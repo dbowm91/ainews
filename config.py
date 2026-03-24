@@ -79,13 +79,19 @@ class ProductionConfig(Config):
         "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'prod.db'}"
     )
 
-    # PostgreSQL-specific settings (used when DATABASE_URL starts with postgresql://)
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_size": 10,
-        "pool_recycle": 300,
-        "pool_pre_ping": True,
-        "max_overflow": 20,
-    }
+    @classmethod
+    def _get_engine_options(cls):
+        db_url = cls.SQLALCHEMY_DATABASE_URI or ""
+        if db_url.startswith("postgresql://") or db_url.startswith("postgres://"):
+            return {
+                "pool_size": 10,
+                "pool_recycle": 300,
+                "pool_pre_ping": True,
+                "max_overflow": 20,
+            }
+        return {}
+
+    SQLALCHEMY_ENGINE_OPTIONS = _get_engine_options.__func__()
 
     @classmethod
     def validate(cls):

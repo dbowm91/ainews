@@ -49,15 +49,13 @@ def upgrade() -> None:
     op.create_index(
         "ix_article_versions_article_id", "article_versions", ["article_id"]
     )
-    op.create_index(
-        "ix_article_versions_article_version",
-        "article_versions",
-        ["article_id", "version_number"],
+    op.create_unique_constraint(
+        "uq_article_version", "article_versions", ["article_id", "version_number"]
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_article_versions_article_version", table_name="article_versions")
+    op.drop_constraint("uq_article_version", "article_versions", type_="unique")
     op.drop_index("ix_article_versions_article_id", table_name="article_versions")
     op.drop_table("article_versions")
     op.drop_column("articles", "original_ai_article")

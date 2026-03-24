@@ -390,12 +390,12 @@ def edit_article(article_id):
             if original_fa.get(preserve_key):
                 fa[preserve_key] = original_fa[preserve_key]
 
-        article.final_article = json.dumps(fa)
-
-        # Create version snapshot before saving
+        # Create version snapshot of OLD content before overwriting
         from services.article import create_article_version
 
         create_article_version(article, change_reason="admin_edit", changed_by="admin")
+
+        article.final_article = json.dumps(fa)
 
         # Validate category
         new_category = request.form.get("category", article.category).strip()
@@ -523,13 +523,14 @@ def rollback_article(article_id, version_id):
 @admin_bp.route("/articles/<int:article_id>/delete", methods=["POST"])
 @require_auth
 def delete_article(article_id):
-    from models import Article, Citation, ArticleMetric, article_tags
+    from models import Article, Citation, ArticleMetric, ArticleVersion, article_tags
     from extensions import db
 
     article = Article.query.get_or_404(article_id)
 
     Citation.query.filter_by(article_id=article_id).delete()
     ArticleMetric.query.filter_by(article_id=article_id).delete()
+    ArticleVersion.query.filter_by(article_id=article_id).delete()
     db.session.execute(
         article_tags.delete().where(article_tags.c.article_id == article_id)
     )

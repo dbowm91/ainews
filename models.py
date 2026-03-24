@@ -267,7 +267,7 @@ class ArticleVersion(db.Model):
     article = db.relationship("Article", backref=db.backref("versions", lazy="dynamic"))
 
     __table_args__ = (
-        db.Index("ix_article_versions_article_version", "article_id", "version_number"),
+        db.UniqueConstraint("article_id", "version_number", name="uq_article_version"),
     )
 
     def __repr__(self):

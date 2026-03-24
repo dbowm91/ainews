@@ -39,16 +39,13 @@
               <td>{{ v.changed_by or 'unknown' }}</td>
               <td>{{ v.created_at.strftime('%b %d %Y %H:%M') if v.created_at }}</td>
               <td class="actions-cell">
-                {% if loop.index0 > 0 %}
-                  <form method="POST" action="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback" style="display:inline"
-                        hx-post="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback"
-                        hx-confirm="Rollback to version {{ v.version_number }}? Current content will be saved as a new version first."
-                        hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
-                    <button type="submit" class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem">rollback</button>
-                  </form>
-                {% else %}
-                  <span class="stat-label">current</span>
-                {% endif %}
+                <form method="POST" action="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback" style="display:inline"
+                      hx-post="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback"
+                      hx-confirm="Rollback to version {{ v.version_number }}? Current content will be saved as a new version first."
+                      hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem">rollback</button>
+                </form>
               </td>
             </tr>
           {% endfor %}

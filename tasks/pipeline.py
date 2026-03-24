@@ -144,9 +144,29 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         fallback = article.draft_article or _build_fallback_article(article)
         article.final_article = fallback
         article.original_ai_article = fallback
-        article.pipeline_status = "done"
         article.retry_count = 0
         article.last_error = None
+
+        # Route to review if enabled, otherwise mark as done
+        from schemas.pipeline import load_pipeline_config
+
+        review_cfg = load_pipeline_config().pipeline.review
+        if review_cfg.enabled:
+            threshold = review_cfg.auto_publish_threshold
+            if threshold is None or (article.impact_score or 0) < threshold:
+                article.pipeline_status = "review"
+                db.session.commit()
+                if run_id:
+                    _log_pipeline(
+                        run_id,
+                        "edit",
+                        "warning",
+                        f"Degraded to review: {article.original_title[:50]}",
+                        article_id=article.id,
+                    )
+                return
+
+        article.pipeline_status = "done"
         db.session.commit()
         if run_id:
             _log_pipeline(
@@ -198,9 +218,22 @@ def _finalize(article_id: int):
             final = article.draft_article or _build_fallback_article(article)
             article.final_article = final
             article.original_ai_article = final
-            article.pipeline_status = "done"
             article.retry_count = 0
             article.last_error = None
+
+            # Route to review if enabled, otherwise mark as done
+            from schemas.pipeline import load_pipeline_config
+
+            review_cfg = load_pipeline_config().pipeline.review
+            if review_cfg.enabled:
+                threshold = review_cfg.auto_publish_threshold
+                if threshold is None or (article.impact_score or 0) < threshold:
+                    article.pipeline_status = "review"
+                    db.session.commit()
+                    logger.info(f"Article {article_id} queued for review (finalize)")
+                    return
+
+            article.pipeline_status = "done"
 
             # Create version snapshot
             from services.article import create_article_version

@@ -1,0 +1,180 @@
+"""Tests for admin password verification and public/admin routes."""
+
+import json
+import pytest
+
+
+class TestPasswordVerification:
+    """Test password hash detection and verification."""
+
+    def test_is_password_hash_scrypt(self):
+        from routes.admin import _is_password_hash
+        assert _is_password_hash("scrypt:32768:8:1$salt$hashvalue")
+        assert _is_password_hash("scrypt:16384:8:1$abc$def")
+
+    def test_is_password_hash_pbkdf2(self):
+        from routes.admin import _is_password_hash
+        assert _is_password_hash("pbkdf2:sha256:600000$salt$hashvalue")
+
+    def test_is_password_hash_rejects_plaintext(self):
+        from routes.admin import _is_password_hash
+        assert not _is_password_hash("mysecretpassword")
+        assert not _is_password_hash("changeme")
+        assert not _is_password_hash("")
+        assert not _is_password_hash("password123")
+
+    def test_verify_password_hashed_correct(self):
+        from werkzeug.security import generate_password_hash
+        from routes.admin import _verify_password
+        hashed = generate_password_hash("correctpassword")
+        assert _verify_password(hashed, "correctpassword") is True
+
+    def test_verify_password_hashed_wrong(self):
+        from werkzeug.security import generate_password_hash
+        from routes.admin import _verify_password
+        hashed = generate_password_hash("correctpassword")
+        assert _verify_password(hashed, "wrongpassword") is False
+
+    def test_verify_password_plaintext_rejected(self):
+        from routes.admin import _verify_password
+        # Plaintext passwords are no longer accepted
+        assert _verify_password("myplainpassword", "myplainpassword") is False
+        assert _verify_password("myplainpassword", "wrongpassword") is False
+
+    def test_verify_password_empty_stored(self):
+        from routes.admin import _verify_password
+        assert _verify_password("", "anypassword") is False
+
+    def test_verify_password_hashed_empty_provided(self):
+        from werkzeug.security import generate_password_hash
+        from routes.admin import _verify_password
+        hashed = generate_password_hash("correctpassword")
+        assert _verify_password(hashed, "") is False
+
+
+class TestPublicRoutes:
+    """Test public-facing routes."""
+
+    def test_index_returns_200(self, client):
+        resp = client.get("/")
+        assert resp.status_code == 200
+
+    def test_health_returns_ok(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        # May be "ok" or "degraded" depending on DB
+        assert data["status"] in ("ok", "degraded")
+
+    def test_feed_returns_xml(self, client):
+        resp = client.get("/feed")
+        assert resp.status_code == 200
+        assert "application/rss+xml" in resp.content_type
+
+    def test_sitemap_returns_xml(self, client):
+        resp = client.get("/sitemap.xml")
+        assert resp.status_code == 200
+        assert "application/xml" in resp.content_type
+
+    def test_subscribe_validates_email(self, client):
+        resp = client.post("/subscribe", data={"email": "invalid", "newsletter_type": "main"})
+        # Without HX-Request header, invalid email returns redirect
+        assert resp.status_code == 302
+
+    def test_subscribe_validates_email_htmx(self, client):
+        resp = client.post("/subscribe", data={"email": "invalid", "newsletter_type": "main"},
+                          headers={"HX-Request": "true"})
+        assert resp.status_code == 200
+        assert b"valid email" in resp.data
+
+    def test_unsubscribe_renders(self, client):
+        resp = client.get("/unsubscribe/nonexistent-token")
+        assert resp.status_code == 200
+
+    def test_nonexistent_article_returns_404(self, client):
+        resp = client.get("/article/999999")
+        assert resp.status_code == 404
+
+
+class TestAdminRoutes:
+    """Test admin authentication and routes."""
+
+    def test_login_page_renders(self, client):
+        resp = client.get("/admin/login")
+        assert resp.status_code == 200
+
+    def test_login_rejects_wrong_password(self, client, app):
+        app.config["ADMIN_PASSWORD"] = "scrypt:32768:8:1$testsalt$fakehashvalue"
+        resp = client.post("/admin/login", data={"password": "wrongpassword"})
+        assert resp.status_code == 200
+        assert b"Invalid password" in resp.data
+
+    def test_login_accepts_correct_hashed_password(self, client, app, hashed_password):
+        app.config["ADMIN_PASSWORD"] = hashed_password
+        resp = client.post("/admin/login", data={"password": "testpass123"}, follow_redirects=False)
+        assert resp.status_code == 302
+        assert "/admin" in resp.location
+
+    def test_login_rejects_plaintext_password(self, client, app):
+        # Plaintext passwords are no longer accepted
+        app.config["ADMIN_PASSWORD"] = "myplainpassword"
+        resp = client.post("/admin/login", data={"password": "myplainpassword"})
+        assert resp.status_code == 200
+        assert b"Invalid password" in resp.data
+
+    def test_admin_dashboard_requires_auth(self, client):
+        resp = client.get("/admin/")
+        assert resp.status_code == 302
+        assert "/admin/login" in resp.location
+
+    def test_admin_dashboard_accessible_after_login(self, client, app, hashed_password):
+        app.config["ADMIN_PASSWORD"] = hashed_password
+        client.post("/admin/login", data={"password": "testpass123"})
+        resp = client.get("/admin/")
+        assert resp.status_code == 200
+
+    def test_logout_clears_session(self, client, app, hashed_password):
+        app.config["ADMIN_PASSWORD"] = hashed_password
+        client.post("/admin/login", data={"password": "testpass123"})
+        resp = client.post("/admin/logout", follow_redirects=False)
+        assert resp.status_code == 302
+        # Verify dashboard is no longer accessible
+        resp = client.get("/admin/")
+        assert resp.status_code == 302
+
+
+class TestAdminArticles:
+    """Test admin article management routes."""
+
+    def test_articles_page_requires_auth(self, client):
+        resp = client.get("/admin/articles")
+        assert resp.status_code == 302
+
+    def test_articles_page_renders(self, client, app, hashed_password):
+        app.config["ADMIN_PASSWORD"] = hashed_password
+        client.post("/admin/login", data={"password": "testpass123"})
+        resp = client.get("/admin/articles")
+        assert resp.status_code == 200
+
+    def test_delete_nonexistent_article_returns_404(self, client, app, hashed_password):
+        app.config["ADMIN_PASSWORD"] = hashed_password
+        client.post("/admin/login", data={"password": "testpass123"})
+        resp = client.post("/admin/articles/999999/delete")
+        assert resp.status_code == 404
+
+
+class TestAdminHealth:
+    """Test admin health endpoint."""
+
+    def test_health_requires_auth(self, client):
+        resp = client.get("/admin/api/health")
+        assert resp.status_code == 302
+
+    def test_health_returns_json(self, client, app, hashed_password):
+        app.config["ADMIN_PASSWORD"] = hashed_password
+        client.post("/admin/login", data={"password": "testpass123"})
+        resp = client.get("/admin/api/health")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "flask" in data
+        assert data["flask"] == "ok"

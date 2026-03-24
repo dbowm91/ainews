@@ -1,0 +1,128 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — edit article{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <a href="/admin/articles">articles</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">{{ article.original_title[:50] }}{% if article.original_title|length > 50 %}...{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">edit article</h1>
+    <a href="/admin/articles" class="btn-primary" style="text-decoration:none">&larr; back to articles</a>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">
+      {{ article.original_title[:100] if article.original_title }}
+      <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %}" style="margin-left:0.5rem">{{ article.pipeline_status }}</span>
+    </h2>
+
+    <div class="article-edit-meta">
+      <span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ article.original_url[:60] if article.original_url }}</a></span>
+      <span>source: {{ article.source.name if article.source else 'unknown' }}</span>
+      <span>created: {{ article.created_at.strftime('%b %d %Y %H:%M') if article.created_at }}</span>
+      {% if article.original_ai_article %}
+      <span><a href="/admin/articles/{{ article.id }}/original" target="_blank" class="btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.5rem">view original AI version</a></span>
+      {% endif %}
+      <span><a href="/admin/articles/{{ article.id }}/versions" class="btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.5rem">version history</a></span>
+    </div>
+
+    <form method="POST" action="/admin/articles/{{ article.id }}/edit" class="edit-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label for="headline">headline</label>
+        <input type="text" id="headline" name="headline" value="{{ fa.get('headline', '') if fa else article.original_title or '' }}" class="form-input">
+      </div>
+
+      <div class="form-group">
+        <label for="tldr">tldr</label>
+        <textarea id="tldr" name="tldr" class="form-textarea" rows="2">{{ fa.get('tldr', '') if fa else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="why_it_matters">why it matters</label>
+        <textarea id="why_it_matters" name="why_it_matters" class="form-textarea" rows="2">{{ fa.get('why_it_matters', '') if fa else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="body">body (markdown)</label>
+        <textarea id="body" name="body" class="form-textarea" rows="12">{{ fa.get('body', '') if fa else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="what_to_watch">what to watch</label>
+        <textarea id="what_to_watch" name="what_to_watch" class="form-textarea" rows="2">{{ fa.get('what_to_watch', '') if fa else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="key_points">key points (one per line)</label>
+        <textarea id="key_points" name="key_points" class="form-textarea" rows="5">{{ '\n'.join(fa.get('key_points', []) if fa else []) }}</textarea>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group form-group-half">
+          <label for="tags">tags (comma-separated)</label>
+          <input type="text" id="tags" name="tags" value="{{ ', '.join(fa.get('tags', []) if fa else []) }}" class="form-input">
+        </div>
+        <div class="form-group form-group-half">
+          <label for="category">category</label>
+          <select id="category" name="category" class="form-select">
+            {% for c in categories %}
+              <option value="{{ c }}" {% if article.category == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group form-group-half">
+          <label for="pipeline_status">pipeline status</label>
+          <select id="pipeline_status" name="pipeline_status" class="form-select">
+            {% for s in ['pending', 'researching', 'writing', 'editing', 'done', 'skipped'] %}
+              <option value="{{ s }}" {% if article.pipeline_status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group form-group-half">
+          <label for="impact_score">impact score (0-100)</label>
+          <input type="number" id="impact_score" name="impact_score" value="{{ article.impact_score or 0 }}" min="0" max="100" class="form-input">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">save changes</button>
+        <a href="/admin/articles" class="btn-secondary">cancel</a>
+      </div>
+    </form>
+
+    <div class="reprocess-section">
+      <h3 class="dash-card-title" style="margin-top:1.5rem">reprocess article</h3>
+      <div class="reprocess-actions">
+        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="from_stage" value="select">
+          <button type="submit" class="btn-secondary" onclick="return confirm('Re-run full pipeline from selector?')">from selector</button>
+        </form>
+        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="from_stage" value="research">
+          <button type="submit" class="btn-secondary" onclick="return confirm('Re-run from researcher?')">from researcher</button>
+        </form>
+        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="from_stage" value="write">
+          <button type="submit" class="btn-secondary" onclick="return confirm('Re-run from writer?')">from writer</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

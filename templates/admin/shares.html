@@ -1,0 +1,36 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — share configuration{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">share configuration</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">share configuration</h1>
+
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">social platforms</h2>
+    <p class="form-hint">Toggle active/inactive to control which social share options appear on article cards and detail pages.</p>
+    {% if configs %}
+      <table class="dash-table" aria-label="Share configurations">
+        <thead>
+          <tr><th>platform</th><th>label</th><th>status</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for config in configs %}
+            {% include "admin/partials/share_row.html" %}
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">no share configs found (will be seeded on startup)</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

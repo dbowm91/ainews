@@ -1,0 +1,159 @@
+import hashlib
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+import requests
+
+from adapters.base import BaseSourceAdapter, RawItem, register_adapter
+from schemas.source import APIConfig
+
+
+@register_adapter("api")
+class APIAdapter(BaseSourceAdapter):
+    config_class = APIConfig
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._session = requests.Session()
+        self._session.headers["User-Agent"] = self.adapter_config.user_agent
+
+    def fetch(self) -> list[Any]:
+        cfg = self.adapter_config
+        resp = self._session.get(cfg.list_url, timeout=cfg.request_timeout)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if cfg.list_method == "json_array":
+            items = data if isinstance(data, list) else []
+        elif cfg.list_method == "json_object_items" and cfg.list_items_path:
+            items = self._resolve_path(data, cfg.list_items_path) or []
+        else:
+            items = data if isinstance(data, list) else []
+
+        items = items[:cfg.max_items]
+
+        # If item_url is set, fetch each item individually
+        if cfg.item_url:
+            fetched = []
+            for item_id in items[:cfg.max_items]:
+                item = self._fetch_item(item_id)
+                if item and self._passes_filters(item, cfg.filters):
+                    fetched.append(item)
+            return fetched
+
+        # Items are already full objects
+        return [i for i in items if self._passes_filters(i, cfg.filters)]
+
+    def parse_item(self, raw: Any) -> Optional[RawItem]:
+        cfg = self.adapter_config
+
+        ext_id = str(
+            self._resolve_path(raw, cfg.fields.get("external_id", "$.id"))
+            or hashlib.sha256(str(raw).encode()).hexdigest()[:16]
+        )
+        title = self._resolve_path(raw, cfg.fields.get("title", "$.title")) or ""
+        if not title:
+            return None
+
+        # Published_at handling
+        published = None
+        pub_raw = self._resolve_path(raw, cfg.fields.get("published_at", "$.time"))
+        if pub_raw:
+            fmt = cfg.fields.get("published_at_format", "unix")
+            if fmt == "unix":
+                try:
+                    published = datetime.fromtimestamp(float(pub_raw), tz=timezone.utc)
+                except (ValueError, TypeError, OSError):
+                    pass
+            elif fmt == "iso":
+                try:
+                    raw_str = str(pub_raw).strip().replace("Z", "+00:00")
+                    published = datetime.fromisoformat(raw_str)
+                except (ValueError, TypeError):
+                    pass
+
+        # Score
+        score_raw = self._resolve_path(raw, cfg.fields.get("raw_score", "$.score"))
+        try:
+            score = float(score_raw) if score_raw is not None else 0.0
+        except (ValueError, TypeError):
+            score = 0.0
+
+        # Metadata
+        raw_meta = {}
+        for meta_key, meta_path in (cfg.metadata or {}).items():
+            val = self._resolve_path(raw, meta_path)
+            if val is not None:
+                raw_meta[meta_key] = val
+
+        # Velocity calculation for time-based scoring
+        if published and score > 0:
+            age_hours = max(
+                (datetime.now(timezone.utc) - published).total_seconds() / 3600, 0.1
+            )
+            raw_meta["velocity"] = round(score / age_hours, 2)
+
+        text_content = self._resolve_path(raw, cfg.fields.get("text_content", "$.text"))
+
+        return RawItem(
+            source_id=self.source_id,
+            external_id=ext_id,
+            title=str(title),
+            url=self._resolve_path(raw, cfg.fields.get("url", "$.url")),
+            author=self._resolve_path(raw, cfg.fields.get("author", "$.by")),
+            published_at=published,
+            text_content=str(text_content)[:3000] if text_content else None,
+            raw_score=score,
+            raw_metadata=raw_meta,
+        )
+
+    def _get_match_text(self, item: RawItem) -> str:
+        if item.text_content:
+            return f"{item.title} {item.text_content}"
+        return item.title
+
+    def _fetch_item(self, item_id) -> Optional[dict]:
+        cfg = self.adapter_config
+        try:
+            url = cfg.item_url.format(id=item_id)
+            resp = self._session.get(url, timeout=cfg.request_timeout)
+            if resp.ok:
+                return resp.json()
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _resolve_path(data: Any, path: str) -> Any:
+        if not path or not path.startswith("$"):
+            return data
+        parts = path.lstrip("$.").split(".")
+        current = data
+        for part in parts:
+            if current is None:
+                return None
+            if isinstance(current, dict):
+                current = current.get(part)
+            elif isinstance(current, list) and part.isdigit():
+                idx = int(part)
+                current = current[idx] if idx < len(current) else None
+            else:
+                return None
+        return current
+
+    def _passes_filters(self, data: Any, filters: list[dict]) -> bool:
+        if not filters:
+            return True
+        for f in filters:
+            current = self._resolve_path(data, f.get("field", ""))
+            if "equals" in f and current != f["equals"]:
+                return False
+            if "min" in f:
+                try:
+                    if float(current) < f["min"]:
+                        return False
+                except (ValueError, TypeError):
+                    return False
+            if "exists" in f and f["exists"] and current is None:
+                return False
+        return True

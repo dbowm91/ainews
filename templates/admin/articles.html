@@ -1,0 +1,54 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — articles{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">articles</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">articles</h1>
+
+  <section class="dash-card dash-card-full">
+    <div class="search-container">
+      <input type="text" class="search-input" name="q" placeholder="search articles..."
+             value="{{ query }}"
+             hx-get="/admin/articles"
+             hx-trigger="input changed delay:300ms"
+             hx-target="#articles-table"
+             hx-include="[name='status'],[name='category']">
+      <div class="filter-bar" style="margin-top:0.5rem">
+        <select name="status" class="filter-select"
+                hx-get="/admin/articles"
+                hx-trigger="change"
+                hx-target="#articles-table"
+                hx-include="[name='q'],[name='category']">
+          <option value="">all statuses</option>
+          {% for s in ['pending', 'researching', 'writing', 'editing', 'review', 'done', 'skipped'] %}
+            <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <select name="category" class="filter-select"
+                hx-get="/admin/articles"
+                hx-trigger="change"
+                hx-target="#articles-table"
+                hx-include="[name='q'],[name='status']">
+          <option value="">all categories</option>
+          {% for c in categories %}
+            <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div id="articles-table">
+      {% include "admin/partials/articles_table.html" %}
+    </div>
+  </section>
+</div>
+{% endblock %}

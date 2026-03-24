@@ -1,0 +1,74 @@
+import re
+from pathlib import Path
+
+_FALLBACK_PATTERNS = {
+    "ai": [
+        r"\bai\b", r"\bartificial intelligence\b", r"\bmachine learning\b",
+        r"\bllm\b", r"\bgpt\b", r"\bclaude\b", r"\bgemini\b", r"\bopenai\b",
+        r"\bdeep learning\b", r"\bneural net", r"\btransformer",
+        r"\blanguage model\b", r"\bdeepseek\b", r"\bllama\b", r"\bmistral\b",
+        r"\bembedding\b", r"\bfine.?tun",
+    ],
+    "privacy": [
+        r"\bprivacy\b", r"\bsurveillance\b", r"\bencrypt", r"\bgdpr\b",
+        r"\btracking\b", r"\bdata breach\b", r"\btor\b", r"\bvpn\b",
+    ],
+    "security": [
+        r"\bcve-\d", r"\bvulnerabilit", r"\bexploit\b", r"\bmalware\b",
+        r"\bransomware\b", r"\bzero.?day\b", r"\bcybersec",
+    ],
+    "programming": [
+        r"\brust\b", r"\bpython\b", r"\bgolang\b", r"\bjavascript\b",
+        r"\btypescript\b", r"\bc\+\+\b", r"\bopen.?source\b", r"\bgithub\b",
+    ],
+    "hardware": [
+        r"\bgpu\b", r"\bchip\b", r"\bsemiconductor\b", r"\bnvidia\b",
+        r"\bamd\b", r"\bapple\b",
+    ],
+}
+
+
+def _load_patterns_from_file() -> dict[str, list[str]]:
+    try:
+        import yaml
+        topics_path = Path(__file__).parent.parent / "topics.yaml"
+        if topics_path.exists():
+            raw = yaml.safe_load(topics_path.read_text()) or {}
+            topic_keys = list((raw.get("topics") or {}).keys())
+            patterns = {k: _FALLBACK_PATTERNS.get(k, []) for k in topic_keys}
+            for k, v in _FALLBACK_PATTERNS.items():
+                if k not in patterns:
+                    patterns[k] = v
+            return patterns
+    except Exception:
+        pass
+    return dict(_FALLBACK_PATTERNS)
+
+
+def _load_patterns() -> dict[str, list[str]]:
+    try:
+        from services.config_cache import get_config_cache
+        return get_config_cache().get(
+            key="trend_patterns",
+            loader_fn=_load_patterns_from_file,
+            ttl=300,
+        )
+    except Exception:
+        return _load_patterns_from_file()
+
+
+def classify(title: str, text: str = "") -> list[str]:
+    patterns = _load_patterns()
+    combined = f"{title} {text}".lower()
+    matched = [
+        topic
+        for topic, pats in patterns.items()
+        if any(re.search(p, combined, re.I) for p in pats)
+    ]
+    return matched or ["other"]
+
+
+def compute_velocity(score: int, timestamp_unix: float) -> float:
+    import time
+    age_hours = max((time.time() - timestamp_unix) / 3600, 0.1)
+    return score / age_hours

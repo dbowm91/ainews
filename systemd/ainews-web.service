@@ -1,0 +1,46 @@
+[Unit]
+Description=ainews Web Application
+Documentation=https://github.com/yourorg/ainews
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=ainews
+Group=ainews
+WorkingDirectory=/opt/ainews
+EnvironmentFile=/opt/ainews/.env
+
+ExecStart=/opt/ainews/.venv/bin/granian \
+    --interface wsgi \
+    --host 127.0.0.1 \
+    --port 5000 \
+    --workers 4 \
+    --blocking-threads 4 \
+    --access-log \
+    --log-level info \
+    --no-ws \
+    run:app
+
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ainews-web
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ainews/instance
+ReadOnlyPaths=/opt/ainews/app/static
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

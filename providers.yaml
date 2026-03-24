@@ -1,0 +1,48 @@
+providers:
+  - id: ollama-local
+    type: ollama
+    enabled: true
+    config:
+      host: "http://localhost:11434"
+      model: "qwen3:8b"
+      max_tokens: 4096
+
+  - id: openai
+    type: openai
+    enabled: false
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      base_url: "https://api.openai.com/v1"
+      model: "gpt-4o-mini"
+      max_tokens: 4096
+
+  - id: anthropic
+    type: anthropic
+    enabled: false
+    config:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-sonnet-4-5-20250929"
+      max_tokens: 4096
+
+default_provider: ollama-local
+
+search_providers:
+  - id: duckduckgo
+    type: duckduckgo
+    enabled: true
+    config: {}
+
+  - id: google
+    type: google
+    enabled: false
+    config:
+      api_key: "${GOOGLE_API_KEY}"
+      cse_id: "${GOOGLE_CSE_ID}"
+
+  - id: searxng
+    type: searxng
+    enabled: false
+    config:
+      host: "http://localhost:8888"
+
+default_search_provider: duckduckgo

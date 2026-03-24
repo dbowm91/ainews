@@ -1,0 +1,41 @@
+[Unit]
+Description=ainews Celery Worker
+Documentation=https://github.com/yourorg/ainews
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=ainews
+Group=ainews
+WorkingDirectory=/opt/ainews
+EnvironmentFile=/opt/ainews/.env
+
+ExecStart=/opt/ainews/.venv/bin/celery \
+    -A celery_app:celery_app \
+    worker \
+    -l info \
+    --concurrency=4 \
+    --max-tasks-per-child=1000
+
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ainews-celery-worker
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ainews/instance
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

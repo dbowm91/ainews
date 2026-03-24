@@ -1,0 +1,62 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — article versions{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <a href="/admin/articles">articles</a>
+  <span class="breadcrumb-separator">›</span>
+  <a href="/admin/articles/{{ article.id }}/edit">{{ article.original_title[:50] }}{% if article.original_title|length > 50 %}...{% endif %}</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">versions</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">version history</h1>
+    <a href="/admin/articles/{{ article.id }}/edit" class="btn-primary" style="text-decoration:none">&larr; back to edit</a>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">
+      {{ article.original_title[:100] if article.original_title }}
+    </h2>
+
+    {% if versions %}
+      <table class="dash-table" aria-label="Article versions">
+        <thead>
+          <tr><th>version</th><th>reason</th><th>changed by</th><th>date</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for v in versions %}
+            <tr>
+              <td>v{{ v.version_number }}</td>
+              <td><span class="pipeline-badge pipeline-{% if v.change_reason == 'rollback' %}skipped{% elif v.change_reason == 'admin_edit' %}active{% else %}done{% endif %}">{{ v.change_reason }}</span></td>
+              <td>{{ v.changed_by or 'unknown' }}</td>
+              <td>{{ v.created_at.strftime('%b %d %Y %H:%M') if v.created_at }}</td>
+              <td class="actions-cell">
+                {% if loop.index0 > 0 %}
+                  <form method="POST" action="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback" style="display:inline"
+                        hx-post="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback"
+                        hx-confirm="Rollback to version {{ v.version_number }}? Current content will be saved as a new version first."
+                        hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                    <button type="submit" class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem">rollback</button>
+                  </form>
+                {% else %}
+                  <span class="stat-label">current</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">no version history available</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — metrics{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">metrics</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">metrics</h1>
+
+  <div class="filter-bar" style="margin-bottom:1rem">
+    <a href="/admin/metrics?days=7" class="filter-btn {% if days == 7 %}active{% endif %}">7 days</a>
+    <a href="/admin/metrics?days=30" class="filter-btn {% if days == 30 %}active{% endif %}">30 days</a>
+    <a href="/admin/metrics?days=90" class="filter-btn {% if days == 90 %}active{% endif %}">90 days</a>
+    <a href="/admin/metrics?days=9999" class="filter-btn {% if days > 365 %}active{% endif %}">all time</a>
+  </div>
+
+  <div class="dashboard-grid">
+    {# ── Summary Cards ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">article engagement</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <span class="stat-value">{{ totals[0] }}</span>
+          <span class="stat-label">page loads</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{{ totals[1] }}</span>
+          <span class="stat-label">share clicks</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{{ totals[2] }}</span>
+          <span class="stat-label">share link views</span>
+        </div>
+      </div>
+    </section>
+
+    {# ── Subscriber Stats ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">subscribers</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <span class="stat-value">{{ total_subs }}</span>
+          <span class="stat-label">active</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{{ inactive_subs }}</span>
+          <span class="stat-label">unsubscribed</span>
+        </div>
+        {% for type, count in subs_by_type.items() %}
+          <div class="stat-item">
+            <span class="stat-value">{{ count }}</span>
+            <span class="stat-label">{{ type }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  {# ── Top by Page Loads ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">top articles by page loads</h2>
+    {% if top_by_views %}
+      <table class="dash-table" aria-label="Top articles by page loads">
+        <thead>
+          <tr><th>#</th><th>article</th><th>category</th><th>page loads</th></tr>
+        </thead>
+        <tbody>
+          {% for article, views in top_by_views %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
+              <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+              <td><strong>{{ views }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">no data yet</p>
+    {% endif %}
+  </section>
+
+  {# ── Top by Share Clicks ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">top articles by share clicks</h2>
+    {% if top_by_shares %}
+      <table class="dash-table" aria-label="Top articles by share clicks">
+        <thead>
+          <tr><th>#</th><th>article</th><th>category</th><th>share clicks</th></tr>
+        </thead>
+        <tbody>
+          {% for article, clicks in top_by_shares %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
+              <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+              <td><strong>{{ clicks }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">no data yet</p>
+    {% endif %}
+  </section>
+
+  {# ── Top by Share Link Views ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">top articles by share link views</h2>
+    {% if top_by_link_views %}
+      <table class="dash-table" aria-label="Top articles by share link views">
+        <thead>
+          <tr><th>#</th><th>article</th><th>category</th><th>link views</th></tr>
+        </thead>
+        <tbody>
+          {% for article, link_views in top_by_link_views %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
+              <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+              <td><strong>{{ link_views }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">no data yet</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

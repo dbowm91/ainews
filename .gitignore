@@ -1,0 +1,17 @@
+.env
+instance/
+*.db
+__pycache__/
+*.pyc
+.venv/
+celerybeat-schedule
+celerybeat-schedule.db
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+dump.rdb
+.ruff_cache/
+htmlcov/
+.pids/
+.last_deploy_commit

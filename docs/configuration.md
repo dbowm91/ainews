@@ -1,0 +1,261 @@
+# Configuration Reference
+
+All configuration is managed through YAML files in the project root and environment variables in `.env`.
+
+## Environment Variables (`.env`)
+
+### Required
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SECRET_KEY` | Flask session signing key | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ADMIN_PASSWORD` | Admin dashboard password (hashed) | `scrypt:32768:8:1$salt$hash...` |
+| `CELERY_BROKER_URL` | Redis URL for Celery | `redis://localhost:6379/0` |
+
+### Optional
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASK_CONFIG` | `development` | Flask config name (`development`, `production`) |
+| `DATABASE_URL` | `sqlite:///instance/ainews.db` | SQLite database URL |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Redis URL for results |
+| `SMTP_HOST` | `localhost` | SMTP server hostname |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | | SMTP username |
+| `SMTP_PASSWORD` | | SMTP password |
+| `SMTP_FROM` | `noreply@ainews.dev` | Sender email address |
+| `SMTP_USE_TLS` | `true` | Enable TLS for SMTP |
+| `OLLAMA_MODEL` | `llama3.1` | Ollama model name |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama API URL |
+| `OPENAI_API_KEY` | | OpenAI API key |
+| `ANTHROPIC_API_KEY` | | Anthropic API key |
+
+### Generate a hashed admin password
+
+```bash
+# Interactive (recommended)
+python scripts/hash_password.py
+
+# As argument (may appear in shell history)
+python scripts/hash_password.py mypassword
+```
+
+## Configuration Files
+
+### `pipeline.yaml` — Processing Pipeline
+
+Controls the AI processing stages: selector, researcher, writer, editor.
+
+```yaml
+pipeline:
+  selector:
+    enabled: true
+    provider: ollama-local        # Provider ID from providers.yaml
+    model: qwen3:8b
+    max_tokens: 1024
+    temperature: 0.2
+    concurrency: 4
+    timeout_seconds: 60
+    min_score: 6                   # Minimum score (1-10) to select an article
+    system_prompt: |               # Custom system prompt (optional)
+      You are a news editor...
+
+  researcher:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 8192
+    temperature: 0.0
+    concurrency: 2
+    timeout_seconds: 180
+    web_search: true
+    web_search_max_results: 5
+    db_related_max: 5
+    max_article_text_length: 6000
+
+  writer:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 4096
+    temperature: 0.3
+    concurrency: 1
+    timeout_seconds: 180
+    max_key_points: 5
+
+  editor:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 4096
+    temperature: 0.0
+    concurrency: 2
+    timeout_seconds: 120
+    max_tags: 3
+
+newsletter:
+  max_articles: 10
+  send_time: "08:00"
+  timezone: "America/New_York"
+  site_url: "https://ainews.dev"
+
+newsletter_pipeline:
+  reader: { ... }   # Same structure as pipeline roles
+  writer: { ... }
+  editor: { ... }
+```
+
+**Role parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `enabled` | Set `false` to skip this stage entirely |
+| `provider` | Provider ID from `providers.yaml` |
+| `model` | Model name to use |
+| `max_tokens` | Max output tokens |
+| `temperature` | Sampling temperature (0.0 = deterministic) |
+| `concurrency` | Max parallel requests |
+| `timeout_seconds` | Request timeout |
+| `system_prompt` | Custom system prompt (uses built-in default if omitted) |
+
+### `sources.yaml` — RSS/API Sources
+
+```yaml
+sources:
+  - id: hackernews
+    name: "Hacker News"
+    type: api                          # rss, api, or web
+    enabled: true
+    schedule_minutes: 30
+    config:
+      list_url: "https://hacker-news.firebaseio.com/v0/topstories.json"
+      list_method: "json_array"
+      max_items: 30
+      item_url: "https://hacker-news.firebaseio.com/v0/item/{id}.json"
+      item_method: "json_object"
+      fields:
+        external_id: "$.id"
+        title: "$.title"
+        url: "$.url"
+        author: "$.by"
+        published_at: "$.time"
+        published_at_format: "unix"
+        text_content: "$.text"
+        raw_score: "$.score"
+      filters:
+        - field: "$.type"
+          equals: "story"
+        - field: "$.score"
+          min: 20
+    topics:
+      match_mode: keyword              # keyword or contextual
+      include: [ai, privacy, security, programming, hardware]
+
+  - id: techcrunch
+    name: "TechCrunch"
+    type: rss
+    enabled: true
+    schedule_minutes: 60
+    config:
+      feed_url: "https://techcrunch.com/feed/"
+      max_items: 50
+    topics:
+      match_mode: contextual
+      include: [ai, security, programming]
+```
+
+**Source types:**
+
+| Type | Description |
+|------|-------------|
+| `rss` | RSS/Atom feed. Requires `feed_url` in config. |
+| `api` | JSON API. Requires `list_url`, `item_url`, `fields`. |
+| `web` | Web scraping. Requires `base_url`, `listing_url`, CSS selectors. |
+
+### `topics.yaml` — Topic Categories
+
+```yaml
+topics:
+  ai:
+    display_name: "AI & Machine Learning"
+    description: "Large language models, neural networks, AI safety..."
+    color: purple
+    icon: "svg/ai.svg"
+
+  privacy:
+    display_name: "Privacy"
+    description: "Data protection, surveillance, encryption, GDPR..."
+    color: orange
+    icon: "svg/privacy.svg"
+
+  security:
+    display_name: "Security"
+    description: "Vulnerabilities, CVEs, exploits, malware..."
+    color: red
+    icon: "svg/security.svg"
+
+  programming:
+    display_name: "Programming"
+    description: "Languages, compilers, open source, developer tools..."
+    color: green
+
+  hardware:
+    display_name: "Hardware"
+    description: "GPUs, chips, semiconductors, processors..."
+    color: blue
+```
+
+### `providers.yaml` — LLM Providers
+
+```yaml
+providers:
+  - id: ollama-local
+    type: ollama
+    enabled: true
+    config:
+      host: "http://localhost:11434"
+      model: "qwen3:8b"
+
+  - id: openai
+    type: openai
+    enabled: false
+    config:
+      api_key: "${OPENAI_API_KEY}"     # Resolved from env at runtime
+      model: "gpt-4o-mini"
+
+  - id: anthropic
+    type: anthropic
+    enabled: false
+    config:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-sonnet-4-5-20250929"
+
+default_provider: ollama-local
+```
+
+**Provider types:**
+
+| Type | Config keys |
+|------|-------------|
+| `ollama` | `host`, `model`, `max_tokens` |
+| `openai` | `api_key`, `base_url`, `model`, `max_tokens` |
+| `anthropic` | `api_key`, `model`, `max_tokens` |
+
+## Pipeline Stages
+
+Articles flow through these stages:
+
+```
+crawl → extract → select → research → write → edit → done
+```
+
+| Stage | Description | Skippable |
+|-------|-------------|-----------|
+| `crawl` | Fetch RSS/API items from sources | No |
+| `extract` | Extract full text from article URLs | No |
+| `select` | LLM evaluates newsworthiness (score 1-10) | Yes — set `enabled: false` |
+| `research` | LLM compiles research brief with external sources | Yes |
+| `write` | LLM drafts condensed article | Yes |
+| `edit` | LLM reviews and polishes draft, assigns tags | Yes |
+
+If a stage is skipped, the article advances to the next stage with default content. If a stage fails after retries, it degrades gracefully and continues.

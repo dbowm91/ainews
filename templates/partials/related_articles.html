@@ -1,0 +1,18 @@
+{% if related_articles %}
+  <section class="related-articles">
+    <h2 class="section-heading">related articles</h2>
+    <div class="related-grid">
+      {% for rel in related_articles %}
+        <a href="/article/{{ rel.id }}" class="related-card"
+           hx-get="{{ url_for('public.article_detail', article_id=rel.id) }}"
+           hx-target="#content" hx-swap="innerHTML" hx-push-url="true">
+          <span class="related-category cat-{{ rel.category }}">{{ rel.category }}</span>
+          <span class="related-title">{{ rel.original_title }}</span>
+          {% if rel._fa and rel._fa.tldr %}
+            <span class="related-tldr">{{ rel._fa.tldr[:100] }}{% if rel._fa.tldr|length > 100 %}...{% endif %}</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}

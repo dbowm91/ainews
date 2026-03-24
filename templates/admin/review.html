@@ -1,0 +1,25 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — review queue{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">review queue</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">review queue
+    {% if total_review %}<span class="stat-label" style="margin-left:0.5rem">({{ total_review }} pending)</span>{% endif %}
+  </h1>
+
+  <section class="dash-card dash-card-full">
+    <div id="review-table">
+      {% include "admin/partials/review_table.html" %}
+    </div>
+  </section>
+</div>
+{% endblock %}

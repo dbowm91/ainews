@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ainews// admin{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="admin-body" hx-boost="true">
+  <a href="#content" class="skip-link">Skip to content</a>
+  <header class="admin-header">
+    <nav class="nav">
+      <a href="/admin/" class="logo">ainews<span class="logo-slash">//</span> admin</a>
+      <div class="nav-links">
+        <a href="/">public site</a>
+        <a href="/admin/">dashboard</a>
+        <a href="/admin/pipelines">pipelines</a>
+        <a href="/admin/review">review</a>
+        <a href="/admin/articles">articles</a>
+        <a href="/admin/newsletters">newsletters</a>
+        <a href="/admin/metrics">metrics</a>
+        <a href="/admin/subscribers">subscribers</a>
+        <a href="/admin/shares">shares</a>
+      </div>
+      <div class="nav-meta">
+        <button type="button" class="theme-toggle" aria-label="Toggle theme" onclick="toggleTheme()">
+          <svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+          <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+        <form method="POST" action="/admin/logout" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-logout">logout</button>
+        </form>
+      </div>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block breadcrumbs %}{% endblock %}
+    <div id="content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+  <script>
+  // Share dropdown accessibility enhancements
+  document.addEventListener('DOMContentLoaded', function() {
+    const shareCheckboxes = document.querySelectorAll('.share-checkbox');
+    shareCheckboxes.forEach(checkbox => {
+      const id = checkbox.dataset.shareId;
+      const button = document.querySelector(`.share-trigger[data-share-id="${id}"] .share-btn`);
+      const dropdown = document.getElementById(`share-dropdown-${id}`);
+      if (!button || !dropdown) return;
+      
+      function updateAria() {
+        button.setAttribute('aria-expanded', checkbox.checked ? 'true' : 'false');
+      }
+      
+      checkbox.addEventListener('change', updateAria);
+      updateAria(); // initial state
+      
+      // When dropdown opens, focus first focusable element for better keyboard navigation
+      checkbox.addEventListener('change', function() {
+        if (checkbox.checked) {
+          const focusable = dropdown.querySelector('input, button, a');
+          if (focusable) focusable.focus();
+        }
+      });
+    });
+  });
+  </script>
+</body>
+</html>

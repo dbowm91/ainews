@@ -1,0 +1,58 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — subscribers{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">subscribers</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">subscribers</h1>
+    <a href="/admin/subscribers/export" class="btn-primary" style="text-decoration:none">export CSV</a>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    <div class="filter-bar">
+      <a href="/admin/subscribers" class="filter-btn {% if not newsletter_type and not active_filter %}active{% endif %}">all</a>
+      <a href="/admin/subscribers?active=active" class="filter-btn {% if active_filter == 'active' %}active{% endif %}">active</a>
+      <a href="/admin/subscribers?active=inactive" class="filter-btn {% if active_filter == 'inactive' %}active{% endif %}">inactive</a>
+      {% for t in types %}
+        <a href="/admin/subscribers?type={{ t }}" class="filter-btn {% if newsletter_type == t %}active{% endif %}">{{ t }}</a>
+      {% endfor %}
+    </div>
+
+    {% if subscribers %}
+      <table class="dash-table" aria-label="Subscribers list">
+        <thead>
+          <tr><th>email</th><th>type</th><th>subscribed</th><th>status</th></tr>
+        </thead>
+        <tbody>
+          {% for sub in subscribers %}
+            <tr>
+              <td>{{ sub.email }}</td>
+              <td><span class="newsletter-type">{{ sub.newsletter_type }}</span></td>
+              <td>{{ sub.subscribed_at.strftime('%b %d %Y') if sub.subscribed_at }}</td>
+              <td>
+                <span class="pipeline-badge pipeline-{% if sub.active %}done{% else %}skipped{% endif %}">
+                  {{ 'active' if sub.active else 'inactive' }}
+                </span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if has_next %}
+        <a href="/admin/subscribers?page={{ next_page }}{% if newsletter_type %}&type={{ newsletter_type }}{% endif %}{% if active_filter %}&active={{ active_filter }}{% endif %}" class="dash-link">next page &rarr;</a>
+      {% endif %}
+    {% else %}
+      <p class="empty-state">no subscribers found</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+<tr id="share-{{ config.id }}">
+  <td><span class="source-type">{{ config.platform_key }}</span></td>
+  <td>{{ config.label }}</td>
+  <td>
+    <span class="pipeline-badge pipeline-{% if config.active %}done{% else %}skipped{% endif %}">
+      {{ 'active' if config.active else 'inactive' }}
+    </span>
+  </td>
+  <td>
+    <form method="POST" action="/admin/shares/{{ config.id }}/toggle" style="display:inline"
+          hx-post="/admin/shares/{{ config.id }}/toggle"
+          hx-target="#share-{{ config.id }}"
+          hx-swap="outerHTML"
+          hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+      <button type="submit" class="btn-secondary">{{ 'deactivate' if config.active else 'activate' }}</button>
+    </form>
+  </td>
+</tr>

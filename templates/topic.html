@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}ainews// {{ topic_def.display_name if topic_def else category }}{% endblock %}
+
+{% block content %}
+<div class="feed-header">
+  {% if topic_def %}
+    <div class="topic-header">
+      <h1 class="topic-title">{{ topic_def.display_name }}</h1>
+      <p class="topic-description">{{ topic_def.description }}</p>
+      <a href="/feed/{{ category }}" class="rss-badge" title="RSS feed for {{ topic_def.display_name }}">&nearr; rss</a>
+    </div>
+  {% endif %}
+
+  <div id="category-filter" class="filter-bar">
+    <a href="/" class="filter-btn">all</a>
+    {% for cat in categories %}
+      <a href="/topic/{{ cat }}" class="filter-btn {% if category == cat %}active{% endif %}">{{ cat }}</a>
+    {% endfor %}
+  </div>
+
+  {% if articles %}
+    <span id="result-count" class="result-count">{{ articles|length }} articles</span>
+  {% else %}
+    <span id="result-count" class="result-count">no articles in this topic yet</span>
+  {% endif %}
+
+  {% include "partials/subscribe_box.html" %}
+</div>
+
+<div id="feed">
+  {% for article in articles %}
+    {% include "partials/article_card.html" %}
+  {% endfor %}
+
+  {% if has_next %}
+  <div id="scroll-sentinel"
+       hx-get="{{ url_for('public.topic_feed', category=category, page=next_page) }}"
+       hx-trigger="revealed"
+       hx-swap="outerHTML"
+       hx-target="#scroll-sentinel">
+    <div class="loading-indicator">
+      <span class="spinner">loading more...</span>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

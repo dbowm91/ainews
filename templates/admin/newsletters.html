@@ -1,0 +1,71 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — newsletters{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">newsletters</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">newsletters</h1>
+    <div class="header-actions">
+      <form method="POST" action="/admin/newsletters/generate" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-primary">generate now</button>
+      </form>
+    </div>
+  </div>
+
+  {# ── Dry Run ── #}
+  <section class="dash-card dash-card-full" style="margin-bottom:1rem">
+    <h2 class="dash-card-title">dry run</h2>
+    <p class="form-hint">Generate newsletters and send only to a test email address instead of the full mailing list.</p>
+    <form method="POST" action="/admin/newsletters/dry-run" class="dry-run-form" id="dry-run-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-row">
+        <input type="email" name="test_email" placeholder="test@example.com" class="form-input" required>
+        <button type="submit" class="btn-secondary">dry run</button>
+      </div>
+    </form>
+    <div id="dry-run-result"></div>
+  </section>
+
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">generated newsletters</h2>
+    {% if newsletters %}
+      <table class="dash-table" aria-label="Generated newsletters">
+        <thead>
+          <tr><th>type</th><th>subject</th><th>articles</th><th>recipients</th><th>generated</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for nl in newsletters %}
+            <tr>
+              <td><span class="newsletter-type">{{ nl.newsletter_type }}</span></td>
+              <td>{{ nl.subject }}</td>
+              <td>{{ nl.article_count }}</td>
+              <td>{{ nl.recipients or 0 }}</td>
+              <td>{{ nl.generated_at.strftime('%b %d %H:%M') if nl.generated_at }}</td>
+              <td>
+                <a href="/admin/newsletters/{{ nl.id }}" target="_blank" class="newsletter-preview-link">preview</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if has_next %}
+        <a href="/admin/newsletters?page={{ next_page }}" class="dash-link">next page &rarr;</a>
+      {% endif %}
+    {% else %}
+      <p class="empty-state">no newsletters generated yet</p>
+    {% endif %}
+  </section>
+</div>
+
+<script src="{{ url_for('static', filename='js/newsletters.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% if logs %}
+  <table class="dash-table logs-table" aria-label="Pipeline logs">
+    <thead>
+      <tr><th>time</th><th>stage</th><th>level</th><th>article</th><th>message</th></tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+        <tr class="log-row log-{{ log.level }}">
+          <td class="log-time">{{ log.created_at.strftime('%H:%M:%S') if log.created_at }}</td>
+          <td><span class="source-type">{{ log.stage }}</span></td>
+          <td>
+            <span class="log-level log-level-{{ log.level }}">{{ log.level }}</span>
+          </td>
+          <td>
+            {% if log.article_id %}
+              <a href="/article/{{ log.article_id }}" target="_blank">#{{ log.article_id }}</a>
+            {% endif %}
+          </td>
+          <td class="log-message">{{ log.message }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if has_next %}
+    <a href="/admin/pipelines/{{ run.id }}/logs?page={{ next_page }}{% if level_filter %}&level={{ level_filter }}{% endif %}" class="dash-link">next page &rarr;</a>
+  {% endif %}
+{% else %}
+  <p class="empty-state">no logs for this run</p>
+{% endif %}

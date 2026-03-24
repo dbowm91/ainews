@@ -1,0 +1,97 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — pipelines{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">pipelines</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">pipelines</h1>
+    <form method="POST" action="/admin/trigger-crawl">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-primary">trigger crawl now</button>
+    </form>
+  </div>
+
+  {# ── Running Pipelines ── #}
+  {% if running %}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">
+      <span class="health-dot green blink"></span> running pipelines ({{ running|length }})
+    </h2>
+    <table class="dash-table">
+      <thead>
+        <tr><th>id</th><th>type</th><th>triggered</th><th>started</th><th>fetched</th><th>processed</th><th>selected</th><th>logs</th></tr>
+      </thead>
+      <tbody>
+        {% for run in running %}
+          <tr class="running-row">
+            <td>#{{ run.id }}</td>
+            <td><span class="source-type">{{ run.run_type }}</span></td>
+            <td>{{ run.triggered_by }}</td>
+            <td>{{ run.started_at.strftime('%b %d %H:%M') if run.started_at }}</td>
+            <td>{{ run.articles_fetched or 0 }}</td>
+            <td>{{ run.articles_processed or 0 }}</td>
+            <td>{{ run.articles_selected or 0 }}</td>
+            <td>
+              <a href="/admin/pipelines/{{ run.id }}/logs" class="newsletter-preview-link">view logs</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {# ── All Runs ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">pipeline runs</h2>
+    <div class="filter-bar">
+      <a href="/admin/pipelines" class="filter-btn {% if not run_type %}active{% endif %}">all</a>
+      <a href="/admin/pipelines?type=crawl" class="filter-btn {% if run_type == 'crawl' %}active{% endif %}">crawl</a>
+      <a href="/admin/pipelines?type=newsletter" class="filter-btn {% if run_type == 'newsletter' %}active{% endif %}">newsletter</a>
+    </div>
+    {% if runs %}
+    <table class="dash-table" aria-label="Running pipelines">
+        <thead>
+          <tr><th>id</th><th>type</th><th>status</th><th>triggered</th><th>fetched</th><th>processed</th><th>selected</th><th>started</th><th>finished</th><th>logs</th></tr>
+        </thead>
+        <tbody>
+          {% for run in runs %}
+            <tr>
+              <td>#{{ run.id }}</td>
+              <td><span class="source-type">{{ run.run_type }}</span></td>
+              <td>
+                <span class="pipeline-badge pipeline-{% if run.status == 'completed' %}done{% elif run.status == 'running' %}active{% elif run.status == 'failed' %}error{% else %}skipped{% endif %}">
+                  {{ run.status }}
+                </span>
+              </td>
+              <td>{{ run.triggered_by }}</td>
+              <td>{{ run.articles_fetched or 0 }}</td>
+              <td>{{ run.articles_processed or 0 }}</td>
+              <td>{{ run.articles_selected or 0 }}</td>
+              <td>{{ run.started_at.strftime('%b %d %H:%M') if run.started_at }}</td>
+              <td>{{ run.finished_at.strftime('%b %d %H:%M') if run.finished_at else '—' }}</td>
+              <td>
+                <a href="/admin/pipelines/{{ run.id }}/logs" class="newsletter-preview-link">view</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if has_next %}
+        <a href="/admin/pipelines?page={{ next_page }}{% if run_type %}&type={{ run_type }}{% endif %}" class="dash-link">next page &rarr;</a>
+      {% endif %}
+    {% else %}
+      <p class="empty-state">no pipeline runs yet</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

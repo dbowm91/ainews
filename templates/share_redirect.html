@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ainews// share</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta http-equiv="refresh" content="3;url=/article/{{ article.id }}">
+</head>
+<body>
+  <main class="container" style="max-width:600px; margin:4rem auto; text-align:center;">
+    <h1 class="article-title" style="font-size:1.2rem; margin-bottom:1rem;">
+      {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
+    </h1>
+    <p style="color:var(--text-muted); margin-bottom:1.5rem;">redirecting to article...</p>
+
+    {% set sid = article.short_id if article.short_id else article.id|string %}
+    {% set short_url = request.host_url.rstrip('/') + '/s/' + sid %}
+    <div class="share-redirect-card">
+      <p style="margin-bottom:1rem;">
+        <input type="text" value="{{ short_url }}" readonly class="share-url-input" style="text-align:center; width:100%;" onclick="this.select()">
+      </p>
+      <div class="share-social-links">
+        {% for config in share_configs %}
+          {% set share_url = config.url_template.replace('{url}', short_url).replace('{title}', (article.original_title or '')|urlencode) %}
+          <a href="{{ share_url }}" target="_blank" rel="noopener" class="share-social-link">
+            <span class="share-icon share-icon-{{ config.platform_key }}">{{ config.platform_key[0]|upper }}</span>
+            <span>{{ config.label }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <p><a href="/article/{{ article.id }}" style="color:var(--accent); font-size:0.8rem;">go to article now &rarr;</a></p>
+  </main>
+</body>
+</html>

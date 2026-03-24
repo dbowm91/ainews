@@ -1,0 +1,71 @@
+{% if page == 1 and top_impact is defined and top_impact %}
+  {% include "partials/top_impact.html" %}
+{% endif %}
+
+<div class="feed-header">
+  <form role="search" class="search-container">
+    <input
+      type="search"
+      name="q"
+      value="{{ query }}"
+      placeholder="search articles..."
+      aria-label="Search articles"
+      class="search-input"
+      hx-get="{{ url_for('public.index') }}"
+      hx-trigger="keyup changed delay:500ms, search"
+      hx-target="#content"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      hx-indicator="#search-spinner"
+      hx-include="[name='category']"
+    >
+    <span id="search-spinner" class="htmx-indicator spinner" aria-hidden="true">...</span>
+    <input type="hidden" name="category" value="{{ category }}">
+  </form>
+
+  <div id="category-filter" class="filter-bar" role="tablist" aria-label="Category filter">
+    <a href="/" role="tab" aria-selected="{% if not category %}true{% else %}false{% endif %}" class="filter-btn {% if not category %}active{% endif %}">all</a>
+    {% for cat in categories %}
+      <a href="/topic/{{ cat }}" role="tab" aria-selected="{% if category == cat %}true{% else %}false{% endif %}" class="filter-btn {% if category == cat %}active{% endif %}">{{ cat }}</a>
+    {% endfor %}
+  </div>
+
+  <div id="active-filters" class="active-filters">
+    {% if category %}
+      <span class="filter-pill">{{ category }}<a href="/" class="pill-close" aria-label="Remove {{ category }} filter">&times;</a></span>
+    {% endif %}
+    {% if query %}
+      <span class="filter-pill">"{{ query }}"<a href="{% if category %}/topic/{{ category }}{% else %}/{% endif %}" class="pill-close" aria-label="Remove search filter">&times;</a></span>
+    {% endif %}
+  </div>
+
+  <div aria-live="polite" aria-atomic="true">
+    {% if articles %}
+      <span id="result-count" class="result-count">{{ articles|length }} articles</span>
+    {% else %}
+      <span id="result-count" class="result-count">no articles yet &mdash; first crawl in progress</span>
+    {% endif %}
+  </div>
+
+  {% include "partials/subscribe_box.html" %}
+</div>
+
+<div id="feed" role="feed" aria-label="Article feed">
+  {% for article in articles %}
+    {% include "partials/article_card.html" %}
+  {% endfor %}
+
+  {% if has_next %}
+  <div id="scroll-sentinel"
+       hx-get="{{ url_for('public.index', page=next_page, category=category, q=query) }}"
+       hx-trigger="revealed"
+       hx-swap="outerHTML"
+       hx-target="#scroll-sentinel"
+       hx-indicator="#scroll-spinner"
+       aria-label="Load more articles">
+    <div id="scroll-spinner" class="loading-indicator">
+      <span class="spinner" aria-live="assertive">loading more...</span>
+    </div>
+  </div>
+  {% endif %}
+</div>

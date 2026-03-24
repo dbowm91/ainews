@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}ainews// unsubscribe{% endblock %}
+
+{% block content %}
+<div class="unsubscribe-page">
+  {% if found %}
+    <h1 class="unsubscribe-title">unsubscribed</h1>
+    <p class="unsubscribe-message">You've been unsubscribed. We're sorry to see you go.</p>
+    <a href="/" class="back-link">&larr; back to feed</a>
+  {% else %}
+    <h1 class="unsubscribe-title">not found</h1>
+    <p class="unsubscribe-message">This unsubscribe link is invalid or has already been used.</p>
+    <a href="/" class="back-link">&larr; back to feed</a>
+  {% endif %}
+</div>
+{% endblock %}

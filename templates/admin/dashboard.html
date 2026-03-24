@@ -1,0 +1,135 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">dashboard</h1>
+
+  <div class="dashboard-grid">
+    {# ── Pipeline Status ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">pipeline status</h2>
+      <div class="stat-grid">
+        {% set statuses = ['pending', 'researching', 'writing', 'editing', 'review', 'done', 'skipped'] %}
+        {% for status in statuses %}
+          <div class="stat-item">
+            <span class="stat-value">{{ pipeline_stats.get(status, 0) }}</span>
+            <span class="stat-label">{{ status }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      {% if running_count %}
+        <div class="running-indicator">
+          <span class="health-dot green blink"></span>
+          <span>{{ running_count }} pipeline(s) running</span>
+          <a href="/admin/pipelines" class="dash-link">view &rarr;</a>
+        </div>
+      {% endif %}
+      <form method="POST" action="/admin/trigger-crawl" class="dash-action">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-primary">trigger crawl now</button>
+      </form>
+      <a href="/admin/pipelines" class="dash-link">pipelines &rarr;</a>
+      <a href="/admin/newsletters" class="dash-link" style="margin-left:1rem">newsletters &rarr;</a>
+    </section>
+
+    {# ── System Health ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">system health</h2>
+      <div class="health-list">
+        <div class="health-item">
+          <span class="health-dot {% if llm_info.get('status') == 'ok' %}green{% else %}red{% endif %}"></span>
+          <span>LLM: {{ llm_info.get('provider', 'unknown') }} / {{ llm_info.get('model', '?') }}</span>
+        </div>
+        <div class="health-item">
+          <span class="health-dot {% if redis_ok %}green{% else %}red{% endif %}"></span>
+          <span>Redis: {{ 'ok' if redis_ok else 'unavailable' }}</span>
+        </div>
+        <div class="health-item">
+          <a href="/admin/api/health" class="health-link" target="_blank">full health JSON &nearr;</a>
+        </div>
+      </div>
+    </section>
+
+    {# ── Sources ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">sources</h2>
+      <table class="dash-table" aria-label="Sources table">
+        <thead>
+          <tr><th>source</th><th>type</th><th>last crawl</th><th>articles</th></tr>
+        </thead>
+        <tbody>
+          {% for source in sources %}
+            <tr>
+              <td>{{ source.name }}</td>
+              <td><span class="source-type">{{ source.source_type }}</span></td>
+              <td>{{ source.last_crawled.strftime('%b %d %H:%M') if source.last_crawled else 'never' }}</td>
+              <td>{{ article_counts.get(source.id, 0) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {# ── Subscribers ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">subscribers</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <span class="stat-value">{{ total_subs }}</span>
+          <span class="stat-label">total active</span>
+        </div>
+        {% for type, count in subs_by_type.items() %}
+          <div class="stat-item">
+            <span class="stat-value">{{ count }}</span>
+            <span class="stat-label">{{ type }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      <a href="/admin/subscribers" class="dash-link">manage subscribers &rarr;</a>
+      <a href="/admin/metrics" class="dash-link" style="margin-left:1rem">metrics &rarr;</a>
+    </section>
+  </div>
+
+  {# ── Recent Articles ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">recent articles</h2>
+    <table class="dash-table" aria-label="Recent articles table">
+      <thead>
+        <tr><th>title</th><th>topic</th><th>status</th><th>score</th><th>impact</th><th>created</th></tr>
+      </thead>
+      <tbody>
+        {% for article in recent %}
+          <tr>
+            <td>
+              <a href="/article/{{ article.id }}" class="article-link" target="_blank">
+                {{ article.original_title[:80] }}
+              </a>
+            </td>
+            <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+            <td>
+              <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %}">
+                {{ article.pipeline_status }}
+              </span>
+            </td>
+            <td>
+              {% if article.selector_result is mapping and article.selector_result.score is defined %}
+                {{ article.selector_result.score }}/10
+              {% endif %}
+            </td>
+            <td>
+              {% if article.impact_score %}
+                <span class="impact-score impact-{% if article.impact_score >= 75 %}high{% elif article.impact_score >= 50 %}mid{% elif article.impact_score >= 25 %}low{% else %}minor{% endif %}">
+                  {{ article.impact_score }}
+                </span>
+              {% endif %}
+            </td>
+            <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

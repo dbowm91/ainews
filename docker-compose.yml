@@ -1,0 +1,82 @@
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file: .env
+    environment:
+      - FLASK_CONFIG=production
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///app/instance/prod.db}
+    volumes:
+      - app-data:/app/instance
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-worker:
+    build: .
+    command: celery -A celery_app:celery_app worker -l info --concurrency=2
+    env_file: .env
+    environment:
+      - FLASK_CONFIG=production
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///app/instance/prod.db}
+    volumes:
+      - app-data:/app/instance
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    build: .
+    command: celery -A celery_app:celery_app beat -l info --schedule=/app/instance/celerybeat-schedule
+    env_file: .env
+    environment:
+      - FLASK_CONFIG=production
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///app/instance/prod.db}
+    volumes:
+      - app-data:/app/instance
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # PostgreSQL (optional — uncomment to use instead of SQLite)
+  # Set DATABASE_URL=postgresql://ainews:ainews@postgres:5432/ainews in .env
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: ainews
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ainews}
+  #     POSTGRES_DB: ainews
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ainews"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+
+volumes:
+  app-data:
+  redis-data:
+  # postgres-data:

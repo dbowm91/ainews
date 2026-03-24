@@ -1,0 +1,27 @@
+{% if top_impact %}
+  <section class="top-impact">
+    <div class="top-impact-header">
+      <h2 class="top-impact-title">top stories</h2>
+      <span class="top-impact-subtitle">from the past 24 hours</span>
+    </div>
+    <div class="top-impact-grid">
+      {% for article in top_impact %}
+        <a href="/article/{{ article.id }}"
+           hx-get="{{ url_for('public.article_detail', article_id=article.id) }}"
+           hx-target="#content" hx-swap="innerHTML" hx-push-url="true"
+           class="top-impact-card">
+          <div class="top-impact-meta">
+            <span class="category-badge cat-{{ article.category }}">{{ article.category }}</span>
+            <span class="card-time">{{ article.created_at.strftime('%b %d') if article.created_at }}</span>
+          </div>
+          <span class="top-impact-headline">
+            {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
+          </span>
+          {% if article._fa and article._fa.tldr %}
+            <span class="top-impact-tldr">{{ article._fa.tldr[:120] }}{% if article._fa.tldr|length > 120 %}...{% endif %}</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}

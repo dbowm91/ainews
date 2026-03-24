@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ainews// login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="admin-body">
+  <main class="login-container">
+    <div class="login-box">
+      <h1 class="login-title">ainews<span class="logo-slash">//</span></h1>
+      <p class="login-subtitle">admin login</p>
+      {% if error %}
+        <p class="login-error">{{ error }}</p>
+      {% endif %}
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input
+          type="password"
+          name="password"
+          placeholder="password"
+          class="login-input"
+          autofocus
+          required
+        >
+        <button type="submit" class="login-btn">login</button>
+      </form>
+    </div>
+  </main>
+</body>
+</html>

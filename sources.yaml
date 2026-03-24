@@ -1,0 +1,70 @@
+sources:
+  - id: hackernews
+    name: "Hacker News"
+    type: api
+    enabled: true
+    schedule_minutes: 30
+    config:
+      list_url: "https://hacker-news.firebaseio.com/v0/topstories.json"
+      list_method: "json_array"
+      max_items: 30
+      item_url: "https://hacker-news.firebaseio.com/v0/item/{id}.json"
+      item_method: "json_object"
+      fields:
+        external_id: "$.id"
+        title: "$.title"
+        url: "$.url"
+        author: "$.by"
+        published_at: "$.time"
+        published_at_format: "unix"
+        text_content: "$.text"
+        raw_score: "$.score"
+      filters:
+        - field: "$.type"
+          equals: "story"
+        - field: "$.score"
+          min: 20
+      metadata:
+        comment_count: "$.descendants"
+    topics:
+      match_mode: keyword
+      include: [ai, privacy, security, programming, hardware]
+
+  - id: techcrunch
+    name: "TechCrunch"
+    type: rss
+    enabled: true
+    schedule_minutes: 60
+    config:
+      feed_url: "https://techcrunch.com/feed/"
+      max_items: 50
+      request_timeout: 15
+    topics:
+      match_mode: contextual
+      include: [ai, security, programming]
+
+  - id: arstechnica
+    name: "Ars Technica"
+    type: rss
+    enabled: true
+    schedule_minutes: 60
+    config:
+      feed_url: "https://feeds.arstechnica.com/arstechnica/index"
+      max_items: 30
+      request_timeout: 15
+    topics:
+      match_mode: contextual
+      include: [ai, privacy, security, hardware, programming]
+
+  - id: theverge
+    name: "The Verge"
+    type: rss
+    enabled: true
+    schedule_minutes: 60
+    config:
+      feed_url: "https://www.theverge.com/rss/index.xml"
+      max_items: 30
+      request_timeout: 15
+    topics:
+      match_mode: contextual
+      include: [ai, privacy, hardware, programming]

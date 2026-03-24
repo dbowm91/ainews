@@ -1,0 +1,56 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — pipeline logs #{{ run.id }}{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">pipeline logs — run #{{ run.id }}</h1>
+    <a href="/admin/pipelines" class="btn-primary" style="text-decoration:none">&larr; back to pipelines</a>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">
+      run #{{ run.id }} — {{ run.run_type }} —
+      <span class="pipeline-badge pipeline-{% if run.status == 'completed' %}done{% elif run.status == 'running' %}active{% elif run.status == 'failed' %}error{% endif %}">{{ run.status }}</span>
+    </h2>
+
+    <div class="filter-bar">
+      <a href="/admin/pipelines/{{ run.id }}/logs" class="filter-btn {% if not level_filter %}active{% endif %}">all</a>
+      <a href="/admin/pipelines/{{ run.id }}/logs?level=info" class="filter-btn {% if level_filter == 'info' %}active{% endif %}">info</a>
+      <a href="/admin/pipelines/{{ run.id }}/logs?level=warning" class="filter-btn {% if level_filter == 'warning' %}active{% endif %}">warning</a>
+      <a href="/admin/pipelines/{{ run.id }}/logs?level=error" class="filter-btn {% if level_filter == 'error' %}active{% endif %}">error</a>
+    </div>
+
+    {% if logs %}
+      <table class="dash-table logs-table" aria-label="Pipeline logs">
+        <thead>
+          <tr><th>time</th><th>stage</th><th>level</th><th>article</th><th>message</th></tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+            <tr class="log-row log-{{ log.level }}">
+              <td class="log-time">{{ log.created_at.strftime('%H:%M:%S') if log.created_at }}</td>
+              <td><span class="source-type">{{ log.stage }}</span></td>
+              <td>
+                <span class="log-level log-level-{{ log.level }}">{{ log.level }}</span>
+              </td>
+              <td>
+                {% if log.article_id %}
+                  <a href="/article/{{ log.article_id }}" target="_blank">#{{ log.article_id }}</a>
+                {% endif %}
+              </td>
+              <td class="log-message">{{ log.message }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if has_next %}
+        <a href="/admin/pipelines/{{ run.id }}/logs?page={{ next_page }}{% if level_filter %}&level={{ level_filter }}{% endif %}" class="dash-link">next page &rarr;</a>
+      {% endif %}
+    {% else %}
+      <p class="empty-state">no logs for this run</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

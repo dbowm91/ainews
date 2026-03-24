@@ -1,0 +1,26 @@
+<div class="subscribe-box">
+  {% if subscribe_success %}
+    <span class="subscribe-success" role="status">{{ subscribe_success }}</span>
+  {% elif subscribe_error %}
+    <span class="subscribe-error" role="alert">{{ subscribe_error }}</span>
+  {% else %}
+    <label for="subscribe-email" class="subscribe-label">
+      {% if newsletter_type and newsletter_type != 'main' %}
+        subscribe to {{ newsletter_type }}
+      {% else %}
+        subscribe to the daily newsletter
+      {% endif %}
+    </label>
+    <form method="POST" action="/subscribe"
+          hx-post="/subscribe"
+          hx-swap="outerHTML"
+          hx-target="closest .subscribe-box"
+          hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="email" id="subscribe-email" name="email" placeholder="you@example.com" class="subscribe-input" required aria-describedby="subscribe-hint">
+      <span id="subscribe-hint" class="sr-only">Enter your email address to subscribe</span>
+      <input type="hidden" name="newsletter_type" value="{{ newsletter_type or 'main' }}">
+      <button type="submit" class="subscribe-btn">subscribe</button>
+    </form>
+  {% endif %}
+</div>

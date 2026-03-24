@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block title %}ainews// {% if category %}{{ category }}{% else %}feed{% endif %}{% endblock %}
+
+{% block content %}
+  {% include "partials/feed.html" %}
+{% endblock %}

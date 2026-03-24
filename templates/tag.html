@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}ainews// tag: {{ tag.name }}{% endblock %}
+
+{% block content %}
+<div class="tag-layout">
+  <div class="tag-main">
+    <div class="feed-header">
+      <div class="tag-header">
+        <h1 class="tag-title">{{ tag.name }}</h1>
+        <span class="tag-count">{{ articles|length }} articles</span>
+      </div>
+      <div id="category-filter" class="filter-bar">
+        <a href="/" class="filter-btn">all</a>
+        {% for cat in categories %}
+          <a href="/topic/{{ cat }}" class="filter-btn">{{ cat }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="feed">
+      {% for article in articles %}
+        {% include "partials/article_card.html" %}
+      {% endfor %}
+
+      {% if has_next %}
+      <div id="scroll-sentinel"
+           hx-get="{{ url_for('public.tag_feed', slug=tag_slug, page=next_page) }}"
+           hx-trigger="revealed"
+           hx-swap="outerHTML"
+           hx-target="#scroll-sentinel">
+        <div class="loading-indicator">
+          <span class="spinner">loading more...</span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <aside class="tag-sidebar">
+    <div class="tag-cloud">
+      <h3 class="sidebar-heading">tags</h3>
+      {% for t in all_tags %}
+        <a href="/tag/{{ t.slug }}"
+           class="tag-cloud-item {% if t.slug == tag.slug %}active{% endif %}">
+          {{ t.name }}
+          <span class="tag-count-sm">{{ t.count }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </aside>
+</div>
+{% endblock %}

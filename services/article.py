@@ -229,7 +229,7 @@ def create_article_version(
     """
     from models import ArticleVersion
 
-    # Get next version number
+    # Get next version number — query after flush so concurrent calls see each other
     max_version = (
         db.session.query(db.func.max(ArticleVersion.version_number))
         .filter_by(article_id=article.id)
@@ -246,6 +246,7 @@ def create_article_version(
         changed_by=changed_by,
     )
     db.session.add(version)
+    db.session.flush()  # Ensure subsequent queries see this version
     # Don't commit here — let the caller handle the transaction
 
 

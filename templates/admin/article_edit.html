@@ -86,7 +86,7 @@
         <div class="form-group form-group-half">
           <label for="pipeline_status">pipeline status</label>
           <select id="pipeline_status" name="pipeline_status" class="form-select">
-            {% for s in ['pending', 'researching', 'writing', 'editing', 'done', 'skipped'] %}
+            {% for s in ['pending', 'researching', 'writing', 'editing', 'review', 'done', 'skipped'] %}
               <option value="{{ s }}" {% if article.pipeline_status == s %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
           </select>

@@ -1,5 +1,6 @@
 from celery import Celery, Task
 import os
+import threading
 
 # Celery CLI (`celery -A celery_app:celery_app`) requires a fully-configured
 # module-level celery_app. We initialize at import time for that reason.
@@ -8,6 +9,7 @@ import os
 
 _celery = Celery("ainews")
 _app_cache = {}
+_app_cache_lock = threading.Lock()
 
 
 class FlaskTask(Task):
@@ -16,15 +18,24 @@ class FlaskTask(Task):
     def __call__(self, *args, **kwargs):
         config_name = os.environ.get("FLASK_CONFIG", "development")
         if config_name not in _app_cache:
-            from app import create_app
-            _app_cache[config_name] = create_app(config_name)
+            with _app_cache_lock:
+                if config_name not in _app_cache:
+                    from app import create_app
+
+                    _app_cache[config_name] = create_app(config_name)
         app = _app_cache[config_name]
         with app.app_context():
-            return self.run(*args, **kwargs)
+            try:
+                return self.run(*args, **kwargs)
+            finally:
+                from extensions import db
+
+                db.session.remove()
 
 
 def _init_celery():
     from app import create_app
+
     app = create_app()
     _celery.config_from_object(app.config, namespace="CELERY")
     _celery.Task = FlaskTask

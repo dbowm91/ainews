@@ -18,7 +18,7 @@ services:
 
   celery-worker:
     build: .
-    command: celery -A celery_app:celery_app worker -l info --concurrency=2
+    command: celery -A celery_app:celery_app worker -l info --concurrency=4
     env_file: .env
     environment:
       - FLASK_CONFIG=production
@@ -59,24 +59,6 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # PostgreSQL (optional — uncomment to use instead of SQLite)
-  # Set DATABASE_URL=postgresql://ainews:ainews@postgres:5432/ainews in .env
-  # postgres:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     POSTGRES_USER: ainews
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ainews}
-  #     POSTGRES_DB: ainews
-  #   volumes:
-  #     - postgres-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U ainews"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: unless-stopped
-
 volumes:
   app-data:
   redis-data:
-  # postgres-data:

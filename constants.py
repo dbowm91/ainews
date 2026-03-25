@@ -18,6 +18,7 @@ VALID_PIPELINE_STATUSES = frozenset(
         "review",
         "done",
         "skipped",
+        "failed",
     }
 )
 
@@ -27,3 +28,6 @@ IMPACT_SCORE_MAX = 100
 
 # Content extraction minimum text length
 MIN_CONTENT_LENGTH = 200
+
+# Dead-letter: minutes before an in-progress article is considered stuck
+STUCK_THRESHOLD_MINUTES = 60

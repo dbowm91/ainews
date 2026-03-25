@@ -1,16 +1,14 @@
 import logging
-import os
 from typing import Any
 
-from services.search.base import BaseSearchProvider, SearchResult, register_search_provider
+from schemas.common import resolve_env_var
+from services.search.base import (
+    BaseSearchProvider,
+    SearchResult,
+    register_search_provider,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_env(val: str) -> str:
-    if isinstance(val, str) and val.startswith("${") and val.endswith("}"):
-        return os.environ.get(val[2:-1], val)
-    return val
 
 
 def _is_configured(val: str) -> bool:
@@ -21,9 +19,11 @@ def _is_configured(val: str) -> bool:
 class GoogleSearchProvider(BaseSearchProvider):
     def __init__(self, provider_id: str, config: dict):
         super().__init__(provider_id, config)
-        self.api_key = _resolve_env(config.get("api_key", ""))
-        self.cse_id = _resolve_env(config.get("cse_id", ""))
-        self.base_url = config.get("base_url", "https://www.googleapis.com/customsearch/v1")
+        self.api_key = resolve_env_var(config.get("api_key", ""))
+        self.cse_id = resolve_env_var(config.get("cse_id", ""))
+        self.base_url = config.get(
+            "base_url", "https://www.googleapis.com/customsearch/v1"
+        )
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         if not _is_configured(self.api_key) or not _is_configured(self.cse_id):
@@ -32,6 +32,7 @@ class GoogleSearchProvider(BaseSearchProvider):
 
         try:
             import requests
+
             resp = requests.get(
                 self.base_url,
                 params={
@@ -47,12 +48,14 @@ class GoogleSearchProvider(BaseSearchProvider):
 
             results = []
             for item in data.get("items", []):
-                results.append(SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("link", ""),
-                    snippet=item.get("snippet", ""),
-                    source=self.provider_id,
-                ))
+                results.append(
+                    SearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("link", ""),
+                        snippet=item.get("snippet", ""),
+                        source=self.provider_id,
+                    )
+                )
             return results[:max_results]
         except Exception as e:
             logger.warning(f"Google search failed for '{query}': {type(e).__name__}")
@@ -63,6 +66,7 @@ class GoogleSearchProvider(BaseSearchProvider):
             return {"provider": self.provider_id, "status": "not configured"}
         try:
             import requests
+
             resp = requests.get(
                 self.base_url,
                 params={"key": self.api_key, "cx": self.cse_id, "q": "test", "num": 1},
@@ -71,4 +75,7 @@ class GoogleSearchProvider(BaseSearchProvider):
             resp.raise_for_status()
             return {"provider": self.provider_id, "status": "ok"}
         except Exception as e:
-            return {"provider": self.provider_id, "status": f"error: {type(e).__name__}"}
+            return {
+                "provider": self.provider_id,
+                "status": f"error: {type(e).__name__}",
+            }

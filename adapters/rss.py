@@ -24,6 +24,9 @@ class RSSAdapter(BaseSourceAdapter):
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
 
+    def close(self):
+        self._session.close()
+
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
         validate_url_safe(cfg.feed_url)

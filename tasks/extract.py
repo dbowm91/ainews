@@ -30,7 +30,10 @@ def _find_duplicate_article(url: str, title: str):
                     Article.original_url.ilike(f"%{escaped_domain}%", escape="\\"),
                 ).all()
                 for cand in candidates:
-                    if cand.original_url and normalize_url(cand.original_url) == normalized:
+                    if (
+                        cand.original_url
+                        and normalize_url(cand.original_url) == normalized
+                    ):
                         return cand
 
     # Title-based dedup: normalize both sides consistently
@@ -41,9 +44,13 @@ def _find_duplicate_article(url: str, title: str):
             # We fetch candidates and verify in Python for exact match.
             escaped = _escape_like_pattern(normalized_title)
             like_pattern = escaped.replace(" ", "%")
-            candidates = Article.query.filter(
-                Article.original_title.ilike(f"%{like_pattern}%", escape="\\"),
-            ).limit(20).all()
+            candidates = (
+                Article.query.filter(
+                    Article.original_title.ilike(f"%{like_pattern}%", escape="\\"),
+                )
+                .limit(20)
+                .all()
+            )
             for cand in candidates:
                 if normalize_title(cand.original_title) == normalized_title:
                     return cand
@@ -53,9 +60,20 @@ def _find_duplicate_article(url: str, title: str):
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=30)
 def process_item(
-    self, source_key, source_name, source_type, external_id,
-    title, url, author, published_at, text_content,
-    raw_score, raw_metadata, topics, min_content_length=None,
+    self,
+    source_key,
+    source_name,
+    source_type,
+    external_id,
+    title,
+    url,
+    author,
+    published_at,
+    text_content,
+    raw_score,
+    raw_metadata,
+    topics,
+    min_content_length=None,
     run_id=None,
 ):
     from services.content_extractor import extract_article
@@ -73,13 +91,21 @@ def process_item(
     if url and (not text_content or len(text_content) < min_content_length):
         try:
             extraction = extract_article(url)
-            if extraction and extraction.text and len(extraction.text) >= MIN_CONTENT_LENGTH:
+            if (
+                extraction
+                and extraction.text
+                and len(extraction.text) >= MIN_CONTENT_LENGTH
+            ):
                 extracted_text = extraction.text
         except Exception as exc:
             logger.warning(f"Extraction failed for {url}: {exc}")
             if run_id:
-                _log_pipeline(run_id, "extract", "warning",
-                              f"Extraction failed for {title[:60]}: {exc}")
+                _log_pipeline(
+                    run_id,
+                    "extract",
+                    "warning",
+                    f"Extraction failed for {title[:60]}: {exc}",
+                )
 
     # Cross-source dedup check
     try:
@@ -88,11 +114,17 @@ def process_item(
         logger.warning(f"Dedup check failed for {title[:50]}: {exc}")
         duplicate = None
     if duplicate:
-        logger.info(f"Duplicate found for [{title[:50]}]: existing article {duplicate.id}")
+        logger.info(
+            f"Duplicate found for [{title[:50]}]: existing article {duplicate.id}"
+        )
         if run_id:
-            _log_pipeline(run_id, "extract", "info",
-                          f"Duplicate skipped: {title[:60]} (existing: {duplicate.id})",
-                          article_id=duplicate.id)
+            _log_pipeline(
+                run_id,
+                "extract",
+                "info",
+                f"Duplicate skipped: {title[:60]} (existing: {duplicate.id})",
+                article_id=duplicate.id,
+            )
         # Add this source as a citation to the existing article if URL differs
         if url and url != duplicate.original_url:
             try:
@@ -100,22 +132,35 @@ def process_item(
                     article_id=duplicate.id, url=url
                 ).first()
                 if not existing_cite:
-                    max_pos = db.session.query(
-                        db.func.max(Citation.position)
-                    ).filter_by(article_id=duplicate.id).scalar() or 0
-                    db.session.add(Citation(
-                        article_id=duplicate.id, url=url, title=title,
-                        author=author, position=max_pos + 1,
-                    ))
+                    max_pos = (
+                        db.session.query(db.func.max(Citation.position))
+                        .filter_by(article_id=duplicate.id)
+                        .scalar()
+                        or 0
+                    )
+                    db.session.add(
+                        Citation(
+                            article_id=duplicate.id,
+                            url=url,
+                            title=title,
+                            author=author,
+                            position=max_pos + 1,
+                        )
+                    )
                     db.session.commit()
-                    logger.info(f"Added citation to article {duplicate.id} from {url[:60]}")
+                    logger.info(
+                        f"Added citation to article {duplicate.id} from {url[:60]}"
+                    )
             except Exception as exc:
                 db.session.rollback()
-                logger.warning(f"Failed to add citation for duplicate {duplicate.id}: {exc}")
+                logger.warning(
+                    f"Failed to add citation for duplicate {duplicate.id}: {exc}"
+                )
         return {"article_id": duplicate.id, "duplicate": True}
 
     try:
         from services.crawling import get_or_create_source
+
         source = get_or_create_source(
             source_key=source_key,
             name=source_name,
@@ -124,19 +169,29 @@ def process_item(
         )
 
         try:
-            pub_date = datetime.fromisoformat(published_at) if published_at else datetime.now(timezone.utc)
+            pub_date = (
+                datetime.fromisoformat(published_at)
+                if published_at
+                else datetime.now(timezone.utc)
+            )
         except (ValueError, TypeError):
             pub_date = datetime.now(timezone.utc)
 
         article = Article(
-            source_id=source.id, external_id=external_id,
-            original_url=url, original_title=title,
-            original_author=author, original_published_at=pub_date,
+            source_id=source.id,
+            external_id=external_id,
+            original_url=url,
+            original_title=title,
+            original_author=author,
+            original_published_at=pub_date,
             extracted_text=extracted_text,
             pipeline_status="pending",
             category=topics[0] if topics else "other",
-            topics=topics, raw_metadata=raw_metadata or {},
-            extraction_status=extraction.status.value if extraction else ("no_url" if not url else "success"),
+            topics=topics,
+            raw_metadata=raw_metadata or {},
+            extraction_status=extraction.status.value
+            if extraction
+            else ("no_url" if not url else "success"),
         )
         db.session.add(article)
         db.session.flush()
@@ -146,10 +201,15 @@ def process_item(
         db.session.flush()
 
         if url:
-            db.session.add(Citation(
-                article_id=article.id, url=url, title=title,
-                author=author, position=1,
-            ))
+            db.session.add(
+                Citation(
+                    article_id=article.id,
+                    url=url,
+                    title=title,
+                    author=author,
+                    position=1,
+                )
+            )
 
         db.session.commit()
     except Exception as exc:
@@ -160,11 +220,16 @@ def process_item(
         raise
 
     if run_id:
-        _log_pipeline(run_id, "extract", "info",
-                      f"Extracted [{topics[0] if topics else '?'}]: {title[:60]}",
-                      article_id=article.id)
+        _log_pipeline(
+            run_id,
+            "extract",
+            "info",
+            f"Extracted [{topics[0] if topics else '?'}]: {title[:60]}",
+            article_id=article.id,
+        )
     logger.info(f"Extracted [{topics[0] if topics else '?'}]: {title[:60]}")
 
     from tasks.select import select_article
+
     select_article.delay(article.id, run_id=run_id)
     return {"article_id": article.id}

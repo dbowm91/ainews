@@ -2,9 +2,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
-import yaml
 
-BASE_DIR = Path(__file__).parent.parent
+from schemas.common import BASE_DIR, cached_config_with_mtime, load_yaml_file
 
 
 class TopicDef(BaseModel):
@@ -22,20 +21,16 @@ def _load_topics_from_file(path: str | Path) -> TopicsConfig:
     p = Path(path)
     if not p.exists():
         return TopicsConfig(topics={})
-    raw = yaml.safe_load(p.read_text()) or {}
+    raw = load_yaml_file(p)
     return TopicsConfig(**raw)
 
 
 def load_topics(path: str | Path = BASE_DIR / "topics.yaml") -> TopicsConfig:
-    try:
-        from services.config_cache import get_config_cache
-        return get_config_cache().get(
-            key="topics",
-            loader_fn=lambda: _load_topics_from_file(path),
-            ttl=300,
-        )
-    except Exception:
-        return _load_topics_from_file(path)
+    return cached_config_with_mtime(
+        key="topics",
+        loader_fn=lambda: _load_topics_from_file(path),
+        config_path=Path(path),
+    )
 
 
 def get_topic_keys(path: str | Path = BASE_DIR / "topics.yaml") -> list[str]:

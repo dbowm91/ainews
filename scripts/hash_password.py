@@ -44,7 +44,9 @@ def main():
 
     # Verify the hash works
     assert check_password_hash(hashed, password), "Hash verification failed"
-    assert not check_password_hash(hashed, password + "wrong"), "Hash should reject wrong password"
+    assert not check_password_hash(hashed, password + "wrong"), (
+        "Hash should reject wrong password"
+    )
 
     print()
     print("Hashed password (set this as ADMIN_PASSWORD in .env):")

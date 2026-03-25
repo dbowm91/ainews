@@ -123,6 +123,41 @@ class ConfigCache:
         except redis.exceptions.RedisError as e:
             logger.warning(f"Config cache invalidate_all failed: {e}")
 
+    def invalidate_if_stale(self, key: str, config_path) -> None:
+        """Invalidate cache entry if the config file has been modified since last load."""
+        from pathlib import Path
+
+        p = Path(config_path)
+        if not p.exists():
+            return
+        mtime_key = f"{self.prefix}:{key}:mtime"
+        try:
+            cached_mtime_raw = self.redis.get(mtime_key)
+            if cached_mtime_raw is not None:
+                cached_mtime = float(
+                    cached_mtime_raw.decode()
+                    if isinstance(cached_mtime_raw, bytes)
+                    else cached_mtime_raw
+                )
+                current_mtime = p.stat().st_mtime
+                if current_mtime > cached_mtime:
+                    self.invalidate(key)
+        except (redis.exceptions.RedisError, ValueError, OSError) as e:
+            logger.warning(f"Staleness check failed for {key}: {e}")
+
+    def _record_mtime(self, key: str, config_path) -> None:
+        """Record the mtime of a config file after a successful load."""
+        from pathlib import Path
+
+        p = Path(config_path)
+        if not p.exists():
+            return
+        mtime_key = f"{self.prefix}:{key}:mtime"
+        try:
+            self.redis.setex(mtime_key, 86400, str(p.stat().st_mtime))
+        except (redis.exceptions.RedisError, OSError) as e:
+            logger.warning(f"Failed to record mtime for {key}: {e}")
+
 
 def get_config_cache() -> ConfigCache:
     global _cache_instance

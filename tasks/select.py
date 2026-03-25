@@ -6,40 +6,20 @@ logger = get_task_logger(__name__)
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
 def select_article(self, article_id: int, run_id=None):
-    from models import Article, PipelineRun
+    from models import PipelineRun
     from extensions import db
-    from schemas.pipeline import get_role_config
-    from services.llm import get_provider_for_role
-    from services.limiter import get_limiter
-    from tasks.pipeline import _log_pipeline, _handle_stage_failure
     from pydantic import BaseModel, Field
+    from schemas.pipeline import get_role_config
+    from services.prompts import get_system_prompt
+    from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next
 
-    rc = get_role_config("selector")
-    if not rc.enabled:
-        from tasks.research import research_article
+    class SelectionResult(BaseModel):
+        selected: bool
+        score: int = Field(ge=1, le=10)
+        reason: str
 
-        research_article.delay(article_id, run_id=run_id)
-        return {"article_id": article_id, "decision": "skip_selector"}
-
-    article = Article.query.get(article_id)
-    if not article:
-        return {"article_id": article_id, "error": "not found"}
-
-    provider, model, max_tokens = get_provider_for_role("selector")
-    limiter = get_limiter()
-    acquired = False
-
-    if not limiter.acquire(rc.provider, model, rc.concurrency, rc.timeout_seconds):
-        raise self.retry(countdown=15, max_retries=20)
-    acquired = True
-
-    try:
-
-        class SelectionResult(BaseModel):
-            selected: bool
-            score: int = Field(ge=1, le=10)
-            reason: str
-
+    def work(article, provider, model, max_tokens):
+        rc = get_role_config("selector")
         text_preview = (article.extracted_text or article.original_title or "")[:500]
         prompt = (
             f"ARTICLE: {article.original_title}\n"
@@ -54,29 +34,30 @@ def select_article(self, article_id: int, run_id=None):
             messages=[{"role": "user", "content": prompt}],
             response_model=SelectionResult,
             model=model,
-            system=rc.system_prompt
-            or "You are a news editor deciding which stories to cover.",
+            system=get_system_prompt("selector", rc.system_prompt),
             temperature=rc.temperature,
             max_tokens=max_tokens,
         )
 
-        from services.llm import record_provider_success
-
-        record_provider_success(rc.provider, model)
-
         article.selector_result = result.model_dump()
-        article.retry_count = 0
-        article.last_error = None
 
         if result.selected and result.score >= (rc.min_score or 6):
             article.pipeline_status = "researching"
-            db.session.commit()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
 
             if run_id:
-                run = PipelineRun.query.get(run_id)
+                run = db.session.get(PipelineRun, run_id)
                 if run:
                     run.articles_selected = (run.articles_selected or 0) + 1
-                    db.session.commit()
+                    try:
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        raise
                 _log_pipeline(
                     run_id,
                     "select",
@@ -86,12 +67,14 @@ def select_article(self, article_id: int, run_id=None):
                 )
 
             logger.info(f"Selected [{result.score}/10]: {article.original_title[:50]}")
-            from tasks.research import research_article
-
-            research_article.delay(article_id, run_id=run_id)
+            _dispatch_next(article_id, run_id=run_id, next_status="researching")
         else:
             article.pipeline_status = "skipped"
-            db.session.commit()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
 
             if run_id:
                 _log_pipeline(
@@ -103,27 +86,16 @@ def select_article(self, article_id: int, run_id=None):
                 )
 
             logger.info(f"Skipped [{result.score}/10]: {article.original_title[:50]}")
-    except Exception as e:
-        db.session.rollback()
-        from services.llm import record_provider_failure
 
-        record_provider_failure(rc.provider, model)
-        article = Article.query.get(article_id)
-        if article:
-            if _handle_stage_failure(article, "select", e, run_id=run_id):
-                return {"article_id": article_id, "result": "degraded"}
-        if run_id:
-            _log_pipeline(
-                run_id,
-                "select",
-                "error",
-                f"Article {article_id}: {e}",
-                article_id=article_id,
-            )
-        logger.error(f"Selector failed for article {article_id}: {e}")
-        raise
-    finally:
-        if acquired:
-            limiter.release(rc.provider, model)
+        return {"article_id": article_id, "result": article.selector_result}
 
-    return {"article_id": article_id, "result": article.selector_result}
+    return run_stage(
+        "selector",
+        article_id,
+        work,
+        task_self=self,
+        run_id=run_id,
+        skip_next="researching",
+        retry_countdown=15,
+        retry_max=20,
+    )

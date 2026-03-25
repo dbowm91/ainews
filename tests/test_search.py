@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock, patch
-from services.search.base import SearchResult, get_search_provider_class
+from services.search.base import get_search_provider_class
 from services.search.duckduckgo import DuckDuckGoSearchProvider
 from services.search.google import GoogleSearchProvider
 from services.search.searxng import SearXNGSearchProvider
@@ -20,6 +20,7 @@ class TestSearchProviderRegistry:
 
     def test_unknown_provider_raises(self):
         import pytest
+
         with pytest.raises(KeyError, match="No search provider for 'unknown'"):
             get_search_provider_class("unknown")
 
@@ -63,15 +64,22 @@ class TestGoogleProvider:
         mock_get.return_value.ok = True
         mock_get.return_value.json.return_value = {
             "items": [
-                {"title": "Google Result", "link": "https://google.com", "snippet": "desc"},
+                {
+                    "title": "Google Result",
+                    "link": "https://google.com",
+                    "snippet": "desc",
+                },
             ]
         }
         mock_get.return_value.raise_for_status = MagicMock()
 
-        provider = GoogleSearchProvider("google", {
-            "api_key": "fake-key",
-            "cse_id": "fake-cse",
-        })
+        provider = GoogleSearchProvider(
+            "google",
+            {
+                "api_key": "fake-key",
+                "cse_id": "fake-cse",
+            },
+        )
         results = provider.search("test", max_results=1)
 
         assert len(results) == 1
@@ -81,10 +89,13 @@ class TestGoogleProvider:
     def test_search_graceful_failure(self, mock_get):
         mock_get.side_effect = Exception("API down")
 
-        provider = GoogleSearchProvider("google", {
-            "api_key": "fake-key",
-            "cse_id": "fake-cse",
-        })
+        provider = GoogleSearchProvider(
+            "google",
+            {
+                "api_key": "fake-key",
+                "cse_id": "fake-cse",
+            },
+        )
         results = provider.search("test")
         assert results == []
 
@@ -95,7 +106,11 @@ class TestSearXNGProvider:
         mock_get.return_value.ok = True
         mock_get.return_value.json.return_value = {
             "results": [
-                {"title": "SearXNG Result", "url": "https://searxng.com", "content": "desc"},
+                {
+                    "title": "SearXNG Result",
+                    "url": "https://searxng.com",
+                    "content": "desc",
+                },
             ]
         }
         mock_get.return_value.raise_for_status = MagicMock()

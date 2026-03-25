@@ -1,33 +1,63 @@
 import logging
-import re
 from flask import render_template, request, jsonify, current_app
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_NEWSLETTERS
 
 logger = logging.getLogger(__name__)
 
-# Pattern to strip potentially dangerous tags from newsletter HTML.
-# Only matches paired tags (open + close) and self-closing tags with "/>".
-_UNSAFE_TAG_PATTERN = re.compile(
-    r"<\s*(script|iframe|object|embed|form|input|textarea|select|link)\b[^>]*>"
-    r".*?<\s*/\s*\1\s*>|"
-    r"<\s*(script|iframe|object|embed|form|input|textarea|select|link)\b[^>]*/\s*>",
-    re.IGNORECASE | re.DOTALL,
-)
-
-# Strip event handler attributes (onclick, onerror, onload, etc.)
-_EVENT_ATTR_PATTERN = re.compile(
-    r'\s+on\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', re.IGNORECASE
-)
+# Allowed HTML tags and attributes for newsletter content.
+_NEWSLETTER_TAGS = {
+    "a",
+    "p",
+    "br",
+    "strong",
+    "em",
+    "b",
+    "i",
+    "u",
+    "ul",
+    "ol",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "blockquote",
+    "img",
+    "table",
+    "tr",
+    "td",
+    "th",
+    "thead",
+    "tbody",
+    "div",
+    "span",
+    "hr",
+    "pre",
+    "code",
+}
+_NEWSLETTER_ATTRS = {
+    "a": {"href", "title"},
+    "img": {"src", "alt", "width", "height"},
+    "td": {"colspan", "rowspan"},
+    "th": {"colspan", "rowspan"},
+}
 
 
 def _sanitize_newsletter_html(html: str) -> str:
-    """Remove script tags and event handlers from newsletter HTML before serving."""
+    """Remove dangerous tags and attributes from newsletter HTML before serving."""
+    import nh3
+
     if not html:
         return html
-    cleaned = _UNSAFE_TAG_PATTERN.sub("", html)
-    cleaned = _EVENT_ATTR_PATTERN.sub("", cleaned)
-    return cleaned
+    return nh3.clean(
+        html,
+        tags=_NEWSLETTER_TAGS,
+        attributes=_NEWSLETTER_ATTRS,
+        url_schemes={"http", "https", "mailto"},
+    )
 
 
 @admin_bp.route("/newsletters")

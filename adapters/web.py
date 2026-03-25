@@ -39,6 +39,9 @@ class WebAdapter(BaseSourceAdapter):
             }
         )
 
+    def close(self):
+        self._session.close()
+
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
         try:

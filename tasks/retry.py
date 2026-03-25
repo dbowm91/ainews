@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
+from constants import STUCK_THRESHOLD_MINUTES
 from tasks.pipeline import MAX_STAGE_RETRIES
 
 logger = get_task_logger(__name__)
@@ -10,42 +11,83 @@ logger = get_task_logger(__name__)
 
 @shared_task
 def retry_stuck():
+    """Retry or dead-letter articles stuck in the pipeline.
+
+    Runs periodically via Celery Beat (every 60 minutes).
+
+    For each stuck article (updated > 15 min ago):
+    - If stuck >= STUCK_THRESHOLD_MINUTES: dead-letter (mark as "failed")
+    - Elif retry_count >= MAX_STAGE_RETRIES: degrade and advance
+    - Else: re-dispatch the current stage with incremented retry_count
+    """
     from models import Article
     from extensions import db
     from tasks.pipeline import _degrade_and_advance
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    now = datetime.now(timezone.utc)
+    soft_cutoff = now - timedelta(minutes=15)
+
     stuck = Article.query.filter(
         Article.pipeline_status.in_(["researching", "writing", "editing", "pending"]),
-        Article.updated_at < cutoff,
+        Article.updated_at < soft_cutoff,
     ).all()
 
-    degraded = 0
     retried = 0
+    degraded = 0
+    dead_lettered = 0
 
     for article in stuck:
-        if (article.retry_count or 0) >= MAX_STAGE_RETRIES:
+        age_minutes = (now - article.updated_at).total_seconds() / 60
+
+        if age_minutes >= STUCK_THRESHOLD_MINUTES:
+            _dead_letter(article)
+            dead_lettered += 1
+        elif (article.retry_count or 0) >= MAX_STAGE_RETRIES:
             _degrade_and_advance(article, article.pipeline_status)
             degraded += 1
-            logger.warning(f"Degraded stuck article {article.id} from {article.pipeline_status}")
-            continue
+            logger.warning(
+                f"Degraded stuck article {article.id} from {article.pipeline_status}"
+            )
+        else:
+            article.retry_count = (article.retry_count or 0) + 1
+            db.session.commit()
+            _dispatch_stage(article)
+            retried += 1
 
-        article.retry_count = (article.retry_count or 0) + 1
-        db.session.commit()
+    if retried or degraded or dead_lettered:
+        logger.info(
+            f"Retry sweep: {retried} retried, {degraded} degraded, {dead_lettered} dead-lettered"
+        )
 
-        logger.info(f"Retrying stuck article {article.id} at stage: {article.pipeline_status}")
-        if article.pipeline_status == "pending":
-            from tasks.select import select_article
-            select_article.delay(article.id)
-        elif article.pipeline_status == "researching":
-            from tasks.research import research_article
-            research_article.delay(article.id)
-        elif article.pipeline_status == "writing":
-            from tasks.write import write_article
-            write_article.delay(article.id)
-        elif article.pipeline_status == "editing":
-            from tasks.edit import edit_article
-            edit_article.delay(article.id)
-        retried += 1
+    return {
+        "retried": retried,
+        "degraded": degraded,
+        "dead_lettered": dead_lettered,
+    }
 
-    return {"retried": retried, "degraded": degraded}
+
+def _dispatch_stage(article):
+    """Re-dispatch a task for the article's current pipeline stage."""
+    from tasks.pipeline import _dispatch_for_status
+
+    _dispatch_for_status(article)
+
+
+def _dead_letter(article):
+    """Force-finalize a stuck article as failed with a fallback draft."""
+    from extensions import db
+    from tasks.pipeline import _apply_fallback
+
+    logger.error(
+        f"Dead-lettering article {article.id}: stuck in '{article.pipeline_status}' "
+        f"for too long (retry_count={article.retry_count})"
+    )
+
+    _apply_fallback(article)
+    article.pipeline_status = "failed"
+    article.retry_count = 0
+    article.last_error = (
+        f"Dead-lettered: stuck in '{article.pipeline_status}' "
+        f"beyond {STUCK_THRESHOLD_MINUTES} minutes"
+    )
+    db.session.commit()

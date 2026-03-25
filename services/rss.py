@@ -18,9 +18,7 @@ def generate_rss_feed(
     SubElement(channel, "link").text = site_url
     SubElement(channel, "description").text = description
     SubElement(channel, "language").text = "en-us"
-    SubElement(channel, "lastBuildDate").text = _format_date(
-        datetime.now(timezone.utc)
-    )
+    SubElement(channel, "lastBuildDate").text = _format_date(datetime.now(timezone.utc))
 
     for article in articles:
         item = SubElement(channel, "item")
@@ -56,9 +54,7 @@ def generate_rss_feed(
 
 
 def generate_sitemap(articles: list, site_url: str = "") -> str:
-    urlset = Element(
-        "urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-    )
+    urlset = Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
 
     # Homepage
     url_el = SubElement(urlset, "url")
@@ -68,6 +64,7 @@ def generate_sitemap(articles: list, site_url: str = "") -> str:
 
     # Topic pages
     from schemas.topic import load_topics
+
     topics = load_topics().topics
     for topic_key in topics:
         url_el = SubElement(urlset, "url")
@@ -80,9 +77,7 @@ def generate_sitemap(articles: list, site_url: str = "") -> str:
         url_el = SubElement(urlset, "url")
         SubElement(url_el, "loc").text = f"{site_url}/article/{article.id}"
         if article.created_at:
-            SubElement(url_el, "lastmod").text = article.created_at.strftime(
-                "%Y-%m-%d"
-            )
+            SubElement(url_el, "lastmod").text = article.created_at.strftime("%Y-%m-%d")
         SubElement(url_el, "changefreq").text = "weekly"
         SubElement(url_el, "priority").text = "0.6"
 
@@ -94,6 +89,7 @@ def generate_sitemap(articles: list, site_url: str = "") -> str:
 
 def _parse_final_article(article) -> tuple[str, str]:
     from services.utils import parse_article_headline
+
     return parse_article_headline(article, include_summary=True)
 
 

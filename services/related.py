@@ -10,11 +10,16 @@ def find_related_articles(article, limit: int = 5):
     """
     from models import Article
 
-    candidates = Article.query.filter(
-        Article.id != article.id,
-        Article.pipeline_status == "done",
-        Article.final_article.isnot(None),
-    ).order_by(Article.created_at.desc()).limit(200).all()
+    candidates = (
+        Article.query.filter(
+            Article.id != article.id,
+            Article.pipeline_status == "done",
+            Article.final_article.isnot(None),
+        )
+        .order_by(Article.created_at.desc())
+        .limit(200)
+        .all()
+    )
 
     article_tag_ids = {t.id for t in article.tags} if article.tags else set()
     article_words = _extract_keywords(article.original_title or "")
@@ -48,7 +53,9 @@ def find_related_articles(article, limit: int = 5):
     return [cand for _, cand in scored[:limit]]
 
 
-def find_related_articles_dicts(topics: list[str], exclude_id: int, limit: int = 5) -> list[dict]:
+def find_related_articles_dicts(
+    topics: list[str], exclude_id: int, limit: int = 5
+) -> list[dict]:
     """Find related articles using scored matching (used by pipeline researcher).
 
     Returns list of dicts compatible with the research prompt builder.
@@ -60,11 +67,16 @@ def find_related_articles_dicts(topics: list[str], exclude_id: int, limit: int =
     if not topics:
         return []
 
-    candidates = Article.query.filter(
-        Article.id != exclude_id,
-        Article.pipeline_status == "done",
-        Article.final_article.isnot(None),
-    ).order_by(Article.created_at.desc()).limit(200).all()
+    candidates = (
+        Article.query.filter(
+            Article.id != exclude_id,
+            Article.pipeline_status == "done",
+            Article.final_article.isnot(None),
+        )
+        .order_by(Article.created_at.desc())
+        .limit(200)
+        .all()
+    )
 
     topic_set = {t.lower() for t in topics}
 
@@ -104,14 +116,73 @@ def find_related_articles_dicts(topics: list[str], exclude_id: int, limit: int =
 def _extract_keywords(title: str) -> set[str]:
     """Extract meaningful keywords from a title, filtering stop words."""
     stop_words = {
-        "a", "an", "the", "is", "are", "was", "were", "be", "been",
-        "to", "of", "in", "for", "on", "with", "at", "by", "from",
-        "as", "into", "about", "up", "out", "if", "or", "and", "but",
-        "not", "it", "its", "this", "that", "we", "he", "she", "they",
-        "i", "you", "my", "your", "his", "her", "our", "their",
-        "has", "have", "had", "do", "does", "did", "will", "would",
-        "could", "should", "can", "may", "might", "must", "shall",
-        "new", "how", "what", "when", "where", "why", "which", "who",
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "about",
+        "up",
+        "out",
+        "if",
+        "or",
+        "and",
+        "but",
+        "not",
+        "it",
+        "its",
+        "this",
+        "that",
+        "we",
+        "he",
+        "she",
+        "they",
+        "i",
+        "you",
+        "my",
+        "your",
+        "his",
+        "her",
+        "our",
+        "their",
+        "has",
+        "have",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "can",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "new",
+        "how",
+        "what",
+        "when",
+        "where",
+        "why",
+        "which",
+        "who",
     }
     words = set(title.lower().split())
     return words - stop_words

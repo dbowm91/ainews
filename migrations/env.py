@@ -11,35 +11,35 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 fileConfig(config.config_file_name)
-logger = logging.getLogger('alembic.env')
+logger = logging.getLogger("alembic.env")
 
 
 def get_engine():
     """Get the SQLAlchemy engine from Flask app."""
     try:
         # Works with Flask-SQLAlchemy < 3
-        return current_app.extensions['migrate'].db.get_engine()
+        return current_app.extensions["migrate"].db.get_engine()
     except (TypeError, AttributeError):
         # Works with Flask-SQLAlchemy >= 3
-        return current_app.extensions['migrate'].db.engine
+        return current_app.extensions["migrate"].db.engine
 
 
 def get_engine_url():
     """Get the database URL from the engine."""
     try:
-        return get_engine().url.render_as_string(hide_password=False).replace('%', '%%')
+        return get_engine().url.render_as_string(hide_password=False).replace("%", "%%")
     except AttributeError:
-        return str(get_engine().url).replace('%', '%%')
+        return str(get_engine().url).replace("%", "%%")
 
 
 # Set the database URL from Flask app config
-config.set_main_option('sqlalchemy.url', get_engine_url())
-target_db = current_app.extensions['migrate'].db
+config.set_main_option("sqlalchemy.url", get_engine_url())
+target_db = current_app.extensions["migrate"].db
 
 
 def get_metadata():
     """Return the metadata from the SQLAlchemy db object."""
-    if hasattr(target_db, 'metadatas'):
+    if hasattr(target_db, "metadatas"):
         return target_db.metadatas[None]
     return target_db.metadata
 
@@ -57,9 +57,7 @@ def run_migrations_offline():
 
     """
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url, target_metadata=get_metadata(), literal_binds=True
-    )
+    context.configure(url=url, target_metadata=get_metadata(), literal_binds=True)
 
     with context.begin_transaction():
         context.run_migrations()

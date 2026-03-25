@@ -2,16 +2,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
-import yaml
 
-BASE_DIR = Path(__file__).parent.parent
+from schemas.common import (
+    BASE_DIR,
+    MAX_TOKENS_FIELD,
+    cached_config_with_mtime,
+    load_yaml_file,
+)
 
 
 class RoleConfig(BaseModel):
     enabled: bool = True
     provider: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
-    max_tokens: int = Field(default=4096, ge=256, le=128000)
+    max_tokens: int = MAX_TOKENS_FIELD
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     concurrency: int = Field(default=2, ge=1, le=32)
     timeout_seconds: int = Field(default=120, ge=10, le=600)
@@ -95,23 +99,18 @@ def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Pipeline config not found: {p}")
-    raw = yaml.safe_load(p.read_text()) or {}
+    raw = load_yaml_file(p)
     return PipelineRootConfig(**raw)
 
 
 def load_pipeline_config(
     path: str | Path = BASE_DIR / "pipeline.yaml",
 ) -> PipelineRootConfig:
-    try:
-        from services.config_cache import get_config_cache
-
-        return get_config_cache().get(
-            key="pipeline",
-            loader_fn=lambda: _load_pipeline_config_from_file(path),
-            ttl=300,
-        )
-    except Exception:
-        return _load_pipeline_config_from_file(path)
+    return cached_config_with_mtime(
+        key="pipeline",
+        loader_fn=lambda: _load_pipeline_config_from_file(path),
+        config_path=Path(path),
+    )
 
 
 def get_role_config(role: str) -> RoleConfig:

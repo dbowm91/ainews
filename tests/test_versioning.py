@@ -1,9 +1,6 @@
 """Tests for article versioning and related article finding."""
 
 import json
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
 
 
 class TestArticleVersioning:
@@ -14,7 +11,9 @@ class TestArticleVersioning:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="ver_test", name="Ver Test", source_type="rss", feed_url="")
+        source = Source(
+            source_key="ver_test", name="Ver Test", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
@@ -38,7 +37,7 @@ class TestArticleVersioning:
         db.session.commit()
 
         # Reload from DB
-        fresh = Article.query.get(article.id)
+        fresh = db.session.get(Article, article.id)
         final = json.loads(fresh.final_article)
         original = json.loads(fresh.original_ai_article)
 
@@ -51,7 +50,9 @@ class TestArticleVersioning:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="fin_test", name="Fin Test", source_type="rss", feed_url="")
+        source = Source(
+            source_key="fin_test", name="Fin Test", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
@@ -68,7 +69,7 @@ class TestArticleVersioning:
 
         _finalize(article.id)
 
-        fresh = Article.query.get(article.id)
+        fresh = db.session.get(Article, article.id)
         assert fresh.final_article == draft
         assert fresh.original_ai_article == draft
         assert fresh.pipeline_status == "done"
@@ -88,27 +89,35 @@ class TestFindRelatedArticles:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="rel_test", name="Rel Test", source_type="rss", feed_url="")
+        source = Source(
+            source_key="rel_test", name="Rel Test", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
         for i in range(3):
-            db.session.add(Article(
+            db.session.add(
+                Article(
+                    source_id=source.id,
+                    external_id=f"rel_{i}",
+                    original_title=f"AI Article {i}",
+                    pipeline_status="done",
+                    category="ai",
+                    final_article=json.dumps(
+                        {"headline": f"AI Article {i}", "tldr": "TLDR"}
+                    ),
+                )
+            )
+        db.session.add(
+            Article(
                 source_id=source.id,
-                external_id=f"rel_{i}",
-                original_title=f"AI Article {i}",
+                external_id="rel_sec",
+                original_title="Security Article",
                 pipeline_status="done",
-                category="ai",
-                final_article=json.dumps({"headline": f"AI Article {i}", "tldr": "TLDR"}),
-            ))
-        db.session.add(Article(
-            source_id=source.id,
-            external_id="rel_sec",
-            original_title="Security Article",
-            pipeline_status="done",
-            category="security",
-            final_article=json.dumps({"headline": "Security", "tldr": "TLDR"}),
-        ))
+                category="security",
+                final_article=json.dumps({"headline": "Security", "tldr": "TLDR"}),
+            )
+        )
         db.session.commit()
 
         result = find_related_articles_dicts(topics=["ai"], exclude_id=0, limit=5)
@@ -126,7 +135,9 @@ class TestFindRelatedArticles:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="ex_test", name="Ex Test", source_type="rss", feed_url="")
+        source = Source(
+            source_key="ex_test", name="Ex Test", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
@@ -138,14 +149,18 @@ class TestFindRelatedArticles:
                 original_title=f"AI Article {i}",
                 pipeline_status="done",
                 category="ai",
-                final_article=json.dumps({"headline": f"AI Article {i}", "tldr": "TLDR"}),
+                final_article=json.dumps(
+                    {"headline": f"AI Article {i}", "tldr": "TLDR"}
+                ),
             )
             db.session.add(a)
             articles.append(a)
         db.session.commit()
 
         exclude_id = articles[0].id
-        result = find_related_articles_dicts(topics=["ai"], exclude_id=exclude_id, limit=5)
+        result = find_related_articles_dicts(
+            topics=["ai"], exclude_id=exclude_id, limit=5
+        )
 
         assert len(result) == 2
         for r in result:
@@ -156,19 +171,25 @@ class TestFindRelatedArticles:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="lim_test", name="Lim Test", source_type="rss", feed_url="")
+        source = Source(
+            source_key="lim_test", name="Lim Test", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
         for i in range(10):
-            db.session.add(Article(
-                source_id=source.id,
-                external_id=f"lim_{i}",
-                original_title=f"AI Article {i}",
-                pipeline_status="done",
-                category="ai",
-                final_article=json.dumps({"headline": f"AI Article {i}", "tldr": "TLDR"}),
-            ))
+            db.session.add(
+                Article(
+                    source_id=source.id,
+                    external_id=f"lim_{i}",
+                    original_title=f"AI Article {i}",
+                    pipeline_status="done",
+                    category="ai",
+                    final_article=json.dumps(
+                        {"headline": f"AI Article {i}", "tldr": "TLDR"}
+                    ),
+                )
+            )
         db.session.commit()
 
         result = find_related_articles_dicts(topics=["ai"], exclude_id=0, limit=3)

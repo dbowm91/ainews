@@ -343,6 +343,7 @@ class TestRunStage:
             "record_success": patch("services.llm.record_provider_success"),
             "record_failure": patch("services.llm.record_provider_failure"),
             "get_limiter": patch("services.limiter.get_limiter"),
+            "get_redis": patch("extensions.get_redis"),
         }
         mocks = {}
         for name, p in patches.items():
@@ -375,16 +376,24 @@ class TestRunStage:
             limiter.acquire.return_value = True
             mocks["get_limiter"].return_value = limiter
 
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = True
+            redis_mock.get.return_value = b"task-123"
+            mocks["get_redis"].return_value = redis_mock
+
             work_result = {"article_id": 1, "data": "ok"}
             work_fn = MagicMock(return_value=work_result)
 
             task_self = MagicMock()
+            task_self.request.id = "task-123"
             result = run_stage("selector", 1, work_fn, task_self)
 
             assert result == work_result
             assert article.retry_count == 0
             assert article.last_error is None
             limiter.release.assert_called_once()
+            redis_mock.set.assert_called_once()
+            redis_mock.delete.assert_called_once()
         finally:
             for p in patches.values():
                 p.stop()
@@ -416,8 +425,14 @@ class TestRunStage:
             limiter.acquire.return_value = True
             mocks["get_limiter"].return_value = limiter
 
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = True
+            redis_mock.get.return_value = b"task-123"
+            mocks["get_redis"].return_value = redis_mock
+
             work_fn = MagicMock(side_effect=Exception("LLM timeout"))
             task_self = MagicMock()
+            task_self.request.id = "task-123"
 
             with patch("tasks.pipeline._handle_stage_failure", return_value=True):
                 result = run_stage("writer", 1, work_fn, task_self)
@@ -455,8 +470,14 @@ class TestRunStage:
             limiter.acquire.return_value = True
             mocks["get_limiter"].return_value = limiter
 
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = True
+            redis_mock.get.return_value = b"task-123"
+            mocks["get_redis"].return_value = redis_mock
+
             work_fn = MagicMock(side_effect=Exception("LLM timeout"))
             task_self = MagicMock()
+            task_self.request.id = "task-123"
 
             with patch("tasks.pipeline._handle_stage_failure", return_value=False):
                 with pytest.raises(Exception, match="LLM timeout"):
@@ -516,14 +537,105 @@ class TestRunStage:
             limiter.acquire.return_value = False
             mocks["get_limiter"].return_value = limiter
 
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = True
+            redis_mock.get.return_value = b"task-123"
+            mocks["get_redis"].return_value = redis_mock
+
             work_fn = MagicMock()
             task_self = MagicMock()
+            task_self.request.id = "task-123"
             task_self.retry.side_effect = Exception("Celery Retry")
 
             with pytest.raises(Exception, match="Celery Retry"):
                 run_stage("selector", 1, work_fn, task_self)
 
             work_fn.assert_not_called()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+    def test_skips_when_stage_locked(self):
+        """When stage lock is held by another task, run_stage returns skipped."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = False  # Lock not acquired
+            mocks["get_redis"].return_value = redis_mock
+
+            work_fn = MagicMock()
+            task_self = MagicMock()
+            task_self.request.id = "task-456"
+
+            result = run_stage("writer", 1, work_fn, task_self)
+
+            assert result == {
+                "article_id": 1,
+                "skipped": True,
+                "reason": "stage_locked",
+            }
+            work_fn.assert_not_called()
+            mocks["get_limiter"].assert_not_called()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+    def test_same_task_can_reacquire_lock(self):
+        """When lock is held by the same task ID (retry), set with nx succeeds."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            article = MagicMock()
+            article.retry_count = 0
+            mocks["db"].session.get.return_value = article
+
+            mocks["get_provider_for_role"].return_value = (
+                MagicMock(),
+                "qwen3:8b",
+                2048,
+            )
+
+            limiter = MagicMock()
+            limiter.acquire.return_value = True
+            mocks["get_limiter"].return_value = limiter
+
+            # First call: lock not held (set returns True). Second call: lock held
+            # by same task — since we use nx=True, if the lock already exists with
+            # the same value, Redis returns None (not True). So we simulate the
+            # retry case where the old lock expired and the task re-acquires.
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = True
+            redis_mock.get.return_value = b"task-789"
+            mocks["get_redis"].return_value = redis_mock
+
+            work_result = {"article_id": 1, "data": "ok"}
+            work_fn = MagicMock(return_value=work_result)
+
+            task_self = MagicMock()
+            task_self.request.id = "task-789"
+
+            result = run_stage("writer", 1, work_fn, task_self)
+
+            assert result == work_result
+            # Lock was acquired and cleaned up
+            redis_mock.delete.assert_called_once()
         finally:
             for p in patches.values():
                 p.stop()

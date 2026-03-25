@@ -1,13 +1,18 @@
 from __future__ import annotations
 import abc
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional, ClassVar
 
-from schemas.source import SourceConfig, TopicMatchConfig
+from schemas.source import SourceConfig
+from services.url import normalize_url
 
 logger = logging.getLogger(__name__)
+
+MAX_TEXT_LENGTH = 3000
+MATCH_TEXT_PREVIEW_LENGTH = 500
 
 
 @dataclass
@@ -31,6 +36,7 @@ def register_adapter(source_type: str):
     def decorator(cls):
         _ADAPTER_REGISTRY[source_type] = cls
         return cls
+
     return decorator
 
 
@@ -54,12 +60,10 @@ class BaseSourceAdapter(abc.ABC):
             self.adapter_config = None
 
     @abc.abstractmethod
-    def fetch(self) -> list[Any]:
-        ...
+    def fetch(self) -> list[Any]: ...
 
     @abc.abstractmethod
-    def parse_item(self, raw: Any) -> Optional[RawItem]:
-        ...
+    def parse_item(self, raw: Any) -> Optional[RawItem]: ...
 
     def fetch_and_parse(self) -> list[RawItem]:
         raw_items = self.fetch()
@@ -71,16 +75,46 @@ class BaseSourceAdapter(abc.ABC):
                     parsed.append(item)
             except Exception as e:
                 logger.warning(f"[{self.source_id}] Parse error: {e}")
-        logger.info(f"[{self.source_id}] Fetched {len(raw_items)}, parsed {len(parsed)}")
+        logger.info(
+            f"[{self.source_id}] Fetched {len(raw_items)}, parsed {len(parsed)}"
+        )
         return parsed
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def close(self):
+        """Release resources. Override in subclasses that hold sessions."""
+        pass
 
     def match_topics(self, item: RawItem) -> RawItem:
         from services.trend_detector import classify
+
         text = self._get_match_text(item)
         matched = classify(text)
-        included = [t for t in matched if t in self.topic_config.include or t == "other"]
+        included = [
+            t for t in matched if t in self.topic_config.include or t == "other"
+        ]
         item.topics = included or ["other"]
         return item
 
     def _get_match_text(self, item: RawItem) -> str:
-        return item.title
+        """Build text for topic matching. Override for custom matching."""
+        parts = [item.title]
+        if item.text_content:
+            parts.append(item.text_content[:MATCH_TEXT_PREVIEW_LENGTH])
+        return " ".join(parts)
+
+    @staticmethod
+    def _hash_ext_id(url: str = None, title: str = None) -> str:
+        """Generate a stable external ID from URL or title."""
+        source = normalize_url(url) if url else (title or "")
+        return hashlib.sha256(source.encode()).hexdigest()[:16]
+
+    @staticmethod
+    def _truncate(text: Optional[str], limit: int = MAX_TEXT_LENGTH) -> Optional[str]:
+        """Truncate text to limit, returning None for empty input."""
+        return text[:limit] if text else None

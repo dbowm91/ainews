@@ -116,6 +116,8 @@ class TestWriteStage:
 
     @staticmethod
     def _setup_mocks():
+        from unittest.mock import MagicMock
+
         patches = {
             "Article": patch("models.Article"),
             "db": patch("extensions.db"),
@@ -124,6 +126,7 @@ class TestWriteStage:
             "record_success": patch("services.llm.record_provider_success"),
             "record_failure": patch("services.llm.record_provider_failure"),
             "get_limiter": patch("services.limiter.get_limiter"),
+            "get_redis": patch("extensions.get_redis"),
         }
         mocks = {}
         for name, p in patches.items():
@@ -149,5 +152,10 @@ class TestWriteStage:
         limiter = MagicMock()
         limiter.acquire.return_value = True
         mocks["get_limiter"].return_value = limiter
+
+        redis_mock = MagicMock()
+        redis_mock.set.return_value = True
+        redis_mock.get.return_value = b"task-test"
+        mocks["get_redis"].return_value = redis_mock
 
         return patches, mocks

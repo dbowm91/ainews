@@ -6,6 +6,8 @@ from typing import Any, Optional, TypeVar, Type
 
 from pydantic import BaseModel
 
+from services.provider_base import BaseProvider, ProviderManager
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
@@ -18,29 +20,11 @@ class LLMResponse:
     tokens_used: int = 0
 
 
-_PROVIDER_REGISTRY: dict[str, type[BaseLLMProvider]] = {}
-
-
-def register_provider(provider_type: str):
-    def decorator(cls):
-        _PROVIDER_REGISTRY[provider_type] = cls
-        return cls
-    return decorator
-
-
-def get_provider_class(provider_type: str) -> type[BaseLLMProvider]:
-    if provider_type not in _PROVIDER_REGISTRY:
-        available = ", ".join(sorted(_PROVIDER_REGISTRY.keys()))
-        raise KeyError(f"No LLM provider for '{provider_type}'. Available: {available}")
-    return _PROVIDER_REGISTRY[provider_type]
-
-
-class BaseLLMProvider(abc.ABC):
+class BaseLLMProvider(BaseProvider, abc.ABC):
     default_model: str = ""
 
     def __init__(self, provider_id: str, config: dict):
-        self.provider_id = provider_id
-        self.config = config
+        super().__init__(provider_id, config)
 
     @abc.abstractmethod
     def chat(
@@ -85,5 +69,24 @@ class BaseLLMProvider(abc.ABC):
         """Provider-specific schema-guided chat, returns raw JSON string."""
         ...
 
-    def health_check(self) -> dict[str, Any]:
-        return {"provider": self.provider_id, "status": "unknown"}
+    def _build_messages(
+        self, messages: list[dict], system: Optional[str]
+    ) -> list[dict]:
+        """Build message list with optional system prompt prepended."""
+        result = []
+        if system:
+            result.append({"role": "system", "content": system})
+        result.extend(messages)
+        return result
+
+
+# Shared provider manager for LLM providers
+_manager = ProviderManager("llm")
+
+# Backward-compatible module-level exports
+_PROVIDER_REGISTRY = _manager._registry
+register_provider = _manager.register
+
+
+def get_provider_class(provider_type: str) -> type[BaseLLMProvider]:
+    return _manager.get_class(provider_type)

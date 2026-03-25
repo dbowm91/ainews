@@ -1,7 +1,11 @@
 import logging
 from typing import Any
 
-from services.search.base import BaseSearchProvider, SearchResult, register_search_provider
+from services.search.base import (
+    BaseSearchProvider,
+    SearchResult,
+    register_search_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +21,7 @@ class SearXNGSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         try:
             import requests
+
             params = {
                 "q": query,
                 "format": "json",
@@ -36,12 +41,14 @@ class SearXNGSearchProvider(BaseSearchProvider):
 
             results = []
             for item in data.get("results", []):
-                results.append(SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=item.get("content", ""),
-                    source=self.provider_id,
-                ))
+                results.append(
+                    SearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        snippet=item.get("content", ""),
+                        source=self.provider_id,
+                    )
+                )
                 if len(results) >= max_results:
                     break
             return results
@@ -52,9 +59,18 @@ class SearXNGSearchProvider(BaseSearchProvider):
     def health_check(self) -> dict[str, Any]:
         try:
             import requests
+
             resp = requests.get(f"{self.host}/healthz", timeout=5)
             if resp.ok:
                 return {"provider": self.provider_id, "status": "ok", "host": self.host}
-            return {"provider": self.provider_id, "status": f"http {resp.status_code}", "host": self.host}
+            return {
+                "provider": self.provider_id,
+                "status": f"http {resp.status_code}",
+                "host": self.host,
+            }
         except Exception as e:
-            return {"provider": self.provider_id, "status": f"error: {e}", "host": self.host}
+            return {
+                "provider": self.provider_id,
+                "status": f"error: {e}",
+                "host": self.host,
+            }

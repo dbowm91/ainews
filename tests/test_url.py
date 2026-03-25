@@ -1,6 +1,5 @@
 """Tests for URL normalization and title normalization."""
 
-import pytest
 from services.url import normalize_url, normalize_title
 
 
@@ -11,7 +10,9 @@ class TestNormalizeUrl:
         assert normalize_url("HTTPS://Example.COM/path") == "https://example.com/path"
 
     def test_strip_www(self):
-        assert normalize_url("https://www.example.com/path") == "https://example.com/path"
+        assert (
+            normalize_url("https://www.example.com/path") == "https://example.com/path"
+        )
 
     def test_strip_trailing_slash(self):
         assert normalize_url("https://example.com/path/") == "https://example.com/path"
@@ -69,13 +70,22 @@ class TestNormalizeUrl:
         assert normalize_url(url) == "https://example.com/article?id=5"
 
     def test_strip_default_https_port(self):
-        assert normalize_url("https://example.com:443/article") == "https://example.com/article"
+        assert (
+            normalize_url("https://example.com:443/article")
+            == "https://example.com/article"
+        )
 
     def test_strip_default_http_port(self):
-        assert normalize_url("http://example.com:80/article") == "http://example.com/article"
+        assert (
+            normalize_url("http://example.com:80/article")
+            == "http://example.com/article"
+        )
 
     def test_preserves_non_default_port(self):
-        assert normalize_url("https://example.com:8080/article") == "https://example.com:8080/article"
+        assert (
+            normalize_url("https://example.com:8080/article")
+            == "https://example.com:8080/article"
+        )
 
 
 class TestNormalizeTitle:

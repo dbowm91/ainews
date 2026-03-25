@@ -449,6 +449,19 @@ def run_stage(
             _dispatch_next(article_id, run_id=run_id, next_status=skip_next)
         return {"article_id": article_id, "decision": f"skip_{stage}"}
 
+    # Stage lock: prevent same article/stage from running concurrently
+    from extensions import get_redis
+
+    redis_client = get_redis()
+    lock_key = f"ainews:stage_lock:{article_id}:{stage}"
+    task_id = task_self.request.id or "manual"
+    lock_acquired = redis_client.set(
+        lock_key, task_id, nx=True, ex=rc.timeout_seconds + 60
+    )
+    if not lock_acquired:
+        logger.info(f"Stage {stage} already running for article {article_id}, skipping")
+        return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
+
     article = db.session.get(Article, article_id)
     if not article:
         return {"article_id": article_id, "error": "not found"}
@@ -485,3 +498,9 @@ def run_stage(
         raise
     finally:
         limiter.release(rc.provider, model)
+        try:
+            stored = redis_client.get(lock_key)
+            if stored and stored.decode() == task_id:
+                redis_client.delete(lock_key)
+        except Exception:
+            pass

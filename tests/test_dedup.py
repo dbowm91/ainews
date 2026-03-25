@@ -2,8 +2,6 @@
 
 import json
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
 
 
 @pytest.fixture
@@ -26,7 +24,9 @@ def seeded_articles(app):
         pipeline_status="done",
         category="ai",
         topics=["ai"],
-        final_article=json.dumps({"headline": "Test Article One", "tldr": "TLDR", "body": "Body"}),
+        final_article=json.dumps(
+            {"headline": "Test Article One", "tldr": "TLDR", "body": "Body"}
+        ),
     )
     db.session.add(article1)
     db.session.commit()

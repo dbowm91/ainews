@@ -5,14 +5,15 @@ Revises: 002_dedup_index
 Create Date: 2026-03-23
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision: str = '003_fts5'
-down_revision: Union[str, Sequence[str], None] = '002_dedup_index'
+revision: str = "003_fts5"
+down_revision: Union[str, Sequence[str], None] = "002_dedup_index"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,7 +1,7 @@
 """Tests for source adapters."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from datetime import datetime, timezone
 
 
@@ -10,6 +10,7 @@ class TestBaseAdapter:
 
     def test_raw_item_dataclass(self):
         from adapters.base import RawItem
+
         item = RawItem(
             source_id="test-source",
             external_id="ext-123",
@@ -34,6 +35,7 @@ class TestBaseAdapter:
 
     def test_adapter_registry(self):
         from adapters.base import _ADAPTER_REGISTRY, get_adapter_class
+
         # RSS adapter should be registered
         assert "rss" in _ADAPTER_REGISTRY
         adapter_class = get_adapter_class("rss")
@@ -41,6 +43,7 @@ class TestBaseAdapter:
 
     def test_get_adapter_class_invalid(self):
         from adapters.base import get_adapter_class
+
         with pytest.raises(KeyError) as exc_info:
             get_adapter_class("nonexistent")
         assert "nonexistent" in str(exc_info.value)

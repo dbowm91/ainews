@@ -52,7 +52,7 @@ def generate_newsletter_html(
                 <td width="40" style="font-family:monospace;font-size:18px;color:#888;font-weight:700;vertical-align:top;padding-right:12px;">{i}.</td>
                 <td>
                   <a href="{safe_link}" style="color:#111;font-size:16px;font-weight:600;text-decoration:none;line-height:1.3;">{headline}</a>
-                  {'<br><span style="font-family:monospace;font-size:11px;color:#888;text-transform:uppercase;">' + category + '</span>' if category else ''}
+                  {'<br><span style="font-family:monospace;font-size:11px;color:#888;text-transform:uppercase;">' + category + "</span>" if category else ""}
                   <p style="color:#555;font-size:14px;line-height:1.5;margin:6px 0 0 0;">{tldr}</p>
                 </td>
               </tr>
@@ -114,16 +114,24 @@ def generate_main_newsletter(
     from models import Article
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    articles = Article.query.filter(
-        Article.pipeline_status == "done",
-        Article.impact_score > 0,
-        Article.created_at >= cutoff,
-    ).order_by(Article.impact_score.desc()).limit(max_articles).all()
+    articles = (
+        Article.query.filter(
+            Article.pipeline_status == "done",
+            Article.impact_score > 0,
+            Article.created_at >= cutoff,
+        )
+        .order_by(Article.impact_score.desc())
+        .limit(max_articles)
+        .all()
+    )
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
     subject = f"ainews// — Top {len(articles)} stories — {date_str}"
     html = generate_newsletter_html(
-        articles, "Top Stories", site_url, date_str,
+        articles,
+        "Top Stories",
+        site_url,
+        date_str,
         executive_summary=executive_summary,
     )
     return html, subject, len(articles)
@@ -145,16 +153,24 @@ def generate_topic_newsletter(
     topic_name = topic_def.display_name if topic_def else topic_key
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    articles = Article.query.filter(
-        Article.pipeline_status == "done",
-        Article.category == topic_key,
-        Article.created_at >= cutoff,
-    ).order_by(Article.impact_score.desc()).limit(max_articles).all()
+    articles = (
+        Article.query.filter(
+            Article.pipeline_status == "done",
+            Article.category == topic_key,
+            Article.created_at >= cutoff,
+        )
+        .order_by(Article.impact_score.desc())
+        .limit(max_articles)
+        .all()
+    )
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
     subject = f"ainews// — {topic_name} — {date_str}"
     html = generate_newsletter_html(
-        articles, topic_name, site_url, date_str,
+        articles,
+        topic_name,
+        site_url,
+        date_str,
         executive_summary=executive_summary,
     )
     return html, subject, len(articles)
@@ -162,4 +178,5 @@ def generate_topic_newsletter(
 
 def _parse_article(article) -> tuple[str, str]:
     from services.utils import parse_article_headline
+
     return parse_article_headline(article, fallback_headline="Untitled")

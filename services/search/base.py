@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import abc
-import logging
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+from services.provider_base import BaseProvider, ProviderManager
 
 
 @dataclass
@@ -15,31 +14,21 @@ class SearchResult:
     source: str = ""
 
 
-_PROVIDER_REGISTRY: dict[str, type[BaseSearchProvider]] = {}
+class BaseSearchProvider(BaseProvider, abc.ABC):
+    def __init__(self, provider_id: str, config: dict):
+        super().__init__(provider_id, config)
+
+    @abc.abstractmethod
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]: ...
 
 
-def register_search_provider(provider_type: str):
-    def decorator(cls):
-        _PROVIDER_REGISTRY[provider_type] = cls
-        return cls
-    return decorator
+# Shared provider manager for search providers
+_manager = ProviderManager("search")
+
+# Backward-compatible module-level exports
+_PROVIDER_REGISTRY = _manager._registry
+register_search_provider = _manager.register
 
 
 def get_search_provider_class(provider_type: str) -> type[BaseSearchProvider]:
-    if provider_type not in _PROVIDER_REGISTRY:
-        available = ", ".join(sorted(_PROVIDER_REGISTRY.keys()))
-        raise KeyError(f"No search provider for '{provider_type}'. Available: {available}")
-    return _PROVIDER_REGISTRY[provider_type]
-
-
-class BaseSearchProvider(abc.ABC):
-    def __init__(self, provider_id: str, config: dict):
-        self.provider_id = provider_id
-        self.config = config
-
-    @abc.abstractmethod
-    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
-        ...
-
-    def health_check(self) -> dict:
-        return {"provider": self.provider_id, "status": "unknown"}
+    return _manager.get_class(provider_type)

@@ -4,10 +4,26 @@
 
 {% block content %}
 <div class="unsubscribe-page">
-  {% if found %}
+  {% if confirmed %}
     <h1 class="unsubscribe-title">unsubscribed</h1>
     <p class="unsubscribe-message">You've been unsubscribed. We're sorry to see you go.</p>
     <a href="/" class="back-link">&larr; back to feed</a>
+  {% elif error %}
+    <h1 class="unsubscribe-title">error</h1>
+    <p class="unsubscribe-message">Something went wrong. Please try again.</p>
+    <form method="POST" action="/unsubscribe/{{ token }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="unsubscribe-confirm-btn">Try Again</button>
+      <a href="/" class="back-link">Cancel</a>
+    </form>
+  {% elif found %}
+    <h1 class="unsubscribe-title">confirm unsubscribe</h1>
+    <p class="unsubscribe-message">Are you sure you want to unsubscribe?</p>
+    <form method="POST" action="/unsubscribe/{{ token }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="unsubscribe-confirm-btn">Unsubscribe</button>
+      <a href="/" class="back-link">Cancel</a>
+    </form>
   {% else %}
     <h1 class="unsubscribe-title">not found</h1>
     <p class="unsubscribe-message">This unsubscribe link is invalid or has already been used.</p>

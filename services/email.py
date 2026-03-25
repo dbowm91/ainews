@@ -3,7 +3,6 @@ import re
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +11,7 @@ def get_smtp_config():
     """Get SMTP settings from Flask app config or env."""
     try:
         from flask import current_app
+
         return {
             "host": current_app.config.get("SMTP_HOST", "localhost"),
             "port": current_app.config.get("SMTP_PORT", 587),
@@ -22,6 +22,7 @@ def get_smtp_config():
         }
     except Exception:
         import os
+
         return {
             "host": os.environ.get("SMTP_HOST", "localhost"),
             "port": int(os.environ.get("SMTP_PORT", "587")),
@@ -94,19 +95,20 @@ def send_newsletter_email(
         </tr>"""
 
     # Replace existing footer or inject before closing table tags
-    if 'condensed by agents' in html_content:
+    if "condensed by agents" in html_content:
         html_content = re.sub(
-            r'<tr>\s*<td[^>]*>.*?condensed by agents.*?</td>\s*</tr>\s*</table>\s*</td></tr>\s*</table>',
-            footer_html + '</table></td></tr></table>',
+            r"<tr>\s*<td[^>]*>.*?condensed by agents.*?</td>\s*</tr>\s*</table>\s*</td></tr>\s*</table>",
+            footer_html + "</table></td></tr></table>",
             html_content,
             flags=re.DOTALL,
         )
     else:
-        # Find last </table> and inject footer before it
+        # Find last </table> pair and inject footer before it
         html_content = re.sub(
-            r'(</table>\s*</td></tr>\s*</table>)\s*$',
-            footer_html + r'\1',
+            r"(</table>\s*</td></tr>\s*</table>)",
+            footer_html + r"\1",
             html_content,
+            count=1,
             flags=re.DOTALL,
         )
 

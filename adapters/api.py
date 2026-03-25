@@ -18,6 +18,9 @@ class APIAdapter(BaseSourceAdapter):
         self._session = requests.Session()
         self._session.headers["User-Agent"] = self.adapter_config.user_agent
 
+    def close(self):
+        self._session.close()
+
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
         validate_url_safe(cfg.list_url)

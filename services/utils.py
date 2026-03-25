@@ -1,5 +1,47 @@
 import json
+import re
 from typing import Optional
+
+from sqlalchemy.orm import Query
+
+
+# Simple but effective email pattern - catches common mistakes
+_EMAIL_RE = re.compile(
+    r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
+    r"@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*"
+    r"\.[a-zA-Z]{2,}$"
+)
+
+
+def is_valid_email(email: str) -> bool:
+    """Return True if email looks like a valid address."""
+    return bool(_EMAIL_RE.match(email.strip()))
+
+
+def paginate_query(
+    query: Query,
+    page: int,
+    per_page: int,
+) -> tuple[list, bool, int]:
+    """Paginate a SQLAlchemy query using the LIMIT+1 pattern.
+
+    Fetches per_page+1 rows to detect if a next page exists without
+    a separate COUNT query.
+
+    Args:
+        query: SQLAlchemy query to paginate.
+        page: Current page number (1-indexed).
+        per_page: Number of items per page.
+
+    Returns:
+        Tuple of (items, has_next, next_page).
+    """
+    rows = query.offset((page - 1) * per_page).limit(per_page + 1).all()
+    has_next = len(rows) > per_page
+    if has_next:
+        rows = rows[:per_page]
+    return rows, has_next, page + 1
 
 
 def parse_article_headline(

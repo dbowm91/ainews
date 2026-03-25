@@ -1,8 +1,6 @@
 """Tests for FTS5 search and article search service."""
 
 import json
-import pytest
-from datetime import datetime, timezone
 
 from services.article import _build_fts_query, _escape_like_pattern
 
@@ -67,14 +65,18 @@ class TestGetArticlesPaginated:
         db.session.flush()
 
         for i in range(3):
-            db.session.add(Article(
-                source_id=source.id,
-                external_id=f"test_{i}",
-                original_title=f"Article {i}",
-                pipeline_status="done",
-                category="ai",
-                final_article=json.dumps({"headline": f"Article {i}", "tldr": "TLDR"}),
-            ))
+            db.session.add(
+                Article(
+                    source_id=source.id,
+                    external_id=f"test_{i}",
+                    original_title=f"Article {i}",
+                    pipeline_status="done",
+                    category="ai",
+                    final_article=json.dumps(
+                        {"headline": f"Article {i}", "tldr": "TLDR"}
+                    ),
+                )
+            )
         db.session.commit()
 
         articles, has_next, next_page = get_articles_paginated(page=1, per_page=10)
@@ -87,18 +89,24 @@ class TestGetArticlesPaginated:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="test2", name="Test2", source_type="rss", feed_url="")
+        source = Source(
+            source_key="test2", name="Test2", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
-        db.session.add(Article(
-            source_id=source.id,
-            external_id="search_test",
-            original_title="Python AI Framework Released",
-            pipeline_status="done",
-            category="ai",
-            final_article=json.dumps({"headline": "Python AI Framework", "tldr": "TLDR"}),
-        ))
+        db.session.add(
+            Article(
+                source_id=source.id,
+                external_id="search_test",
+                original_title="Python AI Framework Released",
+                pipeline_status="done",
+                category="ai",
+                final_article=json.dumps(
+                    {"headline": "Python AI Framework", "tldr": "TLDR"}
+                ),
+            )
+        )
         db.session.commit()
 
         articles, _, _ = get_articles_paginated(page=1, per_page=10, query="python")
@@ -110,22 +118,32 @@ class TestGetArticlesPaginated:
         from models import Article, Source
         from extensions import db
 
-        source = Source(source_key="test3", name="Test3", source_type="rss", feed_url="")
+        source = Source(
+            source_key="test3", name="Test3", source_type="rss", feed_url=""
+        )
         db.session.add(source)
         db.session.flush()
 
-        db.session.add(Article(
-            source_id=source.id, external_id="cat_ai",
-            original_title="AI News", pipeline_status="done",
-            category="ai",
-            final_article=json.dumps({"headline": "AI News", "tldr": "TLDR"}),
-        ))
-        db.session.add(Article(
-            source_id=source.id, external_id="cat_sec",
-            original_title="Security News", pipeline_status="done",
-            category="security",
-            final_article=json.dumps({"headline": "Security News", "tldr": "TLDR"}),
-        ))
+        db.session.add(
+            Article(
+                source_id=source.id,
+                external_id="cat_ai",
+                original_title="AI News",
+                pipeline_status="done",
+                category="ai",
+                final_article=json.dumps({"headline": "AI News", "tldr": "TLDR"}),
+            )
+        )
+        db.session.add(
+            Article(
+                source_id=source.id,
+                external_id="cat_sec",
+                original_title="Security News",
+                pipeline_status="done",
+                category="security",
+                final_article=json.dumps({"headline": "Security News", "tldr": "TLDR"}),
+            )
+        )
         db.session.commit()
 
         articles, _, _ = get_articles_paginated(page=1, per_page=10, category="ai")

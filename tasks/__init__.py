@@ -1,8 +1,12 @@
 """Re-export all Celery tasks for backward compatibility."""
 
 from tasks.pipeline import (
-    _log_pipeline, _degrade_and_advance, _handle_stage_failure,
-    _finalize, _assign_tags, MAX_STAGE_RETRIES,
+    _log_pipeline,
+    _degrade_and_advance,
+    _handle_stage_failure,
+    _finalize,
+    _assign_tags,
+    MAX_STAGE_RETRIES,
 )
 from tasks.crawl import run_all_sources
 from tasks.extract import process_item

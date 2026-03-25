@@ -1,8 +1,6 @@
 """Integration tests for the review queue and pipeline flow."""
 
 import json
-import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestReviewQueue:
@@ -74,7 +72,7 @@ class TestReviewQueue:
         assert resp.status_code == 302
 
         with app.app_context():
-            article = Article.query.get(article_id)
+            article = db.session.get(Article, article_id)
             assert article.pipeline_status == "done"
 
     def test_reject_article(self, client, app, hashed_password):
@@ -103,7 +101,7 @@ class TestReviewQueue:
         assert resp.status_code == 302
 
         with app.app_context():
-            article = Article.query.get(article_id)
+            article = db.session.get(Article, article_id)
             assert article.pipeline_status == "skipped"
 
     def test_approve_non_review_article_returns_400(self, client, app, hashed_password):
@@ -173,7 +171,7 @@ class TestPipelineEndToEnd:
             db.session.commit()
 
             # Verify final state
-            article = Article.query.get(article.id)
+            article = db.session.get(Article, article.id)
             assert article.pipeline_status == "done"
             assert article.final_article is not None
             assert article.original_ai_article is not None
@@ -182,7 +180,6 @@ class TestPipelineEndToEnd:
         """Test that articles route to review when configured."""
         from models import Article, Source
         from extensions import db
-        from schemas.pipeline import load_pipeline_config
 
         with app.app_context():
             source = Source(source_key="test", name="Test", source_type="rss")
@@ -251,7 +248,7 @@ class TestPipelineEndToEnd:
 
     def test_tag_assignment(self, app):
         """Test that tags are created and linked correctly."""
-        from models import Article, Source, Tag, article_tags
+        from models import Article, Source, Tag
         from extensions import db
         from tasks.pipeline import _assign_tags
 
@@ -274,7 +271,7 @@ class TestPipelineEndToEnd:
             db.session.commit()
 
             # Verify tags
-            article = Article.query.get(article.id)
+            article = db.session.get(Article, article.id)
             tag_names = {t.name for t in article.tags}
             assert "machine-learning" in tag_names
             assert "ai" in tag_names
@@ -330,7 +327,7 @@ class TestPipelineEndToEnd:
             run.status = "completed"
             db.session.commit()
 
-            run = PipelineRun.query.get(run.id)
+            run = db.session.get(PipelineRun, run.id)
             assert run.status == "completed"
             assert run.articles_fetched == 10
             assert run.articles_selected == 5
@@ -356,7 +353,7 @@ class TestPipelineEndToEnd:
             newsletter.sent_at = datetime.now(timezone.utc)
             db.session.commit()
 
-            nl = Newsletter.query.get(newsletter.id)
+            nl = db.session.get(Newsletter, newsletter.id)
             assert nl.article_count == 5
             assert nl.recipients == 10
             assert nl.sent_at is not None

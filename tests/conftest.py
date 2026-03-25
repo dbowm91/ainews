@@ -4,11 +4,24 @@ from unittest.mock import MagicMock, patch
 
 @pytest.fixture(autouse=True)
 def _reset_redis():
-    """Reset the global Redis singleton between tests."""
+    """Reset the global Redis singleton and config cache between tests."""
     from extensions import reset_redis
+
     reset_redis()
+    try:
+        from services import config_cache
+
+        config_cache._cache_instance = None
+    except (ImportError, AttributeError):
+        pass
     yield
     reset_redis()
+    try:
+        from services import config_cache
+
+        config_cache._cache_instance = None
+    except (ImportError, AttributeError):
+        pass
 
 
 @pytest.fixture
@@ -28,6 +41,7 @@ def mock_redis():
 
     def keys(pattern):
         import fnmatch
+
         return [k for k in store if fnmatch.fnmatch(k, pattern)]
 
     redis.get = MagicMock(side_effect=get)
@@ -40,10 +54,12 @@ def mock_redis():
 @pytest.fixture
 def mock_celery_tasks():
     """Mock all Celery tasks to prevent actual task execution."""
-    with patch("tasks.select.select_article") as mock_select, \
-         patch("tasks.research.research_article") as mock_research, \
-         patch("tasks.write.write_article") as mock_write, \
-         patch("tasks.edit.edit_article") as mock_edit:
+    with (
+        patch("tasks.select.select_article") as mock_select,
+        patch("tasks.research.research_article") as mock_research,
+        patch("tasks.write.write_article") as mock_write,
+        patch("tasks.edit.edit_article") as mock_edit,
+    ):
         yield {
             "select": mock_select,
             "research": mock_research,
@@ -56,6 +72,7 @@ def mock_celery_tasks():
 def app():
     """Create a test Flask app with in-memory SQLite."""
     import os
+
     os.environ["ADMIN_PASSWORD"] = ""
     os.environ["SECRET_KEY"] = "test-secret-key"
     os.environ["FLASK_CONFIG"] = "testing"
@@ -77,10 +94,19 @@ def app():
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.from_object(TestingConfig)
 
-    from extensions import db, limiter, csrf
+    from extensions import db, csrf
+
+    # Override limiter for testing with memory backend
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+
+    test_limiter = Limiter(
+        get_remote_address, storage_uri="memory://", default_limits=[]
+    )
+
     db.init_app(app)
     csrf.init_app(app)
-    limiter.init_app(app)
+    test_limiter.init_app(app)
 
     import models  # noqa: F401
 
@@ -89,6 +115,7 @@ def app():
 
     from routes.public import public_bp
     from routes.admin import admin_bp
+
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
 
@@ -108,4 +135,46 @@ def client(app):
 def hashed_password():
     """Generate a hashed password for testing."""
     from werkzeug.security import generate_password_hash
+
     return generate_password_hash("testpass123")
+
+
+# Test data factory fixtures
+@pytest.fixture
+def create_source(app):
+    """Factory fixture for creating test sources."""
+    from tests.factories import create_source
+
+    return create_source
+
+
+@pytest.fixture
+def create_article(app):
+    """Factory fixture for creating test articles."""
+    from tests.factories import create_article
+
+    return create_article
+
+
+@pytest.fixture
+def create_tag(app):
+    """Factory fixture for creating test tags."""
+    from tests.factories import create_tag
+
+    return create_tag
+
+
+@pytest.fixture
+def create_subscriber(app):
+    """Factory fixture for creating test subscribers."""
+    from tests.factories import create_subscriber
+
+    return create_subscriber
+
+
+@pytest.fixture
+def seed_articles(app):
+    """Factory fixture for seeding multiple test articles."""
+    from tests.factories import seed_articles
+
+    return seed_articles

@@ -3,9 +3,8 @@ from enum import Enum
 from typing import Any, Optional
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
-import yaml
 
-BASE_DIR = Path(__file__).parent.parent
+from schemas.common import BASE_DIR, cached_config_with_mtime, load_yaml_file
 
 
 class SourceType(str, Enum):
@@ -31,8 +30,10 @@ class RSSConfig(BaseModel):
     request_timeout: int = Field(default=15, ge=5, le=60)
     user_agent: str = "AINewsBot/1.0"
     min_content_length: int = Field(
-        default=200, ge=0, le=5000,
-        description="If feed content is shorter than this, scrape the article page"
+        default=200,
+        ge=0,
+        le=5000,
+        description="If feed content is shorter than this, scrape the article page",
     )
 
 
@@ -110,13 +111,26 @@ class SourceConfig(BaseModel):
     @classmethod
     def validate_type(cls, v):
         if v not in ADAPTER_CONFIGS:
-            raise ValueError(f"Unknown source type '{v}'. Known: {list(ADAPTER_CONFIGS.keys())}")
+            raise ValueError(
+                f"Unknown source type '{v}'. Known: {list(ADAPTER_CONFIGS.keys())}"
+            )
         return v
 
 
-def load_sources(path: str | Path = BASE_DIR / "sources.yaml") -> list[SourceConfig]:
-    path = Path(path)
+def _load_sources_from_file(path: Path) -> list[SourceConfig]:
     if not path.exists():
         return []
-    raw = yaml.safe_load(path.read_text()) or {}
-    return [SourceConfig(**entry) for entry in raw.get("sources", []) if entry.get("enabled", True)]
+    raw = load_yaml_file(path)
+    return [
+        SourceConfig(**entry)
+        for entry in raw.get("sources", [])
+        if entry.get("enabled", True)
+    ]
+
+
+def load_sources(path: str | Path = BASE_DIR / "sources.yaml") -> list[SourceConfig]:
+    return cached_config_with_mtime(
+        key="sources",
+        loader_fn=lambda: _load_sources_from_file(Path(path)),
+        config_path=Path(path),
+    )

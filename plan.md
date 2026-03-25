@@ -6,7 +6,7 @@
 Broad `except Exception:` blocks catch too many exceptions, making debugging harder and potentially masking real errors.
 
 ### Key Files
-- `services/crawling.py:32-36` — bare `except Exception` with re-raise
+- `services/crawling.py` — bare `except Exception` with re-raise (pre-fix)
 - `tasks/pipeline.py` — multiple locations with broad exception handling
 - `services/config_cache.py` — catches all exceptions silently
 
@@ -59,7 +59,10 @@ Several functions lack return type hints and parameter type hints, reducing IDE 
 **Verified:** `routes/admin/api.py:60-68` already has `POST /admin/api/config/reload` that calls `invalidate_all()` and `clear_provider_cache()`. This endpoint exists but is not called automatically after config saves in admin routes.
 
 ### Status
-**No change needed.** Config files (pipeline.yaml, topics.yaml, sources.yaml) are edited on disk, not through admin UI routes. The existing `POST /admin/api/config/reload` is the correct manual invalidation point. If admin config-editing routes are added later, they should call invalidation.
+**Done.** All config files now use `cached_config_with_mtime()` for automatic mtime-based invalidation:
+- `schemas/pipeline.py` — loads `pipeline.yaml`
+- `schemas/topic.py` — loads `topics.yaml`
+- `schemas/source.py` — loads `sources.yaml` (fixed as a gap from review)
 
 ### Deferred
 If admin config editor routes are added, wire up `get_config_cache().invalidate_all()` after saves.
@@ -82,8 +85,8 @@ Multiple Celery workers can process the same source simultaneously. `tasks/crawl
 - `tasks/crawl.py`
 - `tasks/newsletter.py`
 
-### Deferred
-Pipeline stage locking (`ainews:stage_lock:{article_id}:{stage}`) in `tasks/pipeline.py:run_stage()` was in the original plan but not implemented. The existing limiter-based slot acquisition provides similar protection. Could be added if double-execution of the same stage on the same article is observed.
+### ~~Deferred~~ — Done
+Pipeline stage locking (`ainews:stage_lock:{article_id}:{stage}`) implemented in `tasks/pipeline.py:run_stage()` with task-ID-aware cleanup. See [D1](#d1-pipeline-stage-locking--done) for details.
 
 ---
 
@@ -113,7 +116,7 @@ Pipeline degradation in `tasks/pipeline.py` advances articles to next stage afte
 ## 6. Session Security Hardening ✅
 
 ### Problem
-8-hour session lifetime (`config.py:22`) increases attack window if session is compromised. Logout lacks CSRF token in the frontend form (`routes/admin/auth.py:73-76`).
+8-hour session lifetime (`config.py:22`) increases attack window if session is compromised. Logout form in template lacked CSRF token verification.
 
 ### Status
 **Done.** Reduced lifetime from 8h to 2h. Added `SESSION_COOKIE_PATH = "/"`. CSRF token was already present in the logout form template.
@@ -126,7 +129,7 @@ Pipeline degradation in `tasks/pipeline.py` advances articles to next stage afte
 ## 7. SSRF DNS Rebinding Protection ✅
 
 ### Problem
-`services/url.py:57` resolves DNS on every call but does not cache results. A DNS rebinding attack could resolve to a safe IP on first check and a private IP on the actual fetch.
+`services/url.py` resolves DNS on every call but does not cache results. A DNS rebinding attack could resolve to a safe IP on first check and a private IP on the actual fetch.
 
 ### Status
 **Done.**
@@ -145,7 +148,7 @@ Pipeline degradation in `tasks/pipeline.py` advances articles to next stage afte
 ## 8. Content Extraction Timeout ✅
 
 ### Problem
-`services/content_extractor.py:55` calls `trafilatura.fetch_url(url)` without an explicit timeout. Slow or unresponsive sites can block the pipeline indefinitely.
+`services/content_extractor.py` calls `trafilatura.fetch_url(url)` without an explicit timeout. Slow or unresponsive sites can block the pipeline indefinitely.
 
 ### Status
 **Done.** Uses `trafilatura.settings.use_config()` to set `DOWNLOAD_TIMEOUT=30`.
@@ -171,7 +174,7 @@ SQLAlchemy without explicit pool configuration. Under load, connection exhaustio
 ## 10. Redis Connection Pooling ✅
 
 ### Problem
-`extensions.py:42-61` creates a single Redis client without connection pooling.
+`extensions.py` created a single Redis client without connection pooling. Under concurrent Celery workers, connections could be exhausted.
 
 ### Status
 **Done.** Switched to `redis.ConnectionPool.from_url(url, max_connections=20)`. Added `reset_redis()` that properly disconnects the pool.
@@ -184,7 +187,7 @@ SQLAlchemy without explicit pool configuration. Under load, connection exhaustio
 ## 11. Pipeline Log Cleanup ✅
 
 ### Problem
-`models.py:230-244` PipelineLog grows unbounded.
+`models.py` PipelineLog grows unbounded — no TTL or cleanup mechanism.
 
 ### Status
 **Done.**
@@ -240,8 +243,8 @@ The pipeline has 4 LLM-powered stages: `select`, `research`, `write`, `edit`. Cu
 - `tests/test_routes.py`
 - `tests/test_url_validate.py` (new)
 
-### Deferred
-Full end-to-end test (pending → researching → writing → editing → done) was in the plan but not implemented. The individual stage tests plus the existing `test_integration.py` provide reasonable coverage. Could be added if pipeline regressions are observed.
+### ~~Deferred~~ — Done
+Full end-to-end test implemented in `tests/test_pipeline_e2e.py` (4 tests: happy path, degradation, failure budget, stage locking). See [D3](#d3-end-to-end-pipeline-integration-test--done).
 
 ---
 
@@ -300,7 +303,7 @@ Each change should:
 
 ## Deferred Items (Detailed Plans)
 
-### D1. Pipeline Stage Locking
+### D1. Pipeline Stage Locking ✅ Done
 
 #### Motivation
 
@@ -315,44 +318,12 @@ Adding a per-article, per-stage lock ensures exactly-once execution.
 
 Use a Redis lock keyed by `(article_id, stage)` with a TTL matching the stage's `timeout_seconds`. Acquire the lock before the limiter in `run_stage()`. If the lock can't be acquired, skip (another worker is processing this article in this stage).
 
-```python
-# In tasks/pipeline.py:run_stage(), before the limiter acquire
-lock_key = f"ainews:stage_lock:{article_id}:{stage}"
-redis = get_redis()
-task_id = task_self.request.id or "manual"
-lock_acquired = redis.set(lock_key, task_id, nx=True, ex=rc.timeout_seconds + 60)
-if not lock_acquired:
-    logger.info(f"Stage {stage} already running for article {article_id}, skipping")
-    return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
-```
+#### Status
+**Done.** Implemented in `tasks/pipeline.py:run_stage()` (lines 452-506). Lock acquisition with `nx=True, ex=timeout_seconds+60`. Task-ID-aware cleanup in `finally` block. Returns `{"skipped": True, "reason": "stage_locked"}` when lock is held by another task.
 
-Release the lock in the `finally` block (same task-id-aware pattern as `tasks/newsletter.py`):
-```python
-finally:
-    limiter.release(rc.provider, model)
-    try:
-        stored = redis.get(lock_key)
-        if stored and stored.decode() == task_id:
-            redis.delete(lock_key)
-    except Exception:
-        pass
-```
-
-#### Key decisions
-- Lock TTL = `rc.timeout_seconds + 60` — slightly longer than the limiter timeout so the lock outlives the stage
-- Lock value = `task_self.request.id` — same retry-aware pattern as newsletter locking
-- If lock acquisition fails, return early with `{"skipped": True}` rather than retrying — avoids thundering herd
-
-#### Files to Modify
-- `tasks/pipeline.py` — add lock in `run_stage()`
-
-#### Tests
-- `tests/test_pipeline.py` — test that `run_stage` returns `skipped` when lock is held by a different task ID
-- Test that retries from the same task can re-acquire
-
-#### Verification
-- Run `.venv/bin/python -m pytest tests/ -x -q`
-- Run `.venv/bin/ruff check . --exclude .venv`
+#### Files Modified
+- `tasks/pipeline.py`
+- `tests/test_pipeline_e2e.py` — `test_stage_lock_prevents_duplicate_processing`
 
 ---
 
@@ -362,75 +333,29 @@ finally:
 
 Config files (`pipeline.yaml`, `topics.yaml`, `sources.yaml`) are edited on disk. Currently, admins must manually call `POST /admin/api/config/reload` to clear caches. If config editor routes are added to the admin UI, they should auto-invalidate.
 
-#### Design
+#### Status
+**Done.** Phase 2 (mtime-based staleness detection) implemented and wired to all config loaders. Phase 1 (UI config editor routes) deferred until needed.
 
-**Phase 1 (if config editor routes are added):** Each config save endpoint should call invalidation after a successful write:
+#### Phase 2 — Done
+`services/config_cache.py` implements:
+- `invalidate_if_stale(key, config_path)` — compares cached mtime vs file's current mtime; invalidates if file was modified
+- `_record_mtime(key, config_path)` — records mtime after successful load (Redis-backed, TTL=86400s)
 
-```python
-@admin_bp.route("/api/config/pipeline", methods=["PUT"])
-@require_auth
-def save_pipeline_config():
-    # ... validate and write pipeline.yaml ...
-    get_config_cache().invalidate("pipeline")
-    clear_provider_cache()
-    return jsonify({"message": "Pipeline config saved"}), 200
-```
+Called from `schemas/common.py` in config loader wrappers:
+- `schemas/pipeline.py` — loads `pipeline.yaml`
+- `schemas/topic.py` — loads `topics.yaml`
+- `schemas/source.py` — loads `sources.yaml` (added during gap fix)
 
-**Phase 2 (alternative — file watcher):** If configs remain file-based without UI editing, add mtime-based staleness detection:
-
-```python
-# In services/config_cache.py
-def invalidate_if_stale(self, key: str, config_path: Path) -> None:
-    """Invalidate cache entry if the config file has been modified since last load."""
-    full_key = f"{self.prefix}:{key}"
-    mtime = config_path.stat().st_mtime
-    cached_mtime = self._memory_cache.get(f"{full_key}:mtime")
-    if cached_mtime is not None and mtime > cached_mtime:
-        self.invalidate(key)
-        self._memory_cache.pop(f"{full_key}:mtime", None)
-
-def _record_mtime(self, key: str, config_path: Path) -> None:
-    """Record the mtime of a config file after a successful load."""
-    full_key = f"{self.prefix}:{key}"
-    self._memory_cache[f"{full_key}:mtime"] = config_path.stat().st_mtime
-```
-
-Wrap the loader to record mtime after each load:
-```python
-def get_with_mtime(self, key: str, config_path: Path, loader_fn, ttl=300):
-    self.invalidate_if_stale(key, config_path)
-    result = self.get(key, loader_fn, ttl)
-    self._record_mtime(key, config_path)
-    return result
-```
-
-This is called at the top of `load_pipeline_config()` / `load_sources()` / `load_topics()`:
-```python
-def load_pipeline_config(...):
-    cfg = get_config_cache()
-    cfg.invalidate_if_stale("pipeline", BASE_DIR / "pipeline.yaml")
-    return cached_config(...)
-```
+#### Phase 1 — Not implemented
+Config editor endpoints (`routes/admin/config.py`) not created. Config files remain edited on disk. The manual `POST /admin/api/config/reload` endpoint is the primary invalidation mechanism.
 
 #### Key decisions
-- Phase 1 is preferred if UI routes exist; Phase 2 as fallback for file-only workflows
-- Both approaches are low-risk (invalidation already exists, we're just calling it automatically)
-
-#### Files to Modify (Phase 1)
-- New `routes/admin/config.py` — config editor endpoints with auto-invalidation
-- `routes/admin/__init__.py` — register config blueprint
-
-#### Files to Modify (Phase 2)
-- `services/config_cache.py` — add `invalidate_if_stale()` and `_record_mtime()` methods
-- `schemas/pipeline.py`, `schemas/source.py`, `schemas/topic.py` — call `invalidate_if_stale` on load
-
-#### Tests
-- Verify config reload happens automatically after file write
-- Verify stale configs are reloaded without manual intervention
+- Phase 2 chosen over Phase 1 because configs are edited on disk, not through UI
+- If admin config editor routes are added later, each save endpoint should call `get_config_cache().invalidate()` + `clear_provider_cache()`
 
 ---
 
-### D3. End-to-End Pipeline Integration Test
+### D3. End-to-End Pipeline Integration Test ✅ Done
 
 #### Motivation
 
@@ -440,106 +365,109 @@ Individual stage tests (research, write, edit) verify degradation and fallback b
 - `_finalize` not being called at the end
 - Review routing logic not working
 
-#### Design
+#### Status
+**Done.** `tests/test_pipeline_e2e.py` (4 tests):
 
-Create `tests/test_pipeline_e2e.py` with a test that mocks LLM providers at each stage and verifies the full flow.
+| Test | What it covers |
+|------|---------------|
+| `test_full_pipeline_select_through_edit` | Happy path: select → research → write → edit → done |
+| `test_pipeline_degrades_on_max_retries` | Article degrades from "researching" to "writing" after MAX_STAGE_RETRIES failures |
+| `test_pipeline_fails_on_global_budget` | Article marked "failed" when total_retries >= MAX_TOTAL_RETRIES |
+| `test_stage_lock_prevents_duplicate_processing` | `run_stage` returns `skipped` when lock held by another task |
 
-```python
-class TestPipelineEndToEnd:
-    """Test full pipeline: pending -> researching -> writing -> editing -> done."""
-
-    def test_full_pipeline_no_review(self, app, create_source, mock_celery_tasks):
-        """Article passes all stages and ends as done."""
-        with app.app_context():
-            article = create_article(
-                source=create_source(),
-                pipeline_status="pending",
-                original_title="Test Article",
-                extracted_text="Long text content...",
-            )
-            db.session.commit()
-
-            # Stage 1: Select
-            with patch("tasks.select.select_article") as mock_select:
-                mock_select.delay.side_effect = lambda aid, **kw: _run_select(aid)
-                mock_select.delay(article.id)
-            article = db.session.get(Article, article.id)
-            assert article.pipeline_status == "researching"
-
-            # Stage 2: Research
-            with patch("tasks.research.research_article") as mock_research:
-                mock_research.delay.side_effect = lambda aid, **kw: _run_research(aid)
-                mock_research.delay(article.id)
-            article = db.session.get(Article, article.id)
-            assert article.pipeline_status == "writing"
-
-            # Stage 3: Write
-            with patch("tasks.write.write_article") as mock_write:
-                mock_write.delay.side_effect = lambda aid, **kw: _run_write(aid)
-                mock_write.delay(article.id)
-            article = db.session.get(Article, article.id)
-            assert article.pipeline_status == "editing"
-
-            # Stage 4: Edit (editor may be skipped)
-            with patch("services.llm.get_provider_for_role") as mock_provider:
-                mock_provider.return_value = (MagicMock(), "qwen3:8b", 2048)
-                # If editor is disabled, _finalize is called
-                from tasks.pipeline import _finalize
-                _finalize(article.id)
-
-            article = db.session.get(Article, article.id)
-            assert article.pipeline_status in ("done", "review")
-            assert article.final_article is not None
-            assert article.retry_count == 0
-
-    def test_pipeline_degrades_on_max_retries(self, app, create_article):
-        """Article degrades to next stage after MAX_STAGE_RETRIES failures."""
-        with app.app_context():
-            article = create_article(
-                pipeline_status="researching",
-                extracted_text="Content",
-            )
-
-            from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
-
-            for i in range(MAX_STAGE_RETRIES - 1):
-                _handle_stage_failure(article, "research", Exception("fail"))
-                assert article.pipeline_status == "researching"
-
-            # Last retry triggers degradation
-            _handle_stage_failure(article, "research", Exception("fail"))
-            assert article.pipeline_status == "writing"
-            assert article.retry_count == 0
-
-    def test_pipeline_fails_on_global_budget(self, app, create_article):
-        """Article marked failed when total_retries exceeds MAX_TOTAL_RETRIES."""
-        with app.app_context():
-            article = create_article(
-                pipeline_status="writing",
-                extracted_text="Content",
-            )
-            article.total_retries = 9
-            article.retry_count = 0
-
-            from tasks.pipeline import _handle_stage_failure, MAX_TOTAL_RETRIES
-
-            _handle_stage_failure(article, "write", Exception("fail"))
-            assert article.total_retries == MAX_TOTAL_RETRIES
-            assert article.pipeline_status == "failed"
-```
-
-#### Key decisions
-- Mock `Celery task.delay` calls with side effects that run the real logic inline (bypasses task queue)
-- Use existing `create_article` and `create_source` factories
-- Test both happy path and failure/degradation paths
-- Avoid mocking the LLM itself — mock at the `run_stage` / `_handle_stage_failure` level
-
-#### Files to Create
+#### Files Created
 - `tests/test_pipeline_e2e.py`
 
-#### Files to Modify
-- `tests/conftest.py` — no changes needed, fixtures already exist
+---
 
-#### Verification
-- `.venv/bin/python -m pytest tests/test_pipeline_e2e.py -v`
-- `.venv/bin/ruff check . --exclude .venv`
+## 16. Newsletter Pipeline Tests ✅
+
+### Problem
+The newsletter pipeline (`services/newsletter_pipeline.py`) generates executive summaries using reader → writer → editor LLM stages, but has no dedicated test coverage. The pipeline follows similar patterns to the article pipeline but lacks verification of:
+- Pydantic model parsing for NewsletterBrief and ExecutiveSummary
+- Fallback behavior when stages fail
+- Topic context building for main vs topic-specific newsletters
+
+### Status
+**Done.** `tests/test_newsletter_pipeline.py` (13 tests):
+
+| Test Class | Tests |
+|-----------|-------|
+| `TestNewsletterBriefModel` | Valid data, connections default, serialization |
+| `TestExecutiveSummaryModel` | Required field, JSON serialization |
+| `TestBuildReaderPrompt` | Topic context, articles section |
+| `TestBuildWriterPrompt` | Brief JSON embedding, topic context |
+| `TestBuildEditorPrompt` | Review instructions, tone |
+| `TestRoleConfig` | Config loading for reader role |
+| `TestNewsletterPipelineIntegration` | Happy path (generate returns string), all-stages-disabled fallback |
+
+### Files Created
+- `tests/test_newsletter_pipeline.py` (new)
+
+---
+
+## 17. RSS Service Tests ✅
+
+### Problem
+`services/rss.py` generates RSS feeds and XML sitemaps but has no test coverage. This is public-facing output that could break rendering if malformed.
+
+### Status
+**Done.** `tests/test_rss.py` (19 tests):
+
+| Test Class | Tests |
+|-----------|-------|
+| `TestGenerateRSSFeed` | Valid XML, required fields, article item/link/guid, description, category, author, pubDate, multiple articles |
+| `TestGenerateSitemap` | Valid XML, homepage, topic pages (mocked), article URLs, lastmod |
+| `TestFormatDate` | Naive datetime UTC conversion, aware datetime, RFC 2822 format |
+| `TestParseFinalArticle` | Headline/tldr extraction, fallback to original title |
+
+### Files Created
+- `tests/test_rss.py` (new)
+
+---
+
+## 18. Trend Detector Tests ✅
+
+### Problem
+`services/trend_detector.py` classifies articles into topics using regex pattern matching but has no test coverage. Misclassification could cause articles to be dropped during crawling or assigned wrong categories.
+
+### Status
+**Done.** `tests/test_trend_detector.py` (21 tests):
+
+| Test Class | Tests |
+|-----------|-------|
+| `TestClassify` | AI keywords, LLM variations, CVE patterns, hardware, privacy, programming, multi-topic, no-match fallback, case insensitive, body text param, deep learning variants |
+| `TestComputeVelocity` | Newer > older, age floor, score proportionality, correct calculation |
+| `TestLoadPatterns` | Cache integration, fallback on failure, fallback completeness |
+| `TestTopicMatching` | Security, privacy, and AI+hardware article classification (integration) |
+
+### Files Created
+- `tests/test_trend_detector.py` (new)
+
+---
+
+## Areas Not Covered by This Plan
+
+The following exist in the codebase but are not addressed above. They are stable and don't need changes, but are documented here for completeness.
+
+### Deployment Infrastructure
+- **ASGI adapter** — `run.py` exports `WsgiToAsgi(flask_app)` for granian (documented in AGENTS.md)
+- **Docker** — `docker-compose.yml` (4 services: web, worker, beat, redis), `Dockerfile` (Python 3.12-slim, non-root user)
+- **systemd** — 3 unit files in `systemd/` with memory limits and security hardening (`NoNewPrivileges`, `ProtectSystem=strict`)
+- **Scripts** — `scripts/` (dev, test, install, deploy, backup, hash_password)
+- **Makefile** — 14 targets (install, dev, test, docker, lint, backup, clean)
+
+### Celery
+- **Beat schedule** — 4 tasks in `config.py`: crawl (30m), retry stuck (60m), newsletters (daily 8am), log cleanup (daily 3am)
+- **FlaskTask pattern** — `celery_app.py` wraps tasks in Flask app context with proper session cleanup
+
+### Frontend
+- **Templates** — 37 Jinja2 templates with HTMX for dynamic admin/public UI
+- **Static assets** — CSS, JS (theme toggle, HTMX vendored), SVG topic icons
+
+### Documentation
+- `docs/quickstart.md`, `docs/deployment.md`, `docs/configuration.md`
+
+### Gaps
+- **CI/CD** — No automated pipeline (no GitHub Actions, GitLab CI). `scripts/test.sh` and Makefile are ready but unconnected.
+- **Observability** — Health checks only (`/health`, `/admin/api/health`). No APM/error tracking (Sentry, Datadog, etc.).

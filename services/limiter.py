@@ -1,6 +1,8 @@
 import logging
 import threading
 
+import redis.exceptions
+
 logger = logging.getLogger(__name__)
 
 _ACQUIRE_SCRIPT = """
@@ -40,23 +42,31 @@ class ModelLimiter:
         try:
             result = self._acquire_script(keys=[key], args=[max_concurrent, timeout])
             return bool(result)
-        except Exception as e:
-            logger.error(f"Limiter acquire failed: {e}")
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Limiter acquire failed for {provider_id}/{model}: {e}")
             return False  # fail closed — deny slot if Redis is unavailable
 
     def release(self, provider_id: str, model: str) -> None:
         key = f"{self._prefix}:{provider_id}:{model}"
         try:
             self._release_script(keys=[key])
-        except Exception as e:
-            logger.warning(f"Limiter release failed: {e}")
+        except redis.exceptions.RedisError as e:
+            logger.warning(f"Limiter release failed for {provider_id}/{model}: {e}")
 
     def get_active(self, provider_id: str, model: str) -> int:
         key = f"{self._prefix}:{provider_id}:{model}"
         try:
             return int(self.redis.get(key) or 0)
-        except Exception:
+        except redis.exceptions.RedisError:
             return 0
+
+    def is_healthy(self) -> bool:
+        """Check if the underlying Redis connection is responsive."""
+        try:
+            self.redis.ping()
+            return True
+        except redis.exceptions.RedisError:
+            return False
 
 
 _limiter: ModelLimiter | None = None

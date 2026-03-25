@@ -1,7 +1,6 @@
 """Tests for admin password verification and public/admin routes."""
 
 import json
-import pytest
 
 
 class TestPasswordVerification:
@@ -9,15 +8,18 @@ class TestPasswordVerification:
 
     def test_is_password_hash_scrypt(self):
         from routes.admin import _is_password_hash
+
         assert _is_password_hash("scrypt:32768:8:1$salt$hashvalue")
         assert _is_password_hash("scrypt:16384:8:1$abc$def")
 
     def test_is_password_hash_pbkdf2(self):
         from routes.admin import _is_password_hash
+
         assert _is_password_hash("pbkdf2:sha256:600000$salt$hashvalue")
 
     def test_is_password_hash_rejects_plaintext(self):
         from routes.admin import _is_password_hash
+
         assert not _is_password_hash("mysecretpassword")
         assert not _is_password_hash("changeme")
         assert not _is_password_hash("")
@@ -26,28 +28,33 @@ class TestPasswordVerification:
     def test_verify_password_hashed_correct(self):
         from werkzeug.security import generate_password_hash
         from routes.admin import _verify_password
+
         hashed = generate_password_hash("correctpassword")
         assert _verify_password(hashed, "correctpassword") is True
 
     def test_verify_password_hashed_wrong(self):
         from werkzeug.security import generate_password_hash
         from routes.admin import _verify_password
+
         hashed = generate_password_hash("correctpassword")
         assert _verify_password(hashed, "wrongpassword") is False
 
     def test_verify_password_plaintext_rejected(self):
         from routes.admin import _verify_password
+
         # Plaintext passwords are no longer accepted
         assert _verify_password("myplainpassword", "myplainpassword") is False
         assert _verify_password("myplainpassword", "wrongpassword") is False
 
     def test_verify_password_empty_stored(self):
         from routes.admin import _verify_password
+
         assert _verify_password("", "anypassword") is False
 
     def test_verify_password_hashed_empty_provided(self):
         from werkzeug.security import generate_password_hash
         from routes.admin import _verify_password
+
         hashed = generate_password_hash("correctpassword")
         assert _verify_password(hashed, "") is False
 
@@ -77,13 +84,18 @@ class TestPublicRoutes:
         assert "application/xml" in resp.content_type
 
     def test_subscribe_validates_email(self, client):
-        resp = client.post("/subscribe", data={"email": "invalid", "newsletter_type": "main"})
+        resp = client.post(
+            "/subscribe", data={"email": "invalid", "newsletter_type": "main"}
+        )
         # Without HX-Request header, invalid email returns redirect
         assert resp.status_code == 302
 
     def test_subscribe_validates_email_htmx(self, client):
-        resp = client.post("/subscribe", data={"email": "invalid", "newsletter_type": "main"},
-                          headers={"HX-Request": "true"})
+        resp = client.post(
+            "/subscribe",
+            data={"email": "invalid", "newsletter_type": "main"},
+            headers={"HX-Request": "true"},
+        )
         assert resp.status_code == 200
         assert b"valid email" in resp.data
 
@@ -111,7 +123,9 @@ class TestAdminRoutes:
 
     def test_login_accepts_correct_hashed_password(self, client, app, hashed_password):
         app.config["ADMIN_PASSWORD"] = hashed_password
-        resp = client.post("/admin/login", data={"password": "testpass123"}, follow_redirects=False)
+        resp = client.post(
+            "/admin/login", data={"password": "testpass123"}, follow_redirects=False
+        )
         assert resp.status_code == 302
         assert "/admin" in resp.location
 
@@ -178,3 +192,16 @@ class TestAdminHealth:
         data = json.loads(resp.data)
         assert "flask" in data
         assert data["flask"] == "ok"
+
+
+class TestRequestSizeLimit:
+    """Test MAX_CONTENT_LENGTH enforcement."""
+
+    def test_413_handler_returns_text(self, client, app):
+        """Oversized requests should get a 413 before reaching the handler."""
+        app.config["MAX_CONTENT_LENGTH"] = 100
+        resp = client.post(
+            "/subscribe",
+            data={"email": "x" * 200},
+        )
+        assert resp.status_code == 413

@@ -1,5 +1,7 @@
 import json
 from unittest.mock import MagicMock
+
+import redis.exceptions
 from pydantic import BaseModel
 from services.config_cache import ConfigCache, _serialize, _deserialize
 
@@ -98,7 +100,9 @@ class TestConfigCache:
         mock_redis.delete.assert_called_with(b"test:foo", b"test:bar")
 
     def test_graceful_on_redis_failure(self, mock_redis):
-        mock_redis.get = MagicMock(side_effect=Exception("Redis down"))
+        mock_redis.get = MagicMock(
+            side_effect=redis.exceptions.ConnectionError("Redis down")
+        )
         cache = ConfigCache(mock_redis, prefix="test")
 
         result = cache.get("myconfig", lambda: {"fallback": True}, ttl=60)
@@ -106,7 +110,9 @@ class TestConfigCache:
 
     def test_graceful_on_write_failure(self, mock_redis):
         mock_redis.get = MagicMock(return_value=None)
-        mock_redis.setex = MagicMock(side_effect=Exception("Redis write fail"))
+        mock_redis.setex = MagicMock(
+            side_effect=redis.exceptions.ConnectionError("Redis write fail")
+        )
         cache = ConfigCache(mock_redis, prefix="test")
 
         result = cache.get("myconfig", lambda: {"data": True}, ttl=60)

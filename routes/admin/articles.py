@@ -290,6 +290,7 @@ def reprocess_article(article_id):
         article.final_article = None
         article.original_ai_article = None
         article.retry_count = 0
+        article.total_retries = 0
         article.last_error = None
         db.session.commit()
         select_article.delay(article.id)
@@ -302,6 +303,7 @@ def reprocess_article(article_id):
         article.final_article = None
         article.original_ai_article = None
         article.retry_count = 0
+        article.total_retries = 0
         article.last_error = None
         db.session.commit()
         research_article.delay(article.id)
@@ -313,6 +315,7 @@ def reprocess_article(article_id):
         article.final_article = None
         article.original_ai_article = None
         article.retry_count = 0
+        article.total_retries = 0
         article.last_error = None
         db.session.commit()
         write_article.delay(article.id)

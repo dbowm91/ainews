@@ -16,7 +16,7 @@ class TestDegradeAndAdvance:
         article.original_title = "Test Article"
         article.retry_count = 3
 
-        with patch("extensions.db") as mock_db:
+        with patch("extensions.db"):
             _degrade_and_advance(article, "select")
 
         assert article.pipeline_status == "researching"
@@ -35,7 +35,7 @@ class TestDegradeAndAdvance:
         article.extracted_text = "Some text content"
         article.retry_count = 3
 
-        with patch("extensions.db") as mock_db:
+        with patch("extensions.db"):
             _degrade_and_advance(article, "research")
 
         assert article.pipeline_status == "writing"
@@ -55,7 +55,7 @@ class TestDegradeAndAdvance:
         article.extracted_text = "Content"
         article.retry_count = 3
 
-        with patch("extensions.db") as mock_db:
+        with patch("extensions.db"):
             _degrade_and_advance(article, "write")
 
         assert article.pipeline_status == "editing"
@@ -72,7 +72,7 @@ class TestDegradeAndAdvance:
         article.draft_article = '{"headline": "Test"}'
         article.retry_count = 3
 
-        with patch("extensions.db") as mock_db:
+        with patch("extensions.db"):
             _degrade_and_advance(article, "edit")
 
         assert article.pipeline_status == "done"
@@ -159,11 +159,14 @@ class TestHandleStageFailure:
 
         article = MagicMock(spec=Article)
         article.retry_count = 1
+        article.total_retries = 0
+        article.id = 1
 
         with patch("extensions.db"):
             result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert article.retry_count == 2
+        assert article.total_retries == 1
         assert result is False  # not degraded yet
 
     @patch("tasks.write.write_article")
@@ -175,6 +178,7 @@ class TestHandleStageFailure:
         article = MagicMock(spec=Article)
         article.id = 1
         article.retry_count = MAX_STAGE_RETRIES - 1
+        article.total_retries = 0
         article.original_title = "Test"
         article.original_url = "https://example.com"
         article.original_author = "Author"
@@ -192,6 +196,8 @@ class TestHandleStageFailure:
 
         article = MagicMock(spec=Article)
         article.retry_count = 0
+        article.total_retries = 0
+        article.id = 1
         error = Exception("Something went wrong very badly")
 
         with patch("extensions.db"):
@@ -253,7 +259,9 @@ class TestRetryStuck:
         article.original_url = "https://example.com"
         article.original_author = "Author"
         article.extracted_text = "Content"
-        article.updated_at = datetime.now(timezone.utc) - timedelta(minutes=30)  # Old enough
+        article.updated_at = datetime.now(timezone.utc) - timedelta(
+            minutes=30
+        )  # Old enough
         return article
 
     @pytest.fixture(autouse=True)
@@ -272,15 +280,19 @@ class TestRetryStuck:
         with patch("models.Article") as MockArticle:
             MockArticle.query = mock_query
             # Mock the column comparisons to return a MagicMock (for SQLAlchemy expressions)
-            # This prevents "TypeError: '<' not supported between instances of
-            # 'MagicMock' and 'datetime.datetime'" when comparing Article.updated_at < cutoff
             MockArticle.pipeline_status = MagicMock()
             MockArticle.pipeline_status.in_ = MagicMock(return_value=MagicMock())
             MockArticle.updated_at = MagicMock()
             MockArticle.updated_at.__lt__ = MagicMock(return_value=MagicMock())
+            MockArticle.updated_at.__ge__ = MagicMock(return_value=MagicMock())
+            MockArticle.retry_count = MagicMock()
+            MockArticle.retry_count.__ge__ = MagicMock(return_value=MagicMock())
+            mock_query.filter.return_value.all.return_value = []
             yield MockArticle, mock_query
 
-    def test_degrades_articles_over_max_retries(self, mock_celery_tasks, mock_article_query):
+    def test_degrades_articles_over_max_retries(
+        self, mock_celery_tasks, mock_article_query
+    ):
         """Articles with retry_count >= MAX_STAGE_RETRIES should be degraded."""
         from tasks.retry import retry_stuck, MAX_STAGE_RETRIES
 
@@ -305,8 +317,287 @@ class TestRetryStuck:
         mock_query.filter.return_value.all.return_value = [article]
 
         with patch("extensions.db"):
-            result = retry_stuck()
+            with patch("tasks.pipeline._degrade_and_advance") as mock_degrade:
+                with patch("tasks.retry._dead_letter") as mock_dead:
+                    result = retry_stuck()
 
-        mock_celery_tasks["write"].delay.assert_called_once_with(1)
+        mock_celery_tasks["write"].delay.assert_called_once_with(1, run_id=None)
+        mock_degrade.assert_not_called()
+        mock_dead.assert_not_called()
         assert result["retried"] == 1
         assert result["degraded"] == 0
+        assert result["dead_lettered"] == 0
+
+
+class TestRunStage:
+    """Test run_stage lifecycle management."""
+
+    @staticmethod
+    def _mock_run_stage_deps():
+        """Set up common mocks for run_stage tests."""
+        patches = {
+            "Article": patch("models.Article"),
+            "db": patch("extensions.db"),
+            "get_role_config": patch("schemas.pipeline.get_role_config"),
+            "get_provider_for_role": patch("services.llm.get_provider_for_role"),
+            "record_success": patch("services.llm.record_provider_success"),
+            "record_failure": patch("services.llm.record_provider_failure"),
+            "get_limiter": patch("services.limiter.get_limiter"),
+        }
+        mocks = {}
+        for name, p in patches.items():
+            mocks[name] = p.start()
+        return patches, mocks
+
+    def test_returns_result_on_success(self):
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            article = MagicMock()
+            article.retry_count = 0
+            mocks["db"].session.get.return_value = article
+
+            mocks["get_provider_for_role"].return_value = (
+                MagicMock(),
+                "qwen3:8b",
+                2048,
+            )
+
+            limiter = MagicMock()
+            limiter.acquire.return_value = True
+            mocks["get_limiter"].return_value = limiter
+
+            work_result = {"article_id": 1, "data": "ok"}
+            work_fn = MagicMock(return_value=work_result)
+
+            task_self = MagicMock()
+            result = run_stage("selector", 1, work_fn, task_self)
+
+            assert result == work_result
+            assert article.retry_count == 0
+            assert article.last_error is None
+            limiter.release.assert_called_once()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+    def test_returns_degraded_when_handler_succeeds(self):
+        """When work raises but _handle_stage_failure returns True, run_stage returns degraded dict."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            article = MagicMock()
+            article.retry_count = 0
+            mocks["db"].session.get.return_value = article
+
+            mocks["get_provider_for_role"].return_value = (
+                MagicMock(),
+                "qwen3:8b",
+                2048,
+            )
+
+            limiter = MagicMock()
+            limiter.acquire.return_value = True
+            mocks["get_limiter"].return_value = limiter
+
+            work_fn = MagicMock(side_effect=Exception("LLM timeout"))
+            task_self = MagicMock()
+
+            with patch("tasks.pipeline._handle_stage_failure", return_value=True):
+                result = run_stage("writer", 1, work_fn, task_self)
+
+            assert result == {"article_id": 1, "result": "degraded"}
+            limiter.release.assert_called_once()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+    def test_raises_when_handler_returns_false(self):
+        """When work raises and _handle_stage_failure returns False, run_stage re-raises."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            article = MagicMock()
+            article.retry_count = 0
+            mocks["db"].session.get.return_value = article
+
+            mocks["get_provider_for_role"].return_value = (
+                MagicMock(),
+                "qwen3:8b",
+                2048,
+            )
+
+            limiter = MagicMock()
+            limiter.acquire.return_value = True
+            mocks["get_limiter"].return_value = limiter
+
+            work_fn = MagicMock(side_effect=Exception("LLM timeout"))
+            task_self = MagicMock()
+
+            with patch("tasks.pipeline._handle_stage_failure", return_value=False):
+                with pytest.raises(Exception, match="LLM timeout"):
+                    run_stage("writer", 1, work_fn, task_self)
+
+            limiter.release.assert_called_once()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+    def test_skips_when_disabled(self):
+        """When stage is disabled, run_stage skips to next stage."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = False
+            mocks["get_role_config"].return_value = rc
+
+            work_fn = MagicMock()
+            task_self = MagicMock()
+
+            with patch("tasks.pipeline._finalize") as mock_finalize:
+                result = run_stage("editor", 1, work_fn, task_self)
+
+            assert result == {"article_id": 1, "decision": "skip_editor"}
+            mock_finalize.assert_called_once_with(1)
+            work_fn.assert_not_called()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+    def test_retries_when_limiter_denies(self):
+        """When limiter.acquire returns False, run_stage raises task retry."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            article = MagicMock()
+            mocks["db"].session.get.return_value = article
+
+            mocks["get_provider_for_role"].return_value = (
+                MagicMock(),
+                "qwen3:8b",
+                2048,
+            )
+
+            limiter = MagicMock()
+            limiter.acquire.return_value = False
+            mocks["get_limiter"].return_value = limiter
+
+            work_fn = MagicMock()
+            task_self = MagicMock()
+            task_self.retry.side_effect = Exception("Celery Retry")
+
+            with pytest.raises(Exception, match="Celery Retry"):
+                run_stage("selector", 1, work_fn, task_self)
+
+            work_fn.assert_not_called()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+
+class TestRetryBudget:
+    """Test global retry budget prevents infinite retries."""
+
+    def test_increments_total_retries(self):
+        """_handle_stage_failure should increment total_retries."""
+        from tasks.pipeline import _handle_stage_failure
+        from models import Article
+
+        article = MagicMock(spec=Article)
+        article.retry_count = 1
+        article.total_retries = 0
+        article.id = 1
+
+        with patch("extensions.db"):
+            result = _handle_stage_failure(article, "write", Exception("test"))
+
+        assert article.total_retries == 1
+        assert result is False
+
+    def test_fails_article_on_budget_exceeded(self):
+        """When total_retries >= MAX_TOTAL_RETRIES, article should be marked failed."""
+        from tasks.pipeline import _handle_stage_failure, MAX_TOTAL_RETRIES
+        from models import Article
+
+        article = MagicMock(spec=Article)
+        article.retry_count = 0
+        article.total_retries = MAX_TOTAL_RETRIES - 1
+        article.id = 1
+
+        with patch("extensions.db"):
+            result = _handle_stage_failure(article, "write", Exception("test"))
+
+        assert article.total_retries == MAX_TOTAL_RETRIES
+        assert article.pipeline_status == "failed"
+        assert result is True
+
+    def test_total_retries_accumulates_across_stages(self):
+        """Total retries should accumulate across different stages."""
+        from tasks.pipeline import _handle_stage_failure
+        from models import Article
+
+        article = MagicMock(spec=Article)
+        article.retry_count = 0
+        article.total_retries = 5
+        article.id = 1
+
+        with patch("extensions.db"):
+            _handle_stage_failure(article, "research", Exception("test"))
+
+        assert article.total_retries == 6
+
+    def test_stage_retries_reset_on_degrade(self):
+        """Per-stage retry_count resets on degrade, but total_retries keeps accumulating."""
+        from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
+        from models import Article
+
+        article = MagicMock(spec=Article)
+        article.retry_count = MAX_STAGE_RETRIES - 1
+        article.total_retries = 2
+        article.id = 1
+        article.original_title = "Test"
+        article.original_url = "https://example.com"
+        article.original_author = "Author"
+        article.extracted_text = "Content"
+
+        with patch("extensions.db"):
+            with patch("tasks.edit.edit_article"):
+                result = _handle_stage_failure(article, "write", Exception("test"))
+
+        assert result is True
+        assert article.total_retries == 3
+        assert article.pipeline_status == "editing"

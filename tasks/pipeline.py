@@ -3,10 +3,12 @@
 import json
 
 from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_task_logger(__name__)
 
 MAX_STAGE_RETRIES = 3
+MAX_TOTAL_RETRIES = 10
 
 _STAGE_STATUS_MAP = {
     # Pipeline statuses → stage names
@@ -34,6 +36,9 @@ _STAGE_TASKS = {
     "editing": ("tasks.edit", "edit_article"),
 }
 
+# Cache for resolved task functions to avoid repeated importlib calls
+_task_fn_cache: dict[str, tuple] = {}
+
 
 def _dispatch_next(
     article_id: int,
@@ -45,13 +50,18 @@ def _dispatch_next(
     status = next_status or (article.pipeline_status if article else None)
     if not status:
         return
-    module_path, task_name = _STAGE_TASKS.get(status, (None, None))
-    if module_path:
-        import importlib
+    if status not in _task_fn_cache:
+        module_path, task_name = _STAGE_TASKS.get(status, (None, None))
+        if module_path:
+            import importlib
 
-        module = importlib.import_module(module_path)
-        task_fn = getattr(module, task_name)
-        task_fn.delay(article_id, run_id=run_id)
+            module = importlib.import_module(module_path)
+            _task_fn_cache[status] = (module, task_name)
+        else:
+            return
+    module, task_name = _task_fn_cache[status]
+    task_fn = getattr(module, task_name)
+    task_fn.delay(article_id, run_id=run_id)
 
 
 def _dispatch_for_status(article) -> None:
@@ -120,7 +130,11 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         article.pipeline_status = "researching"
         article.retry_count = 0
         article.last_error = None
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
         if run_id:
             _log_pipeline(
                 run_id,
@@ -150,7 +164,11 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         article.pipeline_status = "writing"
         article.retry_count = 0
         article.last_error = None
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
         if run_id:
             _log_pipeline(
                 run_id,
@@ -166,7 +184,11 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         article.pipeline_status = "editing"
         article.retry_count = 0
         article.last_error = None
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
         if run_id:
             _log_pipeline(
                 run_id,
@@ -184,7 +206,11 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
 
         if _should_route_to_review(article):
             article.pipeline_status = "review"
-            db.session.commit()
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
             if run_id:
                 _log_pipeline(
                     run_id,
@@ -196,7 +222,11 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
             return
 
         article.pipeline_status = "done"
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
         if run_id:
             _log_pipeline(
                 run_id,
@@ -218,12 +248,36 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
     from extensions import db
 
     article.retry_count = (article.retry_count or 0) + 1
+    article.total_retries = (article.total_retries or 0) + 1
     article.last_error = f"{stage}: {str(exc)[:500]}"
+
+    # Global retry budget: fail article permanently if exceeded
+    if article.total_retries >= MAX_TOTAL_RETRIES:
+        article.pipeline_status = "failed"
+        try:
+            db.session.commit()
+        except SQLAlchemyError as commit_exc:
+            db.session.rollback()
+            logger.error(
+                f"Failed to commit failed status for article {article.id}: {commit_exc}"
+            )
+        if run_id:
+            _log_pipeline(
+                run_id,
+                stage,
+                "error",
+                f"Article {article.id} exceeded global retry budget ({MAX_TOTAL_RETRIES}), marked as failed",
+                article_id=article.id,
+            )
+        logger.error(
+            f"Article {article.id} exceeded global retry budget ({MAX_TOTAL_RETRIES})"
+        )
+        return True
 
     if article.retry_count >= MAX_STAGE_RETRIES:
         try:
             db.session.commit()
-        except Exception as commit_exc:
+        except SQLAlchemyError as commit_exc:
             db.session.rollback()
             logger.error(
                 f"Failed to commit retry_count for article {article.id}: {commit_exc}"
@@ -234,7 +288,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
     else:
         try:
             db.session.commit()
-        except Exception as commit_exc:
+        except SQLAlchemyError as commit_exc:
             db.session.rollback()
             logger.error(
                 f"Failed to commit retry_count for article {article.id}: {commit_exc}"
@@ -401,11 +455,9 @@ def run_stage(
 
     provider, model, max_tokens = get_provider_for_role(stage)
     limiter = get_limiter()
-    acquired = False
 
     if not limiter.acquire(rc.provider, model, rc.concurrency, rc.timeout_seconds):
         raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
-    acquired = True
 
     try:
         result = work_fn(article, provider, model, max_tokens)
@@ -419,9 +471,8 @@ def run_stage(
         db.session.rollback()
         record_provider_failure(rc.provider, model)
         article = db.session.get(Article, article_id)
-        if article:
-            if _handle_stage_failure(article, stage, e, run_id=run_id):
-                return {"article_id": article_id, "result": "degraded"}
+        if article and _handle_stage_failure(article, stage, e, run_id=run_id):
+            return {"article_id": article_id, "result": "degraded"}
         if run_id:
             _log_pipeline(
                 run_id,
@@ -433,5 +484,4 @@ def run_stage(
         logger.error(f"{stage.title()} failed for article {article_id}: {e}")
         raise
     finally:
-        if acquired:
-            limiter.release(rc.provider, model)
+        limiter.release(rc.provider, model)

@@ -94,12 +94,12 @@ class Article(db.Model):
     raw_metadata = db.Column(db.JSON)
     extraction_status = db.Column(db.String(32), default="pending")
     retry_count = db.Column(db.Integer, default=0)
+    total_retries = db.Column(db.Integer, nullable=False, default=0)
     last_error = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     citations = db.relationship("Citation", backref="article", lazy="joined")
@@ -109,6 +109,8 @@ class Article(db.Model):
     __table_args__ = (
         db.UniqueConstraint("source_id", "external_id", name="uq_source_external_id"),
         db.Index("ix_articles_status_created", "pipeline_status", "created_at"),
+        db.Index("ix_articles_published", "original_published_at"),
+        db.Index("ix_articles_impact", "impact_score"),
     )
 
     def __repr__(self):
@@ -187,7 +189,6 @@ class ArticleMetric(db.Model):
     updated_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 
@@ -272,3 +273,13 @@ class ArticleVersion(db.Model):
 
     def __repr__(self):
         return f"<ArticleVersion {self.article_id} v{self.version_number}>"
+
+
+@db.event.listens_for(Article, "before_update")
+def _article_before_update(mapper, connection, target):
+    target.updated_at = datetime.now(timezone.utc)
+
+
+@db.event.listens_for(ArticleMetric, "before_update")
+def _metric_before_update(mapper, connection, target):
+    target.updated_at = datetime.now(timezone.utc)

@@ -44,3 +44,44 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
 ### ASGI deployment
 
 `run.py` exports `WsgiToAsgi(flask_app)` as the module-level `app` variable for granian. Flask remains WSGI internally; the adapter runs it in a thread pool behind granian's async event loop. Do not remove the `WsgiToAsgi` wrapper — granian and systemd are configured for `--interface asgi`.
+
+### Database choice
+
+SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — articles are written once by Celery workers, then served thousands of times by Flask. PostgreSQL adds operational overhead (connection pooling, separate process, vacuuming) with no benefit at this scale. Do not suggest or add PostgreSQL support.
+
+### Existing capabilities to be aware of
+
+- **Config cache reload**: `POST /admin/api/config/reload` (`routes/admin/api.py:60-68`) clears all cached configs and LLM provider instances. Call this after config changes rather than building new invalidation.
+- **Public rate limiting**: Subscribe endpoint already has `@limiter.limit("3 per minute")`. Login has `@limiter.limit("10 per minute")`. Don't re-add these.
+- **Subscriber validation**: Newsletter type is validated against known topic keys (`routes/public.py:406-408`). Invalid types default to "main".
+- **Admin auth**: All `/admin/api/*` routes use `@require_auth` decorator. The health endpoint, task status, and config reload are all authenticated.
+
+### Redis error handling
+
+Always catch `redis.exceptions.RedisError` (not bare `Exception`) for Redis operations in `services/`, `routes/`, and `tasks/`. This includes `ModelLimiter`, `ConfigCache`, and lock operations. Import as `import redis.exceptions` at module level.
+
+In tests, import `ConnectionError as RedisConnectionError` directly to avoid shadowing the mock variable named `redis`:
+```python
+from redis.exceptions import ConnectionError as RedisConnectionError
+```
+
+### Celery task locking
+
+Distributed locks in Celery tasks must be retry-aware. Use the task's `self.request.id` as the lock value so that retries from the same task can re-acquire, while different concurrent tasks are still blocked. See `tasks/newsletter.py:generate_daily_newsletters` for the pattern. Always use `try/finally` for lock cleanup.
+
+### Model column defaults
+
+When adding columns with `server_default` in migrations, also set `nullable=False` in the Python model definition. SQLAlchemy won't enforce NOT NULL without it — a code path that creates a row without the field will insert NULL, potentially breaking downstream comparisons.
+
+### DNS cache in SSRF validation
+
+`services/url.py` uses a bounded `_TTLCache` (1024 entries, 60s TTL) to prevent DNS rebinding between validation and fetch. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
+```python
+from services.url import _dns_cache
+
+@pytest.fixture(autouse=True)
+def _clear_dns_cache():
+    _dns_cache.clear()
+    yield
+    _dns_cache.clear()
+```

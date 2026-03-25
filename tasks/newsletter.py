@@ -1,13 +1,83 @@
 from datetime import datetime, timezone, timedelta
 
-from celery import shared_task
+from celery import shared_task, group
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=120)
-def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
+@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+def send_single_email(
+    self, email: str, subject: str, html: str, unsub_url: str
+) -> dict:
+    """Send a single newsletter email. Called by generate_daily_newsletters.
+
+    Retries on transient SMTP errors (connection, timeout).
+    """
+    import smtplib
+    from services.email import send_newsletter_email
+
+    try:
+        send_newsletter_email(email, subject, html, unsub_url)
+        return {"email": email, "sent": True}
+    except (
+        smtplib.SMTPConnectError,
+        smtplib.SMTPServerDisconnected,
+        TimeoutError,
+    ) as e:
+        # Transient errors - retry
+        logger.warning(f"Transient error sending to {email}, retrying: {e}")
+        raise self.retry(exc=e)
+    except smtplib.SMTPResponseException as e:
+        if e.smtp_code >= 400 and e.smtp_code < 500:
+            # 4xx temporary failure - retry
+            logger.warning(f"Temporary SMTP error for {email}, retrying: {e}")
+            raise self.retry(exc=e)
+        # 5xx permanent failure - don't retry
+        logger.error(f"Permanent SMTP error sending to {email}: {e}")
+        return {"email": email, "sent": False, "error": str(e)}
+    except Exception as e:
+        logger.error(f"Failed to send to {email}: {e}")
+        return {"email": email, "sent": False, "error": str(e)}
+
+
+def _send_emails_parallel(subscribers, subject, html, site_url):
+    """Send emails to subscribers in parallel using Celery group.
+
+    Returns the count of successfully sent emails.
+    """
+    if not subscribers:
+        return 0
+
+    # Build email tasks
+    email_tasks = []
+    for sub in subscribers:
+        unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
+        email_tasks.append(
+            send_single_email.s(
+                email=sub.email,
+                subject=subject,
+                html=html,
+                unsub_url=unsub_url,
+            )
+        )
+
+    # Execute in parallel
+    job = group(email_tasks)
+    result = job.apply_async()
+
+    try:
+        results = result.get(timeout=120, propagate=False)
+        sent = sum(1 for r in results if isinstance(r, dict) and r.get("sent"))
+        return sent
+    except Exception as e:
+        logger.error(f"Error waiting for email results: {e}")
+        # Fallback: count as 0 sent
+        return 0
+
+
+def _generate_newsletters_impl(task_self, dry_run_email, run_id):
+    """Implementation of newsletter generation logic."""
     from schemas.pipeline import load_pipeline_config
     from schemas.topic import load_topics
     from services.newsletter import generate_main_newsletter, generate_topic_newsletter
@@ -29,7 +99,7 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     # Create PipelineRun for tracking
     if run_id is None:
         run = PipelineRun(
-            task_id=self.request.id,
+            task_id=task_self.request.id,
             run_type="newsletter",
             status="running",
             triggered_by="manual" if is_dry_run else "scheduled",
@@ -40,11 +110,16 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
 
     # Main newsletter
     try:
-        articles = Article.query.filter(
-            Article.pipeline_status == "done",
-            Article.impact_score > 0,
-            Article.created_at >= cutoff,
-        ).order_by(Article.impact_score.desc()).limit(nl.max_articles).all()
+        articles = (
+            Article.query.filter(
+                Article.pipeline_status == "done",
+                Article.impact_score > 0,
+                Article.created_at >= cutoff,
+            )
+            .order_by(Article.impact_score.desc())
+            .limit(nl.max_articles)
+            .all()
+        )
 
         exec_summary = ""
         if articles:
@@ -81,19 +156,17 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
             subscribers = Subscriber.query.filter_by(
                 newsletter_type="main", active=True
             ).all()
-            for sub in subscribers:
-                unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
-                try:
-                    send_newsletter_email(sub.email, subject, html, unsub_url)
-                    sent += 1
-                except Exception as e:
-                    logger.error(f"Failed to send to {sub.email}: {e}")
+            sent = _send_emails_parallel(subscribers, subject, html, site_url)
 
         newsletter.recipients = sent
         newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
         db.session.commit()
-        results.append({"type": "main", "articles": count, "sent": sent, "dry_run": is_dry_run})
-        logger.info(f"Main newsletter: {subject} ({count} articles, {sent} sent, dry_run={is_dry_run})")
+        results.append(
+            {"type": "main", "articles": count, "sent": sent, "dry_run": is_dry_run}
+        )
+        logger.info(
+            f"Main newsletter: {subject} ({count} articles, {sent} sent, dry_run={is_dry_run})"
+        )
     except Exception as e:
         db.session.rollback()
         logger.error(f"Main newsletter failed: {e}")
@@ -103,11 +176,16 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     if not is_dry_run:
         for topic_key in topics:
             try:
-                articles = Article.query.filter(
-                    Article.pipeline_status == "done",
-                    Article.category == topic_key,
-                    Article.created_at >= cutoff,
-                ).order_by(Article.impact_score.desc()).limit(nl.max_articles).all()
+                articles = (
+                    Article.query.filter(
+                        Article.pipeline_status == "done",
+                        Article.category == topic_key,
+                        Article.created_at >= cutoff,
+                    )
+                    .order_by(Article.impact_score.desc())
+                    .limit(nl.max_articles)
+                    .all()
+                )
 
                 if not articles:
                     results.append({"type": topic_key, "skipped": True})
@@ -115,7 +193,9 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
 
                 exec_summary = ""
                 try:
-                    exec_summary = generate_executive_summary(articles, topic_key=topic_key)
+                    exec_summary = generate_executive_summary(
+                        articles, topic_key=topic_key
+                    )
                 except Exception as e:
                     logger.error(f"{topic_key} exec summary failed: {e}")
 
@@ -138,27 +218,22 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
                 subscribers = Subscriber.query.filter_by(
                     newsletter_type=topic_key, active=True
                 ).all()
-                sent = 0
-                for sub in subscribers:
-                    unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
-                    try:
-                        send_newsletter_email(sub.email, subject, html, unsub_url)
-                        sent += 1
-                    except Exception as e:
-                        logger.error(f"Failed to send to {sub.email}: {e}")
+                sent = _send_emails_parallel(subscribers, subject, html, site_url)
 
                 newsletter.recipients = sent
                 newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
                 db.session.commit()
                 results.append({"type": topic_key, "articles": count, "sent": sent})
-                logger.info(f"{topic_key} newsletter: {subject} ({count} articles, {sent} sent)")
+                logger.info(
+                    f"{topic_key} newsletter: {subject} ({count} articles, {sent} sent)"
+                )
             except Exception as e:
                 db.session.rollback()
                 logger.error(f"{topic_key} newsletter failed: {e}")
                 results.append({"type": topic_key, "error": str(e)})
 
     # Update run status
-    run = PipelineRun.query.get(run_id)
+    run = db.session.get(PipelineRun, run_id)
     if run:
         run.status = "completed"
         run.finished_at = datetime.now(timezone.utc)
@@ -166,3 +241,32 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
 
     logger.info(f"Newsletter generation complete: {results}")
     return results
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=120)
+def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
+    from extensions import get_redis
+
+    # Distributed lock to prevent duplicate newsletter generation.
+    # Uses task ID so retries from the same task can re-acquire.
+    task_id = self.request.id or "manual"
+    lock_key = "ainews:newsletter_lock"
+    redis = get_redis()
+
+    existing = redis.get(lock_key)
+    if existing and existing.decode() != task_id:
+        logger.info(
+            f"Newsletter generation already in progress (task {existing.decode()}), skipping"
+        )
+        return {"skipped": True, "reason": "locked"}
+
+    redis.set(lock_key, task_id, ex=600)
+
+    try:
+        return _generate_newsletters_impl(self, dry_run_email, run_id)
+    finally:
+        try:
+            if redis.get(lock_key) and redis.get(lock_key).decode() == task_id:
+                redis.delete(lock_key)
+        except Exception:
+            logger.warning("Failed to release newsletter lock")

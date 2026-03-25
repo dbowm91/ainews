@@ -19,7 +19,11 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = False  # overridden in ProductionConfig
-    PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+    SESSION_COOKIE_PATH = "/"
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=2)
+
+    # Request size limits
+    MAX_CONTENT_LENGTH = 64 * 1024  # 64KB
 
     # SMTP
     SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
@@ -62,6 +66,10 @@ class Config:
             "task": "tasks.newsletter.generate_daily_newsletters",
             "schedule": crontab(hour=8, minute=0),
         },
+        "cleanup-old-logs": {
+            "task": "tasks.cleanup.cleanup_old_pipeline_logs",
+            "schedule": crontab(hour=3, minute=0),
+        },
     }
 
 
@@ -78,20 +86,10 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'prod.db'}"
     )
-
-    @classmethod
-    def _get_engine_options(cls):
-        db_url = cls.SQLALCHEMY_DATABASE_URI or ""
-        if db_url.startswith("postgresql://") or db_url.startswith("postgres://"):
-            return {
-                "pool_size": 10,
-                "pool_recycle": 300,
-                "pool_pre_ping": True,
-                "max_overflow": 20,
-            }
-        return {}
-
-    SQLALCHEMY_ENGINE_OPTIONS = _get_engine_options.__func__()
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+    }
 
     @classmethod
     def validate(cls):

@@ -4,6 +4,7 @@ import ipaddress
 import logging
 import re
 import socket
+import time
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 logger = logging.getLogger(__name__)
@@ -21,16 +22,93 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("fe80::/10"),
 ]
 
+# DNS cache to prevent rebinding between validation and fetch
+_DNS_CACHE_TTL = 60  # seconds
+_DNS_CACHE_MAX = 1024
+
+
+class _TTLCache:
+    """Bounded TTL cache for DNS results. Thread-safe enough for GIL-guarded access."""
+
+    def __init__(self, maxsize: int, ttl: float) -> None:
+        self._store: dict[str, tuple[float, list[str]]] = {}
+        self._maxsize = maxsize
+        self._ttl = ttl
+
+    def get(self, key: str) -> list[str] | None:
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        ts, value = entry
+        if (time.monotonic() - ts) >= self._ttl:
+            del self._store[key]
+            return None
+        return value
+
+    def set(self, key: str, value: list[str]) -> None:
+        if len(self._store) >= self._maxsize:
+            # Evict oldest entry
+            oldest = min(self._store, key=lambda k: self._store[k][0])
+            del self._store[oldest]
+        self._store[key] = (time.monotonic(), value)
+
+    def clear(self) -> None:
+        self._store.clear()
+
+
+_dns_cache = _TTLCache(maxsize=_DNS_CACHE_MAX, ttl=_DNS_CACHE_TTL)
+
 
 class UnsafeURLError(ValueError):
     """Raised when a URL resolves to a private/reserved IP address."""
+
+
+def _resolve_and_check(hostname: str) -> list[str]:
+    """Resolve hostname to IPs and validate against blocked networks.
+
+    Uses a short-lived DNS cache to prevent rebinding attacks between
+    the validation check and the actual HTTP fetch.
+
+    Returns list of resolved IP strings if all are safe.
+    Raises UnsafeURLError if any IP is in a blocked range.
+    """
+    cached = _dns_cache.get(hostname)
+    if cached is not None:
+        return cached
+
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise UnsafeURLError(f"DNS resolution failed for {hostname}")
+
+    seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    safe_ips: list[str] = []
+    for family, _, _, _, sockaddr in addr_infos:
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if ip in seen_ips:
+            continue
+        seen_ips.add(ip)
+        for network in _BLOCKED_NETWORKS:
+            if ip in network:
+                raise UnsafeURLError(
+                    f"Hostname {hostname} resolves to private/reserved IP {ip} ({network})"
+                )
+        safe_ips.append(ip_str)
+
+    _dns_cache.set(hostname, safe_ips)
+    return safe_ips
 
 
 def validate_url_safe(url: str) -> str:
     """Validate that a URL does not resolve to a private/reserved IP.
 
     Resolves the hostname to IP addresses and checks each against known
-    private/reserved ranges to prevent SSRF attacks.
+    private/reserved ranges to prevent SSRF attacks. Uses DNS caching
+    to prevent rebinding between validation and fetch.
 
     Args:
         url: The URL to validate.
@@ -53,27 +131,7 @@ def validate_url_safe(url: str) -> str:
     if not hostname:
         raise ValueError("URL has no hostname")
 
-    try:
-        addr_infos = socket.getaddrinfo(hostname, None)
-    except socket.gaierror:
-        # DNS resolution failed — let the downstream HTTP client handle it
-        return url
-
-    seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
-    for family, _, _, _, sockaddr in addr_infos:
-        ip_str = sockaddr[0]
-        try:
-            ip = ipaddress.ip_address(ip_str)
-        except ValueError:
-            continue
-        if ip in seen_ips:
-            continue
-        seen_ips.add(ip)
-        for network in _BLOCKED_NETWORKS:
-            if ip in network:
-                raise UnsafeURLError(
-                    f"URL {url} resolves to private/reserved IP {ip} ({network})"
-                )
+    _resolve_and_check(hostname)
 
     return url
 

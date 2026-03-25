@@ -52,7 +52,9 @@ def extract_article(url: str) -> ExtractionResult:
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     try:
-        downloaded = trafilatura.fetch_url(url)
+        cfg = trafilatura.settings.use_config()
+        cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", "30")
+        downloaded = trafilatura.fetch_url(url, config=cfg)
     except Exception as e:
         logger.warning(f"Fetch failed for {url}: {e}")
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)

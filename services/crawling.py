@@ -6,7 +6,7 @@ from typing import Optional
 
 from extensions import db
 from models import Article, Source, PipelineRun
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,11 @@ def create_pipeline_run(task_id: str, triggered_by: str = "scheduled") -> Pipeli
         triggered_by=triggered_by,
     )
     db.session.add(run)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
     return run
 
 
@@ -43,7 +47,9 @@ def should_skip_source(source: Source, schedule_minutes: int) -> bool:
         True if the source should be skipped
     """
     if source and source.last_crawled:
-        elapsed = (datetime.now(timezone.utc) - source.last_crawled).total_seconds() / 60
+        elapsed = (
+            datetime.now(timezone.utc) - source.last_crawled
+        ).total_seconds() / 60
         return elapsed < schedule_minutes
     return False
 
@@ -57,7 +63,11 @@ def get_existing_external_ids(source: Source) -> set[str]:
     Returns:
         Set of existing external IDs
     """
-    existing = Article.query.filter_by(source_id=source.id).with_entities(Article.external_id).all()
+    existing = (
+        Article.query.filter_by(source_id=source.id)
+        .with_entities(Article.external_id)
+        .all()
+    )
     return {r[0] for r in existing if r[0]}
 
 
@@ -86,8 +96,9 @@ def filter_non_other_topics(items: list) -> list:
     return [i for i in items if i.topics != ["other"]]
 
 
-def get_or_create_source(source_key: str, name: str, source_type: str,
-                         url: str = "", feed_url: str = "") -> Source:
+def get_or_create_source(
+    source_key: str, name: str, source_type: str, url: str = "", feed_url: str = ""
+) -> Source:
     """Get an existing Source or create one, handling race conditions.
 
     Args:
@@ -141,7 +152,11 @@ def update_source_crawl_time(source: Optional[Source], cfg) -> Source:
             feed_url=cfg.config.get("feed_url", ""),
         )
     source.last_crawled = datetime.now(timezone.utc)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
     return source
 
 
@@ -167,4 +182,8 @@ def update_pipeline_run_stats(
     run.finished_at = datetime.now(timezone.utc)
     if error_message:
         run.error_message = error_message
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise

@@ -1,0 +1,74 @@
+from flask import jsonify
+from routes.admin import admin_bp, require_auth
+
+
+@admin_bp.route("/api/health")
+@require_auth
+def health():
+    from extensions import db
+    from sqlalchemy import text
+    from services.circuit_breaker import get_all_breaker_status
+    from services.limiter import get_limiter
+
+    status = {"flask": "ok", "database": "unknown", "llm": "unknown"}
+
+    try:
+        db.session.execute(text("SELECT 1"))
+        status["database"] = "ok"
+    except Exception:
+        status["database"] = "error"
+
+    try:
+        from services.llm import get_provider_info
+
+        status["llm"] = get_provider_info()
+    except Exception:
+        status["llm"] = "error"
+
+    try:
+        from extensions import get_redis
+
+        r = get_redis()
+        r.ping()
+        status["redis"] = "ok"
+    except Exception:
+        status["redis"] = "error"
+
+    status["circuit_breakers"] = get_all_breaker_status()
+
+    limiter = get_limiter()
+    status["limiter"] = {
+        "healthy": limiter.is_healthy(),
+    }
+
+    return jsonify(status)
+
+
+@admin_bp.route("/api/task/<task_id>")
+@require_auth
+def task_status(task_id):
+    from celery.result import AsyncResult
+    from celery_app import celery_app
+
+    task = AsyncResult(task_id, app=celery_app)
+    response = {
+        "task_id": task_id,
+        "status": task.status,
+        "result": None,
+    }
+    if task.ready():
+        response["result"] = task.result
+    elif task.info:
+        response["result"] = task.info
+    return jsonify(response)
+
+
+@admin_bp.route("/api/config/reload", methods=["POST"])
+@require_auth
+def reload_config():
+    from services.config_cache import get_config_cache
+    from services.llm import clear_provider_cache
+
+    get_config_cache().invalidate_all()
+    clear_provider_cache()
+    return jsonify({"message": "Config cache cleared"}), 200

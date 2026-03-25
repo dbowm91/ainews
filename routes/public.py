@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, Response, redirect, jsonify
 from datetime import datetime, timezone, timedelta
+from typing import Any
 from models import Article, Tag, ShareConfig, ArticleMetric
 from extensions import limiter, csrf
 from constants import PER_PAGE_PUBLIC
@@ -20,7 +21,7 @@ public_bp = Blueprint("public", __name__)
 PER_PAGE = PER_PAGE_PUBLIC
 
 
-def _render_feed_or_page(ctx: dict, full_template: str):
+def _render_feed_or_page(ctx: dict[str, Any], full_template: str) -> str:
     """Render HTMX partial or full page based on request type."""
     if request.headers.get("HX-Request"):
         if ctx.get("page", 1) > 1:
@@ -29,7 +30,7 @@ def _render_feed_or_page(ctx: dict, full_template: str):
     return render_template(full_template, **ctx)
 
 
-def _get_categories():
+def _get_categories() -> list[str]:
     from schemas.topic import load_topics
 
     return get_config_cache().get(
@@ -37,8 +38,8 @@ def _get_categories():
     )
 
 
-def _get_topic_icons():
-    def _load():
+def _get_topic_icons() -> dict[str, str]:
+    def _load() -> dict[str, str]:
         try:
             from schemas.topic import load_topics
 
@@ -50,8 +51,8 @@ def _get_topic_icons():
     return get_config_cache().get("topic_icons", _load, ttl=300)
 
 
-def _get_tag_cloud():
-    def _load():
+def _get_tag_cloud() -> list[dict[str, Any]]:
+    def _load() -> list[dict[str, Any]]:
         from sqlalchemy import func
         from extensions import db
         from models import article_tags
@@ -97,8 +98,8 @@ def _get_top_impact(limit: int = 3) -> list:
     )
 
 
-def _get_share_configs():
-    def _load():
+def _get_share_configs() -> list[dict[str, Any]]:
+    def _load() -> list[dict[str, Any]]:
         configs = (
             ShareConfig.query.filter_by(active=True)
             .order_by(ShareConfig.sort_order)
@@ -294,14 +295,19 @@ def track_share_click(article_id):
 def health():
     from extensions import db
     from sqlalchemy import text
+    from services.limiter import get_limiter
 
     status = "ok"
     try:
         db.session.execute(text("SELECT 1"))
     except Exception:
         status = "degraded"
+
+    limiter_ok = get_limiter().is_healthy()
     code = 200 if status == "ok" else 503
-    return jsonify({"status": status}), code
+    return jsonify(
+        {"status": status, "limiter": "ok" if limiter_ok else "degraded"}
+    ), code
 
 
 @public_bp.route("/feed")

@@ -36,4 +36,4 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
 
-CMD ["granian", "--interface", "wsgi", "--host", "0.0.0.0", "--port", "5000", "--workers", "2", "--blocking-threads", "2", "--access-log", "--log-level", "info", "--no-ws", "run:app"]
+CMD ["granian", "--interface", "asgi", "--host", "0.0.0.0", "--port", "5000", "--workers", "2", "--threads", "4", "--access-log", "--log-level", "info", "run:app"]

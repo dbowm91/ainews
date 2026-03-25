@@ -12,14 +12,13 @@ WorkingDirectory=/opt/ainews
 EnvironmentFile=/opt/ainews/.env
 
 ExecStart=/opt/ainews/.venv/bin/granian \
-    --interface wsgi \
+    --interface asgi \
     --host 127.0.0.1 \
     --port 5000 \
     --workers 4 \
-    --blocking-threads 4 \
+    --threads 4 \
     --access-log \
     --log-level info \
-    --no-ws \
     run:app
 
 Restart=always

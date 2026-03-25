@@ -69,6 +69,14 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 Distributed locks in Celery tasks must be retry-aware. Use the task's `self.request.id` as the lock value so that retries from the same task can re-acquire, while different concurrent tasks are still blocked. See `tasks/newsletter.py:generate_daily_newsletters` for the pattern. Always use `try/finally` for lock cleanup.
 
+### Celery beat schedule
+
+Four scheduled tasks are configured in `config.py:56-73`:
+- `run-all-sources` — crawl all sources every 30 minutes
+- `retry-stuck-articles` — retry stuck articles every 60 minutes
+- `generate-newsletters` — daily at 8:00 AM (cron)
+- `cleanup-old-logs` — daily at 3:00 AM (cron)
+
 ### Model column defaults
 
 When adding columns with `server_default` in migrations, also set `nullable=False` in the Python model definition. SQLAlchemy won't enforce NOT NULL without it — a code path that creates a row without the field will insert NULL, potentially breaking downstream comparisons.
@@ -85,3 +93,19 @@ def _clear_dns_cache():
     yield
     _dns_cache.clear()
 ```
+
+### Content extraction timeout
+
+`services/content_extractor.py` sets `DOWNLOAD_TIMEOUT=30` via trafilatura config. Do not remove this — without it, slow sites block the pipeline indefinitely.
+
+### Pipeline retry budget
+
+Articles have a `total_retries` column (incremented on every stage failure). When `total_retries >= MAX_TOTAL_RETRIES` (10), the article is marked `pipeline_status="failed"` and skipped. The admin route `reprocess_article` resets this on manual reprocessing.
+
+### Test conventions
+
+- **Factories**: Use `tests/factories.py` (`create_source`, `create_article`, `create_tag`, `create_subscriber`, `seed_articles`). These are available as fixtures via `tests/conftest.py`.
+- **Autouse fixtures**: `_reset_redis` (conftest.py) resets the Redis singleton between tests. `_clear_dns_cache` (url.py) clears DNS cache. Do not create additional autouse fixtures without careful consideration.
+- **Mock Redis**: Use the `mock_redis` fixture from conftest.py for unit tests that need Redis without a running instance.
+- **Mock Celery tasks**: Use `mock_celery_tasks` fixture to prevent actual pipeline task execution in tests.
+- **App fixture**: Creates in-memory SQLite with `WTF_CSRF_ENABLED=False`. Use `client` fixture for HTTP tests.

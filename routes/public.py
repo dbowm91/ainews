@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, Response, redirect, jsonify
 from datetime import datetime, timezone, timedelta
 from models import Article, Tag, ShareConfig, ArticleMetric
-from extensions import limiter, csrf, get_redis
+from extensions import limiter, csrf
 from constants import PER_PAGE_PUBLIC
 from services.article import (
     parse_article_json,
@@ -9,7 +9,8 @@ from services.article import (
     track_metric,
     get_articles_paginated,
 )
-import json
+from services.utils import is_valid_email
+from services.config_cache import get_config_cache
 import logging
 import secrets
 
@@ -19,32 +20,21 @@ public_bp = Blueprint("public", __name__)
 PER_PAGE = PER_PAGE_PUBLIC
 
 
-def _cached(key, ttl_seconds, fn):
-    try:
-        r = get_redis()
-        cached = r.get(f"ainews:cache:{key}")
-        if cached is not None:
-            if isinstance(cached, bytes):
-                cached = cached.decode("utf-8")
-            return json.loads(cached)
-    except Exception as e:
-        logger.warning(f"Cache read failed for {key}: {e}")
-
-    value = fn()
-
-    try:
-        r = get_redis()
-        r.setex(f"ainews:cache:{key}", ttl_seconds, json.dumps(value))
-    except Exception as e:
-        logger.warning(f"Cache write failed for {key}: {e}")
-
-    return value
+def _render_feed_or_page(ctx: dict, full_template: str):
+    """Render HTMX partial or full page based on request type."""
+    if request.headers.get("HX-Request"):
+        if ctx.get("page", 1) > 1:
+            return render_template("partials/cards.html", **ctx)
+        return render_template("partials/feed.html", **ctx)
+    return render_template(full_template, **ctx)
 
 
 def _get_categories():
     from schemas.topic import load_topics
 
-    return _cached("categories", 300, lambda: list(load_topics().topics.keys()))
+    return get_config_cache().get(
+        "categories", lambda: list(load_topics().topics.keys()), ttl=300
+    )
 
 
 def _get_topic_icons():
@@ -57,7 +47,7 @@ def _get_topic_icons():
         except Exception:
             return {}
 
-    return _cached("topic_icons", 300, _load)
+    return get_config_cache().get("topic_icons", _load, ttl=300)
 
 
 def _get_tag_cloud():
@@ -84,7 +74,7 @@ def _get_tag_cloud():
             for r in results
         ]
 
-    return _cached("tag_cloud", 60, _load)
+    return get_config_cache().get("tag_cloud", _load, ttl=60)
 
 
 def _get_top_impact(limit: int = 3) -> list:
@@ -125,7 +115,7 @@ def _get_share_configs():
             for c in configs
         ]
 
-    return _cached("share_configs", 300, _load)
+    return get_config_cache().get("share_configs", _load, ttl=300)
 
 
 @public_bp.route("/")
@@ -159,11 +149,7 @@ def index():
         share_configs=share_configs,
     )
 
-    if request.headers.get("HX-Request"):
-        if page > 1:
-            return render_template("partials/cards.html", **ctx)
-        return render_template("partials/feed.html", **ctx)
-    return render_template("index.html", **ctx)
+    return _render_feed_or_page(ctx, "index.html")
 
 
 @public_bp.route("/topic/<category>")
@@ -197,11 +183,7 @@ def topic_feed(category):
         share_configs=share_configs,
     )
 
-    if request.headers.get("HX-Request"):
-        if page > 1:
-            return render_template("partials/cards.html", **ctx)
-        return render_template("partials/feed.html", **ctx)
-    return render_template("topic.html", **ctx)
+    return _render_feed_or_page(ctx, "topic.html")
 
 
 @public_bp.route("/article/<int:article_id>")
@@ -235,6 +217,8 @@ def article_detail(article_id):
 
 @public_bp.route("/tag/<slug>")
 def tag_feed(slug):
+    from services.utils import paginate_query
+
     page = max(1, request.args.get("page", 1, type=int))
 
     tag = Tag.query.filter_by(slug=slug).first_or_404()
@@ -244,10 +228,7 @@ def tag_feed(slug):
         Article.pipeline_status.in_(["done", "skipped"]),
     ).order_by(Article.created_at.desc())
 
-    articles = q.offset((page - 1) * PER_PAGE).limit(PER_PAGE + 1).all()
-    has_next = len(articles) > PER_PAGE
-    if has_next:
-        articles = articles[:PER_PAGE]
+    articles, has_next, next_page = paginate_query(q, page, PER_PAGE)
     parse_articles(articles)
 
     share_configs = _get_share_configs()
@@ -255,7 +236,7 @@ def tag_feed(slug):
     ctx = dict(
         articles=articles,
         has_next=has_next,
-        next_page=page + 1,
+        next_page=next_page,
         page=page,
         category="",
         query="",
@@ -267,11 +248,7 @@ def tag_feed(slug):
         share_configs=share_configs,
     )
 
-    if request.headers.get("HX-Request"):
-        if page > 1:
-            return render_template("partials/cards.html", **ctx)
-        return render_template("partials/feed.html", **ctx)
-    return render_template("tag.html", **ctx)
+    return _render_feed_or_page(ctx, "tag.html")
 
 
 # ──────────────────────────────────────────────
@@ -303,7 +280,7 @@ def short_url_tracking_page(short_id):
 @csrf.exempt
 @limiter.limit("30 per minute")
 def track_share_click(article_id):
-    article = Article.query.get_or_404(article_id)
+    Article.query.get_or_404(article_id)
     track_metric(article_id, ArticleMetric.share_button_clicks)
     return "", 204
 
@@ -388,13 +365,18 @@ def feed_topic(category):
 @public_bp.route("/sitemap.xml")
 def sitemap():
     from services.rss import generate_sitemap
+    from collections import namedtuple
 
-    articles = (
+    rows = (
         Article.query.filter(Article.pipeline_status.in_(["done", "skipped"]))
+        .with_entities(Article.id, Article.created_at)
         .order_by(Article.created_at.desc())
         .limit(200)
         .all()
     )
+
+    _SitemapEntry = namedtuple("SitemapEntry", ["id", "created_at"])
+    articles = [_SitemapEntry(id=r.id, created_at=r.created_at) for r in rows]
 
     site_url = request.host_url.rstrip("/")
     xml = generate_sitemap(articles, site_url=site_url)
@@ -420,7 +402,12 @@ def subscribe():
     email = request.form.get("email", "").strip().lower()
     newsletter_type = request.form.get("newsletter_type", "main").strip()
 
-    if not email or "@" not in email:
+    # Validate newsletter_type against known topic keys
+    valid_types = set(_get_categories()) | {"main"}
+    if newsletter_type not in valid_types:
+        newsletter_type = "main"
+
+    if not is_valid_email(email):
         if request.headers.get("HX-Request"):
             return render_template(
                 "partials/subscribe_box.html",
@@ -437,7 +424,7 @@ def subscribe():
         if request.headers.get("HX-Request"):
             return render_template(
                 "partials/subscribe_box.html",
-                subscribe_success=f"Already subscribed!",
+                subscribe_success="Already subscribed!",
                 newsletter_type=newsletter_type,
             )
         return redirect("/")
@@ -478,14 +465,31 @@ def subscribe():
     if request.headers.get("HX-Request"):
         return render_template(
             "partials/subscribe_box.html",
-            subscribe_success=f"Subscribed!",
+            subscribe_success="Subscribed!",
             newsletter_type=newsletter_type,
         )
     return redirect("/")
 
 
 @public_bp.route("/unsubscribe/<token>")
+@limiter.limit("20 per minute")
 def unsubscribe(token):
+    """Show unsubscribe confirmation page (GET)."""
+    from models import Subscriber
+
+    subscriber = Subscriber.query.filter_by(
+        unsubscribe_token=token, active=True
+    ).first()
+
+    return render_template(
+        "unsubscribe.html", token=token, found=subscriber is not None
+    )
+
+
+@public_bp.route("/unsubscribe/<token>", methods=["POST"])
+@limiter.limit("10 per minute")
+def unsubscribe_confirm(token):
+    """Process unsubscribe request (POST with CSRF protection)."""
     from models import Subscriber
     from extensions import db
 
@@ -493,8 +497,20 @@ def unsubscribe(token):
         unsubscribe_token=token, active=True
     ).first()
 
+    commit_failed = False
     if subscriber:
         subscriber.active = False
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.exception(f"Failed to unsubscribe token {token}")
+            commit_failed = True
 
-    return render_template("unsubscribe.html", found=subscriber is not None)
+    return render_template(
+        "unsubscribe.html",
+        token=token,
+        found=subscriber is not None,
+        confirmed=subscriber is not None and not commit_failed,
+        error=commit_failed,
+    )

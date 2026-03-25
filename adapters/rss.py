@@ -1,6 +1,4 @@
-import hashlib
 from datetime import datetime, timezone
-from time import mktime
 from typing import Any, Optional
 
 import feedparser
@@ -11,7 +9,7 @@ from bs4 import BeautifulSoup
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import RSSConfig
-from services.url import normalize_url
+from services.url import validate_url_safe
 
 
 @register_adapter("rss")
@@ -28,14 +26,17 @@ class RSSAdapter(BaseSourceAdapter):
 
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
+        validate_url_safe(cfg.feed_url)
         headers = {
             "User-Agent": cfg.user_agent,
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
         }
-        resp = self._session.get(cfg.feed_url, headers=headers, timeout=cfg.request_timeout)
+        resp = self._session.get(
+            cfg.feed_url, headers=headers, timeout=cfg.request_timeout
+        )
         resp.raise_for_status()
         feed = feedparser.parse(resp.content)
-        return feed.entries[:cfg.max_items]
+        return feed.entries[: cfg.max_items]
 
     def parse_item(self, raw: Any) -> Optional[RawItem]:
         title = (raw.get("title") or "").strip()
@@ -65,9 +66,6 @@ class RSSAdapter(BaseSourceAdapter):
                 separator=" ", strip=True
             )
 
-        # External ID: hash the normalized URL
-        ext_id = hashlib.sha256(normalize_url(url).encode()).hexdigest()[:16] if url else hashlib.sha256(title.encode()).hexdigest()[:16]
-
         # Author
         author = raw.get("author")
         if not author and raw.get("authors"):
@@ -75,20 +73,14 @@ class RSSAdapter(BaseSourceAdapter):
 
         return RawItem(
             source_id=self.source_id,
-            external_id=ext_id,
+            external_id=self._hash_ext_id(url, title),
             title=title,
             url=url,
             author=author,
             published_at=published,
-            text_content=text[:3000] if text else None,
+            text_content=self._truncate(text),
             raw_score=0.0,
             raw_metadata={
                 "tags": [t["term"] for t in raw.get("tags", []) if t.get("term")],
             },
         )
-
-    def _get_match_text(self, item: RawItem) -> str:
-        parts = [item.title]
-        if item.text_content:
-            parts.append(item.text_content[:500])
-        return " ".join(parts)

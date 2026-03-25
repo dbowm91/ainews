@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field
 from typing import Optional
 import logging
 
+from services.prompts import esc_xml_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,11 +50,10 @@ class ResearchBrief(BaseModel):
         default="",
         description="Additional context, background, or significance",
     )
-    newsworthiness: str = Field(
-        description="Why this matters to a tech audience"
-    )
+    newsworthiness: str = Field(description="Why this matters to a tech audience")
     impact_score: int = Field(
-        ge=0, le=100,
+        ge=0,
+        le=100,
         description=(
             "Impact score 0-100 reflecting: importance of subject matter, "
             "original article popularity, research findings significance, "
@@ -62,32 +63,12 @@ class ResearchBrief(BaseModel):
     )
 
 
-DEFAULT_RESEARCHER_SYSTEM_PROMPT = (
-    "You are a tech research analyst. Your job is to compile a comprehensive "
-    "research brief for a news article.\n\n"
-    "INSTRUCTIONS:\n"
-    "1. Extract all key factual claims from the source article.\n"
-    "2. Identify direct quotes with proper attribution.\n"
-    "3. Use the provided external sources and related articles to add context.\n"
-    "4. Explain why this matters to a tech-savvy audience.\n"
-    "5. Be precise with names, dates, numbers, and attributions.\n"
-    "6. Rate each claim's confidence as high/medium/low.\n"
-    "7. Provide an impact score (0-100) based on:\n"
-    "   - Importance of the subject matter to the tech community\n"
-    "   - Popularity/engagement signals of the original article\n"
-    "   - Significance of research findings and external context\n"
-    "   - Community excitement and discussion level\n"
-    "   - Potential lasting impact on the industry\n"
-    "   Scale: 0-25 niche/minor, 26-50 notable, 51-75 significant, 76-100 major/breaking.\n"
-)
-
-
 def get_researcher_system_prompt() -> str:
     from schemas.pipeline import get_role_config
+    from services.prompts import get_system_prompt
+
     rc = get_role_config("researcher")
-    if rc.system_prompt:
-        return rc.system_prompt
-    return DEFAULT_RESEARCHER_SYSTEM_PROMPT
+    return get_system_prompt("researcher", rc.system_prompt)
 
 
 def build_research_prompt(
@@ -100,28 +81,41 @@ def build_research_prompt(
     related_articles: list[dict],
     max_text_length: int = 6000,
 ) -> str:
+    # User-controlled content is wrapped in XML tags to separate from instructions
     parts = [
-        f"SOURCE ARTICLE: {title}",
-        f"URL: {original_url}",
-        f"AUTHOR: {author}",
-        f"TOPICS: {', '.join(topics)}",
-        "",
-        "ARTICLE TEXT:",
-        extracted_text[:max_text_length],
+        "<source_article>",
+        f"  <title>{esc_xml_text(title)}</title>",
+        f"  <url>{esc_xml_text(original_url)}</url>",
+        f"  <author>{esc_xml_text(author)}</author>",
+        f"  <topics>{esc_xml_text(', '.join(topics))}</topics>",
+        "  <body>",
+        esc_xml_text(extracted_text[:max_text_length]),
+        "  </body>",
+        "</source_article>",
         "",
     ]
 
     if web_results:
-        parts.append("ADDITIONAL WEB SOURCES:")
+        parts.append("<external_sources>")
         for i, wr in enumerate(web_results, 1):
-            parts.append(f"{i}. [{wr['title']}]({wr['url']})")
-            parts.append(f"   {wr['snippet'][:300]}")
+            parts.append(f"  <source index='{i}'>")
+            parts.append(f"    <title>{esc_xml_text(wr['title'])}</title>")
+            parts.append(f"    <url>{esc_xml_text(wr['url'])}</url>")
+            parts.append(f"    <snippet>{esc_xml_text(wr['snippet'][:300])}</snippet>")
+            parts.append("  </source>")
+        parts.append("</external_sources>")
         parts.append("")
 
     if related_articles:
-        parts.append("RELATED ARTICLES FROM OUR DATABASE:")
+        parts.append("<related_articles>")
         for i, ra in enumerate(related_articles, 1):
-            parts.append(f"{i}. {ra['title']} ({ra['category']}) - {ra['snippet'][:200]}")
+            parts.append(
+                f"  <article index='{i}'>"
+                f"{esc_xml_text(ra['title'])} ({esc_xml_text(ra['category'])}) - "
+                f"{esc_xml_text(ra['snippet'][:200])}"
+                f"</article>"
+            )
+        parts.append("</related_articles>")
         parts.append("")
 
     parts.append(

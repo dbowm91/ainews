@@ -1,19 +1,16 @@
 import logging
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Optional
 
-from pydantic import BaseModel
-
+from schemas.common import resolve_env_vars
 from services.llm.base import BaseLLMProvider, LLMResponse, register_provider
-from schemas.llm import OllamaConfig, _resolve_env_vars
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T", bound=BaseModel)
 
 
 @register_provider("ollama")
 class OllamaProvider(BaseLLMProvider):
     def __init__(self, provider_id: str, config: dict):
-        super().__init__(provider_id, _resolve_env_vars(config))
+        super().__init__(provider_id, resolve_env_vars(config))
         cfg = OllamaConfig(**self.config)
         self.host = cfg.host
         self.default_model = cfg.model
@@ -24,7 +21,8 @@ class OllamaProvider(BaseLLMProvider):
     def client(self):
         if self._client is None:
             import ollama
-            self._client = ollama.Client(host=self.host)
+
+            self._client = ollama.Client(host=self.host, timeout=120)
         return self._client
 
     def _extract_text(self, resp) -> str:
@@ -77,15 +75,6 @@ class OllamaProvider(BaseLLMProvider):
         )
         return self._extract_text(resp)
 
-    def _build_messages(
-        self, messages: list[dict], system: Optional[str]
-    ) -> list[dict]:
-        result = []
-        if system:
-            result.append({"role": "system", "content": system})
-        result.extend(messages)
-        return result
-
     def health_check(self) -> dict[str, Any]:
         try:
             result = self.client.list()
@@ -97,3 +86,7 @@ class OllamaProvider(BaseLLMProvider):
             }
         except Exception as e:
             return {"provider": self.provider_id, "status": f"error: {e}"}
+
+
+# Re-export for backward compatibility
+from schemas.llm import OllamaConfig  # noqa: E402

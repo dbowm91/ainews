@@ -1,4 +1,5 @@
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,8 @@ class ModelLimiter:
             result = self._acquire_script(keys=[key], args=[max_concurrent, timeout])
             return bool(result)
         except Exception as e:
-            logger.warning(f"Limiter acquire failed: {e}")
-            return True  # fail open
+            logger.error(f"Limiter acquire failed: {e}")
+            return False  # fail closed — deny slot if Redis is unavailable
 
     def release(self, provider_id: str, model: str) -> None:
         key = f"{self._prefix}:{provider_id}:{model}"
@@ -59,13 +60,17 @@ class ModelLimiter:
 
 
 _limiter: ModelLimiter | None = None
+_limiter_lock = threading.Lock()
 
 
 def get_limiter() -> ModelLimiter:
     global _limiter
     if _limiter is not None:
         return _limiter
-    from extensions import get_redis
+    with _limiter_lock:
+        if _limiter is not None:
+            return _limiter
+        from extensions import get_redis
 
-    _limiter = ModelLimiter(get_redis())
-    return _limiter
+        _limiter = ModelLimiter(get_redis())
+        return _limiter

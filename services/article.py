@@ -4,7 +4,6 @@ import json
 import logging
 from typing import Optional
 from sqlalchemy import func, text
-from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import Article, ArticleMetric
@@ -137,8 +136,8 @@ def parse_articles(articles: list) -> list:
 def track_metric(article_id: int, column) -> None:
     """Atomically increment a metric column, creating the row if needed.
 
-    INSERT-first approach to avoid TOCTOU races:
-    1. Try INSERT (wins if row doesn't exist yet)
+    Uses INSERT-then-UPDATE approach:
+    1. Try INSERT with value 1 (wins if row doesn't exist yet)
     2. On IntegrityError (row already exists), do atomic UPDATE
     3. Single commit per path
 
@@ -146,8 +145,10 @@ def track_metric(article_id: int, column) -> None:
         article_id: The ID of the article to track metrics for
         column: The SQLAlchemy column to increment (e.g., ArticleMetric.page_loads)
     """
+    from sqlalchemy.exc import IntegrityError
+
     try:
-        metric = ArticleMetric(article_id=article_id, page_loads=0)
+        metric = ArticleMetric(article_id=article_id)
         setattr(metric, column.key, 1)
         db.session.add(metric)
         db.session.commit()
@@ -222,32 +223,53 @@ def create_article_version(
 ) -> None:
     """Create a version snapshot of an article before changes.
 
+    Handles concurrent calls by catching IntegrityError on the unique
+    constraint (article_id, version_number) and retrying with a fresh
+    version number query.
+
     Args:
         article: Article model instance
         change_reason: Reason for the version (e.g., "admin_edit", "pipeline_edit", "rollback")
         changed_by: Who made the change (e.g., "admin", "pipeline:writer")
     """
     from models import ArticleVersion
+    from sqlalchemy.exc import IntegrityError
 
-    # Get next version number — query after flush so concurrent calls see each other
-    max_version = (
-        db.session.query(db.func.max(ArticleVersion.version_number))
-        .filter_by(article_id=article.id)
-        .scalar()
-        or 0
-    )
+    max_retries = 3
+    for attempt in range(max_retries):
+        max_version = (
+            db.session.query(db.func.max(ArticleVersion.version_number))
+            .filter_by(article_id=article.id)
+            .scalar()
+            or 0
+        )
 
-    version = ArticleVersion(
-        article_id=article.id,
-        version_number=max_version + 1,
-        final_article=article.final_article,
-        original_ai_article=article.original_ai_article,
-        change_reason=change_reason,
-        changed_by=changed_by,
-    )
-    db.session.add(version)
-    db.session.flush()  # Ensure subsequent queries see this version
-    # Don't commit here — let the caller handle the transaction
+        version = ArticleVersion(
+            article_id=article.id,
+            version_number=max_version + 1,
+            final_article=article.final_article,
+            original_ai_article=article.original_ai_article,
+            change_reason=change_reason,
+            changed_by=changed_by,
+        )
+        db.session.add(version)
+        try:
+            db.session.flush()
+            return
+        except IntegrityError:
+            db.session.rollback()
+            if attempt == max_retries - 1:
+                logger.error(
+                    "Failed to create version for article %s after %d retries",
+                    article.id,
+                    max_retries,
+                )
+                raise
+            logger.debug(
+                "Version race for article %s, retrying (attempt %d)",
+                article.id,
+                attempt + 1,
+            )
 
 
 def get_article_versions(article_id: int, limit: int = 20) -> list:

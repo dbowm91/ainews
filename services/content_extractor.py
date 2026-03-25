@@ -43,37 +43,34 @@ def _detect_paywall(html: str) -> bool:
 
 def extract_article(url: str) -> ExtractionResult:
     from constants import MIN_CONTENT_LENGTH
+    from services.url import validate_url_safe, UnsafeURLError
+
+    try:
+        validate_url_safe(url)
+    except UnsafeURLError as e:
+        logger.warning(f"Blocked unsafe URL {url}: {e}")
+        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     try:
         downloaded = trafilatura.fetch_url(url)
     except Exception as e:
         logger.warning(f"Fetch failed for {url}: {e}")
-        return ExtractionResult(
-            url, None, None, None, ExtractionStatus.FETCH_ERROR
-        )
+        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     if not downloaded:
-        return ExtractionResult(
-            url, None, None, None, ExtractionStatus.FETCH_ERROR
-        )
+        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     paywall = _detect_paywall(downloaded)
 
     # Primary: trafilatura
-    result = trafilatura.bare_extraction(
-        downloaded, url=url, with_metadata=True
-    )
+    result = trafilatura.bare_extraction(downloaded, url=url, with_metadata=True)
     if result and result.get("text") and len(result["text"]) >= MIN_CONTENT_LENGTH:
         return ExtractionResult(
             url=url,
             text=result["text"],
             title=result.get("title"),
             author=result.get("author"),
-            status=(
-                ExtractionStatus.PAYWALL
-                if paywall
-                else ExtractionStatus.SUCCESS
-            ),
+            status=(ExtractionStatus.PAYWALL if paywall else ExtractionStatus.SUCCESS),
             content_length=len(result["text"]),
         )
 
@@ -94,6 +91,4 @@ def extract_article(url: str) -> ExtractionResult:
     except Exception as e:
         logger.debug(f"Readability fallback failed for {url}: {e}")
 
-    return ExtractionResult(
-        url, None, None, None, ExtractionStatus.EMPTY
-    )
+    return ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)

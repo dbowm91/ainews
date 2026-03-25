@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field
 from typing import Optional
 import logging
 
+from services.prompts import esc_xml_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,35 +52,12 @@ class CondensedArticle(BaseModel):
     )
 
 
-DEFAULT_WRITER_SYSTEM_PROMPT = (
-    "You are a professional tech news writer. Write condensed articles "
-    "inspired by the Smart Brevity format — short, scannable, high-signal.\n\n"
-    "STRUCTURE:\n"
-    "1. HEADLINE — Short, punchy, accurate. No clickbait.\n"
-    "2. TL;DR — One bold sentence that captures the essence. The busy-reader hook.\n"
-    "3. WHY IT MATTERS — 1-2 sentences on why this is significant to the reader.\n"
-    "   Connect the story to a bigger trend or consequence.\n"
-    "4. BODY — 3-5 tight paragraphs. Lead with the most important fact.\n"
-    "   Use clear, direct prose. No filler, no throat-clearing, no fluff.\n"
-    "   Attribute every claim to a source. Include context from external sources.\n"
-    "   Write in markdown with paragraphs, not bullet lists.\n"
-    "5. WHAT TO WATCH — Forward-looking: what happens next, what to monitor,\n"
-    "   a key date, or why this story isn't over.\n\n"
-    "STYLE RULES:\n"
-    "- Sentences should be short and punchy. Vary rhythm.\n"
-    "- Use technical terms accurately. Assume the reader knows the basics.\n"
-    "- No opinions or speculation. Factual only.\n"
-    "- Include inline references to external sources in the body text.\n"
-    "- Reference related articles from the research brief where relevant.\n"
-)
-
-
 def get_writer_system_prompt() -> str:
     from schemas.pipeline import get_role_config
+    from services.prompts import get_system_prompt
+
     rc = get_role_config("writer")
-    if rc.system_prompt:
-        return rc.system_prompt
-    return DEFAULT_WRITER_SYSTEM_PROMPT
+    return get_system_prompt("writer", rc.system_prompt)
 
 
 def build_writer_prompt(
@@ -87,10 +66,13 @@ def build_writer_prompt(
     research_brief: str,
     max_key_points: int = 5,
 ) -> str:
+    # User-controlled content wrapped in XML tags to separate from instructions
     return (
-        f"TOPICS: {', '.join(topics)}\n"
-        f"ORIGINAL TITLE: {title}\n\n"
-        f"RESEARCH BRIEF:\n{research_brief}\n\n"
+        "<input_data>\n"
+        f"  <topics>{esc_xml_text(', '.join(topics))}</topics>\n"
+        f"  <original_title>{esc_xml_text(title)}</original_title>\n"
+        f"  <research_brief>\n{esc_xml_text(research_brief)}\n  </research_brief>\n"
+        "</input_data>\n\n"
         f"Write a condensed news article based on this research brief. "
         f"Include all key facts, quotes with attribution, and external context. "
         f"Include 'why_it_matters' (why this is significant) and "

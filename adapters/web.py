@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import random
 import time
@@ -11,7 +10,7 @@ from bs4 import BeautifulSoup
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import WebConfig
-from services.url import normalize_url
+from services.url import validate_url_safe, UnsafeURLError
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +29,23 @@ class WebAdapter(BaseSourceAdapter):
         super().__init__(*args, **kwargs)
         self._session = requests.Session()
         ua = self.adapter_config.user_agent
-        self._session.headers["User-Agent"] = ua if ua != "AINewsBot/1.0" else random.choice(USER_AGENTS)
-        self._session.headers.update({
-            "Accept": "text/html,application/xhtml+xml",
-            "Accept-Language": "en-US,en;q=0.5",
-        })
+        self._session.headers["User-Agent"] = (
+            ua if ua != "AINewsBot/1.0" else random.choice(USER_AGENTS)
+        )
+        self._session.headers.update(
+            {
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "en-US,en;q=0.5",
+            }
+        )
 
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
+        try:
+            validate_url_safe(cfg.listing_url)
+        except UnsafeURLError as e:
+            logger.error(f"[{self.source_id}] Unsafe listing URL: {e}")
+            return []
         article_urls = self._scrape_listing(cfg.listing_url)
         logger.info(f"[{self.source_id}] Found {len(article_urls)} article links")
 
@@ -47,6 +55,8 @@ class WebAdapter(BaseSourceAdapter):
                 soup = self._polite_get(url)
                 if soup:
                     articles.append((soup, url))
+            except UnsafeURLError as e:
+                logger.warning(f"[{self.source_id}] Blocked unsafe URL {url}: {e}")
             except Exception as e:
                 logger.warning(f"[{self.source_id}] Failed to scrape {url}: {e}")
         return articles
@@ -75,7 +85,9 @@ class WebAdapter(BaseSourceAdapter):
         # Date extraction
         published = None
         if acfg.date_selector:
-            dt_str = self._attr(soup, acfg.date_selector, acfg.date_attribute or "datetime")
+            dt_str = self._attr(
+                soup, acfg.date_selector, acfg.date_attribute or "datetime"
+            )
             if not dt_str:
                 dt_str = self._text(soup, acfg.date_selector)
             if dt_str:
@@ -89,9 +101,11 @@ class WebAdapter(BaseSourceAdapter):
                 body = body_el.get_text(separator=" ", strip=True)
         # Fallback: use trafilatura on the full HTML
         from constants import MIN_CONTENT_LENGTH
+
         if not body or len(body) < MIN_CONTENT_LENGTH:
             try:
                 import trafilatura
+
                 html_str = str(soup)
                 extracted = trafilatura.extract(html_str)
                 if extracted and len(extracted) >= MIN_CONTENT_LENGTH:
@@ -99,7 +113,7 @@ class WebAdapter(BaseSourceAdapter):
             except Exception:
                 pass
 
-        ext_id = hashlib.sha256(normalize_url(url).encode()).hexdigest()[:16] if url else hashlib.sha256(title.encode()).hexdigest()[:16]
+        ext_id = self._hash_ext_id(url, title)
 
         return RawItem(
             source_id=self.source_id,
@@ -108,16 +122,10 @@ class WebAdapter(BaseSourceAdapter):
             url=url,
             author=author,
             published_at=published,
-            text_content=body[:3000] if body else None,
+            text_content=self._truncate(body),
             raw_score=0.0,
             raw_metadata={"source_url": url},
         )
-
-    def _get_match_text(self, item: RawItem) -> str:
-        parts = [item.title]
-        if item.text_content:
-            parts.append(item.text_content[:500])
-        return " ".join(parts)
 
     def _scrape_listing(self, url: str, depth: int = 0) -> list[str]:
         cfg = self.adapter_config
@@ -154,6 +162,7 @@ class WebAdapter(BaseSourceAdapter):
 
     def _polite_get(self, url: str) -> Optional[BeautifulSoup]:
         cfg = self.adapter_config
+        validate_url_safe(url)
         delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)
         time.sleep(delay)
 
@@ -161,14 +170,16 @@ class WebAdapter(BaseSourceAdapter):
             try:
                 resp = self._session.get(url, timeout=15)
                 if resp.status_code == 429:
-                    wait = 2 ** attempt * 5 + random.uniform(0, 2)
+                    wait = 2**attempt * 5 + random.uniform(0, 2)
                     time.sleep(wait)
                     continue
                 resp.raise_for_status()
                 return BeautifulSoup(resp.text, "lxml")
             except requests.RequestException as e:
-                logger.warning(f"[{self.source_id}] Request failed ({attempt+1}): {e}")
-                time.sleep(2 ** attempt)
+                logger.warning(
+                    f"[{self.source_id}] Request failed ({attempt + 1}): {e}"
+                )
+                time.sleep(2**attempt)
         return None
 
     @staticmethod

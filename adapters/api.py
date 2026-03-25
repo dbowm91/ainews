@@ -6,6 +6,7 @@ import requests
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import APIConfig
+from services.url import validate_url_safe
 
 
 @register_adapter("api")
@@ -19,6 +20,7 @@ class APIAdapter(BaseSourceAdapter):
 
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
+        validate_url_safe(cfg.list_url)
         resp = self._session.get(cfg.list_url, timeout=cfg.request_timeout)
         resp.raise_for_status()
         data = resp.json()
@@ -30,12 +32,12 @@ class APIAdapter(BaseSourceAdapter):
         else:
             items = data if isinstance(data, list) else []
 
-        items = items[:cfg.max_items]
+        items = items[: cfg.max_items]
 
         # If item_url is set, fetch each item individually
         if cfg.item_url:
             fetched = []
-            for item_id in items[:cfg.max_items]:
+            for item_id in items[: cfg.max_items]:
                 item = self._fetch_item(item_id)
                 if item and self._passes_filters(item, cfg.filters):
                     fetched.append(item)
@@ -102,7 +104,7 @@ class APIAdapter(BaseSourceAdapter):
             url=self._resolve_path(raw, cfg.fields.get("url", "$.url")),
             author=self._resolve_path(raw, cfg.fields.get("author", "$.by")),
             published_at=published,
-            text_content=str(text_content)[:3000] if text_content else None,
+            text_content=self._truncate(str(text_content)) if text_content else None,
             raw_score=score,
             raw_metadata=raw_meta,
         )
@@ -116,6 +118,7 @@ class APIAdapter(BaseSourceAdapter):
         cfg = self.adapter_config
         try:
             url = cfg.item_url.format(id=item_id)
+            validate_url_safe(url)
             resp = self._session.get(url, timeout=cfg.request_timeout)
             if resp.ok:
                 return resp.json()

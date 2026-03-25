@@ -9,11 +9,54 @@ logger = get_task_logger(__name__)
 MAX_STAGE_RETRIES = 3
 
 _STAGE_STATUS_MAP = {
+    # Pipeline statuses → stage names
     "pending": "select",
     "researching": "research",
     "writing": "write",
     "editing": "edit",
+    # Role names → stage names
+    "selector": "select",
+    "researcher": "research",
+    "writer": "write",
+    "editor": "edit",
+    # Stage names → stage names (passthrough)
+    "select": "select",
+    "research": "research",
+    "write": "write",
+    "edit": "edit",
 }
+
+# Maps pipeline status to the task that handles it
+_STAGE_TASKS = {
+    "pending": ("tasks.select", "select_article"),
+    "researching": ("tasks.research", "research_article"),
+    "writing": ("tasks.write", "write_article"),
+    "editing": ("tasks.edit", "edit_article"),
+}
+
+
+def _dispatch_next(
+    article_id: int,
+    run_id: int | None = None,
+    next_status: str | None = None,
+    article=None,
+) -> None:
+    """Dispatch the next pipeline stage based on article status."""
+    status = next_status or (article.pipeline_status if article else None)
+    if not status:
+        return
+    module_path, task_name = _STAGE_TASKS.get(status, (None, None))
+    if module_path:
+        import importlib
+
+        module = importlib.import_module(module_path)
+        task_fn = getattr(module, task_name)
+        task_fn.delay(article_id, run_id=run_id)
+
+
+def _dispatch_for_status(article) -> None:
+    """Re-dispatch the task matching the article's current pipeline status."""
+    _dispatch_next(article.id, article=article)
 
 
 def _build_fallback_article(article) -> str:
@@ -86,9 +129,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 f"Degraded: auto-selected {article.original_title[:50]}",
                 article_id=article.id,
             )
-        from tasks.research import research_article
-
-        research_article.delay(article.id, run_id=run_id)
+        _dispatch_next(article.id, run_id=run_id, next_status="researching")
 
     elif failed_stage == "research":
         article.research_brief = json.dumps(
@@ -118,9 +159,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 f"Degraded: skipped research for {article.original_title[:50]}",
                 article_id=article.id,
             )
-        from tasks.write import write_article
-
-        write_article.delay(article.id, run_id=run_id)
+        _dispatch_next(article.id, run_id=run_id, next_status="writing")
 
     elif failed_stage == "write":
         article.draft_article = _build_fallback_article(article)
@@ -136,35 +175,25 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 f"Degraded: minimal draft for {article.original_title[:50]}",
                 article_id=article.id,
             )
-        from tasks.edit import edit_article
-
-        edit_article.delay(article.id, run_id=run_id)
+        _dispatch_next(article.id, run_id=run_id, next_status="editing")
 
     elif failed_stage == "edit":
-        fallback = article.draft_article or _build_fallback_article(article)
-        article.final_article = fallback
-        article.original_ai_article = fallback
+        _apply_fallback(article)
         article.retry_count = 0
         article.last_error = None
 
-        # Route to review if enabled, otherwise mark as done
-        from schemas.pipeline import load_pipeline_config
-
-        review_cfg = load_pipeline_config().pipeline.review
-        if review_cfg.enabled:
-            threshold = review_cfg.auto_publish_threshold
-            if threshold is None or (article.impact_score or 0) < threshold:
-                article.pipeline_status = "review"
-                db.session.commit()
-                if run_id:
-                    _log_pipeline(
-                        run_id,
-                        "edit",
-                        "warning",
-                        f"Degraded to review: {article.original_title[:50]}",
-                        article_id=article.id,
-                    )
-                return
+        if _should_route_to_review(article):
+            article.pipeline_status = "review"
+            db.session.commit()
+            if run_id:
+                _log_pipeline(
+                    run_id,
+                    "edit",
+                    "warning",
+                    f"Degraded to review: {article.original_title[:50]}",
+                    article_id=article.id,
+                )
+            return
 
         article.pipeline_status = "done"
         db.session.commit()
@@ -184,7 +213,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         )
 
 
-def _handle_stage_failure(article, stage: str, exc, run_id=None):
+def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -> bool:
     """Handle failure for a pipeline stage. Returns True if degraded, False if retrying."""
     from extensions import db
 
@@ -194,16 +223,22 @@ def _handle_stage_failure(article, stage: str, exc, run_id=None):
     if article.retry_count >= MAX_STAGE_RETRIES:
         try:
             db.session.commit()
-        except Exception:
+        except Exception as commit_exc:
             db.session.rollback()
+            logger.error(
+                f"Failed to commit retry_count for article {article.id}: {commit_exc}"
+            )
             return False
         _degrade_and_advance(article, stage, run_id=run_id)
         return True
     else:
         try:
             db.session.commit()
-        except Exception:
+        except Exception as commit_exc:
             db.session.rollback()
+            logger.error(
+                f"Failed to commit retry_count for article {article.id}: {commit_exc}"
+            )
         return False
 
 
@@ -213,29 +248,20 @@ def _finalize(article_id: int):
     from extensions import db
 
     try:
-        article = Article.query.get(article_id)
+        article = db.session.get(Article, article_id)
         if article:
-            final = article.draft_article or _build_fallback_article(article)
-            article.final_article = final
-            article.original_ai_article = final
+            _apply_fallback(article)
             article.retry_count = 0
             article.last_error = None
 
-            # Route to review if enabled, otherwise mark as done
-            from schemas.pipeline import load_pipeline_config
-
-            review_cfg = load_pipeline_config().pipeline.review
-            if review_cfg.enabled:
-                threshold = review_cfg.auto_publish_threshold
-                if threshold is None or (article.impact_score or 0) < threshold:
-                    article.pipeline_status = "review"
-                    db.session.commit()
-                    logger.info(f"Article {article_id} queued for review (finalize)")
-                    return
+            if _should_route_to_review(article):
+                article.pipeline_status = "review"
+                db.session.commit()
+                logger.info(f"Article {article_id} queued for review (finalize)")
+                return
 
             article.pipeline_status = "done"
 
-            # Create version snapshot
             from services.article import create_article_version
 
             create_article_version(
@@ -307,3 +333,105 @@ def _assign_tags(article, tag_names: list[str], db):
             db.session.execute(
                 article_tags.insert().values(article_id=article.id, tag_id=tag.id)
             )
+
+
+def _should_route_to_review(article) -> bool:
+    """Check if article should go to review instead of being marked done."""
+    from schemas.pipeline import load_pipeline_config
+
+    review_cfg = load_pipeline_config().pipeline.review
+    if review_cfg.enabled:
+        threshold = review_cfg.auto_publish_threshold
+        if threshold is None or (article.impact_score or 0) < threshold:
+            return True
+    return False
+
+
+def _apply_fallback(article):
+    """Set final_article from draft or build a fallback."""
+    fallback = article.draft_article or _build_fallback_article(article)
+    article.final_article = fallback
+    article.original_ai_article = fallback
+
+
+def run_stage(
+    stage: str,
+    article_id: int,
+    work_fn,
+    task_self,
+    run_id=None,
+    skip_next: str = "finalize",
+    retry_countdown: int = 30,
+    retry_max: int = 15,
+):
+    """Execute a pipeline stage with standard lifecycle management.
+
+    Args:
+        stage: Stage name (selector, researcher, writer, editor)
+        article_id: Article ID
+        work_fn: Callable(article, provider, model, max_tokens) -> dict
+                 Returns result dict with stage-specific data
+        task_self: The Celery task instance (self) for retry support
+        run_id: Optional pipeline run ID
+        skip_next: Where to skip to if stage disabled ("finalize" or next status)
+        retry_countdown: Seconds between limiter retries
+        retry_max: Max limiter retries
+    """
+    from models import Article
+    from extensions import db
+    from schemas.pipeline import get_role_config
+    from services.llm import (
+        get_provider_for_role,
+        record_provider_success,
+        record_provider_failure,
+    )
+    from services.limiter import get_limiter
+
+    rc = get_role_config(stage)
+    if not rc.enabled:
+        if skip_next == "finalize":
+            _finalize(article_id)
+        else:
+            _dispatch_next(article_id, run_id=run_id, next_status=skip_next)
+        return {"article_id": article_id, "decision": f"skip_{stage}"}
+
+    article = db.session.get(Article, article_id)
+    if not article:
+        return {"article_id": article_id, "error": "not found"}
+
+    provider, model, max_tokens = get_provider_for_role(stage)
+    limiter = get_limiter()
+    acquired = False
+
+    if not limiter.acquire(rc.provider, model, rc.concurrency, rc.timeout_seconds):
+        raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
+    acquired = True
+
+    try:
+        result = work_fn(article, provider, model, max_tokens)
+
+        record_provider_success(rc.provider, model)
+        article.retry_count = 0
+        article.last_error = None
+
+        return result
+    except Exception as e:
+        db.session.rollback()
+        record_provider_failure(rc.provider, model)
+        article = db.session.get(Article, article_id)
+        if article:
+            if _handle_stage_failure(article, stage, e, run_id=run_id):
+                return {"article_id": article_id, "result": "degraded"}
+        if run_id:
+            _log_pipeline(
+                run_id,
+                stage,
+                "error",
+                f"Article {article_id}: {e}",
+                article_id=article_id,
+            )
+        logger.error(f"{stage.title()} failed for article {article_id}: {e}")
+        raise
+    finally:
+        if acquired:
+            limiter.release(rc.provider, model)

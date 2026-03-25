@@ -1,19 +1,35 @@
 import logging
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Optional
 
-from pydantic import BaseModel
-
+from schemas.common import resolve_env_vars
 from services.llm.base import BaseLLMProvider, LLMResponse, register_provider
-from schemas.llm import AnthropicConfig, _resolve_env_vars
+from services.llm.errors import handle_provider_error
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T", bound=BaseModel)
+
+
+def _handle_anthropic_error(e: Exception) -> Exception:
+    """Convert Anthropic SDK exceptions to our custom exceptions."""
+    from anthropic import (
+        RateLimitError,
+        AuthenticationError,
+        APITimeoutError,
+        APIConnectionError,
+    )
+
+    return handle_provider_error(
+        e,
+        "Anthropic",
+        rate_limit_exc=(RateLimitError,),
+        auth_exc=AuthenticationError,
+        timeout_exc=(APITimeoutError, APIConnectionError),
+    )
 
 
 @register_provider("anthropic")
 class AnthropicProvider(BaseLLMProvider):
     def __init__(self, provider_id: str, config: dict):
-        super().__init__(provider_id, _resolve_env_vars(config))
+        super().__init__(provider_id, resolve_env_vars(config))
         cfg = AnthropicConfig(**self.config)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
@@ -24,6 +40,7 @@ class AnthropicProvider(BaseLLMProvider):
     def client(self):
         if self._client is None:
             from anthropic import Anthropic
+
             self._client = Anthropic(api_key=self._api_key)
         return self._client
 
@@ -45,7 +62,10 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
-        resp = self.client.messages.create(**call_kwargs)
+        try:
+            resp = self.client.messages.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_anthropic_error(e)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return LLMResponse(
@@ -53,7 +73,8 @@ class AnthropicProvider(BaseLLMProvider):
             model=model,
             tokens_used=(
                 (resp.usage.input_tokens or 0) + (resp.usage.output_tokens or 0)
-                if resp.usage else 0
+                if resp.usage
+                else 0
             ),
         )
 
@@ -78,7 +99,10 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
-        resp = self.client.beta.messages.create(**call_kwargs)
+        try:
+            resp = self.client.beta.messages.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_anthropic_error(e)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp.content[0].text
@@ -96,4 +120,9 @@ class AnthropicProvider(BaseLLMProvider):
                 "model": self.default_model,
             }
         except Exception as e:
-            return {"provider": self.provider_id, "status": f"error: {e}"}
+            converted = _handle_anthropic_error(e)
+            return {"provider": self.provider_id, "status": f"error: {converted}"}
+
+
+# Re-export for backward compatibility
+from schemas.llm import AnthropicConfig  # noqa: E402

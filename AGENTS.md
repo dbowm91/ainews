@@ -98,6 +98,14 @@ def _clear_dns_cache():
 
 `services/content_extractor.py` sets `DOWNLOAD_TIMEOUT=30` via trafilatura config. Do not remove this — without it, slow sites block the pipeline indefinitely.
 
+### Login lockout
+
+The login lockout mechanism has two code paths: primary Redis-based (via Lua script) and in-memory fallback for when Redis is unavailable. Both are intentional — do not remove the fallback path.
+
+### Newsletter pipeline fallback behavior
+
+`services/newsletter_pipeline.py` has silent fallbacks when LLM stages fail (reader, writer, editor). Failures log errors but continue with empty/partial output. This is intentional for resilience, but callers should check for empty content before sending newsletters.
+
 ### Pipeline retry budget
 
 Articles have a `total_retries` column (incremented on every stage failure). When `total_retries >= MAX_TOTAL_RETRIES` (10), the article is marked `pipeline_status="failed"` and skipped. The admin route `reprocess_article` resets this on manual reprocessing.

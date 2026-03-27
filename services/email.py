@@ -126,7 +126,7 @@ def _send_smtp(to_email: str, subject: str, html_body: str):
     msg.attach(MIMEText(html_body, "html"))
 
     try:
-        server = smtplib.SMTP(cfg["host"], cfg["port"])
+        server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=30)
 
         with server:
             if cfg["use_tls"]:

@@ -5,10 +5,9 @@ from flask import render_template, request, redirect, url_for, session, current_
 from routes.admin import (
     admin_bp,
     _is_locked_out,
-    _record_failed_attempt,
+    _check_and_record_attempt,
     _clear_attempts,
     _verify_password,
-    _LOGIN_MAX_ATTEMPTS,
 )
 from extensions import limiter
 
@@ -52,21 +51,12 @@ def login():
             session["admin"] = True
             next_url = request.args.get("next", "")
             return redirect(_safe_redirect_url(next_url))
-        _record_failed_attempt(ip)
-        # Check remaining attempts from Redis
-        try:
-            from extensions import get_redis
-
-            r = get_redis()
-            key = f"ainews:login_attempts:{ip}"
-            count = int(r.hget(key, "count") or 0)
-        except Exception:
-            count = 1  # Fallback if Redis unavailable
-        remaining = _LOGIN_MAX_ATTEMPTS - count
-        if remaining > 0:
-            error = "Invalid password"
-        else:
+        # Atomically check lockout AND record attempt (prevents TOCTOU race)
+        locked = _check_and_record_attempt(ip)
+        if locked:
             error = "Too many failed attempts. Try again later."
+        else:
+            error = "Invalid password"
     return render_template("admin/login.html", error=error)
 
 

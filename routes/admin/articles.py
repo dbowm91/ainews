@@ -1,6 +1,7 @@
 import json
 import logging
 from flask import render_template, request, redirect, url_for, jsonify
+from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth, _admin_categories
 from services.article import _escape_like_pattern
 from constants import PER_PAGE_ADMIN_ARTICLES
@@ -141,7 +142,7 @@ def edit_article(article_id):
 
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             logger.exception("Failed to save article %s", article_id)
             return render_template(
@@ -226,7 +227,7 @@ def rollback_article(article_id, version_id):
 
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         logger.exception(
             "Failed to rollback article %s to version %s", article_id, version_id
@@ -254,7 +255,7 @@ def delete_article(article_id):
         )
         db.session.delete(article)
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to delete article %s", article_id)
         return jsonify({"message": "Failed to delete article"}), 500

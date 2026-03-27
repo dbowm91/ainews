@@ -1,5 +1,6 @@
 import logging
 from flask import render_template, request, redirect, url_for, jsonify
+from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_ADMIN_ARTICLES
 
@@ -18,13 +19,12 @@ def review_queue():
     q = Article.query.filter_by(pipeline_status="review").order_by(
         Article.impact_score.desc()
     )
+    total_review = q.count()
     articles, has_next, next_page = paginate_query(q, page, per_page)
 
     from services.article import parse_articles
 
     parse_articles(articles)
-
-    total_review = Article.query.filter_by(pipeline_status="review").count()
 
     if request.headers.get("HX-Request"):
         return render_template(
@@ -60,7 +60,7 @@ def approve_article(article_id):
     article.last_error = None
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"message": "Failed to approve article"}), 500
@@ -85,7 +85,7 @@ def reject_article(article_id):
     article.pipeline_status = "skipped"
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to reject article %s", article_id)
         return jsonify({"message": "Failed to reject article"}), 500

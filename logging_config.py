@@ -3,6 +3,7 @@
 import logging
 import json
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from contextvars import ContextVar
@@ -81,6 +82,7 @@ class RequestIDMiddleware:
     The request ID is stored in contextvars for use in logging and
     is returned in the X-Request-ID response header. The context is
     properly cleaned up after each request via token reset.
+    Also logs request timing for performance monitoring.
     """
 
     def __init__(self, app):
@@ -90,6 +92,8 @@ class RequestIDMiddleware:
         # Generate or use existing request ID
         request_id = environ.get("HTTP_X_REQUEST_ID") or uuid.uuid4().hex[:12]
         token = request_id_var.set(request_id)
+        request_logger = logging.getLogger("request")
+        start_time = time.monotonic()
 
         def start_response_with_request_id(status, headers, *args, **kwargs):
             # Convert to list if tuple (WSGI allows any iterable)
@@ -102,6 +106,13 @@ class RequestIDMiddleware:
         try:
             return self.app(environ, start_response_with_request_id)
         finally:
+            duration_ms = round((time.monotonic() - start_time) * 1000, 1)
+            method = environ.get("REQUEST_METHOD", "?")
+            path = environ.get("PATH_INFO", "/")
+            request_logger.info(
+                f"{method} {path} completed in {duration_ms}ms",
+                extra={"method": method, "path": path, "duration_ms": duration_ms},
+            )
             request_id_var.reset(token)
 
 

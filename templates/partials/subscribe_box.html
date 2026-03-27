@@ -1,6 +1,8 @@
 <div class="subscribe-box">
   {% if subscribe_success %}
     <span class="subscribe-success" role="status">{{ subscribe_success }}</span>
+  {% elif subscribe_warning %}
+    <span class="subscribe-success" role="status">{{ subscribe_warning }}</span>
   {% elif subscribe_error %}
     <span class="subscribe-error" role="alert">{{ subscribe_error }}</span>
   {% else %}

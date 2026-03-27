@@ -1,14 +1,17 @@
 from flask import jsonify
 from routes.admin import admin_bp, require_auth
+from extensions import limiter
 
 
 @admin_bp.route("/api/health")
 @require_auth
+@limiter.limit("30 per minute")
 def health():
     from extensions import db
     from sqlalchemy import text
     from services.circuit_breaker import get_all_breaker_status
     from services.limiter import get_limiter
+    from services.cache import get_response_cache
 
     status = {"flask": "ok", "database": "unknown", "llm": "unknown"}
 
@@ -36,16 +39,22 @@ def health():
 
     status["circuit_breakers"] = get_all_breaker_status()
 
-    limiter = get_limiter()
+    limiter_inst = get_limiter()
     status["limiter"] = {
-        "healthy": limiter.is_healthy(),
+        "healthy": limiter_inst.is_healthy(),
     }
+
+    try:
+        status["cache"] = get_response_cache().get_stats()
+    except Exception:
+        status["cache"] = "error"
 
     return jsonify(status)
 
 
 @admin_bp.route("/api/task/<task_id>")
 @require_auth
+@limiter.limit("60 per minute")
 def task_status(task_id):
     from celery.result import AsyncResult
     from celery_app import celery_app
@@ -65,6 +74,7 @@ def task_status(task_id):
 
 @admin_bp.route("/api/config/reload", methods=["POST"])
 @require_auth
+@limiter.limit("5 per minute")
 def reload_config():
     from services.config_cache import get_config_cache
     from services.llm import clear_provider_cache
@@ -72,3 +82,12 @@ def reload_config():
     get_config_cache().invalidate_all()
     clear_provider_cache()
     return jsonify({"message": "Config cache cleared"}), 200
+
+
+@admin_bp.route("/api/metrics")
+@require_auth
+@limiter.limit("30 per minute")
+def app_metrics():
+    from services.metrics import get_metrics
+
+    return jsonify(get_metrics().get_metrics())

@@ -122,51 +122,54 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
         )
 
         exec_summary = ""
-        if articles:
+        if not articles:
+            logger.warning("Main newsletter has 0 articles, skipping send")
+            results.append({"type": "main", "articles": 0, "sent": 0, "skipped": True})
+        else:
             try:
                 exec_summary = generate_executive_summary(articles, topic_key="main")
             except Exception as e:
                 logger.error(f"Main exec summary failed: {e}")
 
-        html, subject, count = generate_main_newsletter(
-            site_url=site_url,
-            max_articles=nl.max_articles,
-            executive_summary=exec_summary,
-        )
+            html, subject, count = generate_main_newsletter(
+                site_url=site_url,
+                max_articles=nl.max_articles,
+                executive_summary=exec_summary,
+            )
 
-        newsletter = Newsletter(
-            newsletter_type="main",
-            subject=subject,
-            html_content=html,
-            article_count=count,
-        )
-        db.session.add(newsletter)
-        db.session.flush()
+            newsletter = Newsletter(
+                newsletter_type="main",
+                subject=subject,
+                html_content=html,
+                article_count=count,
+            )
+            db.session.add(newsletter)
+            db.session.flush()
 
-        sent = 0
-        if is_dry_run:
-            unsub_url = f"{site_url}/unsubscribe/test"
-            try:
-                send_newsletter_email(dry_run_email, subject, html, unsub_url)
-                sent = 1
-                logger.info(f"Dry run: sent main newsletter to {dry_run_email}")
-            except Exception as e:
-                logger.error(f"Dry run failed for {dry_run_email}: {e}")
-        else:
-            subscribers = Subscriber.query.filter_by(
-                newsletter_type="main", active=True
-            ).all()
-            sent = _send_emails_parallel(subscribers, subject, html, site_url)
+            sent = 0
+            if is_dry_run:
+                unsub_url = f"{site_url}/unsubscribe/test"
+                try:
+                    send_newsletter_email(dry_run_email, subject, html, unsub_url)
+                    sent = 1
+                    logger.info(f"Dry run: sent main newsletter to {dry_run_email}")
+                except Exception as e:
+                    logger.error(f"Dry run failed for {dry_run_email}: {e}")
+            else:
+                subscribers = Subscriber.query.filter_by(
+                    newsletter_type="main", active=True
+                ).all()
+                sent = _send_emails_parallel(subscribers, subject, html, site_url)
 
-        newsletter.recipients = sent
-        newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
-        db.session.commit()
-        results.append(
-            {"type": "main", "articles": count, "sent": sent, "dry_run": is_dry_run}
-        )
-        logger.info(
-            f"Main newsletter: {subject} ({count} articles, {sent} sent, dry_run={is_dry_run})"
-        )
+            newsletter.recipients = sent
+            newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
+            db.session.commit()
+            results.append(
+                {"type": "main", "articles": count, "sent": sent, "dry_run": is_dry_run}
+            )
+            logger.info(
+                f"Main newsletter: {subject} ({count} articles, {sent} sent, dry_run={is_dry_run})"
+            )
     except Exception as e:
         db.session.rollback()
         logger.error(f"Main newsletter failed: {e}")

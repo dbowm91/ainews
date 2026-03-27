@@ -1,5 +1,6 @@
 from functools import wraps
 import logging
+import os
 import re
 import time
 from flask import Blueprint, redirect, url_for, session
@@ -17,6 +18,21 @@ _LOGIN_ATTEMPT_PREFIX = "ainews:login_attempts:"
 _login_attempts_memory: dict[str, tuple[int, float]] = {}
 _memory_lock = __import__("threading").Lock()
 
+# Load Lua script for atomic login lockout
+_LUA_SCRIPT = None
+
+
+def _get_lockout_lua_script():
+    """Load the login lockout Lua script (cached after first load)."""
+    global _LUA_SCRIPT
+    if _LUA_SCRIPT is None:
+        script_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "services", "login_lockout.lua"
+        )
+        with open(script_path) as f:
+            _LUA_SCRIPT = f.read()
+    return _LUA_SCRIPT
+
 
 def _get_redis():
     """Get Redis client for login attempt tracking."""
@@ -26,8 +42,8 @@ def _get_redis():
 
 
 def _is_password_hash(value: str) -> bool:
-    """Check if a value is a Werkzeug password hash (scrypt:... or pbkdf2:...)."""
-    return bool(re.match(r"^(scrypt|pbkdf2):", value))
+    """Check if a value is a Werkzeug password hash (scrypt:, pbkdf2:, or argon2:)."""
+    return bool(re.match(r"^(scrypt|pbkdf2|argon2):", value))
 
 
 def _verify_password(stored: str, provided: str) -> bool:
@@ -86,6 +102,33 @@ def _is_locked_out_memory(ip: str) -> bool:
             del _login_attempts_memory[ip]
             return False
         return count >= _LOGIN_MAX_ATTEMPTS
+
+
+def _check_and_record_attempt(ip: str) -> bool:
+    """Atomically check if locked out AND record a failed attempt.
+
+    Returns True if locked out (attempt was recorded but threshold exceeded).
+    Uses Redis Lua script for atomicity — eliminates TOCTOU race condition
+    between separate check and record calls.
+    Falls back to in-memory tracking when Redis is unavailable.
+    """
+    try:
+        r = _get_redis()
+        key = f"{_LOGIN_ATTEMPT_PREFIX}{ip}"
+        result = r.eval(
+            _get_lockout_lua_script(),
+            1,
+            key,
+            str(time.time()),
+            str(_LOGIN_LOCKOUT_SECONDS),
+            str(_LOGIN_MAX_ATTEMPTS),
+        )
+        return result == 1
+    except Exception as e:
+        logger.warning(f"Redis error in check_and_record for {ip}: {e}")
+        # Fallback: record in memory and check
+        _record_failed_attempt_memory(ip)
+        return _is_locked_out_memory(ip)
 
 
 def _record_failed_attempt(ip: str) -> None:

@@ -190,7 +190,7 @@ class TestSendSMTP:
 
         _send_smtp("test@example.com", "Test Subject", "<p>Body</p>")
 
-        mock_smtp_class.assert_called_once_with("smtp.example.com", 587)
+        mock_smtp_class.assert_called_once_with("smtp.example.com", 587, timeout=30)
         mock_smtp_class.return_value.starttls.assert_called_once()
         mock_smtp_class.return_value.sendmail.assert_called_once()
 

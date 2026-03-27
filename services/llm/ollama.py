@@ -7,6 +7,20 @@ from services.llm.base import BaseLLMProvider, LLMResponse, register_provider
 logger = logging.getLogger(__name__)
 
 
+def _handle_ollama_error(e: Exception) -> Exception:
+    """Convert ollama SDK exceptions to our custom exceptions."""
+    from services.llm.errors import handle_provider_error
+    from ollama import ResponseError
+
+    return handle_provider_error(
+        e,
+        "Ollama",
+        rate_limit_exc=(ResponseError,),
+        auth_exc=(ResponseError,),
+        timeout_exc=(ConnectionError, TimeoutError),
+    )
+
+
 @register_provider("ollama")
 class OllamaProvider(BaseLLMProvider):
     def __init__(self, provider_id: str, config: dict):
@@ -44,11 +58,14 @@ class OllamaProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        resp = self.client.chat(
-            model=model,
-            messages=msgs,
-            options={"temperature": temperature, "num_predict": max_tokens},
-        )
+        try:
+            resp = self.client.chat(
+                model=model,
+                messages=msgs,
+                options={"temperature": temperature, "num_predict": max_tokens},
+            )
+        except Exception as e:
+            raise _handle_ollama_error(e) from e
         return LLMResponse(
             text=self._extract_text(resp),
             model=model,
@@ -67,12 +84,15 @@ class OllamaProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        resp = self.client.chat(
-            model=model,
-            messages=msgs,
-            format=schema,
-            options={"temperature": temperature, "num_predict": max_tokens},
-        )
+        try:
+            resp = self.client.chat(
+                model=model,
+                messages=msgs,
+                format=schema,
+                options={"temperature": temperature, "num_predict": max_tokens},
+            )
+        except Exception as e:
+            raise _handle_ollama_error(e) from e
         return self._extract_text(resp)
 
     def health_check(self) -> dict[str, Any]:
@@ -85,7 +105,8 @@ class OllamaProvider(BaseLLMProvider):
                 "available_models": [m.model for m in result.models],
             }
         except Exception as e:
-            return {"provider": self.provider_id, "status": f"error: {e}"}
+            converted = _handle_ollama_error(e)
+            return {"provider": self.provider_id, "status": f"error: {converted}"}
 
 
 # Re-export for backward compatibility

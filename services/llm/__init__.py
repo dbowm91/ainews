@@ -29,7 +29,8 @@ def get_provider_by_id(provider_id: str) -> BaseLLMProvider:
 def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
     """Returns (provider, model, max_tokens) for a pipeline role.
 
-    Raises CircuitOpenError if the provider's circuit breaker is open.
+    Falls back to other enabled providers when the primary circuit is open.
+    Raises CircuitOpenError only if ALL enabled providers have open circuits.
     """
     rc = get_role_config(role)
     breaker = get_breaker(
@@ -37,12 +38,35 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
         failure_threshold=_LLM_FAILURE_THRESHOLD,
         recovery_timeout=_LLM_RECOVERY_TIMEOUT,
     )
-    if not breaker.can_execute():
-        raise CircuitOpenError(
-            f"LLM provider {rc.provider}/{rc.model} circuit is {breaker.state.value}"
+    if breaker.can_execute():
+        provider = get_provider_by_id(rc.provider)
+        return provider, rc.model, rc.max_tokens
+
+    # Primary circuit is open — try other enabled providers
+    logger.warning(
+        f"LLM provider {rc.provider}/{rc.model} circuit open, trying fallbacks"
+    )
+    config = load_providers_config()
+    for pdef in config.providers:
+        if pdef.id == rc.provider or not pdef.enabled:
+            continue
+        fallback_breaker = get_breaker(
+            f"llm:{pdef.id}:{pdef.config.get('model', '')}",
+            failure_threshold=_LLM_FAILURE_THRESHOLD,
+            recovery_timeout=_LLM_RECOVERY_TIMEOUT,
         )
-    provider = get_provider_by_id(rc.provider)
-    return provider, rc.model, rc.max_tokens
+        if fallback_breaker.can_execute():
+            logger.info(f"Falling back to LLM provider {pdef.id}")
+            provider = get_provider_by_id(pdef.id)
+            return (
+                provider,
+                pdef.config.get("model", ""),
+                pdef.config.get("max_tokens", rc.max_tokens),
+            )
+
+    raise CircuitOpenError(
+        f"All LLM providers have open circuits (primary: {rc.provider}/{rc.model})"
+    )
 
 
 def record_provider_success(provider_id: str, model: str) -> None:

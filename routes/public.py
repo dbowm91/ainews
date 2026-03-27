@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, Response, redirect, jsonify
 from datetime import datetime, timezone, timedelta
 from typing import Any
+from sqlalchemy.exc import SQLAlchemyError
 from models import Article, Tag, ShareConfig, ArticleMetric
 from extensions import limiter, csrf
 from constants import PER_PAGE_PUBLIC
@@ -297,41 +298,67 @@ def health():
     from sqlalchemy import text
     from services.limiter import get_limiter
 
-    status = "ok"
+    checks = {}
+    overall = "ok"
+
+    # Database check
     try:
         db.session.execute(text("SELECT 1"))
+        checks["database"] = "ok"
     except Exception:
-        status = "degraded"
+        checks["database"] = "error"
+        overall = "degraded"
 
+    # Redis check
+    try:
+        from extensions import get_redis
+
+        r = get_redis()
+        r.ping()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "error"
+        overall = "degraded"
+
+    # Rate limiter check
     limiter_ok = get_limiter().is_healthy()
-    code = 200 if status == "ok" else 503
-    return jsonify(
-        {"status": status, "limiter": "ok" if limiter_ok else "degraded"}
-    ), code
+    checks["limiter"] = "ok" if limiter_ok else "degraded"
+    if not limiter_ok:
+        overall = "degraded"
+
+    code = 200 if overall == "ok" else 503
+    return jsonify({"status": overall, "checks": checks}), code
 
 
 @public_bp.route("/feed")
 def feed_all():
     from services.rss import generate_rss_feed
+    from services.cache import get_response_cache
 
-    articles = (
-        Article.query.filter(Article.pipeline_status.in_(["done", "skipped"]))
-        .order_by(Article.created_at.desc())
-        .limit(50)
-        .all()
-    )
-
+    cache = get_response_cache()
     site_url = request.host_url.rstrip("/")
-    xml = generate_rss_feed(
-        articles,
-        title="ainews// — Condensed Tech News",
-        description="Autonomous AI-curated condensed news across AI, privacy, security, programming, and hardware.",
-        site_url=site_url,
-    )
+    cache_key = f"rss_feed:all:{site_url}"
+
+    xml = cache.get(cache_key)
+    if xml is None:
+        articles = (
+            Article.query.filter(Article.pipeline_status.in_(["done", "skipped"]))
+            .order_by(Article.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        xml = generate_rss_feed(
+            articles,
+            title="ainews// — Condensed Tech News",
+            description="Autonomous AI-curated condensed news across AI, privacy, security, programming, and hardware.",
+            site_url=site_url,
+        )
+        cache.set(cache_key, xml, ttl=120)
+
     return Response(
         xml,
         mimetype="application/rss+xml",
-        headers={"Cache-Control": "public, max-age=300"},
+        headers={"Cache-Control": "public, max-age=120"},
     )
 
 
@@ -339,32 +366,40 @@ def feed_all():
 def feed_topic(category):
     from services.rss import generate_rss_feed
     from schemas.topic import load_topics
+    from services.cache import get_response_cache
 
-    topics = load_topics().topics
-    topic_def = topics.get(category)
-    topic_name = topic_def.display_name if topic_def else category
-
-    articles = (
-        Article.query.filter(
-            Article.category == category,
-            Article.pipeline_status.in_(["done", "skipped"]),
-        )
-        .order_by(Article.created_at.desc())
-        .limit(50)
-        .all()
-    )
-
+    cache = get_response_cache()
     site_url = request.host_url.rstrip("/")
-    xml = generate_rss_feed(
-        articles,
-        title=f"ainews// — {topic_name}",
-        description=f"Condensed tech news: {topic_name}",
-        site_url=site_url,
-    )
+    cache_key = f"rss_feed:{category}:{site_url}"
+
+    xml = cache.get(cache_key)
+    if xml is None:
+        topics = load_topics().topics
+        topic_def = topics.get(category)
+        topic_name = topic_def.display_name if topic_def else category
+
+        articles = (
+            Article.query.filter(
+                Article.category == category,
+                Article.pipeline_status.in_(["done", "skipped"]),
+            )
+            .order_by(Article.created_at.desc())
+            .limit(50)
+            .all()
+        )
+
+        xml = generate_rss_feed(
+            articles,
+            title=f"ainews// — {topic_name}",
+            description=f"Condensed tech news: {topic_name}",
+            site_url=site_url,
+        )
+        cache.set(cache_key, xml, ttl=120)
+
     return Response(
         xml,
         mimetype="application/rss+xml",
-        headers={"Cache-Control": "public, max-age=300"},
+        headers={"Cache-Control": "public, max-age=120"},
     )
 
 
@@ -450,7 +485,7 @@ def subscribe():
 
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to subscribe %s", email)
         if request.headers.get("HX-Request"):
@@ -463,15 +498,20 @@ def subscribe():
 
     site_url = request.host_url.rstrip("/")
     unsubscribe_url = f"{site_url}/unsubscribe/{token}"
+    email_failed = False
     try:
         send_confirmation_email(email, newsletter_type, unsubscribe_url)
     except Exception as e:
         logger.warning(f"Confirmation email failed for {email}: {e}")
+        email_failed = True
 
     if request.headers.get("HX-Request"):
         return render_template(
             "partials/subscribe_box.html",
-            subscribe_success="Subscribed!",
+            subscribe_success="Subscribed!" if not email_failed else None,
+            subscribe_warning="Confirmation email could not be sent. You are still subscribed."
+            if email_failed
+            else None,
             newsletter_type=newsletter_type,
         )
     return redirect("/")

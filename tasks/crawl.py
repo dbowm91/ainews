@@ -23,13 +23,20 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     cfg = SourceConfig(**source_config)
     source_id = cfg.id
 
-    # Distributed lock to prevent duplicate processing across workers
+    # Distributed lock to prevent duplicate processing across workers.
+    # Uses task ID so retries from the same task can re-acquire.
     lock_key = f"ainews:crawl_lock:{source_id}"
     redis = get_redis()
-    acquired = redis.set(lock_key, "1", nx=True, ex=30)
+    task_id = self.request.id or "manual"
+    acquired = redis.set(lock_key, task_id, nx=True, ex=30)
     if not acquired:
-        logger.info(f"Source {source_id} already being crawled, skipping")
-        return {"source_id": source_id, "skipped": True, "reason": "locked"}
+        existing = redis.get(lock_key)
+        if existing and existing.decode() == task_id:
+            # Retry from same task — re-acquire
+            redis.set(lock_key, task_id, nx=False, ex=30)
+        else:
+            logger.info(f"Source {source_id} already being crawled, skipping")
+            return {"source_id": source_id, "skipped": True, "reason": "locked"}
 
     try:
         adapter_class = get_adapter_class(cfg.type)
@@ -109,7 +116,8 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
         return {"source_id": source_id, "error": str(e)}
     finally:
         try:
-            redis.delete(lock_key)
+            if redis.get(lock_key) and redis.get(lock_key).decode() == task_id:
+                redis.delete(lock_key)
         except Exception:
             logger.warning(f"Failed to release crawl lock for {source_id}")
 

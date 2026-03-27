@@ -1,5 +1,7 @@
 import logging
 
+from sqlalchemy.orm import joinedload
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,7 +13,8 @@ def find_related_articles(article, limit: int = 5):
     from models import Article
 
     candidates = (
-        Article.query.filter(
+        Article.query.options(joinedload(Article.tags))
+        .filter(
             Article.id != article.id,
             Article.pipeline_status == "done",
             Article.final_article.isnot(None),

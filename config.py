@@ -97,6 +97,38 @@ class ProductionConfig(Config):
             raise RuntimeError("SECRET_KEY must be set in production")
         if not cls.ADMIN_PASSWORD:
             raise RuntimeError("ADMIN_PASSWORD must be set in production")
+        _validate_llm_providers()
+
+
+def _validate_llm_providers():
+    """Validate LLM provider configuration at startup.
+
+    Warns (does not raise) if enabled providers are missing required config.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    try:
+        from schemas.llm import load_providers_config
+
+        config = load_providers_config()
+        for pdef in config.providers:
+            if not pdef.enabled:
+                continue
+            if pdef.type == "openai" and not pdef.config.get("api_key"):
+                logger.warning(
+                    f"LLM provider '{pdef.id}' (openai) is enabled but has no api_key"
+                )
+            elif pdef.type == "anthropic" and not pdef.config.get("api_key"):
+                logger.warning(
+                    f"LLM provider '{pdef.id}' (anthropic) is enabled but has no api_key"
+                )
+            elif pdef.type == "ollama" and not pdef.config.get("model"):
+                logger.warning(
+                    f"LLM provider '{pdef.id}' (ollama) is enabled but has no model"
+                )
+    except Exception as e:
+        logger.warning(f"Could not validate LLM providers: {e}")
 
 
 config = {

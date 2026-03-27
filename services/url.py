@@ -22,7 +22,11 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("fe80::/10"),
 ]
 
-# DNS cache to prevent rebinding between validation and fetch
+# DNS cache to prevent rebinding between validation and fetch.
+# Short TTL limits DNS rebinding window for SSRF protection.
+# Entries may be stale for legitimate DNS changes (CDN rotation,
+# failover) but shorter is safer here — fetch failures are
+# preferable to SSRF exposure. 60s matches typical OS DNS cache TTLs.
 _DNS_CACHE_TTL = 60  # seconds
 _DNS_CACHE_MAX = 1024
 

@@ -96,7 +96,19 @@ def create_app(config_name=None):
         content_security_policy=csp,
         frame_options="SAMEORIGIN",
         referrer_policy="strict-origin-when-cross-origin",
+        strict_transport_security_max_age=31536000,
+        strict_transport_security_include_subdomains=False,
+        permissions_policy={
+            "camera": "()",
+            "microphone": "()",
+            "geolocation": "()",
+        },
     )
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     import models  # noqa: F401
 

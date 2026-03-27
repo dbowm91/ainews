@@ -14,12 +14,36 @@ def _reset_redis():
         config_cache._cache_instance = None
     except (ImportError, AttributeError):
         pass
+    try:
+        from services import cache
+
+        cache._cache_instance = None
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from services import metrics
+
+        metrics._metrics_instance = None
+    except (ImportError, AttributeError):
+        pass
     yield
     reset_redis()
     try:
         from services import config_cache
 
         config_cache._cache_instance = None
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from services import cache
+
+        cache._cache_instance = None
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from services import metrics
+
+        metrics._metrics_instance = None
     except (ImportError, AttributeError):
         pass
 

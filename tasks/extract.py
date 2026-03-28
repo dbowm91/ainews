@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import truncate_for_log
 
 logger = get_task_logger(__name__)
 
@@ -111,11 +112,11 @@ def process_item(
     try:
         duplicate = _find_duplicate_article(url, title)
     except Exception as exc:
-        logger.warning(f"Dedup check failed for {title[:50]}: {exc}")
+        logger.warning(f"Dedup check failed for {truncate_for_log(title)}: {exc}")
         duplicate = None
     if duplicate:
         logger.info(
-            f"Duplicate found for [{title[:50]}]: existing article {duplicate.id}"
+            f"Duplicate found for [{truncate_for_log(title)}]: existing article {duplicate.id}"
         )
         if run_id:
             _log_pipeline(

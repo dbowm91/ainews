@@ -4,7 +4,7 @@ import json
 
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
-from constants import PipelineStatus
+from constants import PipelineStatus, truncate_for_log
 
 logger = get_task_logger(__name__)
 
@@ -150,7 +150,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 run_id,
                 "select",
                 "warning",
-                f"Degraded: auto-selected {article.original_title[:50]}",
+                f"Degraded: auto-selected {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
         _dispatch_next(article.id, run_id=run_id, next_status="researching")
@@ -184,7 +184,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 run_id,
                 "research",
                 "warning",
-                f"Degraded: skipped research for {article.original_title[:50]}",
+                f"Degraded: skipped research for {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
         _dispatch_next(article.id, run_id=run_id, next_status="writing")
@@ -204,7 +204,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 run_id,
                 "write",
                 "warning",
-                f"Degraded: minimal draft for {article.original_title[:50]}",
+                f"Degraded: minimal draft for {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
         _dispatch_next(article.id, run_id=run_id, next_status="editing")
@@ -226,7 +226,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                     run_id,
                     "edit",
                     "warning",
-                    f"Degraded to review: {article.original_title[:50]}",
+                    f"Degraded to review: {truncate_for_log(article.original_title)}",
                     article_id=article.id,
                 )
             return
@@ -242,7 +242,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 run_id,
                 "edit",
                 "warning",
-                f"Degraded: used draft as final for {article.original_title[:50]}",
+                f"Degraded: used draft as final for {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
         logger.warning(f"Article {article.id} finalized with degraded content")

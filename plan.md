@@ -10,7 +10,7 @@ Consolidated plan from plan2–plan6. Items are deduplicated, organized by phase
 
 ---
 
-## Phase 1: Thread Safety & Correctness (High Risk If Left Unfixed)
+## Phase 1: Thread Safety & Correctness (COMPLETED)
 
 ### 1.1 DNS Cache Thread Safety
 
@@ -76,7 +76,7 @@ def get_metrics() -> MetricsCollector:
 
 ---
 
-## Phase 2: Security & Safety
+## Phase 2: Security & Safety (COMPLETED)
 
 ### 2.1 Admin Route Authorization Audit
 
@@ -164,7 +164,7 @@ class DevelopmentConfig(Config):
 
 ---
 
-## Phase 3: Configuration & Validation (Consolidated)
+## Phase 3: Configuration & Validation (COMPLETED)
 
 Merges: plan3 item 4 (production config startup validation), plan4 item 2.3 (config hot-reload validation), plan5 item 5.5 (LLM provider startup validation).
 
@@ -678,9 +678,9 @@ These items appeared in source plans but are confirmed complete:
 
 | Phase | Items | Est. Time | Status |
 |-------|-------|-----------|--------|
-| 1. Thread Safety | 3 | ~2.75h | Not started (pre-existing) |
-| 2. Security & Safety | 4 | ~3.5h | Not started (pre-existing) |
-| 3. Config Validation | 1 | ~1.5h | Not started (pre-existing) |
+| 1. Thread Safety | 3 | ~2.75h | **COMPLETED** |
+| 2. Security & Safety | 4 | ~3.5h | **COMPLETED** |
+| 3. Config Validation | 1 | ~1.5h | **COMPLETED** |
 | 4. Pipeline Reliability | 4 | ~7-8h | **COMPLETED** |
 | 5. Error Handling & Logging | 4 | ~3-4h | **COMPLETED** |
 | 6. Observability | 3 | ~6-8h | **DEFERRED** |
@@ -689,5 +689,5 @@ These items appeared in source plans but are confirmed complete:
 | 9. Optional | 3 | ~4.75h | **DEFERRED** |
 | **Total (non-optional)** | **27** | **~30-35h** | |
 | **Total (all)** | **30** | **~35-40h** | |
-| **Completed** | **8** | **~10-12h** | **33% of total** |
-| **Deferred** | **14** | **~18-22h** | **47% of total** |
+| **Completed** | **16** | **~18-20h** | **59% of non-optional** |
+| **Deferred** | **11** | **~18-22h** | **41% of non-optional** |

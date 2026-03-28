@@ -1,5 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import truncate_for_log
 
 logger = get_task_logger(__name__)
 
@@ -47,11 +48,11 @@ def write_article(self, article_id: int, run_id=None):
                 run_id,
                 "write",
                 "info",
-                f"Drafted: {article.original_title[:50]}",
+                f"Drafted: {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
 
-        logger.info(f"Drafted: {article.original_title[:50]}")
+        logger.info(f"Drafted: {truncate_for_log(article.original_title)}")
 
         _dispatch_next(article_id, run_id=run_id, next_status="editing")
         return {"article_id": article_id}

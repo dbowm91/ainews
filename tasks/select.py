@@ -1,5 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import truncate_for_log
 
 logger = get_task_logger(__name__)
 
@@ -62,11 +63,11 @@ def select_article(self, article_id: int, run_id=None):
                     run_id,
                     "select",
                     "info",
-                    f"Selected [{result.score}/10]: {article.original_title[:50]}",
+                    f"Selected [{result.score}/10]: {truncate_for_log(article.original_title)}",
                     article_id=article.id,
                 )
 
-            logger.info(f"Selected [{result.score}/10]: {article.original_title[:50]}")
+            logger.info(f"Selected [{result.score}/10]: {truncate_for_log(article.original_title)}")
             _dispatch_next(article_id, run_id=run_id, next_status="researching")
         else:
             article.pipeline_status = "skipped"
@@ -81,11 +82,11 @@ def select_article(self, article_id: int, run_id=None):
                     run_id,
                     "select",
                     "info",
-                    f"Skipped [{result.score}/10]: {article.original_title[:50]}",
+                    f"Skipped [{result.score}/10]: {truncate_for_log(article.original_title)}",
                     article_id=article.id,
                 )
 
-            logger.info(f"Skipped [{result.score}/10]: {article.original_title[:50]}")
+            logger.info(f"Skipped [{result.score}/10]: {truncate_for_log(article.original_title)}")
 
         return {"article_id": article_id, "result": article.selector_result}
 

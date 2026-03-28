@@ -1,5 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import truncate_for_log
 
 logger = get_task_logger(__name__)
 
@@ -84,12 +85,12 @@ def research_article(self, article_id: int, run_id=None):
                 run_id,
                 "research",
                 "info",
-                f"Researched: {article.original_title[:50]} (score: {brief.impact_score})",
+                f"Researched: {truncate_for_log(article.original_title)} (score: {brief.impact_score})",
                 article_id=article.id,
             )
 
         logger.info(
-            f"Researched: {article.original_title[:50]} (score: {brief.impact_score}, "
+            f"Researched: {truncate_for_log(article.original_title)} (score: {brief.impact_score}, "
             f"sources: {len(web_results)}, related: {len(related)})"
         )
 

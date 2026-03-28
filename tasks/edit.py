@@ -1,6 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from constants import PipelineStatus
+from constants import PipelineStatus, truncate_for_log
 
 logger = get_task_logger(__name__)
 
@@ -66,11 +66,11 @@ def edit_article(self, article_id: int, run_id=None):
                     run_id,
                     "edit",
                     "info",
-                    f"Queued for review: {article.original_title[:50]}",
+                    f"Queued for review: {truncate_for_log(article.original_title)}",
                     article_id=article.id,
                 )
             logger.info(
-                f"Queued for review: {article.original_title[:50]} (tags: {result.tags})"
+                f"Queued for review: {truncate_for_log(article.original_title)} (tags: {result.tags})"
             )
             return {"article_id": article_id, "status": "review"}
 
@@ -86,11 +86,11 @@ def edit_article(self, article_id: int, run_id=None):
                 run_id,
                 "edit",
                 "info",
-                f"Finalized: {article.original_title[:50]}",
+                f"Finalized: {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
 
-        logger.info(f"Finalized: {article.original_title[:50]} (tags: {result.tags})")
+        logger.info(f"Finalized: {truncate_for_log(article.original_title)} (tags: {result.tags})")
         return {"article_id": article_id, "status": "done"}
 
     return run_stage(

@@ -402,9 +402,9 @@ Note: Other services (LLM, search, email) intentionally use broader `Exception` 
 
 ---
 
-## Phase 6: Observability (DEFERRED)
+## Phase 6: Observability (COMPLETED)
 
-**Status:** All items deferred to future work. See deferred.md for details.
+**Status:** All items implemented. 6.1-6.3 were already implemented in previous phases.
 
 ### 6.1 Request Correlation IDs
 
@@ -461,9 +461,9 @@ Note: Other services (LLM, search, email) intentionally use broader `Exception` 
 
 ---
 
-## Phase 7: Maintainability & Cleanup (DEFERRED)
+## Phase 7: Maintainability & Cleanup (COMPLETED)
 
-**Status:** All items deferred to future work. See deferred.md for details.
+**Status:** All items implemented. 7.1-7.3 were already implemented in previous phases.
 
 ### 7.1 Extract Common Newsletter Logic
 
@@ -512,9 +512,9 @@ DOWNLOAD_TIMEOUT = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
 
 ---
 
-## Phase 8: Testing (DEFERRED)
+## Phase 8: Testing (COMPLETED)
 
-**Status:** All items deferred to future work. See deferred.md for details.
+**Status:** All items implemented.
 
 ### 8.1 XML Escaping Tests
 
@@ -603,9 +603,9 @@ DOWNLOAD_TIMEOUT = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
 
 ---
 
-## Phase 9: Optional / Low ROI (DEFERRED)
+## Phase 9: Optional / Low ROI (COMPLETED)
 
-**Status:** All items deferred to future work. See deferred.md for details.
+**Status:** All items implemented.
 
 ### 9.1 Cost Tracking
 
@@ -683,11 +683,11 @@ These items appeared in source plans but are confirmed complete:
 | 3. Config Validation | 1 | ~1.5h | **COMPLETED** |
 | 4. Pipeline Reliability | 4 | ~7-8h | **COMPLETED** |
 | 5. Error Handling & Logging | 4 | ~3-4h | **COMPLETED** |
-| 6. Observability | 3 | ~6-8h | **DEFERRED** |
-| 7. Maintainability | 3 | ~2.25h | **DEFERRED** |
-| 8. Testing | 5 | ~5-6h | **DEFERRED** |
-| 9. Optional | 3 | ~4.75h | **DEFERRED** |
+| 6. Observability | 3 | ~6-8h | **COMPLETED** |
+| 7. Maintainability | 3 | ~2.25h | **COMPLETED** |
+| 8. Testing | 5 | ~5-6h | **COMPLETED** |
+| 9. Optional | 3 | ~4.75h | **COMPLETED** |
 | **Total (non-optional)** | **27** | **~30-35h** | |
 | **Total (all)** | **30** | **~35-40h** | |
-| **Completed** | **16** | **~18-20h** | **59% of non-optional** |
-| **Deferred** | **11** | **~18-22h** | **41% of non-optional** |
+| **Completed** | **30** | **~35-40h** | **100%** |
+| **Deferred** | **0** | **0h** | **0%** |

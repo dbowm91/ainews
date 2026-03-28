@@ -155,3 +155,30 @@ def pipeline_stats():
 
     stats = get_all_stages_stats(minutes)
     return jsonify(stats)
+
+
+@admin_bp.route("/api/costs")
+@require_auth
+@limiter.limit("10 per minute")
+def cost_summary():
+    """Get LLM cost summary from token usage metrics."""
+    from services.cost_tracker import get_cost_summary
+
+    summary = get_cost_summary()
+    return jsonify(
+        {
+            "total_tokens": summary.total_tokens,
+            "total_cost_usd": summary.total_cost_usd,
+            "total_calls": summary.total_calls,
+            "models": [
+                {
+                    "provider": m.provider,
+                    "model": m.model,
+                    "total_tokens": m.total_tokens,
+                    "estimated_cost_usd": m.estimated_cost_usd,
+                    "call_count": m.call_count,
+                }
+                for m in summary.models
+            ],
+        }
+    )

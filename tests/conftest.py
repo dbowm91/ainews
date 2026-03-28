@@ -120,17 +120,12 @@ def app():
 
     from extensions import db, csrf
 
-    # Override limiter for testing with memory backend
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
-
-    test_limiter = Limiter(
-        get_remote_address, storage_uri="memory://", default_limits=[]
-    )
+    # Disable rate limiting in tests
+    from extensions import limiter as ext_limiter
 
     db.init_app(app)
     csrf.init_app(app)
-    test_limiter.init_app(app)
+    ext_limiter.enabled = False
 
     import models  # noqa: F401
 

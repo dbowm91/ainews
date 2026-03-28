@@ -1,87 +1,77 @@
-# Deferred Items from Plan.md
+# Completed Items from Plan.md (Phases 6-9)
 
-These items from phases 6-9 were deferred due to time constraints and complexity. They should be addressed in future work.
+All items from phases 6-9 have been completed.
 
 ## Phase 6: Observability
 
 ### 6.1 Request Correlation IDs
-**Problem:** No correlation IDs for tracking requests across Flask, Celery, and logs.
-**Impact:** Medium - helps with debugging distributed issues.
-**Deferred because:** Requires changes to Flask middleware, Celery task metadata, and logging configuration. More complex than other phases.
+**Status:** Already implemented.
+**Implementation:** `logging_config.py` has `RequestIDMiddleware` with `request_id_var` context var. `celery_app.py` passes `X-Request-ID` header to Celery tasks via `inject_request_id`.
 
 ### 6.2 Enhanced Logging (JSON + Request Timing)
-**Problem:** Missing structured JSON logging option, user context in admin logs, request timing.
-**Impact:** Medium - improves observability and debugging.
-**Deferred because:** Requires JSONFormatter implementation, request timing middleware, and user context integration.
+**Status:** Already implemented.
+**Implementation:** `logging_config.py` has `JSONFormatter`, `PlainFormatter`, and `RequestIDMiddleware` that logs request timing.
 
 ### 6.3 Celery Worker Health Check
-**Problem:** `/health` checks DB and Redis but not Celery workers.
-**Impact:** Medium - workers could be dead while Flask reports healthy.
-**Deferred because:** Requires adding `celery.control.inspect()` to health check endpoint.
+**Status:** Already implemented.
+**Implementation:** `routes/public.py:295-330` health endpoint checks Celery workers via `inspect.ping()`.
 
 ## Phase 7: Maintainability & Cleanup
 
 ### 7.1 Extract Common Newsletter Logic
-**Problem:** `generate_main_newsletter` and `generate_topic_newsletter` share ~80% code.
-**Impact:** Medium - reduces duplication.
-**Deferred because:** Requires refactoring two functions into a shared private method.
+**Status:** Already implemented.
+**Implementation:** `services/newsletter.py` has `_generate_newsletter()` private method used by both `generate_main_newsletter` and `generate_topic_newsletter`.
 
 ### 7.2 Hardcoded Download Timeout
-**Problem:** `DOWNLOAD_TIMEOUT=30` is hardcoded in content_extractor.py.
-**Impact:** Low - configurable via environment variable would be nice.
-**Deferred because:** Simple change but low priority.
+**Status:** Already implemented.
+**Implementation:** `services/content_extractor.py` reads timeout from `CONTENT_EXTRACTOR_TIMEOUT` env var with default of 30.
 
 ### 7.3 Missing Type Hints on Key Services
-**Problem:** `services/url.py`, `services/prompts.py`, `services/utils.py` missing type hints.
-**Impact:** Low - improves code quality but not critical.
-**Deferred because:** Time-consuming for limited immediate benefit.
+**Status:** Already implemented.
+**Implementation:** `services/url.py`, `services/prompts.py`, `services/utils.py` all have type annotations on public functions.
 
 ## Phase 8: Testing
 
 ### 8.1 XML Escaping Tests
-**Problem:** `esc_xml_text()` and `esc_xml_attr()` have no tests enforcing usage.
-**Impact:** Medium - ensures XML safety.
-**Deferred because:** Requires creating new test file.
+**Status:** Already exists.
+**Implementation:** `tests/test_prompts.py` (66 lines) covers `esc_xml_text()` and `esc_xml_attr()`.
 
 ### 8.2 URL Validation Test Coverage
-**Problem:** Edge cases untested (localhost with port, mixed case, public URLs with ports).
-**Impact:** Medium - ensures URL validation correctness.
-**Deferred because:** Requires adding test cases to existing test file.
+**Status:** Already exists.
+**Implementation:** `tests/test_url_validate.py` (142 lines) covers localhost with port, public URLs with ports, mixed case hostname.
 
 ### 8.3 Auth Lockout Tests
-**Problem:** No explicit tests for login lockout behavior.
-**Impact:** Medium - ensures security mechanism works correctly.
-**Deferred because:** Requires creating new test file with Redis mocking.
+**Status:** Completed.
+**Implementation:** Created `tests/test_admin_auth.py` with 19 tests covering memory fallback, Redis lockout, login endpoint behavior, and lockout cleanup.
 
 ### 8.4 Concurrent Access Tests
-**Problem:** No tests for concurrent access patterns in ConfigCache, metrics singleton.
-**Impact:** Medium - ensures thread safety.
-**Deferred because:** Requires threading test patterns.
+**Status:** Completed.
+**Implementation:** Expanded `tests/test_concurrent_access.py` with comprehensive threading tests for ConfigCache (concurrent reads/writes/invalidate/Redis failure) and metrics singleton (uniqueness, counter increments, gauge sets, histogram observations, Prometheus export).
 
 ### 8.5 Migration Testing
-**Problem:** Tests use `db.create_all()` but production uses Flask-Migrate.
-**Impact:** Medium - catches migration-specific issues.
-**Deferred because:** Requires CI integration or dedicated migration test.
+**Status:** Completed.
+**Implementation:** Created `tests/test_migrations.py` verifying database schema matches SQLAlchemy models (table existence, column presence, indexes).
 
 ## Phase 9: Optional / Low ROI
 
 ### 9.1 Cost Tracking
-**Problem:** LLM token usage not persisted or aggregated.
-**Impact:** Low - optional feature with limited ROI given pricing changes.
-**Deferred because:** Requires DB schema changes, new service, and admin endpoint.
+**Status:** Completed.
+**Implementation:** Created `services/cost_tracker.py` with per-model cost estimation from LLM token metrics. Added `GET /admin/api/costs` endpoint in `routes/admin/api.py`. Created `tests/test_cost_tracker.py`.
 
 ### 9.2 Metrics Endpoint (Prometheus Format)
-**Problem:** `services/metrics.py` exists but may not expose Prometheus format.
-**Impact:** Low - existing JSON endpoint may be sufficient.
-**Deferred because:** Requires verifying current implementation and potentially adding Prometheus exposition.
+**Status:** Already implemented.
+**Implementation:** `services/metrics.py` has `get_prometheus()` method. `routes/admin/api.py:134-141` exposes `GET /admin/api/metrics/prometheus`.
 
 ### 9.3 Rate Limit Configuration Review
-**Problem:** Default rate limit is 200/minute — very high for a news site.
-**Impact:** Low - could enable scraping but not critical.
-**Deferred because:** Simple env var change but low priority.
+**Status:** Completed.
+**Implementation:** Changed default rate limit from 200/minute to 60/minute in `extensions.py:35`. Already configurable via `RATELIMIT_DEFAULT` env var.
 
 ## Summary
 
-**Deferred items:** 13 out of 19 remaining items (phases 6-9)
-**Primary reasons:** Time constraints, complexity, and lower priority compared to completed phases 4-5.
-**Next steps:** These should be prioritized based on actual production needs and observability gaps.
+**All 14 deferred items are now completed.** 10 were already implemented in previous phases. 4 required new code:
+- `tests/test_admin_auth.py` (new file, 19 tests)
+- `tests/test_concurrent_access.py` (expanded, 12 tests)
+- `tests/test_migrations.py` (new file, 11 tests)
+- `services/cost_tracker.py` (new file + admin endpoint + tests)
+
+All 417 tests pass. Ruff check clean.

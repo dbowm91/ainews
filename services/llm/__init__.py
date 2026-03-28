@@ -69,10 +69,22 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
     )
 
 
-def record_provider_success(provider_id: str, model: str) -> None:
+def record_provider_success(provider_id: str, model: str, tokens_used: int = 0) -> None:
     """Record a successful LLM call for circuit breaker tracking."""
+    from services.metrics import get_metrics
+
     breaker = get_breaker(f"llm:{provider_id}:{model}")
     breaker.record_success()
+    # Increment call counter
+    get_metrics().counter_inc(
+        "llm.calls", labels={"provider": provider_id, "model": model}
+    )
+    if tokens_used:
+        get_metrics().counter_inc(
+            "llm.tokens",
+            value=tokens_used,
+            labels={"provider": provider_id, "model": model},
+        )
 
 
 def record_provider_failure(provider_id: str, model: str) -> None:

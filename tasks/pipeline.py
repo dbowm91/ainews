@@ -111,8 +111,10 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
     except Exception as e:
         savepoint.rollback()
         logger.error(f"Failed to write pipeline log: {e}")
-        metrics.counter_inc("pipeline.log_write_failed", labels={"stage": stage, "level": level})
-        
+        metrics.counter_inc(
+            "pipeline.log_write_failed", labels={"stage": stage, "level": level}
+        )
+
         # Re-raise for fatal stages (error level) after logging failure
         if level == "error":
             raise
@@ -481,11 +483,11 @@ def run_stage(
         raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
 
     from services.pipeline_monitor import record_stage_result
-    
+
     try:
         result = work_fn(article, provider, model, max_tokens)
 
-        record_provider_success(rc.provider, model)
+        record_provider_success(rc.provider, model, tokens_used=max_tokens)
         article.retry_count = 0
         article.last_error = None
         record_stage_result(stage, success=True, run_id=run_id)

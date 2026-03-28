@@ -37,6 +37,19 @@ def health():
     except Exception:
         status["redis"] = "error"
 
+    # Celery workers check
+    try:
+        from celery_app import celery_app
+
+        inspect = celery_app.control.inspect()
+        ping_response = inspect.ping()
+        if ping_response and any(ping_response.values()):
+            status["celery"] = "ok"
+        else:
+            status["celery"] = "no_workers"
+    except Exception:
+        status["celery"] = "error"
+
     status["circuit_breakers"] = get_all_breaker_status()
 
     limiter_inst = get_limiter()
@@ -118,6 +131,16 @@ def app_metrics():
     return jsonify(get_metrics().get_metrics())
 
 
+@admin_bp.route("/api/metrics/prometheus")
+@require_auth
+@limiter.limit("30 per minute")
+def prometheus_metrics():
+    from flask import Response
+    from services.metrics import get_metrics
+
+    return Response(get_metrics().get_prometheus(), mimetype="text/plain")
+
+
 @admin_bp.route("/api/pipeline/stats")
 @require_auth
 @limiter.limit("10 per minute")
@@ -125,10 +148,10 @@ def pipeline_stats():
     """Get pipeline stage success/failure statistics."""
     from services.pipeline_monitor import get_all_stages_stats
     from flask import request
-    
+
     minutes = request.args.get("minutes", 15, type=int)
     # Limit to reasonable range
     minutes = max(1, min(minutes, 120))
-    
+
     stats = get_all_stages_stats(minutes)
     return jsonify(stats)

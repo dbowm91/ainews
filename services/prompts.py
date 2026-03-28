@@ -8,12 +8,12 @@ logger = logging.getLogger(__name__)
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 
-def esc_xml_text(text) -> str:
+def esc_xml_text(text: str) -> str:
     """Escape text content for safe embedding in XML tags within LLM prompts."""
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def esc_xml_attr(text) -> str:
+def esc_xml_attr(text: str) -> str:
     """Escape a value for safe embedding in XML attributes within LLM prompts."""
     return (
         str(text)

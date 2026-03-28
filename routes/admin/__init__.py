@@ -4,7 +4,8 @@ import os
 import re
 import time
 import redis.exceptions
-from flask import Blueprint, redirect, url_for, session
+from flask import Blueprint, redirect, url_for, session, request
+from logging_config import get_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +30,22 @@ def _cleanup_stale_entries() -> None:
         for ip, (count, first_time) in _login_attempts_memory.items():
             if now - first_time >= _LOGIN_LOCKOUT_SECONDS:
                 stale_keys.append(ip)
-        
+
         for ip in stale_keys:
             del _login_attempts_memory[ip]
-        
+
         # If still too many entries, remove oldest
         if len(_login_attempts_memory) > _MAX_MEMORY_ENTRIES:
             # Sort by first_time and keep newest
             sorted_entries = sorted(
                 _login_attempts_memory.items(),
                 key=lambda x: x[1][1],  # first_time
-                reverse=True
+                reverse=True,
             )
             _login_attempts_memory.clear()
             for ip, entry in sorted_entries[:_MAX_MEMORY_ENTRIES]:
                 _login_attempts_memory[ip] = entry
+
 
 # Load Lua script for atomic login lockout
 _LUA_SCRIPT = None
@@ -216,6 +218,17 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         if not session.get("admin"):
             return redirect(url_for("admin.login"))
+        # Log admin access with context
+        request_id = get_request_id()
+        logger.info(
+            f"Admin access: {request.method} {request.path}",
+            extra={
+                "user": "admin",
+                "ip": request.remote_addr,
+                "request_id": request_id,
+                "admin": True,
+            },
+        )
         return f(*args, **kwargs)
 
     return decorated

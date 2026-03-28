@@ -83,7 +83,15 @@ class DevelopmentConfig(Config):
     def __init__(self):
         super().__init__()
         if not self.ADMIN_PASSWORD:
-            logging.getLogger(__name__).warning("ADMIN_PASSWORD not set - admin login disabled")
+            logging.getLogger(__name__).warning(
+                "ADMIN_PASSWORD not set - admin login disabled"
+            )
+
+
+class TestingConfig(DevelopmentConfig):
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    WTF_CSRF_ENABLED = False
 
 
 class ProductionConfig(Config):
@@ -117,6 +125,7 @@ def _validate_llm_providers():
     enabled_providers = []
     try:
         from schemas.llm import load_providers_config
+
         config = load_providers_config()
         for pdef in config.providers:
             if not pdef.enabled:
@@ -132,11 +141,14 @@ def _validate_llm_providers():
         logger.warning(f"Could not validate LLM providers: {e}")
 
     if not enabled_providers:
-        raise RuntimeError("No LLM providers enabled. Configure at least one in providers.yaml")
+        raise RuntimeError(
+            "No LLM providers enabled. Configure at least one in providers.yaml"
+        )
 
 
 config = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,
+    "testing": TestingConfig,
     "default": DevelopmentConfig,
 }

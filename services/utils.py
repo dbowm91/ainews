@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Optional
+from typing import Optional, Any
 
 from sqlalchemy.orm import Query
 
@@ -45,7 +45,7 @@ def paginate_query(
 
 
 def parse_article_headline(
-    article,
+    article: Any,
     fallback_headline: Optional[str] = None,
     include_summary: bool = False,
 ) -> tuple[str, str]:

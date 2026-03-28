@@ -298,6 +298,7 @@ def health():
     from extensions import db
     from sqlalchemy import text
     from services.limiter import get_limiter
+    from celery_app import celery_app
 
     checks = {}
     overall = "ok"
@@ -319,6 +320,20 @@ def health():
         checks["redis"] = "ok"
     except redis.exceptions.RedisError:
         checks["redis"] = "error"
+        overall = "degraded"
+
+    # Celery workers check
+    try:
+        inspect = celery_app.control.inspect()
+        # Ping all workers
+        ping_response = inspect.ping()
+        if ping_response and any(ping_response.values()):
+            checks["celery"] = "ok"
+        else:
+            checks["celery"] = "no_workers"
+            # missing workers is not considered degradation for health endpoint
+    except Exception:
+        checks["celery"] = "error"
         overall = "degraded"
 
     # Rate limiter check
@@ -458,9 +473,11 @@ def subscribe():
             )
         return redirect("/")
 
-    existing = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
-        email=email, newsletter_type=newsletter_type
-    ).first()
+    existing = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter_by(email=email, newsletter_type=newsletter_type)
+        .first()
+    )
 
     if existing and existing.active:
         if request.headers.get("HX-Request"):
@@ -524,9 +541,11 @@ def unsubscribe(token):
     """Show unsubscribe confirmation page (GET)."""
     from models import Subscriber
 
-    subscriber = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
-        unsubscribe_token=token, active=True
-    ).first()
+    subscriber = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter_by(unsubscribe_token=token, active=True)
+        .first()
+    )
 
     return render_template(
         "unsubscribe.html", token=token, found=subscriber is not None
@@ -540,9 +559,11 @@ def unsubscribe_confirm(token):
     from models import Subscriber
     from extensions import db
 
-    subscriber = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
-        unsubscribe_token=token, active=True
-    ).first()
+    subscriber = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter_by(unsubscribe_token=token, active=True)
+        .first()
+    )
 
     commit_failed = False
     if subscriber:

@@ -81,6 +81,27 @@ class MetricsCollector:
                     }
             return result
 
+    def get_prometheus(self) -> str:
+        """Return metrics in Prometheus exposition format."""
+        lines = []
+        with self._lock:
+            # Counters
+            for key, value in self._counters.items():
+                lines.append(f"# TYPE {key} counter")
+                lines.append(f"{key} {value}")
+            # Gauges
+            for key, value in self._gauges.items():
+                lines.append(f"# TYPE {key} gauge")
+                lines.append(f"{key} {value}")
+            # Histograms (simplified as counters for now)
+            for key, values in self._histograms.items():
+                if values:
+                    lines.append(f"# TYPE {key} histogram")
+                    # Could add buckets but skip for simplicity
+                    lines.append(f"{key}_count {len(values)}")
+                    lines.append(f"{key}_sum {sum(values)}")
+        return "\n".join(lines)
+
 
 def get_metrics() -> MetricsCollector:
     """Get or create the singleton MetricsCollector."""

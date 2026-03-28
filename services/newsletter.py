@@ -104,6 +104,54 @@ def generate_newsletter_html(
 </html>"""
 
 
+def _generate_newsletter(
+    title: str,
+    articles_filter,
+    site_url: str = "",
+    max_articles: int = 10,
+    hours: int = 24,
+    executive_summary: str = "",
+) -> tuple[str, str, int]:
+    """Generate a newsletter with custom article filter.
+
+    Args:
+        title: Title for the newsletter (used in HTML)
+        articles_filter: Callable that takes a SQLAlchemy query and returns filtered query
+        site_url: Base URL for article links
+        max_articles: Maximum number of articles to include
+        hours: Lookback window in hours
+        executive_summary: Optional executive summary text
+
+    Returns:
+        Tuple of (html, subject, article_count)
+    """
+    from models import Article
+    from constants import PipelineStatus
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    base_query = Article.query.filter(
+        Article.pipeline_status == PipelineStatus.DONE,
+        Article.created_at >= cutoff,
+    )
+    query = articles_filter(base_query)
+    articles = query.order_by(Article.impact_score.desc()).limit(max_articles).all()
+
+    if not articles:
+        logger.warning(f"{title} newsletter has no articles, skipping generation")
+        return "", "", 0
+
+    date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
+    subject = f"ainews// — {title} — {date_str}"
+    html = generate_newsletter_html(
+        articles,
+        title,
+        site_url,
+        date_str,
+        executive_summary=executive_summary,
+    )
+    return html, subject, len(articles)
+
+
 def generate_main_newsletter(
     site_url: str = "",
     max_articles: int = 10,
@@ -112,34 +160,18 @@ def generate_main_newsletter(
 ) -> tuple[str, str, int]:
     """Generate the main newsletter. Returns (html, subject, article_count)."""
     from models import Article
-    from constants import PipelineStatus
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    articles = (
-        Article.query.filter(
-            Article.pipeline_status == PipelineStatus.DONE,
-            Article.impact_score > 0,
-            Article.created_at >= cutoff,
-        )
-        .order_by(Article.impact_score.desc())
-        .limit(max_articles)
-        .all()
-    )
+    def filter_main(query):
+        return query.filter(Article.impact_score > 0)
 
-    if not articles:
-        logger.warning("Main newsletter has no articles, skipping generation")
-        return "", "", 0
-
-    date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
-    subject = f"ainews// — Top {len(articles)} stories — {date_str}"
-    html = generate_newsletter_html(
-        articles,
-        "Top Stories",
-        site_url,
-        date_str,
+    return _generate_newsletter(
+        title="Top Stories",
+        articles_filter=filter_main,
+        site_url=site_url,
+        max_articles=max_articles,
+        hours=hours,
         executive_summary=executive_summary,
     )
-    return html, subject, len(articles)
 
 
 def generate_topic_newsletter(
@@ -152,38 +184,22 @@ def generate_topic_newsletter(
     """Generate a topic-specific newsletter. Returns (html, subject, article_count)."""
     from models import Article
     from schemas.topic import load_topics
-    from constants import PipelineStatus
 
     topics = load_topics().topics
     topic_def = topics.get(topic_key)
     topic_name = topic_def.display_name if topic_def else topic_key
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    articles = (
-        Article.query.filter(
-            Article.pipeline_status == PipelineStatus.DONE,
-            Article.category == topic_key,
-            Article.created_at >= cutoff,
-        )
-        .order_by(Article.impact_score.desc())
-        .limit(max_articles)
-        .all()
-    )
+    def filter_topic(query):
+        return query.filter(Article.category == topic_key)
 
-    if not articles:
-        logger.warning(f"Topic newsletter {topic_key} has no articles, skipping generation")
-        return "", "", 0
-
-    date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
-    subject = f"ainews// — {topic_name} — {date_str}"
-    html = generate_newsletter_html(
-        articles,
-        topic_name,
-        site_url,
-        date_str,
+    return _generate_newsletter(
+        title=topic_name,
+        articles_filter=filter_topic,
+        site_url=site_url,
+        max_articles=max_articles,
+        hours=hours,
         executive_summary=executive_summary,
     )
-    return html, subject, len(articles)
 
 
 def _parse_article(article) -> tuple[str, str]:

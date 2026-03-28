@@ -110,3 +110,33 @@ class TestValidateUrlSafe:
             ]
             result = validate_url_safe("https://example.com/path?q=1")
             assert result == "https://example.com/path?q=1"
+
+    def test_rejects_localhost_with_port(self):
+        """Localhost with port should still be rejected."""
+        with pytest.raises(UnsafeURLError, match="private/reserved"):
+            validate_url_safe("http://localhost:8080/")
+
+    def test_rejects_localhost_ipv6_with_port(self):
+        """IPv6 localhost with port should be rejected."""
+        with pytest.raises(UnsafeURLError, match="private/reserved"):
+            validate_url_safe("http://[::1]:8080/")
+
+    @patch("services.url.socket.getaddrinfo")
+    def test_passes_public_url_with_port(self, mock_resolve):
+        """Public URL with custom port should pass validation."""
+        mock_resolve.return_value = [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))
+        ]
+        result = validate_url_safe("http://example.com:8080/path")
+        assert result == "http://example.com:8080/path"
+
+    @patch("services.url.socket.getaddrinfo")
+    def test_mixed_case_hostname(self, mock_resolve):
+        """Hostname case should not affect validation."""
+        mock_resolve.return_value = [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", 0))
+        ]
+        result = validate_url_safe("http://EXAMPLE.COM/")
+        assert result == "http://EXAMPLE.COM/"
+        # Verify hostname was resolved (mock called)
+        mock_resolve.assert_called_once()

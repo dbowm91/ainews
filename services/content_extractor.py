@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,8 @@ def extract_article(url: str) -> ExtractionResult:
 
     try:
         cfg = trafilatura.settings.use_config()
-        cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", "30")
+        timeout = os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30")
+        cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", timeout)
         downloaded = trafilatura.fetch_url(url, config=cfg)
     except Exception as e:
         logger.warning(f"Fetch failed for {url}: {e}")

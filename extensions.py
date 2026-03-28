@@ -32,7 +32,7 @@ def _get_limiter_storage_uri() -> str:
 limiter = Limiter(
     get_remote_address,
     storage_uri=_get_limiter_storage_uri(),
-    default_limits=["200 per minute"],
+    default_limits=[os.environ.get("RATELIMIT_DEFAULT", "200 per minute")],
 )
 
 _redis_client = None

@@ -1,4 +1,5 @@
 from celery import Celery, Task
+from celery.signals import before_task_publish
 import os
 import threading
 
@@ -6,6 +7,8 @@ import threading
 # module-level celery_app. We initialize at import time for that reason.
 # Each task execution uses its own app_context() via FlaskTask.__call__,
 # which is safe since Flask apps are thread-safe for read operations.
+
+from logging_config import request_id_var
 
 _celery = Celery("ainews")
 _app_cache = {}
@@ -16,6 +19,14 @@ class FlaskTask(Task):
     abstract = True
 
     def __call__(self, *args, **kwargs):
+        # Set request ID from Celery headers into logging context
+        request_id = None
+        if hasattr(self, "request") and self.request and self.request.headers:
+            request_id = self.request.headers.get("X-Request-ID")
+        token = None
+        if request_id:
+            token = request_id_var.set(request_id)
+
         config_name = os.environ.get("FLASK_CONFIG", "development")
         if config_name not in _app_cache:
             with _app_cache_lock:
@@ -31,6 +42,19 @@ class FlaskTask(Task):
                 from extensions import db
 
                 db.session.remove()
+                if token is not None:
+                    request_id_var.reset(token)
+
+
+@before_task_publish.connect
+def inject_request_id(headers=None, **kwargs):
+    """Inject request ID from Flask context into Celery task headers."""
+    if headers is None:
+        return
+    # Get request ID from current logging context (set by RequestIDMiddleware)
+    request_id = request_id_var.get()
+    if request_id and "X-Request-ID" not in headers:
+        headers["X-Request-ID"] = request_id
 
 
 def _init_celery():

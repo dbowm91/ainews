@@ -5,6 +5,7 @@ import json
 import sys
 import time
 import uuid
+import os
 from datetime import datetime, timezone
 from contextvars import ContextVar
 
@@ -76,6 +77,16 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 
+class PlainFormatter(logging.Formatter):
+    """Plain text formatter with optional request ID."""
+
+    def format(self, record):
+        request_id = get_request_id()
+        if request_id:
+            record.request_id = request_id
+        return super().format(record)
+
+
 class RequestIDMiddleware:
     """WSGI middleware that assigns a unique request ID to each request.
 
@@ -131,9 +142,18 @@ def setup_logging(app=None, level=logging.INFO):
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # Console handler with JSON formatting
+    # Console handler with configurable formatting
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(JSONFormatter())
+    log_format = os.environ.get("LOG_FORMAT", "json").lower()
+    if log_format == "json":
+        console_handler.setFormatter(JSONFormatter())
+    else:
+        # Plain text format with request ID
+        formatter = PlainFormatter(
+            fmt="%(asctime)s %(levelname)s %(name)s: %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+        console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
     # Set specific loggers

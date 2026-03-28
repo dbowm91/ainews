@@ -52,6 +52,12 @@ class ModelLimiter:
             self._release_script(keys=[key])
         except redis.exceptions.RedisError as e:
             logger.warning(f"Limiter release failed for {provider_id}/{model}: {e}")
+            try:
+                from services.metrics import get_metrics
+
+                get_metrics().counter_inc("limiter.release_failure")
+            except Exception:
+                pass
 
     def get_active(self, provider_id: str, model: str) -> int:
         key = f"{self._prefix}:{provider_id}:{model}"

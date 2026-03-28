@@ -11,6 +11,27 @@ logger = get_task_logger(__name__)
 MAX_STAGE_RETRIES = 3
 MAX_TOTAL_RETRIES = 10
 
+
+def _get_max_stage_retries() -> int:
+    """Get max stage retries from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("MAX_STAGE_RETRIES", MAX_STAGE_RETRIES)
+    except RuntimeError:
+        return MAX_STAGE_RETRIES
+
+
+def _get_max_total_retries() -> int:
+    """Get max total retries from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("MAX_TOTAL_RETRIES", MAX_TOTAL_RETRIES)
+    except RuntimeError:
+        return MAX_TOTAL_RETRIES
+
+
 _STAGE_STATUS_MAP = {
     # Pipeline statuses → stage names
     "pending": "select",
@@ -261,8 +282,11 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
     article.total_retries = (article.total_retries or 0) + 1
     article.last_error = f"{stage}: {str(exc)[:500]}"
 
+    max_total = _get_max_total_retries()
+    max_stage = _get_max_stage_retries()
+
     # Global retry budget: fail article permanently if exceeded
-    if article.total_retries >= MAX_TOTAL_RETRIES:
+    if article.total_retries >= max_total:
         article.pipeline_status = "failed"
         try:
             db.session.commit()
@@ -276,15 +300,13 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
                 run_id,
                 stage,
                 "error",
-                f"Article {article.id} exceeded global retry budget ({MAX_TOTAL_RETRIES}), marked as failed",
+                f"Article {article.id} exceeded global retry budget ({max_total}), marked as failed",
                 article_id=article.id,
             )
-        logger.error(
-            f"Article {article.id} exceeded global retry budget ({MAX_TOTAL_RETRIES})"
-        )
+        logger.error(f"Article {article.id} exceeded global retry budget ({max_total})")
         return True
 
-    if article.retry_count >= MAX_STAGE_RETRIES:
+    if article.retry_count >= max_stage:
         try:
             db.session.commit()
         except SQLAlchemyError as commit_exc:

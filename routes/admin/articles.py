@@ -9,29 +9,69 @@ from constants import PER_PAGE_ADMIN_ARTICLES
 logger = logging.getLogger(__name__)
 
 
+def _query_looks_like_url(query: str) -> bool:
+    """Check if the query string looks like a URL."""
+    return bool(query) and (
+        query.startswith("http://")
+        or query.startswith("https://")
+        or "/" in query
+        and "." in query
+    )
+
+
 @admin_bp.route("/articles")
 @require_auth
 def articles():
-    from models import Article
+    from models import Article, Source
     from services.utils import paginate_query
+    from datetime import datetime
 
     page = max(1, request.args.get("page", 1, type=int))
     query = request.args.get("q", "", type=str).strip()
     status = request.args.get("status", "", type=str).strip()
     category = request.args.get("category", "", type=str).strip()
+    source_id = request.args.get("source_id", "", type=str).strip()
+    date_from = request.args.get("date_from", "", type=str).strip()
+    date_to = request.args.get("date_to", "", type=str).strip()
 
     q = Article.query.order_by(Article.created_at.desc())
 
     if query:
-        escaped_query = _escape_like_pattern(query)
-        q = q.filter(Article.original_title.ilike(f"%{escaped_query}%", escape="\\"))
+        if _query_looks_like_url(query):
+            escaped_query = _escape_like_pattern(query)
+            q = q.filter(Article.original_url.ilike(f"%{escaped_query}%", escape="\\"))
+        else:
+            escaped_query = _escape_like_pattern(query)
+            q = q.filter(
+                Article.original_title.ilike(f"%{escaped_query}%", escape="\\")
+            )
     if status:
         q = q.filter_by(pipeline_status=status)
     if category:
         q = q.filter_by(category=category)
+    if source_id:
+        try:
+            q = q.filter_by(source_id=int(source_id))
+        except ValueError:
+            pass
+    if date_from:
+        try:
+            dt_from = datetime.fromisoformat(date_from)
+            q = q.filter(Article.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.fromisoformat(date_to)
+            q = q.filter(Article.created_at <= dt_to)
+        except ValueError:
+            pass
 
     per_page = PER_PAGE_ADMIN_ARTICLES
     articles, has_next, next_page = paginate_query(q, page, per_page)
+
+    # Get sources for filter dropdown
+    sources = Source.query.order_by(Source.name).all()
 
     if request.headers.get("HX-Request"):
         return render_template(
@@ -43,7 +83,11 @@ def articles():
             query=query,
             status=status,
             category=category,
+            source_id=source_id,
+            date_from=date_from,
+            date_to=date_to,
             categories=_admin_categories(),
+            sources=sources,
         )
 
     categories = _admin_categories()
@@ -57,7 +101,11 @@ def articles():
         query=query,
         status=status,
         category=category,
+        source_id=source_id,
+        date_from=date_from,
+        date_to=date_to,
         categories=categories,
+        sources=sources,
     )
 
 
@@ -293,7 +341,14 @@ def reprocess_article(article_id):
         article.retry_count = 0
         article.total_retries = 0
         article.last_error = None
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            logger.exception(
+                "Failed to reprocess article %s (select stage)", article_id
+            )
+            return jsonify({"message": "Failed to reprocess article"}), 500
         select_article.delay(article.id)
     elif stage == "research":
         from tasks import research_article
@@ -306,7 +361,14 @@ def reprocess_article(article_id):
         article.retry_count = 0
         article.total_retries = 0
         article.last_error = None
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            logger.exception(
+                "Failed to reprocess article %s (research stage)", article_id
+            )
+            return jsonify({"message": "Failed to reprocess article"}), 500
         research_article.delay(article.id)
     elif stage == "write":
         from tasks import write_article
@@ -318,7 +380,12 @@ def reprocess_article(article_id):
         article.retry_count = 0
         article.total_retries = 0
         article.last_error = None
-        db.session.commit()
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            logger.exception("Failed to reprocess article %s (write stage)", article_id)
+            return jsonify({"message": "Failed to reprocess article"}), 500
         write_article.delay(article.id)
 
     return redirect(url_for("admin.articles"))

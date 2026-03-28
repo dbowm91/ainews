@@ -7,6 +7,7 @@ from sqlalchemy import func, text
 
 from extensions import db
 from models import Article, ArticleMetric
+from sqlalchemy.orm import joinedload
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,15 @@ def _search_fts(
 
     # Fetch articles preserving FTS rank order
     id_order = {id_: i for i, id_ in enumerate(article_ids)}
-    articles = Article.query.filter(Article.id.in_(article_ids)).all()
+    articles = (
+        Article.query.options(
+            joinedload(Article.source),
+            joinedload(Article.tags),
+            joinedload(Article.metrics),
+        )
+        .filter(Article.id.in_(article_ids))
+        .all()
+    )
     articles.sort(key=lambda a: id_order.get(a.id, 999))
 
     parse_articles(articles)
@@ -191,8 +200,14 @@ def get_articles_paginated(
             logger.debug("FTS5 search failed, falling back to ILIKE", exc_info=True)
 
     # Standard SQL query (no search, or ILIKE fallback)
-    q = Article.query.filter(Article.pipeline_status.in_(["done", "skipped"])).order_by(
-        Article.created_at.desc()
+    q = (
+        Article.query.options(
+            joinedload(Article.source),
+            joinedload(Article.tags),
+            joinedload(Article.metrics),
+        )
+        .filter(Article.pipeline_status.in_(["done", "skipped"]))
+        .order_by(Article.created_at.desc())
     )
 
     if category:

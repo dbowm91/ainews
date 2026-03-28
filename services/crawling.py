@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
+MAX_CONSECUTIVE_FAILURES = 10
+
 
 def create_pipeline_run(task_id: str, triggered_by: str = "scheduled") -> PipelineRun:
     """Create a new pipeline run record.
@@ -182,6 +184,46 @@ def update_pipeline_run_stats(
     run.finished_at = datetime.now(timezone.utc)
     if error_message:
         run.error_message = error_message
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+
+
+def record_crawl_success(source: Source) -> None:
+    """Record a successful crawl for a source.
+
+    Resets consecutive failures, updates last_success_at, re-enables if disabled.
+    """
+    now = datetime.now(timezone.utc)
+    source.consecutive_failures = 0
+    source.last_success_at = now
+    source.last_error = None
+    if source.disabled_at:
+        source.disabled_at = None
+        source.active = True
+        logger.info(f"Re-enabled source {source.source_key} after successful crawl")
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+
+
+def record_crawl_failure(source: Source, error_message: str) -> None:
+    """Record a failed crawl for a source.
+
+    Increments consecutive_failures and auto-disables after MAX_CONSECUTIVE_FAILURES.
+    """
+    source.consecutive_failures = (source.consecutive_failures or 0) + 1
+    source.last_error = error_message[:2000] if error_message else None
+    if source.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+        source.disabled_at = datetime.now(timezone.utc)
+        source.active = False
+        logger.warning(
+            f"Auto-disabled source {source.source_key} after {source.consecutive_failures} consecutive failures"
+        )
     try:
         db.session.commit()
     except SQLAlchemyError:

@@ -16,11 +16,28 @@ from services.utils import is_valid_email
 from services.config_cache import get_config_cache
 import logging
 import secrets
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
 public_bp = Blueprint("public", __name__)
 PER_PAGE = PER_PAGE_PUBLIC
+
+
+def limit_content_length(max_bytes: int):
+    """Decorator to limit request Content-Length per route."""
+
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            content_length = request.content_length
+            if content_length and content_length > max_bytes:
+                return jsonify({"message": "Request too large"}), 413
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 def _render_feed_or_page(ctx: dict[str, Any], full_template: str) -> str:
@@ -214,8 +231,23 @@ def article_detail(article_id):
         share_configs=share_configs,
     )
     if request.headers.get("HX-Request"):
-        return render_template("partials/article_detail.html", **ctx)
-    return render_template("article.html", **ctx)
+        response = render_template("partials/article_detail.html", **ctx)
+    else:
+        response = render_template("article.html", **ctx)
+
+    # Add cache headers - short TTL since article content can be edited
+    from flask import make_response
+
+    if not isinstance(response, Response):
+        resp = make_response(response)
+    else:
+        resp = response
+    resp.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    if article.updated_at:
+        resp.headers["Last-Modified"] = article.updated_at.strftime(
+            "%a, %d %b %Y %H:%M:%S GMT"
+        )
+    return resp
 
 
 @public_bp.route("/tag/<slug>")
@@ -374,7 +406,7 @@ def feed_all():
     return Response(
         xml,
         mimetype="application/rss+xml",
-        headers={"Cache-Control": "public, max-age=120"},
+        headers={"Cache-Control": "public, max-age=120, stale-while-revalidate=600"},
     )
 
 
@@ -415,7 +447,7 @@ def feed_topic(category):
     return Response(
         xml,
         mimetype="application/rss+xml",
-        headers={"Cache-Control": "public, max-age=120"},
+        headers={"Cache-Control": "public, max-age=120, stale-while-revalidate=600"},
     )
 
 
@@ -451,6 +483,7 @@ def sitemap():
 
 @public_bp.route("/subscribe", methods=["POST"])
 @limiter.limit("3 per minute")
+@limit_content_length(1024)
 def subscribe():
     from models import Subscriber
     from extensions import db

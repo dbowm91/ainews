@@ -26,6 +26,10 @@ class Config:
     # Request size limits
     MAX_CONTENT_LENGTH = 64 * 1024  # 64KB
 
+    # Pipeline retry limits
+    MAX_STAGE_RETRIES = int(os.environ.get("MAX_STAGE_RETRIES", "3"))
+    MAX_TOTAL_RETRIES = int(os.environ.get("MAX_TOTAL_RETRIES", "10"))
+
     # SMTP
     SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -111,6 +115,13 @@ class ProductionConfig(Config):
             raise RuntimeError("SECRET_KEY must be set in production")
         if not cls.ADMIN_PASSWORD:
             raise RuntimeError("ADMIN_PASSWORD must be set in production")
+        from routes.admin import _is_password_hash
+
+        if not _is_password_hash(cls.ADMIN_PASSWORD):
+            raise RuntimeError(
+                "ADMIN_PASSWORD must be a hashed password. "
+                "Run: python scripts/hash_password.py"
+            )
         _validate_llm_providers()
 
 

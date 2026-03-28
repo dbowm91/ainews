@@ -1,0 +1,73 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — sources{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">sources</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">sources</h1>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    {% if sources %}
+      <table class="dash-table" aria-label="Sources list">
+        <thead>
+          <tr><th>name</th><th>type</th><th>status</th><th>failures</th><th>last success</th><th>last error</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for s in sources %}
+            <tr>
+              <td>
+                <strong>{{ s.name }}</strong>
+                <br><small style="color: var(--text-muted)">{{ s.source_key }}</small>
+              </td>
+              <td>{{ s.source_type }}</td>
+              <td>
+                {% if s.disabled_at %}
+                  <span class="pipeline-badge pipeline-failed">disabled</span>
+                {% elif s.active %}
+                  <span class="pipeline-badge pipeline-done">active</span>
+                {% else %}
+                  <span class="pipeline-badge pipeline-skipped">inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if s.consecutive_failures > 0 %}
+                  <span class="{% if s.consecutive_failures >= 5 %}text-danger{% endif %}">{{ s.consecutive_failures }}</span>
+                {% else %}
+                  <span style="color: var(--text-muted)">0</span>
+                {% endif %}
+              </td>
+              <td>{{ s.last_success_at.strftime('%b %d %H:%M') if s.last_success_at else '—' }}</td>
+              <td>
+                {% if s.last_error %}
+                  <small title="{{ s.last_error }}" style="color: var(--text-muted)">{{ s.last_error[:80] }}{% if s.last_error|length > 80 %}...{% endif %}</small>
+                {% else %}
+                  <span style="color: var(--text-muted)">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if s.disabled_at or not s.active %}
+                  <button class="btn-small" hx-post="/admin/sources/{{ s.id }}/enable" hx-swap="outerHTML" hx-target="closest tr">enable</button>
+                {% else %}
+                  <button class="btn-small" hx-post="/admin/sources/{{ s.id }}/disable" hx-swap="outerHTML" hx-target="closest tr">disable</button>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">no sources configured</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

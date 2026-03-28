@@ -245,5 +245,6 @@ from routes.admin import (  # noqa: E402, F401
     subscribers as subscribers,
     metrics as metrics,
     shares as shares,
+    sources as sources,
     api as api,
 )

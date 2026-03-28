@@ -135,3 +135,34 @@ Use `PipelineStatus` class from `constants.py` instead of string literals for pi
 ### Test context requirements
 
 Tests using `_degrade_and_advance()` or `_handle_stage_failure()` must include the `app` fixture and use `app.app_context()` since these functions import `db` from extensions.
+
+### Source health tracking
+
+Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_at` columns. `services/crawling.py` provides `record_crawl_success()` and `record_crawl_failure()`. Auto-disable triggers at 10 consecutive failures. Sources page at `/admin/sources` with enable/disable. API: `GET /admin/api/sources/health`.
+
+### Pipeline retry configuration
+
+`MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are now configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers in `tasks/pipeline.py`.
+
+### Redis variable shadowing in pipeline_monitor
+
+When working with `services/pipeline_monitor.py`, avoid naming local variables `redis` as it shadows the module import. The module uses `from redis.exceptions import RedisError` to avoid this issue. The `_get_redis()` function returns a Redis client — name the local variable `redis_client` or `r` to avoid shadowing.
+
+### Request size limiting
+
+`limit_content_length(max_bytes)` decorator in `routes/public.py` checks `request.content_length` before processing. Applied to subscribe (1KB) and admin login (1KB). Global `MAX_CONTENT_LENGTH=64KB` remains as fallback in Flask config.
+
+### Bulk article operations
+
+`POST /admin/api/articles/bulk` accepts JSON with `article_ids` (list, max 500) and `action` (delete, set_status, set_category). See `routes/admin/api.py:bulk_article_operations()`.
+
+### Newsletter preview
+
+`POST /admin/api/newsletter/preview` generates newsletter HTML without sending. Returns `{subject, article_count, html}`. Uses same pipeline as live newsletters.
+
+### Article search improvements
+
+Admin article list (`/admin/articles`) supports:
+- URL search: queries starting with `http://` or containing `/` and `.` search `original_url`
+- Source filter: `source_id` query param
+- Date range: `date_from`, `date_to` query params (ISO format)

@@ -12,6 +12,25 @@ from routes.admin import (
 from extensions import limiter
 
 
+def _limit_content_length(max_bytes: int):
+    """Decorator to limit request Content-Length per route."""
+    from functools import wraps
+
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            content_length = request.content_length
+            if content_length and content_length > max_bytes:
+                from flask import jsonify
+
+                return jsonify({"message": "Request too large"}), 413
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
 def _safe_redirect_url(next_url: str) -> str:
     """Return a safe redirect target, falling back to admin dashboard.
 
@@ -32,6 +51,7 @@ def _safe_redirect_url(next_url: str) -> str:
 
 @admin_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
+@_limit_content_length(1024)
 def login():
     if session.get("admin"):
         return redirect(url_for("admin.dashboard"))

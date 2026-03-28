@@ -126,3 +126,60 @@ def newsletter_dry_run():
     except Exception:
         current_app.logger.exception("Failed to trigger newsletter dry run")
         return jsonify({"message": "Failed to start dry run"}), 503
+
+
+@admin_bp.route("/api/newsletter/preview", methods=["POST"])
+@require_auth
+def newsletter_preview():
+    """Generate newsletter HTML preview without sending emails."""
+    from models import Article
+    from constants import PipelineStatus
+    from datetime import datetime, timezone, timedelta
+    from services.newsletter_pipeline import generate_executive_summary
+    from services.newsletter import generate_main_newsletter
+
+    site_url = request.form.get("site_url", "").strip()
+    if not site_url:
+        site_url = request.host_url.rstrip("/")
+
+    # Get recent articles
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    articles = (
+        Article.query.filter(
+            Article.pipeline_status == PipelineStatus.DONE,
+            Article.impact_score > 0,
+            Article.created_at >= cutoff,
+        )
+        .order_by(Article.impact_score.desc())
+        .limit(20)
+        .all()
+    )
+
+    if not articles:
+        return jsonify({"message": "No articles available for preview"}), 400
+
+    try:
+        result = generate_executive_summary(articles, topic_key="main")
+        exec_summary = result["summary"]
+    except Exception as e:
+        logger.exception("Preview exec summary failed")
+        exec_summary = f"(Summary generation failed: {e})"
+
+    try:
+        html, subject, count = generate_main_newsletter(
+            site_url=site_url,
+            max_articles=20,
+            executive_summary=exec_summary,
+        )
+    except Exception as e:
+        logger.exception("Preview HTML generation failed")
+        return jsonify({"message": f"Failed to generate preview: {e}"}), 500
+
+    safe_html = _sanitize_newsletter_html(html)
+    return jsonify(
+        {
+            "subject": subject,
+            "article_count": count,
+            "html": safe_html,
+        }
+    )

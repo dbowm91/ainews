@@ -46,6 +46,12 @@ class Source(db.Model):
     last_crawled = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # Crawl health tracking
+    consecutive_failures = db.Column(db.Integer, nullable=False, default=0)
+    last_success_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    disabled_at = db.Column(db.DateTime, nullable=True)
+
     articles = db.relationship("Article", backref="source", lazy="dynamic")
 
     def __repr__(self):
@@ -111,6 +117,7 @@ class Article(db.Model):
         db.Index("ix_articles_status_created", "pipeline_status", "created_at"),
         db.Index("ix_articles_published", "original_published_at"),
         db.Index("ix_articles_impact", "impact_score"),
+        db.Index("ix_articles_category_status", "category", "pipeline_status"),
     )
 
     def __repr__(self):

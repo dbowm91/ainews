@@ -78,6 +78,31 @@ def task_status(task_id):
 def reload_config():
     from services.config_cache import get_config_cache
     from services.llm import clear_provider_cache
+    from schemas.pipeline import load_pipeline_config
+    from schemas.source import load_sources
+    from schemas.topic import load_topics
+    from schemas.llm import load_providers_config
+
+    errors = []
+    try:
+        load_pipeline_config()
+    except Exception as e:
+        errors.append(f"pipeline config: {e}")
+    try:
+        load_sources()
+    except Exception as e:
+        errors.append(f"sources config: {e}")
+    try:
+        load_topics()
+    except Exception as e:
+        errors.append(f"topics config: {e}")
+    try:
+        load_providers_config()
+    except Exception as e:
+        errors.append(f"providers config: {e}")
+
+    if errors:
+        return jsonify({"errors": errors}), 400
 
     get_config_cache().invalidate_all()
     clear_provider_cache()
@@ -91,3 +116,19 @@ def app_metrics():
     from services.metrics import get_metrics
 
     return jsonify(get_metrics().get_metrics())
+
+
+@admin_bp.route("/api/pipeline/stats")
+@require_auth
+@limiter.limit("10 per minute")
+def pipeline_stats():
+    """Get pipeline stage success/failure statistics."""
+    from services.pipeline_monitor import get_all_stages_stats
+    from flask import request
+    
+    minutes = request.args.get("minutes", 15, type=int)
+    # Limit to reasonable range
+    minutes = max(1, min(minutes, 120))
+    
+    stats = get_all_stages_stats(minutes)
+    return jsonify(stats)

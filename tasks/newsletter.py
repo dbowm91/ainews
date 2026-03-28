@@ -6,7 +6,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+@shared_task(bind=True, max_retries=2, default_retry_delay=30, soft_time_limit=300, time_limit=360)
 def send_single_email(
     self, email: str, subject: str, html: str, unsub_url: str
 ) -> dict:
@@ -85,6 +85,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     from services.email import send_newsletter_email
     from models import Newsletter, Subscriber, Article, PipelineRun
     from extensions import db
+    from constants import PipelineStatus
 
     config = load_pipeline_config()
     nl = config.newsletter
@@ -112,7 +113,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     try:
         articles = (
             Article.query.filter(
-                Article.pipeline_status == "done",
+                Article.pipeline_status == PipelineStatus.DONE,
                 Article.impact_score > 0,
                 Article.created_at >= cutoff,
             )
@@ -122,12 +123,17 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
         )
 
         exec_summary = ""
+        pipeline_info = {"used_fallback": False, "fallback_stages": []}
         if not articles:
             logger.warning("Main newsletter has 0 articles, skipping send")
             results.append({"type": "main", "articles": 0, "sent": 0, "skipped": True})
         else:
             try:
-                exec_summary = generate_executive_summary(articles, topic_key="main")
+                result = generate_executive_summary(articles, topic_key="main")
+                exec_summary = result["summary"]
+                pipeline_info = {"used_fallback": result["used_fallback"], "fallback_stages": result["fallback_stages"]}
+                if result["used_fallback"]:
+                    logger.warning(f"Main newsletter pipeline used fallback stages: {result['fallback_stages']}")
             except Exception as e:
                 logger.error(f"Main exec summary failed: {e}")
 
@@ -156,7 +162,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 except Exception as e:
                     logger.error(f"Dry run failed for {dry_run_email}: {e}")
             else:
-                subscribers = Subscriber.query.filter_by(
+                subscribers = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
                     newsletter_type="main", active=True
                 ).all()
                 sent = _send_emails_parallel(subscribers, subject, html, site_url)
@@ -165,7 +171,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
             newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
             db.session.commit()
             results.append(
-                {"type": "main", "articles": count, "sent": sent, "dry_run": is_dry_run}
+                {"type": "main", "articles": count, "sent": sent, "dry_run": is_dry_run, **pipeline_info}
             )
             logger.info(
                 f"Main newsletter: {subject} ({count} articles, {sent} sent, dry_run={is_dry_run})"
@@ -181,7 +187,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
             try:
                 articles = (
                     Article.query.filter(
-                        Article.pipeline_status == "done",
+                        Article.pipeline_status == PipelineStatus.DONE,
                         Article.category == topic_key,
                         Article.created_at >= cutoff,
                     )
@@ -195,10 +201,15 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                     continue
 
                 exec_summary = ""
+                pipeline_info = {"used_fallback": False, "fallback_stages": []}
                 try:
-                    exec_summary = generate_executive_summary(
+                    result = generate_executive_summary(
                         articles, topic_key=topic_key
                     )
+                    exec_summary = result["summary"]
+                    pipeline_info = {"used_fallback": result["used_fallback"], "fallback_stages": result["fallback_stages"]}
+                    if result["used_fallback"]:
+                        logger.warning(f"{topic_key} newsletter pipeline used fallback stages: {result['fallback_stages']}")
                 except Exception as e:
                     logger.error(f"{topic_key} exec summary failed: {e}")
 
@@ -218,7 +229,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 db.session.add(newsletter)
                 db.session.flush()
 
-                subscribers = Subscriber.query.filter_by(
+                subscribers = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
                     newsletter_type=topic_key, active=True
                 ).all()
                 sent = _send_emails_parallel(subscribers, subject, html, site_url)
@@ -226,7 +237,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 newsletter.recipients = sent
                 newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
                 db.session.commit()
-                results.append({"type": topic_key, "articles": count, "sent": sent})
+                results.append({"type": topic_key, "articles": count, "sent": sent, **pipeline_info})
                 logger.info(
                     f"{topic_key} newsletter: {subject} ({count} articles, {sent} sent)"
                 )
@@ -246,7 +257,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     return results
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=120)
+@shared_task(bind=True, max_retries=3, default_retry_delay=120, soft_time_limit=300, time_limit=360)
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     from extensions import get_redis
 

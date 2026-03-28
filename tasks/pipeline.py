@@ -4,6 +4,7 @@ import json
 
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
+from constants import PipelineStatus
 
 logger = get_task_logger(__name__)
 
@@ -93,7 +94,9 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
     """Create a PipelineLog entry without committing outer transactions."""
     from models import PipelineLog
     from extensions import db
+    from services.metrics import get_metrics
 
+    metrics = get_metrics()
     savepoint = db.session.begin_nested()
     try:
         log = PipelineLog(
@@ -108,6 +111,11 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
     except Exception as e:
         savepoint.rollback()
         logger.error(f"Failed to write pipeline log: {e}")
+        metrics.counter_inc("pipeline.log_write_failed", labels={"stage": stage, "level": level})
+        
+        # Re-raise for fatal stages (error level) after logging failure
+        if level == "error":
+            raise
 
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
@@ -221,7 +229,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 )
             return
 
-        article.pipeline_status = "done"
+        article.pipeline_status = PipelineStatus.DONE
         try:
             db.session.commit()
         except SQLAlchemyError:
@@ -309,12 +317,12 @@ def _finalize(article_id: int):
             article.last_error = None
 
             if _should_route_to_review(article):
-                article.pipeline_status = "review"
+                article.pipeline_status = PipelineStatus.REVIEW
                 db.session.commit()
                 logger.info(f"Article {article_id} queued for review (finalize)")
                 return
 
-            article.pipeline_status = "done"
+            article.pipeline_status = PipelineStatus.DONE
 
             from services.article import create_article_version
 
@@ -472,17 +480,21 @@ def run_stage(
     if not limiter.acquire(rc.provider, model, rc.concurrency, rc.timeout_seconds):
         raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
 
+    from services.pipeline_monitor import record_stage_result
+    
     try:
         result = work_fn(article, provider, model, max_tokens)
 
         record_provider_success(rc.provider, model)
         article.retry_count = 0
         article.last_error = None
+        record_stage_result(stage, success=True, run_id=run_id)
 
         return result
     except Exception as e:
         db.session.rollback()
         record_provider_failure(rc.provider, model)
+        record_stage_result(stage, success=False, run_id=run_id)
         article = db.session.get(Article, article_id)
         if article and _handle_stage_failure(article, stage, e, run_id=run_id):
             return {"article_id": article_id, "result": "degraded"}

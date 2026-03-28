@@ -178,7 +178,10 @@ class TestNewsletterPipelineIntegration:
         articles = [MockArticle()]
         result = generate_executive_summary(articles, "main")
 
-        assert isinstance(result, str)
+        assert isinstance(result, dict)
+        assert "summary" in result
+        assert "used_fallback" in result
+        assert "fallback_stages" in result
 
     @patch("services.llm.get_provider_for_role")
     @patch("services.limiter.get_limiter")
@@ -209,4 +212,6 @@ class TestNewsletterPipelineIntegration:
 
         result = generate_executive_summary(articles, "main")
 
-        assert result == ""
+        assert result["summary"] == ""
+        assert result["used_fallback"]
+        assert "writer_disabled" in result["fallback_stages"]

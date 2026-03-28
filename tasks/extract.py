@@ -58,7 +58,7 @@ def _find_duplicate_article(url: str, title: str):
     return None
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+@shared_task(bind=True, max_retries=2, default_retry_delay=30, soft_time_limit=300, time_limit=360)
 def process_item(
     self,
     source_key,

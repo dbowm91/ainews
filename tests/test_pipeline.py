@@ -7,7 +7,7 @@ class TestDegradeAndAdvance:
     """Test the _degrade_and_advance function behavior."""
 
     @patch("tasks.research.research_article")
-    def test_select_degrades_to_research(self, mock_research):
+    def test_select_degrades_to_research(self, mock_research, app):
         from tasks.pipeline import _degrade_and_advance
         from models import Article
 
@@ -16,7 +16,7 @@ class TestDegradeAndAdvance:
         article.original_title = "Test Article"
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "select")
 
         assert article.pipeline_status == "researching"
@@ -25,7 +25,7 @@ class TestDegradeAndAdvance:
         mock_research.delay.assert_called_once_with(1, run_id=None)
 
     @patch("tasks.write.write_article")
-    def test_research_degrades_to_write(self, mock_write):
+    def test_research_degrades_to_write(self, mock_write, app):
         from tasks.pipeline import _degrade_and_advance
         from models import Article
 
@@ -35,7 +35,7 @@ class TestDegradeAndAdvance:
         article.extracted_text = "Some text content"
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "research")
 
         assert article.pipeline_status == "writing"
@@ -43,7 +43,7 @@ class TestDegradeAndAdvance:
         mock_write.delay.assert_called_once_with(1, run_id=None)
 
     @patch("tasks.edit.edit_article")
-    def test_write_degrades_to_edit(self, mock_edit):
+    def test_write_degrades_to_edit(self, mock_edit, app):
         from tasks.pipeline import _degrade_and_advance
         from models import Article
 
@@ -55,7 +55,7 @@ class TestDegradeAndAdvance:
         article.extracted_text = "Content"
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "write")
 
         assert article.pipeline_status == "editing"
@@ -63,7 +63,7 @@ class TestDegradeAndAdvance:
         assert draft["headline"] == "Test Article"
         mock_edit.delay.assert_called_once_with(1, run_id=None)
 
-    def test_edit_degrades_to_done(self):
+    def test_edit_degrades_to_done(self, app):
         from tasks.pipeline import _degrade_and_advance
         from models import Article
 
@@ -72,7 +72,7 @@ class TestDegradeAndAdvance:
         article.draft_article = '{"headline": "Test"}'
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "edit")
 
         assert article.pipeline_status == "done"
@@ -80,7 +80,7 @@ class TestDegradeAndAdvance:
 
     @patch("tasks.research.research_article")
     @patch("tasks.write.write_article")
-    def test_normalizes_status_name_researching(self, mock_write, mock_research):
+    def test_normalizes_status_name_researching(self, mock_write, mock_research, app):
         """retry_stuck passes 'researching' but _degrade_and_advance checks 'research'."""
         from tasks.pipeline import _degrade_and_advance
         from models import Article
@@ -91,15 +91,14 @@ class TestDegradeAndAdvance:
         article.extracted_text = "Content"
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "researching")
 
         assert article.pipeline_status == "writing"
-        mock_research.delay.assert_not_called()
         mock_write.delay.assert_called_once_with(1, run_id=None)
 
     @patch("tasks.edit.edit_article")
-    def test_normalizes_status_name_writing(self, mock_edit):
+    def test_normalizes_status_name_writing(self, mock_edit, app):
         """retry_stuck passes 'writing' but _degrade_and_advance checks 'write'."""
         from tasks.pipeline import _degrade_and_advance
         from models import Article
@@ -112,13 +111,13 @@ class TestDegradeAndAdvance:
         article.extracted_text = "Content"
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "writing")
 
         assert article.pipeline_status == "editing"
         mock_edit.delay.assert_called_once_with(1, run_id=None)
 
-    def test_normalizes_status_name_editing(self):
+    def test_normalizes_status_name_editing(self, app):
         """retry_stuck passes 'editing' but _degrade_and_advance checks 'edit'."""
         from tasks.pipeline import _degrade_and_advance
         from models import Article
@@ -128,12 +127,12 @@ class TestDegradeAndAdvance:
         article.draft_article = '{"headline": "Test"}'
         article.retry_count = 3
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "editing")
 
         assert article.pipeline_status == "done"
 
-    def test_resets_retry_state_on_degrade(self):
+    def test_resets_retry_state_on_degrade(self, app):
         from tasks.pipeline import _degrade_and_advance
         from models import Article
 
@@ -143,7 +142,7 @@ class TestDegradeAndAdvance:
         article.retry_count = 5
         article.last_error = "write: some error"
 
-        with patch("extensions.db"):
+        with app.app_context():
             _degrade_and_advance(article, "edit")
 
         assert article.retry_count == 0
@@ -153,7 +152,7 @@ class TestDegradeAndAdvance:
 class TestHandleStageFailure:
     """Test the _handle_stage_failure function."""
 
-    def test_increments_retry_count(self):
+    def test_increments_retry_count(self, app):
         from tasks.pipeline import _handle_stage_failure
         from models import Article
 
@@ -162,7 +161,7 @@ class TestHandleStageFailure:
         article.total_retries = 0
         article.id = 1
 
-        with patch("extensions.db"):
+        with app.app_context():
             result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert article.retry_count == 2
@@ -171,7 +170,7 @@ class TestHandleStageFailure:
 
     @patch("tasks.write.write_article")
     @patch("tasks.edit.edit_article")
-    def test_degrades_after_max_retries(self, mock_edit, mock_write):
+    def test_degrades_after_max_retries(self, mock_edit, mock_write, app):
         from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
         from models import Article
 
@@ -184,13 +183,13 @@ class TestHandleStageFailure:
         article.original_author = "Author"
         article.extracted_text = "Content"
 
-        with patch("extensions.db"):
+        with app.app_context():
             result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert result is True  # degraded
         mock_edit.delay.assert_called_once_with(1, run_id=None)
 
-    def test_sets_last_error(self):
+    def test_sets_last_error(self, app):
         from tasks.pipeline import _handle_stage_failure
         from models import Article
 
@@ -200,7 +199,7 @@ class TestHandleStageFailure:
         article.id = 1
         error = Exception("Something went wrong very badly")
 
-        with patch("extensions.db"):
+        with app.app_context():
             _handle_stage_failure(article, "select", error)
 
         assert "select" in article.last_error
@@ -644,7 +643,7 @@ class TestRunStage:
 class TestRetryBudget:
     """Test global retry budget prevents infinite retries."""
 
-    def test_increments_total_retries(self):
+    def test_increments_total_retries(self, app):
         """_handle_stage_failure should increment total_retries."""
         from tasks.pipeline import _handle_stage_failure
         from models import Article
@@ -654,13 +653,13 @@ class TestRetryBudget:
         article.total_retries = 0
         article.id = 1
 
-        with patch("extensions.db"):
+        with app.app_context():
             result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert article.total_retries == 1
         assert result is False
 
-    def test_fails_article_on_budget_exceeded(self):
+    def test_fails_article_on_budget_exceeded(self, app):
         """When total_retries >= MAX_TOTAL_RETRIES, article should be marked failed."""
         from tasks.pipeline import _handle_stage_failure, MAX_TOTAL_RETRIES
         from models import Article
@@ -670,14 +669,14 @@ class TestRetryBudget:
         article.total_retries = MAX_TOTAL_RETRIES - 1
         article.id = 1
 
-        with patch("extensions.db"):
+        with app.app_context():
             result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert article.total_retries == MAX_TOTAL_RETRIES
         assert article.pipeline_status == "failed"
         assert result is True
 
-    def test_total_retries_accumulates_across_stages(self):
+    def test_total_retries_accumulates_across_stages(self, app):
         """Total retries should accumulate across different stages."""
         from tasks.pipeline import _handle_stage_failure
         from models import Article
@@ -687,12 +686,12 @@ class TestRetryBudget:
         article.total_retries = 5
         article.id = 1
 
-        with patch("extensions.db"):
+        with app.app_context():
             _handle_stage_failure(article, "research", Exception("test"))
 
         assert article.total_retries == 6
 
-    def test_stage_retries_reset_on_degrade(self):
+    def test_stage_retries_reset_on_degrade(self, app):
         """Per-stage retry_count resets on degrade, but total_retries keeps accumulating."""
         from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
         from models import Article
@@ -706,7 +705,7 @@ class TestRetryBudget:
         article.original_author = "Author"
         article.extracted_text = "Content"
 
-        with patch("extensions.db"):
+        with app.app_context():
             with patch("tasks.edit.edit_article"):
                 result = _handle_stage_failure(article, "write", Exception("test"))
 

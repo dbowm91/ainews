@@ -2,9 +2,10 @@ from flask import Blueprint, render_template, request, Response, redirect, jsoni
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
+import redis.exceptions
 from models import Article, Tag, ShareConfig, ArticleMetric
 from extensions import limiter, csrf
-from constants import PER_PAGE_PUBLIC
+from constants import PER_PAGE_PUBLIC, PipelineStatus
 from services.article import (
     parse_article_json,
     parse_articles,
@@ -85,7 +86,7 @@ def _get_top_impact(limit: int = 3) -> list:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     return (
         Article.query.filter(
-            Article.pipeline_status == "done",
+            Article.pipeline_status == PipelineStatus.DONE,
             Article.impact_score > 0,
             or_(
                 Article.original_published_at >= cutoff,
@@ -305,7 +306,7 @@ def health():
     try:
         db.session.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception:
+    except SQLAlchemyError:
         checks["database"] = "error"
         overall = "degraded"
 
@@ -316,7 +317,7 @@ def health():
         r = get_redis()
         r.ping()
         checks["redis"] = "ok"
-    except Exception:
+    except redis.exceptions.RedisError:
         checks["redis"] = "error"
         overall = "degraded"
 
@@ -457,7 +458,7 @@ def subscribe():
             )
         return redirect("/")
 
-    existing = Subscriber.query.filter_by(
+    existing = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
         email=email, newsletter_type=newsletter_type
     ).first()
 
@@ -523,7 +524,7 @@ def unsubscribe(token):
     """Show unsubscribe confirmation page (GET)."""
     from models import Subscriber
 
-    subscriber = Subscriber.query.filter_by(
+    subscriber = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
         unsubscribe_token=token, active=True
     ).first()
 
@@ -539,7 +540,7 @@ def unsubscribe_confirm(token):
     from models import Subscriber
     from extensions import db
 
-    subscriber = Subscriber.query.filter_by(
+    subscriber = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(
         unsubscribe_token=token, active=True
     ).first()
 
@@ -548,7 +549,7 @@ def unsubscribe_confirm(token):
         subscriber.active = False
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             logger.exception(f"Failed to unsubscribe token {token}")
             commit_failed = True

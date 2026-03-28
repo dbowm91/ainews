@@ -163,6 +163,7 @@ class Subscriber(db.Model):
     )
     subscribed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     active = db.Column(db.Boolean, default=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint("email", "newsletter_type", name="uq_email_newsletter"),
@@ -170,6 +171,11 @@ class Subscriber(db.Model):
 
     def __repr__(self):
         return f"<Subscriber {self.email} -> {self.newsletter_type}>"
+
+    @classmethod
+    def get_active(cls):
+        """Return query for active, non-deleted subscribers."""
+        return cls.query.filter(cls.deleted_at.is_(None))
 
 
 class ArticleMetric(db.Model):

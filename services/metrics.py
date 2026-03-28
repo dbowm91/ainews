@@ -13,6 +13,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 _metrics_instance: Optional["MetricsCollector"] = None
+_metrics_lock = threading.Lock()
 
 
 class MetricsCollector:
@@ -86,11 +87,15 @@ def get_metrics() -> MetricsCollector:
     global _metrics_instance
     if _metrics_instance is not None:
         return _metrics_instance
-    _metrics_instance = MetricsCollector()
+    with _metrics_lock:
+        if _metrics_instance is not None:
+            return _metrics_instance
+        _metrics_instance = MetricsCollector()
     return _metrics_instance
 
 
 def reset_metrics() -> None:
     """Reset the singleton (for testing)."""
     global _metrics_instance
-    _metrics_instance = None
+    with _metrics_lock:
+        _metrics_instance = None

@@ -41,9 +41,10 @@ def dashboard():
         pass
 
     # Subscriber stats
-    total_subs = Subscriber.query.filter_by(active=True).count()
+    total_subs = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(active=True).count()
     subs_by_type = dict(
         db.session.query(Subscriber.newsletter_type, func.count(Subscriber.id))
+        .filter(Subscriber.deleted_at.is_(None))
         .filter_by(active=True)
         .group_by(Subscriber.newsletter_type)
         .all()

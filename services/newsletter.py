@@ -112,11 +112,12 @@ def generate_main_newsletter(
 ) -> tuple[str, str, int]:
     """Generate the main newsletter. Returns (html, subject, article_count)."""
     from models import Article
+    from constants import PipelineStatus
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     articles = (
         Article.query.filter(
-            Article.pipeline_status == "done",
+            Article.pipeline_status == PipelineStatus.DONE,
             Article.impact_score > 0,
             Article.created_at >= cutoff,
         )
@@ -124,6 +125,10 @@ def generate_main_newsletter(
         .limit(max_articles)
         .all()
     )
+
+    if not articles:
+        logger.warning("Main newsletter has no articles, skipping generation")
+        return "", "", 0
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
     subject = f"ainews// — Top {len(articles)} stories — {date_str}"
@@ -147,6 +152,7 @@ def generate_topic_newsletter(
     """Generate a topic-specific newsletter. Returns (html, subject, article_count)."""
     from models import Article
     from schemas.topic import load_topics
+    from constants import PipelineStatus
 
     topics = load_topics().topics
     topic_def = topics.get(topic_key)
@@ -155,7 +161,7 @@ def generate_topic_newsletter(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     articles = (
         Article.query.filter(
-            Article.pipeline_status == "done",
+            Article.pipeline_status == PipelineStatus.DONE,
             Article.category == topic_key,
             Article.created_at >= cutoff,
         )
@@ -163,6 +169,10 @@ def generate_topic_newsletter(
         .limit(max_articles)
         .all()
     )
+
+    if not articles:
+        logger.warning(f"Topic newsletter {topic_key} has no articles, skipping generation")
+        return "", "", 0
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
     subject = f"ainews// — {topic_name} — {date_str}"

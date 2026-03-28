@@ -117,3 +117,37 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 - **Mock Redis**: Use the `mock_redis` fixture from conftest.py for unit tests that need Redis without a running instance.
 - **Mock Celery tasks**: Use `mock_celery_tasks` fixture to prevent actual pipeline task execution in tests.
 - **App fixture**: Creates in-memory SQLite with `WTF_CSRF_ENABLED=False`. Use `client` fixture for HTTP tests.
+
+## Lessons learned from Phase 4-9 implementation
+
+### Pipeline monitoring
+
+Added `services/pipeline_monitor.py` for Redis minute-bucket counters tracking pipeline stage success/failure rates. New admin endpoint `GET /admin/api/pipeline/stats` returns aggregated stats. Use `record_stage_result()` from pipeline stages.
+
+### Pipeline status constants
+
+Added `PipelineStatus` class to `constants.py` with constants for all pipeline states. Use these instead of string literals to avoid typos. Updated key files: `tasks/pipeline.py`, `tasks/edit.py`, `tasks/retry.py`, `routes/admin/review.py`, `routes/public.py`, `services/newsletter.py`.
+
+### Newsletter pipeline improvements
+
+`generate_executive_summary()` now returns a dict with `summary`, `used_fallback`, and `fallback_stages` instead of just a string. Callers must handle the new return type. Added metrics counters for pipeline fallbacks (`newsletter.pipeline_fallback`).
+
+### Redis error handling
+
+Updated `routes/admin/__init__.py` to use `redis.exceptions.RedisError` instead of bare `Exception` for Redis operations. Import at module level: `import redis.exceptions`.
+
+### Login attempts memory cleanup
+
+Added `_cleanup_stale_entries()` function to prevent unbounded growth of `_login_attempts_memory` dict. Called in `_is_locked_out_memory()` and `_record_failed_attempt_memory()`.
+
+### Test updates
+
+Tests that use `_degrade_and_advance()` or `_handle_stage_failure()` directly need the `app` fixture and `app.app_context()` because these functions now import `db` from extensions. Update test signatures to include `app` parameter.
+
+### Pre-commit checks
+
+Always run both ruff and pytest before committing:
+```bash
+ruff check . --exclude .venv
+python3 -m pytest tests/ -x -q
+```

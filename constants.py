@@ -12,6 +12,7 @@ PER_PAGE_PIPELINE_LOGS = 100
 VALID_PIPELINE_STATUSES = frozenset(
     {
         "pending",
+        "selecting",
         "researching",
         "writing",
         "editing",
@@ -21,6 +22,33 @@ VALID_PIPELINE_STATUSES = frozenset(
         "failed",
     }
 )
+
+
+class PipelineStatus:
+    """Pipeline status constants to avoid typos."""
+    PENDING = "pending"
+    SELECTING = "selecting"  # Added for completeness, though not in DB
+    RESEARCHING = "researching"
+    WRITING = "writing"
+    EDITING = "editing"
+    REVIEW = "review"
+    DONE = "done"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
+# Log truncation constants
+MAX_LOG_TITLE_LENGTH = 100
+
+
+def truncate_for_log(text: str, max_length: int = MAX_LOG_TITLE_LENGTH) -> str:
+    """Truncate text for logging, preserving readability."""
+    if not text:
+        return ""
+    text = str(text).strip()
+    if len(text) <= max_length:
+        return text
+    return text[:max_length - 3] + "..."
 
 # Impact score bounds
 IMPACT_SCORE_MIN = 0

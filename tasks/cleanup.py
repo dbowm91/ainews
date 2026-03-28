@@ -8,7 +8,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, soft_time_limit=300, time_limit=360)
 def cleanup_old_pipeline_logs(self):
     """Delete pipeline logs older than 30 days.
 

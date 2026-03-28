@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from typing import Any, Callable, Optional
 
@@ -64,6 +65,7 @@ class ConfigCache:
         self.redis = redis_client
         self.prefix = prefix
         self._memory_cache: dict[str, tuple[float, Any]] = {}
+        self._lock = threading.RLock()
 
     def get(
         self,
@@ -73,24 +75,40 @@ class ConfigCache:
     ) -> Any:
         full_key = f"{self.prefix}:{key}"
 
-        # Check in-memory cache first (avoids Redis/file round-trip)
+        # Double-checked locking pattern for memory cache
+        # First check without lock (fast path)
         mem_entry = self._memory_cache.get(full_key)
         if mem_entry is not None:
             expires_at, value = mem_entry
             if time.monotonic() < expires_at:
                 return value
 
+        with self._lock:
+            # Re-check after acquiring lock
+            mem_entry = self._memory_cache.get(full_key)
+            if mem_entry is not None:
+                expires_at, value = mem_entry
+                if time.monotonic() < expires_at:
+                    return value
+
+            # Not in memory cache, try Redis (outside lock to avoid blocking other threads)
+            # We'll release lock temporarily
+            pass
+
+        # Redis operations outside lock
         try:
             cached = self.redis.get(full_key)
             if cached is not None:
                 if isinstance(cached, bytes):
                     cached = cached.decode("utf-8")
                 value = _deserialize(cached)
-                self._memory_cache[full_key] = (time.monotonic() + ttl, value)
+                with self._lock:
+                    self._memory_cache[full_key] = (time.monotonic() + ttl, value)
                 return value
         except redis.exceptions.RedisError as e:
             logger.warning(f"Config cache read failed for {key}: {e}")
 
+        # Cache miss, load value
         value = loader_fn()
 
         try:
@@ -98,19 +116,22 @@ class ConfigCache:
         except redis.exceptions.RedisError as e:
             logger.warning(f"Config cache write failed for {key}: {e}")
 
-        self._memory_cache[full_key] = (time.monotonic() + ttl, value)
+        with self._lock:
+            self._memory_cache[full_key] = (time.monotonic() + ttl, value)
         return value
 
     def invalidate(self, key: str) -> None:
         full_key = f"{self.prefix}:{key}"
-        self._memory_cache.pop(full_key, None)
+        with self._lock:
+            self._memory_cache.pop(full_key, None)
         try:
             self.redis.delete(full_key)
         except redis.exceptions.RedisError as e:
             logger.warning(f"Config cache invalidate failed for {key}: {e}")
 
     def invalidate_all(self) -> None:
-        self._memory_cache.clear()
+        with self._lock:
+            self._memory_cache.clear()
         pattern = f"{self.prefix}:*"
         try:
             cursor = 0

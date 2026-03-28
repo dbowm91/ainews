@@ -3,14 +3,14 @@ from datetime import datetime, timezone, timedelta
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
-from constants import STUCK_THRESHOLD_MINUTES
+from constants import STUCK_THRESHOLD_MINUTES, PipelineStatus
 from tasks.pipeline import MAX_STAGE_RETRIES
 
 logger = get_task_logger(__name__)
 
 
-@shared_task
-def retry_stuck():
+@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+def retry_stuck(self):
     """Retry or dead-letter articles stuck in the pipeline.
 
     Runs periodically via Celery Beat (every 60 minutes).
@@ -28,7 +28,12 @@ def retry_stuck():
     soft_cutoff = now - timedelta(minutes=15)
 
     stuck = Article.query.filter(
-        Article.pipeline_status.in_(["researching", "writing", "editing", "pending"]),
+        Article.pipeline_status.in_([
+            PipelineStatus.RESEARCHING,
+            PipelineStatus.WRITING,
+            PipelineStatus.EDITING,
+            PipelineStatus.PENDING,
+        ]),
         Article.updated_at < soft_cutoff,
     ).all()
 
@@ -84,7 +89,7 @@ def _dead_letter(article):
     )
 
     _apply_fallback(article)
-    article.pipeline_status = "failed"
+    article.pipeline_status = PipelineStatus.FAILED
     article.retry_count = 0
     article.last_error = (
         f"Dead-lettered: stuck in '{article.pipeline_status}' "

@@ -4,7 +4,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+@shared_task(bind=True, max_retries=2, default_retry_delay=60, soft_time_limit=300, time_limit=360)
 def write_article(self, article_id: int, run_id=None):
     from extensions import db
     from schemas.pipeline import get_role_config

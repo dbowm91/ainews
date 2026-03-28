@@ -4,6 +4,7 @@ import ipaddress
 import logging
 import re
 import socket
+import threading
 import time
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
@@ -32,32 +33,36 @@ _DNS_CACHE_MAX = 1024
 
 
 class _TTLCache:
-    """Bounded TTL cache for DNS results. Thread-safe enough for GIL-guarded access."""
+    """Bounded TTL cache for DNS results with explicit locking for thread safety."""
 
     def __init__(self, maxsize: int, ttl: float) -> None:
         self._store: dict[str, tuple[float, list[str]]] = {}
         self._maxsize = maxsize
         self._ttl = ttl
+        self._lock = threading.Lock()
 
     def get(self, key: str) -> list[str] | None:
-        entry = self._store.get(key)
-        if entry is None:
-            return None
-        ts, value = entry
-        if (time.monotonic() - ts) >= self._ttl:
-            del self._store[key]
-            return None
-        return value
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            ts, value = entry
+            if (time.monotonic() - ts) >= self._ttl:
+                del self._store[key]
+                return None
+            return value
 
     def set(self, key: str, value: list[str]) -> None:
-        if len(self._store) >= self._maxsize:
-            # Evict oldest entry
-            oldest = min(self._store, key=lambda k: self._store[k][0])
-            del self._store[oldest]
-        self._store[key] = (time.monotonic(), value)
+        with self._lock:
+            if len(self._store) >= self._maxsize:
+                # Evict oldest entry
+                oldest = min(self._store, key=lambda k: self._store[k][0])
+                del self._store[oldest]
+            self._store[key] = (time.monotonic(), value)
 
     def clear(self) -> None:
-        self._store.clear()
+        with self._lock:
+            self._store.clear()
 
 
 _dns_cache = _TTLCache(maxsize=_DNS_CACHE_MAX, ttl=_DNS_CACHE_TTL)

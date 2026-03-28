@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+import redis.exceptions
 from flask import Blueprint, redirect, url_for, session
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,32 @@ _LOGIN_ATTEMPT_PREFIX = "ainews:login_attempts:"
 # In-memory fallback when Redis is unavailable (per-worker protection)
 _login_attempts_memory: dict[str, tuple[int, float]] = {}
 _memory_lock = __import__("threading").Lock()
+_MAX_MEMORY_ENTRIES = 1000
+
+
+def _cleanup_stale_entries() -> None:
+    """Remove expired entries from memory to prevent unbounded growth."""
+    with _memory_lock:
+        now = time.monotonic()
+        stale_keys = []
+        for ip, (count, first_time) in _login_attempts_memory.items():
+            if now - first_time >= _LOGIN_LOCKOUT_SECONDS:
+                stale_keys.append(ip)
+        
+        for ip in stale_keys:
+            del _login_attempts_memory[ip]
+        
+        # If still too many entries, remove oldest
+        if len(_login_attempts_memory) > _MAX_MEMORY_ENTRIES:
+            # Sort by first_time and keep newest
+            sorted_entries = sorted(
+                _login_attempts_memory.items(),
+                key=lambda x: x[1][1],  # first_time
+                reverse=True
+            )
+            _login_attempts_memory.clear()
+            for ip, entry in sorted_entries[:_MAX_MEMORY_ENTRIES]:
+                _login_attempts_memory[ip] = entry
 
 # Load Lua script for atomic login lockout
 _LUA_SCRIPT = None
@@ -85,7 +112,7 @@ def _is_locked_out(ip: str) -> bool:
             return False
         count = int(data.get(b"count", 0))
         return count >= _LOGIN_MAX_ATTEMPTS
-    except Exception as e:
+    except redis.exceptions.RedisError as e:
         logger.warning(f"Redis error checking lockout for {ip}: {e}")
         # Fallback to in-memory tracking
         return _is_locked_out_memory(ip)
@@ -93,6 +120,7 @@ def _is_locked_out(ip: str) -> bool:
 
 def _is_locked_out_memory(ip: str) -> bool:
     """In-memory fallback for lockout check."""
+    _cleanup_stale_entries()  # Periodic cleanup
     with _memory_lock:
         entry = _login_attempts_memory.get(ip)
         if entry is None:
@@ -124,7 +152,7 @@ def _check_and_record_attempt(ip: str) -> bool:
             str(_LOGIN_MAX_ATTEMPTS),
         )
         return result == 1
-    except Exception as e:
+    except redis.exceptions.RedisError as e:
         logger.warning(f"Redis error in check_and_record for {ip}: {e}")
         # Fallback: record in memory and check
         _record_failed_attempt_memory(ip)
@@ -147,13 +175,14 @@ def _record_failed_attempt(ip: str) -> None:
         pipe.hsetnx(key, "first_attempt", str(time.time()))
         pipe.expire(key, _LOGIN_LOCKOUT_SECONDS)
         pipe.execute()
-    except Exception as e:
+    except redis.exceptions.RedisError as e:
         logger.warning(f"Redis error recording attempt for {ip}: {e}")
         _record_failed_attempt_memory(ip)
 
 
 def _record_failed_attempt_memory(ip: str) -> None:
     """In-memory fallback for recording failed attempts."""
+    _cleanup_stale_entries()  # Periodic cleanup
     with _memory_lock:
         now = time.monotonic()
         entry = _login_attempts_memory.get(ip)
@@ -175,7 +204,7 @@ def _clear_attempts(ip: str) -> None:
     try:
         r = _get_redis()
         r.delete(f"{_LOGIN_ATTEMPT_PREFIX}{ip}")
-    except Exception as e:
+    except redis.exceptions.RedisError as e:
         logger.warning(f"Redis error clearing attempts for {ip}: {e}")
     # Always clear in-memory fallback (used when Redis is unavailable)
     with _memory_lock:

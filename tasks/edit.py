@@ -1,10 +1,11 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import PipelineStatus
 
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+@shared_task(bind=True, max_retries=2, default_retry_delay=60, soft_time_limit=300, time_limit=360)
 def edit_article(self, article_id: int, run_id=None):
     from models import Tag
     from extensions import db
@@ -54,7 +55,7 @@ def edit_article(self, article_id: int, run_id=None):
 
         # Route to review if enabled and article doesn't meet auto-publish threshold
         if _should_route_to_review(article):
-            article.pipeline_status = "review"
+            article.pipeline_status = PipelineStatus.REVIEW
             try:
                 db.session.commit()
             except Exception:
@@ -73,7 +74,7 @@ def edit_article(self, article_id: int, run_id=None):
             )
             return {"article_id": article_id, "status": "review"}
 
-        article.pipeline_status = "done"
+        article.pipeline_status = PipelineStatus.DONE
         try:
             db.session.commit()
         except Exception:

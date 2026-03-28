@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from datetime import timedelta
@@ -79,6 +80,11 @@ class DevelopmentConfig(Config):
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
 
+    def __init__(self):
+        super().__init__()
+        if not self.ADMIN_PASSWORD:
+            logging.getLogger(__name__).warning("ADMIN_PASSWORD not set - admin login disabled")
+
 
 class ProductionConfig(Config):
     DEBUG = False
@@ -103,32 +109,30 @@ class ProductionConfig(Config):
 def _validate_llm_providers():
     """Validate LLM provider configuration at startup.
 
-    Warns (does not raise) if enabled providers are missing required config.
+    Raises RuntimeError if enabled providers are missing required config.
     """
     import logging
 
     logger = logging.getLogger(__name__)
+    enabled_providers = []
     try:
         from schemas.llm import load_providers_config
-
         config = load_providers_config()
         for pdef in config.providers:
             if not pdef.enabled:
                 continue
+            enabled_providers.append(pdef.id)
             if pdef.type == "openai" and not pdef.config.get("api_key"):
-                logger.warning(
-                    f"LLM provider '{pdef.id}' (openai) is enabled but has no api_key"
-                )
+                raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
             elif pdef.type == "anthropic" and not pdef.config.get("api_key"):
-                logger.warning(
-                    f"LLM provider '{pdef.id}' (anthropic) is enabled but has no api_key"
-                )
+                raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
             elif pdef.type == "ollama" and not pdef.config.get("model"):
-                logger.warning(
-                    f"LLM provider '{pdef.id}' (ollama) is enabled but has no model"
-                )
+                raise RuntimeError(f"Provider '{pdef.id}': missing model")
     except Exception as e:
         logger.warning(f"Could not validate LLM providers: {e}")
+
+    if not enabled_providers:
+        raise RuntimeError("No LLM providers enabled. Configure at least one in providers.yaml")
 
 
 config = {

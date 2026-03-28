@@ -4,7 +4,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+@shared_task(bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=300, time_limit=360)
 def select_article(self, article_id: int, run_id=None):
     from models import PipelineRun
     from extensions import db

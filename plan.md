@@ -212,7 +212,9 @@ def _validate_llm_providers():
 
 ---
 
-## Phase 4: Pipeline Reliability
+## Phase 4: Pipeline Reliability (COMPLETED)
+
+**Status:** All items completed. See deferred.md for details on changes made.
 
 ### 4.1 Newsletter Pipeline Error Handling
 
@@ -316,7 +318,9 @@ class PipelineStatus:
 
 ---
 
-## Phase 5: Error Handling & Logging
+## Phase 5: Error Handling & Logging (COMPLETED)
+
+**Status:** All items completed. See deferred.md for details on changes made.
 
 ### 5.1 Redis Error Handling Standardization
 
@@ -398,7 +402,9 @@ Note: Other services (LLM, search, email) intentionally use broader `Exception` 
 
 ---
 
-## Phase 6: Observability
+## Phase 6: Observability (DEFERRED)
+
+**Status:** All items deferred to future work. See deferred.md for details.
 
 ### 6.1 Request Correlation IDs
 
@@ -455,7 +461,9 @@ Note: Other services (LLM, search, email) intentionally use broader `Exception` 
 
 ---
 
-## Phase 7: Maintainability & Cleanup
+## Phase 7: Maintainability & Cleanup (DEFERRED)
+
+**Status:** All items deferred to future work. See deferred.md for details.
 
 ### 7.1 Extract Common Newsletter Logic
 
@@ -504,7 +512,9 @@ DOWNLOAD_TIMEOUT = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
 
 ---
 
-## Phase 8: Testing
+## Phase 8: Testing (DEFERRED)
+
+**Status:** All items deferred to future work. See deferred.md for details.
 
 ### 8.1 XML Escaping Tests
 
@@ -593,7 +603,9 @@ DOWNLOAD_TIMEOUT = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
 
 ---
 
-## Phase 9: Optional / Low ROI
+## Phase 9: Optional / Low ROI (DEFERRED)
+
+**Status:** All items deferred to future work. See deferred.md for details.
 
 ### 9.1 Cost Tracking
 
@@ -664,16 +676,18 @@ These items appeared in source plans but are confirmed complete:
 
 ## Summary
 
-| Phase | Items | Est. Time |
-|-------|-------|-----------|
-| 1. Thread Safety | 3 | ~2.75h |
-| 2. Security & Safety | 4 | ~3.5h |
-| 3. Config Validation | 1 | ~1.5h |
-| 4. Pipeline Reliability | 4 | ~7-8h |
-| 5. Error Handling & Logging | 4 | ~3-4h |
-| 6. Observability | 3 | ~6-8h |
-| 7. Maintainability | 3 | ~2.25h |
-| 8. Testing | 5 | ~5-6h |
-| 9. Optional | 3 | ~4.75h |
-| **Total (non-optional)** | **27** | **~30-35h** |
-| **Total (all)** | **30** | **~35-40h** |
+| Phase | Items | Est. Time | Status |
+|-------|-------|-----------|--------|
+| 1. Thread Safety | 3 | ~2.75h | Not started (pre-existing) |
+| 2. Security & Safety | 4 | ~3.5h | Not started (pre-existing) |
+| 3. Config Validation | 1 | ~1.5h | Not started (pre-existing) |
+| 4. Pipeline Reliability | 4 | ~7-8h | **COMPLETED** |
+| 5. Error Handling & Logging | 4 | ~3-4h | **COMPLETED** |
+| 6. Observability | 3 | ~6-8h | **DEFERRED** |
+| 7. Maintainability | 3 | ~2.25h | **DEFERRED** |
+| 8. Testing | 5 | ~5-6h | **DEFERRED** |
+| 9. Optional | 3 | ~4.75h | **DEFERRED** |
+| **Total (non-optional)** | **27** | **~30-35h** | |
+| **Total (all)** | **30** | **~35-40h** | |
+| **Completed** | **8** | **~10-12h** | **33% of total** |
+| **Deferred** | **14** | **~18-22h** | **47% of total** |

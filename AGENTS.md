@@ -102,10 +102,6 @@ def _clear_dns_cache():
 
 The login lockout mechanism has two code paths: primary Redis-based (via Lua script) and in-memory fallback for when Redis is unavailable. Both are intentional — do not remove the fallback path.
 
-### Newsletter pipeline fallback behavior
-
-`services/newsletter_pipeline.py` has silent fallbacks when LLM stages fail (reader, writer, editor). Failures log errors but continue with empty/partial output. This is intentional for resilience, but callers should check for empty content before sending newsletters.
-
 ### Pipeline retry budget
 
 Articles have a `total_retries` column (incremented on every stage failure). When `total_retries >= MAX_TOTAL_RETRIES` (10), the article is marked `pipeline_status="failed"` and skipped. The admin route `reprocess_article` resets this on manual reprocessing.
@@ -118,36 +114,24 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 - **Mock Celery tasks**: Use `mock_celery_tasks` fixture to prevent actual pipeline task execution in tests.
 - **App fixture**: Creates in-memory SQLite with `WTF_CSRF_ENABLED=False`. Use `client` fixture for HTTP tests.
 
-## Lessons learned from Phase 4-9 implementation
+## Key infrastructure patterns
 
 ### Pipeline monitoring
 
-Added `services/pipeline_monitor.py` for Redis minute-bucket counters tracking pipeline stage success/failure rates. New admin endpoint `GET /admin/api/pipeline/stats` returns aggregated stats. Use `record_stage_result()` from pipeline stages.
+`services/pipeline_monitor.py` provides Redis minute-bucket counters for tracking pipeline stage success/failure rates. Use `record_stage_result()` from pipeline stages. Admin endpoint: `GET /admin/api/pipeline/stats`.
 
 ### Pipeline status constants
 
-Added `PipelineStatus` class to `constants.py` with constants for all pipeline states. Use these instead of string literals to avoid typos. Updated key files: `tasks/pipeline.py`, `tasks/edit.py`, `tasks/retry.py`, `routes/admin/review.py`, `routes/public.py`, `services/newsletter.py`.
+Use `PipelineStatus` class from `constants.py` instead of string literals for pipeline states to avoid typos.
 
-### Newsletter pipeline improvements
+### Newsletter pipeline return types
 
-`generate_executive_summary()` now returns a dict with `summary`, `used_fallback`, and `fallback_stages` instead of just a string. Callers must handle the new return type. Added metrics counters for pipeline fallbacks (`newsletter.pipeline_fallback`).
-
-### Redis error handling
-
-Updated `routes/admin/__init__.py` to use `redis.exceptions.RedisError` instead of bare `Exception` for Redis operations. Import at module level: `import redis.exceptions`.
+`generate_executive_summary()` returns a dict with `summary`, `used_fallback`, and `fallback_stages` — callers must handle this structure. Also check for empty content before sending newsletters (pipeline has silent fallbacks).
 
 ### Login attempts memory cleanup
 
-Added `_cleanup_stale_entries()` function to prevent unbounded growth of `_login_attempts_memory` dict. Called in `_is_locked_out_memory()` and `_record_failed_attempt_memory()`.
+`_cleanup_stale_entries()` in `routes/admin/__init__.py` prevents unbounded growth of `_login_attempts_memory` dict. Called automatically in `_is_locked_out_memory()` and `_record_failed_attempt_memory()`.
 
-### Test updates
+### Test context requirements
 
-Tests that use `_degrade_and_advance()` or `_handle_stage_failure()` directly need the `app` fixture and `app.app_context()` because these functions now import `db` from extensions. Update test signatures to include `app` parameter.
-
-### Pre-commit checks
-
-Always run both ruff and pytest before committing:
-```bash
-ruff check . --exclude .venv
-python3 -m pytest tests/ -x -q
-```
+Tests using `_degrade_and_advance()` or `_handle_stage_failure()` must include the `app` fixture and use `app.app_context()` since these functions import `db` from extensions.

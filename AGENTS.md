@@ -166,3 +166,15 @@ Admin article list (`/admin/articles`) supports:
 - URL search: queries starting with `http://` or containing `/` and `.` search `original_url`
 - Source filter: `source_id` query param
 - Date range: `date_from`, `date_to` query params (ISO format)
+
+### Known issues (verified 2026-03-29)
+
+These are bugs and code smells identified during a codebase review. See `plan.md` for the full improvement plan.
+
+- **`_dead_letter()` missing try/except** (`tasks/retry.py:98`): `db.session.commit()` has no error handling. A failed commit crashes the entire `retry_stuck` sweep.
+- **`_handle_stage_failure()` double-commit** (`tasks/pipeline.py:309-318`): Commits `retry_count` before calling `_degrade_and_advance()` which also commits. If degrade raises, article has incremented retry_count but was never advanced.
+- **Bare `except Exception:` in health endpoint** (`routes/admin/api.py:7-66`): Five catch blocks silently swallow errors with no logging. Add `logger.exception()` calls.
+- **Bare `except Exception:` in sources routes** (`routes/admin/sources.py:31,49`): Should be `except SQLAlchemyError:` to avoid masking non-DB errors.
+- **Duplicate `limit_content_length`**: Defined in both `routes/public.py:35-48` and `routes/admin/auth.py:15-31`. Can be deduplicated into `routes/__init__.py` (currently empty).
+- **`redis.keys()` blocking** (`services/pipeline_monitor.py:143`): `clear_stage_stats()` uses blocking `redis.keys()` — should use `scan_iter()` for large keyspaces.
+- **Hardcoded constants**: `MAX_CONSECUTIVE_FAILURES=10` in `services/crawling.py:13` and `STUCK_THRESHOLD_MINUTES=60` in `constants.py:61` are not configurable via env vars.

@@ -30,6 +30,7 @@ dependencies = [
     "duckduckgo-search==8.1.1",
     "nh3==0.3.3",
     "short_url==1.2.2",
+    "defusedxml==0.7.1",
 ]
 
 [project.optional-dependencies]

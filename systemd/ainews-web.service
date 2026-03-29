@@ -35,7 +35,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/ainews/instance
-ReadOnlyPaths=/opt/ainews/app/static
+ReadOnlyPaths=/opt/ainews/static
 
 # Resource limits
 LimitNOFILE=65536

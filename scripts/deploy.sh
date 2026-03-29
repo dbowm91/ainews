@@ -151,13 +151,9 @@ fi
 # 6. Run database migrations
 # -------------------------------------------------------
 log_info "Running database migrations..."
-if [[ -f "migrations/upgrade.py" ]]; then
-    sudo -u "$APP_USER" env $(grep -v '^#' "$APP_DIR/.env" | xargs) \
-        "$APP_DIR/.venv/bin/python" migrations/upgrade.py
-    log_info "Migrations completed"
-else
-    log_info "No migration script found. Database will auto-update on startup."
-fi
+sudo -u "$APP_USER" env $(grep -v '^#' "$APP_DIR/.env" | xargs) \
+    "$APP_DIR/.venv/bin/python" -m flask --app app:create_app db upgrade
+log_info "Migrations completed"
 
 # -------------------------------------------------------
 # 7. Validate configuration

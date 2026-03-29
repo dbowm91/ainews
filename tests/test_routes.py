@@ -103,6 +103,83 @@ class TestPublicRoutes:
         resp = client.get("/unsubscribe/nonexistent-token")
         assert resp.status_code == 200
 
+    def test_subscribe_sends_verification_email(self, client, app, create_subscriber):
+        """New subscription should send a verification email, not activate immediately."""
+        from unittest.mock import patch
+
+        with patch("services.email.send_verification_email") as mock_send:
+            resp = client.post(
+                "/subscribe",
+                data={"email": "verify-test@example.com", "newsletter_type": "main"},
+                headers={"HX-Request": "true"},
+            )
+            assert resp.status_code == 200
+            assert b"Check your email" in resp.data
+            mock_send.assert_called_once()
+
+    def test_subscribe_already_verified_shows_already(
+        self, client, app, create_subscriber
+    ):
+        """Subscribing with an already-verified email should show 'Already subscribed!'."""
+        create_subscriber(email="done@example.com", newsletter_type="main")
+        resp = client.post(
+            "/subscribe",
+            data={"email": "done@example.com", "newsletter_type": "main"},
+            headers={"HX-Request": "true"},
+        )
+        assert resp.status_code == 200
+        assert b"Already subscribed" in resp.data
+
+    def test_verify_valid_token(self, client, app, create_subscriber):
+        """Following a valid verification link should confirm the subscriber."""
+        from models import Subscriber
+        from extensions import db
+
+        with app.app_context():
+            sub = create_subscriber(
+                email="verify-me@example.com",
+                confirmed_at=None,
+                verification_token="valid-verify-token",
+            )
+            db.session.commit()
+
+        from unittest.mock import patch
+
+        with patch("services.email.send_welcome_email"):
+            resp = client.get("/verify/valid-verify-token")
+            assert resp.status_code == 200
+            assert b"confirmed" in resp.data
+
+        with app.app_context():
+            sub = Subscriber.query.filter_by(email="verify-me@example.com").first()
+            assert sub.confirmed_at is not None
+            assert sub.verification_token is None
+
+    def test_verify_invalid_token(self, client):
+        """An invalid verification token should show an error page."""
+        resp = client.get("/verify/nonexistent-token")
+        assert resp.status_code == 200
+        assert b"Invalid" in resp.data
+
+    def test_verify_expired_token(self, client, app, create_subscriber):
+        """An expired verification link should show an expired page."""
+        from datetime import datetime, timezone, timedelta
+        from extensions import db
+
+        with app.app_context():
+            sub = create_subscriber(
+                email="expired@example.com",
+                confirmed_at=None,
+                verification_token="expired-verify-token",
+            )
+            # Set subscribed_at far in the past so it's expired
+            sub.subscribed_at = datetime.now(timezone.utc) - timedelta(hours=25)
+            db.session.commit()
+
+        resp = client.get("/verify/expired-verify-token")
+        assert resp.status_code == 200
+        assert b"expired" in resp.data
+
     def test_nonexistent_article_returns_404(self, client):
         resp = client.get("/article/999999")
         assert resp.status_code == 404

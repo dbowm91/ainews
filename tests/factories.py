@@ -140,6 +140,8 @@ def create_subscriber(
     newsletter_type: str = "main",
     active: bool = True,
     unsubscribe_token: Optional[str] = None,
+    confirmed_at: Optional[datetime] = ...,  # sentinel: defaults to now
+    verification_token: Optional[str] = None,
 ) -> Subscriber:
     """Create a test subscriber.
 
@@ -148,6 +150,8 @@ def create_subscriber(
         newsletter_type: Newsletter type
         active: Whether subscription is active
         unsubscribe_token: Unsubscribe token (auto-generated if None)
+        confirmed_at: Verification timestamp (defaults to now; pass None for unverified)
+        verification_token: Verification token (auto-generated if unverified)
 
     Returns:
         The created Subscriber instance
@@ -156,12 +160,18 @@ def create_subscriber(
         email = f"test-{_next_id()}@example.com"
     if unsubscribe_token is None:
         unsubscribe_token = f"token-{secrets.token_hex(8)}"
+    if confirmed_at is ...:
+        confirmed_at = datetime.now(timezone.utc)
+    if confirmed_at is None and verification_token is None:
+        verification_token = f"verify-{secrets.token_hex(8)}"
 
     subscriber = Subscriber(
         email=email,
         newsletter_type=newsletter_type,
         active=active,
         unsubscribe_token=unsubscribe_token,
+        confirmed_at=confirmed_at,
+        verification_token=verification_token,
     )
     db.session.add(subscriber)
     db.session.flush()

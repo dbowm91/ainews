@@ -359,21 +359,32 @@ class TestPipelineEndToEnd:
             assert nl.sent_at is not None
 
     def test_subscriber_lifecycle(self, app):
-        """Test subscriber creation, unsubscribe, and resubscribe."""
+        """Test subscriber creation, verify, unsubscribe, and resubscribe."""
+        from datetime import datetime, timezone
         from models import Subscriber
         from extensions import db
 
         with app.app_context():
-            # Subscribe
+            # Subscribe (unverified)
             sub = Subscriber(
                 email="test@example.com",
                 newsletter_type="main",
                 unsubscribe_token="test-token-123",
+                verification_token="verify-token-123",
             )
             db.session.add(sub)
             db.session.commit()
 
             assert sub.active is True
+            assert sub.confirmed_at is None
+            assert sub.is_verified is False
+
+            # Verify
+            sub.confirmed_at = datetime.now(timezone.utc)
+            sub.verification_token = None
+            db.session.commit()
+
+            assert sub.is_verified is True
 
             # Unsubscribe
             sub.active = False
@@ -382,11 +393,51 @@ class TestPipelineEndToEnd:
             sub = Subscriber.query.filter_by(email="test@example.com").first()
             assert sub.active is False
 
-            # Resubscribe
+            # Resubscribe (requires re-verification)
             sub.active = True
             sub.unsubscribe_token = "new-token-456"
+            sub.verification_token = "new-verify-456"
+            sub.confirmed_at = None
             db.session.commit()
 
             sub = Subscriber.query.filter_by(email="test@example.com").first()
             assert sub.active is True
+            assert sub.is_verified is False
             assert sub.unsubscribe_token == "new-token-456"
+
+    def test_cleanup_expired_verifications(self, app, create_subscriber):
+        """Expired unverified subscribers should be deleted by the cleanup task."""
+        from datetime import datetime, timezone, timedelta
+        from models import Subscriber
+        from extensions import db
+
+        with app.app_context():
+            # Verified subscriber — should be kept
+            create_subscriber(email="verified@example.com")
+            # Expired unverified — should be deleted
+            expired = create_subscriber(
+                email="expired@example.com",
+                confirmed_at=None,
+            )
+            expired.subscribed_at = datetime.now(timezone.utc) - timedelta(hours=2)
+            # Fresh unverified — should be kept (not expired yet)
+            create_subscriber(
+                email="fresh@example.com",
+                confirmed_at=None,
+            )
+            db.session.commit()
+
+            assert Subscriber.query.count() == 3
+
+        # Run cleanup
+        with app.app_context():
+            from tasks.cleanup import cleanup_expired_verifications
+
+            result = cleanup_expired_verifications.run()
+            assert result["deleted"] == 1
+
+            remaining = Subscriber.query.all()
+            emails = {s.email for s in remaining}
+            assert "verified@example.com" in emails
+            assert "fresh@example.com" in emails
+            assert "expired@example.com" not in emails

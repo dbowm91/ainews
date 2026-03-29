@@ -43,15 +43,72 @@ class TestGetSMTPConfig:
             assert cfg["port"] == 587
 
 
-class TestSendConfirmationEmail:
-    """Tests for send_confirmation_email function."""
+class TestSendVerificationEmail:
+    """Tests for send_verification_email function."""
 
     @patch("services.email._send_smtp")
-    def test_send_confirmation_email_main(self, mock_send):
-        """Test confirmation email for main newsletter type."""
-        from services.email import send_confirmation_email
+    def test_send_verification_email_main(self, mock_send):
+        """Test verification email for main newsletter type."""
+        from services.email import send_verification_email
 
-        send_confirmation_email(
+        send_verification_email(
+            email="test@example.com",
+            newsletter_type="main",
+            verification_url="https://example.com/verify/token123",
+            unsubscribe_url="https://example.com/unsub/token123",
+        )
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert args[0] == "test@example.com"
+        assert "Confirm" in args[1]
+        assert "all topics" in args[1]
+        assert "verify/token123" in args[2]
+        assert "unsub/token123" in args[2]
+
+    @patch("services.email._send_smtp")
+    def test_send_verification_email_topic(self, mock_send):
+        """Test verification email for topic-specific newsletter."""
+        from services.email import send_verification_email
+
+        send_verification_email(
+            email="test@example.com",
+            newsletter_type="ai",
+            verification_url="https://example.com/verify/token123",
+            unsubscribe_url="https://example.com/unsub/token123",
+        )
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert "ai" in args[1]
+
+    @patch("services.email._send_smtp")
+    def test_send_verification_email_custom_site_name(self, mock_send):
+        """Test verification email with custom site name."""
+        from services.email import send_verification_email
+
+        send_verification_email(
+            email="test@example.com",
+            newsletter_type="main",
+            verification_url="https://example.com/verify/token123",
+            unsubscribe_url="https://example.com/unsub/token123",
+            site_name="MyNews",
+        )
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args[0]
+        assert "MyNews" in args[1]
+
+
+class TestSendWelcomeEmail:
+    """Tests for send_welcome_email function."""
+
+    @patch("services.email._send_smtp")
+    def test_send_welcome_email_main(self, mock_send):
+        """Test welcome email for main newsletter type."""
+        from services.email import send_welcome_email
+
+        send_welcome_email(
             email="test@example.com",
             newsletter_type="main",
             unsubscribe_url="https://example.com/unsub/token123",
@@ -64,11 +121,11 @@ class TestSendConfirmationEmail:
         assert "token123" in args[2]
 
     @patch("services.email._send_smtp")
-    def test_send_confirmation_email_topic(self, mock_send):
-        """Test confirmation email for topic-specific newsletter."""
-        from services.email import send_confirmation_email
+    def test_send_welcome_email_topic(self, mock_send):
+        """Test welcome email for topic-specific newsletter."""
+        from services.email import send_welcome_email
 
-        send_confirmation_email(
+        send_welcome_email(
             email="test@example.com",
             newsletter_type="ai",
             unsubscribe_url="https://example.com/unsub/token123",
@@ -79,11 +136,11 @@ class TestSendConfirmationEmail:
         assert "ai" in args[1]
 
     @patch("services.email._send_smtp")
-    def test_send_confirmation_email_custom_site_name(self, mock_send):
-        """Test confirmation email with custom site name."""
-        from services.email import send_confirmation_email
+    def test_send_welcome_email_custom_site_name(self, mock_send):
+        """Test welcome email with custom site name."""
+        from services.email import send_welcome_email
 
-        send_confirmation_email(
+        send_welcome_email(
             email="test@example.com",
             newsletter_type="main",
             unsubscribe_url="https://example.com/unsub/token123",

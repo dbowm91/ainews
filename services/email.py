@@ -33,13 +33,64 @@ def get_smtp_config():
         }
 
 
-def send_confirmation_email(
+def send_verification_email(
+    email: str,
+    newsletter_type: str,
+    verification_url: str,
+    unsubscribe_url: str,
+    site_name: str = "ainews//",
+):
+    """Send email verification link to a new subscriber."""
+    newsletter_label = newsletter_type if newsletter_type != "main" else "all topics"
+    subject = f"Confirm your subscription to {site_name} — {newsletter_label}"
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">
+      <tr><td style="padding:24px 32px;background:#0d1117;color:#fff;">
+        <span style="font-family:monospace;font-size:20px;font-weight:700;">ainews<span style="color:#58a6ff;">//</span></span>
+      </td></tr>
+      <tr><td style="padding:24px 32px;">
+        <h1 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px 0;">Confirm your subscription</h1>
+        <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 16px 0;">
+          Click the button below to confirm your subscription to the
+          <strong>{newsletter_label}</strong> newsletter on {site_name}.
+          This link will expire in 1 hour.
+        </p>
+        <p style="text-align:center;margin:24px 0;">
+          <a href="{verification_url}" style="display:inline-block;padding:12px 32px;background:#0d1117;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;font-size:14px;">
+            Confirm subscription
+          </a>
+        </p>
+        <p style="color:#888;font-size:12px;line-height:1.6;margin:0;">
+          If you didn't request this, you can ignore this email or
+          <a href="{unsubscribe_url}" style="color:#58a6ff;">unsubscribe</a>.
+        </p>
+      </td></tr>
+      <tr><td style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eaeaea;">
+        <p style="font-family:monospace;font-size:11px;color:#888;margin:0;text-align:center;">
+          condensed by agents &middot;
+          <a href="{unsubscribe_url}" style="color:#58a6ff;text-decoration:none;">unsubscribe</a>
+        </p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body>
+</html>"""
+
+    _send_smtp(email, subject, html)
+    logger.info(f"Verification email sent to {email} for {newsletter_type}")
+
+
+def send_welcome_email(
     email: str,
     newsletter_type: str,
     unsubscribe_url: str,
     site_name: str = "ainews//",
 ):
-    """Send subscription confirmation email."""
+    """Send welcome email after verification is complete."""
     newsletter_label = newsletter_type if newsletter_type != "main" else "all topics"
     subject = f"Subscribed to {site_name} — {newsletter_label}"
     html = f"""<!DOCTYPE html>
@@ -73,7 +124,7 @@ def send_confirmation_email(
 </html>"""
 
     _send_smtp(email, subject, html)
-    logger.info(f"Confirmation email sent to {email} for {newsletter_type}")
+    logger.info(f"Welcome email sent to {email} for {newsletter_type}")
 
 
 def send_newsletter_email(

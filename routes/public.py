@@ -1,4 +1,12 @@
-from flask import Blueprint, render_template, request, Response, redirect, jsonify
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    Response,
+    redirect,
+    jsonify,
+    current_app,
+)
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
@@ -487,7 +495,7 @@ def sitemap():
 def subscribe():
     from models import Subscriber
     from extensions import db
-    from services.email import send_confirmation_email
+    from services.email import send_verification_email
 
     email = request.form.get("email", "").strip().lower()
     newsletter_type = request.form.get("newsletter_type", "main").strip()
@@ -512,7 +520,8 @@ def subscribe():
         .first()
     )
 
-    if existing and existing.active:
+    # Already subscribed and verified
+    if existing and existing.active and existing.confirmed_at is not None:
         if request.headers.get("HX-Request"):
             return render_template(
                 "partials/subscribe_box.html",
@@ -521,16 +530,25 @@ def subscribe():
             )
         return redirect("/")
 
-    token = secrets.token_urlsafe(32)
+    unsub_token = secrets.token_urlsafe(32)
+    verify_token = secrets.token_urlsafe(32)
 
     if existing and not existing.active:
+        # Reactivate previously unsubscribed subscriber — needs re-verification
         existing.active = True
-        existing.unsubscribe_token = token
+        existing.unsubscribe_token = unsub_token
+        existing.verification_token = verify_token
+        existing.confirmed_at = None
+    elif existing and existing.active and existing.confirmed_at is None:
+        # Already pending verification — rotate token and resend
+        existing.verification_token = verify_token
+        unsub_token = existing.unsubscribe_token
     else:
         subscriber = Subscriber(
             email=email,
             newsletter_type=newsletter_type,
-            unsubscribe_token=token,
+            unsubscribe_token=unsub_token,
+            verification_token=verify_token,
         )
         db.session.add(subscriber)
 
@@ -548,19 +566,24 @@ def subscribe():
         return redirect("/")
 
     site_url = request.host_url.rstrip("/")
-    unsubscribe_url = f"{site_url}/unsubscribe/{token}"
+    verification_url = f"{site_url}/verify/{verify_token}"
+    unsubscribe_url = f"{site_url}/unsubscribe/{unsub_token}"
     email_failed = False
     try:
-        send_confirmation_email(email, newsletter_type, unsubscribe_url)
+        send_verification_email(
+            email, newsletter_type, verification_url, unsubscribe_url
+        )
     except Exception as e:
-        logger.warning(f"Confirmation email failed for {email}: {e}")
+        logger.warning(f"Verification email failed for {email}: {e}")
         email_failed = True
 
     if request.headers.get("HX-Request"):
         return render_template(
             "partials/subscribe_box.html",
-            subscribe_success="Subscribed!" if not email_failed else None,
-            subscribe_warning="Confirmation email could not be sent. You are still subscribed."
+            subscribe_info="Check your email to confirm your subscription."
+            if not email_failed
+            else None,
+            subscribe_warning="Verification email could not be sent. Please try again later."
             if email_failed
             else None,
             newsletter_type=newsletter_type,
@@ -615,3 +638,52 @@ def unsubscribe_confirm(token):
         confirmed=subscriber is not None and not commit_failed,
         error=commit_failed,
     )
+
+
+@public_bp.route("/verify/<token>")
+@limiter.limit("20 per minute")
+def verify(token):
+    """Verify a subscriber's email address via token link."""
+    from models import Subscriber
+    from extensions import db
+
+    subscriber = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter(Subscriber.confirmed_at.is_(None))
+        .filter_by(verification_token=token)
+        .first()
+    )
+
+    if not subscriber:
+        return render_template("verify.html", found=False)
+
+    expiry = current_app.config.get("VERIFICATION_EXPIRY_SECONDS", 3600)
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=expiry)
+    subscribed_at = subscriber.subscribed_at
+    if subscribed_at.tzinfo is None:
+        subscribed_at = subscribed_at.replace(tzinfo=timezone.utc)
+    if subscribed_at < cutoff:
+        return render_template("verify.html", found=False, expired=True)
+
+    subscriber.confirmed_at = datetime.now(timezone.utc)
+    subscriber.verification_token = None
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.exception("Failed to verify subscriber token %s", token)
+        return render_template("verify.html", found=False)
+
+    # Send welcome email
+    site_url = request.host_url.rstrip("/")
+    unsubscribe_url = f"{site_url}/unsubscribe/{subscriber.unsubscribe_token}"
+    try:
+        from services.email import send_welcome_email
+
+        send_welcome_email(
+            subscriber.email, subscriber.newsletter_type, unsubscribe_url
+        )
+    except Exception as e:
+        logger.warning(f"Welcome email failed for {subscriber.email}: {e}")
+
+    return render_template("verify.html", found=True, subscriber=subscriber)

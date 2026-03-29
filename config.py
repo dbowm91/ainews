@@ -30,6 +30,11 @@ class Config:
     MAX_STAGE_RETRIES = int(os.environ.get("MAX_STAGE_RETRIES", "3"))
     MAX_TOTAL_RETRIES = int(os.environ.get("MAX_TOTAL_RETRIES", "10"))
 
+    # Email verification
+    VERIFICATION_EXPIRY_SECONDS = int(
+        os.environ.get("VERIFICATION_EXPIRY_SECONDS", "3600")
+    )
+
     # SMTP
     SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -74,6 +79,10 @@ class Config:
         "cleanup-old-logs": {
             "task": "tasks.cleanup.cleanup_old_pipeline_logs",
             "schedule": crontab(hour=3, minute=0),
+        },
+        "cleanup-expired-verifications": {
+            "task": "tasks.cleanup.cleanup_expired_verifications",
+            "schedule": timedelta(minutes=15),
         },
     }
 

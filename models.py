@@ -168,13 +168,24 @@ class Subscriber(db.Model):
         index=True,
         default=lambda: secrets.token_urlsafe(32),
     )
+    verification_token = db.Column(
+        db.String(64),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
     subscribed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    confirmed_at = db.Column(db.DateTime, nullable=True)
     active = db.Column(db.Boolean, default=True)
     deleted_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint("email", "newsletter_type", name="uq_email_newsletter"),
     )
+
+    @property
+    def is_verified(self):
+        return self.confirmed_at is not None
 
     def __repr__(self):
         return f"<Subscriber {self.email} -> {self.newsletter_type}>"

@@ -90,10 +90,18 @@ def mock_redis():
 
         return [k for k in store if fnmatch.fnmatch(k, pattern)]
 
+    def scan_iter(match=None, count=None):
+        import fnmatch
+
+        if match:
+            return (k for k in store if fnmatch.fnmatch(k, match))
+        return iter(store)
+
     redis.get = MagicMock(side_effect=get)
     redis.setex = MagicMock(side_effect=setex)
     redis.delete = MagicMock(side_effect=delete)
     redis.keys = MagicMock(side_effect=keys)
+    redis.scan_iter = MagicMock(side_effect=scan_iter)
     return redis
 
 

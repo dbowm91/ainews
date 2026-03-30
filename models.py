@@ -6,6 +6,7 @@ from extensions import db
 import short_url
 
 _SHORT_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+_short_encoder = short_url.UrlEncoder(alphabet=_SHORT_ALPHABET)
 
 
 def slugify(name: str) -> str:
@@ -16,12 +17,12 @@ def slugify(name: str) -> str:
 
 
 def encode_short_url(article_id: int) -> str:
-    return short_url.encode_url(article_id, min_length=6, alphabet=_SHORT_ALPHABET)
+    return _short_encoder.encode_url(article_id, min_length=6)
 
 
 def decode_short_url(code: str) -> int | None:
     try:
-        return short_url.decode_url(code, alphabet=_SHORT_ALPHABET)
+        return _short_encoder.decode_url(code)
     except Exception:
         return None
 

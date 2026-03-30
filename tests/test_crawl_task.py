@@ -217,3 +217,47 @@ class TestRunAllSources:
         assert len(result) == 1
         assert result[0]["fetched"] == 5
         mock_group.assert_called_once()
+
+    @patch("services.crawling.update_pipeline_run_stats")
+    @patch("tasks.crawl.group")
+    @patch("services.crawling.create_pipeline_run")
+    @patch("schemas.source.load_sources")
+    def test_timeout_error_handling(
+        self, mock_load, mock_create_run, mock_group, mock_update_stats, app
+    ):
+        """TimeoutError from result.get() should set run status to timeout."""
+        mock_run = MagicMock()
+        mock_run.id = 1
+        mock_run.status = "running"
+        mock_create_run.return_value = mock_run
+
+        source_cfg = MagicMock()
+        source_cfg.model_dump.return_value = {"id": "s1", "name": "S1"}
+        mock_load.return_value = [source_cfg]
+
+        mock_group_result = MagicMock()
+        # First call raises TimeoutError, second call returns empty list
+        mock_group_result.get.side_effect = [TimeoutError("timed out"), []]
+        mock_group.return_value.apply_async.return_value = mock_group_result
+
+        from tasks.crawl import run_all_sources
+        from extensions import db
+        from models import PipelineRun
+
+        with app.app_context():
+            # Pre-create the pipeline run so db.session.get finds it
+            from datetime import datetime, timezone
+
+            pr = PipelineRun(
+                id=1,
+                run_type="crawl",
+                status="running",
+                triggered_by="scheduled",
+                started_at=datetime.now(timezone.utc),
+            )
+            db.session.add(pr)
+            db.session.commit()
+            result = run_all_sources.__wrapped__()
+            db.session.refresh(pr)
+        assert result == []
+        assert pr.status == "timeout"

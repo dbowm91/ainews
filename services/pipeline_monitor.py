@@ -132,17 +132,17 @@ def clear_stage_stats(stage: Optional[str] = None) -> None:
                If None, clear all stages.
     """
     try:
-        redis = _get_redis()
+        redis_client = _get_redis()
 
         if stage:
             pattern = f"{_PIPELINE_COUNTER_PREFIX}{stage}:*"
         else:
             pattern = f"{_PIPELINE_COUNTER_PREFIX}*"
 
-        # Get all matching keys
-        keys = redis.keys(pattern)
+        # Use scan_iter to avoid blocking Redis with keys()
+        keys = list(redis_client.scan_iter(match=pattern, count=500))
         if keys:
-            redis.delete(*keys)
+            redis_client.delete(*keys)
             logger.info(f"Cleared {len(keys)} pipeline counter keys")
 
     except RedisError as e:

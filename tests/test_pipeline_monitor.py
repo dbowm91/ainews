@@ -35,11 +35,19 @@ def redis_client():
 
         return [k for k in store if fnmatch.fnmatch(k, pattern)]
 
+    def scan_iter(match=None, count=None):
+        import fnmatch
+
+        if match:
+            return (k for k in store if fnmatch.fnmatch(k, match))
+        return iter(store)
+
     client.get = MagicMock(side_effect=get)
     client.incr = MagicMock(side_effect=incr)
     client.expire = MagicMock(side_effect=expire)
     client.delete = MagicMock(side_effect=delete)
     client.keys = MagicMock(side_effect=keys)
+    client.scan_iter = MagicMock(side_effect=scan_iter)
     client._store = store
     return client
 
@@ -140,7 +148,7 @@ class TestClearStageStats:
 
     def test_redis_error_does_not_raise(self):
         bad_redis = MagicMock()
-        bad_redis.keys.side_effect = redis.exceptions.ConnectionError("down")
+        bad_redis.scan_iter.side_effect = redis.exceptions.ConnectionError("down")
         from services.pipeline_monitor import clear_stage_stats
 
         with patch("services.pipeline_monitor._get_redis", return_value=bad_redis):

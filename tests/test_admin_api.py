@@ -19,21 +19,27 @@ class TestHealth:
         assert client.get("/admin/api/health").status_code in (302, 401)
 
     @pytest.mark.skip(
-        reason="Health endpoint call contaminates SQLite session state for downstream tests"
+        reason="Health endpoint HTTP request changes SQLAlchemy SQLite connection state, "
+        "causing naive/aware datetime comparison failures in downstream tests"
     )
     def test_authenticated(self, auth_client, mock_redis):
-        with patch("extensions.get_redis", return_value=mock_redis):
-            with patch("services.llm.get_provider_info") as mi:
-                mi.return_value = {"status": "ok"}
-                with patch("services.limiter.get_limiter") as ml:
-                    ml.return_value = MagicMock()
-                    ml.return_value.is_healthy.return_value = True
-                    with patch("services.cache.get_response_cache") as mc:
-                        mc.return_value = MagicMock()
-                        mc.return_value.get_stats.return_value = {}
-                        resp = auth_client.get("/admin/api/health")
-                        assert resp.status_code == 200
-                        assert "flask" in resp.get_json()
+        with (
+            patch("extensions.get_redis", return_value=mock_redis),
+            patch("services.llm.get_provider_info") as mi,
+            patch("services.limiter.get_limiter") as ml,
+            patch("services.cache.get_response_cache") as mc,
+            patch("services.circuit_breaker.get_all_breaker_status") as mb,
+        ):
+            mi.return_value = {"status": "ok"}
+            ml.return_value = MagicMock()
+            ml.return_value.is_healthy.return_value = True
+            mc.return_value = MagicMock()
+            mc.return_value.get_stats.return_value = {}
+            mb.return_value = {}
+            resp = auth_client.get("/admin/api/health")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "flask" in data
 
 
 class TestConfigReload:

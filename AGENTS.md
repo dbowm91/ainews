@@ -170,14 +170,26 @@ Admin article list (`/admin/articles`) supports:
 - Source filter: `source_id` query param
 - Date range: `date_from`, `date_to` query params (ISO format)
 
-### Known issues (verified 2026-03-29)
+### Known issues (verified 2026-03-29) — ALL RESOLVED
 
-These are bugs and code smells identified during a codebase review. See `plan.md` for the full improvement plan.
+These were identified during a codebase review and have been fixed. See `plan.md` for details.
 
-- **`_dead_letter()` missing try/except** (`tasks/retry.py:98`): `db.session.commit()` has no error handling. A failed commit crashes the entire `retry_stuck` sweep.
-- **`_handle_stage_failure()` double-commit** (`tasks/pipeline.py:309-318`): Commits `retry_count` before calling `_degrade_and_advance()` which also commits. If degrade raises, article has incremented retry_count but was never advanced.
-- **Bare `except Exception:` in health endpoint** (`routes/admin/api.py:7-66`): Five catch blocks silently swallow errors with no logging. Add `logger.exception()` calls.
-- **Bare `except Exception:` in sources routes** (`routes/admin/sources.py:31,49`): Should be `except SQLAlchemyError:` to avoid masking non-DB errors.
-- **Duplicate `limit_content_length`**: Defined in both `routes/public.py:35-48` and `routes/admin/auth.py:15-31`. Can be deduplicated into `routes/__init__.py` (currently empty).
-- **`redis.keys()` blocking** (`services/pipeline_monitor.py:143`): `clear_stage_stats()` uses blocking `redis.keys()` — should use `scan_iter()` for large keyspaces.
-- **Hardcoded constants**: `MAX_CONSECUTIVE_FAILURES=10` in `services/crawling.py:13` and `STUCK_THRESHOLD_MINUTES=60` in `constants.py:61` are not configurable via env vars.
+- ~~`_dead_letter()` missing try/except~~ — FIXED: wrapped in `try/except SQLAlchemyError`
+- ~~`_handle_stage_failure()` double-commit~~ — FIXED: removed standalone commit before `_degrade_and_advance()`
+- ~~Bare `except Exception:` in health endpoint~~ — FIXED: added `logger.exception()` calls
+- ~~Bare `except Exception:` in sources routes~~ — FIXED: replaced with `except SQLAlchemyError:`
+- ~~Duplicate `limit_content_length`~~ — FIXED: deduplicated into `routes/__init__.py`
+- ~~`redis.keys()` blocking~~ — FIXED: replaced with `scan_iter()` in `clear_stage_stats()`
+- ~~Hardcoded constants~~ — FIXED: configurable via env vars
+
+### Additional lessons learned
+
+**`short_url` library API**: Version 1.2.2 does not support `alphabet` parameter on module-level `encode_url()`/`decode_url()` functions. Must instantiate `short_url.UrlEncoder(alphabet=...)` and use its methods. See `models.py:8-10`.
+
+**Health endpoint test contamination**: Calling `auth_client.get("/admin/api/health")` in tests changes SQLAlchemy's SQLite connection state, causing naive/aware datetime comparison failures in downstream tests. The authenticated health test is intentionally skipped. See `tests/test_admin_api.py`.
+
+**Flask-Migrate config path**: `migrations/env.py` calls `fileConfig(config.config_file_name)` which expects `alembic.ini` in the `migrations/` directory. In the test environment, `alembic.ini` is at the project root. The call is wrapped in `try/except (OSError, TypeError)` since it's only for logging setup.
+
+**Migration tests on SQLite**: Cannot run full `upgrade()`/`downgrade()` when migrations use `op.create_unique_constraint` (unsupported ALTER in SQLite). Test migration chain integrity and schema consistency instead. See `tests/test_migration.py`.
+
+**Redis mock fixture consistency**: When changing Redis operations (e.g., `keys()` → `scan_iter()`), update ALL mock fixtures — both the shared `mock_redis` in `conftest.py` AND any test-specific fixtures (e.g., `redis_client` in `test_pipeline_monitor.py`).

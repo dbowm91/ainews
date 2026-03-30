@@ -10,7 +10,12 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-fileConfig(config.config_file_name)
+# Wrap in try/except to handle missing config file in test environments
+# where alembic.ini lives at project root instead of migrations/.
+try:
+    fileConfig(config.config_file_name)
+except (OSError, TypeError):
+    pass
 logger = logging.getLogger("alembic.env")
 
 

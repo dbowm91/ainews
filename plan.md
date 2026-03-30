@@ -1,16 +1,16 @@
 # ainews Consolidated Improvement Plan
 
-Consolidated from plan2–plan5. Items verified against current codebase state (2026-03-29).
+Consolidated from plan2–plan5. Items verified against current codebase state (2026-03-30).
+
+**Status key:** ✅ Done | 🔶 Partially done | ❌ Not done
 
 ## Phase 1: Bug Fixes & Transaction Safety
 
-### 1.1 Fix `_dead_letter()` missing try/except around commit
+### 1.1 ✅ Fix `_dead_letter()` missing try/except around commit
 
 **File:** `tasks/retry.py:98`
 
-**Problem:** `_dead_letter()` calls `db.session.commit()` without try/except. If the commit fails, the exception crashes the entire `retry_stuck` sweep — all other stuck articles lose their retry opportunity.
-
-**Fix:** Wrap commit in try/except with rollback (matching codebase pattern). Add `from sqlalchemy.exc import SQLAlchemyError` import.
+**Status:** Done — commit wrapped in `try/except SQLAlchemyError` with rollback and logging.
 
 ```python
 try:
@@ -22,302 +22,250 @@ except SQLAlchemyError:
 
 ---
 
-### 1.2 Fix `_handle_stage_failure()` double-commit inconsistency
+### 1.2 ✅ Fix `_handle_stage_failure()` double-commit inconsistency
 
 **File:** `tasks/pipeline.py:309-318`
 
-**Problem:** When `retry_count >= max_stage`, the function commits `retry_count` at line 310, then calls `_degrade_and_advance()` which does its own commit (resetting `retry_count = 0`). If the first commit succeeds but `_degrade_and_advance` raises, the article has an incremented `retry_count` but was never advanced.
-
-**Fix:** Remove the standalone commit before `_degrade_and_advance()`. Let `_degrade_and_advance()` own the full transaction:
-
-```python
-if article.retry_count >= max_stage:
-    _degrade_and_advance(article, stage, run_id=run_id)
-    return True
-```
-
-`_degrade_and_advance()` already sets `retry_count = 0`, resets `last_error`, and commits with proper try/except/rollback.
+**Status:** Done — standalone commit before `_degrade_and_advance()` removed.
 
 ---
 
-### 1.3 Add startup warning for default SECRET_KEY
+### 1.3 ✅ Add startup warning for default SECRET_KEY
 
 **File:** `config.py` — `DevelopmentConfig.__init__`
 
-**Problem:** `SECRET_KEY` defaults to `"dev-secret-key-change-me"`. If `FLASK_CONFIG` is accidentally left as `"development"` in production, sessions are insecure.
-
-**Fix:** Add warning check in `DevelopmentConfig.__init__`, same pattern as existing `ADMIN_PASSWORD` warning.
+**Status:** Done — warning logged when `SECRET_KEY == "dev-secret-key-change-me"`.
 
 ---
 
 ## Phase 2: Error Handling & Logging
 
-### 2.1 Add logger to `routes/admin/api.py` health endpoint
+### 2.1 ✅ Add logger to `routes/admin/api.py` health endpoint
 
 **File:** `routes/admin/api.py:7-66`
 
-**Problem:** Five bare `except Exception:` blocks silently swallow errors in the health endpoint. No log output for debugging.
-
-**Fix:** Add module-level logger, use `logger.exception()` in each catch block. Resilience is preserved while making failures visible.
+**Status:** Done — module-level logger added, all five `except Exception:` blocks now call `logger.exception()`.
 
 ---
 
-### 2.2 Fix bare `Exception` catches in `routes/admin/sources.py`
+### 2.2 ✅ Fix bare `Exception` catches in `routes/admin/sources.py`
 
 **File:** `routes/admin/sources.py:31, 49`
 
-**Problem:** `enable_source` and `disable_source` catch bare `Exception` instead of `SQLAlchemyError`, potentially masking non-DB errors.
-
-**Fix:** Replace with `except SQLAlchemyError:` in both handlers.
+**Status:** Done — both handlers now catch `SQLAlchemyError` with proper rollback.
 
 ---
 
-### 2.3 Deduplicate `limit_content_length` decorator
+### 2.3 ✅ Deduplicate `limit_content_length` decorator
 
 **Files:** `routes/public.py:35-48`, `routes/admin/auth.py:15-31`
 
-**Problem:** Identical decorator defined in two files (auth.py version has leading underscore).
-
-**Fix:** Move single definition to `routes/__init__.py` (currently empty). Import from there in both files. No circular dependency risk since `routes/__init__.py` doesn't import from submodules.
+**Status:** Done — single definition in `routes/__init__.py`, both files import from there.
 
 ---
 
-### 2.4 Bare `except Exception` in `routes/public.py`
+### 2.4 🔶 Bare `except Exception` in `routes/public.py`
 
-**File:** `routes/public.py:75, 375`
+**File:** `routes/public.py:59, 359`
 
-**Problem:** Bare `except Exception:` catches all exceptions including `KeyboardInterrupt` and `SystemExit`.
-
-**Fix:** Use `except Exception as e:` with logging, or more specific exception types where identifiable.
+**Status:** Partially done — `logger.exception()` added everywhere. Health endpoint uses specific types (`SQLAlchemyError`, `RedisError`) for DB/Redis checks. Remaining broad catches have logging and are arguably intentional.
 
 ---
 
 ## Phase 3: Test Coverage
 
-### 3.1 Tests for `services/crawling.py`
+### 3.1 ✅ Tests for `services/crawling.py`
 
-**Create:** `tests/test_crawling.py`
-
-**Functions to test:**
-- `create_pipeline_run()`, `should_skip_source()`, `get_existing_external_ids()`
-- `filter_new_items()`, `filter_non_other_topics()`, `get_or_create_source()`
-- `update_source_crawl_time()`, `update_pipeline_run_stats()`
-- `record_crawl_success()` — resets failures, re-enables disabled source
-- `record_crawl_failure()` — increments failures, auto-disables at threshold (10)
+**Created:** `tests/test_crawling.py` (201 lines). All planned functions tested.
 
 ---
 
-### 3.2 Tests for `services/cache.py` (ResponseCache)
+### 3.2 ✅ Tests for `services/cache.py` (ResponseCache)
 
-**Create:** `tests/test_response_cache.py`
-
-**Tests:** `get()` empty/hit/expiry, `set()`/`get()` round-trip, L1 memory hit, L2 Redis hit, `get_or_set()`, `invalidate()`, `invalidate_prefix()`, `get_stats()`, Redis `RedisError` handling, key hashing for keys > 200 chars.
+**Created:** `tests/test_response_cache.py` (182 lines). All scenarios covered.
 
 ---
 
-### 3.3 Tests for `services/pipeline_monitor.py`
+### 3.3 ✅ Tests for `services/pipeline_monitor.py`
 
-**Create:** `tests/test_pipeline_monitor.py`
-
-**Tests:** `record_stage_result()` success/failure/RedisError, `get_stage_stats()` aggregation and defaults on RedisError, `get_all_stages_stats()`, `clear_stage_stats()` per-stage and all.
+**Created:** `tests/test_pipeline_monitor.py` (147 lines). All scenarios covered.
 
 ---
 
-### 3.4 Tests for LLM adapters
+### 3.4 ✅ Tests for LLM adapters
 
-**Create:** `tests/test_llm_adapters.py`
-
-**Tests:** `OllamaProvider.chat()` with/without system message, error translation, `_chat_with_schema()`, `health_check()`, lazy client initialization, `handle_provider_error()` with `ConnectionError` → `ProviderTimeoutError`, auth errors → `AuthError`.
+**Created:** `tests/test_llm_adapters.py` (302 lines). All scenarios covered.
 
 ---
 
-### 3.5 Tests for `tasks/crawl.py`
+### 3.5 ✅ Tests for `tasks/crawl.py`
 
-**Create:** `tests/test_crawl_task.py`
-
-**Tests:** `crawl_source` happy path, source not found, source disabled, schedule skip, exception handling. `run_all_sources` dispatch and TimeoutError handling.
+**Created:** `tests/test_crawl_task.py` (256 lines). All scenarios covered: `crawl_source` — lock skip, schedule skip, happy path, exception handling, lock held by different task. `run_all_sources` — no sources, load failure retries, dispatches sources, TimeoutError handling.
 
 ---
 
-### 3.6 Tests for select and extract tasks
+### 3.6 ✅ Tests for select and extract tasks
 
-**Create:** `tests/test_task_select.py`, extend `tests/test_dedup.py`
-
-**Tests for select:** score ≥ threshold → researching + dispatches next, score < threshold → skipped, selector disabled → dispatches researching directly.
-
-**Tests for extract:** happy path, extraction failure with empty text, dedup URL match, dedup title match, source not found.
+**Created:** `tests/test_task_select.py` (269 lines) — fully complete. `tests/test_extract_task.py` (144 lines) — extract task tests: happy path, extraction failure with fallback, duplicate detection, no-URL skip. `tests/test_dedup.py` — dedup URL/title match tests.
 
 ---
 
-### 3.7 Tests for admin API endpoints
+### 3.7 🔶 Tests for admin API endpoints
 
-**Create:** `tests/test_admin_api.py`
+**Created:** `tests/test_admin_api.py` (152 lines).
 
-**Tests:** `GET /admin/api/health` (authenticated + 401), `POST /admin/api/config/reload`, bulk article operations (delete, set_status, set_category, invalid action, >500 ids, empty list), `GET /admin/api/pipeline/stats`, `GET /admin/api/sources/health`.
+**Done:** Config reload, bulk articles (delete, set_status, set_category, invalid action, >500 ids, empty list, no JSON), pipeline stats, sources health, auth checks on all endpoints.
+
+**Skipped:** `test_authenticated` in `TestHealth` — skipped due to SQLAlchemy SQLite connection state contamination that causes naive/aware datetime comparison failures in downstream tests.
 
 ---
 
-### 3.8 Un-skip migration tests
+### 3.8 ✅ Un-skip migration tests
 
-**File:** `tests/test_migration.py`
-
-**Problem:** Tests skipped because Flask-Migrate not wired in test fixture.
-
-**Fix:** Add `Migrate()` init in `tests/conftest.py` after `db.init_app(app)`. May need to remove `db.create_all()` and rely on migrations. Then un-skip the `TestMigrations` class.
+**Rewritten:** `tests/test_migration.py` — replaced skipped `TestMigrations` class with `TestMigrationChain` (heads, chain integrity, revision loading) and `TestCreateAllSchema` (tables, article columns, source columns). Uses `flask_migrate.Migrate()` wired in conftest. Full upgrade/downgrade cannot run on SQLite due to migration 004's `op.create_unique_constraint`.
 
 ---
 
 ## Phase 4: Infrastructure
 
-### 4.1 Docker migration init service
+### 4.1 ✅ Docker migration init service
 
 **File:** `docker-compose.yml`
 
-**Add:** `db-migrate` service that runs `flask db upgrade`. Set `depends_on` with `service_completed_successfully` condition on both `web` and `celery-worker` services. Use `restart: "no"`.
+**Status:** Done — `db-migrate` service runs `flask db upgrade`, `web` and `celery-worker` depend on it with `service_completed_successfully`.
 
 ---
 
-### 4.2 Configurable constants
+### 4.2 ✅ Configurable constants
 
-**Files:** `config.py`, `services/crawling.py`, `constants.py`
-
-**Move to Config class with env var support:**
-- `MAX_CONSECUTIVE_FAILURES` (currently module-level `= 10` in `services/crawling.py:13`)
-- `STUCK_THRESHOLD_MINUTES` (currently module-level `= 60` in `constants.py:61`)
-- `MIN_CONTENT_LENGTH` (currently hardcoded 200 in content extraction)
-
-Default values unchanged for backward compatibility.
+**Status:** Done — all three constants configurable via env vars with fallback defaults.
 
 ---
 
-### 4.3 Database model consistency audit
+### 4.3 ✅ Database model consistency audit
 
-**Files:** All model files, migration files
-
-**Create:** `scripts/validate_models.py`
-
-Check that all columns with `server_default` also have `nullable=False` in Python models. The `AGENTS.md` already documents this convention but it's not enforced. Validate at CI time.
+**Created:** `scripts/validate_models.py` (73 lines). Validates `server_default` + `nullable=False` convention.
 
 ---
 
-### 4.4 Conftest improvements
+### 4.4 ✅ Conftest improvements
 
-**File:** `tests/conftest.py`
-
-- Reset `_warned_missing_vars` from `schemas/common.py` in `_reset_redis` autouse fixture (prevents warning suppression leaking across tests)
-- Add `_reset_factory_counter` autouse fixture to reset `factories._counter = 0` between tests
+**Status:** Done — `_warned_missing_vars` reset, `_reset_factory_counter` autouse fixture added.
 
 ---
 
 ## Phase 5: Architecture Improvements (Longer-term)
 
-### 5.1 Route refactoring
+### 5.1 ❌ Route refactoring
 
-**Files:** `routes/public.py` (689 lines) → split into blueprint modules
-
-Split into: `routes/public/articles.py`, `routes/public/feed.py`, `routes/public/subscribe.py`. Keep common routes (index, health, topic, tag) in `routes/public/__init__.py`. Provide 301 redirects for any URL changes. Target: each file under 200 lines.
+**Files:** `routes/public.py` (670 lines). No `routes/public/` directory exists yet.
 
 ---
 
-### 5.2 Service layer simplification
+### 5.2 🔶 Service layer simplification
 
 **Files:** `services/article.py`
 
-Extract: metrics tracking → `services/metrics.py`, pagination → `services/pagination.py`, JSON parsing → `services/article_parser.py`. Apply Single Responsibility Principle.
+**Done:** `services/metrics.py` extracted. **Missing:** `services/pagination.py`, `services/article_parser.py`.
 
 ---
 
-### 5.3 Configuration unification
+### 5.3 ❌ Configuration unification
 
-**New:** `services/config_unified.py`
-
-Unified config loader with precedence: DB > Env > YAML > Defaults. Pydantic schema validation at startup. Hot-reload via file watchers. Backward-compatible wrapper for existing `config.KEY` access patterns.
+**New:** `services/config_unified.py` — not created.
 
 ---
 
 ## Phase 6: Observability & Resilience (Longer-term)
 
-### 6.1 Structured logging
+### 6.1 ❌ Structured logging
 
-**New:** `services/logging_utils.py`
-
-Context vars for `request_id` and `article_id`. Structured log filter adding these fields automatically. Standardize log levels across codebase.
+**New:** `services/logging_utils.py` — not created.
 
 ---
 
-### 6.2 Metrics expansion
+### 6.2 ❌ Metrics expansion
 
-Extend `services/metrics.py` with histogram metrics for LLM call latency, content extraction duration, DB query time. Add Prometheus exposition via `/admin/api/metrics/prometheus`. Leverage existing `pipeline_monitor.py` Redis counters.
-
----
-
-### 6.3 Health check enhancement
-
-**New:** `services/health.py`
-
-Comprehensive health checker with circuit breaker pattern. Parallel checks for database, Redis, Ollama, SMTP, pipeline. Add `/health/detailed` and `/health/dependencies/<name>` endpoints.
+Not started.
 
 ---
 
-### 6.4 Redis operations optimization
+### 6.3 ❌ Health check enhancement
+
+**New:** `services/health.py` — not created.
+
+---
+
+### 6.4 ✅ Redis operations optimization
 
 **File:** `services/pipeline_monitor.py:143`
 
-Replace `redis.keys()` with `scan_iter()` batched iteration in `clear_stage_stats()`. Add connection pool metrics. Consider instrumented Redis client wrapper.
+**Status:** Done — `redis.keys()` replaced with `scan_iter(match=pattern, count=500)` in `clear_stage_stats()`. Variable renamed from `redis` to `redis_client` per AGENTS.md convention. Test fixtures updated with `scan_iter` support.
 
 ---
 
-### 6.5 DNS cache improvement
+### 6.5 ❌ DNS cache improvement
 
-**File:** `services/url.py:35-66`
-
-Replace `_TTLCache` (evicts oldest by timestamp) with LRU eviction policy. Add hit rate statistics. Add cache warming for active source domains.
+Not started.
 
 ---
 
-### 6.6 Dead letter queue
+### 6.6 ❌ Dead letter queue
 
-**New:** `services/dead_letter.py`, model in `models.py`
-
-Archive articles exceeding `MAX_TOTAL_RETRIES` to `dead_letter_articles` table with full failure context. Admin UI for viewing and manual retry. Audit trail for permanently failed articles.
+**New:** `services/dead_letter.py` — not created.
 
 ---
 
-### 6.7 Graceful degradation
+### 6.7 ❌ Graceful degradation
 
-Extend LLM fallback chain with explicit model-level fallbacks per role. Add fallback article extraction (trafilatura → readability → raw HTML). "Best effort" mode that continues pipeline with degraded quality.
+Not started.
 
 ---
 
-### 6.8 Timeout enforcement
+### 6.8 ❌ Timeout enforcement
 
-Review all HTTP request timeouts. Add Celery task soft/hard timeouts. Add database query timeouts. Make configurable in `pipeline.yaml`.
+Not started.
 
 ---
 
 ## Phase 7: Security Hardening (Longer-term)
 
-### 7.1 Input validation enhancement
+### 7.1 ❌ Input validation enhancement
 
-Comprehensive Pydantic validation on all route inputs. Validate all query parameters. Sanitize user inputs in templates.
+Not started.
 
-### 7.2 Audit logging
+### 7.2 ❌ Audit logging
 
-**New:** `services/audit.py`, model in `models.py`
-
-Log all admin actions (CRUD, config changes, source modifications) to `audit_logs` table. Admin UI for viewing audit trail.
+**New:** `services/audit.py` — not created.
 
 ---
 
 ## Execution Order
 
-**Immediate (bugs + safety):** Items 1.1, 1.2, 1.3
-**Quick wins (error handling):** Items 2.1, 2.2, 2.3, 2.4
-**Test foundation:** Items 4.4 (conftest), then 3.1–3.8
-**Infrastructure:** Items 4.1, 4.2, 4.3
-**Architecture:** Phase 5 items
-**Observability:** Phase 6 items
-**Security:** Phase 7 items
+**Completed:** Phases 1–2 (items 1.1–1.3, 2.1–2.4), Phase 3 (items 3.1–3.8), Phase 4 (all items), Phase 6.4
+
+**Remaining (by priority):**
+1. Phase 5 items — longer-term architecture improvements
+2. Phase 6 items (except 6.4) — longer-term observability
+3. Phase 7 items — longer-term security
+
+## Additional Fixes (not in original plan)
+
+### A.1 `encode_short_url` library API mismatch
+
+**File:** `models.py:18-19`
+
+**Problem:** `short_url.encode_url(article_id, min_length=6, alphabet=...)` fails with `TypeError` on `short-url==1.2.2` — the `alphabet` parameter was removed from the module-level function.
+
+**Fix:** Create a `UrlEncoder` instance with the custom alphabet at module level, use its `encode_url`/`decode_url` methods.
+
+### A.2 `migrations/env.py` fileConfig in test environment
+
+**File:** `migrations/env.py:13`
+
+**Problem:** `fileConfig(config.config_file_name)` fails in test environment because `alembic.ini` lives at project root, not in `migrations/`.
+
+**Fix:** Wrapped in `try/except (OSError, TypeError)` since it's only for logging setup.
 
 ## Verification
 

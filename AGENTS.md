@@ -39,7 +39,11 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
 
 ### Rate limiting
 
-`ModelLimiter` in `services/limiter.py` fails closed on Redis errors — returns `False` to deny slots when Redis is unavailable. This is intentional for LLM pipeline stages.
+**Do not add `@limiter.limit()` decorators to routes.** The application runs behind a reverse proxy/WAF that handles rate limiting more efficiently than Flask-Limiter. Adding per-route rate limiting adds unnecessary overhead and complexity.
+
+Only the admin login lockout remains (`routes/admin/auth.py` and `routes/admin/__init__.py`) as a defense-in-depth measure against brute-force attacks on the admin login endpoint.
+
+`ModelLimiter` in `services/limiter.py` still fails closed on Redis errors — returns `False` to deny slots when Redis is unavailable. This is intentional for LLM pipeline stages.
 
 ### ASGI deployment
 
@@ -51,9 +55,8 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 
 ### Existing capabilities to be aware of
 
-- **Config cache reload**: `POST /admin/api/config/reload` (`routes/admin/api.py:60-68`) clears all cached configs and LLM provider instances. Call this after config changes rather than building new invalidation.
-- **Public rate limiting**: Subscribe endpoint already has `@limiter.limit("3 per minute")`. Login has `@limiter.limit("10 per minute")`. Don't re-add these.
-- **Subscriber validation**: Newsletter type is validated against known topic keys (`routes/public.py:406-408`). Invalid types default to "main".
+- **Config cache reload**: `POST /admin/api/config/reload` (`routes/admin/api.py`) clears all cached configs and LLM provider instances. Call this after config changes rather than building new invalidation.
+- **Subscriber validation**: Newsletter type is validated against known topic keys (`routes/public.py`). Invalid types default to "main".
 - **Admin auth**: All `/admin/api/*` routes use `@require_auth` decorator. The health endpoint, task status, and config reload are all authenticated.
 
 ### Redis error handling

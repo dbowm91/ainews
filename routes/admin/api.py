@@ -3,14 +3,12 @@ import logging
 from flask import jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
-from extensions import limiter
 
 logger = logging.getLogger(__name__)
 
 
 @admin_bp.route("/api/health")
 @require_auth
-@limiter.limit("30 per minute")
 def health():
     from extensions import db
     from sqlalchemy import text
@@ -77,7 +75,6 @@ def health():
 
 @admin_bp.route("/api/workers/health")
 @require_auth
-@limiter.limit("10 per minute")
 def workers_health():
     """Detailed Celery worker health check for admin monitoring."""
     from celery_app import celery_app
@@ -125,7 +122,6 @@ def workers_health():
 
 @admin_bp.route("/api/task/<task_id>")
 @require_auth
-@limiter.limit("60 per minute")
 def task_status(task_id):
     from celery.result import AsyncResult
     from celery_app import celery_app
@@ -145,7 +141,6 @@ def task_status(task_id):
 
 @admin_bp.route("/api/config/reload", methods=["POST"])
 @require_auth
-@limiter.limit("5 per minute")
 def reload_config():
     from services.config_cache import get_config_cache
     from services.llm import clear_provider_cache
@@ -182,7 +177,6 @@ def reload_config():
 
 @admin_bp.route("/api/metrics")
 @require_auth
-@limiter.limit("30 per minute")
 def app_metrics():
     from services.metrics import get_metrics
 
@@ -191,7 +185,6 @@ def app_metrics():
 
 @admin_bp.route("/api/metrics/prometheus")
 @require_auth
-@limiter.limit("30 per minute")
 def prometheus_metrics():
     from flask import Response
     from services.metrics import get_metrics
@@ -201,7 +194,6 @@ def prometheus_metrics():
 
 @admin_bp.route("/api/pipeline/stats")
 @require_auth
-@limiter.limit("10 per minute")
 def pipeline_stats():
     """Get pipeline stage success/failure statistics."""
     from services.pipeline_monitor import get_all_stages_stats
@@ -217,7 +209,6 @@ def pipeline_stats():
 
 @admin_bp.route("/api/costs")
 @require_auth
-@limiter.limit("10 per minute")
 def cost_summary():
     """Get LLM cost summary from token usage metrics."""
     from services.cost_tracker import get_cost_summary
@@ -244,7 +235,6 @@ def cost_summary():
 
 @admin_bp.route("/api/sources/health")
 @require_auth
-@limiter.limit("10 per minute")
 def sources_health():
     """Get health status of all sources."""
     from models import Source
@@ -273,7 +263,6 @@ def sources_health():
 
 @admin_bp.route("/api/articles/bulk", methods=["POST"])
 @require_auth
-@limiter.limit("10 per minute")
 def bulk_article_operations():
     """Bulk operations on articles: delete, change status, change category."""
     from models import Article

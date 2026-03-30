@@ -1,6 +1,5 @@
 from flask import render_template, request, Response
 from routes.admin import admin_bp, require_auth
-from extensions import limiter
 from constants import PER_PAGE_ADMIN_SUBSCRIBERS
 
 
@@ -14,7 +13,9 @@ def subscribers():
     newsletter_type = request.args.get("type", "", type=str).strip()
     active_filter = request.args.get("active", "", type=str).strip()
 
-    q = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).order_by(Subscriber.subscribed_at.desc())
+    q = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).order_by(
+        Subscriber.subscribed_at.desc()
+    )
     if newsletter_type:
         q = q.filter_by(newsletter_type=newsletter_type)
     if active_filter == "active":
@@ -28,7 +29,8 @@ def subscribers():
     # Get distinct newsletter types for filter
     types = [
         r[0]
-        for r in Subscriber.query.filter(Subscriber.deleted_at.is_(None)).with_entities(Subscriber.newsletter_type)
+        for r in Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .with_entities(Subscriber.newsletter_type)
         .distinct()
         .all()
     ]
@@ -47,13 +49,16 @@ def subscribers():
 
 @admin_bp.route("/subscribers/export")
 @require_auth
-@limiter.limit("5 per hour")
 def export_subscribers():
     from models import Subscriber
     import csv
     import io
 
-    subs = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).order_by(Subscriber.subscribed_at.desc()).all()
+    subs = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .order_by(Subscriber.subscribed_at.desc())
+        .all()
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)

@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 import redis.exceptions
 from models import Article, Tag, ShareConfig, ArticleMetric
-from extensions import limiter, csrf
+from extensions import csrf
 from constants import PER_PAGE_PUBLIC, PipelineStatus
 from services.article import (
     parse_article_json,
@@ -306,7 +306,6 @@ def short_url_tracking_page(short_id):
 
 @public_bp.route("/api/track/share-click/<int:article_id>", methods=["POST"])
 @csrf.exempt
-@limiter.limit("30 per minute")
 def track_share_click(article_id):
     Article.query.get_or_404(article_id)
     track_metric(article_id, ArticleMetric.share_button_clicks)
@@ -476,7 +475,6 @@ def sitemap():
 
 
 @public_bp.route("/subscribe", methods=["POST"])
-@limiter.limit("3 per minute")
 @limit_content_length(1024)
 def subscribe():
     from models import Subscriber
@@ -578,7 +576,6 @@ def subscribe():
 
 
 @public_bp.route("/unsubscribe/<token>")
-@limiter.limit("20 per minute")
 def unsubscribe(token):
     """Show unsubscribe confirmation page (GET)."""
     from models import Subscriber
@@ -595,7 +592,6 @@ def unsubscribe(token):
 
 
 @public_bp.route("/unsubscribe/<token>", methods=["POST"])
-@limiter.limit("10 per minute")
 def unsubscribe_confirm(token):
     """Process unsubscribe request (POST with CSRF protection)."""
     from models import Subscriber
@@ -627,7 +623,6 @@ def unsubscribe_confirm(token):
 
 
 @public_bp.route("/verify/<token>")
-@limiter.limit("20 per minute")
 def verify(token):
     """Verify a subscriber's email address via token link."""
     from models import Subscriber

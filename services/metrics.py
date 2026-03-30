@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -120,3 +121,38 @@ def reset_metrics() -> None:
     global _metrics_instance
     with _metrics_lock:
         _metrics_instance = None
+
+
+@contextmanager
+def time_histogram(name: str, labels: dict = None):
+    """Context manager that records duration as a histogram observation.
+
+    Usage:
+        with time_histogram("pipeline.stage.duration", {"stage": "write"}):
+            run_write_stage()
+    """
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        duration = time.monotonic() - start
+        get_metrics().histogram_observe(name, duration, labels)
+
+
+def record_request(
+    method: str, path: str, status_code: int, duration_ms: float
+) -> None:
+    """Record an HTTP request metric.
+
+    Args:
+        method: HTTP method (GET, POST, etc.)
+        path: Request path
+        status_code: HTTP status code
+        duration_ms: Request duration in milliseconds
+    """
+    m = get_metrics()
+    m.counter_inc(
+        "http_requests_total",
+        labels={"method": method, "status": str(status_code)},
+    )
+    m.histogram_observe("http_request_duration_ms", duration_ms)

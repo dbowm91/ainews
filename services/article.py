@@ -1,145 +1,22 @@
-"""Article service for business logic related to articles."""
+"""Article service for business logic related to articles.
 
-import json
+For JSON parsing, see services/article_parser.py.
+For pagination and FTS search, see services/pagination.py.
+"""
+
 import logging
 from typing import Optional
-from sqlalchemy import func, text
+from sqlalchemy import func
 
 from extensions import db
 from models import Article, ArticleMetric
 from sqlalchemy.orm import joinedload
 
+# Re-export from extracted modules for backward compatibility
+from services.article_parser import parse_article_json, parse_articles  # noqa: F401
+from services.pagination import paginate_query, search_fts, _escape_like_pattern  # noqa: F401
+
 logger = logging.getLogger(__name__)
-
-
-def _escape_like_pattern(pattern: str) -> str:
-    r"""Escape special characters in LIKE patterns.
-
-    Escapes %, _, and \ characters that have special meaning in SQL LIKE.
-    This prevents unintended wildcard matches when searching.
-    """
-    return pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _build_fts_query(query: str) -> str:
-    """Build a safe FTS5 query string from user input.
-
-    Wraps each word in quotes and joins with AND for phrase-safe matching.
-    Strips FTS5 special characters to prevent syntax errors.
-    """
-    # Strip FTS5 operators that could break the query
-    safe = (
-        query.replace('"', "'")
-        .replace("*", "")
-        .replace(":", " ")
-        .replace("(", " ")
-        .replace(")", " ")
-        .replace("-", " ")
-        .replace("+", " ")
-    )
-    words = [w.strip() for w in safe.split() if w.strip()]
-    if not words:
-        return ""
-    return " AND ".join(f'"{w}"' for w in words)
-
-
-def _search_fts(
-    query: str, page: int, per_page: int, category: Optional[str] = None
-) -> tuple[list[Article], bool, int]:
-    """Search articles using SQLite FTS5.
-
-    Returns (articles, has_next, next_page).
-    """
-    fts_query = _build_fts_query(query)
-    if not fts_query:
-        return [], False, page + 1
-
-    offset = (page - 1) * per_page
-
-    if category:
-        sql = text("""
-            SELECT a.id, rank
-            FROM articles_fts fts
-            JOIN articles a ON a.id = fts.rowid
-            WHERE articles_fts MATCH :query
-              AND a.pipeline_status IN ('done', 'skipped')
-              AND a.category = :category
-            ORDER BY rank
-            LIMIT :limit OFFSET :offset
-        """)
-        params = {
-            "query": fts_query,
-            "category": category,
-            "limit": per_page + 1,
-            "offset": offset,
-        }
-    else:
-        sql = text("""
-            SELECT a.id, rank
-            FROM articles_fts fts
-            JOIN articles a ON a.id = fts.rowid
-            WHERE articles_fts MATCH :query
-              AND a.pipeline_status IN ('done', 'skipped')
-            ORDER BY rank
-            LIMIT :limit OFFSET :offset
-        """)
-        params = {"query": fts_query, "limit": per_page + 1, "offset": offset}
-
-    result = db.session.execute(sql, params)
-    rows = result.fetchall()
-
-    has_next = len(rows) > per_page
-    article_ids = [r[0] for r in rows[:per_page]]
-
-    if not article_ids:
-        return [], False, page + 1
-
-    # Fetch articles preserving FTS rank order
-    id_order = {id_: i for i, id_ in enumerate(article_ids)}
-    articles = (
-        Article.query.options(
-            joinedload(Article.source),
-            joinedload(Article.tags),
-            joinedload(Article.metrics),
-        )
-        .filter(Article.id.in_(article_ids))
-        .all()
-    )
-    articles.sort(key=lambda a: id_order.get(a.id, 999))
-
-    parse_articles(articles)
-    return articles, has_next, page + 1
-
-
-def parse_article_json(article) -> None:
-    """Attach pre-parsed JSON dicts to article objects.
-
-    This modifies the article object in-place by adding _fa and _summary attributes.
-    """
-    fa_raw = getattr(article, "final_article", None)
-    if fa_raw:
-        try:
-            article._fa = json.loads(fa_raw)
-        except (json.JSONDecodeError, TypeError):
-            article._fa = None
-    else:
-        article._fa = None
-
-    summary_raw = getattr(article, "summary", None)
-    if summary_raw:
-        try:
-            article._summary = json.loads(summary_raw)
-        except (json.JSONDecodeError, TypeError):
-            article._summary = None
-    else:
-        article._summary = None
-
-
-def parse_articles(articles: list) -> list:
-    """Batch-parse JSON for a list of articles."""
-    for article in articles:
-        parse_article_json(article)
-    return articles
 
 
 def track_metric(article_id: int, column) -> None:
@@ -194,7 +71,7 @@ def get_articles_paginated(
     # Use FTS5 for text search when query is provided
     if query:
         try:
-            return _search_fts(query, page, per_page, category=category)
+            return search_fts(query, page, per_page, category=category)
         except Exception:
             # FTS5 table may not exist yet (e.g., tests, fresh install)
             logger.debug("FTS5 search failed, falling back to ILIKE", exc_info=True)

@@ -32,6 +32,12 @@ def _reset_redis():
         _warned_missing_vars.clear()
     except (ImportError, AttributeError):
         pass
+    try:
+        from services import config_unified
+
+        config_unified._instance = None
+    except (ImportError, AttributeError):
+        pass
     yield
     reset_redis()
     try:
@@ -56,6 +62,12 @@ def _reset_redis():
         from schemas.common import _warned_missing_vars
 
         _warned_missing_vars.clear()
+    except (ImportError, AttributeError):
+        pass
+    try:
+        from services import config_unified
+
+        config_unified._instance = None
     except (ImportError, AttributeError):
         pass
 

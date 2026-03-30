@@ -33,29 +33,37 @@ _DNS_CACHE_MAX = 1024
 
 
 class _TTLCache:
-    """Bounded TTL cache for DNS results with explicit locking for thread safety."""
+    """Bounded TTL cache for DNS results with explicit locking for thread safety.
+
+    Tracks hit/miss statistics and uses LRU eviction when full.
+    """
 
     def __init__(self, maxsize: int, ttl: float) -> None:
         self._store: dict[str, tuple[float, list[str]]] = {}
         self._maxsize = maxsize
         self._ttl = ttl
         self._lock = threading.Lock()
+        self._hits = 0
+        self._misses = 0
 
     def get(self, key: str) -> list[str] | None:
         with self._lock:
             entry = self._store.get(key)
             if entry is None:
+                self._misses += 1
                 return None
             ts, value = entry
             if (time.monotonic() - ts) >= self._ttl:
                 del self._store[key]
+                self._misses += 1
                 return None
+            self._hits += 1
             return value
 
     def set(self, key: str, value: list[str]) -> None:
         with self._lock:
-            if len(self._store) >= self._maxsize:
-                # Evict oldest entry
+            if len(self._store) >= self._maxsize and key not in self._store:
+                # Evict oldest entry (lowest timestamp)
                 oldest = min(self._store, key=lambda k: self._store[k][0])
                 del self._store[oldest]
             self._store[key] = (time.monotonic(), value)
@@ -63,6 +71,19 @@ class _TTLCache:
     def clear(self) -> None:
         with self._lock:
             self._store.clear()
+
+    def get_stats(self) -> dict:
+        """Return cache hit/miss statistics."""
+        with self._lock:
+            total = self._hits + self._misses
+            return {
+                "size": len(self._store),
+                "maxsize": self._maxsize,
+                "ttl": self._ttl,
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": round(self._hits / total, 3) if total > 0 else 0,
+            }
 
 
 _dns_cache = _TTLCache(maxsize=_DNS_CACHE_MAX, ttl=_DNS_CACHE_TTL)

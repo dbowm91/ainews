@@ -2,7 +2,7 @@
 
 import json
 
-from services.article import _build_fts_query, _escape_like_pattern
+from services.pagination import _build_fts_query, _escape_like_pattern
 
 
 class TestFtsQueryBuilder:

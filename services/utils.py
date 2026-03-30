@@ -2,7 +2,6 @@ import json
 import re
 from typing import Optional, Any
 
-from sqlalchemy.orm import Query
 
 
 # Simple but effective email pattern - catches common mistakes
@@ -19,29 +18,8 @@ def is_valid_email(email: str) -> bool:
     return bool(_EMAIL_RE.match(email.strip()))
 
 
-def paginate_query(
-    query: Query,
-    page: int,
-    per_page: int,
-) -> tuple[list, bool, int]:
-    """Paginate a SQLAlchemy query using the LIMIT+1 pattern.
-
-    Fetches per_page+1 rows to detect if a next page exists without
-    a separate COUNT query.
-
-    Args:
-        query: SQLAlchemy query to paginate.
-        page: Current page number (1-indexed).
-        per_page: Number of items per page.
-
-    Returns:
-        Tuple of (items, has_next, next_page).
-    """
-    rows = query.offset((page - 1) * per_page).limit(per_page + 1).all()
-    has_next = len(rows) > per_page
-    if has_next:
-        rows = rows[:per_page]
-    return rows, has_next, page + 1
+# Re-export from canonical location
+from services.pagination import paginate_query  # noqa: E402, F401
 
 
 def parse_article_headline(

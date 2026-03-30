@@ -1,0 +1,133 @@
+"""Unified configuration access layer.
+
+Provides a single point of access to all application configuration,
+abstracting Flask config, environment variables, and YAML configs.
+"""
+
+import logging
+import os
+from dataclasses import dataclass, field
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PipelineConfig:
+    """Pipeline-related configuration."""
+
+    max_stage_retries: int = 3
+    max_total_retries: int = 10
+    stuck_threshold_minutes: int = 60
+    min_content_length: int = 200
+
+
+@dataclass
+class SecurityConfig:
+    """Security-related configuration."""
+
+    session_cookie_secure: bool = False
+    session_cookie_httponly: bool = True
+    session_cookie_samesite: str = "Lax"
+    max_content_length: int = 64 * 1024
+    verification_expiry_seconds: int = 3600
+
+
+@dataclass
+class SourceConfig:
+    """Source health configuration."""
+
+    max_consecutive_failures: int = 10
+
+
+@dataclass
+class AppConfig:
+    """Unified application configuration.
+
+    Aggregates configuration from Flask config and environment variables
+    into a single typed object with sensible defaults.
+    """
+
+    pipeline: PipelineConfig = field(default_factory=PipelineConfig)
+    security: SecurityConfig = field(default_factory=SecurityConfig)
+    sources: SourceConfig = field(default_factory=SourceConfig)
+
+    @classmethod
+    def from_flask(cls) -> "AppConfig":
+        """Build config from current Flask app context.
+
+        Falls back to environment variables and defaults outside Flask context.
+        """
+        try:
+            from flask import current_app
+
+            cfg = current_app.config
+            return cls(
+                pipeline=PipelineConfig(
+                    max_stage_retries=cfg.get("MAX_STAGE_RETRIES", 3),
+                    max_total_retries=cfg.get("MAX_TOTAL_RETRIES", 10),
+                    stuck_threshold_minutes=cfg.get("STUCK_THRESHOLD_MINUTES", 60),
+                    min_content_length=cfg.get("MIN_CONTENT_LENGTH", 200),
+                ),
+                security=SecurityConfig(
+                    session_cookie_secure=cfg.get("SESSION_COOKIE_SECURE", False),
+                    session_cookie_httponly=cfg.get("SESSION_COOKIE_HTTPONLY", True),
+                    session_cookie_samesite=cfg.get("SESSION_COOKIE_SAMESITE", "Lax"),
+                    max_content_length=cfg.get("MAX_CONTENT_LENGTH", 64 * 1024),
+                    verification_expiry_seconds=cfg.get(
+                        "VERIFICATION_EXPIRY_SECONDS", 3600
+                    ),
+                ),
+                sources=SourceConfig(
+                    max_consecutive_failures=cfg.get("MAX_CONSECUTIVE_FAILURES", 10),
+                ),
+            )
+        except RuntimeError:
+            return cls.from_env()
+
+    @classmethod
+    def from_env(cls) -> "AppConfig":
+        """Build config from environment variables only (no Flask context)."""
+        return cls(
+            pipeline=PipelineConfig(
+                max_stage_retries=int(os.environ.get("MAX_STAGE_RETRIES", "3")),
+                max_total_retries=int(os.environ.get("MAX_TOTAL_RETRIES", "10")),
+                stuck_threshold_minutes=int(
+                    os.environ.get("STUCK_THRESHOLD_MINUTES", "60")
+                ),
+                min_content_length=int(os.environ.get("MIN_CONTENT_LENGTH", "200")),
+            ),
+            security=SecurityConfig(
+                session_cookie_secure=os.environ.get("SESSION_COOKIE_SECURE", "false")
+                .lower()
+                .startswith("t"),
+                max_content_length=int(
+                    os.environ.get("MAX_CONTENT_LENGTH", str(64 * 1024))
+                ),
+                verification_expiry_seconds=int(
+                    os.environ.get("VERIFICATION_EXPIRY_SECONDS", "3600")
+                ),
+            ),
+            sources=SourceConfig(
+                max_consecutive_failures=int(
+                    os.environ.get("MAX_CONSECUTIVE_FAILURES", "10")
+                ),
+            ),
+        )
+
+
+_instance: Optional[AppConfig] = None
+
+
+def get_config() -> AppConfig:
+    """Get the unified app config (cached per request context)."""
+    global _instance
+    if _instance is None:
+        _instance = AppConfig.from_flask()
+    return _instance
+
+
+def reset_config() -> None:
+    """Reset cached config (for testing)."""
+    global _instance
+    _instance = None

@@ -70,6 +70,15 @@ def health():
         logger.exception("Health check: cache stats failed")
         status["cache"] = "error"
 
+    # DNS cache stats
+    try:
+        from services.url import _dns_cache
+
+        status["dns_cache"] = _dns_cache.get_stats()
+    except Exception:
+        logger.exception("Health check: DNS cache stats failed")
+        status["dns_cache"] = "error"
+
     return jsonify(status)
 
 

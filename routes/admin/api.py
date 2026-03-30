@@ -1,7 +1,11 @@
+import logging
+
 from flask import jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from extensions import limiter
+
+logger = logging.getLogger(__name__)
 
 
 @admin_bp.route("/api/health")
@@ -20,6 +24,7 @@ def health():
         db.session.execute(text("SELECT 1"))
         status["database"] = "ok"
     except Exception:
+        logger.exception("Health check: database ping failed")
         status["database"] = "error"
 
     try:
@@ -27,6 +32,7 @@ def health():
 
         status["llm"] = get_provider_info()
     except Exception:
+        logger.exception("Health check: LLM provider info failed")
         status["llm"] = "error"
 
     try:
@@ -36,6 +42,7 @@ def health():
         r.ping()
         status["redis"] = "ok"
     except Exception:
+        logger.exception("Health check: Redis ping failed")
         status["redis"] = "error"
 
     # Celery workers check
@@ -49,6 +56,7 @@ def health():
         else:
             status["celery"] = "no_workers"
     except Exception:
+        logger.exception("Health check: Celery inspect failed")
         status["celery"] = "error"
 
     status["circuit_breakers"] = get_all_breaker_status()
@@ -61,6 +69,7 @@ def health():
     try:
         status["cache"] = get_response_cache().get_stats()
     except Exception:
+        logger.exception("Health check: cache stats failed")
         status["cache"] = "error"
 
     return jsonify(status)

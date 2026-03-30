@@ -26,6 +26,7 @@ VALID_PIPELINE_STATUSES = frozenset(
 
 class PipelineStatus:
     """Pipeline status constants to avoid typos."""
+
     PENDING = "pending"
     SELECTING = "selecting"  # Added for completeness, though not in DB
     RESEARCHING = "researching"
@@ -48,7 +49,8 @@ def truncate_for_log(text: str, max_length: int = MAX_LOG_TITLE_LENGTH) -> str:
     text = str(text).strip()
     if len(text) <= max_length:
         return text
-    return text[:max_length - 3] + "..."
+    return text[: max_length - 3] + "..."
+
 
 # Impact score bounds
 IMPACT_SCORE_MIN = 0
@@ -57,5 +59,28 @@ IMPACT_SCORE_MAX = 100
 # Content extraction minimum text length
 MIN_CONTENT_LENGTH = 200
 
+
+def _get_min_content_length() -> int:
+    """Get min content length from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("MIN_CONTENT_LENGTH", MIN_CONTENT_LENGTH)
+    except RuntimeError:
+        return MIN_CONTENT_LENGTH
+
+
 # Dead-letter: minutes before an in-progress article is considered stuck
 STUCK_THRESHOLD_MINUTES = 60
+
+
+def _get_stuck_threshold_minutes() -> int:
+    """Get stuck threshold from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get(
+            "STUCK_THRESHOLD_MINUTES", STUCK_THRESHOLD_MINUTES
+        )
+    except RuntimeError:
+        return STUCK_THRESHOLD_MINUTES

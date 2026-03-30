@@ -20,7 +20,9 @@ def cleanup_old_pipeline_logs(self):
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     try:
-        deleted = PipelineLog.query.filter(PipelineLog.created_at < cutoff).delete()
+        deleted = PipelineLog.query.filter(PipelineLog.created_at < cutoff).delete(
+            synchronize_session=False
+        )
         db.session.commit()
         logger.info(f"Cleaned up {deleted} pipeline logs older than 30 days")
         return {"deleted": deleted}

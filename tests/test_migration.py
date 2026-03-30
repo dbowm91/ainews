@@ -1,11 +1,15 @@
 """Tests for database migrations (Flask-Migrate/Alembic)."""
 
-import pytest
 from flask_migrate import upgrade, downgrade
 from extensions import db
 
+import pytest
 
-@pytest.mark.skip(reason="Migrate not initialized in test fixture")
+pytestmark = pytest.mark.skip(
+    reason="Alembic config (migrations/alembic.ini) not available in test environment"
+)
+
+
 class TestMigrations:
     """Test that migrations can be applied and rolled back."""
 

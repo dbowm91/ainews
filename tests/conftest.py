@@ -26,6 +26,12 @@ def _reset_redis():
         metrics._metrics_instance = None
     except (ImportError, AttributeError):
         pass
+    try:
+        from schemas.common import _warned_missing_vars
+
+        _warned_missing_vars.clear()
+    except (ImportError, AttributeError):
+        pass
     yield
     reset_redis()
     try:
@@ -46,6 +52,22 @@ def _reset_redis():
         metrics._metrics_instance = None
     except (ImportError, AttributeError):
         pass
+    try:
+        from schemas.common import _warned_missing_vars
+
+        _warned_missing_vars.clear()
+    except (ImportError, AttributeError):
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _reset_factory_counter():
+    """Reset factory ID counter between tests to prevent ID collisions."""
+    import tests.factories as factories
+
+    factories._counter = 0
+    yield
+    factories._counter = 0
 
 
 @pytest.fixture
@@ -126,6 +148,13 @@ def app():
     db.init_app(app)
     csrf.init_app(app)
     ext_limiter.enabled = False
+
+    try:
+        from flask_migrate import Migrate
+
+        Migrate(app, db)
+    except ImportError:
+        pass
 
     import models  # noqa: F401
 

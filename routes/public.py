@@ -22,30 +22,14 @@ from services.article import (
 )
 from services.utils import is_valid_email
 from services.config_cache import get_config_cache
+from routes import limit_content_length
 import logging
 import secrets
-from functools import wraps
 
 logger = logging.getLogger(__name__)
 
 public_bp = Blueprint("public", __name__)
 PER_PAGE = PER_PAGE_PUBLIC
-
-
-def limit_content_length(max_bytes: int):
-    """Decorator to limit request Content-Length per route."""
-
-    def decorator(f):
-        @wraps(f)
-        def wrapped(*args, **kwargs):
-            content_length = request.content_length
-            if content_length and content_length > max_bytes:
-                return jsonify({"message": "Request too large"}), 413
-            return f(*args, **kwargs)
-
-        return wrapped
-
-    return decorator
 
 
 def _render_feed_or_page(ctx: dict[str, Any], full_template: str) -> str:
@@ -73,6 +57,7 @@ def _get_topic_icons() -> dict[str, str]:
             topics = load_topics().topics
             return {k: v.icon for k, v in topics.items() if v.icon}
         except Exception:
+            logger.exception("Failed to load topic icons")
             return {}
 
     return get_config_cache().get("topic_icons", _load, ttl=300)
@@ -373,6 +358,7 @@ def health():
             checks["celery"] = "no_workers"
             # missing workers is not considered degradation for health endpoint
     except Exception:
+        logger.exception("Health check: Celery inspect failed")
         checks["celery"] = "error"
         overall = "degraded"
 

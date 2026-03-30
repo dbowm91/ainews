@@ -2,8 +2,9 @@ from datetime import datetime, timezone, timedelta
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 
-from constants import STUCK_THRESHOLD_MINUTES, PipelineStatus
+from constants import _get_stuck_threshold_minutes, PipelineStatus
 from tasks.pipeline import MAX_STAGE_RETRIES
 
 logger = get_task_logger(__name__)
@@ -28,12 +29,14 @@ def retry_stuck(self):
     soft_cutoff = now - timedelta(minutes=15)
 
     stuck = Article.query.filter(
-        Article.pipeline_status.in_([
-            PipelineStatus.RESEARCHING,
-            PipelineStatus.WRITING,
-            PipelineStatus.EDITING,
-            PipelineStatus.PENDING,
-        ]),
+        Article.pipeline_status.in_(
+            [
+                PipelineStatus.RESEARCHING,
+                PipelineStatus.WRITING,
+                PipelineStatus.EDITING,
+                PipelineStatus.PENDING,
+            ]
+        ),
         Article.updated_at < soft_cutoff,
     ).all()
 
@@ -44,7 +47,7 @@ def retry_stuck(self):
     for article in stuck:
         age_minutes = (now - article.updated_at).total_seconds() / 60
 
-        if age_minutes >= STUCK_THRESHOLD_MINUTES:
+        if age_minutes >= _get_stuck_threshold_minutes():
             _dead_letter(article)
             dead_lettered += 1
         elif (article.retry_count or 0) >= MAX_STAGE_RETRIES:
@@ -93,6 +96,10 @@ def _dead_letter(article):
     article.retry_count = 0
     article.last_error = (
         f"Dead-lettered: stuck in '{article.pipeline_status}' "
-        f"beyond {STUCK_THRESHOLD_MINUTES} minutes"
+        f"beyond {_get_stuck_threshold_minutes()} minutes"
     )
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.error(f"Failed to commit dead-letter for article {article.id}")

@@ -30,6 +30,15 @@ class Config:
     MAX_STAGE_RETRIES = int(os.environ.get("MAX_STAGE_RETRIES", "3"))
     MAX_TOTAL_RETRIES = int(os.environ.get("MAX_TOTAL_RETRIES", "10"))
 
+    # Source health
+    MAX_CONSECUTIVE_FAILURES = int(os.environ.get("MAX_CONSECUTIVE_FAILURES", "10"))
+
+    # Dead-letter threshold
+    STUCK_THRESHOLD_MINUTES = int(os.environ.get("STUCK_THRESHOLD_MINUTES", "60"))
+
+    # Content extraction
+    MIN_CONTENT_LENGTH = int(os.environ.get("MIN_CONTENT_LENGTH", "200"))
+
     # Email verification
     VERIFICATION_EXPIRY_SECONDS = int(
         os.environ.get("VERIFICATION_EXPIRY_SECONDS", "3600")
@@ -95,9 +104,13 @@ class DevelopmentConfig(Config):
 
     def __init__(self):
         super().__init__()
+        logger = logging.getLogger(__name__)
         if not self.ADMIN_PASSWORD:
-            logging.getLogger(__name__).warning(
-                "ADMIN_PASSWORD not set - admin login disabled"
+            logger.warning("ADMIN_PASSWORD not set - admin login disabled")
+        if self.SECRET_KEY == "dev-secret-key-change-me":
+            logger.warning(
+                "SECRET_KEY is using default value 'dev-secret-key-change-me' — "
+                "sessions are insecure. Set SECRET_KEY env var for production."
             )
 
 

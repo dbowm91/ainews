@@ -1,4 +1,5 @@
 from flask import render_template, jsonify
+from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 
 
@@ -28,7 +29,7 @@ def enable_source(source_id):
     source.last_error = None
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         return jsonify({"message": "Failed to enable source"}), 500
     return jsonify({"message": f"Source {source.name} enabled"}), 200
@@ -46,7 +47,7 @@ def disable_source(source_id):
     source.disabled_at = datetime.now(timezone.utc)
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         return jsonify({"message": "Failed to disable source"}), 500
     return jsonify({"message": f"Source {source.name} disabled"}), 200

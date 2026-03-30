@@ -307,14 +307,6 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
         return True
 
     if article.retry_count >= max_stage:
-        try:
-            db.session.commit()
-        except SQLAlchemyError as commit_exc:
-            db.session.rollback()
-            logger.error(
-                f"Failed to commit retry_count for article {article.id}: {commit_exc}"
-            )
-            return False
         _degrade_and_advance(article, stage, run_id=run_id)
         return True
     else:

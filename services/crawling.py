@@ -13,6 +13,18 @@ logger = logging.getLogger(__name__)
 MAX_CONSECUTIVE_FAILURES = 10
 
 
+def _get_max_consecutive_failures() -> int:
+    """Get max consecutive failures from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get(
+            "MAX_CONSECUTIVE_FAILURES", MAX_CONSECUTIVE_FAILURES
+        )
+    except RuntimeError:
+        return MAX_CONSECUTIVE_FAILURES
+
+
 def create_pipeline_run(task_id: str, triggered_by: str = "scheduled") -> PipelineRun:
     """Create a new pipeline run record.
 
@@ -218,7 +230,8 @@ def record_crawl_failure(source: Source, error_message: str) -> None:
     """
     source.consecutive_failures = (source.consecutive_failures or 0) + 1
     source.last_error = error_message[:2000] if error_message else None
-    if source.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+    max_failures = _get_max_consecutive_failures()
+    if source.consecutive_failures >= max_failures:
         source.disabled_at = datetime.now(timezone.utc)
         source.active = False
         logger.warning(

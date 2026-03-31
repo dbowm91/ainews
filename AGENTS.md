@@ -170,18 +170,6 @@ Admin article list (`/admin/articles`) supports:
 - Source filter: `source_id` query param
 - Date range: `date_from`, `date_to` query params (ISO format)
 
-### Known issues (verified 2026-03-29) — ALL RESOLVED
-
-These were identified during a codebase review and have been fixed. See `plan.md` for details.
-
-- ~~`_dead_letter()` missing try/except~~ — FIXED: wrapped in `try/except SQLAlchemyError`
-- ~~`_handle_stage_failure()` double-commit~~ — FIXED: removed standalone commit before `_degrade_and_advance()`
-- ~~Bare `except Exception:` in health endpoint~~ — FIXED: added `logger.exception()` calls
-- ~~Bare `except Exception:` in sources routes~~ — FIXED: replaced with `except SQLAlchemyError:`
-- ~~Duplicate `limit_content_length`~~ — FIXED: deduplicated into `routes/__init__.py`
-- ~~`redis.keys()` blocking~~ — FIXED: replaced with `scan_iter()` in `clear_stage_stats()`
-- ~~Hardcoded constants~~ — FIXED: configurable via env vars
-
 ### Additional lessons learned
 
 **`short_url` library API**: Version 1.2.2 does not support `alphabet` parameter on module-level `encode_url()`/`decode_url()` functions. Must instantiate `short_url.UrlEncoder(alphabet=...)` and use its methods. See `models.py:8-10`.
@@ -193,3 +181,23 @@ These were identified during a codebase review and have been fixed. See `plan.md
 **Migration tests on SQLite**: Cannot run full `upgrade()`/`downgrade()` when migrations use `op.create_unique_constraint` (unsupported ALTER in SQLite). Test migration chain integrity and schema consistency instead. See `tests/test_migration.py`.
 
 **Redis mock fixture consistency**: When changing Redis operations (e.g., `keys()` → `scan_iter()`), update ALL mock fixtures — both the shared `mock_redis` in `conftest.py` AND any test-specific fixtures (e.g., `redis_client` in `test_pipeline_monitor.py`).
+
+### Security patterns
+
+**HTML escaping in email templates**: All text content embedded in email HTML (headlines, categories, TL;DR text) must be escaped with `html.escape()` before insertion. LLM-generated content from `final_article` JSON is untrusted and may contain HTML/JS. See `services/newsletter.py` and `services/email.py`.
+
+**Deserialization allowlists**: Any function that calls `importlib.import_module()` with data from external storage (Redis, user input) must validate against an allowlist of permitted class paths. See `services/config_cache.py:_import_class()`.
+
+### Concurrency patterns
+
+**Atomic lock release with Lua**: Lock release must use a Lua script for atomic check-and-delete, not separate `GET` → `DEL` calls. The check-then-delete pattern has a race condition where another task can acquire the lock between the two operations. See `plan.md` Phase 2.1 for the pattern.
+
+**Thread-safe singletons**: All `get_*()` singleton factory functions must use `threading.Lock` with double-checked locking. The pattern in `services/limiter.py:get_limiter()` is the reference implementation. `get_response_cache()` and `get_config_cache()` lack this protection.
+
+### Logging conventions
+
+**Prefer %-formatting over f-strings in log calls**: Use `logger.error("Failed: %s", e)` not `logger.error(f"Failed: {e}")`. %-style defers string construction when the log level is filtered out. This is a project-wide convention — convert f-string log calls when you encounter them during other work.
+
+### Timeout patterns
+
+**ThreadPoolExecutor shutdown**: When implementing timeouts with `ThreadPoolExecutor`, use `executor.shutdown(wait=False, cancel_futures=True)` in the `finally` block — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout. Python 3.9+ supports `cancel_futures=True` (project uses 3.12).

@@ -1,5 +1,6 @@
 from celery import shared_task, group
 from celery.utils.log import get_task_logger
+from billiard.exceptions import SoftTimeLimitExceeded
 
 logger = get_task_logger(__name__)
 
@@ -32,14 +33,13 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     # Distributed lock to prevent duplicate processing across workers.
     # Uses task ID so retries from the same task can re-acquire.
     lock_key = f"ainews:crawl_lock:{source_id}"
-    redis = get_redis()
+    redis_client = get_redis()
     task_id = self.request.id or "manual"
-    acquired = redis.set(lock_key, task_id, nx=True, ex=30)
+    acquired = redis_client.set(lock_key, task_id, nx=True, ex=30)
     if not acquired:
-        existing = redis.get(lock_key)
+        existing = redis_client.get(lock_key)
         if existing and existing.decode() == task_id:
-            # Retry from same task — re-acquire
-            redis.set(lock_key, task_id, nx=False, ex=30)
+            redis_client.set(lock_key, task_id, nx=False, ex=30)
         else:
             logger.info("Source %s already being crawled, skipping", source_id)
             return {"source_id": source_id, "skipped": True, "reason": "locked"}
@@ -131,6 +131,13 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             "fetched": len(items),
             "new": len(new_items),
         }
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        _log_pipeline(
+            run_id, "crawl", "error", f"{source_id}: soft time limit exceeded"
+        )
+        logger.error("Task exceeded soft time limit for source %s", source_id)
+        raise
     except Exception as e:
         db.session.rollback()
         _log_pipeline(run_id, "crawl", "error", f"{source_id}: {e}")
@@ -140,7 +147,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
         try:
             from services.redis_utils import release_lock
 
-            release_lock(redis, lock_key, task_id)
+            release_lock(redis_client, lock_key, task_id)
         except Exception:
             logger.warning("Failed to release crawl lock for %s", source_id)
 
@@ -196,10 +203,10 @@ def run_all_sources(self, run_id=None):
     results = []
     timed_out = False
     try:
-        results = result.get(timeout=300, propagate=False)
+        results = result.get(timeout=240, propagate=False)
     except TimeoutError:
         timed_out = True
-        logger.error("Source crawl timed out after 300s, aggregating partial results")
+        logger.error("Source crawl timed out after 240s, aggregating partial results")
         # Try to get whatever results are available
         try:
             results = result.get(timeout=1, propagate=False) or []

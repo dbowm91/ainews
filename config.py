@@ -172,7 +172,7 @@ def _validate_llm_providers():
             elif pdef.type == "ollama" and not pdef.config.get("model"):
                 raise RuntimeError(f"Provider '{pdef.id}': missing model")
     except Exception as e:
-        logger.warning(f"Could not validate LLM providers: {e}")
+        logger.warning("Could not validate LLM providers: %s", e)
 
     if not enabled_providers:
         raise RuntimeError(

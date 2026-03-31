@@ -1,7 +1,8 @@
 from celery import Celery, Task
 from celery.signals import before_task_publish
 import os
-import threading
+
+from celery_support import _app_cache, _app_cache_lock
 
 # Celery CLI (`celery -A celery_app:celery_app`) requires a fully-configured
 # module-level celery_app. We initialize at import time for that reason.
@@ -11,8 +12,6 @@ import threading
 from logging_config import request_id_var
 
 _celery = Celery("ainews")
-_app_cache = {}
-_app_cache_lock = threading.Lock()
 
 
 class FlaskTask(Task):

@@ -59,7 +59,13 @@ def _find_duplicate_article(url: str, title: str):
     return None
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=30, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=30,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def process_item(
     self,
     source_key,
@@ -99,7 +105,7 @@ def process_item(
             ):
                 extracted_text = extraction.text
         except Exception as exc:
-            logger.warning(f"Extraction failed for {url}: {exc}")
+            logger.warning("Extraction failed for %s: %s", url, exc)
             if run_id:
                 _log_pipeline(
                     run_id,
@@ -112,7 +118,7 @@ def process_item(
     try:
         duplicate = _find_duplicate_article(url, title)
     except Exception as exc:
-        logger.warning(f"Dedup check failed for {truncate_for_log(title)}: {exc}")
+        logger.warning("Dedup check failed for %s: %s", truncate_for_log(title), exc)
         duplicate = None
     if duplicate:
         logger.info(
@@ -215,7 +221,7 @@ def process_item(
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        logger.error(f"DB operation failed for {external_id}: {exc}")
+        logger.error("DB operation failed for %s: %s", external_id, exc)
         if run_id:
             _log_pipeline(run_id, "extract", "error", f"{external_id}: {exc}")
         raise
@@ -228,7 +234,7 @@ def process_item(
             f"Extracted [{topics[0] if topics else '?'}]: {title[:60]}",
             article_id=article.id,
         )
-    logger.info(f"Extracted [{topics[0] if topics else '?'}]: {title[:60]}")
+    logger.info("Extracted [%s]: %s", topics[0] if topics else "?", title[:60])
 
     from tasks.select import select_article
 

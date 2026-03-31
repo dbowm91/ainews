@@ -6,6 +6,7 @@ abstracting Flask config, environment variables, and YAML configs.
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -117,20 +118,26 @@ class AppConfig:
 
 
 _instance: Optional[AppConfig] = None
+_config_lock = threading.Lock()
 
 
 def get_config() -> AppConfig:
-    """Get the unified app config (cached per request context)."""
+    """Get the unified app config (cached singleton)."""
     global _instance
-    if _instance is None:
+    if _instance is not None:
+        return _instance
+    with _config_lock:
+        if _instance is not None:
+            return _instance
         _instance = AppConfig.from_flask()
-    return _instance
+        return _instance
 
 
 def reset_config() -> None:
     """Reset cached config (for testing)."""
     global _instance
-    _instance = None
+    with _config_lock:
+        _instance = None
 
 
 def validate_config() -> tuple[bool, list[str]]:

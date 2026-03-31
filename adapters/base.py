@@ -74,7 +74,7 @@ class BaseSourceAdapter(abc.ABC):
                 if item is not None:
                     parsed.append(item)
             except Exception as e:
-                logger.warning(f"[{self.source_id}] Parse error: {e}")
+                logger.warning("[%s] Parse error: %s", self.source_id, e)
         logger.info(
             f"[{self.source_id}] Fetched {len(raw_items)}, parsed {len(parsed)}"
         )

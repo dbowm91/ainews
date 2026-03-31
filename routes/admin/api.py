@@ -154,6 +154,7 @@ def reload_config() -> tuple[Response, int] | Response:
     from services.config_cache import get_config_cache
     from services.config_unified import validate_config
     from services.llm import clear_provider_cache
+    from celery_support import clear_app_cache
 
     is_valid, errors = validate_config()
     if not is_valid:
@@ -161,6 +162,7 @@ def reload_config() -> tuple[Response, int] | Response:
 
     get_config_cache().invalidate_all()
     clear_provider_cache()
+    clear_app_cache()
     return jsonify({"message": "Config cache cleared"}), 200
 
 
@@ -312,16 +314,8 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         return jsonify({"message": "No articles found"}), 404
 
     if action == "delete":
-        from models import Citation, ArticleMetric, ArticleVersion, article_tags
-
         try:
             for article in articles:
-                Citation.query.filter_by(article_id=article.id).delete()
-                ArticleMetric.query.filter_by(article_id=article.id).delete()
-                ArticleVersion.query.filter_by(article_id=article.id).delete()
-                db.session.execute(
-                    article_tags.delete().where(article_tags.c.article_id == article.id)
-                )
                 db.session.delete(article)
             db.session.commit()
         except SQLAlchemyError:

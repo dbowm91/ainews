@@ -115,7 +115,7 @@ def _is_locked_out(ip: str) -> bool:
         count = int(data.get(b"count", 0))
         return count >= _LOGIN_MAX_ATTEMPTS
     except redis.exceptions.RedisError as e:
-        logger.warning(f"Redis error checking lockout for {ip}: {e}")
+        logger.warning("Redis error checking lockout for %s: %s", ip, e)
         # Fallback to in-memory tracking
         return _is_locked_out_memory(ip)
 
@@ -155,7 +155,7 @@ def _check_and_record_attempt(ip: str) -> bool:
         )
         return result == 1
     except redis.exceptions.RedisError as e:
-        logger.warning(f"Redis error in check_and_record for {ip}: {e}")
+        logger.warning("Redis error in check_and_record for %s: %s", ip, e)
         # Fallback: record in memory and check
         _record_failed_attempt_memory(ip)
         return _is_locked_out_memory(ip)
@@ -178,7 +178,7 @@ def _record_failed_attempt(ip: str) -> None:
         pipe.expire(key, _LOGIN_LOCKOUT_SECONDS)
         pipe.execute()
     except redis.exceptions.RedisError as e:
-        logger.warning(f"Redis error recording attempt for {ip}: {e}")
+        logger.warning("Redis error recording attempt for %s: %s", ip, e)
         _record_failed_attempt_memory(ip)
 
 
@@ -207,7 +207,7 @@ def _clear_attempts(ip: str) -> None:
         r = _get_redis()
         r.delete(f"{_LOGIN_ATTEMPT_PREFIX}{ip}")
     except redis.exceptions.RedisError as e:
-        logger.warning(f"Redis error clearing attempts for {ip}: {e}")
+        logger.warning("Redis error clearing attempts for %s: %s", ip, e)
     # Always clear in-memory fallback (used when Redis is unavailable)
     with _memory_lock:
         _login_attempts_memory.pop(ip, None)

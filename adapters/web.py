@@ -47,10 +47,10 @@ class WebAdapter(BaseSourceAdapter):
         try:
             validate_url_safe(cfg.listing_url)
         except UnsafeURLError as e:
-            logger.error(f"[{self.source_id}] Unsafe listing URL: {e}")
+            logger.error("[%s] Unsafe listing URL: %s", self.source_id, e)
             return []
         article_urls = self._scrape_listing(cfg.listing_url)
-        logger.info(f"[{self.source_id}] Found {len(article_urls)} article links")
+        logger.info("[%s] Found %s article links", self.source_id, len(article_urls))
 
         articles = []
         for url in article_urls:
@@ -59,9 +59,9 @@ class WebAdapter(BaseSourceAdapter):
                 if soup:
                     articles.append((soup, url))
             except UnsafeURLError as e:
-                logger.warning(f"[{self.source_id}] Blocked unsafe URL {url}: {e}")
+                logger.warning("[%s] Blocked unsafe URL %s: %s", self.source_id, url, e)
             except Exception as e:
-                logger.warning(f"[{self.source_id}] Failed to scrape {url}: {e}")
+                logger.warning("[%s] Failed to scrape %s: %s", self.source_id, url, e)
         return articles
 
     def parse_item(self, raw: Any) -> Optional[RawItem]:

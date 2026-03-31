@@ -121,7 +121,10 @@ class RequestIDMiddleware:
             method = environ.get("REQUEST_METHOD", "?")
             path = environ.get("PATH_INFO", "/")
             request_logger.info(
-                f"{method} {path} completed in {duration_ms}ms",
+                "%s %s completed in %sms",
+                method,
+                path,
+                duration_ms,
                 extra={"method": method, "path": path, "duration_ms": duration_ms},
             )
             request_id_var.reset(token)

@@ -5,6 +5,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Fallback prompts — pipeline.yaml system_prompt fields are the source of truth.
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 

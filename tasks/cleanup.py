@@ -24,11 +24,11 @@ def cleanup_old_pipeline_logs(self):
             synchronize_session=False
         )
         db.session.commit()
-        logger.info(f"Cleaned up {deleted} pipeline logs older than 30 days")
+        logger.info("Cleaned up %s pipeline logs older than 30 days", deleted)
         return {"deleted": deleted}
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Pipeline log cleanup failed: {e}")
+        logger.error("Pipeline log cleanup failed: %s", e)
         raise
 
 
@@ -53,9 +53,9 @@ def cleanup_expired_verifications(self):
         )
         db.session.commit()
         if deleted:
-            logger.info(f"Cleaned up {deleted} expired unverified subscribers")
+            logger.info("Cleaned up %s expired unverified subscribers", deleted)
         return {"deleted": deleted}
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Expired verification cleanup failed: {e}")
+        logger.error("Expired verification cleanup failed: %s", e)
         raise

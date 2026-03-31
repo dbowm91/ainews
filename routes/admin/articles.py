@@ -282,7 +282,9 @@ def rollback_article(article_id, version_id):
         )
         return jsonify({"message": "Rollback failed"}), 500
 
-    logger.info(f"Rolled back article {article_id} to version {version.version_number}")
+    logger.info(
+        "Rolled back article %s to version %s", article_id, version.version_number
+    )
     return redirect(url_for("admin.article_versions", article_id=article_id))
 
 

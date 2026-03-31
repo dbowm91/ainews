@@ -3,6 +3,7 @@ import smtplib
 
 from celery import shared_task, group
 from celery.utils.log import get_task_logger
+from billiard.exceptions import SoftTimeLimitExceeded
 
 logger = get_task_logger(__name__)
 
@@ -312,9 +313,9 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     # Uses task ID so retries from the same task can re-acquire.
     task_id = self.request.id or "manual"
     lock_key = "ainews:newsletter_lock"
-    redis = get_redis()
+    redis_client = get_redis()
 
-    existing = redis.get(lock_key)
+    existing = redis_client.get(lock_key)
     if existing and existing.decode() != task_id:
         logger.info(
             "Newsletter generation already in progress (task %s), skipping",
@@ -322,14 +323,20 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         )
         return {"skipped": True, "reason": "locked"}
 
-    redis.set(lock_key, task_id, ex=600)
+    redis_client.set(lock_key, task_id, ex=600)
 
     try:
         return _generate_newsletters_impl(self, dry_run_email, run_id)
+    except SoftTimeLimitExceeded:
+        from extensions import db
+
+        db.session.rollback()
+        logger.error("Newsletter generation exceeded soft time limit")
+        raise
     finally:
         try:
             from services.redis_utils import release_lock
 
-            release_lock(redis, lock_key, task_id)
+            release_lock(redis_client, lock_key, task_id)
         except Exception:
             logger.warning("Failed to release newsletter lock")

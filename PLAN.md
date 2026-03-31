@@ -4,6 +4,8 @@
 
 Fixes and improvements identified during codebase review. Organized into waves that can be executed in parallel using sub-agents.
 
+**Status: COMPLETED** — All 11 actionable items implemented and verified (623 tests passing).
+
 **Total: 11 actionable items** across 3 waves. Items marked "no action" are documented for completeness but require no code changes.
 
 ---
@@ -338,3 +340,18 @@ After each wave:
 .venv/bin/ruff check . --exclude .venv
 .venv/bin/python -m pytest tests/ -x -q
 ```
+
+---
+
+## Implementation Notes
+
+### 3.1: Celery App Cache Invalidation — Implementation Detail
+
+The `clear_app_cache()` function was implemented in a separate `celery_support.py` module rather than directly in `celery_app.py`. This was necessary because importing `celery_app` triggers `_init_celery()` at module load time, which changes SQLAlchemy's SQLite connection state. In tests, this caused naive/aware datetime comparison failures in `TestCleanupOldPipelineLogs` when run after tests that import `celery_app` (e.g., `TestConfigReload`).
+
+**Final implementation:**
+- `celery_support.py` — defines `_app_cache`, `_app_cache_lock`, and `clear_app_cache()`
+- `celery_app.py` — imports `_app_cache` and `_app_cache_lock` from `celery_support`, uses them in `FlaskTask`
+- `routes/admin/api.py` — imports and calls `clear_app_cache()` from `celery_support`
+
+This pattern ensures that config reload can clear the cached apps without triggering the test contamination issue.

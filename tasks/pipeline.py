@@ -2,6 +2,7 @@
 
 import json
 
+from billiard.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
@@ -633,6 +634,13 @@ def run_stage(
         record_stage_result(stage, success=True, run_id=run_id)
 
         return result
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        record_stage_result(stage, success=False, run_id=run_id)
+        article = db.session.get(Article, article_id)
+        if article:
+            article.last_error = f"{stage}: soft time limit exceeded"
+        raise  # Let Celery handle retry
     except Exception as e:
         db.session.rollback()
         record_provider_failure(rc.provider, model)

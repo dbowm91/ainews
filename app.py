@@ -46,7 +46,11 @@ def _seed_share_configs():
         existing = ShareConfig.query.filter_by(platform_key=d["platform_key"]).first()
         if not existing:
             db.session.add(ShareConfig(**d))
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.warning("Failed to seed share configs", exc_info=True)
 
 
 def create_app(config_name=None):
@@ -156,7 +160,7 @@ def create_app(config_name=None):
     def not_found(e):
         from flask import request, render_template, jsonify
 
-        logger.warning(f"404 Not Found: {request.method} {request.path}")
+        logger.warning("404 Not Found: %s %s", request.method, request.path)
         if _wants_json():
             return jsonify({"error": "Not found"}), 404
         return render_template("errors/404.html"), 404
@@ -187,7 +191,7 @@ def create_app(config_name=None):
     def request_entity_too_large(e):
         from flask import request, jsonify
 
-        logger.warning(f"413 Request too large: {request.method} {request.path}")
+        logger.warning("413 Request too large: %s %s", request.method, request.path)
         if _wants_json():
             return jsonify({"error": "Request too large"}), 413
         return "Request too large", 413

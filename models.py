@@ -124,9 +124,9 @@ class Article(db.Model):
     )
 
     citations = db.relationship(
-        "Citation", backref="article", lazy="joined", cascade="all, delete-orphan"
+        "Citation", backref="article", lazy="select", cascade="all, delete-orphan"
     )
-    tags = db.relationship("Tag", secondary=article_tags, lazy="joined")
+    tags = db.relationship("Tag", secondary=article_tags, lazy="selectin")
     metrics = db.relationship(
         "ArticleMetric", backref="article", uselist=False, cascade="all, delete-orphan"
     )

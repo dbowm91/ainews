@@ -29,9 +29,7 @@ def edit_article(self, article_id: int, run_id=None):
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("editor")
-        existing_tags = [
-            t.name for t in Tag.query.order_by(Tag.id.desc()).limit(500).all()
-        ]
+        existing_tags = [t.name for t in Tag.query.limit(100).all()]
 
         prompt = build_editor_prompt(
             draft_json=article.draft_article or "",

@@ -65,7 +65,7 @@ def approve_article(article_id):
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"message": "Failed to approve article"}), 500
 
-    logger.info(f"Approved article {article_id}: {article.original_title[:50]}")
+    logger.info("Approved article %s: %s", article_id, article.original_title[:50])
 
     if request.headers.get("HX-Request"):
         return "", 200
@@ -90,7 +90,7 @@ def reject_article(article_id):
         logger.exception("Failed to reject article %s", article_id)
         return jsonify({"message": "Failed to reject article"}), 500
 
-    logger.info(f"Rejected article {article_id}: {article.original_title[:50]}")
+    logger.info("Rejected article %s: %s", article_id, article.original_title[:50])
 
     if request.headers.get("HX-Request"):
         return "", 200

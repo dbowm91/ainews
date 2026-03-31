@@ -76,7 +76,11 @@ def retry_stuck(self):
                 )
             else:
                 article.retry_count = (article.retry_count or 0) + 1
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+                    raise
                 _dispatch_stage(article)
                 retried += 1
 

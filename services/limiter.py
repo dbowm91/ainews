@@ -51,7 +51,7 @@ class ModelLimiter:
             )
             return False  # fail closed — deny slot if Redis is unavailable
 
-    def release(self, provider_id: str, model: str) -> None:
+    def release(self, provider_id: str, model: str, timeout: int = 300) -> None:
         key = f"{self._prefix}:{provider_id}:{model}"
         try:
             self._release_script(keys=[key])
@@ -62,7 +62,7 @@ class ModelLimiter:
                 provider_id,
                 model,
                 e,
-                300,
+                timeout,
                 exc_info=True,
             )
             try:
@@ -104,3 +104,10 @@ def get_limiter() -> ModelLimiter:
 
         _limiter = ModelLimiter(get_redis())
         return _limiter
+
+
+def reset_limiter() -> None:
+    """Reset the singleton (for testing)."""
+    global _limiter
+    with _limiter_lock:
+        _limiter = None

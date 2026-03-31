@@ -25,6 +25,12 @@
       <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %}" style="margin-left:0.5rem">{{ article.pipeline_status }}</span>
     </h2>
 
+    {% if error %}
+    <div class="form-error" role="alert">
+      {{ error }}
+    </div>
+    {% endif %}
+
     <div class="article-edit-meta">
       <span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ article.original_url[:60] if article.original_url }}</a></span>
       <span>source: {{ article.source.name if article.source else 'unknown' }}</span>

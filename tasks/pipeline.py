@@ -5,7 +5,7 @@ import json
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
-from constants import PipelineStatus, truncate_for_log
+from constants import PipelineStatus
 
 logger = get_task_logger(__name__)
 
@@ -36,8 +36,11 @@ def _get_max_total_retries() -> int:
 _STAGE_STATUS_MAP = {
     # Pipeline statuses → stage names
     "pending": "select",
+    "selecting": "select",
+    "selected": "research",
     "researching": "research",
     "writing": "write",
+    "written": "edit",
     "editing": "edit",
     # Role names → stage names
     "selector": "select",
@@ -54,8 +57,11 @@ _STAGE_STATUS_MAP = {
 # Maps pipeline status to the task that handles it
 _STAGE_TASKS = {
     "pending": ("tasks.select", "select_article"),
+    "selecting": ("tasks.select", "select_article"),
+    "selected": ("tasks.research", "research_article"),
     "researching": ("tasks.research", "research_article"),
     "writing": ("tasks.write", "write_article"),
+    "written": ("tasks.edit", "edit_article"),
     "editing": ("tasks.edit", "edit_article"),
 }
 
@@ -141,7 +147,7 @@ def _build_fallback_article(article) -> str:
     )
 
 
-def _log_pipeline(run_id, stage, level, message, article_id=None):
+def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
     """Create a PipelineLog entry without committing outer transactions.
 
     Uses a nested transaction (savepoint) so that a log-write failure does not
@@ -152,7 +158,8 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
         run_id: Pipeline-run ID.
         stage: Pipeline stage name (e.g. ``"select"``, ``"write"``).
         level: Log level — ``"info"``, ``"warning"``, or ``"error"``.
-        message: Human-readable log message.
+        message: Human-readable log message, optionally with %-format placeholders.
+        *args: Positional args for message formatting.
         article_id: Optional article ID for correlation.
 
     Raises:
@@ -162,6 +169,9 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
     from models import PipelineLog
     from extensions import db
     from services.metrics import get_metrics
+
+    if args:
+        message = message % args
 
     metrics = get_metrics()
     savepoint = db.session.begin_nested()
@@ -207,116 +217,111 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
             ``"write"``, or ``"edit"``).
         run_id: Optional pipeline-run ID for structured logging.
     """
-    from extensions import db
 
-    # Normalize: accept both action names ("write") and status names ("writing")
     failed_stage = _STAGE_STATUS_MAP.get(failed_stage, failed_stage)
 
     logger.warning(
-        f"Degrading article {article.id} from stage '{failed_stage}' (retry_count={article.retry_count})"
+        "Degrading article %s from stage '%s' (retry_count=%s)",
+        article.id,
+        failed_stage,
+        article.retry_count,
     )
 
-    if failed_stage == "select":
-        article.selector_result = {
-            "selected": True,
-            "score": 6,
-            "reason": "auto-selected after failure",
-        }
-        article.pipeline_status = "researching"
-        article.retry_count = 0
-        article.last_error = None
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            raise
-        if run_id:
-            _log_pipeline(
-                run_id,
-                "select",
-                "warning",
-                f"Degraded: auto-selected {truncate_for_log(article.original_title)}",
-                article_id=article.id,
-            )
-        _dispatch_next(article.id, run_id=run_id, next_status="researching")
+    if failed_stage == "edit":
+        _degrade_edit_stage(article, run_id)
+        return
 
-    elif failed_stage == "research":
-        article.research_brief = json.dumps(
-            {
-                "source_summary": (
-                    article.extracted_text or article.original_title or ""
-                )[:500],
-                "key_claims": [],
-                "direct_quotes": [],
-                "external_sources": [],
-                "related_articles": [],
-                "context_notes": "Research stage failed; using source text only.",
-                "newsworthiness": "Auto-generated after research failure.",
-                "impact_score": 30,
-            }
+    stage_config = _STAGE_DEGRADE_MAP.get(failed_stage)
+    if stage_config is None:
+        logger.error(
+            "Unknown stage '%s' for degradation of article %s",
+            failed_stage,
+            article.id,
         )
-        article.impact_score = 30
-        article.pipeline_status = "writing"
-        article.retry_count = 0
-        article.last_error = None
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            raise
-        if run_id:
-            _log_pipeline(
-                run_id,
-                "research",
-                "warning",
-                f"Degraded: skipped research for {truncate_for_log(article.original_title)}",
-                article_id=article.id,
-            )
-        _dispatch_next(article.id, run_id=run_id, next_status="writing")
+        return
 
-    elif failed_stage == "write":
-        article.draft_article = _build_fallback_article(article)
-        article.pipeline_status = "editing"
-        article.retry_count = 0
-        article.last_error = None
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            raise
-        if run_id:
-            _log_pipeline(
-                run_id,
-                "write",
-                "warning",
-                f"Degraded: minimal draft for {truncate_for_log(article.original_title)}",
-                article_id=article.id,
-            )
-        _dispatch_next(article.id, run_id=run_id, next_status="editing")
+    _apply_degrade_config(article, stage_config, run_id)
 
-    elif failed_stage == "edit":
-        _apply_fallback(article)
-        article.retry_count = 0
-        article.last_error = None
 
-        if _should_route_to_review(article):
-            article.pipeline_status = "review"
-            try:
-                db.session.commit()
-            except SQLAlchemyError:
-                db.session.rollback()
-                raise
-            if run_id:
-                _log_pipeline(
-                    run_id,
-                    "edit",
-                    "warning",
-                    f"Degraded to review: {truncate_for_log(article.original_title)}",
-                    article_id=article.id,
-                )
-            return
+_STAGE_DEGRADE_MAP = {
+    "select": {
+        "next_status": PipelineStatus.RESEARCHING,
+        "log_message": "Degraded: auto-selected %s",
+        "set_fields": lambda article: setattr(
+            article,
+            "selector_result",
+            {"selected": True, "score": 6, "reason": "auto-selected after failure"},
+        ),
+    },
+    "research": {
+        "next_status": PipelineStatus.WRITING,
+        "log_message": "Degraded: skipped research for %s",
+        "set_fields": lambda article: (
+            setattr(
+                article,
+                "research_brief",
+                json.dumps(
+                    {
+                        "source_summary": (
+                            article.extracted_text or article.original_title or ""
+                        )[:500],
+                        "key_claims": [],
+                        "direct_quotes": [],
+                        "external_sources": [],
+                        "related_articles": [],
+                        "context_notes": "Research stage failed; using source text only.",
+                        "newsworthiness": "Auto-generated after research failure.",
+                        "impact_score": 30,
+                    }
+                ),
+            ),
+            setattr(article, "impact_score", 30),
+        ),
+    },
+    "write": {
+        "next_status": PipelineStatus.EDITING,
+        "log_message": "Degraded: minimal draft for %s",
+        "set_fields": lambda article: setattr(
+            article, "draft_article", _build_fallback_article(article)
+        ),
+    },
+}
 
-        article.pipeline_status = PipelineStatus.DONE
+
+def _apply_degrade_config(article, config: dict, run_id):
+    """Apply degradation config and dispatch to next stage."""
+    from extensions import db
+
+    config["set_fields"](article)
+    article.pipeline_status = config["next_status"]
+    article.retry_count = 0
+    article.last_error = None
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+    if run_id:
+        _log_pipeline(
+            run_id,
+            config["next_status"].replace("ing", ""),
+            "warning",
+            config["log_message"],
+            article_id=article.id,
+        )
+    _dispatch_next(article.id, run_id=run_id, next_status=config["next_status"])
+
+
+def _degrade_edit_stage(article, run_id):
+    """Handle edit stage degradation with review routing."""
+    from extensions import db
+
+    _apply_fallback(article)
+    article.retry_count = 0
+    article.last_error = None
+
+    if _should_route_to_review(article):
+        article.pipeline_status = PipelineStatus.REVIEW
         try:
             db.session.commit()
         except SQLAlchemyError:
@@ -327,17 +332,26 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 run_id,
                 "edit",
                 "warning",
-                f"Degraded: used draft as final for {truncate_for_log(article.original_title)}",
+                "Degraded to review: %s",
                 article_id=article.id,
             )
-        logger.warning("Article %s finalized with degraded content", article.id)
+        return
 
-    else:
-        logger.error(
-            "Unknown stage '%s' for degradation of article %s",
-            failed_stage,
-            article.id,
+    article.pipeline_status = PipelineStatus.DONE
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+    if run_id:
+        _log_pipeline(
+            run_id,
+            "edit",
+            "warning",
+            "Degraded: used draft as final for %s",
+            article_id=article.id,
         )
+    logger.warning("Article %s finalized with degraded content", article.id)
 
 
 def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -> bool:
@@ -372,20 +386,24 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
 
     # Global retry budget: fail article permanently if exceeded
     if article.total_retries >= max_total:
-        article.pipeline_status = "failed"
+        article.pipeline_status = PipelineStatus.FAILED
         try:
             db.session.commit()
         except SQLAlchemyError as commit_exc:
             db.session.rollback()
             logger.error(
-                f"Failed to commit failed status for article {article.id}: {commit_exc}"
+                "Failed to commit failed status for article %s: %s",
+                article.id,
+                commit_exc,
             )
         if run_id:
             _log_pipeline(
                 run_id,
                 stage,
                 "error",
-                f"Article {article.id} exceeded global retry budget ({max_total}), marked as failed",
+                "Article %s exceeded global retry budget (%s), marked as failed",
+                article.id,
+                max_total,
                 article_id=article.id,
             )
         logger.error(
@@ -402,7 +420,9 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
         except SQLAlchemyError as commit_exc:
             db.session.rollback()
             logger.error(
-                f"Failed to commit retry_count for article {article.id}: {commit_exc}"
+                "Failed to commit retry_count for article %s: %s",
+                article.id,
+                commit_exc,
             )
         return False
 
@@ -449,14 +469,15 @@ def _finalize(article_id: int):
         logger.error("Finalize failed for article %s: %s", article_id, e)
 
 
-def _assign_tags(article, tag_names: list[str], db):
-    """Find or create tags and link them to the article.
+def _assign_tags(articles, tag_names: list[str], db):
+    """Find or create tags and link them to articles.
 
     Batches queries to avoid N+1: one SELECT for existing tags, one flush
-    for new tags, one SELECT for existing links, one INSERT for new links.
+    for new tags, one SELECT for existing links per article, one INSERT for
+    new links per article.
 
     Args:
-        article: Article model instance to tag.
+        articles: Article instance or list of Article instances to tag.
         tag_names: List of tag name strings (max 10 used, max 64 chars each).
         db: SQLAlchemy database session instance.
     """
@@ -465,7 +486,9 @@ def _assign_tags(article, tag_names: list[str], db):
     if not tag_names:
         return
 
-    # 1. Normalize names and compute slugs
+    if not isinstance(articles, list):
+        articles = [articles]
+
     name_by_slug: dict[str, str] = {}
     for raw in tag_names[:10]:
         name = raw.strip().lower()
@@ -479,11 +502,9 @@ def _assign_tags(article, tag_names: list[str], db):
 
     slugs = list(name_by_slug.keys())
 
-    # 2. Batch-fetch existing tags
     existing_tags = Tag.query.filter(Tag.slug.in_(slugs)).all()
     tag_by_slug = {t.slug: t for t in existing_tags}
 
-    # 3. Create any missing tags
     for slug, name in name_by_slug.items():
         if slug not in tag_by_slug:
             tag = Tag(name=name, slug=slug)
@@ -491,26 +512,29 @@ def _assign_tags(article, tag_names: list[str], db):
             tag_by_slug[slug] = tag
     db.session.flush()
 
-    # 4. Batch-fetch existing article-tag links
     tag_ids = [t.id for t in tag_by_slug.values()]
+    article_ids = [a.id for a in articles]
+
     existing_links = set(
         r[0]
         for r in db.session.execute(
             article_tags.select()
             .where(
-                (article_tags.c.article_id == article.id)
+                (article_tags.c.article_id.in_(article_ids))
                 & (article_tags.c.tag_id.in_(tag_ids))
             )
             .with_only_columns(article_tags.c.tag_id)
         ).all()
     )
 
-    # 5. Insert missing links
-    for tag in tag_by_slug.values():
-        if tag.id not in existing_links:
-            db.session.execute(
-                article_tags.insert().values(article_id=article.id, tag_id=tag.id)
-            )
+    for article in articles:
+        for tag in tag_by_slug.values():
+            link_key = (article.id, tag.id)
+            if link_key not in existing_links:
+                db.session.execute(
+                    article_tags.insert().values(article_id=article.id, tag_id=tag.id)
+                )
+                existing_links.add(link_key)
 
 
 def _should_route_to_review(article) -> bool:
@@ -557,6 +581,28 @@ def _apply_fallback(article):
     article.original_ai_article = fallback
 
 
+def _acquire_stage_lock(redis_client, lock_key, task_id, timeout_seconds):
+    """Acquire a Redis lock, returning (acquired, redis_client)."""
+    import redis.exceptions
+
+    try:
+        acquired = redis_client.set(lock_key, task_id, nx=True, ex=timeout_seconds)
+        return acquired
+    except redis.exceptions.RedisError:
+        logger.warning("Could not acquire stage lock, proceeding without")
+        return True
+
+
+def _check_stage_limiter(rc, task_self, retry_countdown, retry_max):
+    """Acquire limiter slot or raise a retry."""
+    from services.limiter import get_limiter
+
+    limiter = get_limiter()
+    if not limiter.acquire(rc.provider, rc.model, rc.concurrency, rc.timeout_seconds):
+        raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
+    return limiter
+
+
 def run_stage(
     stage: str,
     article_id: int,
@@ -581,14 +627,14 @@ def run_stage(
         retry_max: Max limiter retries
     """
     from models import Article
-    from extensions import db
+    from extensions import db, get_redis
     from schemas.pipeline import get_role_config
     from services.llm import (
         get_provider_for_role,
         record_provider_success,
         record_provider_failure,
     )
-    from services.limiter import get_limiter
+    from services.pipeline_monitor import record_stage_result
 
     rc = get_role_config(stage)
     if not rc.enabled:
@@ -598,34 +644,28 @@ def run_stage(
             _dispatch_next(article_id, run_id=run_id, next_status=skip_next)
         return {"article_id": article_id, "decision": f"skip_{stage}"}
 
-    # Stage lock: prevent same article/stage from running concurrently
-    from extensions import get_redis
-
-    redis_client = get_redis()
     lock_key = f"ainews:stage_lock:{article_id}:{stage}"
     task_id = task_self.request.id or "manual"
-    lock_acquired = redis_client.set(
-        lock_key, task_id, nx=True, ex=rc.timeout_seconds + 60
+    redis_client = get_redis()
+    lock_acquired = _acquire_stage_lock(
+        redis_client, lock_key, task_id, rc.timeout_seconds + 60
     )
-    if not lock_acquired:
-        logger.info(
-            "Stage %s already running for article %s, skipping", stage, article_id
-        )
-        return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
 
-    article = db.session.get(Article, article_id)
-    if not article:
-        return {"article_id": article_id, "error": "not found"}
-
-    provider, model, max_tokens = get_provider_for_role(stage)
-    limiter = get_limiter()
-
-    if not limiter.acquire(rc.provider, model, rc.concurrency, rc.timeout_seconds):
-        raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
-
-    from services.pipeline_monitor import record_stage_result
-
+    limiter = None
     try:
+        if not lock_acquired:
+            logger.info(
+                "Stage %s already running for article %s, skipping", stage, article_id
+            )
+            return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
+
+        article = db.session.get(Article, article_id)
+        if not article:
+            return {"article_id": article_id, "error": "not found"}
+
+        provider, model, max_tokens = get_provider_for_role(stage)
+        limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
+
         result = work_fn(article, provider, model, max_tokens)
 
         record_provider_success(rc.provider, model, tokens_used=max_tokens)
@@ -637,29 +677,32 @@ def run_stage(
     except SoftTimeLimitExceeded:
         db.session.rollback()
         record_stage_result(stage, success=False, run_id=run_id)
-        article = db.session.get(Article, article_id)
-        if article:
-            article.last_error = f"{stage}: soft time limit exceeded"
-        raise  # Let Celery handle retry
+        exc_article = db.session.get(Article, article_id)
+        if exc_article:
+            exc_article.last_error = "%s: soft time limit exceeded" % stage
+        raise
     except Exception as e:
         db.session.rollback()
         record_provider_failure(rc.provider, model)
         record_stage_result(stage, success=False, run_id=run_id)
-        article = db.session.get(Article, article_id)
-        if article and _handle_stage_failure(article, stage, e, run_id=run_id):
+        exc_article = db.session.get(Article, article_id)
+        if exc_article and _handle_stage_failure(exc_article, stage, e, run_id=run_id):
             return {"article_id": article_id, "result": "degraded"}
         if run_id:
             _log_pipeline(
                 run_id,
                 stage,
                 "error",
-                f"Article {article_id}: {e}",
+                "Article %s: %s",
+                article_id,
+                e,
                 article_id=article_id,
             )
         logger.error("%s failed for article %s: %s", stage.title(), article_id, e)
         raise
     finally:
-        limiter.release(rc.provider, model)
+        if limiter is not None:
+            limiter.release(rc.provider, model, rc.timeout_seconds)
         try:
             from services.redis_utils import release_lock
 

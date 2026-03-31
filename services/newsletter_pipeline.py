@@ -52,9 +52,11 @@ def get_newsletter_editor_system_prompt() -> str:
 
 
 def build_reader_prompt(articles, topic_context: str) -> str:
+    from services.utils import parse_article_headline
+
     parts = [f"TOPIC CONTEXT: {topic_context}", "", "TODAY'S ARTICLES:"]
     for i, article in enumerate(articles, 1):
-        headline, tldr = _parse_article(article)
+        headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
         category = article.category or ""
         parts.append(f"{i}. [{category}] {headline}")
         if tldr:
@@ -83,12 +85,6 @@ def build_editor_prompt(summary_json: str) -> str:
         f"Ensure sharp tone, smooth flow, correct article references, and brevity. "
         f"Return the corrected version in the same format."
     )
-
-
-def _parse_article(article):
-    from services.utils import parse_article_headline
-
-    return parse_article_headline(article, fallback_headline="Untitled")
 
 
 def _run_pipeline_stage(
@@ -128,7 +124,9 @@ def _run_pipeline_stage(
                 result = llm_call(provider, model, max_tokens)
                 return result, True
             finally:
-                limiter.release(stage_config.provider, model)
+                limiter.release(
+                    stage_config.provider, model, stage_config.timeout_seconds
+                )
         else:
             metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})
             fallback_stages.append(role)

@@ -122,7 +122,7 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 - **Autouse fixtures**: `_reset_redis` (conftest.py) resets the Redis singleton between tests. `_clear_dns_cache` (url.py) clears DNS cache. Do not create additional autouse fixtures without careful consideration.
 - **Mock Redis**: Use the `mock_redis` fixture from conftest.py for unit tests that need Redis without a running instance.
 - **Mock Celery tasks**: Use `mock_celery_tasks` fixture to prevent actual pipeline task execution in tests.
-- **App fixture**: Creates in-memory SQLite with `WTF_CSRF_ENABLED=False`. Use `client` fixture for HTTP tests.
+- **App fixture**: Uses `create_app("testing")` with `monkeypatch.setenv()` for env vars. Rate limiting is disabled via `limiter.enabled = False`. Teardown (`db.session.remove()` + `db.drop_all()`) runs inside `with app.app_context():`. Tests needing the full app (with Talisman, blueprints, template filters) should use the `app` fixture. `CELERY_BROKER_URL` must be a valid Redis URL in tests — `memory://` causes `get_redis()` to fail since it uses `redis.ConnectionPool.from_url()`.
 
 ## Key infrastructure patterns
 
@@ -195,6 +195,8 @@ During crawling, articles from different sources with near-duplicate titles are 
 **Migration tests on SQLite**: Cannot run full `upgrade()`/`downgrade()` when migrations use `op.create_unique_constraint` (unsupported ALTER in SQLite). Test migration chain integrity and schema consistency instead. See `tests/test_migration.py`.
 
 **Redis mock fixture consistency**: When changing Redis operations (e.g., `keys()` → `scan_iter()`), update ALL mock fixtures — both the shared `mock_redis` in `conftest.py` AND any test-specific fixtures (e.g., `redis_client` in `test_pipeline_monitor.py`). Redis pipeline operations require `client.pipeline = MagicMock(return_value=pipe_mock)` with the pipe mock's methods configured separately.
+
+**Crawl task tests need PipelineRun records**: When testing `crawl_source` with `_call_crawl(cfg, run_id=N)`, the test must create a `PipelineRun` with id matching `N` before calling the task, because `_log_pipeline` in the exception handler inserts a `PipelineLog` with that `run_id` which requires the FK constraint to pass.
 
 **Celery app cache extraction pattern**: When a module has side effects at import time (like `celery_app.py`'s `_init_celery()` which changes SQLAlchemy's connection state), and you need to reference its functionality from tests, extract the shared state into a separate module. The `celery_support.py` pattern — where `_app_cache`, `_app_cache_lock`, and `clear_app_cache()` live separately from `celery_app.py` — allows tests to clear the cache without triggering import-time side effects.
 

@@ -3,6 +3,8 @@ from urllib.parse import urlparse
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from billiard.exceptions import SoftTimeLimitExceeded
+
 from constants import truncate_for_log
 
 logger = get_task_logger(__name__)
@@ -111,7 +113,9 @@ def process_item(
                     run_id,
                     "extract",
                     "warning",
-                    f"Extraction failed for {title[:60]}: {exc}",
+                    "Extraction failed for %s: %s",
+                    title[:60],
+                    exc,
                 )
 
     # Cross-source dedup check
@@ -122,14 +126,18 @@ def process_item(
         duplicate = None
     if duplicate:
         logger.info(
-            f"Duplicate found for [{truncate_for_log(title)}]: existing article {duplicate.id}"
+            "Duplicate found for [%s]: existing article %s",
+            truncate_for_log(title),
+            duplicate.id,
         )
         if run_id:
             _log_pipeline(
                 run_id,
                 "extract",
                 "info",
-                f"Duplicate skipped: {title[:60]} (existing: {duplicate.id})",
+                "Duplicate skipped: %s (existing: %s)",
+                title[:60],
+                duplicate.id,
                 article_id=duplicate.id,
             )
         # Add this source as a citation to the existing article if URL differs
@@ -219,11 +227,15 @@ def process_item(
             )
 
         db.session.commit()
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        logger.error("process_item exceeded soft time limit for %s", external_id)
+        raise
     except Exception as exc:
         db.session.rollback()
         logger.error("DB operation failed for %s: %s", external_id, exc)
         if run_id:
-            _log_pipeline(run_id, "extract", "error", f"{external_id}: {exc}")
+            _log_pipeline(run_id, "extract", "error", "%s: %s", external_id, exc)
         raise
 
     if run_id:
@@ -231,7 +243,9 @@ def process_item(
             run_id,
             "extract",
             "info",
-            f"Extracted [{topics[0] if topics else '?'}]: {title[:60]}",
+            "Extracted [%s]: %s",
+            topics[0] if topics else "?",
+            title[:60],
             article_id=article.id,
         )
     logger.info("Extracted [%s]: %s", topics[0] if topics else "?", title[:60])

@@ -214,7 +214,7 @@ class Subscriber(db.Model):
     @classmethod
     def get_active(cls):
         """Return query for active, non-deleted subscribers."""
-        return cls.query.filter(cls.deleted_at.is_(None))
+        return cls.query.filter(cls.deleted_at.is_(None), cls.active.is_(True))
 
 
 class ArticleMetric(db.Model):

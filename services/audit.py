@@ -30,7 +30,7 @@ def log_admin_action(
         details: Additional context about the action
         user: User performing the action
     """
-    msg = f"Audit: [{user}] {action}"
+    msg = "Audit: [%s] %s" % (user, action)
     if target_type:
         msg += f" on {target_type}"
     if target_id:

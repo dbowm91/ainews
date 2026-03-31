@@ -33,7 +33,7 @@ def review_queue():
             has_next=has_next,
             next_page=next_page,
             page=page,
-            total_review=total_review,
+            total_count=total_review,
         )
     return render_template(
         "admin/review.html",
@@ -41,6 +41,7 @@ def review_queue():
         has_next=has_next,
         next_page=next_page,
         page=page,
+        total_count=total_review,
         total_review=total_review,
     )
 

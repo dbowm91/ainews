@@ -1,6 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from constants import truncate_for_log
+from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
 
 logger = get_task_logger(__name__)
@@ -49,7 +49,7 @@ def write_article(self, article_id: int, run_id=None):
 
         article.draft_article = result.model_dump_json()
         article.writer_model = model
-        article.pipeline_status = "editing"
+        article.pipeline_status = PipelineStatus.EDITING
         try:
             db.session.commit()
         except Exception:
@@ -61,7 +61,8 @@ def write_article(self, article_id: int, run_id=None):
                 run_id,
                 "write",
                 "info",
-                f"Drafted: {truncate_for_log(article.original_title)}",
+                "Drafted: %s",
+                truncate_for_log(article.original_title),
                 article_id=article.id,
             )
 
@@ -71,9 +72,14 @@ def write_article(self, article_id: int, run_id=None):
             title=truncate_for_log(article.original_title),
         )
 
-        _dispatch_next(article_id, run_id=run_id, next_status="editing")
+        _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.EDITING)
         return {"article_id": article_id}
 
     return run_stage(
-        "writer", article_id, work, task_self=self, run_id=run_id, skip_next="editing"
+        "writer",
+        article_id,
+        work,
+        task_self=self,
+        run_id=run_id,
+        skip_next=PipelineStatus.EDITING,
     )

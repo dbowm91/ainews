@@ -60,7 +60,9 @@ class TestSerialize:
 
 
 class TestConfigCache:
-    def test_cache_miss_loads_from_file(self, mock_redis):
+    def test_cache_miss_loads_from_file(self):
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = None
         cache = ConfigCache(mock_redis, prefix="test")
         call_count = 0
 
@@ -166,9 +168,9 @@ class TestStalenessDetection:
             old_mtime = os.stat(config_path).st_mtime - 100
             mock_redis.get = MagicMock(return_value=str(old_mtime).encode())
             cache = ConfigCache(mock_redis, prefix="test")
-            cache._memory_cache["test:myconfig"] = (999999, {"cached": True})
+            cache._memory["test:myconfig"] = (999999, {"cached": True})
             cache.invalidate_if_stale("myconfig", config_path)
-            assert "test:myconfig" not in cache._memory_cache
+            assert "test:myconfig" not in cache._memory
             mock_redis.delete.assert_called_with("test:myconfig")
         finally:
             os.unlink(config_path)
@@ -227,8 +229,10 @@ class TestStalenessDetection:
 
 
 class TestLoadSourcesCaching:
-    def test_load_sources_uses_mtime_cache(self, mock_redis):
+    def test_load_sources_uses_mtime_cache(self):
         """load_sources should use cached_config_with_mtime for automatic invalidation."""
+        from tests.mock_redis import MockRedis
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(
                 """
@@ -248,9 +252,10 @@ sources:
             from services import config_cache
 
             original_get = config_cache.get_config_cache
+            redis_instance = MockRedis()
 
             def mock_get():
-                return config_cache.ConfigCache(mock_redis)
+                return config_cache.ConfigCache(redis_instance)
 
             config_cache.get_config_cache = mock_get
             try:
@@ -265,14 +270,16 @@ sources:
         finally:
             os.unlink(config_path)
 
-    def test_load_sources_returns_empty_for_missing_file(self, mock_redis):
+    def test_load_sources_returns_empty_for_missing_file(self):
         """load_sources should return empty list when file doesn't exist."""
         from services import config_cache
+        from tests.mock_redis import MockRedis
 
         original_get = config_cache.get_config_cache
+        redis_instance = MockRedis()
 
         def mock_get():
-            return config_cache.ConfigCache(mock_redis)
+            return config_cache.ConfigCache(redis_instance)
 
         config_cache.get_config_cache = mock_get
         try:

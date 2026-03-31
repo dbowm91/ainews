@@ -13,10 +13,11 @@ from services.metrics import get_metrics, reset_metrics
 class TestConfigCacheConcurrency:
     """Test ConfigCache thread safety under concurrent access."""
 
-    def test_concurrent_get_and_invalidate(self, mock_redis):
+    def test_concurrent_get_and_invalidate(self):
         """Multiple threads calling get and invalidate concurrently."""
+        mock_redis = MagicMock()
+        mock_redis.get.side_effect = redis.exceptions.RedisError("simulate miss")
         cache = ConfigCache(redis_client=mock_redis, prefix="test:")
-        mock_redis.get.return_value = b'{"key": "value"}'
 
         errors = []
         iterations = 100
@@ -40,8 +41,7 @@ class TestConfigCacheConcurrency:
     def test_concurrent_reads(self, mock_redis):
         """Multiple threads reading from cache should not corrupt data."""
         cache = ConfigCache(mock_redis, prefix="test")
-        # Pre-populate memory cache
-        cache._memory_cache["test:key"] = (time.monotonic() + 300, {"value": 42})
+        cache._memory["test:key"] = (time.monotonic() + 300, {"value": 42})
 
         results = []
         errors = []
@@ -64,9 +64,11 @@ class TestConfigCacheConcurrency:
         assert len(results) == 1000
         assert all(r == {"value": 42} for r in results)
 
-    def test_concurrent_writes(self, mock_redis):
+    def test_concurrent_writes(self):
         """Multiple threads writing to cache should not corrupt data."""
-        cache = ConfigCache(mock_redis, prefix="test")
+        from tests.mock_redis import MockRedis
+
+        cache = ConfigCache(MockRedis(), prefix="test")
         written = []
         errors = []
 
@@ -91,8 +93,8 @@ class TestConfigCacheConcurrency:
     def test_concurrent_invalidate(self, mock_redis):
         """Concurrent invalidate calls should not raise."""
         cache = ConfigCache(mock_redis, prefix="test")
-        cache._memory_cache["test:a"] = (time.monotonic() + 300, "a")
-        cache._memory_cache["test:b"] = (time.monotonic() + 300, "b")
+        cache._memory["test:a"] = (time.monotonic() + 300, "a")
+        cache._memory["test:b"] = (time.monotonic() + 300, "b")
         errors = []
 
         def inval():

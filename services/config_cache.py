@@ -8,12 +8,12 @@ from typing import Any, Callable, Optional
 import redis.exceptions
 from pydantic import BaseModel
 
+from services.cache_base import MemoryCacheMixin
+
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ConfigCache"] = None
 _cache_lock = threading.Lock()
-
-_MAX_MEMORY_ENTRIES = 500
 
 
 def _serialize(value: Any) -> str:
@@ -73,11 +73,13 @@ def _import_class(dotted_path: str) -> type:
     return cls
 
 
-class ConfigCache:
+class ConfigCache(MemoryCacheMixin):
+    _memory: dict[str, tuple[float, Any]]
+
     def __init__(self, redis_client, prefix: str = "ainews:config"):
         self.redis = redis_client
         self.prefix = prefix
-        self._memory_cache: dict[str, tuple[float, Any]] = {}
+        self._memory = {}
         self._lock = threading.RLock()
 
     def get(
@@ -90,7 +92,7 @@ class ConfigCache:
 
         # Double-checked locking pattern for memory cache
         # First check without lock (fast path)
-        mem_entry = self._memory_cache.get(full_key)
+        mem_entry = self._memory.get(full_key)
         if mem_entry is not None:
             expires_at, value = mem_entry
             if time.monotonic() < expires_at:
@@ -98,7 +100,7 @@ class ConfigCache:
 
         with self._lock:
             # Re-check after acquiring lock
-            mem_entry = self._memory_cache.get(full_key)
+            mem_entry = self._memory.get(full_key)
             if mem_entry is not None:
                 expires_at, value = mem_entry
                 if time.monotonic() < expires_at:
@@ -116,7 +118,7 @@ class ConfigCache:
                     cached = cached.decode("utf-8")
                 value = _deserialize(cached)
                 with self._lock:
-                    self._memory_cache[full_key] = (time.monotonic() + ttl, value)
+                    self._memory[full_key] = (time.monotonic() + ttl, value)
                 return value
         except redis.exceptions.RedisError as e:
             logger.warning("Config cache read failed for %s: %s", key, e)
@@ -130,14 +132,14 @@ class ConfigCache:
             logger.warning("Config cache write failed for %s: %s", key, e)
 
         with self._lock:
-            self._memory_cache[full_key] = (time.monotonic() + ttl, value)
+            self._memory[full_key] = (time.monotonic() + ttl, value)
             self._evict_stale()
         return value
 
     def invalidate(self, key: str) -> None:
         full_key = f"{self.prefix}:{key}"
         with self._lock:
-            self._memory_cache.pop(full_key, None)
+            self._memory.pop(full_key, None)
         try:
             self.redis.delete(full_key)
         except redis.exceptions.RedisError as e:
@@ -145,7 +147,7 @@ class ConfigCache:
 
     def invalidate_all(self) -> None:
         with self._lock:
-            self._memory_cache.clear()
+            self._memory.clear()
         pattern = f"{self.prefix}:*"
         try:
             cursor = 0
@@ -196,19 +198,6 @@ class ConfigCache:
         except (redis.exceptions.RedisError, OSError) as e:
             logger.warning("Failed to record mtime for %s: %s", key, e)
 
-    def _evict_stale(self) -> None:
-        """Evict expired entries; if still over limit, drop oldest. Must hold _lock."""
-        if len(self._memory_cache) <= _MAX_MEMORY_ENTRIES:
-            return
-        now = time.monotonic()
-        expired = [k for k, (exp, _) in self._memory_cache.items() if now >= exp]
-        for k in expired:
-            del self._memory_cache[k]
-        if len(self._memory_cache) > _MAX_MEMORY_ENTRIES:
-            sorted_items = sorted(self._memory_cache.items(), key=lambda x: x[1][0])
-            for k, _ in sorted_items[: len(self._memory_cache) - _MAX_MEMORY_ENTRIES]:
-                del self._memory_cache[k]
-
 
 def get_config_cache() -> ConfigCache:
     """Get or create the singleton ConfigCache instance (thread-safe)."""
@@ -222,3 +211,10 @@ def get_config_cache() -> ConfigCache:
 
         _cache_instance = ConfigCache(get_redis())
         return _cache_instance
+
+
+def reset_config_cache() -> None:
+    """Reset the singleton (for testing)."""
+    global _cache_instance
+    with _cache_lock:
+        _cache_instance = None

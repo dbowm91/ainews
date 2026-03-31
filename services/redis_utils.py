@@ -1,6 +1,7 @@
 """Redis utility functions with atomic operations."""
 
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ end
 """
 
 # Cache compiled scripts per Redis client (weakref to avoid leaks)
-_script_cache: dict[int, any] = {}
+_script_cache: dict[int, Any] = {}
 
 
 def release_lock(redis_client, lock_key: str, lock_value: str) -> bool:

@@ -2,74 +2,32 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 
-@pytest.fixture(autouse=True)
-def _reset_redis():
-    """Reset the global Redis singleton and config cache between tests."""
+def _reset_singletons():
+    """Reset all cached singletons to prevent cross-test contamination."""
     from extensions import reset_redis
 
     reset_redis()
-    try:
-        from services import config_cache
+    for module_name, attr, default in [
+        ("services.config_cache", "_cache_instance", None),
+        ("services.cache", "_cache_instance", None),
+        ("services.metrics", "_metrics_instance", None),
+        ("schemas.common", "_warned_missing_vars", None),
+        ("services.config_unified", "_instance", None),
+    ]:
+        try:
+            mod = __import__(module_name, fromlist=[""])
+            if hasattr(mod, attr):
+                setattr(mod, attr, default() if callable(default) else default)
+        except (ImportError, AttributeError):
+            pass
 
-        config_cache._cache_instance = None
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from services import cache
 
-        cache._cache_instance = None
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from services import metrics
-
-        metrics._metrics_instance = None
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from schemas.common import _warned_missing_vars
-
-        _warned_missing_vars.clear()
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from services import config_unified
-
-        config_unified._instance = None
-    except (ImportError, AttributeError):
-        pass
+@pytest.fixture(autouse=True)
+def _reset_redis():
+    """Reset the global Redis singleton and config cache between tests."""
+    _reset_singletons()
     yield
-    reset_redis()
-    try:
-        from services import config_cache
-
-        config_cache._cache_instance = None
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from services import cache
-
-        cache._cache_instance = None
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from services import metrics
-
-        metrics._metrics_instance = None
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from schemas.common import _warned_missing_vars
-
-        _warned_missing_vars.clear()
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from services import config_unified
-
-        config_unified._instance = None
-    except (ImportError, AttributeError):
-        pass
+    _reset_singletons()
 
 
 @pytest.fixture(autouse=True)
@@ -84,37 +42,8 @@ def _reset_factory_counter():
 
 @pytest.fixture
 def mock_redis():
-    redis = MagicMock()
-    store = {}
-
-    def get(key):
-        return store.get(key)
-
-    def setex(key, ttl, value):
-        store[key] = value
-
-    def delete(*keys):
-        for k in keys:
-            store.pop(k, None)
-
-    def keys(pattern):
-        import fnmatch
-
-        return [k for k in store if fnmatch.fnmatch(k, pattern)]
-
-    def scan_iter(match=None, count=None):
-        import fnmatch
-
-        if match:
-            return (k for k in store if fnmatch.fnmatch(k, match))
-        return iter(store)
-
-    redis.get = MagicMock(side_effect=get)
-    redis.setex = MagicMock(side_effect=setex)
-    redis.delete = MagicMock(side_effect=delete)
-    redis.keys = MagicMock(side_effect=keys)
-    redis.scan_iter = MagicMock(side_effect=scan_iter)
-    return redis
+    """Return a plain MagicMock for tests that need full control over return values."""
+    return MagicMock()
 
 
 @pytest.fixture
@@ -135,60 +64,26 @@ def mock_celery_tasks():
 
 
 @pytest.fixture
-def app():
-    """Create a test Flask app with in-memory SQLite."""
-    import os
+def app(monkeypatch):
+    """Create a test Flask app using create_app() with monkeypatched env vars."""
+    monkeypatch.setenv("ADMIN_PASSWORD", "")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key")
+    monkeypatch.setenv("FLASK_CONFIG", "testing")
+    monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/15")
 
-    os.environ["ADMIN_PASSWORD"] = ""
-    os.environ["SECRET_KEY"] = "test-secret-key"
-    os.environ["FLASK_CONFIG"] = "testing"
-    os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/15"
+    from app import create_app
 
-    from flask import Flask
-    from config import Config
+    app = create_app("testing")
 
-    class TestingConfig(Config):
-        DEBUG = True
-        TESTING = True
-        SECRET_KEY = "test-secret-key"
-        ADMIN_PASSWORD = ""
-        SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
-        WTF_CSRF_ENABLED = False
-        CELERY_BROKER_URL = "memory://"
-        CELERY_RESULT_BACKEND = "cache+memory://"
+    from extensions import limiter
 
-    app = Flask(__name__, template_folder="../templates", static_folder="../static")
-    app.config.from_object(TestingConfig)
-
-    from extensions import db, csrf
-
-    # Disable rate limiting in tests
-    from extensions import limiter as ext_limiter
-
-    db.init_app(app)
-    csrf.init_app(app)
-    ext_limiter.enabled = False
-
-    try:
-        from flask_migrate import Migrate
-
-        Migrate(app, db)
-    except ImportError:
-        pass
-
-    import models  # noqa: F401
-
-    with app.app_context():
-        db.create_all()
-
-    from routes.public import public_bp
-    from routes.admin import admin_bp
-
-    app.register_blueprint(public_bp)
-    app.register_blueprint(admin_bp)
+    limiter.enabled = False
 
     with app.app_context():
         yield app
+
+        from extensions import db
+
         db.session.remove()
         db.drop_all()
 

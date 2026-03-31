@@ -4,7 +4,7 @@ from flask import render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth, _admin_categories
 from services.article import _escape_like_pattern
-from constants import PER_PAGE_ADMIN_ARTICLES
+from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ def articles():
             pass
 
     per_page = PER_PAGE_ADMIN_ARTICLES
+    total_count = q.count()
     articles, has_next, next_page = paginate_query(q, page, per_page)
 
     # Get sources for filter dropdown
@@ -80,6 +81,7 @@ def articles():
             has_next=has_next,
             next_page=next_page,
             page=page,
+            total_count=total_count,
             query=query,
             status=status,
             category=category,
@@ -98,6 +100,7 @@ def articles():
         has_next=has_next,
         next_page=next_page,
         page=page,
+        total_count=total_count,
         query=query,
         status=status,
         category=category,
@@ -334,7 +337,7 @@ def reprocess_article(article_id):
     article = Article.query.get_or_404(article_id)
 
     if stage == "select":
-        article.pipeline_status = "pending"
+        article.pipeline_status = PipelineStatus.PENDING
         article.selector_result = None
         article.research_brief = None
         article.draft_article = None
@@ -355,7 +358,7 @@ def reprocess_article(article_id):
     elif stage == "research":
         from tasks import research_article
 
-        article.pipeline_status = "researching"
+        article.pipeline_status = PipelineStatus.RESEARCHING
         article.research_brief = None
         article.draft_article = None
         article.final_article = None
@@ -375,7 +378,7 @@ def reprocess_article(article_id):
     elif stage == "write":
         from tasks import write_article
 
-        article.pipeline_status = "writing"
+        article.pipeline_status = PipelineStatus.WRITING
         article.draft_article = None
         article.final_article = None
         article.original_ai_article = None

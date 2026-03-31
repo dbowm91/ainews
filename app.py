@@ -170,7 +170,10 @@ def create_app(config_name=None):
         from flask import request, render_template, jsonify
 
         logger.error(
-            f"500 Internal Server Error: {request.method} {request.path}", exc_info=True
+            "500 Internal Server Error: %s %s",
+            request.method,
+            request.path,
+            exc_info=True,
         )
         if _wants_json():
             return jsonify({"error": "Internal server error"}), 500
@@ -181,7 +184,10 @@ def create_app(config_name=None):
         from flask import request, render_template, jsonify
 
         logger.warning(
-            f"429 Rate Limited: {request.method} {request.path} from {request.remote_addr}"
+            "429 Rate Limited: %s %s from %s",
+            request.method,
+            request.path,
+            request.remote_addr,
         )
         if _wants_json():
             return jsonify({"error": "Rate limited", "retry_after": e.description}), 429

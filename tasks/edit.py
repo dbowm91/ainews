@@ -77,7 +77,8 @@ def edit_article(self, article_id: int, run_id=None):
                     run_id,
                     "edit",
                     "info",
-                    f"Queued for review: {truncate_for_log(article.original_title)}",
+                    "Queued for review: %s",
+                    truncate_for_log(article.original_title),
                     article_id=article.id,
                 )
             plog.info(
@@ -100,7 +101,8 @@ def edit_article(self, article_id: int, run_id=None):
                 run_id,
                 "edit",
                 "info",
-                f"Finalized: {truncate_for_log(article.original_title)}",
+                "Finalized: %s",
+                truncate_for_log(article.original_title),
                 article_id=article.id,
             )
 

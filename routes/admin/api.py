@@ -3,6 +3,7 @@ import logging
 from flask import jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
+from constants import PipelineStatus
 
 logger = logging.getLogger(__name__)
 
@@ -10,52 +11,20 @@ logger = logging.getLogger(__name__)
 @admin_bp.route("/api/health")
 @require_auth
 def health() -> Response:
-    from extensions import db
-    from sqlalchemy import text
     from services.circuit_breaker import get_all_breaker_status
     from services.limiter import get_limiter
     from services.cache import get_response_cache
+    from services.health import run_health_checks
 
-    status = {"flask": "ok", "database": "unknown", "llm": "unknown"}
-
-    try:
-        db.session.execute(text("SELECT 1"))
-        status["database"] = "ok"
-    except Exception:
-        logger.exception("Health check: database ping failed")
-        status["database"] = "error"
-
-    try:
-        from services.llm import get_provider_info
-
-        status["llm"] = get_provider_info()
-    except Exception:
-        logger.exception("Health check: LLM provider info failed")
-        status["llm"] = "error"
-
-    try:
-        from extensions import get_redis
-
-        r = get_redis()
-        r.ping()
-        status["redis"] = "ok"
-    except Exception:
-        logger.exception("Health check: Redis ping failed")
-        status["redis"] = "error"
-
-    # Celery workers check
-    try:
-        from celery_app import celery_app
-
-        inspect = celery_app.control.inspect()
-        ping_response = inspect.ping()
-        if ping_response and any(ping_response.values()):
-            status["celery"] = "ok"
-        else:
-            status["celery"] = "no_workers"
-    except Exception:
-        logger.exception("Health check: Celery inspect failed")
-        status["celery"] = "error"
+    health_result = run_health_checks(include_celery=True)
+    status = {
+        "flask": "ok",
+        "database": "unknown",
+        "redis": "unknown",
+        "celery": "unknown",
+        "limiter": "unknown",
+    }
+    status.update(health_result.checks)
 
     status["circuit_breakers"] = get_all_breaker_status()
 
@@ -70,7 +39,6 @@ def health() -> Response:
         logger.exception("Health check: cache stats failed")
         status["cache"] = "error"
 
-    # DNS cache stats
     try:
         from services.url import _dns_cache
 
@@ -289,6 +257,79 @@ def sources_health() -> Response:
     )
 
 
+def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
+    from schemas.topic import load_topics
+
+    new_category = data.get("category", "").strip()
+    if not new_category:
+        return jsonify({"message": "category is required"}), 400
+    topics = load_topics().topics
+    if new_category not in topics:
+        return jsonify({"message": f"Unknown category: {new_category}"}), 400
+    try:
+        for article in articles:
+            article.category = new_category
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"message": "Failed to update articles"}), 500
+    return jsonify(
+        {"message": f"Updated {len(articles)} articles to category '{new_category}'"}
+    )
+
+
+def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
+    from tasks.select import select_article
+
+    for article in articles:
+        article.pipeline_status = PipelineStatus.PENDING
+        article.retry_count = 0
+        article.total_retries = 0
+        article.last_error = None
+        article.selector_result = None
+        article.research_brief = None
+        article.draft_article = None
+        article.final_article = None
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"message": "Failed to reset articles for reprocessing"}), 500
+
+    dispatched = 0
+    for article in articles:
+        try:
+            select_article.delay(article.id)
+            dispatched += 1
+        except Exception:
+            logger.warning("Failed to dispatch reprocess for article %s", article.id)
+
+    return jsonify(
+        {"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
+    )
+
+
+def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
+    from tasks.pipeline import _assign_tags
+
+    tag_names = data.get("tags", [])
+    if not tag_names or not isinstance(tag_names, list):
+        return jsonify({"message": "tags must be a non-empty list"}), 400
+    if len(tag_names) > 10:
+        return jsonify({"message": "Maximum 10 tags per bulk operation"}), 400
+
+    try:
+        _assign_tags(articles, tag_names, db)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"message": "Failed to add tags"}), 500
+
+    return jsonify(
+        {"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"}
+    )
+
+
 @admin_bp.route("/api/articles/bulk", methods=["POST"])
 @require_auth
 def bulk_article_operations() -> tuple[Response, int] | Response:
@@ -343,119 +384,13 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         )
 
     elif action == "set_category":
-        new_category = data.get("category", "").strip()
-        if not new_category:
-            return jsonify({"message": "category is required"}), 400
-        try:
-            for article in articles:
-                article.category = new_category
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            return jsonify({"message": "Failed to update articles"}), 500
-        return jsonify(
-            {
-                "message": f"Updated {len(articles)} articles to category '{new_category}'"
-            }
-        )
+        return _bulk_set_category(articles, data, db)
 
     elif action == "reprocess":
-        try:
-            for article in articles:
-                article.pipeline_status = "pending"
-                article.retry_count = 0
-                article.total_retries = 0
-                article.last_error = None
-                article.selector_result = None
-                article.research_brief = None
-                article.draft_article = None
-                article.final_article = None
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            return jsonify(
-                {"message": "Failed to reset articles for reprocessing"}
-            ), 500
-
-        # Dispatch pipeline tasks for each article
-        dispatched = 0
-        for article in articles:
-            try:
-                from tasks.select import select_article
-
-                select_article.delay(article.id)
-                dispatched += 1
-            except Exception:
-                logger.warning(
-                    "Failed to dispatch reprocess for article %s", article.id
-                )
-
-        return jsonify(
-            {
-                "message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"
-            }
-        )
+        return _bulk_reprocess(articles, db)
 
     elif action == "add_tags":
-        tag_names = data.get("tags", [])
-        if not tag_names or not isinstance(tag_names, list):
-            return jsonify({"message": "tags must be a non-empty list"}), 400
-        if len(tag_names) > 10:
-            return jsonify({"message": "Maximum 10 tags per bulk operation"}), 400
-
-        from models import Tag, slugify, article_tags
-
-        # Find or create tags
-        tag_objects = []
-        for raw_name in tag_names:
-            name = raw_name.strip().lower()
-            if not name or len(name) > 64:
-                continue
-            slug = slugify(name)
-            tag = Tag.query.filter_by(slug=slug).first()
-            if not tag:
-                tag = Tag(name=name, slug=slug)
-                db.session.add(tag)
-                db.session.flush()
-            tag_objects.append(tag)
-
-        if not tag_objects:
-            return jsonify({"message": "No valid tags provided"}), 400
-
-        # Link tags to articles (skip existing links)
-        tag_ids = [t.id for t in tag_objects]
-        linked = 0
-        try:
-            for article in articles:
-                existing_links = set(
-                    r[0]
-                    for r in db.session.execute(
-                        article_tags.select()
-                        .where(
-                            (article_tags.c.article_id == article.id)
-                            & (article_tags.c.tag_id.in_(tag_ids))
-                        )
-                        .with_only_columns(article_tags.c.tag_id)
-                    ).all()
-                )
-                for tag in tag_objects:
-                    if tag.id not in existing_links:
-                        db.session.execute(
-                            article_tags.insert().values(
-                                article_id=article.id, tag_id=tag.id
-                            )
-                        )
-                        linked += 1
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            return jsonify({"message": "Failed to add tags"}), 500
-
-        return jsonify(
-            {
-                "message": f"Added {len(tag_objects)} tags to {len(articles)} articles ({linked} new links)"
-            }
-        )
+        return _bulk_add_tags(articles, data, db)
 
     else:
         return jsonify(

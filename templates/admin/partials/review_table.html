@@ -47,9 +47,29 @@
       {% endfor %}
     </tbody>
   </table>
-  {% if has_next %}
-    <a href="/admin/review?page={{ next_page }}" class="dash-link">next page &rarr;</a>
-  {% endif %}
+  <nav class="pagination" aria-label="Review pagination">
+    {% if page > 1 %}
+      <a href="/admin/review?page={{ page - 1 }}" class="pag-link">&larr; prev</a>
+    {% else %}
+      <span class="pag-link pag-disabled">&larr; prev</span>
+    {% endif %}
+    <span class="pag-info">
+      {% set start = (page - 1) * 20 + 1 %}
+      {% set end = start + articles|length - 1 %}
+      {{ start }}–{{ end }} of {{ total_count }}
+    </span>
+    {% if has_next %}
+      <a href="/admin/review?page={{ next_page }}" class="pag-link">next &rarr;</a>
+    {% else %}
+      <span class="pag-link pag-disabled">next &rarr;</span>
+    {% endif %}
+  </nav>
 {% else %}
-  <p class="empty-state">no articles pending review</p>
+  <div class="empty-state">
+    <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="12" y="12" width="40" height="40" rx="8" stroke="currentColor" stroke-width="2"/>
+      <polyline points="24,32 30,38 42,26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <span>no articles pending review</span>
+  </div>
 {% endif %}

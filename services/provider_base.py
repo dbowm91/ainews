@@ -82,7 +82,7 @@ class ProviderManager:
                     return self.get_cached(pdef.id, config_loader)
                 except Exception as e:
                     logger.warning(
-                        f"Default {self.category} provider {pdef.id} failed: {e}"
+                        "Default %s provider %s failed: %s", self.category, pdef.id, e
                     )
 
         # Fallback: first enabled provider
@@ -93,7 +93,10 @@ class ProviderManager:
                 return self.get_cached(pdef.id, config_loader)
             except Exception as e:
                 logger.warning(
-                    f"{self.category.title()} provider {pdef.id} failed: {e}"
+                    "%s provider %s failed: %s",
+                    self.category.title(),
+                    pdef.id,
+                    e,
                 )
 
         raise RuntimeError(f"No enabled {self.category} provider available")

@@ -1,5 +1,30 @@
 /* ainews// - theme for developers */
 
+/* ─────────────────────────────────────────────────────────────────
+   Table of Contents
+   ─────────────────────────────────────────────────────────────────
+   1.  Theme Variables (Dark/Light) ............. 3
+   2.  Base / Reset ............................. 51
+   3.  Typography ............................. 71
+   4.  Layout (container, grid, card) .......... 130
+   5.  Navigation ............................. 168
+   6.  Search & Filters ...................... 276
+   7.  Articles (feed, card, detail) ........ 324
+   8.  Newsletter .............................. 800
+   9.  Forms (subscribe, login, contact) ...... 950
+   10. Buttons ............................... 1040
+   11. Tables (dashboard, admin) .............. 1100
+   12. Pagination ............................. 1250
+   13. Modals / Overlays ..................... 1300
+   14. Share UI .............................. 1400
+   15. Admin Styles ......................... 1500
+   16. Metrics & Badges ...................... 1600
+   17. Errors & Empty States ................ 1700
+   18. Utilities ............................. 1800
+   19. Animations ........................... 1900
+   20. Responsive / Print .................... 2000
+   ───────────────────────────────────────────────────────────────── */
+
 /* ══════════════════════════════════════════════
    Theme Variables (Dark - Default)
    ══════════════════════════════════════════════ */
@@ -302,6 +327,11 @@ label[tabindex]:focus-visible {
   color: var(--accent);
   border-color: var(--accent-dim);
   background: rgba(88, 166, 255, 0.08);
+}
+
+.filter-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .active-filters {
@@ -1774,11 +1804,87 @@ label[tabindex]:focus-visible {
 }
 
 .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
   font-family: var(--font-mono);
   font-size: 0.8rem;
   color: var(--text-dim);
-  padding: 2rem;
   text-align: center;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+/* ── Toast ───────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  opacity: 1;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.toast-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Pagination ───────────────────────────────── */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.pag-link {
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.pag-link:hover:not(.pag-disabled) {
+  background-color: var(--bg-subtle);
+}
+
+.pag-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pag-disabled {
+  color: var(--text-dim);
+  cursor: default;
+  padding: 0.25rem 0.5rem;
+}
+
+.pag-info {
+  color: var(--text-muted);
 }
 
 /* ── Subscribe Box ───────────────────────────── */
@@ -1892,6 +1998,19 @@ label[tabindex]:focus-visible {
   display: none;
 }
 
+.share-details {
+  position: relative;
+  display: inline;
+}
+
+.share-details > summary {
+  list-style: none;
+}
+
+.share-details > summary::-webkit-details-marker {
+  display: none;
+}
+
 .share-btn {
   background: none;
   border: none;
@@ -1927,7 +2046,7 @@ label[tabindex]:focus-visible {
   margin-bottom: 0.5rem;
 }
 
-.share-checkbox:checked ~ .share-dropdown {
+.share-details[open] .share-dropdown {
   display: block;
 }
 
@@ -2075,6 +2194,17 @@ label[tabindex]:focus-visible {
 
 .form-group {
   margin-bottom: 1rem;
+}
+
+.form-error {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--red);
 }
 
 .form-group label {
@@ -2555,5 +2685,27 @@ label[tabindex]:focus-visible {
   .pipeline-badge,
   .tag-pill {
     border: 1px solid #999;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   Responsive Tables (admin)
+   ══════════════════════════════════════════════ */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ══════════════════════════════════════════════
+   Mobile Touch Targets
+   ══════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .btn-delete,
+  .btn-logout {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 }

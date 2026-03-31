@@ -1,6 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from constants import truncate_for_log
+from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
 
 logger = get_task_logger(__name__)
@@ -56,7 +56,7 @@ def select_article(self, article_id: int, run_id=None):
         article.selector_result = result.model_dump()
 
         if result.selected and result.score >= (rc.min_score or 6):
-            article.pipeline_status = "researching"
+            article.pipeline_status = PipelineStatus.RESEARCHING
             try:
                 db.session.commit()
             except Exception:
@@ -76,7 +76,9 @@ def select_article(self, article_id: int, run_id=None):
                     run_id,
                     "select",
                     "info",
-                    f"Selected [{result.score}/10]: {truncate_for_log(article.original_title)}",
+                    "Selected [%s/10]: %s",
+                    result.score,
+                    truncate_for_log(article.original_title),
                     article_id=article.id,
                 )
 
@@ -86,9 +88,11 @@ def select_article(self, article_id: int, run_id=None):
                 score=result.score,
                 title=truncate_for_log(article.original_title),
             )
-            _dispatch_next(article_id, run_id=run_id, next_status="researching")
+            _dispatch_next(
+                article_id, run_id=run_id, next_status=PipelineStatus.RESEARCHING
+            )
         else:
-            article.pipeline_status = "skipped"
+            article.pipeline_status = PipelineStatus.SKIPPED
             try:
                 db.session.commit()
             except Exception:
@@ -100,7 +104,9 @@ def select_article(self, article_id: int, run_id=None):
                     run_id,
                     "select",
                     "info",
-                    f"Skipped [{result.score}/10]: {truncate_for_log(article.original_title)}",
+                    "Skipped [%s/10]: %s",
+                    result.score,
+                    truncate_for_log(article.original_title),
                     article_id=article.id,
                 )
 
@@ -119,7 +125,7 @@ def select_article(self, article_id: int, run_id=None):
         work,
         task_self=self,
         run_id=run_id,
-        skip_next="researching",
+        skip_next=PipelineStatus.RESEARCHING,
         retry_countdown=15,
         retry_max=20,
     )

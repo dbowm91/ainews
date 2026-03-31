@@ -80,16 +80,135 @@ def _send_emails_parallel(subscribers, subject, html, site_url):
         return 0
 
 
+def _fetch_articles_for_newsletter(
+    topic_key: str,
+    cutoff: datetime,
+    max_articles: int,
+) -> list:
+    from models import Article
+    from constants import PipelineStatus
+
+    q = Article.query.filter(
+        Article.pipeline_status == PipelineStatus.DONE,
+        Article.created_at >= cutoff,
+    )
+    if topic_key == "main":
+        q = q.filter(Article.impact_score > 0)
+    else:
+        q = q.filter(Article.category == topic_key)
+    return q.order_by(Article.impact_score.desc()).limit(max_articles).all()
+
+
+def _generate_topic_newsletter_impl(
+    topic_key: str,
+    articles: list,
+    site_url: str,
+    max_articles: int,
+    dry_run_email: str | None,
+    nl,
+) -> dict:
+    from services.newsletter import generate_main_newsletter, generate_topic_newsletter
+    from services.newsletter_pipeline import generate_executive_summary
+    from services.email import send_newsletter_email
+    from models import Newsletter, Subscriber
+    from extensions import db
+
+    if not articles:
+        return {"type": topic_key, "articles": 0, "sent": 0, "skipped": True}
+
+    exec_summary = ""
+    pipeline_info = {"used_fallback": False, "fallback_stages": []}
+    try:
+        result = generate_executive_summary(articles, topic_key=topic_key)
+        exec_summary = result["summary"]
+        pipeline_info = {
+            "used_fallback": result["used_fallback"],
+            "fallback_stages": result["fallback_stages"],
+        }
+        if result["used_fallback"]:
+            logger.warning(
+                "%s newsletter pipeline used fallback stages: %s",
+                topic_key,
+                result["fallback_stages"],
+            )
+    except Exception as e:
+        logger.error("%s exec summary failed: %s", topic_key, e)
+
+    if topic_key == "main":
+        html, subject, count = generate_main_newsletter(
+            site_url=site_url,
+            max_articles=max_articles,
+            executive_summary=exec_summary,
+        )
+    else:
+        html, subject, count = generate_topic_newsletter(
+            topic_key=topic_key,
+            site_url=site_url,
+            max_articles=max_articles,
+            executive_summary=exec_summary,
+        )
+
+    newsletter = Newsletter(
+        newsletter_type=topic_key,
+        subject=subject,
+        html_content=html,
+        article_count=count,
+    )
+    db.session.add(newsletter)
+    db.session.flush()
+
+    is_dry_run = bool(dry_run_email)
+    sent = 0
+    if is_dry_run:
+        unsub_url = f"{site_url}/unsubscribe/test"
+        try:
+            send_newsletter_email(dry_run_email, subject, html, unsub_url)
+            sent = 1
+            logger.info("Dry run: sent main newsletter to %s", dry_run_email)
+        except Exception as e:
+            logger.error("Dry run failed for %s: %s", dry_run_email, e)
+    else:
+        subscribers = (
+            Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+            .filter(Subscriber.confirmed_at.isnot(None))
+            .filter_by(newsletter_type=topic_key, active=True)
+            .all()
+        )
+        sent = _send_emails_parallel(subscribers, subject, html, site_url)
+
+    newsletter.recipients = sent
+    newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    result_dict = {
+        "type": topic_key,
+        "articles": count,
+        "sent": sent,
+        **pipeline_info,
+    }
+    if is_dry_run:
+        result_dict["dry_run"] = True
+    logger.info(
+        "%s newsletter: %s (%d articles, %d sent, dry_run=%s)",
+        topic_key,
+        subject,
+        count,
+        sent,
+        is_dry_run,
+    )
+    return result_dict
+
+
 def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     """Implementation of newsletter generation logic."""
     from schemas.pipeline import load_pipeline_config
     from schemas.topic import load_topics
-    from services.newsletter import generate_main_newsletter, generate_topic_newsletter
-    from services.newsletter_pipeline import generate_executive_summary
-    from services.email import send_newsletter_email
-    from models import Newsletter, Subscriber, Article, PipelineRun
+    from models import PipelineRun
     from extensions import db
-    from constants import PipelineStatus
 
     config = load_pipeline_config()
     nl = config.newsletter
@@ -101,7 +220,6 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
 
     is_dry_run = bool(dry_run_email)
 
-    # Create PipelineRun for tracking
     if run_id is None:
         run = PipelineRun(
             task_id=task_self.request.id,
@@ -110,95 +228,20 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
             triggered_by="manual" if is_dry_run else "scheduled",
         )
         db.session.add(run)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         run_id = run.id
 
     # Main newsletter
     try:
-        articles = (
-            Article.query.filter(
-                Article.pipeline_status == PipelineStatus.DONE,
-                Article.impact_score > 0,
-                Article.created_at >= cutoff,
-            )
-            .order_by(Article.impact_score.desc())
-            .limit(nl.max_articles)
-            .all()
+        articles = _fetch_articles_for_newsletter("main", cutoff, nl.max_articles)
+        result = _generate_topic_newsletter_impl(
+            "main", articles, site_url, nl.max_articles, dry_run_email, nl
         )
-
-        exec_summary = ""
-        pipeline_info = {"used_fallback": False, "fallback_stages": []}
-        if not articles:
-            logger.warning("Main newsletter has 0 articles, skipping send")
-            results.append({"type": "main", "articles": 0, "sent": 0, "skipped": True})
-        else:
-            try:
-                result = generate_executive_summary(articles, topic_key="main")
-                exec_summary = result["summary"]
-                pipeline_info = {
-                    "used_fallback": result["used_fallback"],
-                    "fallback_stages": result["fallback_stages"],
-                }
-                if result["used_fallback"]:
-                    logger.warning(
-                        "Main newsletter pipeline used fallback stages: %s",
-                        result["fallback_stages"],
-                    )
-            except Exception as e:
-                logger.error("Main exec summary failed: %s", e)
-
-            html, subject, count = generate_main_newsletter(
-                site_url=site_url,
-                max_articles=nl.max_articles,
-                executive_summary=exec_summary,
-            )
-
-            newsletter = Newsletter(
-                newsletter_type="main",
-                subject=subject,
-                html_content=html,
-                article_count=count,
-            )
-            db.session.add(newsletter)
-            db.session.flush()
-
-            sent = 0
-            if is_dry_run:
-                unsub_url = f"{site_url}/unsubscribe/test"
-                try:
-                    send_newsletter_email(dry_run_email, subject, html, unsub_url)
-                    sent = 1
-                    logger.info("Dry run: sent main newsletter to %s", dry_run_email)
-                except Exception as e:
-                    logger.error("Dry run failed for %s: %s", dry_run_email, e)
-            else:
-                subscribers = (
-                    Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-                    .filter(Subscriber.confirmed_at.isnot(None))
-                    .filter_by(newsletter_type="main", active=True)
-                    .all()
-                )
-                sent = _send_emails_parallel(subscribers, subject, html, site_url)
-
-            newsletter.recipients = sent
-            newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
-            db.session.commit()
-            results.append(
-                {
-                    "type": "main",
-                    "articles": count,
-                    "sent": sent,
-                    "dry_run": is_dry_run,
-                    **pipeline_info,
-                }
-            )
-            logger.info(
-                "Main newsletter: %s (%d articles, %d sent, dry_run=%s)",
-                subject,
-                count,
-                sent,
-                is_dry_run,
-            )
+        results.append(result)
     except Exception as e:
         db.session.rollback()
         logger.error("Main newsletter failed: %s", e)
@@ -208,92 +251,27 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     if not is_dry_run:
         for topic_key in topics:
             try:
-                articles = (
-                    Article.query.filter(
-                        Article.pipeline_status == PipelineStatus.DONE,
-                        Article.category == topic_key,
-                        Article.created_at >= cutoff,
-                    )
-                    .order_by(Article.impact_score.desc())
-                    .limit(nl.max_articles)
-                    .all()
+                articles = _fetch_articles_for_newsletter(
+                    topic_key, cutoff, nl.max_articles
                 )
-
-                if not articles:
-                    results.append({"type": topic_key, "skipped": True})
-                    continue
-
-                exec_summary = ""
-                pipeline_info = {"used_fallback": False, "fallback_stages": []}
-                try:
-                    result = generate_executive_summary(articles, topic_key=topic_key)
-                    exec_summary = result["summary"]
-                    pipeline_info = {
-                        "used_fallback": result["used_fallback"],
-                        "fallback_stages": result["fallback_stages"],
-                    }
-                    if result["used_fallback"]:
-                        logger.warning(
-                            "%s newsletter pipeline used fallback stages: %s",
-                            topic_key,
-                            result["fallback_stages"],
-                        )
-                except Exception as e:
-                    logger.error("%s exec summary failed: %s", topic_key, e)
-
-                html, subject, count = generate_topic_newsletter(
-                    topic_key=topic_key,
-                    site_url=site_url,
-                    max_articles=nl.max_articles,
-                    executive_summary=exec_summary,
+                result = _generate_topic_newsletter_impl(
+                    topic_key, articles, site_url, nl.max_articles, None, nl
                 )
-
-                newsletter = Newsletter(
-                    newsletter_type=topic_key,
-                    subject=subject,
-                    html_content=html,
-                    article_count=count,
-                )
-                db.session.add(newsletter)
-                db.session.flush()
-
-                subscribers = (
-                    Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-                    .filter(Subscriber.confirmed_at.isnot(None))
-                    .filter_by(newsletter_type=topic_key, active=True)
-                    .all()
-                )
-                sent = _send_emails_parallel(subscribers, subject, html, site_url)
-
-                newsletter.recipients = sent
-                newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
-                db.session.commit()
-                results.append(
-                    {
-                        "type": topic_key,
-                        "articles": count,
-                        "sent": sent,
-                        **pipeline_info,
-                    }
-                )
-                logger.info(
-                    "%s newsletter: %s (%d articles, %d sent)",
-                    topic_key,
-                    subject,
-                    count,
-                    sent,
-                )
+                results.append(result)
             except Exception as e:
                 db.session.rollback()
                 logger.error("%s newsletter failed: %s", topic_key, e)
                 results.append({"type": topic_key, "error": str(e)})
 
-    # Update run status
     run = db.session.get(PipelineRun, run_id)
     if run:
         run.status = "completed"
         run.finished_at = datetime.now(timezone.utc)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
 
     logger.info("Newsletter generation complete: %s", results)
     return results
@@ -307,23 +285,32 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     time_limit=360,
 )
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
+    import redis.exceptions
+
     from extensions import get_redis
 
-    # Distributed lock to prevent duplicate newsletter generation.
-    # Uses task ID so retries from the same task can re-acquire.
     task_id = self.request.id or "manual"
     lock_key = "ainews:newsletter_lock"
     redis_client = get_redis()
 
-    existing = redis_client.get(lock_key)
-    if existing and existing.decode() != task_id:
-        logger.info(
-            "Newsletter generation already in progress (task %s), skipping",
-            existing.decode(),
-        )
-        return {"skipped": True, "reason": "locked"}
+    try:
+        acquired = redis_client.set(lock_key, task_id, nx=True, ex=600)
+    except redis.exceptions.RedisError:
+        acquired = True
 
-    redis_client.set(lock_key, task_id, ex=600)
+    if not acquired:
+        existing = redis_client.get(lock_key)
+        if existing and existing.decode() == task_id:
+            try:
+                redis_client.set(lock_key, task_id, nx=False, ex=600)
+            except redis.exceptions.RedisError:
+                pass
+        else:
+            logger.info(
+                "Newsletter generation already in progress (task %s), skipping",
+                existing.decode() if existing else "unknown",
+            )
+            return {"skipped": True, "reason": "locked"}
 
     try:
         return _generate_newsletters_impl(self, dry_run_email, run_id)

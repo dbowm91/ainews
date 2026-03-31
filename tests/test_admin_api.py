@@ -91,7 +91,7 @@ class TestBulkArticles:
             db.session.commit()
         resp = auth_client.post(
             "/admin/api/articles/bulk",
-            json={"article_ids": [aid], "action": "set_category", "category": "tech"},
+            json={"article_ids": [aid], "action": "set_category", "category": "ai"},
         )
         assert resp.status_code == 200
 

@@ -2,6 +2,8 @@ import html
 import logging
 from datetime import datetime, timezone, timedelta
 
+from services.utils import parse_article_headline
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +42,7 @@ def generate_newsletter_html(
     # Article items
     items_html = ""
     for i, article in enumerate(articles, 1):
-        headline, tldr = _parse_article(article)
+        headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
         link = f"{site_url}/article/{article.id}"
         safe_link = quote(link, safe=":/.?=&#")
         category = article.category or ""
@@ -208,9 +210,3 @@ def generate_topic_newsletter(
         hours=hours,
         executive_summary=executive_summary,
     )
-
-
-def _parse_article(article) -> tuple[str, str]:
-    from services.utils import parse_article_headline
-
-    return parse_article_headline(article, fallback_headline="Untitled")

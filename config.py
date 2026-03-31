@@ -10,6 +10,20 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent
 
 
+def _safe_int(env_var, default):
+    """Parse an environment variable as int with fallback on failure."""
+    try:
+        return int(os.environ.get(env_var, default))
+    except (ValueError, TypeError):
+        logging.getLogger(__name__).warning(
+            "Invalid %s value '%s', using default %s",
+            env_var,
+            os.environ.get(env_var),
+            default,
+        )
+        return int(default)
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
@@ -27,26 +41,24 @@ class Config:
     MAX_CONTENT_LENGTH = 64 * 1024  # 64KB
 
     # Pipeline retry limits
-    MAX_STAGE_RETRIES = int(os.environ.get("MAX_STAGE_RETRIES", "3"))
-    MAX_TOTAL_RETRIES = int(os.environ.get("MAX_TOTAL_RETRIES", "10"))
+    MAX_STAGE_RETRIES = _safe_int("MAX_STAGE_RETRIES", "3")
+    MAX_TOTAL_RETRIES = _safe_int("MAX_TOTAL_RETRIES", "10")
 
     # Source health
-    MAX_CONSECUTIVE_FAILURES = int(os.environ.get("MAX_CONSECUTIVE_FAILURES", "10"))
+    MAX_CONSECUTIVE_FAILURES = _safe_int("MAX_CONSECUTIVE_FAILURES", "10")
 
     # Dead-letter threshold
-    STUCK_THRESHOLD_MINUTES = int(os.environ.get("STUCK_THRESHOLD_MINUTES", "60"))
+    STUCK_THRESHOLD_MINUTES = _safe_int("STUCK_THRESHOLD_MINUTES", "60")
 
     # Content extraction
-    MIN_CONTENT_LENGTH = int(os.environ.get("MIN_CONTENT_LENGTH", "200"))
+    MIN_CONTENT_LENGTH = _safe_int("MIN_CONTENT_LENGTH", "200")
 
     # Email verification
-    VERIFICATION_EXPIRY_SECONDS = int(
-        os.environ.get("VERIFICATION_EXPIRY_SECONDS", "3600")
-    )
+    VERIFICATION_EXPIRY_SECONDS = _safe_int("VERIFICATION_EXPIRY_SECONDS", "3600")
 
     # SMTP
     SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
-    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_PORT = _safe_int("SMTP_PORT", "587")
     SMTP_USER = os.environ.get("SMTP_USER", "")
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
     SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@ainews.dev")

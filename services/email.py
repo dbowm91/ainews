@@ -45,6 +45,8 @@ def send_verification_email(
     newsletter_label = newsletter_type if newsletter_type != "main" else "all topics"
     safe_label = html.escape(newsletter_label)
     safe_site = html.escape(site_name)
+    safe_verification_url = html.escape(verification_url, quote=True)
+    safe_unsubscribe_url = html.escape(unsubscribe_url, quote=True)
     subject = f"Confirm your subscription to {site_name} — {newsletter_label}"
     html_body = f"""<!DOCTYPE html>
 <html>
@@ -63,19 +65,19 @@ def send_verification_email(
           This link will expire in 1 hour.
         </p>
         <p style="text-align:center;margin:24px 0;">
-          <a href="{verification_url}" style="display:inline-block;padding:12px 32px;background:#0d1117;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;font-size:14px;">
+          <a href="{safe_verification_url}" style="display:inline-block;padding:12px 32px;background:#0d1117;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;font-size:14px;">
             Confirm subscription
           </a>
         </p>
         <p style="color:#888;font-size:12px;line-height:1.6;margin:0;">
           If you didn't request this, you can ignore this email or
-          <a href="{unsubscribe_url}" style="color:#58a6ff;">unsubscribe</a>.
+          <a href="{safe_unsubscribe_url}" style="color:#58a6ff;">unsubscribe</a>.
         </p>
       </td></tr>
       <tr><td style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eaeaea;">
         <p style="font-family:monospace;font-size:11px;color:#888;margin:0;text-align:center;">
           condensed by agents &middot;
-          <a href="{unsubscribe_url}" style="color:#58a6ff;text-decoration:none;">unsubscribe</a>
+          <a href="{safe_unsubscribe_url}" style="color:#58a6ff;text-decoration:none;">unsubscribe</a>
         </p>
       </td></tr>
     </table>
@@ -97,6 +99,7 @@ def send_welcome_email(
     newsletter_label = newsletter_type if newsletter_type != "main" else "all topics"
     safe_label = html.escape(newsletter_label)
     safe_site = html.escape(site_name)
+    safe_unsubscribe_url = html.escape(unsubscribe_url, quote=True)
     subject = f"Subscribed to {site_name} — {newsletter_label}"
     html_body = f"""<!DOCTYPE html>
 <html>
@@ -115,7 +118,7 @@ def send_welcome_email(
         </p>
         <p style="color:#555;font-size:14px;line-height:1.6;margin:0;">
           If you ever want to unsubscribe, click here:
-          <a href="{unsubscribe_url}" style="color:#58a6ff;">unsubscribe</a>
+          <a href="{safe_unsubscribe_url}" style="color:#58a6ff;">unsubscribe</a>
         </p>
       </td></tr>
       <tr><td style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eaeaea;">
@@ -139,13 +142,13 @@ def send_newsletter_email(
     unsubscribe_url: str,
 ):
     """Send newsletter email with unsubscribe link injected into footer."""
-    # Inject unsubscribe link into the footer
+    safe_unsubscribe_url = html.escape(unsubscribe_url, quote=True)
     footer_html = f"""
         <tr>
           <td style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eaeaea;">
             <p style="font-family:monospace;font-size:11px;color:#888;margin:0;text-align:center;">
               condensed by agents &middot;
-              <a href="{unsubscribe_url}" style="color:#58a6ff;text-decoration:none;">unsubscribe</a>
+              <a href="{safe_unsubscribe_url}" style="color:#58a6ff;text-decoration:none;">unsubscribe</a>
             </p>
           </td>
         </tr>"""

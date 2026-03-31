@@ -9,61 +9,9 @@ import pytest
 @pytest.fixture
 def redis_client():
     """Create a mock Redis client with in-memory store."""
-    store = {}
-    client = MagicMock()
-    pipe_mock = MagicMock()
+    from tests.mock_redis import MockRedisWithPipelineAssertion
 
-    def get(key):
-        return store.get(key)
-
-    def incr(key):
-        store[key] = store.get(key, 0) + 1
-        return store[key]
-
-    def expire(key, ttl):
-        pass
-
-    def delete(*keys):
-        count = 0
-        for k in keys:
-            if k in store:
-                del store[k]
-                count += 1
-        return count
-
-    def keys(pattern):
-        import fnmatch
-
-        return [k for k in store if fnmatch.fnmatch(k, pattern)]
-
-    def scan_iter(match=None, count=None):
-        import fnmatch
-
-        if match:
-            return (k for k in store if fnmatch.fnmatch(k, match))
-        return iter(store)
-
-    def mget(keys):
-        return [store.get(k) for k in keys]
-
-    def pipeline():
-        return pipe_mock
-
-    pipe_mock.incr = MagicMock(side_effect=incr)
-    pipe_mock.expire = MagicMock(side_effect=expire)
-    pipe_mock.delete = MagicMock(side_effect=delete)
-    pipe_mock.execute = MagicMock(return_value=[])
-
-    client.get = MagicMock(side_effect=get)
-    client.incr = MagicMock(side_effect=incr)
-    client.expire = MagicMock(side_effect=expire)
-    client.delete = MagicMock(side_effect=delete)
-    client.keys = MagicMock(side_effect=keys)
-    client.scan_iter = MagicMock(side_effect=scan_iter)
-    client.mget = MagicMock(side_effect=mget)
-    client.pipeline = MagicMock(return_value=pipe_mock)
-    client._store = store
-    return client
+    return MockRedisWithPipelineAssertion()
 
 
 class TestRecordStageResult:

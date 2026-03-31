@@ -47,6 +47,7 @@ def pipeline_logs(run_id):
     if level:
         q = q.filter_by(level=level)
 
+    total_count = q.count()
     logs, has_next, next_page = paginate_query(q, page, per_page)
     level_filter = level
 
@@ -58,6 +59,8 @@ def pipeline_logs(run_id):
             level_filter=level_filter,
             has_next=has_next,
             next_page=next_page,
+            page=page,
+            total_count=total_count,
         )
     return render_template(
         "admin/pipeline_logs.html",
@@ -66,6 +69,8 @@ def pipeline_logs(run_id):
         level_filter=level_filter,
         has_next=has_next,
         next_page=next_page,
+        page=page,
+        total_count=total_count,
     )
 
 
@@ -87,7 +92,11 @@ def trigger_crawl():
 
         result = run_all_sources.delay(run_id=run.id)
         run.task_id = result.id
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         return jsonify(
             {"message": "Crawl started", "task_id": result.id, "run_id": run.id}
         ), 202

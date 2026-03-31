@@ -40,9 +40,30 @@
       {% endfor %}
     </tbody>
   </table>
-  {% if has_next %}
-    <a href="/admin/articles?page={{ next_page }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="dash-link">next page &rarr;</a>
-  {% endif %}
+  <nav class="pagination" aria-label="Articles pagination">
+    {% if page > 1 %}
+      <a href="/admin/articles?page={{ page - 1 }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="pag-link">&larr; prev</a>
+    {% else %}
+      <span class="pag-link pag-disabled">&larr; prev</span>
+    {% endif %}
+    <span class="pag-info">
+      {% set start = (page - 1) * 20 + 1 %}
+      {% set end = start + articles|length - 1 %}
+      {{ start }}–{{ end }} of {{ total_count }}
+    </span>
+    {% if has_next %}
+      <a href="/admin/articles?page={{ next_page }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="pag-link">next &rarr;</a>
+    {% else %}
+      <span class="pag-link pag-disabled">next &rarr;</span>
+    {% endif %}
+  </nav>
 {% else %}
-  <p class="empty-state">no articles found</p>
+  <div class="empty-state">
+    <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="32" cy="32" r="24" stroke="currentColor" stroke-width="2"/>
+      <line x1="24" y1="28" x2="40" y2="28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="24" y1="36" x2="36" y2="36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span>no articles found</span>
+  </div>
 {% endif %}

@@ -1,6 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from constants import truncate_for_log
+from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
 
 logger = get_task_logger(__name__)
@@ -28,7 +28,7 @@ def research_article(self, article_id: int, run_id=None):
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("researcher")
-        article.pipeline_status = "researching"
+        article.pipeline_status = PipelineStatus.RESEARCHING
         try:
             db.session.commit()
         except Exception:
@@ -86,7 +86,7 @@ def research_article(self, article_id: int, run_id=None):
 
         article.research_brief = brief.model_dump_json()
         article.impact_score = brief.impact_score
-        article.pipeline_status = "writing"
+        article.pipeline_status = PipelineStatus.WRITING
         try:
             db.session.commit()
         except Exception:
@@ -98,7 +98,9 @@ def research_article(self, article_id: int, run_id=None):
                 run_id,
                 "research",
                 "info",
-                f"Researched: {truncate_for_log(article.original_title)} (score: {brief.impact_score})",
+                "Researched: %s (score: %s)",
+                truncate_for_log(article.original_title),
+                brief.impact_score,
                 article_id=article.id,
             )
 
@@ -111,7 +113,7 @@ def research_article(self, article_id: int, run_id=None):
             title=truncate_for_log(article.original_title),
         )
 
-        _dispatch_next(article_id, run_id=run_id, next_status="writing")
+        _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.WRITING)
         return {"article_id": article_id}
 
     return run_stage(
@@ -120,5 +122,5 @@ def research_article(self, article_id: int, run_id=None):
         work,
         task_self=self,
         run_id=run_id,
-        skip_next="writing",
+        skip_next=PipelineStatus.WRITING,
     )

@@ -44,7 +44,7 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
 
     # Primary circuit is open — try other enabled providers
     logger.warning(
-        f"LLM provider {rc.provider}/{rc.model} circuit open, trying fallbacks"
+        "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model
     )
     config = load_providers_config()
     for pdef in config.providers:

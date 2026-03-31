@@ -2,6 +2,16 @@
 
 {% block title %}ainews// {{ article.original_title }}{% endblock %}
 
+{% block meta %}
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{ article.original_title }}">
+  <meta property="og:description" content="{{ article.summary or article._summary.tldr if article._summary else '' }}">
+  <meta name="description" content="{{ article.summary or article._summary.tldr if article._summary else '' }}">
+  <meta property="twitter:card" content="summary">
+  <meta property="twitter:title" content="{{ article.original_title }}">
+  <meta property="twitter:description" content="{{ article.summary or article._summary.tldr if article._summary else '' }}">
+{% endblock %}
+
 {% block content %}
 <article class="article-full">
   {% if article._fa %}

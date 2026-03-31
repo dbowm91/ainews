@@ -528,6 +528,8 @@ class TestRunStage:
             mocks["get_role_config"].return_value = rc
 
             article = MagicMock()
+            article.total_retries = 0
+            article.retry_count = 0
             mocks["db"].session.get.return_value = article
 
             mocks["get_provider_for_role"].return_value = (

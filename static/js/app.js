@@ -1,20 +1,40 @@
 /* Shared UI behaviors — CSP-compliant (no inline scripts). */
 
 document.addEventListener("DOMContentLoaded", function () {
-  /* Share button: track click + toggle dropdown */
+  /* Keyboard shortcut: '/' focuses search input */
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+      var tag = document.activeElement.tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
+        var searchInput = document.querySelector('input[name="q"], input[type="search"]');
+        if (searchInput) {
+          e.preventDefault();
+          searchInput.focus();
+        }
+      }
+    }
+  });
+
+  /* Share button: track click + open dropdown via <details> */
   document.addEventListener("click", function (e) {
     var btn = e.target.closest(".share-btn");
     if (!btn) return;
-    var container = btn.closest(".share-trigger");
-    if (!container) return;
-    var checkbox = container.querySelector(".share-checkbox");
-    if (!checkbox) return;
+    var details = btn.closest(".share-details");
+    if (!details) return;
 
-    var articleId = btn.getAttribute("data-article-id");
+    var articleId = details.getAttribute("data-article-id");
     if (articleId) {
       fetch("/api/track/share-click/" + articleId, { method: "POST" });
     }
-    checkbox.checked = !checkbox.checked;
+  });
+
+  /* Update aria-expanded on share details toggle */
+  document.addEventListener("toggle", function (e) {
+    if (!e.target.classList.contains("share-details")) return;
+    var summary = e.target.querySelector("summary");
+    if (summary) {
+      summary.setAttribute("aria-expanded", e.target.open);
+    }
   });
 
   /* Copy button: copy share URL to clipboard */
@@ -38,4 +58,18 @@ document.addEventListener("DOMContentLoaded", function () {
     input.select();
     navigator.clipboard.writeText(input.value);
   });
+
+  /* Offline detection toast */
+  var toast = document.getElementById("offline-toast");
+  if (toast) {
+    window.addEventListener("offline", function () {
+      toast.classList.remove("toast-hidden");
+    });
+    window.addEventListener("online", function () {
+      toast.classList.add("toast-hidden");
+    });
+    if (!navigator.onLine) {
+      toast.classList.remove("toast-hidden");
+    }
+  }
 });

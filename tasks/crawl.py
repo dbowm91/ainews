@@ -2,6 +2,8 @@ from celery import shared_task, group
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
 
+import redis.exceptions
+
 logger = get_task_logger(__name__)
 
 
@@ -35,20 +37,29 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     lock_key = f"ainews:crawl_lock:{source_id}"
     redis_client = get_redis()
     task_id = self.request.id or "manual"
-    acquired = redis_client.set(lock_key, task_id, nx=True, ex=30)
+    try:
+        acquired = redis_client.set(lock_key, task_id, nx=True, ex=30)
+    except redis.exceptions.RedisError:
+        acquired = True
     if not acquired:
-        existing = redis_client.get(lock_key)
-        if existing and existing.decode() == task_id:
-            redis_client.set(lock_key, task_id, nx=False, ex=30)
-        else:
-            logger.info("Source %s already being crawled, skipping", source_id)
-            return {"source_id": source_id, "skipped": True, "reason": "locked"}
+        try:
+            existing = redis_client.get(lock_key)
+            if existing and existing.decode() == task_id:
+                redis_client.set(lock_key, task_id, nx=False, ex=30)
+            else:
+                logger.info("Source %s already being crawled, skipping", source_id)
+                return {"source_id": source_id, "skipped": True, "reason": "locked"}
+        except redis.exceptions.RedisError:
+            logger.warning(
+                "Redis unavailable for lock check on %s, proceeding", source_id
+            )
+            acquired = True
 
     try:
+        source = Source.query.filter_by(source_key=source_id).first()
+
         adapter_class = get_adapter_class(cfg.type)
         adapter = adapter_class(cfg)
-
-        source = Source.query.filter_by(source_key=source_id).first()
 
         if should_skip_source(source, cfg.schedule_minutes):
             return {"source_id": source_id, "skipped": True}
@@ -124,7 +135,10 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             run_id,
             "crawl",
             "info",
-            f"{source_id}: fetched {len(items)}, {len(new_items)} new",
+            "%s: fetched %s, %s new",
+            source_id,
+            len(items),
+            len(new_items),
         )
         return {
             "source_id": source_id,
@@ -134,14 +148,18 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     except SoftTimeLimitExceeded:
         db.session.rollback()
         _log_pipeline(
-            run_id, "crawl", "error", f"{source_id}: soft time limit exceeded"
+            run_id, "crawl", "error", "%s: soft time limit exceeded", source_id
         )
         logger.error("Task exceeded soft time limit for source %s", source_id)
         raise
     except Exception as e:
         db.session.rollback()
-        _log_pipeline(run_id, "crawl", "error", f"{source_id}: {e}")
+        _log_pipeline(run_id, "crawl", "error", "%s: %s", source_id, e)
         logger.error("Pipeline failed for %s: %s", source_id, e, exc_info=True)
+        from services.crawling import record_crawl_failure
+
+        if source:
+            record_crawl_failure(source, str(e))
         return {"source_id": source_id, "error": str(e)}
     finally:
         try:
@@ -178,11 +196,15 @@ def run_all_sources(self, run_id=None):
     try:
         configs = load_sources()
     except Exception as exc:
-        _log_pipeline(run_id, "crawl", "error", f"Failed to load sources: {exc}")
+        _log_pipeline(run_id, "crawl", "error", "Failed to load sources: %s", exc)
         run = db.session.get(PipelineRun, run_id)
         if run:
             run.status = "failed"
-            db.session.commit()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
         raise self.retry(exc=exc)
 
     if not configs:
@@ -224,6 +246,14 @@ def run_all_sources(self, run_id=None):
         if isinstance(res, dict):
             if "error" in res:
                 errors += 1
+                from services.crawling import record_crawl_failure
+                from models import Source
+
+                source_id = res.get("source_id")
+                if source_id:
+                    src = Source.query.filter_by(source_key=source_id).first()
+                    if src:
+                        record_crawl_failure(src, res["error"])
             total_fetched += res.get("fetched", 0)
             total_new += res.get("new", 0)
 
@@ -231,12 +261,15 @@ def run_all_sources(self, run_id=None):
     run = db.session.get(PipelineRun, run_id)
     if run:
         update_pipeline_run_stats(run, total_fetched, total_new)
-        if timed_out:
-            run.status = "timeout"
+        try:
+            if timed_out:
+                run.status = "timeout"
+            elif errors > 0 and total_new == 0:
+                run.status = "failed"
             db.session.commit()
-        elif errors > 0 and total_new == 0:
-            run.status = "failed"
-            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
 
     logger.info("All sources complete: %s", results)
     return results

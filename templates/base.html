@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  {% block meta %}
+  <meta name="description" content="AI news condensed by agents — stay current on AI, security, privacy, and more.">
+  <meta property="og:site_name" content="ainews">
+  <meta property="og:type" content="website">
+  <meta property="twitter:card" content="summary">
+  {% endblock %}
   <title>{% block title %}ainews//{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <link rel="alternate" type="application/rss+xml" href="/feed" title="All articles">
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/share-a11y.js') }}" defer></script>
 </head>
 <body hx-boost="true">
   <a href="#content" class="skip-link">Skip to content</a>
+  <div id="offline-toast" class="toast toast-hidden" role="status" aria-live="polite">
+    You appear to be offline. Some content may be unavailable.
+  </div>
   <header class="site-header">
     <nav class="nav">
       <a href="/" class="logo">ainews<span class="logo-slash">//</span></a>
@@ -25,7 +37,7 @@
         {% endfor %}
       </div>
       <div class="nav-meta">
-        <a href="/feed" class="rss-link" title="RSS feed">[rss]</a>
+        <a href="/feed" class="rss-link" title="RSS feed" hx-boost="false">[rss]</a>
         <button type="button" class="theme-toggle" aria-label="Toggle theme" onclick="toggleTheme()">
           <svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -48,41 +60,14 @@
   </header>
 
   <main class="container">
+    <span id="content-loading" class="htmx-indicator">&nbsp;&nbsp;loading...</span>
     <div id="content">
       {% block content %}{% endblock %}
     </div>
   </main>
 
   <footer class="site-footer">
-    <p>ainews// &middot; autonomous news condensation &middot; <a href="/feed">feed</a> &middot; <a href="/admin/">admin</a></p>
+    <p>ainews// &middot; autonomous news condensation &middot; <a href="/feed" hx-boost="false">feed</a> &middot; <a href="/admin/">admin</a></p>
   </footer>
-  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
-  <script>
-  // Share dropdown accessibility enhancements
-  document.addEventListener('DOMContentLoaded', function() {
-    const shareCheckboxes = document.querySelectorAll('.share-checkbox');
-    shareCheckboxes.forEach(checkbox => {
-      const id = checkbox.dataset.shareId;
-      const button = document.querySelector(`.share-trigger[data-share-id="${id}"] .share-btn`);
-      const dropdown = document.getElementById(`share-dropdown-${id}`);
-      if (!button || !dropdown) return;
-      
-      function updateAria() {
-        button.setAttribute('aria-expanded', checkbox.checked ? 'true' : 'false');
-      }
-      
-      checkbox.addEventListener('change', updateAria);
-      updateAria(); // initial state
-      
-      // When dropdown opens, focus first focusable element for better keyboard navigation
-      checkbox.addEventListener('change', function() {
-        if (checkbox.checked) {
-          const focusable = dropdown.querySelector('input, button, a');
-          if (focusable) focusable.focus();
-        }
-      });
-    });
-  });
-  </script>
 </body>
 </html>

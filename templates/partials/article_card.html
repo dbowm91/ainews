@@ -27,7 +27,8 @@
        hx-get="{{ url_for('public.article_detail', article_id=article.id) }}"
        hx-target="#content"
        hx-swap="innerHTML"
-       hx-push-url="true">
+       hx-push-url="true"
+       hx-indicator="#content-loading">
       {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
     </a>
   </h2>

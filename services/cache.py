@@ -13,25 +13,27 @@ from typing import Any, Callable, Optional
 
 import redis.exceptions
 
+from services.cache_base import MemoryCacheMixin
+
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ResponseCache"] = None
 _cache_lock = threading.Lock()
 
-_MAX_MEMORY_ENTRIES = 500
 
-
-class ResponseCache:
+class ResponseCache(MemoryCacheMixin):
     """Redis-backed cache with in-memory L1 layer.
 
     Designed for read-heavy routes (article detail, RSS feeds).
     Uses short TTLs by default since articles are written infrequently.
     """
 
+    _memory: dict[str, tuple[float, str]]
+
     def __init__(self, redis_client, prefix: str = "ainews:cache"):
         self.redis = redis_client
         self.prefix = prefix
-        self._memory: dict[str, tuple[float, str]] = {}
+        self._memory = {}
         self._hits = 0
         self._misses = 0
 
@@ -81,20 +83,6 @@ class ResponseCache:
             self.redis.setex(full_key, ttl, raw)
         except redis.exceptions.RedisError as e:
             logger.warning("Cache write failed for %s: %s", key, e)
-
-    def _evict_stale(self) -> None:
-        """Evict expired entries; if still over limit, drop oldest."""
-        if len(self._memory) <= _MAX_MEMORY_ENTRIES:
-            return
-        now = time.monotonic()
-        expired = [k for k, (exp, _) in self._memory.items() if now >= exp]
-        for k in expired:
-            del self._memory[k]
-        if len(self._memory) > _MAX_MEMORY_ENTRIES:
-            # Drop oldest entries by expiry time
-            sorted_items = sorted(self._memory.items(), key=lambda x: x[1][0])
-            for k, _ in sorted_items[: len(self._memory) - _MAX_MEMORY_ENTRIES]:
-                del self._memory[k]
 
     def get_or_set(self, key: str, loader_fn: Callable[[], Any], ttl: int = 120) -> Any:
         """Get from cache or compute and cache."""
@@ -162,4 +150,5 @@ def get_response_cache() -> ResponseCache:
 def reset_response_cache() -> None:
     """Reset the singleton (for testing)."""
     global _cache_instance
-    _cache_instance = None
+    with _cache_lock:
+        _cache_instance = None

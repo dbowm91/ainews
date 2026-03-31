@@ -115,6 +115,20 @@ class TestCrawlSource:
         mock_get_redis.return_value = mock_redis
 
         with app.app_context():
+            from datetime import datetime, timezone
+            from extensions import db
+            from models import PipelineRun
+
+            pr = PipelineRun(
+                id=1,
+                run_type="crawl",
+                status="running",
+                triggered_by="test",
+                started_at=datetime.now(timezone.utc),
+            )
+            db.session.add(pr)
+            db.session.commit()
+
             cfg = {
                 "id": "src_err",
                 "name": "Error Source",

@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from billiard.exceptions import SoftTimeLimitExceeded
 
 logger = get_task_logger(__name__)
 
@@ -26,6 +27,10 @@ def cleanup_old_pipeline_logs(self):
         db.session.commit()
         logger.info("Cleaned up %s pipeline logs older than 30 days", deleted)
         return {"deleted": deleted}
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        logger.error("cleanup_old_pipeline_logs exceeded soft time limit")
+        raise
     except Exception as e:
         db.session.rollback()
         logger.error("Pipeline log cleanup failed: %s", e)
@@ -55,6 +60,10 @@ def cleanup_expired_verifications(self):
         if deleted:
             logger.info("Cleaned up %s expired unverified subscribers", deleted)
         return {"deleted": deleted}
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        logger.error("cleanup_expired_verifications exceeded soft time limit")
+        raise
     except Exception as e:
         db.session.rollback()
         logger.error("Expired verification cleanup failed: %s", e)

@@ -65,6 +65,10 @@ if [ "$DELETED" -gt 0 ]; then
     echo "$(date): Cleaned up $DELETED backups older than $RETENTION_DAYS days"
 fi
 
+# Verify backup
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+"$SCRIPT_DIR/verify_backup.sh" "$BACKUP_FILE"
+
 # Show backup info
 BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 TOTAL_BACKUPS=$(find "$BACKUP_DIR" -name "ainews-*.db*" | wc -l)

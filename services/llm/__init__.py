@@ -56,7 +56,7 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
             recovery_timeout=_LLM_RECOVERY_TIMEOUT,
         )
         if fallback_breaker.can_execute():
-            logger.info(f"Falling back to LLM provider {pdef.id}")
+            logger.info("Falling back to LLM provider %s", pdef.id)
             provider = get_provider_by_id(pdef.id)
             return (
                 provider,

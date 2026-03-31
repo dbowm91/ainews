@@ -17,19 +17,19 @@ logger = logging.getLogger(__name__)
 class HealthResult:
     """Result of a health check."""
 
-    status: str  # "ok", "degraded", "error"
+    status: str  # "ok", "degraded", "unhealthy"
     checks: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_healthy(self) -> bool:
-        return self.status == "ok"
+        return self.status in ("ok", "degraded")
 
     def to_dict(self) -> dict[str, Any]:
         return {"status": self.status, "checks": self.checks}
 
 
 def check_database() -> tuple[str, Any]:
-    """Check database connectivity.
+    """Check database connectivity and pool stats.
 
     Returns (check_name, status) tuple.
     """
@@ -38,10 +38,27 @@ def check_database() -> tuple[str, Any]:
         from sqlalchemy import text
 
         db.session.execute(text("SELECT 1"))
-        return "database", "ok"
+
+        pool = db.engine.pool
+        pool_stats = {}
+        if hasattr(pool, "size"):
+            pool_stats["size"] = pool.size()
+        if hasattr(pool, "checkedin"):
+            pool_stats["checked_in"] = pool.checkedin()
+        if hasattr(pool, "checkedout"):
+            pool_stats["checked_out"] = pool.checkedout()
+        if hasattr(pool, "overflow"):
+            pool_stats["overflow"] = pool.overflow()
+        if hasattr(pool, "invalid"):
+            pool_stats["invalid"] = pool.invalid()
+
+        result: dict[str, Any] = {"status": "ok"}
+        if pool_stats:
+            result["pool"] = pool_stats
+        return "database", result
     except Exception:
         logger.exception("Health check: database ping failed")
-        return "database", "error"
+        return "database", {"status": "error"}
 
 
 def check_redis() -> tuple[str, Any]:
@@ -105,20 +122,29 @@ def run_health_checks(include_celery: bool = True) -> HealthResult:
     checks = {}
     overall = "ok"
 
-    for name, status in [check_database(), check_redis()]:
-        checks[name] = status
-        if status == "error":
+    name, status = check_database()
+    checks[name] = status
+    db_status = status.get("status") if isinstance(status, dict) else status
+    if db_status == "error":
+        overall = "unhealthy"
+
+    name, status = check_redis()
+    checks[name] = status
+    if status == "error":
+        if overall != "unhealthy":
             overall = "degraded"
 
     if include_celery:
         name, status = check_celery()
         checks[name] = status
         if status == "error":
-            overall = "degraded"
+            if overall != "unhealthy":
+                overall = "degraded"
 
     name, status = check_limiter()
     checks[name] = status
     if status != "ok":
-        overall = "degraded"
+        if overall != "unhealthy":
+            overall = "degraded"
 
     return HealthResult(status=overall, checks=checks)

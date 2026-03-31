@@ -3,9 +3,10 @@ import os
 import tempfile
 from unittest.mock import MagicMock
 
+import pytest
 import redis.exceptions
 from pydantic import BaseModel
-from services.config_cache import ConfigCache, _serialize, _deserialize
+from services.config_cache import ConfigCache, _serialize, _deserialize, _import_class
 
 
 class _SampleModel(BaseModel):
@@ -26,22 +27,31 @@ class TestSerialize:
         result = _deserialize(raw)
         assert result == data
 
-    def test_pydantic_model(self):
-        model = _SampleModel(name="hello", value=99)
+    def test_pydantic_model_roundtrip(self):
+        """Pydantic models from schemas.* can be serialized and deserialized."""
+        from schemas.llm import OpenAIConfig
+
+        model = OpenAIConfig(model="gpt-4", api_key="test-key")
         raw = _serialize(model)
         result = _deserialize(raw)
-        assert isinstance(result, _SampleModel)
-        assert result.name == "hello"
-        assert result.value == 99
+        assert isinstance(result, OpenAIConfig)
+        assert result.model == "gpt-4"
+        assert result.api_key == "test-key"
 
-    def test_pydantic_list(self):
-        models = [_SampleModel(name="a"), _SampleModel(name="b", value=10)]
+    def test_pydantic_list_roundtrip(self):
+        """Lists of Pydantic models from schemas.* can roundtrip."""
+        from schemas.llm import OpenAIConfig
+
+        models = [
+            OpenAIConfig(model="gpt-4", api_key="key1"),
+            OpenAIConfig(model="gpt-3.5", api_key="key2"),
+        ]
         raw = _serialize(models)
         result = _deserialize(raw)
         assert len(result) == 2
-        assert all(isinstance(m, _SampleModel) for m in result)
-        assert result[0].name == "a"
-        assert result[1].value == 10
+        assert all(isinstance(m, OpenAIConfig) for m in result)
+        assert result[0].model == "gpt-4"
+        assert result[1].model == "gpt-3.5"
 
     def test_json_not_pickle(self):
         raw = _serialize({"test": True})
@@ -82,12 +92,18 @@ class TestConfigCache:
 
     def test_cache_hit_returns_pydantic(self, mock_redis):
         cache = ConfigCache(mock_redis, prefix="test")
-        mock_redis.get = lambda key: _serialize(_SampleModel(name="cached", value=7))
+        from schemas.llm import OpenAIConfig
 
-        result = cache.get("myconfig", lambda: _SampleModel(name="fresh"), ttl=60)
-        assert isinstance(result, _SampleModel)
-        assert result.name == "cached"
-        assert result.value == 7
+        mock_redis.get = lambda key: _serialize(
+            OpenAIConfig(model="cached-model", api_key="key1")
+        )
+
+        result = cache.get(
+            "myconfig", lambda: OpenAIConfig(model="fresh", api_key="k"), ttl=60
+        )
+        assert isinstance(result, OpenAIConfig)
+        assert result.model == "cached-model"
+        assert result.api_key == "key1"
 
     def test_invalidate_clears_key(self, mock_redis):
         cache = ConfigCache(mock_redis, prefix="test")
@@ -96,10 +112,13 @@ class TestConfigCache:
 
     def test_invalidate_all_clears_prefix(self, mock_redis):
         mock_redis.scan = MagicMock(return_value=(0, [b"test:foo", b"test:bar"]))
+        mock_pipe = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipe
         cache = ConfigCache(mock_redis, prefix="test")
         cache.invalidate_all()
         mock_redis.scan.assert_called_with(cursor=0, match="test:*", count=100)
-        mock_redis.delete.assert_called_with(b"test:foo", b"test:bar")
+        assert mock_pipe.delete.call_count == 2
+        mock_pipe.execute.assert_called_once()
 
     def test_graceful_on_redis_failure(self, mock_redis):
         mock_redis.get = MagicMock(
@@ -263,3 +282,52 @@ sources:
             assert result == []
         finally:
             config_cache.get_config_cache = original_get
+
+
+class TestImportClassAllowlist:
+    """Tests for _import_class allowlist enforcement."""
+
+    def test_rejects_os_system(self):
+        with pytest.raises(ValueError, match="not in allowlist"):
+            _import_class("os.system")
+
+    def test_rejects_subprocess(self):
+        with pytest.raises(ValueError, match="not in allowlist"):
+            _import_class("subprocess.Popen")
+
+    def test_rejects_non_schemas_module(self):
+        with pytest.raises(ValueError, match="not in allowlist"):
+            _import_class("services.config_cache.ConfigCache")
+
+    def test_rejects_non_basemodel_class(self):
+        """Even schemas.* classes must be Pydantic BaseModel subclasses."""
+        with pytest.raises(ValueError, match="not a Pydantic BaseModel"):
+            _import_class("schemas.common.resolve_env_vars")
+
+    def test_allows_schemas_topic(self):
+        from schemas.topic import TopicsConfig
+
+        cls = _import_class("schemas.topic.TopicsConfig")
+        assert cls is TopicsConfig
+
+    def test_allows_schemas_source(self):
+        from schemas.source import SourceConfig
+
+        cls = _import_class("schemas.source.SourceConfig")
+        assert cls is SourceConfig
+
+    def test_allows_schemas_llm(self):
+        from schemas.llm import OpenAIConfig
+
+        cls = _import_class("schemas.llm.OpenAIConfig")
+        assert cls is OpenAIConfig
+
+    def test_allows_schemas_pipeline(self):
+        from schemas.pipeline import PipelineConfig
+
+        cls = _import_class("schemas.pipeline.PipelineConfig")
+        assert cls is PipelineConfig
+
+    def test_rejects_arbitrary_import(self):
+        with pytest.raises(ValueError, match="not in allowlist"):
+            _import_class("__builtins__.__import__")

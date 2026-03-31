@@ -527,8 +527,8 @@ def run_stage(
     finally:
         limiter.release(rc.provider, model)
         try:
-            stored = redis_client.get(lock_key)
-            if stored and stored.decode() == task_id:
-                redis_client.delete(lock_key)
+            from services.redis_utils import release_lock
+
+            release_lock(redis_client, lock_key, task_id)
         except Exception:
             pass

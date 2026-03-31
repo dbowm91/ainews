@@ -119,7 +119,7 @@ class TestModelLimiterGetActive:
         limiter = ModelLimiter(redis)
         assert limiter.get_active("ollama", "qwen3:8b") == 0
 
-    def test_get_active_returns_zero_on_error(self):
+    def test_get_active_returns_none_on_error(self):
         mock_redis = MagicMock()
         mock_redis.get.side_effect = RedisConnectionError("Redis down")
         acquire_script = MagicMock()
@@ -130,7 +130,7 @@ class TestModelLimiterGetActive:
             )
         )
         limiter = ModelLimiter(mock_redis)
-        assert limiter.get_active("ollama", "qwen3:8b") == 0
+        assert limiter.get_active("ollama", "qwen3:8b") is None
 
 
 class TestAcquireReleaseCycle:

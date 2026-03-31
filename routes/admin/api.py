@@ -152,32 +152,12 @@ def task_status(task_id):
 @require_auth
 def reload_config():
     from services.config_cache import get_config_cache
+    from services.config_unified import validate_config
     from services.llm import clear_provider_cache
-    from schemas.pipeline import load_pipeline_config
-    from schemas.source import load_sources
-    from schemas.topic import load_topics
-    from schemas.llm import load_providers_config
 
-    errors = []
-    try:
-        load_pipeline_config()
-    except Exception as e:
-        errors.append(f"pipeline config: {e}")
-    try:
-        load_sources()
-    except Exception as e:
-        errors.append(f"sources config: {e}")
-    try:
-        load_topics()
-    except Exception as e:
-        errors.append(f"topics config: {e}")
-    try:
-        load_providers_config()
-    except Exception as e:
-        errors.append(f"providers config: {e}")
-
-    if errors:
-        return jsonify({"errors": errors}), 400
+    is_valid, errors = validate_config()
+    if not is_valid:
+        return jsonify({"error": "Config validation failed", "details": errors}), 400
 
     get_config_cache().invalidate_all()
     clear_provider_cache()
@@ -214,6 +194,43 @@ def pipeline_stats():
 
     stats = get_all_stages_stats(minutes)
     return jsonify(stats)
+
+
+@admin_bp.route("/api/pipeline/dead-letter/stats")
+@require_auth
+def dead_letter_stats():
+    """Get dead letter queue statistics."""
+    from models import Article
+    from constants import PipelineStatus
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    stuck = Article.query.filter(
+        Article.pipeline_status.in_(
+            [
+                PipelineStatus.RESEARCHING,
+                PipelineStatus.WRITING,
+                PipelineStatus.EDITING,
+                PipelineStatus.PENDING,
+            ]
+        ),
+        Article.updated_at < cutoff,
+    ).count()
+
+    failed = Article.query.filter_by(pipeline_status=PipelineStatus.FAILED).count()
+
+    from services.metrics import get_metrics
+
+    metrics = get_metrics().get_metrics()
+    gauge_val = metrics.get("gauges", {}).get("pipeline.stuck_articles", 0)
+
+    return jsonify(
+        {
+            "stuck_articles": stuck,
+            "failed_articles": failed,
+            "gauge_stuck": gauge_val,
+        }
+    )
 
 
 @admin_bp.route("/api/costs")

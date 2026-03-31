@@ -91,9 +91,58 @@ def _parse_article(article):
     return parse_article_headline(article, fallback_headline="Untitled")
 
 
+def _run_pipeline_stage(
+    role: str,
+    stage_config,
+    metrics,
+    limiter,
+    llm_call,
+    fallback_stages: list,
+):
+    """Run a single pipeline stage with acquire/release/fallback pattern.
+
+    Args:
+        role: Stage name (reader/writer/editor) for logging and metrics.
+        stage_config: The stage's config (nlp.reader/writer/editor).
+        metrics: Metrics collector.
+        limiter: ModelLimiter instance.
+        llm_call: Callable(provider, model, max_tokens) that returns the LLM result.
+        fallback_stages: List to append to on failure.
+
+    Returns:
+        (result, success) tuple. result is the LLM output or None on failure.
+    """
+    from services.llm import get_provider_for_role
+
+    try:
+        provider, model, max_tokens = get_provider_for_role(
+            f"newsletter_pipeline.{role}"
+        )
+        if limiter.acquire(
+            stage_config.provider,
+            model,
+            stage_config.concurrency,
+            stage_config.timeout_seconds,
+        ):
+            try:
+                result = llm_call(provider, model, max_tokens)
+                return result, True
+            finally:
+                limiter.release(stage_config.provider, model)
+        else:
+            metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})
+            fallback_stages.append(role)
+            return None, False
+    except Exception as e:
+        logger.error("%s failed: %s", role, e)
+        metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})
+        fallback_stages.append(role)
+        return None, False
+
+
 def generate_executive_summary(articles, topic_key="main") -> dict:
     """Generate executive summary using reader -> writer -> editor pipeline.
-    
+
     Returns a dict with keys:
         summary: The executive summary text
         used_fallback: bool - Whether any stage fell back to defaults
@@ -101,13 +150,12 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
     """
     from schemas.pipeline import load_pipeline_config
     from services.limiter import get_limiter
-    from services.llm import get_provider_for_role
     from services.metrics import get_metrics
 
     metrics = get_metrics()
     config = load_pipeline_config()
     nlp = config.newsletter_pipeline
-    
+
     used_fallback = False
     fallback_stages = []
 
@@ -128,145 +176,95 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
 
     # Reader
     if nlp.reader.enabled:
-        reader_success = False
-        try:
-            provider, model, max_tokens = get_provider_for_role(
-                "newsletter_pipeline.reader"
+
+        def reader_llm_call(provider, model, max_tokens):
+            prompt = build_reader_prompt(articles, topic_context)
+            return provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=NewsletterBrief,
+                model=model,
+                system=get_reader_system_prompt(),
+                temperature=nlp.reader.temperature,
+                max_tokens=max_tokens,
             )
-            if limiter.acquire(
-                nlp.reader.provider,
-                model,
-                nlp.reader.concurrency,
-                nlp.reader.timeout_seconds,
-            ):
-                try:
-                    prompt = build_reader_prompt(articles, topic_context)
-                    brief = provider.chat_structured(
-                        messages=[{"role": "user", "content": prompt}],
-                        response_model=NewsletterBrief,
-                        model=model,
-                        system=get_reader_system_prompt(),
-                        temperature=nlp.reader.temperature,
-                        max_tokens=max_tokens,
-                    )
-                    brief_json = brief.model_dump_json()
-                    reader_success = True
-                finally:
-                    limiter.release(nlp.reader.provider, model)
-        except Exception as e:
-            logger.error(f"Reader failed: {e}")
-            metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": "reader"})
+
+        brief, reader_success = _run_pipeline_stage(
+            "reader", nlp.reader, metrics, limiter, reader_llm_call, fallback_stages
+        )
+        if reader_success:
+            brief_json = brief.model_dump_json()
+        else:
             used_fallback = True
-            fallback_stages.append("reader")
-        
-        if not reader_success:
-            # Check if reader produced anything meaningful
             try:
                 brief_data = json.loads(brief_json)
                 if not brief_data.get("themes") and not brief_data.get("highlights"):
-                    raise ValueError("Reader stage produced empty brief")
-            except Exception as e:
-                logger.error(f"Reader produced empty brief: {e}")
-                metrics.counter_inc("newsletter.pipeline_empty_stage", labels={"stage": "reader"})
-                used_fallback = True
-                if "reader" not in fallback_stages:
-                    fallback_stages.append("reader")
+                    logger.error("Reader stage produced empty brief")
+                    metrics.counter_inc(
+                        "newsletter.pipeline_empty_stage", labels={"stage": "reader"}
+                    )
+                    if "reader" not in fallback_stages:
+                        fallback_stages.append("reader")
+            except Exception:
+                pass
 
     # Writer
     if nlp.writer.enabled:
-        writer_success = False
-        try:
-            provider, model, max_tokens = get_provider_for_role(
-                "newsletter_pipeline.writer"
+
+        def writer_llm_call(provider, model, max_tokens):
+            prompt = build_writer_prompt(brief_json, topic_context)
+            return provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=ExecutiveSummary,
+                model=model,
+                system=get_newsletter_writer_system_prompt(),
+                temperature=nlp.writer.temperature,
+                max_tokens=max_tokens,
             )
-            if limiter.acquire(
-                nlp.writer.provider,
-                model,
-                nlp.writer.concurrency,
-                nlp.writer.timeout_seconds,
-            ):
-                try:
-                    prompt = build_writer_prompt(brief_json, topic_context)
-                    result = provider.chat_structured(
-                        messages=[{"role": "user", "content": prompt}],
-                        response_model=ExecutiveSummary,
-                        model=model,
-                        system=get_newsletter_writer_system_prompt(),
-                        temperature=nlp.writer.temperature,
-                        max_tokens=max_tokens,
-                    )
-                    summary_json = result.model_dump_json()
-                    writer_success = True
-                finally:
-                    limiter.release(nlp.writer.provider, model)
-            else:
-                # Limiter not available, use fallback
-                metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": "writer"})
-                used_fallback = True
-                fallback_stages.append("writer")
-                return {"summary": "", "used_fallback": True, "fallback_stages": fallback_stages}
-        except Exception as e:
-            logger.error(f"Writer failed: {e}")
-            metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": "writer"})
-            used_fallback = True
-            fallback_stages.append("writer")
-            return {"summary": "", "used_fallback": True, "fallback_stages": fallback_stages}
-        
-        if not writer_success:
-            return {"summary": "", "used_fallback": True, "fallback_stages": fallback_stages}
+
+        result, writer_success = _run_pipeline_stage(
+            "writer", nlp.writer, metrics, limiter, writer_llm_call, fallback_stages
+        )
+        if writer_success:
+            summary_json = result.model_dump_json()
+        else:
+            return {
+                "summary": "",
+                "used_fallback": True,
+                "fallback_stages": fallback_stages,
+            }
     else:
-        # Writer disabled
         metrics.counter_inc("newsletter.pipeline_disabled", labels={"stage": "writer"})
-        return {"summary": "", "used_fallback": True, "fallback_stages": ["writer_disabled"]}
+        return {
+            "summary": "",
+            "used_fallback": True,
+            "fallback_stages": ["writer_disabled"],
+        }
 
     # Editor
     if nlp.editor.enabled:
-        try:
-            provider, model, max_tokens = get_provider_for_role(
-                "newsletter_pipeline.editor"
+
+        def editor_llm_call(provider, model, max_tokens):
+            prompt = build_editor_prompt(summary_json)
+            return provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=ExecutiveSummary,
+                model=model,
+                system=get_newsletter_editor_system_prompt(),
+                temperature=nlp.editor.temperature,
+                max_tokens=max_tokens,
             )
-            if limiter.acquire(
-                nlp.editor.provider,
-                model,
-                nlp.editor.concurrency,
-                nlp.editor.timeout_seconds,
-            ):
-                try:
-                    prompt = build_editor_prompt(summary_json)
-                    result = provider.chat_structured(
-                        messages=[{"role": "user", "content": prompt}],
-                        response_model=ExecutiveSummary,
-                        model=model,
-                        system=get_newsletter_editor_system_prompt(),
-                        temperature=nlp.editor.temperature,
-                        max_tokens=max_tokens,
-                    )
-                    return {
-                        "summary": result.summary,
-                        "used_fallback": used_fallback,
-                        "fallback_stages": fallback_stages,
-                    }
-                finally:
-                    limiter.release(nlp.editor.provider, model)
-            else:
-                # Limiter not available, use fallback
-                metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": "editor"})
-                used_fallback = True
-                fallback_stages.append("editor")
-                try:
-                    summary = json.loads(summary_json).get("summary", "")
-                    return {
-                        "summary": summary,
-                        "used_fallback": True,
-                        "fallback_stages": fallback_stages,
-                    }
-                except Exception:
-                    return {"summary": "", "used_fallback": True, "fallback_stages": fallback_stages}
-        except Exception as e:
-            logger.error(f"Editor failed: {e}")
-            metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": "editor"})
+
+        result, editor_success = _run_pipeline_stage(
+            "editor", nlp.editor, metrics, limiter, editor_llm_call, fallback_stages
+        )
+        if editor_success:
+            return {
+                "summary": result.summary,
+                "used_fallback": used_fallback,
+                "fallback_stages": fallback_stages,
+            }
+        else:
             used_fallback = True
-            fallback_stages.append("editor")
             try:
                 summary = json.loads(summary_json).get("summary", "")
                 return {
@@ -275,16 +273,23 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                     "fallback_stages": fallback_stages,
                 }
             except Exception:
-                return {"summary": "", "used_fallback": True, "fallback_stages": fallback_stages}
+                return {
+                    "summary": "",
+                    "used_fallback": True,
+                    "fallback_stages": fallback_stages,
+                }
     else:
-        # Editor disabled
         metrics.counter_inc("newsletter.pipeline_disabled", labels={"stage": "editor"})
         try:
             summary = json.loads(summary_json).get("summary", "")
             return {
                 "summary": summary,
-                "used_fallback": used_fallback or True,
+                "used_fallback": True,
                 "fallback_stages": fallback_stages + ["editor_disabled"],
             }
         except Exception:
-            return {"summary": "", "used_fallback": True, "fallback_stages": fallback_stages + ["editor_disabled"]}
+            return {
+                "summary": "",
+                "used_fallback": True,
+                "fallback_stages": fallback_stages + ["editor_disabled"],
+            }

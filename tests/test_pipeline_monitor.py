@@ -11,6 +11,7 @@ def redis_client():
     """Create a mock Redis client with in-memory store."""
     store = {}
     client = MagicMock()
+    pipe_mock = MagicMock()
 
     def get(key):
         return store.get(key)
@@ -42,12 +43,25 @@ def redis_client():
             return (k for k in store if fnmatch.fnmatch(k, match))
         return iter(store)
 
+    def mget(keys):
+        return [store.get(k) for k in keys]
+
+    def pipeline():
+        return pipe_mock
+
+    pipe_mock.incr = MagicMock(side_effect=incr)
+    pipe_mock.expire = MagicMock(side_effect=expire)
+    pipe_mock.delete = MagicMock(side_effect=delete)
+    pipe_mock.execute = MagicMock(return_value=[])
+
     client.get = MagicMock(side_effect=get)
     client.incr = MagicMock(side_effect=incr)
     client.expire = MagicMock(side_effect=expire)
     client.delete = MagicMock(side_effect=delete)
     client.keys = MagicMock(side_effect=keys)
     client.scan_iter = MagicMock(side_effect=scan_iter)
+    client.mget = MagicMock(side_effect=mget)
+    client.pipeline = MagicMock(return_value=pipe_mock)
     client._store = store
     return client
 
@@ -58,18 +72,26 @@ class TestRecordStageResult:
 
         with patch("services.pipeline_monitor._get_redis", return_value=redis_client):
             record_stage_result("crawl", success=True)
-        assert redis_client.incr.call_count == 1
+        redis_client.pipeline.assert_called_once()
+        pipe = redis_client.pipeline.return_value
+        pipe.incr.assert_called_once()
+        pipe.expire.assert_called_once()
+        pipe.execute.assert_called_once()
 
     def test_records_failure(self, redis_client):
         from services.pipeline_monitor import record_stage_result
 
         with patch("services.pipeline_monitor._get_redis", return_value=redis_client):
             record_stage_result("write", success=False)
-        assert redis_client.incr.call_count == 1
+        redis_client.pipeline.assert_called_once()
+        pipe = redis_client.pipeline.return_value
+        pipe.incr.assert_called_once()
+        pipe.expire.assert_called_once()
+        pipe.execute.assert_called_once()
 
     def test_redis_error_does_not_raise(self):
         bad_redis = MagicMock()
-        bad_redis.incr.side_effect = redis.exceptions.ConnectionError("down")
+        bad_redis.pipeline.side_effect = redis.exceptions.ConnectionError("down")
         from services.pipeline_monitor import record_stage_result
 
         with patch("services.pipeline_monitor._get_redis", return_value=bad_redis):
@@ -88,7 +110,7 @@ class TestGetStageStats:
 
     def test_returns_defaults_on_redis_error(self):
         bad_redis = MagicMock()
-        bad_redis.get.side_effect = redis.exceptions.ConnectionError("down")
+        bad_redis.mget.side_effect = redis.exceptions.ConnectionError("down")
         from services.pipeline_monitor import get_stage_stats
 
         with patch("services.pipeline_monitor._get_redis", return_value=bad_redis):

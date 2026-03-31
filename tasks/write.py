@@ -1,11 +1,19 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from constants import truncate_for_log
+from services.logging_utils import get_pipeline_logger
 
 logger = get_task_logger(__name__)
+plog = get_pipeline_logger("write")
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def write_article(self, article_id: int, run_id=None):
     from extensions import db
     from schemas.pipeline import get_role_config
@@ -25,14 +33,19 @@ def write_article(self, article_id: int, run_id=None):
             max_key_points=rc.max_key_points or 5,
         )
 
-        result = provider.chat_structured(
-            messages=[{"role": "user", "content": prompt}],
-            response_model=CondensedArticle,
-            model=model,
-            system=get_writer_system_prompt(),
-            temperature=rc.temperature,
-            max_tokens=max_tokens,
-        )
+        from services.metrics import time_histogram
+
+        with time_histogram(
+            "pipeline.stage_duration_seconds", labels={"stage": "write"}
+        ):
+            result = provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=CondensedArticle,
+                model=model,
+                system=get_writer_system_prompt(),
+                temperature=rc.temperature,
+                max_tokens=max_tokens,
+            )
 
         article.draft_article = result.model_dump_json()
         article.writer_model = model
@@ -52,7 +65,11 @@ def write_article(self, article_id: int, run_id=None):
                 article_id=article.id,
             )
 
-        logger.info(f"Drafted: {truncate_for_log(article.original_title)}")
+        plog.info(
+            "Article drafted",
+            article_id=article.id,
+            title=truncate_for_log(article.original_title),
+        )
 
         _dispatch_next(article_id, run_id=run_id, next_status="editing")
         return {"article_id": article_id}

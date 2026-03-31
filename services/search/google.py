@@ -58,7 +58,7 @@ class GoogleSearchProvider(BaseSearchProvider):
                 )
             return results[:max_results]
         except Exception as e:
-            logger.warning(f"Google search failed for '{query}': {type(e).__name__}")
+            logger.warning("Google search failed for '%s': %s", query, type(e).__name__)
             return []
 
     def health_check(self) -> dict[str, Any]:

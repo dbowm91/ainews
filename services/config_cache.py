@@ -1,3 +1,4 @@
+import inspect
 import json
 import logging
 import threading
@@ -10,6 +11,9 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ConfigCache"] = None
+_cache_lock = threading.Lock()
+
+_MAX_MEMORY_ENTRIES = 500
 
 
 def _serialize(value: Any) -> str:
@@ -52,12 +56,21 @@ def _deserialize(raw: str) -> Any:
 
 
 def _import_class(dotted_path: str) -> type:
-    """Import a class from a dotted module path like 'schemas.topic.TopicsConfig'."""
+    """Import a class from a dotted module path like 'schemas.topic.TopicsConfig'.
+
+    Only classes from schemas.* modules are permitted. Raises ValueError
+    for any other path to prevent arbitrary module imports from Redis data.
+    """
+    if not dotted_path.startswith("schemas."):
+        raise ValueError(f"Class path not in allowlist: {dotted_path}")
     module_path, class_name = dotted_path.rsplit(".", 1)
     import importlib
 
     module = importlib.import_module(module_path)
-    return getattr(module, class_name)
+    cls = getattr(module, class_name)
+    if not (inspect.isclass(cls) and issubclass(cls, BaseModel)):
+        raise ValueError(f"Class is not a Pydantic BaseModel: {dotted_path}")
+    return cls
 
 
 class ConfigCache:
@@ -106,7 +119,7 @@ class ConfigCache:
                     self._memory_cache[full_key] = (time.monotonic() + ttl, value)
                 return value
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Config cache read failed for {key}: {e}")
+            logger.warning("Config cache read failed for %s: %s", key, e)
 
         # Cache miss, load value
         value = loader_fn()
@@ -114,10 +127,11 @@ class ConfigCache:
         try:
             self.redis.setex(full_key, ttl, _serialize(value))
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Config cache write failed for {key}: {e}")
+            logger.warning("Config cache write failed for %s: %s", key, e)
 
         with self._lock:
             self._memory_cache[full_key] = (time.monotonic() + ttl, value)
+            self._evict_stale()
         return value
 
     def invalidate(self, key: str) -> None:
@@ -127,7 +141,7 @@ class ConfigCache:
         try:
             self.redis.delete(full_key)
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Config cache invalidate failed for {key}: {e}")
+            logger.warning("Config cache invalidate failed for %s: %s", key, e)
 
     def invalidate_all(self) -> None:
         with self._lock:
@@ -138,11 +152,14 @@ class ConfigCache:
             while True:
                 cursor, keys = self.redis.scan(cursor=cursor, match=pattern, count=100)
                 if keys:
-                    self.redis.delete(*keys)
+                    pipe = self.redis.pipeline()
+                    for key in keys:
+                        pipe.delete(key)
+                    pipe.execute()
                 if cursor == 0:
                     break
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Config cache invalidate_all failed: {e}")
+            logger.warning("Config cache invalidate_all failed: %s", e)
 
     def invalidate_if_stale(self, key: str, config_path) -> None:
         """Invalidate cache entry if the config file has been modified since last load."""
@@ -164,7 +181,7 @@ class ConfigCache:
                 if current_mtime > cached_mtime:
                     self.invalidate(key)
         except (redis.exceptions.RedisError, ValueError, OSError) as e:
-            logger.warning(f"Staleness check failed for {key}: {e}")
+            logger.warning("Staleness check failed for %s: %s", key, e)
 
     def _record_mtime(self, key: str, config_path) -> None:
         """Record the mtime of a config file after a successful load."""
@@ -177,15 +194,31 @@ class ConfigCache:
         try:
             self.redis.setex(mtime_key, 86400, str(p.stat().st_mtime))
         except (redis.exceptions.RedisError, OSError) as e:
-            logger.warning(f"Failed to record mtime for {key}: {e}")
+            logger.warning("Failed to record mtime for %s: %s", key, e)
+
+    def _evict_stale(self) -> None:
+        """Evict expired entries; if still over limit, drop oldest. Must hold _lock."""
+        if len(self._memory_cache) <= _MAX_MEMORY_ENTRIES:
+            return
+        now = time.monotonic()
+        expired = [k for k, (exp, _) in self._memory_cache.items() if now >= exp]
+        for k in expired:
+            del self._memory_cache[k]
+        if len(self._memory_cache) > _MAX_MEMORY_ENTRIES:
+            sorted_items = sorted(self._memory_cache.items(), key=lambda x: x[1][0])
+            for k, _ in sorted_items[: len(self._memory_cache) - _MAX_MEMORY_ENTRIES]:
+                del self._memory_cache[k]
 
 
 def get_config_cache() -> ConfigCache:
+    """Get or create the singleton ConfigCache instance (thread-safe)."""
     global _cache_instance
     if _cache_instance is not None:
         return _cache_instance
+    with _cache_lock:
+        if _cache_instance is not None:
+            return _cache_instance
+        from extensions import get_redis
 
-    from extensions import get_redis
-
-    _cache_instance = ConfigCache(get_redis())
-    return _cache_instance
+        _cache_instance = ConfigCache(get_redis())
+        return _cache_instance

@@ -55,9 +55,16 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 
 ### Existing capabilities to be aware of
 
-- **Config cache reload**: `POST /admin/api/config/reload` (`routes/admin/api.py`) clears all cached configs and LLM provider instances. Call this after config changes rather than building new invalidation.
+- **Config cache reload**: `POST /admin/api/config/reload` (`routes/admin/api.py`) clears all cached configs and LLM provider instances. Validates config before reload — returns 400 if invalid. Call this after config changes rather than building new invalidation.
 - **Subscriber validation**: Newsletter type is validated against known topic keys (`routes/public.py`). Invalid types default to "main".
 - **Admin auth**: All `/admin/api/*` routes use `@require_auth` decorator. The health endpoint, task status, and config reload are all authenticated.
+- **Config validation**: `services/config_unified.py:validate_config()` validates pipeline, topic, source, and LLM provider configs. Returns `(is_valid, errors)` tuple.
+- **Structured logging**: `services/logging_utils.py` provides `PipelineLogger`, `log_pipeline_event()`, `log_article_event()`, and `log_duration()` context manager for structured log output.
+- **Health check degradation**: `services/health.py` returns "unhealthy" for database errors (core functionality broken), "degraded" for Redis/Celery/limiter errors (non-core). `HealthResult.is_healthy` returns True for both "ok" and "degraded".
+- **Dead letter alerting**: `pipeline.stuck_articles` gauge emitted by `retry_stuck`. Alert threshold configurable via `DEAD_LETTER_ALERT_THRESHOLD` env var (default 10). Stats at `GET /admin/api/pipeline/dead-letter/stats`.
+- **Circuit breaker metrics**: Emits `circuit_breaker.state_change` counter with `provider`, `from`, `to` labels and `circuit_breaker.opened` on OPEN transitions.
+- **Pipeline duration histograms**: `pipeline.stage_duration_seconds` recorded for select, research, write, and edit stages.
+- **Backup verification**: `scripts/verify_backup.sh` validates SQLite integrity and required tables. Called automatically from `scripts/backup.sh`.
 
 ### Redis error handling
 
@@ -180,7 +187,11 @@ Admin article list (`/admin/articles`) supports:
 
 **Migration tests on SQLite**: Cannot run full `upgrade()`/`downgrade()` when migrations use `op.create_unique_constraint` (unsupported ALTER in SQLite). Test migration chain integrity and schema consistency instead. See `tests/test_migration.py`.
 
-**Redis mock fixture consistency**: When changing Redis operations (e.g., `keys()` → `scan_iter()`), update ALL mock fixtures — both the shared `mock_redis` in `conftest.py` AND any test-specific fixtures (e.g., `redis_client` in `test_pipeline_monitor.py`).
+**Redis mock fixture consistency**: When changing Redis operations (e.g., `keys()` → `scan_iter()`), update ALL mock fixtures — both the shared `mock_redis` in `conftest.py` AND any test-specific fixtures (e.g., `redis_client` in `test_pipeline_monitor.py`). Redis pipeline operations require `client.pipeline = MagicMock(return_value=pipe_mock)` with the pipe mock's methods configured separately.
+
+### Model cascade rules
+
+All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `cascade="all, delete-orphan"` where appropriate. Migration `011_cascade_deletes.py` documents this — SQLite can't ALTER TABLE FKs, so cascade is enforced at the SQLAlchemy model level for existing databases.
 
 ### Security patterns
 
@@ -192,7 +203,7 @@ Admin article list (`/admin/articles`) supports:
 
 **Atomic lock release with Lua**: Lock release must use a Lua script for atomic check-and-delete, not separate `GET` → `DEL` calls. The check-then-delete pattern has a race condition where another task can acquire the lock between the two operations. See `plan.md` Phase 2.1 for the pattern.
 
-**Thread-safe singletons**: All `get_*()` singleton factory functions must use `threading.Lock` with double-checked locking. The pattern in `services/limiter.py:get_limiter()` is the reference implementation. `get_response_cache()` and `get_config_cache()` lack this protection.
+**Thread-safe singletons**: All `get_*()` singleton factory functions must use `threading.Lock` with double-checked locking. The pattern in `services/limiter.py:get_limiter()` is the reference implementation. `get_response_cache()` and `get_config_cache()` now follow this pattern.
 
 ### Logging conventions
 

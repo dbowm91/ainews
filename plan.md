@@ -6,6 +6,8 @@ This plan consolidates all items from prior plan files (plan2–plan5) into a si
 
 **Verification status:** All items below have been verified against the codebase as of 2026-03-31.
 
+**Implementation status:** Phases 1–6 complete (623 tests passing, 0 lint violations). Phase 7 (P3 backlog) items remain.
+
 **Prerequisites for all phases:**
 ```bash
 .venv/bin/ruff check . --exclude .venv
@@ -14,7 +16,7 @@ This plan consolidates all items from prior plan files (plan2–plan5) into a si
 
 ---
 
-## Phase 1: Security Fixes (High Priority)
+## Phase 1: Security Fixes (High Priority) [DONE]
 
 These items address real security vulnerabilities. Implement first.
 
@@ -75,7 +77,7 @@ These items address real security vulnerabilities. Implement first.
 
 ---
 
-## Phase 2: Correctness & Stability (Medium-High Priority)
+## Phase 2: Correctness & Stability (Medium-High Priority) [DONE]
 
 These items fix concurrency bugs and configuration issues. Many are independent and can be parallelized.
 
@@ -173,7 +175,7 @@ These items fix concurrency bugs and configuration issues. Many are independent 
 
 ---
 
-## Phase 3: Stability & Observability (Medium Priority)
+## Phase 3: Stability & Observability (Medium Priority) [DONE]
 
 ### 3.1 Missing Cascade Delete Rules
 
@@ -239,7 +241,7 @@ These items fix concurrency bugs and configuration issues. Many are independent 
 
 ---
 
-## Phase 4: Observability & Monitoring (P1)
+## Phase 4: Observability & Monitoring (P1) [DONE]
 
 ### 4.1 Circuit Breaker State Change Metrics
 
@@ -283,7 +285,7 @@ These items fix concurrency bugs and configuration issues. Many are independent 
 
 ---
 
-## Phase 5: Performance (P2)
+## Phase 5: Performance (P2) [DONE]
 
 ### 5.1 FTS Search Optimization
 
@@ -319,7 +321,7 @@ These items fix concurrency bugs and configuration issues. Many are independent 
 
 ---
 
-## Phase 6: Operational Improvements (P2)
+## Phase 6: Operational Improvements (P2) [DONE]
 
 ### 6.1 Automated Backup Verification
 
@@ -370,7 +372,7 @@ These items fix concurrency bugs and configuration issues. Many are independent 
 
 ---
 
-## Phase 7: Code Quality & Features (P3 — Backlog)
+## Phase 7: Code Quality & Features (P3 — Backlog) [NOT STARTED]
 
 ### 7.1 Type Hints for Public API
 

@@ -378,6 +378,8 @@ class TestRunStage:
             redis_mock = MagicMock()
             redis_mock.set.return_value = True
             redis_mock.get.return_value = b"task-123"
+            mock_script = MagicMock(return_value=1)
+            redis_mock.register_script.return_value = mock_script
             mocks["get_redis"].return_value = redis_mock
 
             work_result = {"article_id": 1, "data": "ok"}
@@ -392,7 +394,9 @@ class TestRunStage:
             assert article.last_error is None
             limiter.release.assert_called_once()
             redis_mock.set.assert_called_once()
-            redis_mock.delete.assert_called_once()
+            # Lock release now uses atomic Lua script
+            redis_mock.register_script.assert_called_once()
+            mock_script.assert_called_once()
         finally:
             for p in patches.values():
                 p.stop()
@@ -622,6 +626,8 @@ class TestRunStage:
             redis_mock = MagicMock()
             redis_mock.set.return_value = True
             redis_mock.get.return_value = b"task-789"
+            mock_script = MagicMock(return_value=1)
+            redis_mock.register_script.return_value = mock_script
             mocks["get_redis"].return_value = redis_mock
 
             work_result = {"article_id": 1, "data": "ok"}
@@ -633,8 +639,9 @@ class TestRunStage:
             result = run_stage("writer", 1, work_fn, task_self)
 
             assert result == work_result
-            # Lock was acquired and cleaned up
-            redis_mock.delete.assert_called_once()
+            # Lock was acquired and cleaned up via atomic Lua script
+            redis_mock.register_script.assert_called_once()
+            mock_script.assert_called_once()
         finally:
             for p in patches.values():
                 p.stop()

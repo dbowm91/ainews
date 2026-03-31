@@ -35,5 +35,5 @@ def search_web(query: str, max_results: int = 5) -> list[SearchResult]:
         provider = get_search_provider_with_fallback()
         return provider.search(query, max_results)
     except Exception as e:
-        logger.warning(f"Web search failed for '{query}': {e}")
+        logger.warning("Web search failed for '%s': %s", query, e)
         return []

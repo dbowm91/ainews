@@ -24,11 +24,10 @@ _BLOCKED_NETWORKS = [
 ]
 
 # DNS cache to prevent rebinding between validation and fetch.
-# Short TTL limits DNS rebinding window for SSRF protection.
-# Entries may be stale for legitimate DNS changes (CDN rotation,
-# failover) but shorter is safer here — fetch failures are
-# preferable to SSRF exposure. 60s matches typical OS DNS cache TTLs.
-_DNS_CACHE_TTL = 60  # seconds
+# 5-minute TTL covers typical pipeline delays (crawl → fetch can take
+# several minutes under congestion). Short enough to track DNS changes,
+# long enough to prevent rebinding between validation and fetch.
+_DNS_CACHE_TTL = 300  # seconds
 _DNS_CACHE_MAX = 1024
 
 

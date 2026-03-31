@@ -319,7 +319,8 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         return _generate_newsletters_impl(self, dry_run_email, run_id)
     finally:
         try:
-            if redis.get(lock_key) and redis.get(lock_key).decode() == task_id:
-                redis.delete(lock_key)
+            from services.redis_utils import release_lock
+
+            release_lock(redis, lock_key, task_id)
         except Exception:
             logger.warning("Failed to release newsletter lock")

@@ -30,13 +30,13 @@ def handle_provider_error(
 ) -> Exception:
     """Convert SDK-specific exceptions to generic provider errors."""
     if isinstance(e, rate_limit_exc):
-        logger.warning(f"{provider_name} rate limit hit: {e}")
+        logger.warning("%s rate limit hit: %s", provider_name, e)
         return RateLimitError(str(e))
     elif isinstance(e, auth_exc):
-        logger.error(f"{provider_name} authentication failed: {e}")
+        logger.error("%s authentication failed: %s", provider_name, e)
         return AuthError(str(e))
     elif isinstance(e, timeout_exc):
-        logger.warning(f"{provider_name} timeout/connection error: {e}")
+        logger.warning("%s timeout/connection error: %s", provider_name, e)
         return ProviderTimeoutError(str(e))
     elif hasattr(e, "status_code"):
         status = e.status_code
@@ -45,6 +45,6 @@ def handle_provider_error(
         elif status in (401, 403):
             return AuthError(str(e))
         elif status >= 500:
-            logger.error(f"{provider_name} server error ({status}): {e}")
+            logger.error("%s server error (%s): %s", provider_name, status, e)
             return e
     return e

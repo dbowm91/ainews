@@ -1,11 +1,19 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from constants import truncate_for_log
+from services.logging_utils import get_pipeline_logger
 
 logger = get_task_logger(__name__)
+plog = get_pipeline_logger("select")
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def select_article(self, article_id: int, run_id=None):
     from models import PipelineRun
     from extensions import db
@@ -31,14 +39,19 @@ def select_article(self, article_id: int, run_id=None):
             "Return JSON with selected (bool), score (1-10), reason (string)."
         )
 
-        result = provider.chat_structured(
-            messages=[{"role": "user", "content": prompt}],
-            response_model=SelectionResult,
-            model=model,
-            system=get_system_prompt("selector", rc.system_prompt),
-            temperature=rc.temperature,
-            max_tokens=max_tokens,
-        )
+        from services.metrics import time_histogram
+
+        with time_histogram(
+            "pipeline.stage_duration_seconds", labels={"stage": "select"}
+        ):
+            result = provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=SelectionResult,
+                model=model,
+                system=get_system_prompt("selector", rc.system_prompt),
+                temperature=rc.temperature,
+                max_tokens=max_tokens,
+            )
 
         article.selector_result = result.model_dump()
 
@@ -67,7 +80,12 @@ def select_article(self, article_id: int, run_id=None):
                     article_id=article.id,
                 )
 
-            logger.info(f"Selected [{result.score}/10]: {truncate_for_log(article.original_title)}")
+            plog.info(
+                "Article selected",
+                article_id=article.id,
+                score=result.score,
+                title=truncate_for_log(article.original_title),
+            )
             _dispatch_next(article_id, run_id=run_id, next_status="researching")
         else:
             article.pipeline_status = "skipped"
@@ -86,7 +104,12 @@ def select_article(self, article_id: int, run_id=None):
                     article_id=article.id,
                 )
 
-            logger.info(f"Skipped [{result.score}/10]: {truncate_for_log(article.original_title)}")
+            plog.info(
+                "Article skipped",
+                article_id=article.id,
+                score=result.score,
+                title=truncate_for_log(article.original_title),
+            )
 
         return {"article_id": article_id, "result": article.selector_result}
 

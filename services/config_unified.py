@@ -131,3 +131,42 @@ def reset_config() -> None:
     """Reset cached config (for testing)."""
     global _instance
     _instance = None
+
+
+def validate_config() -> tuple[bool, list[str]]:
+    """Validate current configuration.
+
+    Returns:
+        (is_valid, errors) tuple. errors is empty if valid.
+    """
+    errors = []
+
+    try:
+        from schemas.pipeline import load_pipeline_config
+
+        load_pipeline_config()
+    except Exception as e:
+        errors.append(f"Pipeline config error: {e}")
+
+    try:
+        from schemas.topic import load_topics
+
+        load_topics()
+    except Exception as e:
+        errors.append(f"Topic config error: {e}")
+
+    try:
+        from schemas.source import load_sources
+
+        load_sources()
+    except Exception as e:
+        errors.append(f"Source config error: {e}")
+
+    try:
+        from schemas.llm import load_providers_config
+
+        load_providers_config()
+    except Exception as e:
+        errors.append(f"LLM providers config error: {e}")
+
+    return (len(errors) == 0, errors)

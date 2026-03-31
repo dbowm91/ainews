@@ -29,8 +29,18 @@ def decode_short_url(code: str) -> int | None:
 
 article_tags = db.Table(
     "article_tags",
-    db.Column("article_id", db.Integer, db.ForeignKey("articles.id"), primary_key=True),
-    db.Column("tag_id", db.Integer, db.ForeignKey("tags.id"), primary_key=True),
+    db.Column(
+        "article_id",
+        db.Integer,
+        db.ForeignKey("articles.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "tag_id",
+        db.Integer,
+        db.ForeignKey("tags.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
@@ -53,7 +63,9 @@ class Source(db.Model):
     last_error = db.Column(db.Text, nullable=True)
     disabled_at = db.Column(db.DateTime, nullable=True)
 
-    articles = db.relationship("Article", backref="source", lazy="dynamic")
+    articles = db.relationship(
+        "Article", backref="source", lazy="dynamic", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<Source {self.source_key}>"
@@ -76,7 +88,9 @@ class Article(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     short_id = db.Column(db.String(12), unique=True, index=True)
-    source_id = db.Column(db.Integer, db.ForeignKey("sources.id"), nullable=False)
+    source_id = db.Column(
+        db.Integer, db.ForeignKey("sources.id", ondelete="CASCADE"), nullable=False
+    )
     external_id = db.Column(db.String(128), index=True)
     original_url = db.Column(db.String(2048))
     original_title = db.Column(db.String(512))
@@ -109,9 +123,13 @@ class Article(db.Model):
         default=lambda: datetime.now(timezone.utc),
     )
 
-    citations = db.relationship("Citation", backref="article", lazy="joined")
+    citations = db.relationship(
+        "Citation", backref="article", lazy="joined", cascade="all, delete-orphan"
+    )
     tags = db.relationship("Tag", secondary=article_tags, lazy="joined")
-    metrics = db.relationship("ArticleMetric", backref="article", uselist=False)
+    metrics = db.relationship(
+        "ArticleMetric", backref="article", uselist=False, cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         db.UniqueConstraint("source_id", "external_id", name="uq_source_external_id"),
@@ -129,7 +147,9 @@ class Citation(db.Model):
     __tablename__ = "citations"
 
     id = db.Column(db.Integer, primary_key=True)
-    article_id = db.Column(db.Integer, db.ForeignKey("articles.id"), nullable=False)
+    article_id = db.Column(
+        db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False
+    )
     url = db.Column(db.String(2048), nullable=False)
     title = db.Column(db.String(512))
     author = db.Column(db.String(128))
@@ -203,7 +223,7 @@ class ArticleMetric(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     article_id = db.Column(
         db.Integer,
-        db.ForeignKey("articles.id"),
+        db.ForeignKey("articles.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
         index=True,
@@ -247,7 +267,9 @@ class PipelineRun(db.Model):
     started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     finished_at = db.Column(db.DateTime)
 
-    logs = db.relationship("PipelineLog", backref="run", lazy="dynamic")
+    logs = db.relationship(
+        "PipelineLog", backref="run", lazy="dynamic", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<PipelineRun {self.id} {self.run_type} {self.status}>"
@@ -258,9 +280,14 @@ class PipelineLog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     run_id = db.Column(
-        db.Integer, db.ForeignKey("pipeline_runs.id"), nullable=False, index=True
+        db.Integer,
+        db.ForeignKey("pipeline_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    article_id = db.Column(db.Integer, db.ForeignKey("articles.id"), nullable=True)
+    article_id = db.Column(
+        db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), nullable=True
+    )
     stage = db.Column(db.String(32), nullable=False)
     level = db.Column(db.String(8), default="info")  # info, warning, error
     message = db.Column(db.Text, nullable=False)
@@ -277,7 +304,10 @@ class ArticleVersion(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     article_id = db.Column(
-        db.Integer, db.ForeignKey("articles.id"), nullable=False, index=True
+        db.Integer,
+        db.ForeignKey("articles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     version_number = db.Column(db.Integer, nullable=False, default=1)
     final_article = db.Column(db.Text)
@@ -290,7 +320,10 @@ class ArticleVersion(db.Model):
     )  # e.g., "admin", "pipeline:writer", "pipeline:editor"
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    article = db.relationship("Article", backref=db.backref("versions", lazy="dynamic"))
+    article = db.relationship(
+        "Article",
+        backref=db.backref("versions", lazy="dynamic", cascade="all, delete-orphan"),
+    )
 
     __table_args__ = (
         db.UniqueConstraint("article_id", "version_number", name="uq_article_version"),

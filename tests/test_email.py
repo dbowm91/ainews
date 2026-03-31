@@ -346,3 +346,63 @@ class TestSendSMTP:
 
         with pytest.raises(smtplib.SMTPAuthenticationError):
             _send_smtp("test@example.com", "Test Subject", "<p>Body</p>")
+
+
+class TestEmailHtmlEscaping:
+    """Tests for HTML escaping of untrusted content in email templates."""
+
+    @patch("services.email._send_smtp")
+    def test_verification_escapes_script_in_site_name(self, mock_send):
+        from services.email import send_verification_email
+
+        send_verification_email(
+            email="test@example.com",
+            newsletter_type="main",
+            verification_url="https://example.com/verify/t",
+            unsubscribe_url="https://example.com/unsub/t",
+            site_name="<script>alert(1)</script>",
+        )
+        html = mock_send.call_args[0][2]
+        assert "<script" not in html
+        assert "&lt;script&gt;" in html
+
+    @patch("services.email._send_smtp")
+    def test_verification_escapes_script_in_newsletter_type(self, mock_send):
+        from services.email import send_verification_email
+
+        send_verification_email(
+            email="test@example.com",
+            newsletter_type="<script>alert(1)</script>",
+            verification_url="https://example.com/verify/t",
+            unsubscribe_url="https://example.com/unsub/t",
+        )
+        html = mock_send.call_args[0][2]
+        assert "<script" not in html
+        assert "&lt;script&gt;" in html
+
+    @patch("services.email._send_smtp")
+    def test_welcome_escapes_script_in_site_name(self, mock_send):
+        from services.email import send_welcome_email
+
+        send_welcome_email(
+            email="test@example.com",
+            newsletter_type="main",
+            unsubscribe_url="https://example.com/unsub/t",
+            site_name="<script>alert(1)</script>",
+        )
+        html = mock_send.call_args[0][2]
+        assert "<script" not in html
+        assert "&lt;script&gt;" in html
+
+    @patch("services.email._send_smtp")
+    def test_welcome_escapes_script_in_newsletter_type(self, mock_send):
+        from services.email import send_welcome_email
+
+        send_welcome_email(
+            email="test@example.com",
+            newsletter_type="<script>alert(1)</script>",
+            unsubscribe_url="https://example.com/unsub/t",
+        )
+        html = mock_send.call_args[0][2]
+        assert "<script" not in html
+        assert "&lt;script&gt;" in html

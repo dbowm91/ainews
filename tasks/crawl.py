@@ -4,7 +4,13 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def crawl_source(self, source_config: dict, run_id: int) -> dict:
     """Crawl a single source. Called by run_all_sources for parallel execution."""
     from adapters.base import get_adapter_class
@@ -116,13 +122,20 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
         return {"source_id": source_id, "error": str(e)}
     finally:
         try:
-            if redis.get(lock_key) and redis.get(lock_key).decode() == task_id:
-                redis.delete(lock_key)
+            from services.redis_utils import release_lock
+
+            release_lock(redis, lock_key, task_id)
         except Exception:
-            logger.warning(f"Failed to release crawl lock for {source_id}")
+            logger.warning("Failed to release crawl lock for %s", source_id)
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def run_all_sources(self, run_id=None):
     """Orchestrate crawling of all sources using parallel task execution."""
     from schemas.source import load_sources

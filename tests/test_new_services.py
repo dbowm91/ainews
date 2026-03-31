@@ -228,6 +228,12 @@ class TestHealth:
         from services.health import HealthResult
 
         r = HealthResult(status="degraded", checks={"redis": "error"})
+        assert r.is_healthy is True
+
+    def test_health_result_unhealthy(self):
+        from services.health import HealthResult
+
+        r = HealthResult(status="unhealthy", checks={"database": {"status": "error"}})
         assert r.is_healthy is False
 
     def test_check_database(self, app):
@@ -235,7 +241,7 @@ class TestHealth:
 
         name, status = check_database()
         assert name == "database"
-        assert status == "ok"
+        assert status["status"] == "ok"
 
 
 # ─── dead_letter ───────────────────────────────────────────────

@@ -16,7 +16,7 @@ def _handle_ollama_error(e: Exception) -> Exception:
         e,
         "Ollama",
         rate_limit_exc=(ResponseError,),
-        auth_exc=(ResponseError,),
+        auth_exc=(),
         timeout_exc=(ConnectionError, TimeoutError),
     )
 

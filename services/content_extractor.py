@@ -49,7 +49,7 @@ def extract_article(url: str) -> ExtractionResult:
     try:
         validate_url_safe(url)
     except UnsafeURLError as e:
-        logger.warning(f"Blocked unsafe URL {url}: {e}")
+        logger.warning("Blocked unsafe URL %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     try:
@@ -58,7 +58,7 @@ def extract_article(url: str) -> ExtractionResult:
         cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", timeout)
         downloaded = trafilatura.fetch_url(url, config=cfg)
     except Exception as e:
-        logger.warning(f"Fetch failed for {url}: {e}")
+        logger.warning("Fetch failed for %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     if not downloaded:
@@ -93,6 +93,6 @@ def extract_article(url: str) -> ExtractionResult:
                 content_length=len(text),
             )
     except Exception as e:
-        logger.debug(f"Readability fallback failed for {url}: {e}")
+        logger.debug("Readability fallback failed for %s: %s", url, e)
 
     return ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)

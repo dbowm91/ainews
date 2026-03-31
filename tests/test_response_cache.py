@@ -11,6 +11,7 @@ def redis_client():
     """Create a mock Redis client with in-memory store."""
     store = {}
     client = MagicMock()
+    pipe_mock = MagicMock()
 
     def get(key):
         return store.get(key)
@@ -28,10 +29,17 @@ def redis_client():
         matched = [k for k in store if fnmatch.fnmatch(k, match)] if match else []
         return 0, matched
 
+    def pipe_delete(key):
+        store.pop(key, None)
+
+    pipe_mock.delete = MagicMock(side_effect=pipe_delete)
+    pipe_mock.execute = MagicMock(return_value=[])
+
     client.get = MagicMock(side_effect=get)
     client.setex = MagicMock(side_effect=setex)
     client.delete = MagicMock(side_effect=delete)
     client.scan = MagicMock(side_effect=scan)
+    client.pipeline = MagicMock(return_value=pipe_mock)
     client._store = store
     return client
 

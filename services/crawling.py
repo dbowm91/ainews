@@ -215,7 +215,7 @@ def record_crawl_success(source: Source) -> None:
     if source.disabled_at:
         source.disabled_at = None
         source.active = True
-        logger.info(f"Re-enabled source {source.source_key} after successful crawl")
+        logger.info("Re-enabled source %s after successful crawl", source.source_key)
     try:
         db.session.commit()
     except SQLAlchemyError:

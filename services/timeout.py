@@ -27,7 +27,8 @@ def timeout(seconds: float, operation: Optional[str] = None):
 
     Uses ThreadPoolExecutor for cross-platform timeout support.
     The decorated function runs in a separate thread and is abandoned
-    (not cancelled) if it exceeds the timeout.
+    (not cancelled) if it exceeds the timeout. The thread continues
+    in the background but its result is discarded.
 
     Args:
         seconds: Maximum execution time in seconds.
@@ -44,7 +45,8 @@ def timeout(seconds: float, operation: Optional[str] = None):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            with ThreadPoolExecutor(max_workers=1) as executor:
+            executor = ThreadPoolExecutor(max_workers=1)
+            try:
                 future = executor.submit(func, *args, **kwargs)
                 try:
                     return future.result(timeout=seconds)
@@ -53,6 +55,8 @@ def timeout(seconds: float, operation: Optional[str] = None):
                         "Operation '%s' timed out after %.1fs", op_name, seconds
                     )
                     raise OperationTimeoutError(op_name, seconds)
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
 
         return wrapper
 

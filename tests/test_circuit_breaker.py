@@ -188,3 +188,109 @@ class TestCircuitProtected:
         my_func()
         breaker = get_breaker("success-test")
         assert breaker.state.value == "closed"
+
+
+class TestCircuitBreakerMetrics:
+    """Test that circuit breaker emits metrics on state transitions."""
+
+    def _make_breaker(self, **kwargs):
+        from services.circuit_breaker import CircuitBreaker
+        from services.metrics import reset_metrics, get_metrics
+
+        reset_metrics()
+        defaults = dict(
+            name="test-metric",
+            failure_threshold=2,
+            recovery_timeout=0.1,
+            half_open_max_calls=1,
+            window_seconds=10.0,
+        )
+        defaults.update(kwargs)
+        return CircuitBreaker(**defaults), get_metrics()
+
+    def test_state_change_metric_on_open(self):
+        breaker, metrics = self._make_breaker(failure_threshold=2)
+        breaker.record_failure()
+        breaker.record_failure()
+        assert breaker.state.value == "open"
+
+        m = metrics.get_metrics()
+        key = "circuit_breaker.state_change{from=closed,provider=test-metric,to=open}"
+        assert m["counters"].get(key, 0) == 1
+
+    def test_opened_counter_on_open(self):
+        breaker, metrics = self._make_breaker(failure_threshold=2)
+        breaker.record_failure()
+        breaker.record_failure()
+
+        m = metrics.get_metrics()
+        assert m["counters"].get("circuit_breaker.opened{provider=test-metric}", 0) == 1
+
+    def test_state_change_metric_on_half_open(self):
+        breaker, metrics = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
+        breaker.record_failure()
+        breaker.record_failure()
+        time.sleep(0.15)
+        assert breaker.state.value == "half_open"
+
+        m = metrics.get_metrics()
+        key = (
+            "circuit_breaker.state_change{from=open,provider=test-metric,to=half_open}"
+        )
+        assert m["counters"].get(key, 0) == 1
+
+    def test_state_change_metric_on_close_from_half_open(self):
+        breaker, metrics = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
+        breaker.record_failure()
+        breaker.record_failure()
+        time.sleep(0.15)
+        assert breaker.state.value == "half_open"
+        breaker.record_success()
+
+        m = metrics.get_metrics()
+        key = "circuit_breaker.state_change{from=half_open,provider=test-metric,to=closed}"
+        assert m["counters"].get(key, 0) == 1
+
+    def test_reopen_from_half_open(self):
+        breaker, metrics = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
+        breaker.record_failure()
+        breaker.record_failure()
+        time.sleep(0.15)
+        assert breaker.state.value == "half_open"
+        breaker.record_failure()
+
+        m = metrics.get_metrics()
+        key = (
+            "circuit_breaker.state_change{from=half_open,provider=test-metric,to=open}"
+        )
+        assert m["counters"].get(key, 0) == 1
+        # Should have 2 opened total (CLOSED->OPEN and HALF_OPEN->OPEN)
+        assert m["counters"].get("circuit_breaker.opened{provider=test-metric}", 0) == 2
+
+    def test_no_metric_without_transition(self):
+        breaker, metrics = self._make_breaker(failure_threshold=5)
+        breaker.record_failure()
+        # Only 1 failure, threshold is 5 — no transition
+        m = metrics.get_metrics()
+        key = "circuit_breaker.state_change{from=closed,provider=test-metric,to=open}"
+        assert m["counters"].get(key, 0) == 0
+
+    def test_metrics_failure_does_not_break_breaker(self, monkeypatch):
+        from services.metrics import get_metrics
+
+        breaker, _ = self._make_breaker(failure_threshold=2)
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("metrics down")
+
+        monkeypatch.setattr(get_metrics(), "counter_inc", boom)
+
+        # Should not raise — transitions still happen
+        breaker.record_failure()
+        breaker.record_failure()
+        assert breaker.state.value == "open"
+
+        time.sleep(0.15)
+        assert breaker.state.value == "half_open"
+        breaker.record_success()
+        assert breaker.state.value == "closed"

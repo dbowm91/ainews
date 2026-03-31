@@ -53,7 +53,7 @@ class SearXNGSearchProvider(BaseSearchProvider):
                     break
             return results
         except Exception as e:
-            logger.warning(f"SearXNG search failed for '{query}': {e}")
+            logger.warning("SearXNG search failed for '%s': %s", query, e)
             return []
 
     def health_check(self) -> dict[str, Any]:

@@ -35,30 +35,33 @@ def record_stage_result(
         run_id: Optional pipeline run ID for additional context
     """
     try:
-        redis = _get_redis()
+        redis_client = _get_redis()
         current_minute = int(time.time() // _PIPELINE_WINDOW_SECONDS)
 
-        # Keys for success and failure counters in current minute
         success_key = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{current_minute}:success"
         failure_key = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{current_minute}:failure"
 
+        pipe = redis_client.pipeline()
         if success:
-            redis.incr(success_key)
+            pipe.incr(success_key)
+            pipe.expire(success_key, 1800)
         else:
-            redis.incr(failure_key)
+            pipe.incr(failure_key)
+            pipe.expire(failure_key, 1800)
+        pipe.execute()
 
-        # Set expiration to keep only recent data (30 minutes)
-        redis.expire(success_key, 1800)
-        redis.expire(failure_key, 1800)
-
-        logger.debug(f"Pipeline stage {stage}: {'success' if success else 'failure'}")
+        logger.debug(
+            "Pipeline stage %s: %s", stage, "success" if success else "failure"
+        )
 
     except RedisError as e:
-        logger.warning(f"Failed to record pipeline stage result: {e}")
+        logger.warning("Failed to record pipeline stage result: %s", e)
 
 
 def get_stage_stats(stage: str, minutes: int = 15) -> dict:
     """Get pipeline stage statistics for recent minutes.
+
+    Uses a single mget call instead of 2*N individual gets.
 
     Args:
         stage: Pipeline stage name (crawl, select, research, write, edit)
@@ -72,24 +75,27 @@ def get_stage_stats(stage: str, minutes: int = 15) -> dict:
             - window_minutes: Actual window size in minutes
     """
     try:
-        redis = _get_redis()
+        redis_client = _get_redis()
         current_minute = int(time.time() // _PIPELINE_WINDOW_SECONDS)
+
+        keys = []
+        for i in range(minutes):
+            minute = current_minute - i
+            keys.append(f"{_PIPELINE_COUNTER_PREFIX}{stage}:{minute}:success")
+            keys.append(f"{_PIPELINE_COUNTER_PREFIX}{stage}:{minute}:failure")
+
+        values = redis_client.mget(keys)
 
         total_success = 0
         total_failure = 0
 
         for i in range(minutes):
-            minute = current_minute - i
-            success_key = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{minute}:success"
-            failure_key = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{minute}:failure"
-
-            success_str = redis.get(success_key)
-            failure_str = redis.get(failure_key)
-
-            if success_str:
-                total_success += int(success_str)
-            if failure_str:
-                total_failure += int(failure_str)
+            success_val = values[i * 2]
+            failure_val = values[i * 2 + 1]
+            if success_val:
+                total_success += int(success_val)
+            if failure_val:
+                total_failure += int(failure_val)
 
         total = total_success + total_failure
         success_rate = (total_success / total * 100) if total > 0 else 100.0
@@ -102,7 +108,7 @@ def get_stage_stats(stage: str, minutes: int = 15) -> dict:
         }
 
     except RedisError as e:
-        logger.error(f"Failed to get pipeline stage stats: {e}")
+        logger.error("Failed to get pipeline stage stats: %s", e)
         return {
             "success_count": 0,
             "failure_count": 0,
@@ -143,7 +149,7 @@ def clear_stage_stats(stage: Optional[str] = None) -> None:
         keys = list(redis_client.scan_iter(match=pattern, count=500))
         if keys:
             redis_client.delete(*keys)
-            logger.info(f"Cleared {len(keys)} pipeline counter keys")
+            logger.info("Cleared %d pipeline counter keys", len(keys))
 
     except RedisError as e:
-        logger.error(f"Failed to clear pipeline stats: {e}")
+        logger.error("Failed to clear pipeline stats: %s", e)

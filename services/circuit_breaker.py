@@ -13,6 +13,8 @@ from threading import Lock
 from typing import Callable, Optional
 from functools import wraps
 
+from services.metrics import get_metrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,10 +59,31 @@ class CircuitBreaker:
         with self._lock:
             if self._state == State.OPEN:
                 if time.monotonic() - self._opened_at >= self.recovery_timeout:
+                    old = self._state
                     self._state = State.HALF_OPEN
                     self._half_open_calls = 0
-                    logger.info(f"Circuit {self.name}: OPEN -> HALF_OPEN")
+                    logger.info("Circuit %s: OPEN -> HALF_OPEN", self.name)
+                    self._on_state_change(old, self._state)
             return self._state
+
+    def _on_state_change(self, old_state: State, new_state: State) -> None:
+        try:
+            metrics = get_metrics()
+            metrics.counter_inc(
+                "circuit_breaker.state_change",
+                labels={
+                    "provider": self.name,
+                    "from": old_state.value,
+                    "to": new_state.value,
+                },
+            )
+            if new_state == State.OPEN:
+                metrics.counter_inc(
+                    "circuit_breaker.opened",
+                    labels={"provider": self.name},
+                )
+        except Exception:
+            logger.debug("Failed to emit circuit breaker metric", exc_info=True)
 
     def _prune_old_failures(self) -> None:
         cutoff = time.monotonic() - self.window_seconds
@@ -70,11 +93,13 @@ class CircuitBreaker:
     def record_success(self) -> None:
         with self._lock:
             if self._state == State.HALF_OPEN:
+                old = self._state
                 self._state = State.CLOSED
                 self._failure_count = 0
                 self._failure_times.clear()
                 self._half_open_calls = 0
-                logger.info(f"Circuit {self.name}: HALF_OPEN -> CLOSED (recovered)")
+                logger.info("Circuit %s: HALF_OPEN -> CLOSED (recovered)", self.name)
+                self._on_state_change(old, self._state)
             elif self._state == State.CLOSED:
                 self._prune_old_failures()
 
@@ -83,22 +108,30 @@ class CircuitBreaker:
             now = time.monotonic()
 
             if self._state == State.HALF_OPEN:
+                old = self._state
                 self._state = State.OPEN
                 self._opened_at = now
                 self._half_open_calls = 0
-                logger.warning(f"Circuit {self.name}: HALF_OPEN -> OPEN (probe failed)")
+                logger.warning(
+                    "Circuit %s: HALF_OPEN -> OPEN (probe failed)", self.name
+                )
+                self._on_state_change(old, self._state)
                 return
 
             self._failure_times.append(now)
             self._prune_old_failures()
 
             if self._failure_count >= self.failure_threshold:
+                old = self._state
                 self._state = State.OPEN
                 self._opened_at = now
                 logger.warning(
-                    f"Circuit {self.name}: CLOSED -> OPEN "
-                    f"({self._failure_count} failures in {self.window_seconds}s)"
+                    "Circuit %s: CLOSED -> OPEN (%s failures in %ss)",
+                    self.name,
+                    self._failure_count,
+                    self.window_seconds,
                 )
+                self._on_state_change(old, self._state)
 
     def can_execute(self) -> bool:
         state = self.state
@@ -167,7 +200,9 @@ def circuit_protected(breaker_name: str, fallback: Optional[Callable] = None):
             breaker = get_breaker(breaker_name)
             if not breaker.can_execute():
                 logger.warning(
-                    f"Circuit {breaker_name} is {breaker.state.value}, rejecting call"
+                    "Circuit %s is %s, rejecting call",
+                    breaker_name,
+                    breaker.state.value,
                 )
                 if fallback:
                     return fallback(*args, **kwargs)

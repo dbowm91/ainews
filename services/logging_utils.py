@@ -4,6 +4,7 @@ Wraps standard logging with consistent structured context for
 pipeline stages, article processing, and admin actions.
 """
 
+import json
 import logging
 import time
 from contextlib import contextmanager
@@ -89,6 +90,36 @@ def log_admin_event(
     logger.info(msg, extra=ctx)
 
 
+class PipelineLogger:
+    """Wraps a logger and adds structured pipeline context to messages."""
+
+    def __init__(self, stage: str, base_logger: logging.Logger = None):
+        self.stage = stage
+        self.logger = base_logger or logger
+
+    def _format(self, msg: str, **context) -> str:
+        if context:
+            ctx = json.dumps(context, default=str)
+            return f"[{self.stage}] {msg} | {ctx}"
+        return f"[{self.stage}] {msg}"
+
+    def info(self, msg: str, **context):
+        self.logger.info(self._format(msg, **context))
+
+    def warning(self, msg: str, **context):
+        self.logger.warning(self._format(msg, **context))
+
+    def error(self, msg: str, **context):
+        self.logger.error(self._format(msg, **context))
+
+
+def get_pipeline_logger(
+    stage: str, base_logger: logging.Logger = None
+) -> PipelineLogger:
+    """Get a structured logger for a pipeline stage."""
+    return PipelineLogger(stage, base_logger)
+
+
 @contextmanager
 def log_duration(operation: str, **extra: Any):
     """Context manager that logs the duration of an operation.
@@ -103,6 +134,8 @@ def log_duration(operation: str, **extra: Any):
     finally:
         duration_ms = round((time.monotonic() - start) * 1000, 1)
         logger.info(
-            f"{operation} completed in {duration_ms}ms",
+            "%s completed in %sms",
+            operation,
+            duration_ms,
             extra={"operation": operation, "duration_ms": duration_ms, **extra},
         )

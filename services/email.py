@@ -1,3 +1,4 @@
+import html
 import logging
 import re
 import smtplib
@@ -42,8 +43,10 @@ def send_verification_email(
 ):
     """Send email verification link to a new subscriber."""
     newsletter_label = newsletter_type if newsletter_type != "main" else "all topics"
+    safe_label = html.escape(newsletter_label)
+    safe_site = html.escape(site_name)
     subject = f"Confirm your subscription to {site_name} — {newsletter_label}"
-    html = f"""<!DOCTYPE html>
+    html_body = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:24px;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
@@ -56,7 +59,7 @@ def send_verification_email(
         <h1 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px 0;">Confirm your subscription</h1>
         <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 16px 0;">
           Click the button below to confirm your subscription to the
-          <strong>{newsletter_label}</strong> newsletter on {site_name}.
+          <strong>{safe_label}</strong> newsletter on {safe_site}.
           This link will expire in 1 hour.
         </p>
         <p style="text-align:center;margin:24px 0;">
@@ -80,8 +83,8 @@ def send_verification_email(
 </body>
 </html>"""
 
-    _send_smtp(email, subject, html)
-    logger.info(f"Verification email sent to {email} for {newsletter_type}")
+    _send_smtp(email, subject, html_body)
+    logger.info("Verification email sent to %s for %s", email, newsletter_type)
 
 
 def send_welcome_email(
@@ -92,8 +95,10 @@ def send_welcome_email(
 ):
     """Send welcome email after verification is complete."""
     newsletter_label = newsletter_type if newsletter_type != "main" else "all topics"
+    safe_label = html.escape(newsletter_label)
+    safe_site = html.escape(site_name)
     subject = f"Subscribed to {site_name} — {newsletter_label}"
-    html = f"""<!DOCTYPE html>
+    html_body = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:24px;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
@@ -105,7 +110,7 @@ def send_welcome_email(
       <tr><td style="padding:24px 32px;">
         <h1 style="font-size:18px;font-weight:700;color:#111;margin:0 0 12px 0;">You're subscribed!</h1>
         <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 16px 0;">
-          You've subscribed to the <strong>{newsletter_label}</strong> newsletter on {site_name}.
+          You've subscribed to the <strong>{safe_label}</strong> newsletter on {safe_site}.
           You'll receive condensed news summaries when new articles are published.
         </p>
         <p style="color:#555;font-size:14px;line-height:1.6;margin:0;">
@@ -123,8 +128,8 @@ def send_welcome_email(
 </body>
 </html>"""
 
-    _send_smtp(email, subject, html)
-    logger.info(f"Welcome email sent to {email} for {newsletter_type}")
+    _send_smtp(email, subject, html_body)
+    logger.info("Welcome email sent to %s for %s", email, newsletter_type)
 
 
 def send_newsletter_email(
@@ -185,7 +190,7 @@ def _send_smtp(to_email: str, subject: str, html_body: str):
             if cfg["user"] and cfg["password"]:
                 server.login(cfg["user"], cfg["password"])
             server.sendmail(cfg["from_addr"], to_email, msg.as_string())
-        logger.info(f"Email sent to {to_email}: {subject}")
+        logger.info("Email sent to %s: %s", to_email, subject)
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error("Failed to send email to %s: %s", to_email, e)
         raise

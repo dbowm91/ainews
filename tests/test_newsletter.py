@@ -213,3 +213,107 @@ class TestGenerateTopicNewsletter:
 
             _, _, count = generate_topic_newsletter(topic_key="nonexistent")
             assert count == 0
+
+
+class TestNewsletterHtmlEscaping:
+    """Tests for HTML escaping of untrusted content in newsletter HTML."""
+
+    def test_escapes_script_in_headline(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            article = MagicMock()
+            article.id = 1
+            article.category = "ai"
+            article.final_article = (
+                '{"headline": "<script>alert(1)</script>", "tldr": "safe"}'
+            )
+            html = generate_newsletter_html(
+                articles=[article], title="T", site_url="https://x.com"
+            )
+            assert "<script" not in html
+            assert "&lt;script&gt;" in html
+
+    def test_escapes_img_onerror_in_headline(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            article = MagicMock()
+            article.id = 1
+            article.category = "ai"
+            article.final_article = (
+                '{"headline": "<img src=x onerror=alert(1)>", "tldr": "safe"}'
+            )
+            html = generate_newsletter_html(
+                articles=[article], title="T", site_url="https://x.com"
+            )
+            # html.escape converts < to &lt; and > to &gt;,
+            # preventing the tag from being interpreted by email clients
+            assert "<img" not in html
+            assert "&lt;img" in html
+
+    def test_escapes_script_in_tldr(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            article = MagicMock()
+            article.id = 1
+            article.category = "ai"
+            article.final_article = (
+                '{"headline": "safe", "tldr": "<script>alert(1)</script>"}'
+            )
+            html = generate_newsletter_html(
+                articles=[article], title="T", site_url="https://x.com"
+            )
+            assert "<script" not in html
+            assert "&lt;script&gt;" in html
+
+    def test_escapes_script_in_category(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            article = MagicMock()
+            article.id = 1
+            article.category = '<script>alert("cat")</script>'
+            article.final_article = '{"headline": "safe", "tldr": "safe"}'
+            html = generate_newsletter_html(
+                articles=[article], title="T", site_url="https://x.com"
+            )
+            assert "<script" not in html
+            assert "&lt;script&gt;" in html
+
+    def test_escapes_script_in_title(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            html = generate_newsletter_html(
+                articles=[], title="<script>alert(1)</script>", site_url="https://x.com"
+            )
+            assert "<script" not in html
+            assert "&lt;script&gt;" in html
+
+    def test_escapes_script_in_executive_summary(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            html = generate_newsletter_html(
+                articles=[],
+                title="T",
+                site_url="https://x.com",
+                executive_summary="<script>alert(1)</script>",
+            )
+            assert "<script" not in html
+            assert "&lt;script&gt;" in html
+
+    def test_escapes_html_entities_in_headline(self, app):
+        with app.app_context():
+            from services.newsletter import generate_newsletter_html
+
+            article = MagicMock()
+            article.id = 1
+            article.category = "ai"
+            article.final_article = '{"headline": "A & B < C > D", "tldr": "safe"}'
+            html = generate_newsletter_html(
+                articles=[article], title="T", site_url="https://x.com"
+            )
+            assert "A &amp; B &lt; C &gt; D" in html

@@ -7,6 +7,7 @@ Used for article detail pages, RSS feeds, and other frequently accessed data.
 import hashlib
 import json
 import logging
+import threading
 import time
 from typing import Any, Callable, Optional
 
@@ -15,6 +16,9 @@ import redis.exceptions
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ResponseCache"] = None
+_cache_lock = threading.Lock()
+
+_MAX_MEMORY_ENTRIES = 500
 
 
 class ResponseCache:
@@ -58,7 +62,7 @@ class ResponseCache:
                 self._hits += 1
                 return json.loads(raw)
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Cache read failed for {key}: {e}")
+            logger.warning("Cache read failed for %s: %s", key, e)
 
         self._misses += 1
         return None
@@ -68,14 +72,29 @@ class ResponseCache:
         full_key = self._make_key(key)
         raw = json.dumps(value)
 
-        # L1: in-memory
+        # L1: in-memory with eviction
+        self._evict_stale()
         self._memory[full_key] = (time.monotonic() + ttl, raw)
 
         # L2: Redis
         try:
             self.redis.setex(full_key, ttl, raw)
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Cache write failed for {key}: {e}")
+            logger.warning("Cache write failed for %s: %s", key, e)
+
+    def _evict_stale(self) -> None:
+        """Evict expired entries; if still over limit, drop oldest."""
+        if len(self._memory) <= _MAX_MEMORY_ENTRIES:
+            return
+        now = time.monotonic()
+        expired = [k for k, (exp, _) in self._memory.items() if now >= exp]
+        for k in expired:
+            del self._memory[k]
+        if len(self._memory) > _MAX_MEMORY_ENTRIES:
+            # Drop oldest entries by expiry time
+            sorted_items = sorted(self._memory.items(), key=lambda x: x[1][0])
+            for k, _ in sorted_items[: len(self._memory) - _MAX_MEMORY_ENTRIES]:
+                del self._memory[k]
 
     def get_or_set(self, key: str, loader_fn: Callable[[], Any], ttl: int = 120) -> Any:
         """Get from cache or compute and cache."""
@@ -93,26 +112,27 @@ class ResponseCache:
         try:
             self.redis.delete(full_key)
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Cache invalidate failed for {key}: {e}")
+            logger.warning("Cache invalidate failed for %s: %s", key, e)
 
     def invalidate_prefix(self, prefix: str) -> None:
         """Invalidate all keys matching a prefix pattern."""
         pattern = f"{self._make_key(prefix)}*"
-        # Clear in-memory
         to_remove = [k for k in self._memory if k.startswith(self._make_key(prefix))]
         for k in to_remove:
             del self._memory[k]
-        # Clear Redis
         try:
             cursor = 0
             while True:
                 cursor, keys = self.redis.scan(cursor=cursor, match=pattern, count=100)
                 if keys:
-                    self.redis.delete(*keys)
+                    pipe = self.redis.pipeline()
+                    for key in keys:
+                        pipe.delete(key)
+                    pipe.execute()
                 if cursor == 0:
                     break
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Cache invalidate_prefix failed: {e}")
+            logger.warning("Cache invalidate_prefix failed: %s", e)
 
     def get_stats(self) -> dict:
         """Return cache hit/miss statistics."""
@@ -126,15 +146,17 @@ class ResponseCache:
 
 
 def get_response_cache() -> ResponseCache:
-    """Get or create the singleton ResponseCache instance."""
+    """Get or create the singleton ResponseCache instance (thread-safe)."""
     global _cache_instance
     if _cache_instance is not None:
         return _cache_instance
+    with _cache_lock:
+        if _cache_instance is not None:
+            return _cache_instance
+        from extensions import get_redis
 
-    from extensions import get_redis
-
-    _cache_instance = ResponseCache(get_redis())
-    return _cache_instance
+        _cache_instance = ResponseCache(get_redis())
+        return _cache_instance
 
 
 def reset_response_cache() -> None:

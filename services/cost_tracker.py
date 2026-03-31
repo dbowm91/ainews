@@ -57,7 +57,7 @@ def _load_rates() -> dict[str, dict[str, float]]:
             rates.update(custom)
             return rates
         except (json.JSONDecodeError, TypeError) as e:
-            logger.warning(f"Failed to parse COST_RATES: {e}, using defaults")
+            logger.warning("Failed to parse COST_RATES: %s, using defaults", e)
     return dict(_DEFAULT_RATES)
 
 
@@ -104,11 +104,12 @@ def get_cost_summary() -> CostSummary:
             mc.call_count += value
 
     # Estimate costs
+    input_ratio = float(os.environ.get("COST_INPUT_RATIO", "0.6"))
+    output_ratio = float(os.environ.get("COST_OUTPUT_RATIO", "0.4"))
     for model_key, mc in model_costs.items():
         rate = rates.get(model_key)
         if rate and mc.total_tokens > 0:
-            # Blended rate: assume 60% input, 40% output
-            blended = rate["input"] * 0.6 + rate["output"] * 0.4
+            blended = rate["input"] * input_ratio + rate["output"] * output_ratio
             mc.estimated_cost_usd = round(mc.total_tokens / 1_000_000 * blended, 4)
         summary.total_tokens += mc.total_tokens
         summary.total_cost_usd += mc.estimated_cost_usd

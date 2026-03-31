@@ -43,7 +43,12 @@ class ModelLimiter:
             result = self._acquire_script(keys=[key], args=[max_concurrent, timeout])
             return bool(result)
         except redis.exceptions.RedisError as e:
-            logger.error(f"Limiter acquire failed for {provider_id}/{model}: {e}")
+            logger.error(
+                "Limiter acquire failed for %s/%s: %s",
+                provider_id,
+                model,
+                e,
+            )
             return False  # fail closed — deny slot if Redis is unavailable
 
     def release(self, provider_id: str, model: str) -> None:
@@ -51,7 +56,15 @@ class ModelLimiter:
         try:
             self._release_script(keys=[key])
         except redis.exceptions.RedisError as e:
-            logger.warning(f"Limiter release failed for {provider_id}/{model}: {e}")
+            logger.error(
+                "Limiter release failed for %s/%s: %s "
+                "(slot will leak until TTL=%ds expires)",
+                provider_id,
+                model,
+                e,
+                300,
+                exc_info=True,
+            )
             try:
                 from services.metrics import get_metrics
 
@@ -59,12 +72,13 @@ class ModelLimiter:
             except Exception:
                 pass
 
-    def get_active(self, provider_id: str, model: str) -> int:
+    def get_active(self, provider_id: str, model: str) -> int | None:
+        """Get active slot count. Returns None if Redis is unavailable."""
         key = f"{self._prefix}:{provider_id}:{model}"
         try:
             return int(self.redis.get(key) or 0)
         except redis.exceptions.RedisError:
-            return 0
+            return None
 
     def is_healthy(self) -> bool:
         """Check if the underlying Redis connection is responsive."""

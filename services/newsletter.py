@@ -1,3 +1,4 @@
+import html
 import logging
 from datetime import datetime, timezone, timedelta
 
@@ -10,7 +11,7 @@ def generate_newsletter_html(
     site_url: str = "",
     date_str: str = "",
     executive_summary: str = "",
-    unsubscribe_url: str = "{site_url}/unsubscribe/placeholder",
+    unsubscribe_url: str = "",
 ) -> str:
     """Generate email-safe newsletter HTML from a list of articles."""
     from urllib.parse import quote
@@ -23,7 +24,7 @@ def generate_newsletter_html(
         for p in paragraphs:
             p = p.strip()
             if p:
-                para_html += f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{p}</p>'
+                para_html += f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{html.escape(p)}</p>'
         if para_html:
             summary_html = f"""
         <tr>
@@ -43,6 +44,9 @@ def generate_newsletter_html(
         link = f"{site_url}/article/{article.id}"
         safe_link = quote(link, safe=":/.?=&#")
         category = article.category or ""
+        safe_headline = html.escape(headline)
+        safe_category = html.escape(category)
+        safe_tldr = html.escape(tldr)
 
         items_html += f"""
         <tr>
@@ -51,16 +55,20 @@ def generate_newsletter_html(
               <tr>
                 <td width="40" style="font-family:monospace;font-size:18px;color:#888;font-weight:700;vertical-align:top;padding-right:12px;">{i}.</td>
                 <td>
-                  <a href="{safe_link}" style="color:#111;font-size:16px;font-weight:600;text-decoration:none;line-height:1.3;">{headline}</a>
-                  {'<br><span style="font-family:monospace;font-size:11px;color:#888;text-transform:uppercase;">' + category + "</span>" if category else ""}
-                  <p style="color:#555;font-size:14px;line-height:1.5;margin:6px 0 0 0;">{tldr}</p>
+                  <a href="{safe_link}" style="color:#111;font-size:16px;font-weight:600;text-decoration:none;line-height:1.3;">{safe_headline}</a>
+                  {'<br><span style="font-family:monospace;font-size:11px;color:#888;text-transform:uppercase;">' + safe_category + "</span>" if category else ""}
+                  <p style="color:#555;font-size:14px;line-height:1.5;margin:6px 0 0 0;">{safe_tldr}</p>
                 </td>
               </tr>
             </table>
           </td>
         </tr>"""
 
-    unsub = unsubscribe_url.replace("{site_url}", site_url)
+    if unsubscribe_url:
+        unsub = unsubscribe_url.replace("{site_url}", site_url)
+        unsub_link = f'<a href="{unsub}" style="color:#888;text-decoration:none;">unsubscribe</a>'
+    else:
+        unsub_link = '<span style="color:#888;">unsubscribe link unavailable</span>'
 
     return f"""<!DOCTYPE html>
 <html>
@@ -77,7 +85,7 @@ def generate_newsletter_html(
         </tr>
         <tr>
           <td style="padding:24px 32px 8px 32px;">
-            <h1 style="font-size:20px;font-weight:700;color:#111;margin:0;">{title}</h1>
+            <h1 style="font-size:20px;font-weight:700;color:#111;margin:0;">{html.escape(title)}</h1>
           </td>
         </tr>
         {summary_html}
@@ -93,7 +101,7 @@ def generate_newsletter_html(
             <p style="font-family:monospace;font-size:11px;color:#888;margin:0;text-align:center;">
               condensed by agents &middot;
               <a href="{site_url}" style="color:#58a6ff;text-decoration:none;">ainews//</a> &middot;
-              <a href="{unsub}" style="color:#888;text-decoration:none;">unsubscribe</a>
+              {unsub_link}
             </p>
           </td>
         </tr>
@@ -137,7 +145,7 @@ def _generate_newsletter(
     articles = query.order_by(Article.impact_score.desc()).limit(max_articles).all()
 
     if not articles:
-        logger.warning(f"{title} newsletter has no articles, skipping generation")
+        logger.warning("%s newsletter has no articles, skipping generation", title)
         return "", "", 0
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")

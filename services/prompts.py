@@ -31,7 +31,7 @@ def load_prompt_file(name: str) -> str | None:
     try:
         return path.read_text().strip()
     except FileNotFoundError:
-        logger.debug(f"Prompt file not found: {path}")
+        logger.debug("Prompt file not found: %s", path)
         return None
 
 

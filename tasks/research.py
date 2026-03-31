@@ -1,11 +1,19 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from constants import truncate_for_log
+from services.logging_utils import get_pipeline_logger
 
 logger = get_task_logger(__name__)
+plog = get_pipeline_logger("research")
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def research_article(self, article_id: int, run_id=None):
     from extensions import db
     from schemas.pipeline import get_role_config
@@ -62,14 +70,19 @@ def research_article(self, article_id: int, run_id=None):
             max_text_length=rc.max_article_text_length or 6000,
         )
 
-        brief = provider.chat_structured(
-            messages=[{"role": "user", "content": prompt}],
-            response_model=ResearchBrief,
-            model=model,
-            system=get_researcher_system_prompt(),
-            temperature=rc.temperature,
-            max_tokens=max_tokens,
-        )
+        from services.metrics import time_histogram
+
+        with time_histogram(
+            "pipeline.stage_duration_seconds", labels={"stage": "research"}
+        ):
+            brief = provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=ResearchBrief,
+                model=model,
+                system=get_researcher_system_prompt(),
+                temperature=rc.temperature,
+                max_tokens=max_tokens,
+            )
 
         article.research_brief = brief.model_dump_json()
         article.impact_score = brief.impact_score
@@ -89,9 +102,13 @@ def research_article(self, article_id: int, run_id=None):
                 article_id=article.id,
             )
 
-        logger.info(
-            f"Researched: {truncate_for_log(article.original_title)} (score: {brief.impact_score}, "
-            f"sources: {len(web_results)}, related: {len(related)})"
+        plog.info(
+            "Article researched",
+            article_id=article.id,
+            impact_score=brief.impact_score,
+            sources=len(web_results),
+            related=len(related),
+            title=truncate_for_log(article.original_title),
         )
 
         _dispatch_next(article_id, run_id=run_id, next_status="writing")

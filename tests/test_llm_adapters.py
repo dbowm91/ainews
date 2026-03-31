@@ -300,3 +300,46 @@ class TestOllamaProvider:
                 [{"role": "user", "content": "hi"}],
                 response_model=TestModel,
             )
+
+
+class TestOllamaErrorHandling:
+    """Tests for Ollama-specific error classification."""
+
+    def test_response_error_maps_to_rate_limit_not_auth(self):
+        """Ollama ResponseError should map to RateLimitError, not AuthError.
+
+        Ollama is self-hosted and doesn't distinguish auth errors, so
+        auth_exc=() ensures all ResponseErrors go through rate_limit_exc.
+        """
+        from services.llm.errors import handle_provider_error, RateLimitError, AuthError
+
+        class ResponseError(Exception):
+            status_code = 500
+
+        err = ResponseError("server error")
+        result = handle_provider_error(
+            err,
+            "Ollama",
+            rate_limit_exc=(ResponseError,),
+            auth_exc=(),
+            timeout_exc=(ConnectionError, TimeoutError),
+        )
+        assert isinstance(result, RateLimitError)
+        assert not isinstance(result, AuthError)
+
+    def test_response_error_429_maps_to_rate_limit(self):
+        """Ollama ResponseError with 429 status should be RateLimitError."""
+        from services.llm.errors import handle_provider_error, RateLimitError
+
+        class ResponseError(Exception):
+            status_code = 429
+
+        err = ResponseError("too many requests")
+        result = handle_provider_error(
+            err,
+            "Ollama",
+            rate_limit_exc=(ResponseError,),
+            auth_exc=(),
+            timeout_exc=(ConnectionError, TimeoutError),
+        )
+        assert isinstance(result, RateLimitError)

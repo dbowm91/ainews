@@ -123,6 +123,7 @@ class TestingConfig(DevelopmentConfig):
 class ProductionConfig(Config):
     DEBUG = False
     SESSION_COOKIE_SECURE = True
+    WTF_CSRF_ENABLED = True
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'prod.db'}"
     )

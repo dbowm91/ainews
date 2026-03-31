@@ -41,7 +41,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             # Retry from same task — re-acquire
             redis.set(lock_key, task_id, nx=False, ex=30)
         else:
-            logger.info(f"Source {source_id} already being crawled, skipping")
+            logger.info("Source %s already being crawled, skipping", source_id)
             return {"source_id": source_id, "skipped": True, "reason": "locked"}
 
     try:
@@ -80,9 +80,25 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             else MIN_CONTENT_LENGTH
         )
 
+        # Filter out near-duplicate titles from other sources
+        from services.article import find_duplicate_titles
+
+        deduplicated_items = []
+        for item in new_items:
+            dupes = find_duplicate_titles(item.title, source.id)
+            if dupes:
+                logger.info(
+                    "Skipping item '%s' — similar to article %s from source %s",
+                    item.title[:80],
+                    dupes[0].id,
+                    dupes[0].source_id,
+                )
+            else:
+                deduplicated_items.append(item)
+
         from tasks.extract import process_item
 
-        for item in new_items:
+        for item in deduplicated_items:
             process_item.delay(
                 source_key=source_id,
                 source_name=cfg.name,
@@ -118,7 +134,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     except Exception as e:
         db.session.rollback()
         _log_pipeline(run_id, "crawl", "error", f"{source_id}: {e}")
-        logger.error(f"Pipeline failed for {source_id}: {e}", exc_info=True)
+        logger.error("Pipeline failed for %s: %s", source_id, e, exc_info=True)
         return {"source_id": source_id, "error": str(e)}
     finally:
         try:
@@ -190,7 +206,7 @@ def run_all_sources(self, run_id=None):
         except Exception:
             results = []
     except Exception as e:
-        logger.error(f"Error waiting for source crawl results: {e}")
+        logger.error("Error waiting for source crawl results: %s", e)
         results = []
 
     # Aggregate results
@@ -215,5 +231,5 @@ def run_all_sources(self, run_id=None):
             run.status = "failed"
             db.session.commit()
 
-    logger.info(f"All sources complete: {results}")
+    logger.info("All sources complete: %s", results)
     return results

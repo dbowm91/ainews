@@ -1,6 +1,6 @@
 import logging
 
-from flask import jsonify, request
+from flask import jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @admin_bp.route("/api/health")
 @require_auth
-def health():
+def health() -> Response:
     from extensions import db
     from sqlalchemy import text
     from services.circuit_breaker import get_all_breaker_status
@@ -84,7 +84,7 @@ def health():
 
 @admin_bp.route("/api/workers/health")
 @require_auth
-def workers_health():
+def workers_health() -> Response:
     """Detailed Celery worker health check for admin monitoring."""
     from celery_app import celery_app
 
@@ -131,7 +131,7 @@ def workers_health():
 
 @admin_bp.route("/api/task/<task_id>")
 @require_auth
-def task_status(task_id):
+def task_status(task_id: str) -> Response:
     from celery.result import AsyncResult
     from celery_app import celery_app
 
@@ -150,7 +150,7 @@ def task_status(task_id):
 
 @admin_bp.route("/api/config/reload", methods=["POST"])
 @require_auth
-def reload_config():
+def reload_config() -> tuple[Response, int] | Response:
     from services.config_cache import get_config_cache
     from services.config_unified import validate_config
     from services.llm import clear_provider_cache
@@ -166,7 +166,7 @@ def reload_config():
 
 @admin_bp.route("/api/metrics")
 @require_auth
-def app_metrics():
+def app_metrics() -> Response:
     from services.metrics import get_metrics
 
     return jsonify(get_metrics().get_metrics())
@@ -174,7 +174,7 @@ def app_metrics():
 
 @admin_bp.route("/api/metrics/prometheus")
 @require_auth
-def prometheus_metrics():
+def prometheus_metrics() -> Response:
     from flask import Response
     from services.metrics import get_metrics
 
@@ -183,7 +183,7 @@ def prometheus_metrics():
 
 @admin_bp.route("/api/pipeline/stats")
 @require_auth
-def pipeline_stats():
+def pipeline_stats() -> Response:
     """Get pipeline stage success/failure statistics."""
     from services.pipeline_monitor import get_all_stages_stats
     from flask import request
@@ -198,7 +198,7 @@ def pipeline_stats():
 
 @admin_bp.route("/api/pipeline/dead-letter/stats")
 @require_auth
-def dead_letter_stats():
+def dead_letter_stats() -> Response:
     """Get dead letter queue statistics."""
     from models import Article
     from constants import PipelineStatus
@@ -235,7 +235,7 @@ def dead_letter_stats():
 
 @admin_bp.route("/api/costs")
 @require_auth
-def cost_summary():
+def cost_summary() -> Response:
     """Get LLM cost summary from token usage metrics."""
     from services.cost_tracker import get_cost_summary
 
@@ -261,7 +261,7 @@ def cost_summary():
 
 @admin_bp.route("/api/sources/health")
 @require_auth
-def sources_health():
+def sources_health() -> Response:
     """Get health status of all sources."""
     from models import Source
 
@@ -289,8 +289,8 @@ def sources_health():
 
 @admin_bp.route("/api/articles/bulk", methods=["POST"])
 @require_auth
-def bulk_article_operations():
-    """Bulk operations on articles: delete, change status, change category."""
+def bulk_article_operations() -> tuple[Response, int] | Response:
+    """Bulk operations on articles: delete, change status, change category, reprocess, add tags."""
     from models import Article
     from extensions import db
     from constants import VALID_PIPELINE_STATUSES
@@ -365,9 +365,107 @@ def bulk_article_operations():
             }
         )
 
+    elif action == "reprocess":
+        try:
+            for article in articles:
+                article.pipeline_status = "pending"
+                article.retry_count = 0
+                article.total_retries = 0
+                article.last_error = None
+                article.selector_result = None
+                article.research_brief = None
+                article.draft_article = None
+                article.final_article = None
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            return jsonify(
+                {"message": "Failed to reset articles for reprocessing"}
+            ), 500
+
+        # Dispatch pipeline tasks for each article
+        dispatched = 0
+        for article in articles:
+            try:
+                from tasks.select import select_article
+
+                select_article.delay(article.id)
+                dispatched += 1
+            except Exception:
+                logger.warning(
+                    "Failed to dispatch reprocess for article %s", article.id
+                )
+
+        return jsonify(
+            {
+                "message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"
+            }
+        )
+
+    elif action == "add_tags":
+        tag_names = data.get("tags", [])
+        if not tag_names or not isinstance(tag_names, list):
+            return jsonify({"message": "tags must be a non-empty list"}), 400
+        if len(tag_names) > 10:
+            return jsonify({"message": "Maximum 10 tags per bulk operation"}), 400
+
+        from models import Tag, slugify, article_tags
+
+        # Find or create tags
+        tag_objects = []
+        for raw_name in tag_names:
+            name = raw_name.strip().lower()
+            if not name or len(name) > 64:
+                continue
+            slug = slugify(name)
+            tag = Tag.query.filter_by(slug=slug).first()
+            if not tag:
+                tag = Tag(name=name, slug=slug)
+                db.session.add(tag)
+                db.session.flush()
+            tag_objects.append(tag)
+
+        if not tag_objects:
+            return jsonify({"message": "No valid tags provided"}), 400
+
+        # Link tags to articles (skip existing links)
+        tag_ids = [t.id for t in tag_objects]
+        linked = 0
+        try:
+            for article in articles:
+                existing_links = set(
+                    r[0]
+                    for r in db.session.execute(
+                        article_tags.select()
+                        .where(
+                            (article_tags.c.article_id == article.id)
+                            & (article_tags.c.tag_id.in_(tag_ids))
+                        )
+                        .with_only_columns(article_tags.c.tag_id)
+                    ).all()
+                )
+                for tag in tag_objects:
+                    if tag.id not in existing_links:
+                        db.session.execute(
+                            article_tags.insert().values(
+                                article_id=article.id, tag_id=tag.id
+                            )
+                        )
+                        linked += 1
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            return jsonify({"message": "Failed to add tags"}), 500
+
+        return jsonify(
+            {
+                "message": f"Added {len(tag_objects)} tags to {len(articles)} articles ({linked} new links)"
+            }
+        )
+
     else:
         return jsonify(
             {
-                "message": "Invalid action. Must be one of: delete, set_status, set_category"
+                "message": "Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags"
             }
         ), 400

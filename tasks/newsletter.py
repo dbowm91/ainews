@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta
+import smtplib
 
 from celery import shared_task, group
 from celery.utils.log import get_task_logger
@@ -8,42 +9,38 @@ logger = get_task_logger(__name__)
 
 @shared_task(
     bind=True,
-    max_retries=2,
-    default_retry_delay=30,
+    max_retries=3,
+    default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,
+    autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError),
+    dont_autoretry_for=(smtplib.SMTPResponseException,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def send_single_email(
     self, email: str, subject: str, html: str, unsub_url: str
 ) -> dict:
     """Send a single newsletter email. Called by generate_daily_newsletters.
 
-    Retries on transient SMTP errors (connection, timeout).
+    Transient SMTP errors (connection failures, timeouts) are automatically
+    retried via the Celery autoretry mechanism.  Permanent 5xx SMTP errors
+    are not retried.
     """
-    import smtplib
     from services.email import send_newsletter_email
 
     try:
         send_newsletter_email(email, subject, html, unsub_url)
         return {"email": email, "sent": True}
-    except (
-        smtplib.SMTPConnectError,
-        smtplib.SMTPServerDisconnected,
-        TimeoutError,
-    ) as e:
-        # Transient errors - retry
-        logger.warning(f"Transient error sending to {email}, retrying: {e}")
-        raise self.retry(exc=e)
     except smtplib.SMTPResponseException as e:
-        if e.smtp_code >= 400 and e.smtp_code < 500:
-            # 4xx temporary failure - retry
-            logger.warning(f"Temporary SMTP error for {email}, retrying: {e}")
-            raise self.retry(exc=e)
-        # 5xx permanent failure - don't retry
-        logger.error(f"Permanent SMTP error sending to {email}: {e}")
-        return {"email": email, "sent": False, "error": str(e)}
+        if e.smtp_code >= 500:
+            logger.error("Permanent SMTP error sending to %s: %s", email, e)
+            return {"email": email, "sent": False, "error": str(e)}
+        # 4xx: re-raise so autoretry_for handles it
+        raise
     except Exception as e:
-        logger.error(f"Failed to send to {email}: {e}")
+        logger.error("Failed to send to %s: %s", email, e)
         return {"email": email, "sent": False, "error": str(e)}
 
 
@@ -77,7 +74,7 @@ def _send_emails_parallel(subscribers, subject, html, site_url):
         sent = sum(1 for r in results if isinstance(r, dict) and r.get("sent"))
         return sent
     except Exception as e:
-        logger.error(f"Error waiting for email results: {e}")
+        logger.error("Error waiting for email results: %s", e)
         # Fallback: count as 0 sent
         return 0
 
@@ -143,10 +140,11 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 }
                 if result["used_fallback"]:
                     logger.warning(
-                        f"Main newsletter pipeline used fallback stages: {result['fallback_stages']}"
+                        "Main newsletter pipeline used fallback stages: %s",
+                        result["fallback_stages"],
                     )
             except Exception as e:
-                logger.error(f"Main exec summary failed: {e}")
+                logger.error("Main exec summary failed: %s", e)
 
             html, subject, count = generate_main_newsletter(
                 site_url=site_url,
@@ -169,9 +167,9 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 try:
                     send_newsletter_email(dry_run_email, subject, html, unsub_url)
                     sent = 1
-                    logger.info(f"Dry run: sent main newsletter to {dry_run_email}")
+                    logger.info("Dry run: sent main newsletter to %s", dry_run_email)
                 except Exception as e:
-                    logger.error(f"Dry run failed for {dry_run_email}: {e}")
+                    logger.error("Dry run failed for %s: %s", dry_run_email, e)
             else:
                 subscribers = (
                     Subscriber.query.filter(Subscriber.deleted_at.is_(None))
@@ -194,11 +192,15 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 }
             )
             logger.info(
-                f"Main newsletter: {subject} ({count} articles, {sent} sent, dry_run={is_dry_run})"
+                "Main newsletter: %s (%d articles, %d sent, dry_run=%s)",
+                subject,
+                count,
+                sent,
+                is_dry_run,
             )
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Main newsletter failed: {e}")
+        logger.error("Main newsletter failed: %s", e)
         results.append({"type": "main", "error": str(e)})
 
     # Per-topic newsletters (skip in dry run for main only)
@@ -231,10 +233,12 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                     }
                     if result["used_fallback"]:
                         logger.warning(
-                            f"{topic_key} newsletter pipeline used fallback stages: {result['fallback_stages']}"
+                            "%s newsletter pipeline used fallback stages: %s",
+                            topic_key,
+                            result["fallback_stages"],
                         )
                 except Exception as e:
-                    logger.error(f"{topic_key} exec summary failed: {e}")
+                    logger.error("%s exec summary failed: %s", topic_key, e)
 
                 html, subject, count = generate_topic_newsletter(
                     topic_key=topic_key,
@@ -272,11 +276,15 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                     }
                 )
                 logger.info(
-                    f"{topic_key} newsletter: {subject} ({count} articles, {sent} sent)"
+                    "%s newsletter: %s (%d articles, %d sent)",
+                    topic_key,
+                    subject,
+                    count,
+                    sent,
                 )
             except Exception as e:
                 db.session.rollback()
-                logger.error(f"{topic_key} newsletter failed: {e}")
+                logger.error("%s newsletter failed: %s", topic_key, e)
                 results.append({"type": topic_key, "error": str(e)})
 
     # Update run status
@@ -286,7 +294,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
         run.finished_at = datetime.now(timezone.utc)
         db.session.commit()
 
-    logger.info(f"Newsletter generation complete: {results}")
+    logger.info("Newsletter generation complete: %s", results)
     return results
 
 
@@ -309,7 +317,8 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     existing = redis.get(lock_key)
     if existing and existing.decode() != task_id:
         logger.info(
-            f"Newsletter generation already in progress (task {existing.decode()}), skipping"
+            "Newsletter generation already in progress (task %s), skipping",
+            existing.decode(),
         )
         return {"skipped": True, "reason": "locked"}
 

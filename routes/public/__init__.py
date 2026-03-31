@@ -10,6 +10,7 @@ Submodules:
 
 from flask import (
     Blueprint,
+    Response,
     render_template,
     request,
     jsonify,
@@ -105,7 +106,7 @@ def _get_share_configs() -> list[dict]:
 
 
 @public_bp.route("/health")
-def health():
+def health() -> tuple[Response, int]:
     from services.health import run_health_checks
 
     result = run_health_checks(include_celery=True)

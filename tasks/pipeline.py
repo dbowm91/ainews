@@ -68,7 +68,17 @@ def _dispatch_next(
     next_status: str | None = None,
     article=None,
 ) -> None:
-    """Dispatch the next pipeline stage based on article status."""
+    """Dispatch the next pipeline stage based on article status.
+
+    Looks up the Celery task corresponding to the article's current (or
+    provided) pipeline status and calls ``.delay()`` to enqueue it.
+
+    Args:
+        article_id: ID of the article to process.
+        run_id: Optional pipeline-run ID for log correlation.
+        next_status: Override status; if ``None``, uses ``article.pipeline_status``.
+        article: Article model instance (used only when *next_status* is ``None``).
+    """
     status = next_status or (article.pipeline_status if article else None)
     if not status:
         return
@@ -87,12 +97,31 @@ def _dispatch_next(
 
 
 def _dispatch_for_status(article) -> None:
-    """Re-dispatch the task matching the article's current pipeline status."""
+    """Re-dispatch the task matching the article's current pipeline status.
+
+    Convenience wrapper around :func:`_dispatch_next` that reads the status
+    from the article object directly.
+
+    Args:
+        article: Article model instance with a populated ``pipeline_status``.
+    """
     _dispatch_next(article.id, article=article)
 
 
 def _build_fallback_article(article) -> str:
-    """Build a minimal article JSON when pipeline stages fail or are skipped."""
+    """Build a minimal article JSON when pipeline stages fail or are skipped.
+
+    Constructs a best-effort article representation from raw fields so that
+    downstream consumers (newsletter, editor) always receive valid JSON even
+    when the LLM stages could not run.
+
+    Args:
+        article: Article model instance (may have ``original_title``,
+            ``extracted_text``, ``original_url``, ``original_author``).
+
+    Returns:
+        JSON-encoded string with headline, tldr, body, and metadata fields.
+    """
     return json.dumps(
         {
             "headline": article.original_title or "Untitled",
@@ -112,7 +141,23 @@ def _build_fallback_article(article) -> str:
 
 
 def _log_pipeline(run_id, stage, level, message, article_id=None):
-    """Create a PipelineLog entry without committing outer transactions."""
+    """Create a PipelineLog entry without committing outer transactions.
+
+    Uses a nested transaction (savepoint) so that a log-write failure does not
+    roll back the caller's work.  Fatal-level (``"error"``) log failures are
+    re-raised after the failed savepoint is rolled back.
+
+    Args:
+        run_id: Pipeline-run ID.
+        stage: Pipeline stage name (e.g. ``"select"``, ``"write"``).
+        level: Log level — ``"info"``, ``"warning"``, or ``"error"``.
+        message: Human-readable log message.
+        article_id: Optional article ID for correlation.
+
+    Raises:
+        Exception: Re-raised only when *level* is ``"error"`` and the
+            log write itself fails.
+    """
     from models import PipelineLog
     from extensions import db
     from services.metrics import get_metrics
@@ -131,7 +176,7 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
         savepoint.commit()
     except Exception as e:
         savepoint.rollback()
-        logger.error(f"Failed to write pipeline log: {e}")
+        logger.error("Failed to write pipeline log: %s", e)
         metrics.counter_inc(
             "pipeline.log_write_failed", labels={"stage": stage, "level": level}
         )
@@ -142,7 +187,25 @@ def _log_pipeline(run_id, stage, level, message, article_id=None):
 
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
-    """Advance article to next stage with degraded quality on persistent failure."""
+    """Advance article to next stage with degraded quality on persistent failure.
+
+    When a stage exhausts its per-stage retry budget, instead of failing the
+    article entirely this function synthesizes minimal content for the failed
+    stage and moves the article to the next status.  Each stage has its own
+    degradation strategy:
+
+    * **select** — auto-selects the article with a default score of 6.
+    * **research** — creates a minimal research brief from extracted text.
+    * **write** — builds a fallback article JSON from raw fields.
+    * **edit** — uses the draft as-is and marks the article done (or routes
+      to review if configured).
+
+    Args:
+        article: Article model instance (will be mutated and committed).
+        failed_stage: Stage name that failed (``"select"``, ``"research"``,
+            ``"write"``, or ``"edit"``).
+        run_id: Optional pipeline-run ID for structured logging.
+    """
     from extensions import db
 
     # Normalize: accept both action names ("write") and status names ("writing")
@@ -266,16 +329,37 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
                 f"Degraded: used draft as final for {truncate_for_log(article.original_title)}",
                 article_id=article.id,
             )
-        logger.warning(f"Article {article.id} finalized with degraded content")
+        logger.warning("Article %s finalized with degraded content", article.id)
 
     else:
         logger.error(
-            f"Unknown stage '{failed_stage}' for degradation of article {article.id}"
+            "Unknown stage '%s' for degradation of article %s",
+            failed_stage,
+            article.id,
         )
 
 
 def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -> bool:
-    """Handle failure for a pipeline stage. Returns True if degraded, False if retrying."""
+    """Handle failure for a pipeline stage.
+
+    Increments both per-stage (``retry_count``) and global (``total_retries``)
+    counters, then decides the next action:
+
+    * If the global retry budget is exceeded → mark article ``"failed"``.
+    * If the per-stage retry budget is exceeded → degrade and advance.
+    * Otherwise → commit the incremented counters and return for retry.
+
+    Args:
+        article: Article model instance (mutated in-place).
+        stage: Stage name that failed.
+        exc: The exception that caused the failure.
+        run_id: Optional pipeline-run ID for structured logging.
+
+    Returns:
+        ``True`` if the article was degraded or permanently failed (caller
+        should not retry).  ``False`` if the article is still eligible for
+        retry.
+    """
     from extensions import db
 
     article.retry_count = (article.retry_count or 0) + 1
@@ -303,7 +387,9 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
                 f"Article {article.id} exceeded global retry budget ({max_total}), marked as failed",
                 article_id=article.id,
             )
-        logger.error(f"Article {article.id} exceeded global retry budget ({max_total})")
+        logger.error(
+            "Article %s exceeded global retry budget (%s)", article.id, max_total
+        )
         return True
 
     if article.retry_count >= max_stage:
@@ -321,7 +407,15 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
 
 
 def _finalize(article_id: int):
-    """Mark article as done when editor is skipped."""
+    """Mark article as done when the editor stage is skipped.
+
+    Applies fallback content (draft or generated), creates a version
+    snapshot, and either routes the article to review or marks it as
+    ``PipelineStatus.DONE`` depending on the review configuration.
+
+    Args:
+        article_id: ID of the article to finalize.
+    """
     from models import Article
     from extensions import db
 
@@ -335,7 +429,7 @@ def _finalize(article_id: int):
             if _should_route_to_review(article):
                 article.pipeline_status = PipelineStatus.REVIEW
                 db.session.commit()
-                logger.info(f"Article {article_id} queued for review (finalize)")
+                logger.info("Article %s queued for review (finalize)", article_id)
                 return
 
             article.pipeline_status = PipelineStatus.DONE
@@ -351,7 +445,7 @@ def _finalize(article_id: int):
             db.session.commit()
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Finalize failed for article {article_id}: {e}")
+        logger.error("Finalize failed for article %s: %s", article_id, e)
 
 
 def _assign_tags(article, tag_names: list[str], db):
@@ -359,6 +453,11 @@ def _assign_tags(article, tag_names: list[str], db):
 
     Batches queries to avoid N+1: one SELECT for existing tags, one flush
     for new tags, one SELECT for existing links, one INSERT for new links.
+
+    Args:
+        article: Article model instance to tag.
+        tag_names: List of tag name strings (max 10 used, max 64 chars each).
+        db: SQLAlchemy database session instance.
     """
     from models import Tag, slugify, article_tags
 
@@ -414,7 +513,21 @@ def _assign_tags(article, tag_names: list[str], db):
 
 
 def _should_route_to_review(article) -> bool:
-    """Check if article should go to review instead of being marked done."""
+    """Check if article should go to review instead of being marked done.
+
+    Reads the review configuration from the pipeline config.  An article is
+    routed to review when:
+
+    * The review stage is enabled, **and**
+    * Either ``auto_publish_threshold`` is ``None`` (always review), or the
+      article's ``impact_score`` is below the threshold.
+
+    Args:
+        article: Article model instance (reads ``impact_score``).
+
+    Returns:
+        ``True`` if the article should enter the review queue.
+    """
     from schemas.pipeline import load_pipeline_config
 
     review_cfg = load_pipeline_config().pipeline.review
@@ -426,7 +539,18 @@ def _should_route_to_review(article) -> bool:
 
 
 def _apply_fallback(article):
-    """Set final_article from draft or build a fallback."""
+    """Set ``final_article`` from draft or build a minimal fallback.
+
+    If the article has a ``draft_article`` from the writer stage, it is used
+    directly.  Otherwise a minimal article is constructed from raw source
+    fields via :func:`_build_fallback_article`.
+
+    Also sets ``original_ai_article`` to the same value so that the audit
+    trail always has a copy of the AI-generated (or fallback) content.
+
+    Args:
+        article: Article model instance (mutated in-place, not committed).
+    """
     fallback = article.draft_article or _build_fallback_article(article)
     article.final_article = fallback
     article.original_ai_article = fallback
@@ -483,7 +607,9 @@ def run_stage(
         lock_key, task_id, nx=True, ex=rc.timeout_seconds + 60
     )
     if not lock_acquired:
-        logger.info(f"Stage {stage} already running for article {article_id}, skipping")
+        logger.info(
+            "Stage %s already running for article %s, skipping", stage, article_id
+        )
         return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
 
     article = db.session.get(Article, article_id)
@@ -522,7 +648,7 @@ def run_stage(
                 f"Article {article_id}: {e}",
                 article_id=article_id,
             )
-        logger.error(f"{stage.title()} failed for article {article_id}: {e}")
+        logger.error("%s failed for article %s: %s", stage.title(), article_id, e)
         raise
     finally:
         limiter.release(rc.provider, model)

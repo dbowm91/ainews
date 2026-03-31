@@ -6,7 +6,7 @@ This plan consolidates all items from prior plan files (plan2–plan5) into a si
 
 **Verification status:** All items below have been verified against the codebase as of 2026-03-31.
 
-**Implementation status:** Phases 1–6 complete (623 tests passing, 0 lint violations). Phase 7 (P3 backlog) items remain.
+**Implementation status:** Phases 1–7 complete (623 tests passing, 0 lint violations).
 
 **Prerequisites for all phases:**
 ```bash
@@ -372,7 +372,7 @@ These items fix concurrency bugs and configuration issues. Many are independent 
 
 ---
 
-## Phase 7: Code Quality & Features (P3 — Backlog) [NOT STARTED]
+## Phase 7: Code Quality & Features (P3 — Backlog) [DONE]
 
 ### 7.1 Type Hints for Public API
 

@@ -2,11 +2,14 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from extensions import db
 from models import Article, Source, PipelineRun
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+if TYPE_CHECKING:
+    from adapters.base import RawItem
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,7 @@ def get_existing_external_ids(source: Source) -> set[str]:
     return {r[0] for r in existing if r[0]}
 
 
-def filter_new_items(items: list, existing_ids: set[str]) -> list:
+def filter_new_items(items: list["RawItem"], existing_ids: set[str]) -> list["RawItem"]:
     """Filter items to only include new ones.
 
     Args:
@@ -98,7 +101,7 @@ def filter_new_items(items: list, existing_ids: set[str]) -> list:
     return [i for i in items if i.external_id not in existing_ids]
 
 
-def filter_non_other_topics(items: list) -> list:
+def filter_non_other_topics(items: list["RawItem"]) -> list["RawItem"]:
     """Filter out items with only 'other' topic.
 
     Args:
@@ -235,7 +238,9 @@ def record_crawl_failure(source: Source, error_message: str) -> None:
         source.disabled_at = datetime.now(timezone.utc)
         source.active = False
         logger.warning(
-            f"Auto-disabled source {source.source_key} after {source.consecutive_failures} consecutive failures"
+            "Auto-disabled source %s after %d consecutive failures",
+            source.source_key,
+            source.consecutive_failures,
         )
     try:
         db.session.commit()

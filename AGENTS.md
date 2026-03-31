@@ -164,7 +164,10 @@ When working with `services/pipeline_monitor.py`, avoid naming local variables `
 
 ### Bulk article operations
 
-`POST /admin/api/articles/bulk` accepts JSON with `article_ids` (list, max 500) and `action` (delete, set_status, set_category). See `routes/admin/api.py:bulk_article_operations()`.
+`POST /admin/api/articles/bulk` accepts JSON with `article_ids` (list, max 500) and `action`. Supported actions: `delete`, `set_status`, `set_category`, `reprocess`, `add_tags`. See `routes/admin/api.py:bulk_article_operations()`.
+
+- **reprocess**: Resets pipeline status to `pending`, clears all retry counters and stage results, then dispatches `select_article` tasks for each article.
+- **add_tags**: Accepts `tags` (list of name strings, max 10). Finds or creates Tag records and links them to articles (deduplicates existing links).
 
 ### Newsletter preview
 
@@ -176,6 +179,10 @@ Admin article list (`/admin/articles`) supports:
 - URL search: queries starting with `http://` or containing `/` and `.` search `original_url`
 - Source filter: `source_id` query param
 - Date range: `date_from`, `date_to` query params (ISO format)
+
+### Article duplicate detection
+
+During crawling, articles from different sources with near-duplicate titles are filtered out using Jaccard similarity on title word sets (`services/article.py:find_duplicate_titles()`). Threshold is 0.5 (configurable via `TITLE_SIMILARITY_THRESHOLD`). Only compares against articles from the last 7 days and from other sources. Same-source duplicates are handled by the `external_id` uniqueness constraint.
 
 ### Additional lessons learned
 
@@ -212,3 +219,7 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 ### Timeout patterns
 
 **ThreadPoolExecutor shutdown**: When implementing timeouts with `ThreadPoolExecutor`, use `executor.shutdown(wait=False, cancel_futures=True)` in the `finally` block — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout. Python 3.9+ supports `cancel_futures=True` (project uses 3.12).
+
+### Celery retry patterns
+
+**`autoretry_for` over manual `self.retry()`**: Prefer the `autoretry_for` / `dont_autoretry_for` decorator parameters over manual `raise self.retry()` calls. This is cleaner and supports `retry_backoff` and `retry_jitter` out of the box. See `tasks/newsletter.py:send_single_email` for the reference pattern — uses `autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError)` with `dont_autoretry_for=(smtplib.SMTPResponseException,)` to distinguish transient from permanent SMTP errors.

@@ -86,11 +86,24 @@ class CircuitBreaker:
             logger.debug("Failed to emit circuit breaker metric", exc_info=True)
 
     def _prune_old_failures(self) -> None:
+        """Remove failure timestamps older than the sliding window.
+
+        Recomputes ``_failure_count`` from the pruned list so that the
+        circuit can transition back to CLOSED once enough time has passed.
+        Must be called while holding ``_lock``.
+        """
         cutoff = time.monotonic() - self.window_seconds
         self._failure_times = [t for t in self._failure_times if t > cutoff]
         self._failure_count = len(self._failure_times)
 
     def record_success(self) -> None:
+        """Record a successful call.
+
+        In CLOSED state the sliding window of failures is pruned (no other
+        action is needed — successes don't reduce the failure count while
+        inside the window).  In HALF_OPEN state a success transitions the
+        circuit back to CLOSED, clearing all failure tracking.
+        """
         with self._lock:
             if self._state == State.HALF_OPEN:
                 old = self._state
@@ -104,6 +117,13 @@ class CircuitBreaker:
                 self._prune_old_failures()
 
     def record_failure(self) -> None:
+        """Record a failed call.
+
+        In HALF_OPEN state any failure immediately re-opens the circuit.  In
+        CLOSED state the failure timestamp is appended to the sliding window;
+        if the count meets or exceeds ``failure_threshold``, the circuit
+        transitions to OPEN.
+        """
         with self._lock:
             now = time.monotonic()
 
@@ -134,6 +154,17 @@ class CircuitBreaker:
                 self._on_state_change(old, self._state)
 
     def can_execute(self) -> bool:
+        """Check whether a call is permitted under the current circuit state.
+
+        In CLOSED state calls always pass.  In OPEN state calls are rejected.
+        In HALF_OPEN state a limited number of probe calls (up to
+        ``half_open_max_calls``) are allowed through; each call that checks
+        this method increments the half-open counter atomically.
+
+        Returns:
+            ``True`` if the call may proceed, ``False`` if it should be
+            short-circuited.
+        """
         state = self.state
         if state == State.CLOSED:
             return True
@@ -148,6 +179,14 @@ class CircuitBreaker:
         return False
 
     def get_status(self) -> dict:
+        """Return a serialisable snapshot of the circuit breaker state.
+
+        Useful for health-check endpoints and admin dashboards.
+
+        Returns:
+            Dict with ``name``, ``state``, ``failure_count``,
+            ``failure_threshold``, and ``recovery_timeout``.
+        """
         return {
             "name": self.name,
             "state": self.state.value,

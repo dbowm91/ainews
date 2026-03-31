@@ -4,7 +4,7 @@ import secrets
 import logging
 from datetime import datetime, timezone, timedelta
 
-from flask import request, render_template, redirect, current_app
+from flask import request, render_template, redirect, current_app, Response
 from sqlalchemy.exc import SQLAlchemyError
 
 from models import Subscriber
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @public_bp.route("/subscribe", methods=["POST"])
 @limit_content_length(1024)
-def subscribe():
+def subscribe() -> Response:
     email = request.form.get("email", "").strip().lower()
     newsletter_type = request.form.get("newsletter_type", "main").strip()
 
@@ -117,7 +117,7 @@ def subscribe():
 
 
 @public_bp.route("/unsubscribe/<token>")
-def unsubscribe(token):
+def unsubscribe(token: str) -> str:
     """Show unsubscribe confirmation page (GET)."""
     subscriber = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))
@@ -131,7 +131,7 @@ def unsubscribe(token):
 
 
 @public_bp.route("/unsubscribe/<token>", methods=["POST"])
-def unsubscribe_confirm(token):
+def unsubscribe_confirm(token: str) -> str:
     """Process unsubscribe request (POST with CSRF protection)."""
     subscriber = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))
@@ -159,7 +159,7 @@ def unsubscribe_confirm(token):
 
 
 @public_bp.route("/verify/<token>")
-def verify(token):
+def verify(token: str) -> str:
     """Verify a subscriber's email address via token link."""
     subscriber = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))

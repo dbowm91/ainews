@@ -22,7 +22,7 @@ from routes.public import (
 PER_PAGE = PER_PAGE_PUBLIC
 
 
-def _get_top_impact(limit: int = 3) -> list:
+def _get_top_impact(limit: int = 3) -> list[Article]:
     from sqlalchemy import or_
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
@@ -43,7 +43,7 @@ def _get_top_impact(limit: int = 3) -> list:
 
 
 @public_bp.route("/")
-def index():
+def index() -> str:
     page = max(1, request.args.get("page", 1, type=int))
     category = request.args.get("category", "", type=str).strip()
     query = request.args.get("q", "", type=str).strip()
@@ -77,7 +77,7 @@ def index():
 
 
 @public_bp.route("/topic/<category>")
-def topic_feed(category):
+def topic_feed(category: str) -> str:
     page = max(1, request.args.get("page", 1, type=int))
 
     from schemas.topic import load_topics
@@ -111,7 +111,7 @@ def topic_feed(category):
 
 
 @public_bp.route("/tag/<slug>")
-def tag_feed(slug):
+def tag_feed(slug: str) -> str:
     from services.utils import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
@@ -147,7 +147,7 @@ def tag_feed(slug):
 
 
 @public_bp.route("/feed")
-def feed_all():
+def feed_all() -> Response:
     from services.rss import generate_rss_feed
     from services.cache import get_response_cache
 
@@ -179,7 +179,7 @@ def feed_all():
 
 
 @public_bp.route("/feed/<category>")
-def feed_topic(category):
+def feed_topic(category: str) -> Response:
     from services.rss import generate_rss_feed
     from schemas.topic import load_topics
     from services.cache import get_response_cache
@@ -220,7 +220,7 @@ def feed_topic(category):
 
 
 @public_bp.route("/sitemap.xml")
-def sitemap():
+def sitemap() -> Response:
     from services.rss import generate_sitemap
 
     rows = (

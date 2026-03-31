@@ -18,6 +18,10 @@ from services.pagination import paginate_query, search_fts, _escape_like_pattern
 
 logger = logging.getLogger(__name__)
 
+# Threshold for Jaccard similarity on title word sets (0–1).
+# Pairs with similarity >= this value are considered duplicates.
+TITLE_SIMILARITY_THRESHOLD = 0.5
+
 
 def track_metric(article_id: int, column) -> None:
     """Atomically increment a metric column, creating the row if needed.
@@ -174,3 +178,81 @@ def get_article_versions(article_id: int, limit: int = 20) -> list:
         .limit(limit)
         .all()
     )
+
+
+def _title_word_set(title: str | None) -> set[str]:
+    """Normalize a title into a set of lowercase words for comparison.
+
+    Strips punctuation, lowercases, and splits on whitespace.
+    """
+    import re
+
+    if not title:
+        return set()
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    # Filter out very short words (articles, prepositions) that inflate similarity
+    return {w for w in words if len(w) > 2}
+
+
+def jaccard_similarity(set_a: set, set_b: set) -> float:
+    """Compute Jaccard similarity between two sets.
+
+    Returns:
+        Float between 0.0 (no overlap) and 1.0 (identical).
+        Returns 0.0 if both sets are empty.
+    """
+    if not set_a and not set_b:
+        return 0.0
+    intersection = len(set_a & set_b)
+    union = len(set_a | set_b)
+    return intersection / union if union > 0 else 0.0
+
+
+def find_duplicate_titles(
+    title: str,
+    source_id: int,
+    threshold: float = TITLE_SIMILARITY_THRESHOLD,
+) -> list[Article]:
+    """Find existing articles with similar titles from *other* sources.
+
+    Uses Jaccard similarity on the word sets of titles to detect near-duplicate
+    articles that may have been published by different sources with slightly
+    different wording.
+
+    Args:
+        title: The candidate article title.
+        source_id: Source ID of the candidate (duplicates from the same source
+            are excluded — those are handled by the ``external_id`` check).
+        threshold: Minimum Jaccard similarity to flag as duplicate (0–1).
+
+    Returns:
+        List of Article objects whose titles are similar to *title*.
+    """
+    candidate_words = _title_word_set(title)
+    if not candidate_words:
+        return []
+
+    # Fetch recent articles from other sources to compare against.
+    # Limit to last 7 days to keep the comparison set manageable.
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    candidates = (
+        Article.query.filter(
+            Article.source_id != source_id,
+            Article.created_at >= cutoff,
+            Article.original_title.isnot(None),
+        )
+        .with_entities(Article.id, Article.original_title)
+        .all()
+    )
+
+    duplicates = []
+    for article_id, other_title in candidates:
+        other_words = _title_word_set(other_title)
+        if jaccard_similarity(candidate_words, other_words) >= threshold:
+            article = db.session.get(Article, article_id)
+            if article:
+                duplicates.append(article)
+
+    return duplicates

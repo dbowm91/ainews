@@ -2,7 +2,7 @@
 
 import logging
 
-from flask import request, render_template, redirect, make_response
+from flask import request, render_template, redirect, make_response, Response
 
 from models import Article, ArticleMetric
 from services.article import parse_article_json, track_metric
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @public_bp.route("/article/<int:article_id>")
-def article_detail(article_id):
+def article_detail(article_id: int) -> Response:
     from schemas.topic import load_topics
     from services.related import find_related_articles
     from services.article import parse_articles
@@ -61,14 +61,14 @@ def article_detail(article_id):
 
 
 @public_bp.route("/s/<short_id>")
-def short_url_redirect(short_id):
+def short_url_redirect(short_id: str) -> Response:
     article = Article.query.filter_by(short_id=short_id).first_or_404()
     track_metric(article.id, ArticleMetric.share_link_views)
     return redirect(f"/article/{article.id}")
 
 
 @public_bp.route("/a/<short_id>")
-def short_url_tracking_page(short_id):
+def short_url_tracking_page(short_id: str) -> str:
     article = Article.query.filter_by(short_id=short_id).first_or_404()
     parse_article_json(article)
     track_metric(article.id, ArticleMetric.share_link_views)
@@ -82,7 +82,7 @@ def short_url_tracking_page(short_id):
 
 @public_bp.route("/api/track/share-click/<int:article_id>", methods=["POST"])
 @csrf.exempt
-def track_share_click(article_id):
+def track_share_click(article_id: int) -> tuple[str, int]:
     Article.query.get_or_404(article_id)
     track_metric(article_id, ArticleMetric.share_button_clicks)
     return "", 204

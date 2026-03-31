@@ -154,9 +154,9 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 
 `MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are now configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers in `tasks/pipeline.py`.
 
-### Redis variable shadowing in pipeline_monitor
+### Redis variable shadowing
 
-When working with `services/pipeline_monitor.py`, avoid naming local variables `redis` as it shadows the module import. The module uses `from redis.exceptions import RedisError` to avoid this issue. The `_get_redis()` function returns a Redis client — name the local variable `redis_client` or `r` to avoid shadowing.
+When working with any file that uses Redis, avoid naming local variables `redis` as it shadows the module import. This applies to `services/pipeline_monitor.py`, `tasks/crawl.py`, `tasks/newsletter.py`, and all other files. Name the local variable `redis_client` or `r`. Modules that import `from redis.exceptions import RedisError` are already safe from shadowing the exception import.
 
 ### Request size limiting
 
@@ -208,9 +208,9 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 ### Concurrency patterns
 
-**Atomic lock release with Lua**: Lock release must use a Lua script for atomic check-and-delete, not separate `GET` → `DEL` calls. The check-then-delete pattern has a race condition where another task can acquire the lock between the two operations. See `plan.md` Phase 2.1 for the pattern.
+**Atomic lock release with Lua**: Lock release must use a Lua script for atomic check-and-delete, not separate `GET` -> `DEL` calls. The check-then-delete pattern has a race condition where another task can acquire the lock between the two operations.
 
-**Thread-safe singletons**: All `get_*()` singleton factory functions must use `threading.Lock` with double-checked locking. The pattern in `services/limiter.py:get_limiter()` is the reference implementation. `get_response_cache()` and `get_config_cache()` now follow this pattern.
+**Thread-safe singletons**: All `get_*()` singleton factory functions must use `threading.Lock` with double-checked locking. The pattern in `services/limiter.py:get_limiter()` is the reference implementation. `get_response_cache()`, `get_config_cache()`, and `get_config()` all follow this pattern. `reset_*()` functions should also acquire the lock when clearing state.
 
 ### Logging conventions
 
@@ -223,3 +223,19 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 ### Celery retry patterns
 
 **`autoretry_for` over manual `self.retry()`**: Prefer the `autoretry_for` / `dont_autoretry_for` decorator parameters over manual `raise self.retry()` calls. This is cleaner and supports `retry_backoff` and `retry_jitter` out of the box. See `tasks/newsletter.py:send_single_email` for the reference pattern — uses `autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError)` with `dont_autoretry_for=(smtplib.SMTPResponseException,)` to distinguish transient from permanent SMTP errors.
+
+### Celery task timeout handling
+
+**`SoftTimeLimitExceeded` handling**: Tasks with `soft_time_limit` should catch `billiard.exceptions.SoftTimeLimitExceeded` explicitly for graceful cleanup (rollback, error logging) before re-raising. Without this, soft timeouts fall through to generic `except Exception` handlers and are indistinguishable from actual errors. Pipeline stages handle this in `tasks/pipeline.py:run_stage()`.
+
+### Celery app cache invalidation
+
+`celery_app.py` caches Flask app instances in `_app_cache` keyed by config name. The `clear_app_cache()` function must be called from the config reload endpoint (`routes/admin/api.py:reload_config`) to ensure Celery workers pick up config changes without requiring a restart.
+
+### SQLAlchemy relationship loading
+
+**Avoid `lazy="joined"` as default**: Use `lazy="select"` (or `lazy="selectin"` for collections) as the default on relationships. Views that need eager loading should use explicit `joinedload()` in the query. `lazy="joined"` adds unnecessary LEFT JOINs to every query, including list views that don't need the related data.
+
+### Prompt file conventions
+
+System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each pipeline stage). The `prompts/*.txt` files are fallback prompts only — they are used when `pipeline.yaml` does not define a `system_prompt` for a given role. See `prompts/README.md` for details.

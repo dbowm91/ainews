@@ -241,3 +241,17 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 ### Prompt file conventions
 
 System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each pipeline stage). The `prompts/*.txt` files are fallback prompts only — they are used when `pipeline.yaml` does not define a `system_prompt` for a given role. See `prompts/README.md` for details.
+
+## Working with this codebase
+
+### Improvement plan
+
+All pending improvements are tracked in `plan.md`. It is organized into 8 waves (backend bugs → security → code quality → tests → UI critical → UI structural → UI UX → UI polish). Each wave is designed for parallel execution with sub-agents. Check `plan.md` for the current status and execution strategy before starting work.
+
+### Large refactoring strategy
+
+When tackling multi-file changes:
+- Prefer extracting shared logic over copy-paste modifications
+- Run `.venv/bin/ruff check . --exclude .venv` after each file change, not just at the end
+- If a change touches both tests and production code, update tests first to avoid false positives
+- For test fixture changes (`conftest.py`), run the full suite immediately — fixture changes can cause cascading failures that are hard to trace

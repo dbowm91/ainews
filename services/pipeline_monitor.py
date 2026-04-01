@@ -4,11 +4,10 @@ Provides Redis minute-bucket counters for each pipeline stage
 (crawl, select, research, write, edit) to track success/failure counts.
 """
 
-import time
 import logging
+import time
 from typing import Optional
-
-from redis.exceptions import RedisError
+import redis.exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def record_stage_result(
             "Pipeline stage %s: %s", stage, "success" if success else "failure"
         )
 
-    except RedisError as e:
+    except redis.exceptions.RedisError as e:
         logger.warning("Failed to record pipeline stage result: %s", e)
 
 
@@ -107,7 +106,7 @@ def get_stage_stats(stage: str, minutes: int = 15) -> dict:
             "window_minutes": minutes,
         }
 
-    except RedisError as e:
+    except redis.exceptions.RedisError as e:
         logger.error("Failed to get pipeline stage stats: %s", e)
         return {
             "success_count": 0,
@@ -151,5 +150,5 @@ def clear_stage_stats(stage: Optional[str] = None) -> None:
             redis_client.delete(*keys)
             logger.info("Cleared %d pipeline counter keys", len(keys))
 
-    except RedisError as e:
+    except redis.exceptions.RedisError as e:
         logger.error("Failed to clear pipeline stats: %s", e)

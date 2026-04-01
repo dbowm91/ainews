@@ -28,6 +28,7 @@
     </div>
 
     {% if subscribers %}
+      <div class="table-responsive">
       <table class="dash-table" aria-label="Subscribers list">
         <thead>
           <tr><th>email</th><th>type</th><th>subscribed</th><th>status</th></tr>
@@ -47,6 +48,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
       {% if has_next %}
         <a href="/admin/subscribers?page={{ next_page }}{% if newsletter_type %}&type={{ newsletter_type }}{% endif %}{% if active_filter %}&active={{ active_filter }}{% endif %}" class="dash-link">next page &rarr;</a>
       {% endif %}

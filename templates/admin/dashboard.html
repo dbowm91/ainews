@@ -55,6 +55,7 @@
     {# ── Sources ── #}
     <section class="dash-card">
       <h2 class="dash-card-title">sources</h2>
+      <div class="table-responsive">
       <table class="dash-table" aria-label="Sources table">
         <thead>
           <tr><th>source</th><th>type</th><th>last crawl</th><th>articles</th></tr>
@@ -70,6 +71,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
       <a href="/admin/sources" class="dash-link">manage sources &rarr;</a>
     </section>
 
@@ -96,6 +98,7 @@
   {# ── Recent Articles ── #}
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">recent articles</h2>
+    <div class="table-responsive">
     <table class="dash-table" aria-label="Recent articles table">
       <thead>
         <tr><th>title</th><th>topic</th><th>status</th><th>score</th><th>impact</th><th>created</th></tr>
@@ -131,6 +134,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </section>
 </div>
 {% endblock %}

@@ -39,6 +39,7 @@
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">generated newsletters</h2>
     {% if newsletters %}
+      <div class="table-responsive">
       <table class="dash-table" aria-label="Generated newsletters">
         <thead>
           <tr><th>type</th><th>subject</th><th>articles</th><th>recipients</th><th>generated</th><th>actions</th></tr>
@@ -58,6 +59,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
       {% if has_next %}
         <a href="/admin/newsletters?page={{ next_page }}" class="dash-link">next page &rarr;</a>
       {% endif %}

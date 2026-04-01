@@ -6,7 +6,7 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 
 **Total items:** ~55 items across 8 waves
 
-**Status:** IN PROGRESS — ~31 items complete, ~24 remaining
+**Status:** COMPLETE ✅ — All 55 items across 8 waves finished.
 
 ---
 
@@ -248,7 +248,7 @@ if category not in topics:
 
 ### 3.1: f-strings in log calls — remaining instances
 
-**Status:** NEEDS VERIFICATION
+**Status:** COMPLETE ✅ — Verified no f-string log calls in codebase.
 
 **Problem:** Multiple files use f-strings in log calls, violating the project convention of %-formatting.
 
@@ -276,7 +276,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.2: Inconsistent `PipelineStatus` usage — string literals to constants
 
-**Status:** NEEDS VERIFICATION
+**Status:** COMPLETE ✅ — Verified all relevant files use PipelineStatus constants.
 
 **Problem:** Many files use string literals (`"researching"`, `"writing"`, `"editing"`, `"pending"`, `"failed"`, `"skipped"`) instead of `PipelineStatus` enum constants from `constants.py`.
 
@@ -403,7 +403,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.11: Redis import style in `services/pipeline_monitor.py`
 
-**Status:** NEEDS VERIFICATION — Still uses `from redis.exceptions import RedisError`.
+**Status:** COMPLETE ✅ — Changed to `import redis.exceptions`.
 
 **Problem:** Uses `from redis.exceptions import RedisError` instead of the AGENTS.md convention of `import redis.exceptions`.
 
@@ -927,7 +927,7 @@ except SoftTimeLimitExceeded:
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
 | A | 1.1 Newsletter lock race condition | `tasks/newsletter.py` | ✅ DONE |
-| B | 1.2 Pipeline lock leak | `tasks/pipeline.py` | |
+| B | 1.2 Pipeline lock leak | `tasks/pipeline.py` | ✅ DONE |
 | C | 1.3 Crawl failure health tracking | `tasks/crawl.py` | ✅ DONE |
 | D | 1.4 Subscriber.get_active filter | `models.py` | ✅ DONE |
 | E | 1.5 Missing statuses in stage maps | `tasks/pipeline.py` | ✅ DONE |
@@ -937,7 +937,7 @@ except SoftTimeLimitExceeded:
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
 | G | 2.1 Escape URLs in email HTML | `services/email.py` | ✅ DONE |
-| H | 2.2 Guard db.session.commit() calls | Multiple task files | ⚠️ PARTIAL |
+| H | 2.2 Guard db.session.commit() calls | Multiple task files | ✅ DONE |
 | I | 2.3 RedisError on lock acquisition | Multiple task files | ✅ DONE |
 | J | 2.4 reset_response_cache thread safety | `services/cache.py` | ✅ DONE |
 | K | 2.5 Missing reset functions | `services/limiter.py`, `services/config_cache.py` | ✅ DONE |
@@ -948,30 +948,30 @@ except SoftTimeLimitExceeded:
 ### Wave 3: Code Quality (Parallel, after Wave 2)
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
-| O | 3.1 f-strings in log calls | Multiple files | ⚠️ TODO |
-| P | 3.2 PipelineStatus constants | Multiple task files | ⚠️ TODO |
+| O | 3.1 f-strings in log calls | Multiple files | ✅ DONE |
+| P | 3.2 PipelineStatus constants | Multiple task files | ✅ DONE |
 | Q | 3.3 Deduplicate tag assignment | `tasks/pipeline.py`, `routes/admin/api.py` | ✅ DONE |
 | R | 3.4 Deduplicate health checks | `routes/admin/api.py`, `services/health.py` | ✅ DONE |
 | S | 3.5 Deduplicate _parse_article | `services/newsletter.py`, `services/newsletter_pipeline.py` | ✅ DONE |
-| T | 3.6 Break up _generate_newsletters_impl | `tasks/newsletter.py` | |
-| U | 3.7 Data-drive _degrade_and_advance | `tasks/pipeline.py` | |
+| T | 3.6 Break up _generate_newsletters_impl | `tasks/newsletter.py` | ✅ DONE |
+| U | 3.7 Data-drive _degrade_and_advance | `tasks/pipeline.py` | ✅ DONE |
 | V | 3.8 Break up bulk_article_operations | `routes/admin/api.py` | ✅ DONE |
-| W | 3.9 Break up run_stage | `tasks/pipeline.py` | |
-| X | 3.10 Deduplicate _evict_stale | `services/cache.py`, `services/config_cache.py` | |
-| Y | 3.11 Redis import style | `services/pipeline_monitor.py` | ⚠️ TODO |
+| W | 3.9 Break up run_stage | `tasks/pipeline.py` | ✅ DONE |
+| X | 3.10 Deduplicate _evict_stale | `services/cache.py`, `services/config_cache.py` | ✅ DONE |
+| Y | 3.11 Redis import style | `services/pipeline_monitor.py` | ✅ DONE |
 | Z | 3.12 Type hint fix | `services/redis_utils.py` | ✅ DONE |
-| AA | 3.13 Limiter timeout log message | `services/limiter.py` | |
+| AA | 3.13 Limiter timeout log message | `services/limiter.py` | ✅ DONE |
 
 ### Wave 4: Test & Config (Parallel, after Wave 3)
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
 | AB | 4.1 Deduplicate Redis mock | Test files | ✅ DONE |
-| AC | 4.2 Extract _reset_singletons | `tests/conftest.py` | |
-| AD | 4.3 Test app fixture uses create_app() | `tests/conftest.py` | |
-| AE | 4.4 Fix test env var cleanup | `tests/conftest.py` | |
-| AF | 4.5 Guard config int() calls | `config.py` | |
+| AC | 4.2 Extract _reset_singletons | `tests/conftest.py` | ✅ DONE |
+| AD | 4.3 Test app fixture uses create_app() | `tests/conftest.py` | ✅ DONE |
+| AE | 4.4 Fix test env var cleanup | `tests/conftest.py` | ✅ DONE |
+| AF | 4.5 Guard config int() calls | `config.py` | ✅ DONE |
 | AG | 4.6 SoftTimeLimitExceeded handlers | `tasks/extract.py`, `tasks/cleanup.py` | ✅ DONE |
-| AH | 4.7 Test suite improvements | Multiple test files | |
+| AH | 4.7 Test suite improvements | Multiple test files | ✅ DONE |
 
 ### Wave 5: UI Critical Fixes (Parallel, after Wave 4)
 | Agent | Item | Scope | Status |
@@ -979,36 +979,36 @@ except SoftTimeLimitExceeded:
 | AI | 5.1 Move theme.js to <head> | `templates/base.html`, `templates/base_admin.html` | ✅ DONE |
 | AJ | 5.2 Extract duplicate inline scripts | `static/js/share-a11y.js`, templates | ✅ DONE |
 | AK | 5.3 ARIA labels on search inputs | `templates/admin/articles.html` | ✅ DONE |
-| AL | 5.4 Focus styles on filter buttons | `static/css/style.css` | |
+| AL | 5.4 Focus styles on filter buttons | `static/css/style.css` | ✅ DONE |
 | AM | 5.5 aria-haspopup on share buttons | `templates/partials/share_macro.html` | ✅ DONE |
-| AN | 5.6 Responsive admin tables | Multiple admin templates | ⚠️ PARTIAL |
-| AO | 5.7 Touch targets for mobile | `static/css/style.css` | |
+| AN | 5.6 Responsive admin tables | Multiple admin templates | ✅ DONE |
+| AO | 5.7 Touch targets for mobile | `static/css/style.css` | ✅ DONE |
 | AP | 5.8 role="alert" on error pages | `templates/errors/*.html` | ✅ DONE |
 
 ### Wave 6: UI Structural (Parallel, after Wave 5)
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
 | AQ | 6.1 Admin hamburger menu | `templates/base_admin.html`, CSS | ✅ DONE |
-| AR | 6.2 Admin nav active state | `templates/base_admin.html` | |
+| AR | 6.2 Admin nav active state | `templates/base_admin.html` | ✅ DONE |
 | AS | 6.3 HTMX loading indicators | Admin article templates | ✅ DONE |
 | AT | 6.4 Article detail loading state | `templates/partials/article_card.html`, `templates/base.html` | ✅ DONE |
-| AU | 6.5 Prevent hx-boost interception | `templates/base.html`, `templates/base_admin.html` | |
-| AV | 6.6 CSS TOC comment | `static/css/style.css` | |
+| AU | 6.5 Prevent hx-boost interception | `templates/base.html`, `templates/base_admin.html` | ✅ DONE |
+| AV | 6.6 CSS TOC comment | `static/css/style.css` | ✅ DONE |
 
 ### Wave 7: UI UX Enhancements (Parallel, after Wave 6)
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
 | AW | 7.1 Meta/OG tags | `templates/base.html`, `templates/article.html` | ✅ DONE |
-| AX | 7.2 Search keyboard shortcut | `static/js/app.js` | |
-| AY | 7.3 Pagination controls | Admin templates and routes | |
+| AX | 7.2 Search keyboard shortcut | `static/js/app.js` | ✅ DONE |
+| AY | 7.3 Pagination controls | Admin templates and routes | ✅ DONE |
 | AZ | 7.4 Form validation feedback | `templates/admin/article_edit.html` | ✅ DONE |
-| BA | 7.5 Sources link to dashboard | `templates/admin/dashboard.html` | |
+| BA | 7.5 Sources link to dashboard | `templates/admin/dashboard.html` | ✅ DONE |
 
 ### Wave 8: UI Polish (Parallel, after Wave 7)
 | Agent | Item | Scope | Status |
 |-------|------|-------|--------|
 | BB | 8.1 Favicon | `static/favicon.svg`, base templates | ✅ DONE |
-| BC | 8.2 Empty state illustrations | Multiple templates, CSS | |
+| BC | 8.2 Empty state illustrations | Multiple templates, CSS | ✅ DONE |
 | BD | 8.3 Replace checkbox hack with <details> | Share macro, CSS, JS | ✅ DONE |
 | BE | 8.4 Offline detection toast | `static/js/app.js`, CSS, base template | ✅ DONE |
 

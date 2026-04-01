@@ -250,7 +250,6 @@ All pending improvements are tracked in `plan.md`. It is organized into 10 waves
 
 ### Known issues (to be fixed)
 
-- **Config reload doesn't invalidate unified config singleton**: `routes/admin/api.py:reload_config` calls `clear_provider_cache()`, `clear_app_cache()`, and `get_config_cache().invalidate_all()` — but never `reset_config()`. After config reload, `get_config()` returns stale `AppConfig`. See plan.md item 1.1.
 - **Admin base template missing HTMX**: `templates/base_admin.html` uses `hx-*` attributes extensively but does not load `htmx.min.js`. Admin HTMX features may not work if child templates don't load it independently. See plan.md item 6.9.
 
 ### Large refactoring strategy

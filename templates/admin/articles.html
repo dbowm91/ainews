@@ -23,24 +23,26 @@
              hx-target="#articles-table"
              hx-include="[name='status'],[name='category']"
              hx-indicator="#articles-table-spinner">
-      <div class="filter-bar" style="margin-top:0.5rem">
-        <select name="status" class="filter-select"
+      <div class="filter-bar mt-05">
+        <select name="status" class="filter-select" aria-label="Filter by status"
                 hx-get="/admin/articles"
                 hx-trigger="change"
                 hx-target="#articles-table"
                 hx-include="[name='q'],[name='category']"
-                hx-indicator="#articles-table-spinner">
+                hx-indicator="#articles-table-spinner"
+                hx-push-url="true">
           <option value="">all statuses</option>
           {% for s in ['pending', 'researching', 'writing', 'editing', 'review', 'done', 'skipped'] %}
             <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
-        <select name="category" class="filter-select"
+        <select name="category" class="filter-select" aria-label="Filter by category"
                 hx-get="/admin/articles"
                 hx-trigger="change"
                 hx-target="#articles-table"
                 hx-include="[name='q'],[name='status']"
-                hx-indicator="#articles-table-spinner">
+                hx-indicator="#articles-table-spinner"
+                hx-push-url="true">
           <option value="">all categories</option>
           {% for c in categories %}
             <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>

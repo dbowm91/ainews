@@ -26,6 +26,7 @@ def pipelines():
         running=running,
         has_next=has_next,
         next_page=next_page,
+        page=page,
         run_type=run_type,
     )
 
@@ -101,9 +102,22 @@ def trigger_crawl():
         except Exception:
             db.session.rollback()
             raise
+
+        message = "Crawl started"
+        if request.headers.get("HX-Request"):
+            return (
+                f'<div class="dash-action"><span class="health-dot green blink"></span> {message}</div>',
+                202,
+            )
         return jsonify(
-            {"message": "Crawl started", "task_id": result.id, "run_id": run.id}
+            {"message": message, "task_id": result.id, "run_id": run.id}
         ), 202
-    except Exception:
+    except Exception as e:
         current_app.logger.exception("Failed to trigger crawl")
-        return jsonify({"message": "Failed to start crawl"}), 503
+        message = f"Failed to start crawl: {str(e)[:200]}"
+        if request.headers.get("HX-Request"):
+            return (
+                f'<div class="dash-action"><span class="health-dot red"></span> {message}</div>',
+                503,
+            )
+        return jsonify({"message": message}), 503

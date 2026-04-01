@@ -10,6 +10,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
+from constants import MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,8 +36,8 @@ def _safe_int(key: str, default: int) -> int:
 class PipelineConfig:
     """Pipeline-related configuration."""
 
-    max_stage_retries: int = 3
-    max_total_retries: int = 10
+    max_stage_retries: int = MAX_STAGE_RETRIES
+    max_total_retries: int = MAX_TOTAL_RETRIES
     stuck_threshold_minutes: int = 60
     min_content_length: int = 200
 

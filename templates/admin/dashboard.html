@@ -1,4 +1,5 @@
 {% extends "base_admin.html" %}
+{% from "macros/badges.html" import pipeline_badge, impact_score %}
 
 {% block title %}ainews// admin — dashboard{% endblock %}
 
@@ -26,12 +27,12 @@
           <a href="/admin/pipelines" class="dash-link">view &rarr;</a>
         </div>
       {% endif %}
-      <form method="POST" action="/admin/trigger-crawl" class="dash-action">
+      <form method="POST" action="/admin/trigger-crawl" class="dash-action" hx-post="/admin/trigger-crawl" hx-swap="outerHTML" hx-target="closest .dash-action">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn-primary">trigger crawl now</button>
+        <button type="submit" class="btn-primary" hx-disable="true">trigger crawl now</button>
       </form>
       <a href="/admin/pipelines" class="dash-link">pipelines &rarr;</a>
-      <a href="/admin/newsletters" class="dash-link" style="margin-left:1rem">newsletters &rarr;</a>
+      <a href="/admin/newsletters" class="dash-link ml-1">newsletters &rarr;</a>
     </section>
 
     {# ── System Health ── #}
@@ -91,7 +92,7 @@
         {% endfor %}
       </div>
       <a href="/admin/subscribers" class="dash-link">manage subscribers &rarr;</a>
-      <a href="/admin/metrics" class="dash-link" style="margin-left:1rem">metrics &rarr;</a>
+      <a href="/admin/metrics" class="dash-link ml-1">metrics &rarr;</a>
     </section>
   </div>
 
@@ -112,23 +113,13 @@
               </a>
             </td>
             <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
-            <td>
-              <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %}">
-                {{ article.pipeline_status }}
-              </span>
-            </td>
+            <td>{{ pipeline_badge(article.pipeline_status) }}</td>
             <td>
               {% if article.selector_result is mapping and article.selector_result.score is defined %}
                 {{ article.selector_result.score }}/10
               {% endif %}
             </td>
-            <td>
-              {% if article.impact_score %}
-                <span class="impact-score impact-{% if article.impact_score >= 75 %}high{% elif article.impact_score >= 50 %}mid{% elif article.impact_score >= 25 %}low{% else %}minor{% endif %}">
-                  {{ article.impact_score }}
-                </span>
-              {% endif %}
-            </td>
+            <td>{{ impact_score(article.impact_score) }}</td>
             <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
           </tr>
         {% endfor %}

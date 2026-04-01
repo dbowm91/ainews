@@ -221,7 +221,9 @@ def require_auth(f):
         # Log admin access with context
         request_id = get_request_id()
         logger.info(
-            f"Admin access: {request.method} {request.path}",
+            "Admin access: %s %s",
+            request.method,
+            request.path,
             extra={
                 "user": "admin",
                 "ip": request.remote_addr,

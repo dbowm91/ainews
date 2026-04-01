@@ -31,6 +31,10 @@ def _get_cached_tag_names() -> list[str]:
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=30,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def edit_article(self, article_id: int, run_id=None):
     from extensions import db
@@ -69,8 +73,9 @@ def edit_article(self, article_id: int, run_id=None):
                 max_tokens=max_tokens,
             )
 
-        article.final_article = result.model_dump_json()
-        article.original_ai_article = result.model_dump_json()
+        result_json = result.model_dump_json()
+        article.final_article = result_json
+        article.original_ai_article = result_json
 
         _assign_tags(article, result.tags or [], db)
 

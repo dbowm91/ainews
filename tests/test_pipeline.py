@@ -654,6 +654,109 @@ class TestRunStage:
             for p in patches.values():
                 p.stop()
 
+    def test_releases_limiter_when_lock_fails(self):
+        """When limiter succeeds but lock fails, limiter.release() must be called."""
+        from tasks.pipeline import run_stage
+
+        patches, mocks = self._mock_run_stage_deps()
+        try:
+            rc = MagicMock()
+            rc.enabled = True
+            rc.provider = "ollama"
+            rc.concurrency = 4
+            rc.timeout_seconds = 300
+            mocks["get_role_config"].return_value = rc
+
+            limiter = MagicMock()
+            limiter.acquire.return_value = True
+            mocks["get_limiter"].return_value = limiter
+
+            redis_mock = MagicMock()
+            redis_mock.set.return_value = False
+            mocks["get_redis"].return_value = redis_mock
+
+            work_fn = MagicMock()
+            task_self = MagicMock()
+            task_self.request.id = "task-999"
+
+            result = run_stage("writer", 1, work_fn, task_self)
+
+            assert result == {
+                "article_id": 1,
+                "skipped": True,
+                "reason": "stage_locked",
+            }
+            work_fn.assert_not_called()
+            limiter.release.assert_called_once()
+        finally:
+            for p in patches.values():
+                p.stop()
+
+
+class TestDispatchNextCache:
+    """Test _task_fn_cache population and clear_task_fn_cache()."""
+
+    @staticmethod
+    def _get_cache():
+        import tasks.pipeline as tp
+
+        return tp._task_fn_cache
+
+    def test_dispatch_populates_cache(self):
+        from tasks.pipeline import _dispatch_next, clear_task_fn_cache
+
+        clear_task_fn_cache()
+        cache = self._get_cache()
+        assert len(cache) == 0
+
+        with patch("tasks.select.select_article") as mock_task:
+            _dispatch_next(1, next_status="pending")
+
+        assert "pending" in cache
+        mock_task.delay.assert_called_once_with(1, run_id=None)
+
+    def test_clear_empties_cache(self):
+        from tasks.pipeline import clear_task_fn_cache
+
+        cache = self._get_cache()
+        cache["pending"] = ("mod", "fn")
+        cache["selected"] = ("mod2", "fn2")
+        assert len(cache) == 2
+
+        clear_task_fn_cache()
+
+        assert len(self._get_cache()) == 0
+
+    def test_dispatch_reuses_cached_entry(self):
+        from tasks.pipeline import _dispatch_next, clear_task_fn_cache
+
+        clear_task_fn_cache()
+
+        with patch("tasks.research.research_article") as mock_task:
+            _dispatch_next(1, next_status="selected")
+            _dispatch_next(2, next_status="selected")
+
+        assert len(self._get_cache()) == 1
+        assert mock_task.delay.call_count == 2
+
+    def test_clear_allows_repopulation(self):
+        from tasks.pipeline import _dispatch_next, clear_task_fn_cache
+
+        clear_task_fn_cache()
+
+        with patch("tasks.write.write_article"):
+            _dispatch_next(1, next_status="writing")
+
+        assert "writing" in self._get_cache()
+
+        clear_task_fn_cache()
+        assert len(self._get_cache()) == 0
+
+        with patch("tasks.write.write_article"):
+            _dispatch_next(2, next_status="writing")
+
+        assert "writing" in self._get_cache()
+
 
 class TestRetryBudget:
     """Test global retry budget prevents infinite retries."""

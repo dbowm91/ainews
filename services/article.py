@@ -7,6 +7,8 @@ For pagination and FTS search, see services/pagination.py.
 import logging
 from typing import Optional
 
+from sqlalchemy import Column
+
 from extensions import db
 from models import Article, ArticleMetric
 from sqlalchemy.orm import joinedload
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 TITLE_SIMILARITY_THRESHOLD = 0.5
 
 
-def track_metric(article_id: int, column) -> None:
+def track_metric(article_id: int, column: Column) -> None:
     """Atomically increment a metric column, creating the row if needed.
 
     Uses upsert approach with a single INSERT + ON CONFLICT DO UPDATE
@@ -108,9 +110,10 @@ def get_articles_paginated(
 
 
 def create_article_version(
-    article,
+    article: Article,
     change_reason: str = "edit",
     changed_by: str = "admin",
+    source_fields: dict | None = None,
 ) -> None:
     """Create a version snapshot of an article before changes.
 
@@ -122,6 +125,7 @@ def create_article_version(
         article: Article model instance
         change_reason: Reason for the version (e.g., "admin_edit", "pipeline_edit", "rollback")
         changed_by: Who made the change (e.g., "admin", "pipeline:writer")
+        source_fields: Optional dict of source-specific fields to capture
     """
     from models import ArticleVersion
     from sqlalchemy.exc import IntegrityError
@@ -140,6 +144,7 @@ def create_article_version(
             version_number=max_version + 1,
             final_article=article.final_article,
             original_ai_article=article.original_ai_article,
+            source_fields=source_fields,
             change_reason=change_reason,
             changed_by=changed_by,
         )
@@ -189,7 +194,7 @@ def _title_word_set(title: str | None) -> set[str]:
     return {w for w in words if len(w) > 2}
 
 
-def jaccard_similarity(set_a: set, set_b: set) -> float:
+def jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
     """Compute Jaccard similarity between two sets.
 
     Returns:

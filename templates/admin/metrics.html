@@ -14,11 +14,16 @@
 <div class="dashboard">
   <h1 class="dashboard-title">metrics</h1>
 
-  <div class="filter-bar" style="margin-bottom:1rem">
-    <a href="/admin/metrics?days=7" class="filter-btn {% if days == 7 %}active{% endif %}">7 days</a>
-    <a href="/admin/metrics?days=30" class="filter-btn {% if days == 30 %}active{% endif %}">30 days</a>
-    <a href="/admin/metrics?days=90" class="filter-btn {% if days == 90 %}active{% endif %}">90 days</a>
-    <a href="/admin/metrics?days=9999" class="filter-btn {% if days > 365 %}active{% endif %}">all time</a>
+  <div class="filter-bar mb-1">
+    <a href="/admin/metrics?days=7&limit={{ limit }}" class="filter-btn {% if days == 7 %}active{% endif %}">7 days</a>
+    <a href="/admin/metrics?days=30&limit={{ limit }}" class="filter-btn {% if days == 30 %}active{% endif %}">30 days</a>
+    <a href="/admin/metrics?days=90&limit={{ limit }}" class="filter-btn {% if days == 90 %}active{% endif %}">90 days</a>
+    <a href="/admin/metrics?days=9999&limit={{ limit }}" class="filter-btn {% if days > 365 %}active{% endif %}">all time</a>
+    <span class="ml-1 opacity-06">|</span>
+    <span class="ml-1 opacity-06">show</span>
+    <a href="/admin/metrics?days={{ days }}&limit=10" class="filter-btn {% if limit == 10 %}active{% endif %}">10</a>
+    <a href="/admin/metrics?days={{ days }}&limit=20" class="filter-btn {% if limit == 20 %}active{% endif %}">20</a>
+    <a href="/admin/metrics?days={{ days }}&limit=50" class="filter-btn {% if limit == 50 %}active{% endif %}">50</a>
   </div>
 
   <div class="dashboard-grid">

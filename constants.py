@@ -1,5 +1,9 @@
 """Shared constants for pagination and other configuration values."""
 
+# Pipeline retry limits (single source of truth)
+MAX_STAGE_RETRIES = 3
+MAX_TOTAL_RETRIES = 10
+
 # Pagination constants
 PER_PAGE_PUBLIC = 20
 PER_PAGE_ADMIN_ARTICLES = 25

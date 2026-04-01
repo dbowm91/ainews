@@ -85,3 +85,42 @@ class TestTrackMetric:
                 article_id=article_with_source
             ).first()
             assert metric.page_loads == 20
+
+    def test_concurrent_upsert_increments_correctly(self, app, article_with_source):
+        """Simulate concurrent-style increments and verify each one is persisted."""
+        with app.app_context():
+            for i in range(1, 11):
+                track_metric(article_with_source, ArticleMetric.page_loads)
+                db.session.expire_all()
+                metric = ArticleMetric.query.filter_by(
+                    article_id=article_with_source
+                ).first()
+                assert metric.page_loads == i
+
+    def test_interleaved_metric_columns_no_crosstalk(self, app, article_with_source):
+        """Interleaved increments on different columns stay independent."""
+        with app.app_context():
+            columns = [
+                ArticleMetric.page_loads,
+                ArticleMetric.share_button_clicks,
+                ArticleMetric.share_link_views,
+            ]
+            for col in columns:
+                for _ in range(5):
+                    track_metric(article_with_source, col)
+            metric = ArticleMetric.query.filter_by(
+                article_id=article_with_source
+            ).first()
+            assert metric.page_loads == 5
+            assert metric.share_button_clicks == 5
+            assert metric.share_link_views == 5
+
+    def test_upsert_creates_single_row_per_article(self, app, article_with_source):
+        """Multiple calls produce exactly one ArticleMetric row."""
+        with app.app_context():
+            for _ in range(5):
+                track_metric(article_with_source, ArticleMetric.page_loads)
+            count = ArticleMetric.query.filter_by(
+                article_id=article_with_source
+            ).count()
+            assert count == 1

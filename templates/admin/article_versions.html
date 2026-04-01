@@ -18,7 +18,7 @@
 <div class="dashboard">
   <div class="dashboard-header">
     <h1 class="dashboard-title">version history</h1>
-    <a href="/admin/articles/{{ article.id }}/edit" class="btn-primary" style="text-decoration:none">&larr; back to edit</a>
+    <a href="/admin/articles/{{ article.id }}/edit" class="btn-primary no-decoration">&larr; back to edit</a>
   </div>
 
   <section class="dash-card dash-card-full">
@@ -40,12 +40,11 @@
                 <td>{{ v.changed_by or 'unknown' }}</td>
                 <td>{{ v.created_at.strftime('%b %d %Y %H:%M') if v.created_at }}</td>
                 <td class="actions-cell">
-                  <form method="POST" action="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback" style="display:inline"
+                  <form method="POST" action="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback" class="inline"
                         hx-post="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback"
                         hx-confirm="Rollback to version {{ v.version_number }}? Current content will be saved as a new version first."
                         hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.75rem">rollback</button>
+                    <button type="submit" class="btn-secondary btn-sm">rollback</button>
                   </form>
                 </td>
               </tr>

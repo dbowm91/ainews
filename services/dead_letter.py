@@ -4,11 +4,12 @@ Provides structured dead-letter handling with metadata tracking,
 separate from the task-level _dead_letter function.
 """
 
-import json
 import logging
 from typing import Optional
 
 from sqlalchemy.exc import SQLAlchemyError
+
+from services.article_fallback import build_fallback_article_json
 
 logger = logging.getLogger(__name__)
 
@@ -84,22 +85,7 @@ def _apply_dead_letter_fallback(article, reason: str) -> None:
         article.original_ai_article = article.draft_article
         return
 
-    fallback = json.dumps(
-        {
-            "headline": article.original_title or "Untitled",
-            "tldr": (article.extracted_text or "")[:200],
-            "why_it_matters": "",
-            "body": article.extracted_text or article.original_title or "",
-            "key_points": [],
-            "what_to_watch": "",
-            "citations": [],
-            "original_attribution": {
-                "source": article.original_url or "",
-                "author": article.original_author or "",
-            },
-            "tags": [],
-        }
-    )
+    fallback = build_fallback_article_json(article)
     article.final_article = fallback
     article.original_ai_article = fallback
 

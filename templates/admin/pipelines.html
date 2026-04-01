@@ -1,4 +1,5 @@
 {% extends "base_admin.html" %}
+{% from "partials/pagination.html" import pagination_nav %}
 
 {% block title %}ainews// admin — pipelines{% endblock %}
 
@@ -90,8 +91,8 @@
         </tbody>
       </table>
     </div>
-    {% if has_next %}
-        <a href="/admin/pipelines?page={{ next_page }}{% if run_type %}&type={{ run_type }}{% endif %}" class="dash-link">next page &rarr;</a>
+    {% if has_next or page > 1 %}
+        {{ pagination_nav(page, has_next, next_page, base_url="/admin/pipelines", query_params={"type": run_type}) }}
       {% endif %}
     {% else %}
       <p class="empty-state">no pipeline runs yet</p>

@@ -54,7 +54,7 @@ class TestGetStageStats:
             stats = get_stage_stats("crawl", minutes=5)
         assert stats["success_count"] == 0
         assert stats["failure_count"] == 0
-        assert stats["success_rate"] == 100.0
+        assert stats["success_rate"] is None
 
     def test_returns_defaults_on_redis_error(self):
         bad_redis = MagicMock()

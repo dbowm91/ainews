@@ -1,16 +1,15 @@
 """Shared pipeline helpers used across stage modules."""
 
 import json
+import time
 
 from billiard.exceptions import SoftTimeLimitExceeded
+from services.article_fallback import build_fallback_article_json
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
-from constants import PipelineStatus
+from constants import PipelineStatus, MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
 
 logger = get_task_logger(__name__)
-
-MAX_STAGE_RETRIES = 3
-MAX_TOTAL_RETRIES = 10
 
 
 def _get_max_stage_retries() -> int:
@@ -138,22 +137,7 @@ def _build_fallback_article(article) -> str:
     Returns:
         JSON-encoded string with headline, tldr, body, and metadata fields.
     """
-    return json.dumps(
-        {
-            "headline": article.original_title or "Untitled",
-            "tldr": (article.extracted_text or "")[:200],
-            "why_it_matters": "",
-            "body": article.extracted_text or article.original_title or "",
-            "key_points": [],
-            "what_to_watch": "",
-            "citations": [],
-            "original_attribution": {
-                "source": article.original_url or "",
-                "author": article.original_author or "",
-            },
-            "tags": [],
-        }
-    )
+    return build_fallback_article_json(article)
 
 
 def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
@@ -252,6 +236,24 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
     _apply_degrade_config(article, stage_config, run_id)
 
 
+def _degrade_research(article):
+    article.research_brief = json.dumps(
+        {
+            "source_summary": (article.extracted_text or article.original_title or "")[
+                :500
+            ],
+            "key_claims": [],
+            "direct_quotes": [],
+            "external_sources": [],
+            "related_articles": [],
+            "context_notes": "Research stage failed; using source text only.",
+            "newsworthiness": "Auto-generated after research failure.",
+            "impact_score": 30,
+        }
+    )
+    article.impact_score = 30
+
+
 _STAGE_DEGRADE_MAP = {
     "select": {
         "next_status": PipelineStatus.RESEARCHING,
@@ -265,27 +267,7 @@ _STAGE_DEGRADE_MAP = {
     "research": {
         "next_status": PipelineStatus.WRITING,
         "log_message": "Degraded: skipped research for %s",
-        "set_fields": lambda article: (
-            setattr(
-                article,
-                "research_brief",
-                json.dumps(
-                    {
-                        "source_summary": (
-                            article.extracted_text or article.original_title or ""
-                        )[:500],
-                        "key_claims": [],
-                        "direct_quotes": [],
-                        "external_sources": [],
-                        "related_articles": [],
-                        "context_notes": "Research stage failed; using source text only.",
-                        "newsworthiness": "Auto-generated after research failure.",
-                        "impact_score": 30,
-                    }
-                ),
-            ),
-            setattr(article, "impact_score", 30),
-        ),
+        "set_fields": _degrade_research,
     },
     "write": {
         "next_status": PipelineStatus.EDITING,
@@ -313,7 +295,7 @@ def _apply_degrade_config(article, config: dict, run_id):
     if run_id:
         _log_pipeline(
             run_id,
-            config["next_status"].replace("ing", ""),
+            _STAGE_STATUS_MAP.get(config["next_status"], config["next_status"]),
             "warning",
             config["log_message"],
             article_id=article.id,
@@ -650,6 +632,7 @@ def run_stage(
         record_provider_failure,
     )
     from services.pipeline_monitor import record_stage_result
+    from services.metrics import get_metrics
 
     rc = get_role_config(stage)
     if not rc.enabled:
@@ -671,6 +654,7 @@ def run_stage(
     )
 
     model = None
+    t0 = time.monotonic()
     try:
         if not lock_acquired:
             logger.info(
@@ -690,11 +674,21 @@ def run_stage(
         article.retry_count = 0
         article.last_error = None
         record_stage_result(stage, success=True, run_id=run_id)
+        get_metrics().histogram_observe(
+            "pipeline.stage_duration_seconds",
+            time.monotonic() - t0,
+            labels={"stage": stage, "success": "true"},
+        )
 
         return result
     except SoftTimeLimitExceeded:
         db.session.rollback()
         record_stage_result(stage, success=False, run_id=run_id)
+        get_metrics().histogram_observe(
+            "pipeline.stage_duration_seconds",
+            time.monotonic() - t0,
+            labels={"stage": stage, "success": "false"},
+        )
         exc_article = db.session.get(Article, article_id)
         if exc_article:
             exc_article.last_error = "%s: soft time limit exceeded" % stage
@@ -703,6 +697,11 @@ def run_stage(
         db.session.rollback()
         record_provider_failure(rc.provider, model)
         record_stage_result(stage, success=False, run_id=run_id)
+        get_metrics().histogram_observe(
+            "pipeline.stage_duration_seconds",
+            time.monotonic() - t0,
+            labels={"stage": stage, "success": "false"},
+        )
         exc_article = db.session.get(Article, article_id)
         if exc_article and _handle_stage_failure(exc_article, stage, e, run_id=run_id):
             return {"article_id": article_id, "result": "degraded"}

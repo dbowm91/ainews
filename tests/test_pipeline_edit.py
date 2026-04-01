@@ -35,6 +35,7 @@ class TestEditStage:
             )
 
             from tasks.pipeline import run_stage
+            from tests.helpers.pipeline_mocks import setup_pipeline_mocks
 
             edited = self._make_edited_article_json()
             work_result = {
@@ -43,7 +44,7 @@ class TestEditStage:
             }
             work_fn = MagicMock(return_value=work_result)
 
-            patches, mocks = self._setup_mocks()
+            patches, mocks = setup_pipeline_mocks()
             try:
                 result = run_stage("editor", article.id, work_fn, MagicMock())
 
@@ -111,49 +112,3 @@ class TestEditStage:
                     _degrade_and_advance(article, "edit")
 
             assert article.pipeline_status == "review"
-
-    @staticmethod
-    def _setup_mocks():
-        from unittest.mock import MagicMock
-
-        patches = {
-            "Article": patch("models.Article"),
-            "db": patch("extensions.db"),
-            "get_role_config": patch("schemas.pipeline.get_role_config"),
-            "get_provider_for_role": patch("services.llm.get_provider_for_role"),
-            "record_success": patch("services.llm.record_provider_success"),
-            "record_failure": patch("services.llm.record_provider_failure"),
-            "get_limiter": patch("services.limiter.get_limiter"),
-            "get_redis": patch("extensions.get_redis"),
-        }
-        mocks = {}
-        for name, p in patches.items():
-            mocks[name] = p.start()
-
-        rc = MagicMock()
-        rc.enabled = True
-        rc.provider = "ollama"
-        rc.concurrency = 4
-        rc.timeout_seconds = 300
-        mocks["get_role_config"].return_value = rc
-
-        article = MagicMock()
-        article.retry_count = 0
-        mocks["db"].session.get.return_value = article
-
-        mocks["get_provider_for_role"].return_value = (
-            MagicMock(),
-            "qwen3:8b",
-            2048,
-        )
-
-        limiter = MagicMock()
-        limiter.acquire.return_value = True
-        mocks["get_limiter"].return_value = limiter
-
-        redis_mock = MagicMock()
-        redis_mock.set.return_value = True
-        redis_mock.get.return_value = b"task-test"
-        mocks["get_redis"].return_value = redis_mock
-
-        return patches, mocks

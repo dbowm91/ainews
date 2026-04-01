@@ -17,18 +17,57 @@
   </div>
 
   <section class="dash-card dash-card-full">
+    <details class="share-details">
+      <summary class="btn-primary inline-block cursor-pointer mb-1">+ add source</summary>
+      <div id="add-source-form">
+        <form hx-post="/admin/sources/add"
+              hx-target="#source-add-result"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful)this.reset()"
+              class="edit-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label for="source-name">name</label>
+              <input type="text" id="source-name" name="name" class="form-input" required>
+            </div>
+            <div class="form-group form-group-half">
+              <label for="source-type">source type</label>
+              <select id="source-type" name="source_type" class="form-select" required>
+                <option value="rss">rss</option>
+                <option value="web">web</option>
+                <option value="api">api</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label for="source-url">source url</label>
+              <input type="url" id="source-url" name="source_url" class="form-input" placeholder="https://...">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">add source</button>
+          </div>
+        </form>
+        <div id="source-add-result"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="dash-card dash-card-full">
     {% if sources %}
       <div class="table-responsive">
       <table class="dash-table" aria-label="Sources list">
         <thead>
           <tr><th>name</th><th>type</th><th>status</th><th>failures</th><th>last success</th><th>last error</th><th>actions</th></tr>
         </thead>
-        <tbody>
+        <tbody id="sources-body">
           {% for s in sources %}
             <tr>
               <td>
                 <strong>{{ s.name }}</strong>
-                <br><small style="color: var(--text-muted)">{{ s.source_key }}</small>
+                <br><small class="text-muted">{{ s.source_key }}</small>
               </td>
               <td>{{ s.source_type }}</td>
               <td>
@@ -44,15 +83,15 @@
                 {% if s.consecutive_failures > 0 %}
                   <span class="{% if s.consecutive_failures >= 5 %}text-danger{% endif %}">{{ s.consecutive_failures }}</span>
                 {% else %}
-                  <span style="color: var(--text-muted)">0</span>
+                  <span class="text-muted">0</span>
                 {% endif %}
               </td>
               <td>{{ s.last_success_at.strftime('%b %d %H:%M') if s.last_success_at else '—' }}</td>
               <td>
                 {% if s.last_error %}
-                  <small title="{{ s.last_error }}" style="color: var(--text-muted)">{{ s.last_error[:80] }}{% if s.last_error|length > 80 %}...{% endif %}</small>
+                  <small title="{{ s.last_error }}" class="text-muted">{{ s.last_error[:80] }}{% if s.last_error|length > 80 %}...{% endif %}</small>
                 {% else %}
-                  <span style="color: var(--text-muted)">—</span>
+                  <span class="text-muted">—</span>
                 {% endif %}
               </td>
               <td>

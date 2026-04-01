@@ -159,7 +159,6 @@ def prometheus_metrics() -> Response:
 def pipeline_stats() -> Response:
     """Get pipeline stage success/failure statistics."""
     from services.pipeline_monitor import get_all_stages_stats
-    from flask import request
 
     minutes = request.args.get("minutes", 15, type=int)
     # Limit to reasonable range

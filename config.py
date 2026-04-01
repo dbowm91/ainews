@@ -3,6 +3,10 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+from constants import (
+    MAX_STAGE_RETRIES as _DEFAULT_STAGE_RETRIES,
+    MAX_TOTAL_RETRIES as _DEFAULT_TOTAL_RETRIES,
+)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,8 +45,8 @@ class Config:
     MAX_CONTENT_LENGTH = 64 * 1024  # 64KB
 
     # Pipeline retry limits
-    MAX_STAGE_RETRIES = _safe_int("MAX_STAGE_RETRIES", "3")
-    MAX_TOTAL_RETRIES = _safe_int("MAX_TOTAL_RETRIES", "10")
+    MAX_STAGE_RETRIES = _safe_int("MAX_STAGE_RETRIES", str(_DEFAULT_STAGE_RETRIES))
+    MAX_TOTAL_RETRIES = _safe_int("MAX_TOTAL_RETRIES", str(_DEFAULT_TOTAL_RETRIES))
 
     # Source health
     MAX_CONSECUTIVE_FAILURES = _safe_int("MAX_CONSECUTIVE_FAILURES", "10")

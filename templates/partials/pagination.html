@@ -1,0 +1,29 @@
+{% macro pagination_nav(page, has_next, next_page, total_count=None, per_page=20, base_url="/", query_params={}) %}
+{% set qs = "" %}
+{% for k, v in query_params.items() %}
+  {% if v %}
+    {% set qs = qs ~ "&" ~ k ~ "=" ~ v %}
+  {% endif %}
+{% endfor %}
+<nav class="pagination" aria-label="Pagination">
+  {% if page > 1 %}
+    <a href="{{ base_url }}?page={{ page - 1 }}{{ qs }}" class="pag-link">&larr; prev</a>
+  {% else %}
+    <span class="pag-link pag-disabled">&larr; prev</span>
+  {% endif %}
+  {% if total_count is not none %}
+    <span class="pag-info">
+      {% set start = (page - 1) * per_page + 1 %}
+      {% set end = [start + per_page - 1, total_count] | min %}
+      {{ start }}–{{ end }} of {{ total_count }}
+    </span>
+  {% else %}
+    <span class="pag-info">page {{ page }}</span>
+  {% endif %}
+  {% if has_next %}
+    <a href="{{ base_url }}?page={{ next_page }}{{ qs }}" class="pag-link">next &rarr;</a>
+  {% else %}
+    <span class="pag-link pag-disabled">next &rarr;</span>
+  {% endif %}
+</nav>
+{% endmacro %}

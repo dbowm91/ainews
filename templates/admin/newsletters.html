@@ -1,4 +1,5 @@
 {% extends "base_admin.html" %}
+{% from "partials/pagination.html" import pagination_nav %}
 
 {% block title %}ainews// admin — newsletters{% endblock %}
 
@@ -15,7 +16,7 @@
   <div class="dashboard-header">
     <h1 class="dashboard-title">newsletters</h1>
     <div class="header-actions">
-      <form method="POST" action="/admin/newsletters/generate" style="display:inline">
+      <form method="POST" action="/admin/newsletters/generate" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-primary">generate now</button>
       </form>
@@ -23,14 +24,17 @@
   </div>
 
   {# ── Dry Run ── #}
-  <section class="dash-card dash-card-full" style="margin-bottom:1rem">
+  <section class="dash-card dash-card-full mb-1">
     <h2 class="dash-card-title">dry run</h2>
     <p class="form-hint">Generate newsletters and send only to a test email address instead of the full mailing list.</p>
-    <form method="POST" action="/admin/newsletters/dry-run" class="dry-run-form" id="dry-run-form">
+    <form hx-post="/admin/newsletters/dry-run" hx-target="#dry-run-result" hx-swap="innerHTML" class="dry-run-form" id="dry-run-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-row">
         <input type="email" name="test_email" placeholder="test@example.com" class="form-input" required>
-        <button type="submit" class="btn-secondary">dry run</button>
+        <button type="submit" class="btn-secondary">
+          dry run
+          <span class="htmx-indicator spinner" aria-label="Sending...">...</span>
+        </button>
       </div>
     </form>
     <div id="dry-run-result"></div>
@@ -60,14 +64,12 @@
         </tbody>
       </table>
       </div>
-      {% if has_next %}
-        <a href="/admin/newsletters?page={{ next_page }}" class="dash-link">next page &rarr;</a>
+      {% if has_next or page > 1 %}
+        {{ pagination_nav(page, has_next, next_page, base_url="/admin/newsletters") }}
       {% endif %}
     {% else %}
       <p class="empty-state">no newsletters generated yet</p>
     {% endif %}
   </section>
 </div>
-
-<script src="{{ url_for('static', filename='js/newsletters.js') }}"></script>
 {% endblock %}

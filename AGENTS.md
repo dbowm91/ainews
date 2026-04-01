@@ -246,11 +246,20 @@ System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each
 
 ### Improvement plan
 
-All pending improvements are tracked in `plan.md`. It is organized into 10 waves (bugs → security → performance → accessibility/UX → code quality/CSS → template DRY → pipeline resilience → testing → documentation). Each wave contains independent tasks designed for parallel execution with sub-agents. Check `plan.md` for the current status, execution strategy, and parallelization guidance before starting work.
+All improvements tracked in `plan.md` are now complete (93/93 items). The plan covers bugs, security, performance, accessibility, code quality, template DRY, pipeline resilience, testing, and documentation. See `plan.md` for full history and details.
 
-### Known issues (to be fixed)
+### Jinja2 macro conventions
 
-- **Admin base template missing HTMX**: `templates/base_admin.html` uses `hx-*` attributes extensively but does not load `htmx.min.js`. Admin HTMX features may not work if child templates don't load it independently. See plan.md item 6.9.
+Shared macros live in `templates/macros/` (e.g., `badges.html` for `pipeline_badge` and `impact_score`). Shared partials live in `templates/partials/` (e.g., `pagination.html` for `pagination_nav`). Import with `{% from "macros/badges.html" import pipeline_badge %}` or `{% from "partials/pagination.html" import pagination_nav %}`.
+
+### CSS utility classes
+
+Common utility classes are defined at the bottom of `static/css/style.css` in the Utilities section. Use these instead of inline `style=` attributes:
+- `.inline`, `.inline-block` — display utilities
+- `.ml-05`, `.ml-1`, `.mt-05`, `.mt-15`, `.mb-1` — spacing utilities
+- `.text-muted`, `.text-danger` — text color utilities
+- `.no-decoration`, `.cursor-pointer` — behavior utilities
+- `.btn-sm` — small button variant
 
 ### Large refactoring strategy
 

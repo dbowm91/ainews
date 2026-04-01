@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from extensions import db
 from models import Article, Source, PipelineRun
@@ -157,7 +157,7 @@ def get_or_create_source(
     return source
 
 
-def update_source_crawl_time(source: Optional[Source], cfg) -> Source:
+def update_source_crawl_time(source: Optional[Source], cfg: Any) -> Source:
     """Update or create source record with current crawl time.
 
     Args:

@@ -12,7 +12,7 @@
                 {{ article.original_title[:80] if article.original_title }}
               </a>
               {% if article._fa and article._fa.tldr %}
-                <br><small style="color:var(--text-muted)">{{ article._fa.tldr[:120] }}</small>
+                <br><small class="text-muted">{{ article._fa.tldr[:120] }}</small>
               {% endif %}
             </td>
             <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
@@ -26,21 +26,19 @@
             <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
             <td class="actions-cell">
               <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
-              <form method="POST" action="/admin/review/{{ article.id }}/approve" style="display:inline"
+              <form method="POST" action="/admin/review/{{ article.id }}/approve" class="inline"
                     hx-post="/admin/review/{{ article.id }}/approve"
                     hx-target="closest tr"
                     hx-swap="outerHTML"
                     hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn-primary" style="padding:0.25rem 0.5rem;font-size:0.75rem">approve</button>
+                <button type="submit" class="btn-primary btn-sm">approve</button>
               </form>
-              <form method="POST" action="/admin/review/{{ article.id }}/reject" style="display:inline"
+              <form method="POST" action="/admin/review/{{ article.id }}/reject" class="inline"
                     hx-post="/admin/review/{{ article.id }}/reject"
                     hx-confirm="Reject this article?"
                     hx-target="closest tr"
                     hx-swap="outerHTML"
                     hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn-delete">reject</button>
               </form>
             </td>

@@ -76,6 +76,7 @@ def newsletters():
         newsletters=newsletters,
         has_next=has_next,
         next_page=next_page,
+        page=page,
     )
 
 
@@ -112,19 +113,32 @@ def newsletter_dry_run():
     test_email = request.form.get("test_email", "").strip().lower()
     from services.utils import is_valid_email
 
+    is_htmx = request.headers.get("HX-Request")
+
     if not is_valid_email(test_email):
+        if is_htmx:
+            return (
+                '<span class="health-dot red"></span> <span class="form-hint">Invalid email address</span>',
+                400,
+            )
         return jsonify({"message": "Invalid email address"}), 400
 
     try:
         result = generate_daily_newsletters.delay(dry_run_email=test_email)
-        return jsonify(
-            {
-                "message": f"Dry run started — will send to {test_email}",
-                "task_id": result.id,
-            }
-        ), 202
+        msg = f"Dry run started — will send to {test_email}"
+        if is_htmx:
+            return (
+                f'<span class="health-dot green"></span> <span class="form-hint">{msg}</span>',
+                202,
+            )
+        return jsonify({"message": msg, "task_id": result.id}), 202
     except Exception:
         current_app.logger.exception("Failed to trigger newsletter dry run")
+        if is_htmx:
+            return (
+                '<span class="health-dot red"></span> <span class="form-hint">Failed to start dry run</span>',
+                503,
+            )
         return jsonify({"message": "Failed to start dry run"}), 503
 
 

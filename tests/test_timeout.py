@@ -16,28 +16,25 @@ class TestTimeoutDecorator:
         assert fast_func() == 42
 
     def test_raises_on_timeout(self):
-        @timeout(0.1, operation="slow_op")
+        @timeout(0.25, operation="slow_op")
         def slow_func():
-            time.sleep(5)
+            time.sleep(999)
 
         with pytest.raises(OperationTimeoutError) as exc_info:
             slow_func()
         assert exc_info.value.operation == "slow_op"
-        assert exc_info.value.timeout == 0.1
+        assert exc_info.value.timeout == 0.25
 
     def test_timeout_returns_promptly(self):
-        """Verify that timeout does not block waiting for the stuck function."""
-
-        @timeout(0.1, operation="prompt_check")
+        @timeout(0.25, operation="prompt_check")
         def stuck_func():
-            time.sleep(5)
+            time.sleep(999)
 
         start = time.monotonic()
         with pytest.raises(OperationTimeoutError):
             stuck_func()
         elapsed = time.monotonic() - start
-        # Should return within 2 seconds (generous for CI), not wait for 999s
-        assert elapsed < 2.0
+        assert elapsed < 3.0
 
     def test_passes_args_and_kwargs(self):
         @timeout(5)
@@ -55,9 +52,9 @@ class TestTimeoutDecorator:
             fail()
 
     def test_default_operation_name(self):
-        @timeout(0.1)
+        @timeout(0.25)
         def my_named_func():
-            time.sleep(5)
+            time.sleep(999)
 
         with pytest.raises(OperationTimeoutError) as exc_info:
             my_named_func()

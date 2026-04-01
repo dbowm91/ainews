@@ -16,13 +16,13 @@
 <div class="dashboard">
   <div class="dashboard-header">
     <h1 class="dashboard-title">edit article</h1>
-    <a href="/admin/articles" class="btn-primary" style="text-decoration:none">&larr; back to articles</a>
+    <a href="/admin/articles" class="btn-primary no-decoration">&larr; back to articles</a>
   </div>
 
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">
       {{ article.original_title[:100] if article.original_title }}
-      <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %}" style="margin-left:0.5rem">{{ article.pipeline_status }}</span>
+      <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %} ml-05">{{ article.pipeline_status }}</span>
     </h2>
 
     {% if error %}
@@ -36,9 +36,9 @@
       <span>source: {{ article.source.name if article.source else 'unknown' }}</span>
       <span>created: {{ article.created_at.strftime('%b %d %Y %H:%M') if article.created_at }}</span>
       {% if article.original_ai_article %}
-      <span><a href="/admin/articles/{{ article.id }}/original" target="_blank" class="btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.5rem">view original AI version</a></span>
+      <span><a href="/admin/articles/{{ article.id }}/original" target="_blank" class="btn-secondary btn-sm">view original AI version</a></span>
       {% endif %}
-      <span><a href="/admin/articles/{{ article.id }}/versions" class="btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.5rem">version history</a></span>
+      <span><a href="/admin/articles/{{ article.id }}/versions" class="btn-secondary btn-sm">version history</a></span>
     </div>
 
     <form method="POST" action="/admin/articles/{{ article.id }}/edit" class="edit-form">
@@ -110,22 +110,28 @@
     </form>
 
     <div class="reprocess-section">
-      <h3 class="dash-card-title" style="margin-top:1.5rem">reprocess article</h3>
+      <h3 class="dash-card-title mt-15">reprocess article</h3>
       <div class="reprocess-actions">
-        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" style="display:inline">
+        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
+              hx-post="/admin/articles/{{ article.id }}/reprocess"
+              hx-confirm="Re-run full pipeline from selector?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="from_stage" value="select">
-          <button type="submit" class="btn-secondary" onclick="return confirm('Re-run full pipeline from selector?')">from selector</button>
+          <button type="submit" class="btn-secondary">from selector</button>
         </form>
-        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" style="display:inline">
+        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
+              hx-post="/admin/articles/{{ article.id }}/reprocess"
+              hx-confirm="Re-run from researcher?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="from_stage" value="research">
-          <button type="submit" class="btn-secondary" onclick="return confirm('Re-run from researcher?')">from researcher</button>
+          <button type="submit" class="btn-secondary">from researcher</button>
         </form>
-        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" style="display:inline">
+        <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
+              hx-post="/admin/articles/{{ article.id }}/reprocess"
+              hx-confirm="Re-run from writer?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="from_stage" value="write">
-          <button type="submit" class="btn-secondary" onclick="return confirm('Re-run from writer?')">from writer</button>
+          <button type="submit" class="btn-secondary">from writer</button>
         </form>
       </div>
     </div>

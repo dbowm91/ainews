@@ -1,0 +1,13 @@
+{% macro pipeline_badge(status) %}
+  <span class="pipeline-badge pipeline-{% if status == 'done' %}done{% elif status == 'skipped' %}skipped{% else %}active{% endif %}">
+    {{ status }}
+  </span>
+{% endmacro %}
+
+{% macro impact_score(score) %}
+  {% if score %}
+    <span class="impact-score impact-{% if score >= 75 %}high{% elif score >= 50 %}mid{% elif score >= 25 %}low{% else %}minor{% endif %}">
+      {{ score }}
+    </span>
+  {% endif %}
+{% endmacro %}

@@ -13,6 +13,10 @@ plog = get_pipeline_logger("select")
     default_retry_delay=30,
     soft_time_limit=300,
     time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=30,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def select_article(self, article_id: int, run_id=None):
     from models import PipelineRun

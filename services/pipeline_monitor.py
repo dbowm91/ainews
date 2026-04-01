@@ -97,12 +97,14 @@ def get_stage_stats(stage: str, minutes: int = 15) -> dict:
                 total_failure += int(failure_val)
 
         total = total_success + total_failure
-        success_rate = (total_success / total * 100) if total > 0 else 100.0
+        success_rate = (total_success / total * 100) if total > 0 else None
 
         return {
             "success_count": total_success,
             "failure_count": total_failure,
-            "success_rate": round(success_rate, 2),
+            "success_rate": round(success_rate, 2)
+            if success_rate is not None
+            else None,
             "window_minutes": minutes,
         }
 
@@ -111,7 +113,7 @@ def get_stage_stats(stage: str, minutes: int = 15) -> dict:
         return {
             "success_count": 0,
             "failure_count": 0,
-            "success_rate": 100.0,
+            "success_rate": None,
             "window_minutes": minutes,
         }
 

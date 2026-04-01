@@ -1,3 +1,5 @@
+{% from "partials/pagination.html" import pagination_nav %}
+{% from "macros/badges.html" import pipeline_badge, impact_score %}
 {% if articles %}
   <div class="table-responsive">
   <table class="dash-table" aria-label="Articles list">
@@ -13,22 +15,12 @@
             </a>
           </td>
           <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
-          <td>
-            <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %}">
-              {{ article.pipeline_status }}
-            </span>
-          </td>
-          <td>
-            {% if article.impact_score %}
-              <span class="impact-score impact-{% if article.impact_score >= 75 %}high{% elif article.impact_score >= 50 %}mid{% elif article.impact_score >= 25 %}low{% else %}minor{% endif %}">
-                {{ article.impact_score }}
-              </span>
-            {% endif %}
-          </td>
+          <td>{{ pipeline_badge(article.pipeline_status) }}</td>
+          <td>{{ impact_score(article.impact_score) }}</td>
           <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
           <td class="actions-cell">
             <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
-            <form method="POST" action="/admin/articles/{{ article.id }}/delete" style="display:inline"
+            <form method="POST" action="/admin/articles/{{ article.id }}/delete" class="inline"
                   hx-post="/admin/articles/{{ article.id }}/delete"
                   hx-confirm="Delete this article?"
                   hx-target="closest tr"
@@ -42,23 +34,7 @@
     </tbody>
   </table>
   </div>
-  <nav class="pagination" aria-label="Articles pagination">
-    {% if page > 1 %}
-      <a href="/admin/articles?page={{ page - 1 }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="pag-link">&larr; prev</a>
-    {% else %}
-      <span class="pag-link pag-disabled">&larr; prev</span>
-    {% endif %}
-    <span class="pag-info">
-      {% set start = (page - 1) * 20 + 1 %}
-      {% set end = start + articles|length - 1 %}
-      {{ start }}–{{ end }} of {{ total_count }}
-    </span>
-    {% if has_next %}
-      <a href="/admin/articles?page={{ next_page }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="pag-link">next &rarr;</a>
-    {% else %}
-      <span class="pag-link pag-disabled">next &rarr;</span>
-    {% endif %}
-  </nav>
+  {{ pagination_nav(page, has_next, next_page, total_count, 20, "/admin/articles", {"q": query, "status": status, "category": category}) }}
 {% else %}
   <div class="empty-state">
     <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

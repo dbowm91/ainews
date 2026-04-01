@@ -12,7 +12,10 @@ def metrics():
 
     # Date range
     days = request.args.get("days", 30, type=int)
-    days = max(1, min(days, 365))  # Clamp to 1-365
+    days = max(1, min(days, 365))
+
+    limit = request.args.get("limit", 20, type=int)
+    limit = max(10, min(limit, 100))
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Total metrics
@@ -35,7 +38,7 @@ def metrics():
             ArticleMetric.updated_at >= cutoff,
         )
         .order_by(ArticleMetric.page_loads.desc())
-        .limit(10)
+        .limit(limit)
         .all()
     )
 
@@ -48,7 +51,7 @@ def metrics():
             ArticleMetric.updated_at >= cutoff,
         )
         .order_by(ArticleMetric.share_button_clicks.desc())
-        .limit(10)
+        .limit(limit)
         .all()
     )
 
@@ -61,12 +64,16 @@ def metrics():
             ArticleMetric.updated_at >= cutoff,
         )
         .order_by(ArticleMetric.share_link_views.desc())
-        .limit(10)
+        .limit(limit)
         .all()
     )
 
     # Subscriber metrics
-    total_subs = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(active=True).count()
+    total_subs = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter_by(active=True)
+        .count()
+    )
     subs_by_type = dict(
         db.session.query(Subscriber.newsletter_type, func.count(Subscriber.id))
         .filter(Subscriber.deleted_at.is_(None))
@@ -74,7 +81,11 @@ def metrics():
         .group_by(Subscriber.newsletter_type)
         .all()
     )
-    inactive_subs = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(active=False).count()
+    inactive_subs = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter_by(active=False)
+        .count()
+    )
 
     return render_template(
         "admin/metrics.html",
@@ -83,6 +94,7 @@ def metrics():
         top_by_shares=top_by_shares,
         top_by_link_views=top_by_link_views,
         days=days,
+        limit=limit,
         total_subs=total_subs,
         subs_by_type=subs_by_type,
         inactive_subs=inactive_subs,

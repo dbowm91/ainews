@@ -312,6 +312,7 @@ class ArticleVersion(db.Model):
     version_number = db.Column(db.Integer, nullable=False, default=1)
     final_article = db.Column(db.Text)
     original_ai_article = db.Column(db.Text)
+    source_fields = db.Column(db.JSON, nullable=True)
     change_reason = db.Column(
         db.String(256)
     )  # e.g., "admin_edit", "pipeline_edit", "rollback"

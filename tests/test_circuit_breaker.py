@@ -1,7 +1,31 @@
 """Tests for the circuit breaker module."""
 
-import time
 import pytest
+
+
+_fake_time = 1000.0
+
+
+def fake_monotonic():
+    return _fake_time
+
+
+def advance_time(seconds):
+    global _fake_time
+    _fake_time += seconds
+
+
+@pytest.fixture(autouse=True)
+def _reset_fake_clock():
+    global _fake_time
+    _fake_time = 1000.0
+    yield
+    _fake_time = 1000.0
+
+
+@pytest.fixture(autouse=True)
+def _patch_monotonic(monkeypatch):
+    monkeypatch.setattr("services.circuit_breaker.time.monotonic", fake_monotonic)
 
 
 class TestCircuitBreaker:
@@ -38,7 +62,7 @@ class TestCircuitBreaker:
         breaker.record_failure()
         assert breaker.state.value == "open"
 
-        time.sleep(0.15)
+        advance_time(0.15)
         assert breaker.state.value == "half_open"
         assert breaker.can_execute() is True
 
@@ -46,7 +70,7 @@ class TestCircuitBreaker:
         breaker = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
         breaker.record_failure()
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
 
         breaker.can_execute()  # transition to half_open
         breaker.record_success()
@@ -57,7 +81,7 @@ class TestCircuitBreaker:
         breaker = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
         breaker.record_failure()
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
 
         breaker.can_execute()  # transition to half_open
         breaker.record_failure()
@@ -69,7 +93,7 @@ class TestCircuitBreaker:
         )
         breaker.record_failure()
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
 
         assert breaker.can_execute() is True
         assert breaker.can_execute() is False  # second call rejected
@@ -77,7 +101,7 @@ class TestCircuitBreaker:
     def test_old_failures_pruned(self):
         breaker = self._make_breaker(failure_threshold=3, window_seconds=0.1)
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
         breaker.record_failure()
         # Old failure should be pruned, only 1 counted
         assert breaker._failure_count == 1
@@ -230,7 +254,7 @@ class TestCircuitBreakerMetrics:
         breaker, metrics = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
         breaker.record_failure()
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
         assert breaker.state.value == "half_open"
 
         m = metrics.get_metrics()
@@ -243,7 +267,7 @@ class TestCircuitBreakerMetrics:
         breaker, metrics = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
         breaker.record_failure()
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
         assert breaker.state.value == "half_open"
         breaker.record_success()
 
@@ -255,7 +279,7 @@ class TestCircuitBreakerMetrics:
         breaker, metrics = self._make_breaker(failure_threshold=2, recovery_timeout=0.1)
         breaker.record_failure()
         breaker.record_failure()
-        time.sleep(0.15)
+        advance_time(0.15)
         assert breaker.state.value == "half_open"
         breaker.record_failure()
 
@@ -290,7 +314,7 @@ class TestCircuitBreakerMetrics:
         breaker.record_failure()
         assert breaker.state.value == "open"
 
-        time.sleep(0.15)
+        advance_time(0.15)
         assert breaker.state.value == "half_open"
         breaker.record_success()
         assert breaker.state.value == "closed"

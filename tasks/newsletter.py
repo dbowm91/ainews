@@ -148,6 +148,13 @@ def _generate_topic_newsletter_impl(
             executive_summary=exec_summary,
         )
 
+    if not html or not html.strip():
+        logger.warning(
+            "%s newsletter has empty content after generation, skipping send",
+            topic_key,
+        )
+        return {"type": topic_key, "articles": 0, "skipped": "empty_content"}
+
     newsletter = Newsletter(
         newsletter_type=topic_key,
         subject=subject,

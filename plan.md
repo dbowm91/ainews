@@ -56,7 +56,10 @@ Consolidated from plan2–plan7 (original review date: 2026-04-01). Items verifi
 | 3.5 | plan6 #11 | Medium | `.btn-primary` display fix | Done |
 
 **Changes made:**
-- `static/css/style.css`: Added `.error-page`, `.error-title`, `.error-message`, `.unsubscribe-confirm-btn`, `.card-author` rules; added `display: inline-block` to `.btn-primary`
+- `static/css/pages.css`: Added `.error-page`, `.error-title`, `.error-message` rules for error pages
+- `static/css/pages.css`: Added `.unsubscribe-confirm-btn` with hover styles
+- `static/css/pages.css`: Added `.card-author` for article card author display
+- `static/css/components.css`: Added `display: inline-block` to `.btn-primary`
 - `templates/admin/sources.html:99,101`: Renamed `btn-small` → `btn-sm`
 - `templates/admin/partials/source_row.html:33,35`: Renamed `btn-small` → `btn-sm`
 
@@ -73,7 +76,8 @@ Consolidated from plan2–plan7 (original review date: 2026-04-01). Items verifi
 
 **Changes made:**
 - Deleted: `partials/article_detail.html`, `partials/cards.html`, `partials/skeleton_loading.html`, `partials/skeleton_card.html`, `admin/partials/pipeline_logs.html`
-- Created: `templates/partials/article_body.html` with shared rendering logic
+- Created: `templates/partials/article_body.html` with shared rendering logic for summary/fallback article paths
+- `templates/article.html`: Uses `{% include "partials/article_body.html" %}` for non-condensed articles
 - `templates/admin/partials/review_table.html`: Uses `pagination_nav` macro
 - `templates/partials/pagination.html`: Added `urlencode` filter
 
@@ -180,7 +184,9 @@ Consolidated from plan2–plan7 (original review date: 2026-04-01). Items verifi
 | 9.8 | plan6 #9 | Medium | Font size scale naming | Done |
 
 **Changes made:**
-- `static/css/style.css`: Added tablet breakpoint, toast animation, hamburger transition, z-index custom properties, `line-clamp` standard property, font size scale comments
+- `static/css/variables.css`: Added `--z-index-sticky`, `--z-index-share-dropdown`, `--z-index-skip-link`, `--z-index-toast` custom properties
+- `static/css/critical.css`, `layout.css`, `base.css`, `components.css`: Replaced all hardcoded `z-index` values with CSS custom properties
+- `static/css/critical.css`, `layout.css`: Added tablet breakpoint, toast animation, hamburger transition, font size scale comments
 - `templates/base.html`, `templates/base_admin.html`: Added RSS link and theme toggle inside `.nav-links` for mobile
 
 ---

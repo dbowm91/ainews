@@ -153,6 +153,7 @@
   border: 1px solid var(--accent);
   border-radius: 5px;
   cursor: pointer;
+  display: inline-block;
   transition: color 0.15s, background-color 0.15s, border-color 0.15s;
   text-decoration: none;
 }
@@ -322,7 +323,7 @@
   border-radius: 8px;
   padding: 0.75rem;
   min-width: 260px;
-  z-index: 200;
+  z-index: var(--z-index-share-dropdown);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   margin-bottom: 0.5rem;
 }
@@ -435,7 +436,7 @@
   font-size: 0.8rem;
   color: var(--text-primary);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 9999;
+  z-index: var(--z-index-toast);
   opacity: 1;
   transition: opacity 0.2s;
   white-space: nowrap;

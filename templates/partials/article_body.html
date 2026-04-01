@@ -1,0 +1,40 @@
+{# Renders article body for summary and fallback paths.
+   Expects: article (with _summary or raw fields) #}
+
+{% set sd = article._summary if article._summary is defined else none %}
+
+{% if sd and sd.headline %}
+  <h1 class="article-title">{{ sd.headline }}</h1>
+{% else %}
+  <h1 class="article-title">{{ article.original_title }}</h1>
+{% endif %}
+
+{% if sd and sd.tldr %}
+  <div class="article-tldr">
+    <span class="tldr-label">tl;dr</span>
+    {{ sd.tldr }}
+  </div>
+{% elif article.summary and not sd %}
+  <div class="article-summary">{{ article.summary }}</div>
+{% endif %}
+
+{% if sd and sd.key_points %}
+  <section class="article-keypoints">
+    <h2 class="section-heading">key takeaways</h2>
+    <ul class="keypoints-list">
+      {% for p in sd.key_points[:5] %}
+        <li>{{ p }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+
+{% if article.pipeline_status == 'pending' or (not article.pipeline_status and not sd) %}
+  {% if not sd and not article.summary %}
+    <p class="article-body">This article is being processed.</p>
+  {% endif %}
+{% elif article.pipeline_status == 'skipped' %}
+  {% if article.selector_result %}
+    <p class="article-body">Not selected. Score: {{ article.selector_result.score }}/10. {{ article.selector_result.reason }}</p>
+  {% endif %}
+{% endif %}

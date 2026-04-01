@@ -157,6 +157,12 @@
   --color-category-programming: var(--green);
   --color-category-hardware: var(--accent);
   --color-category-other: var(--text-muted);
+
+  /* Semantic: Z-index layers */
+  --z-index-sticky: 100;
+  --z-index-share-dropdown: 200;
+  --z-index-skip-link: 1000;
+  --z-index-toast: 9999;
 }
 
 /* ─────────────────────────────────────────────────────────────────

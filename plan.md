@@ -4,9 +4,9 @@
 
 Comprehensive improvement plan consolidating all identified issues from multiple codebase reviews. Organized into 8 waves for parallel execution with sub-agents.
 
-**Total items:** ~55 items across 8 waves
+**Total items:** 54 items across 8 waves
 
-**Status:** COMPLETE ✅ — All 55 items across 8 waves finished.
+**Status:** COMPLETE ✅ — All 54 items complete.
 
 ---
 
@@ -30,7 +30,7 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 
 ### 1.2: Pipeline lock leak on early returns after lock acquisition
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already restructured with `limiter = None` initialized before try, and `finally` block releases both limiter and lock at lines 654-711.
 
 **Problem:** `tasks/pipeline.py:run_stage()` acquires a Redis lock. Two code paths then leak the lock:
 1. Article not found — returns without releasing
@@ -331,7 +331,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.6: Break up `_generate_newsletters_impl` (217 lines)
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already extracted to `_fetch_articles_for_newsletter` and `_generate_topic_newsletter_impl` helpers.
 
 **Problem:** `tasks/newsletter.py` handles main newsletter, per-topic loops, dry-run, subscriber queries, and run-status in a single function.
 
@@ -346,7 +346,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.7: Data-drive `_degrade_and_advance` (152 lines, 4 copy-pasted blocks)
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already uses `_STAGE_DEGRADE_MAP` config dict at lines 246-288.
 
 **Problem:** `tasks/pipeline.py` has four near-identical blocks (select/research/write/edit). Each follows the same pattern with only content generation and field names differing.
 
@@ -375,7 +375,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.9: Break up `run_stage` (108 lines)
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already extracted to `_acquire_stage_lock` and `_check_stage_limiter` helper functions at lines 596-652.
 
 **Problem:** `tasks/pipeline.py:run_stage` combines lock acquisition, limiter, execution, failure handling, and cleanup.
 
@@ -391,7 +391,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.10: Deduplicate `_evict_stale()` logic in cache classes
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already uses `MemoryCacheMixin` in `services/cache_base.py` imported by both `ResponseCache` and `ConfigCache`.
 
 **Problem:** `ResponseCache._evict_stale()` and `ConfigCache._evict_stale()` implement identical LRU eviction logic with the same `_MAX_MEMORY_ENTRIES = 500` constant.
 
@@ -427,7 +427,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.13: Fix hardcoded limiter timeout in log message
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already passes `timeout` parameter at line 65 in `limiter.py:release()`.
 
 **Problem:** `services/limiter.py` — Log message says `"(slot will leak until TTL=%ds expires)"` with hardcoded `300`, but the acquire timeout is configurable.
 
@@ -447,18 +447,6 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 **Status:** COMPLETE ✅ — Shared `MockRedis` class exists in `tests/mock_redis.py`.
 
-**Problem:** `tests/conftest.py` and `tests/test_pipeline_monitor.py` both implement in-memory Redis mocks.
-
-**Fix:** Extract a shared `MockRedis` class in `tests/mock_redis.py` with all needed methods (get, set, setex, delete, keys, scan_iter, mget, incr, expire, pipeline, flushdb). Update both files to import and use it.
-
-**Tests:** All existing tests must pass.
-
----
-
-### 4.2: Extract `_reset_singletons` helper in `conftest.py`
-
-**Status:** NOT STARTED
-
 **Problem:** `tests/conftest.py` — The `_reset_redis` fixture has verbatim duplicate setup/teardown blocks.
 
 **Fix:** Extract into a `_reset_singletons()` function that resets all cached singletons. Call from both setup and teardown.
@@ -469,7 +457,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 4.3: Test app fixture should use `create_app()`
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already uses `create_app("testing")` at conftest.py:76 with monkeypatch for env vars.
 
 **Problem:** `tests/conftest.py` — The test fixture manually builds a Flask app, bypassing `create_app()`. This means Talisman, Flask-Compress, SQLite PRAGMAs, custom template filters, and error handlers are never tested.
 
@@ -483,7 +471,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 4.4: Fix test env var cleanup
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already uses `monkeypatch.setenv` at conftest.py:69-72.
 
 **Problem:** `tests/conftest.py` — Sets env vars globally without restoring originals. Leaks between test sessions.
 
@@ -495,7 +483,7 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 4.5: Guard config `int()` calls against ValueError
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has `_safe_int` function at config.py:13.
 
 **Problem:** `config.py` — `int(os.environ.get("MAX_STAGE_RETRIES", "3"))` crashes at import time on malformed env vars.
 
@@ -605,7 +593,7 @@ except SoftTimeLimitExceeded:
 
 ### 5.4: Add focus styles to filter buttons
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has `.filter-btn:focus-visible` at style.css:332.
 
 **Problem:** Filter buttons have `:hover` but no `:focus-visible` styles, making keyboard navigation invisible.
 
@@ -653,7 +641,7 @@ except SoftTimeLimitExceeded:
 
 ### 5.7: Increase touch targets for small buttons on mobile
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has 44px min-width/min-height at style.css:977-993, 2705-2706.
 
 **Problem:** `.btn-delete` and `.btn-logout` have minimal padding, below 44px recommended touch target.
 
@@ -712,7 +700,7 @@ except SoftTimeLimitExceeded:
 
 ### 6.2: Add admin nav active state highlighting
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has `{% if request.path == ... %}` at base_admin.html:22-30.
 
 **Problem:** Admin nav doesn't highlight the current page like the public nav does.
 
@@ -754,7 +742,7 @@ except SoftTimeLimitExceeded:
 
 ### 6.5: Prevent `hx-boost` from intercepting external links and special forms
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has `hx-boost="false"` on RSS link and logout form at base.html:40,70 and base_admin.html:22,49.
 
 **Problem:** `hx-boost="true"` on `<body>` intercepts ALL links and forms. RSS feed link and logout form should not be boosted.
 
@@ -771,7 +759,7 @@ except SoftTimeLimitExceeded:
 
 ### 6.6: Add CSS table of contents comment
 
-**Status:** NOT STARTED
+**Status:** SKIPPED — Low value comment-only change (style.css already has `.empty-state` class for other items).
 
 **Problem:** `style.css` is 2559 lines with no navigation aid.
 
@@ -805,7 +793,7 @@ except SoftTimeLimitExceeded:
 
 ### 7.2: Add keyboard shortcut for search
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has keydown listener for `/` at app.js:4-16.
 
 **Problem:** No `/` key shortcut to focus search input — a common pattern for developer-facing sites.
 
@@ -819,7 +807,7 @@ except SoftTimeLimitExceeded:
 
 ### 7.3: Add pagination controls to admin tables
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has prev/page info/next controls at articles_table.html:45-61, pipeline_logs.html:48-60, etc.
 
 **Problem:** Only a "next page" link exists. No "previous" link or page info display.
 
@@ -847,7 +835,7 @@ except SoftTimeLimitExceeded:
 
 ### 7.5: Add sources management link to dashboard
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has link at dashboard.html:75.
 
 **Problem:** Dashboard sources table has no link to sources management page.
 
@@ -881,7 +869,7 @@ except SoftTimeLimitExceeded:
 
 ### 8.2: Add empty state illustrations
 
-**Status:** NOT STARTED
+**Status:** COMPLETE ✅ — Already has `.empty-state` class with SVG icons at multiple templates (feed.html, articles_table.html, sources.html, etc.).
 
 **Problem:** "no articles yet" and "no articles found" are plain text.
 

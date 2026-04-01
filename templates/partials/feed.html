@@ -2,6 +2,8 @@
   {% include "partials/top_impact.html" %}
 {% endif %}
 
+<h1 class="sr-only">AI News Feed</h1>
+
 <div class="feed-header">
   <form role="search" class="search-container">
     <input
@@ -42,6 +44,8 @@
   <div aria-live="polite" aria-atomic="true">
     {% if articles %}
       <span id="result-count" class="result-count">{{ articles|length }} articles</span>
+    {% elif query or category %}
+      <span id="result-count" class="result-count">no articles match your filters</span>
     {% else %}
       <span id="result-count" class="result-count">no articles yet &mdash; first crawl in progress</span>
       <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -70,7 +74,7 @@
        hx-indicator="#scroll-spinner"
        aria-label="Load more articles">
     <div id="scroll-spinner" class="loading-indicator">
-      <span class="spinner" aria-live="assertive">loading more...</span>
+      <span class="spinner" aria-live="polite">loading more...</span>
     </div>
   </div>
   {% endif %}

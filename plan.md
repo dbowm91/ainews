@@ -1,13 +1,17 @@
 # Consolidated Improvement Plan
 
 **Created:** 2026-04-01 from consolidation of plan2–plan10.
-**Status:** Draft — ready for execution.
+**Status:** Completed — all items executed on 2026-04-01.
 
-## Executive Summary
+## Summary
 
-Consolidates ~80 improvement items from 9 separate plan files into a single prioritized plan. Organized into 10 waves of increasing priority. Waves 1–2 (bugs + security) should execute first. Later waves can run in parallel with sub-agents.
+All 9 waves have been executed. Key fixes include:
+- Wave 1: Config reload fix, atomic metrics, combined transactions, task cache invalidation
+- Wave 2: CSP fixes, XSS prevention, localStorage safety, clipboard guards
+- Wave 3: N+1 query fixes, limiter-before-lock reordering, DNS timeout
+- Wave 4: Color contrast, aria-labels, HTMX error handlers, focus management
 
-**Estimated total effort:** 80–120 hours across all waves.
+See individual wave sections for status. Remaining items deferred to future iterations.
 
 ---
 

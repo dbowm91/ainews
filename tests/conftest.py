@@ -20,6 +20,12 @@ def _reset_singletons():
                 setattr(mod, attr, default() if callable(default) else default)
         except (ImportError, AttributeError):
             pass
+    try:
+        from tasks.pipeline import clear_task_fn_cache
+
+        clear_task_fn_cache()
+    except (ImportError, AttributeError):
+        pass
 
 
 @pytest.fixture(autouse=True)

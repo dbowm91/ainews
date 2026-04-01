@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ainews// share</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   <meta http-equiv="refresh" content="3;url=/article/{{ article.id }}">
 </head>
 <body>
@@ -18,7 +19,7 @@
     {% set short_url = request.host_url.rstrip('/') + '/s/' + sid %}
     <div class="share-redirect-card">
       <p style="margin-bottom:1rem;">
-        <input type="text" value="{{ short_url }}" readonly class="share-url-input" style="text-align:center; width:100%;" onclick="this.select()">
+        <input type="text" value="{{ short_url }}" readonly class="share-url-input js-select-on-click" style="text-align:center; width:100%;">
       </p>
       <div class="share-social-links">
         {% for config in share_configs %}

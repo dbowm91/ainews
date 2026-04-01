@@ -4,6 +4,7 @@ import logging
 
 from flask import request, render_template, redirect, make_response, Response
 
+from extensions import csrf
 from models import Article, ArticleMetric
 from services.article import parse_article_json, track_metric
 from routes.public import (
@@ -79,7 +80,14 @@ def short_url_tracking_page(short_id: str) -> str:
     )
 
 
+# CSRF exemption: this endpoint is called from client-side JS when user clicks
+# share button - no form involved and requiring CSRF tokens would require
+# additional JS complexity. The endpoint is read-only (just records a metric)
+# and is rate-limited globally via Flask-Limiter (configured in extensions.py).
+
+
 @public_bp.route("/api/track/share-click/<int:article_id>", methods=["POST"])
+@csrf.exempt
 def track_share_click(article_id: int) -> tuple[str, int]:
     Article.query.get_or_404(article_id)
     track_metric(article_id, ArticleMetric.share_button_clicks)

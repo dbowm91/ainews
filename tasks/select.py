@@ -57,21 +57,16 @@ def select_article(self, article_id: int, run_id=None):
 
         if result.selected and result.score >= (rc.min_score or 6):
             article.pipeline_status = PipelineStatus.RESEARCHING
+            if run_id:
+                run = db.session.get(PipelineRun, run_id)
+                if run:
+                    run.articles_selected = (run.articles_selected or 0) + 1
             try:
                 db.session.commit()
             except Exception:
                 db.session.rollback()
                 raise
-
-            if run_id:
-                run = db.session.get(PipelineRun, run_id)
-                if run:
-                    run.articles_selected = (run.articles_selected or 0) + 1
-                    try:
-                        db.session.commit()
-                    except Exception:
-                        db.session.rollback()
-                        raise
+            if run_id and run:
                 _log_pipeline(
                     run_id,
                     "select",

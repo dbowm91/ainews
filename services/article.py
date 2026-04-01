@@ -6,7 +6,6 @@ For pagination and FTS search, see services/pagination.py.
 
 import logging
 from typing import Optional
-from sqlalchemy import func
 
 from extensions import db
 from models import Article, ArticleMetric
@@ -26,29 +25,25 @@ TITLE_SIMILARITY_THRESHOLD = 0.5
 def track_metric(article_id: int, column) -> None:
     """Atomically increment a metric column, creating the row if needed.
 
-    Uses INSERT-then-UPDATE approach:
-    1. Try INSERT with value 1 (wins if row doesn't exist yet)
-    2. On IntegrityError (row already exists), do atomic UPDATE
-    3. Single commit per path
+    Uses upsert approach with a single INSERT + ON CONFLICT DO UPDATE
+    to avoid race conditions between concurrent increments.
 
     Args:
         article_id: The ID of the article to track metrics for
         column: The SQLAlchemy column to increment (e.g., ArticleMetric.page_loads)
     """
-    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-    try:
-        metric = ArticleMetric(article_id=article_id)
-        setattr(metric, column.key, 1)
-        db.session.add(metric)
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        db.session.query(ArticleMetric).filter_by(article_id=article_id).update(
-            {column: func.coalesce(column, 0) + 1},
-            synchronize_session=False,
-        )
-        db.session.commit()
+    column_key = column.key
+    current_col = getattr(ArticleMetric, column_key)
+    stmt = sqlite_insert(ArticleMetric).values(article_id=article_id, **{column_key: 1})
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["article_id"],
+        set_={column_key: current_col + 1},
+    )
+    db.session.execute(stmt)
+    db.session.commit()
+    db.session.expire_all()
 
 
 def get_articles_paginated(
@@ -243,16 +238,16 @@ def find_duplicate_titles(
             Article.created_at >= cutoff,
             Article.original_title.isnot(None),
         )
-        .with_entities(Article.id, Article.original_title)
+        .with_entities(Article.id, Article.original_title, Article.source_id)
         .all()
     )
 
-    duplicates = []
-    for article_id, other_title in candidates:
+    matched_ids = []
+    for article_id, other_title, _ in candidates:
         other_words = _title_word_set(other_title)
         if jaccard_similarity(candidate_words, other_words) >= threshold:
-            article = db.session.get(Article, article_id)
-            if article:
-                duplicates.append(article)
+            matched_ids.append(article_id)
 
-    return duplicates
+    if matched_ids:
+        return Article.query.filter(Article.id.in_(matched_ids)).all()
+    return []

@@ -46,7 +46,8 @@ def login():
     error = None
     if request.method == "POST":
         password = request.form.get("password", "")
-        if _verify_password(current_app.config["ADMIN_PASSWORD"], password):
+        admin_password = current_app.config.get("ADMIN_PASSWORD", "")
+        if admin_password and _verify_password(admin_password, password):
             _clear_attempts(ip)
             # Clear session to prevent fixation, then set admin flag
             session.clear()

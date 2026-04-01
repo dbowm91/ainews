@@ -13,6 +13,23 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _safe_int(key: str, default: int) -> int:
+    """Safely parse an environment variable as an integer.
+
+    Returns default if the value is missing or not a valid integer.
+    """
+    value = os.environ.get(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(
+            "Invalid integer value for %s: %r, using default %d", key, value, default
+        )
+        return default
+
+
 @dataclass
 class PipelineConfig:
     """Pipeline-related configuration."""
@@ -91,28 +108,22 @@ class AppConfig:
         """Build config from environment variables only (no Flask context)."""
         return cls(
             pipeline=PipelineConfig(
-                max_stage_retries=int(os.environ.get("MAX_STAGE_RETRIES", "3")),
-                max_total_retries=int(os.environ.get("MAX_TOTAL_RETRIES", "10")),
-                stuck_threshold_minutes=int(
-                    os.environ.get("STUCK_THRESHOLD_MINUTES", "60")
-                ),
-                min_content_length=int(os.environ.get("MIN_CONTENT_LENGTH", "200")),
+                max_stage_retries=_safe_int("MAX_STAGE_RETRIES", 3),
+                max_total_retries=_safe_int("MAX_TOTAL_RETRIES", 10),
+                stuck_threshold_minutes=_safe_int("STUCK_THRESHOLD_MINUTES", 60),
+                min_content_length=_safe_int("MIN_CONTENT_LENGTH", 200),
             ),
             security=SecurityConfig(
                 session_cookie_secure=os.environ.get("SESSION_COOKIE_SECURE", "false")
                 .lower()
                 .startswith("t"),
-                max_content_length=int(
-                    os.environ.get("MAX_CONTENT_LENGTH", str(64 * 1024))
-                ),
-                verification_expiry_seconds=int(
-                    os.environ.get("VERIFICATION_EXPIRY_SECONDS", "3600")
+                max_content_length=_safe_int("MAX_CONTENT_LENGTH", 64 * 1024),
+                verification_expiry_seconds=_safe_int(
+                    "VERIFICATION_EXPIRY_SECONDS", 3600
                 ),
             ),
             sources=SourceConfig(
-                max_consecutive_failures=int(
-                    os.environ.get("MAX_CONSECUTIVE_FAILURES", "10")
-                ),
+                max_consecutive_failures=_safe_int("MAX_CONSECUTIVE_FAILURES", 10),
             ),
         )
 

@@ -72,7 +72,7 @@ def should_skip_source(source: Source, schedule_minutes: int) -> bool:
 
 
 def get_existing_external_ids(source: Source) -> set[str]:
-    """Get existing external IDs for a source.
+    """Get existing external IDs for a source (last 30 days).
 
     Args:
         source: The Source instance
@@ -80,8 +80,14 @@ def get_existing_external_ids(source: Source) -> set[str]:
     Returns:
         Set of existing external IDs
     """
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     existing = (
-        Article.query.filter_by(source_id=source.id)
+        Article.query.filter(
+            Article.source_id == source.id,
+            Article.created_at >= cutoff,
+        )
         .with_entities(Article.external_id)
         .all()
     )

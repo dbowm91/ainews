@@ -6,7 +6,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
 from constants import _get_stuck_threshold_minutes, PipelineStatus
-from tasks.pipeline import MAX_STAGE_RETRIES
+from tasks.pipeline import _get_max_stage_retries
 
 logger = get_task_logger(__name__)
 
@@ -66,7 +66,7 @@ def retry_stuck(self):
             if age_minutes >= _get_stuck_threshold_minutes():
                 _dead_letter(article)
                 dead_lettered += 1
-            elif (article.retry_count or 0) >= MAX_STAGE_RETRIES:
+            elif (article.retry_count or 0) >= _get_max_stage_retries():
                 _degrade_and_advance(article, article.pipeline_status)
                 degraded += 1
                 logger.warning(

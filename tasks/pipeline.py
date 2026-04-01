@@ -69,6 +69,15 @@ _STAGE_TASKS = {
 _task_fn_cache: dict[str, tuple] = {}
 
 
+def clear_task_fn_cache() -> None:
+    """Clear the task function cache.
+
+    Called after config reload to ensure stale task references are refreshed.
+    """
+    global _task_fn_cache
+    _task_fn_cache = {}
+
+
 def _dispatch_next(
     article_id: int,
     run_id: int | None = None,
@@ -424,6 +433,12 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
                 article.id,
                 commit_exc,
             )
+            article.pipeline_status = PipelineStatus.FAILED
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+            return True
         return False
 
 
@@ -644,6 +659,10 @@ def run_stage(
             _dispatch_next(article_id, run_id=run_id, next_status=skip_next)
         return {"article_id": article_id, "decision": f"skip_{stage}"}
 
+    limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
+    if not limiter:
+        return {"article_id": article_id, "skipped": True, "reason": "limiter_rejected"}
+
     lock_key = f"ainews:stage_lock:{article_id}:{stage}"
     task_id = task_self.request.id or "manual"
     redis_client = get_redis()
@@ -651,7 +670,7 @@ def run_stage(
         redis_client, lock_key, task_id, rc.timeout_seconds + 60
     )
 
-    limiter = None
+    model = None
     try:
         if not lock_acquired:
             logger.info(
@@ -664,7 +683,6 @@ def run_stage(
             return {"article_id": article_id, "error": "not found"}
 
         provider, model, max_tokens = get_provider_for_role(stage)
-        limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
 
         result = work_fn(article, provider, model, max_tokens)
 
@@ -701,11 +719,12 @@ def run_stage(
         logger.error("%s failed for article %s: %s", stage.title(), article_id, e)
         raise
     finally:
-        if limiter is not None:
-            limiter.release(rc.provider, model, rc.timeout_seconds)
+        limiter.release(
+            rc.provider, model if "model" in locals() else None, rc.timeout_seconds
+        )
         try:
             from services.redis_utils import release_lock
 
             release_lock(redis_client, lock_key, task_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to release stage lock %s: %s", lock_key, e)

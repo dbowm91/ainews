@@ -9,14 +9,19 @@
   var STORAGE_KEY = 'ainews-theme';
   var DARK = 'dark';
   var LIGHT = 'light';
+  var FALLBACK_THEME = DARK;
 
   /**
    * Get preferred theme from localStorage or system preference
    */
   function getPreferredTheme() {
-    var stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return stored;
+    try {
+      var stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        return stored;
+      }
+    } catch (e) {
+      // localStorage unavailable (private browsing, etc.)
     }
     return window.matchMedia('(prefers-color-scheme: light)').matches ? LIGHT : DARK;
   }
@@ -26,7 +31,11 @@
    */
   function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem(STORAGE_KEY, theme);
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch (e) {
+      // localStorage unavailable
+    }
   }
 
   /**
@@ -38,14 +47,25 @@
     setTheme(next);
   };
 
+  // Event delegation for theme toggle - CSP compliant
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.theme-toggle')) {
+      window.toggleTheme();
+    }
+  });
+
   // Initialize on load
   setTheme(getPreferredTheme());
 
   // Listen for system preference changes
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
     // Only auto-switch if user hasn't set a manual preference
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      setTheme(e.matches ? DARK : LIGHT);
+    try {
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        setTheme(e.matches ? DARK : LIGHT);
+      }
+    } catch (e) {
+      // localStorage unavailable
     }
   });
 

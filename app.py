@@ -189,8 +189,12 @@ def create_app(config_name=None):
             request.path,
             request.remote_addr,
         )
+        retry_after = None
+        response = e.get_response()
+        if response:
+            retry_after = response.headers.get("Retry-After")
         if _wants_json():
-            return jsonify({"error": "Rate limited", "retry_after": e.description}), 429
+            return jsonify({"error": "Rate limited", "retry_after": retry_after}), 429
         return render_template("errors/429.html"), 429
 
     @app.errorhandler(413)
@@ -210,12 +214,18 @@ def create_app(config_name=None):
 
     @app.template_filter("safe_href")
     def safe_href_filter(value):
-        """Return URL only if it uses an http/https scheme."""
+        """Return URL only if it uses an http/https scheme and passes SSRF checks."""
         if not value:
             return "#"
         url = str(value).strip().lower()
-        if url.startswith(("http://", "https://")):
+        if not url.startswith(("http://", "https://")):
+            return "#"
+        try:
+            from services.url import validate_url_safe
+
+            validate_url_safe(value)
             return value
-        return "#"
+        except Exception:
+            return "#"
 
     return app

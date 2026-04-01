@@ -2,9 +2,27 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
+import time
 
 logger = get_task_logger(__name__)
 plog = get_pipeline_logger("edit")
+
+_TAG_CACHE: list[str] | None = None
+_TAG_CACHE_TIME: float = 0
+_TAG_CACHE_TTL = 300
+
+
+def _get_cached_tag_names() -> list[str]:
+    global _TAG_CACHE, _TAG_CACHE_TIME
+    now = time.time()
+    if _TAG_CACHE is not None and (now - _TAG_CACHE_TIME) < _TAG_CACHE_TTL:
+        return _TAG_CACHE
+    from models import Tag
+
+    tags = Tag.query.order_by(Tag.name).limit(100).all()
+    _TAG_CACHE = [t.name for t in tags]
+    _TAG_CACHE_TIME = now
+    return _TAG_CACHE
 
 
 @shared_task(
@@ -15,7 +33,6 @@ plog = get_pipeline_logger("edit")
     time_limit=360,
 )
 def edit_article(self, article_id: int, run_id=None):
-    from models import Tag
     from extensions import db
     from schemas.pipeline import get_role_config
     from services.writer import CondensedArticle
@@ -29,7 +46,7 @@ def edit_article(self, article_id: int, run_id=None):
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("editor")
-        existing_tags = [t.name for t in Tag.query.limit(100).all()]
+        existing_tags = _get_cached_tag_names()
 
         prompt = build_editor_prompt(
             draft_json=article.draft_article or "",

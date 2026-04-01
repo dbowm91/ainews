@@ -150,7 +150,7 @@ class ProductionConfig(Config):
             raise RuntimeError("SECRET_KEY must be set in production")
         if not cls.ADMIN_PASSWORD:
             raise RuntimeError("ADMIN_PASSWORD must be set in production")
-        from routes.admin import _is_password_hash
+        from services.validation import _is_password_hash
 
         if not _is_password_hash(cls.ADMIN_PASSWORD):
             raise RuntimeError(

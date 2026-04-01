@@ -111,7 +111,7 @@ newsletter:
   max_articles: 10
   send_time: "08:00"
   timezone: "America/New_York"
-  site_url: "https://ainews.dev"
+  site_url: "${SITE_URL}"
   prep_minutes: 15
 
 newsletter_pipeline:

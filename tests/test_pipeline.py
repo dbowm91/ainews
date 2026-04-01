@@ -171,12 +171,13 @@ class TestHandleStageFailure:
     @patch("tasks.write.write_article")
     @patch("tasks.edit.edit_article")
     def test_degrades_after_max_retries(self, mock_edit, mock_write, app):
-        from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
+        from tasks.pipeline import _handle_stage_failure, _get_max_stage_retries
         from models import Article
 
+        max_retries = _get_max_stage_retries()
         article = MagicMock(spec=Article)
         article.id = 1
-        article.retry_count = MAX_STAGE_RETRIES - 1
+        article.retry_count = max_retries - 1
         article.total_retries = 0
         article.original_title = "Test"
         article.original_url = "https://example.com"
@@ -293,10 +294,12 @@ class TestRetryStuck:
         self, mock_celery_tasks, mock_article_query
     ):
         """Articles with retry_count >= MAX_STAGE_RETRIES should be degraded."""
-        from tasks.retry import retry_stuck, MAX_STAGE_RETRIES
+        from tasks.retry import retry_stuck
+        from tasks.pipeline import _get_max_stage_retries
 
+        max_retries = _get_max_stage_retries()
         MockArticle, mock_query = mock_article_query
-        article = self._create_mock_article(retry_count=MAX_STAGE_RETRIES)
+        article = self._create_mock_article(retry_count=max_retries)
         mock_query.filter.return_value.all.return_value = [article]
 
         with patch("extensions.db"):
@@ -589,7 +592,10 @@ class TestRunStage:
                 "reason": "stage_locked",
             }
             work_fn.assert_not_called()
-            mocks["get_limiter"].assert_not_called()
+            # Limiter is checked before lock, so it should be called
+            mocks["get_limiter"].assert_called()
+            # Limiter should be released when stage is locked
+            mocks["get_limiter"].return_value.release.assert_called_once()
         finally:
             for p in patches.values():
                 p.stop()
@@ -702,11 +708,12 @@ class TestRetryBudget:
 
     def test_stage_retries_reset_on_degrade(self, app):
         """Per-stage retry_count resets on degrade, but total_retries keeps accumulating."""
-        from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
+        from tasks.pipeline import _handle_stage_failure, _get_max_stage_retries
         from models import Article
 
+        max_retries = _get_max_stage_retries()
         article = MagicMock(spec=Article)
-        article.retry_count = MAX_STAGE_RETRIES - 1
+        article.retry_count = max_retries - 1
         article.total_retries = 2
         article.id = 1
         article.original_title = "Test"

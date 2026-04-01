@@ -225,10 +225,10 @@ def run_all_sources(self, run_id=None):
     results = []
     timed_out = False
     try:
-        results = result.get(timeout=240, propagate=False)
+        results = result.get(timeout=360, propagate=False)
     except TimeoutError:
         timed_out = True
-        logger.error("Source crawl timed out after 240s, aggregating partial results")
+        logger.error("Source crawl timed out after 360s, aggregating partial results")
         # Try to get whatever results are available
         try:
             results = result.get(timeout=1, propagate=False) or []

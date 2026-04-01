@@ -88,7 +88,11 @@ def trigger_crawl():
             triggered_by="manual",
         )
         db.session.add(run)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
 
         result = run_all_sources.delay(run_id=run.id)
         run.task_id = result.id

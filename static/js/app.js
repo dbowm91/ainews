@@ -43,20 +43,31 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!copyBtn) return;
     var input = copyBtn.previousElementSibling;
     if (!input) return;
-    navigator.clipboard.writeText(input.value).then(function () {
-      copyBtn.textContent = "copied!";
-      setTimeout(function () {
-        copyBtn.textContent = "copy";
-      }, 1000);
-    });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(input.value).then(function () {
+        copyBtn.textContent = "copied!";
+        setTimeout(function () {
+          copyBtn.textContent = "copy";
+        }, 1000);
+      }).catch(function () {
+        copyBtn.textContent = "failed";
+        setTimeout(function () {
+          copyBtn.textContent = "copy";
+        }, 1000);
+      });
+    }
   });
 
-  /* Share URL input: select on click for easy copy */
+  /* Share URL input: select on click for easy copy (with clipboard support) */
   document.addEventListener("click", function (e) {
-    var input = e.target.closest(".share-url-input");
+    var input = e.target.closest(".share-url-input.js-select-on-click");
     if (!input) return;
     input.select();
-    navigator.clipboard.writeText(input.value);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(input.value).catch(function () {
+        // clipboard not available, fall back to just selecting
+      });
+    }
   });
 
   /* Offline detection toast */
@@ -72,4 +83,28 @@ document.addEventListener("DOMContentLoaded", function () {
       toast.classList.remove("toast-hidden");
     }
   }
+
+  /* HTMX error handling - show toast on failed requests */
+  document.addEventListener("htmx:responseError", function (e) {
+    var container = document.getElementById("toast-container");
+    if (!container) return;
+    var toast = document.createElement("div");
+    toast.className = "toast";
+    toast.textContent = "Request failed. Please try again.";
+    container.appendChild(toast);
+    setTimeout(function () {
+      toast.remove();
+    }, 5000);
+  });
+
+  /* Focus management after HTMX content swaps */
+  document.addEventListener("htmx:afterSwap", function (e) {
+    var content = document.querySelector("#content");
+    if (!content) return;
+    var heading = content.querySelector("h1, h2, h3");
+    if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus();
+    }
+  });
 });

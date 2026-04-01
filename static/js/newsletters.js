@@ -14,13 +14,25 @@ document.addEventListener('DOMContentLoaded', function() {
         body: 'test_email=' + encodeURIComponent(email) + '&csrf_token=' + encodeURIComponent(csrf)
       });
       var data = await resp.json();
-      if (resp.ok) {
-        resultDiv.innerHTML = '<span class="health-dot green"></span> <span class="form-hint">' + data.message + '</span>';
-      } else {
-        resultDiv.innerHTML = '<span class="health-dot red"></span> <span class="form-hint">' + (data.message || 'failed') + '</span>';
-      }
+      resultDiv.innerHTML = '';
+      var dot = document.createElement('span');
+      dot.className = 'health-dot ' + (resp.ok ? 'green' : 'red');
+      var msg = document.createElement('span');
+      msg.className = 'form-hint';
+      msg.textContent = resp.ok ? (data.message || 'done') : (data.message || 'failed');
+      resultDiv.appendChild(dot);
+      resultDiv.appendChild(document.createTextNode(' '));
+      resultDiv.appendChild(msg);
     } catch(err) {
-      resultDiv.innerHTML = '<span class="health-dot red"></span> <span class="form-hint">request failed</span>';
+      resultDiv.innerHTML = '';
+      var dot = document.createElement('span');
+      dot.className = 'health-dot red';
+      var msg = document.createElement('span');
+      msg.className = 'form-hint';
+      msg.textContent = 'request failed';
+      resultDiv.appendChild(dot);
+      resultDiv.appendChild(document.createTextNode(' '));
+      resultDiv.appendChild(msg);
     }
   });
 });

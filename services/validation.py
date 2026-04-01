@@ -116,3 +116,17 @@ def validate_bulk_ids(article_ids: list, max_count: int = 500) -> list[int]:
             )
         validated.append(aid)
     return validated
+
+
+def _is_password_hash(value: str) -> bool:
+    """Check if a string looks like a SHA256 hash (64 hex chars)."""
+    if not value or len(value) != 64:
+        return False
+    return bool(re.match(r"^[a-f0-9]{64}$", value))
+
+
+def _hash_password(password: str) -> str:
+    """Hash a password using SHA256."""
+    import hashlib
+
+    return hashlib.sha256(password.encode()).hexdigest()

@@ -120,9 +120,10 @@ def task_status(task_id: str) -> Response:
 @require_auth
 def reload_config() -> tuple[Response, int] | Response:
     from services.config_cache import get_config_cache
-    from services.config_unified import validate_config
+    from services.config_unified import validate_config, reset_config
     from services.llm import clear_provider_cache
     from celery_support import clear_app_cache
+    from tasks.pipeline import clear_task_fn_cache
 
     is_valid, errors = validate_config()
     if not is_valid:
@@ -131,6 +132,8 @@ def reload_config() -> tuple[Response, int] | Response:
     get_config_cache().invalidate_all()
     clear_provider_cache()
     clear_app_cache()
+    reset_config()
+    clear_task_fn_cache()
     return jsonify({"message": "Config cache cleared"}), 200
 
 
@@ -171,10 +174,11 @@ def pipeline_stats() -> Response:
 def dead_letter_stats() -> Response:
     """Get dead letter queue statistics."""
     from models import Article
-    from constants import PipelineStatus
+    from constants import PipelineStatus, _get_stuck_threshold_minutes
     from datetime import datetime, timezone, timedelta
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    threshold = _get_stuck_threshold_minutes()
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold)
     stuck = Article.query.filter(
         Article.pipeline_status.in_(
             [

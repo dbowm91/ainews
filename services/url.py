@@ -6,9 +6,12 @@ import re
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 logger = logging.getLogger(__name__)
+
+_DNS_RESOLVE_TIMEOUT = 10  # seconds
 
 # Private/reserved IP ranges that should never be fetched
 _BLOCKED_NETWORKS = [
@@ -106,9 +109,13 @@ def _resolve_and_check(hostname: str) -> list[str]:
         return cached
 
     try:
-        addr_infos = socket.getaddrinfo(hostname, None)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(socket.getaddrinfo, hostname, None)
+            addr_infos = future.result(timeout=_DNS_RESOLVE_TIMEOUT)
     except socket.gaierror:
         raise UnsafeURLError(f"DNS resolution failed for {hostname}")
+    except TimeoutError:
+        raise UnsafeURLError(f"DNS resolution timed out for {hostname}")
 
     seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
     safe_ips: list[str] = []

@@ -100,6 +100,9 @@ def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:
     if not p.exists():
         raise FileNotFoundError(f"Pipeline config not found: {p}")
     raw = load_yaml_file(p)
+    from schemas.common import resolve_env_vars
+
+    raw = resolve_env_vars(raw)
     return PipelineRootConfig(**raw)
 
 

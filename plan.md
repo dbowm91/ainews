@@ -4,9 +4,9 @@
 
 Comprehensive improvement plan consolidating all identified issues from multiple codebase reviews. Organized into 8 waves for parallel execution with sub-agents.
 
-**Status:** NOT STARTED
+**Total items:** ~55 items across 8 waves
 
-**Total items:** ~70 actionable items across 8 waves
+**Status:** IN PROGRESS — ~31 items complete, ~24 remaining
 
 ---
 
@@ -18,6 +18,8 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 
 ### 1.1: Newsletter lock race condition — use atomic `SET NX EX`
 
+**Status:** COMPLETE ✅ — Already uses `set(nx=True, ex=600)` at line 297.
+
 **Problem:** `tasks/newsletter.py` acquires the daily newsletter lock with separate `GET` + `SET` operations. Two concurrent tasks can both pass the `GET` check and proceed, causing duplicate newsletter sends.
 
 **Fix:** Replace with `set(name, task_id, nx=True, ex=600)` for atomic set-if-not-exists. Remove the separate `GET` check and `SET`. The `finally` block with atomic `release_lock` (Lua script) remains unchanged.
@@ -27,6 +29,8 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 ---
 
 ### 1.2: Pipeline lock leak on early returns after lock acquisition
+
+**Status:** NOT STARTED
 
 **Problem:** `tasks/pipeline.py:run_stage()` acquires a Redis lock. Two code paths then leak the lock:
 1. Article not found — returns without releasing
@@ -40,6 +44,8 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 
 ### 1.3: Crawl failures don't update source health tracking
 
+**Status:** COMPLETE ✅ — Already calls `record_crawl_failure()` at lines 162, 256.
+
 **Problem:** `tasks/crawl.py` catches exceptions from `crawl_source` but never calls `record_crawl_failure()`. Sources' `consecutive_failures` counter never increments, so auto-disable (at 10 failures) never works.
 
 **Fix:** Add `record_crawl_failure(source, error_msg)` call in the exception handler. Also add the same call in `run_all_sources` exception handling paths for each individual source failure within the group callback.
@@ -50,6 +56,8 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 
 ### 1.4: Fix `Subscriber.get_active()` to filter `active=True`
 
+**Status:** COMPLETE ✅ — Already filters `cls.active.is_(True)` at line 217.
+
 **Problem:** `models.py` — `get_active()` docstring says "active, non-deleted" but filter only checks `deleted_at IS NULL`. Inactive subscribers receive newsletters.
 
 **Fix:** Add `cls.active.is_(True)` to the filter.
@@ -59,6 +67,8 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 ---
 
 ### 1.5: Add missing statuses to `_STAGE_STATUS_MAP` and `_STAGE_TASKS`
+
+**Status:** COMPLETE ✅ — Already includes `selecting`, `selected`, `written` at lines 39-44, 60-64.
 
 **Problem:** `tasks/pipeline.py` — `constants.py:VALID_PIPELINE_STATUSES` includes `"selecting"`, `"selected"`, and `"written"`, but the stage maps have no entries for them. If a manual DB update or admin action sets one of these statuses, both `retry_stuck` and `_dispatch_next` would silently skip the article.
 
@@ -72,6 +82,8 @@ Comprehensive improvement plan consolidating all identified issues from multiple
 ---
 
 ### 1.6: Non-atomic lock acquisition in `tasks/newsletter.py`
+
+**Status:** COMPLETE ✅ — Already uses `SET NX` pattern with TTL refresh (lines 296-313).
 
 **Problem:** `tasks/newsletter.py` uses a TOCTOU pattern for lock acquisition (GET then SET). Two tasks could both read `None` and both proceed.
 
@@ -98,6 +110,8 @@ if not acquired:
 
 ### 2.1: Escape URLs in email HTML templates
 
+**Status:** COMPLETE ✅ — Already uses `html.escape(url, quote=True)` at lines 48-49, 102, 145.
+
 **Problem:** `services/email.py` — `verification_url` and `unsubscribe_url` are interpolated directly into `href` attributes without escaping.
 
 **Fix:** Apply `html.escape(url, quote=True)` to all URL values before HTML insertion in `send_verification_email`, `send_welcome_email`, and `send_newsletter_email`.
@@ -107,6 +121,8 @@ if not acquired:
 ---
 
 ### 2.2: Guard unprotected `db.session.commit()` calls
+
+**Status:** PARTIAL — Most commits already wrapped with try/except. Verify remaining cases.
 
 **Problem:** Multiple locations across tasks have `db.session.commit()` without try/except/rollback:
 - `tasks/crawl.py` — lines 185, 236, 239
@@ -130,6 +146,8 @@ except SQLAlchemyError:
 
 ### 2.3: Missing `RedisError` handling on lock acquisition
 
+**Status:** COMPLETE ✅ — Already wraps lock acquisition in try/except for `redis.exceptions.RedisError` in all tasks.
+
 **Problem:** Lock acquisition in `crawl_source`, `generate_daily_newsletters`, and `run_stage` will crash if Redis is unavailable. Only `retry_stuck` handles this correctly.
 
 **Fix:** Wrap lock acquisition in try/except:
@@ -152,6 +170,8 @@ Apply to:
 
 ### 2.4: Thread safety bug in `reset_response_cache()`
 
+**Status:** COMPLETE ✅ — Already uses lock pattern at line 216.
+
 **Problem:** `services/cache.py` clears the singleton without acquiring `_cache_lock`. All other reset functions acquire their locks.
 
 **Fix:**
@@ -168,6 +188,8 @@ def reset_response_cache() -> None:
 
 ### 2.5: Missing reset functions for singletons
 
+**Status:** COMPLETE ✅ — Both `reset_limiter()` and `reset_config_cache()` exist.
+
 **Problem:** `get_limiter()` and `get_config_cache()` have no corresponding reset functions, making test isolation harder.
 
 **Fix:** Add `reset_limiter()` to `services/limiter.py` and `reset_config_cache()` to `services/config_cache.py` following the same pattern as other reset functions.
@@ -177,6 +199,8 @@ def reset_response_cache() -> None:
 ---
 
 ### 2.6: `set_category` bulk action has no allowlist validation
+
+**Status:** COMPLETE ✅ — Already validates against topic keys at lines 266-268.
 
 **Problem:** `routes/admin/api.py` accepts any string as a category value. Unlike `edit_article` which validates against known categories, the bulk operation allows arbitrary strings.
 
@@ -194,6 +218,8 @@ if category not in topics:
 
 ### 2.7: CSRF-exempt state-changing POST in `routes/public/links.py`
 
+**Status:** COMPLETE ✅ — No longer `@csrf.exempt`.
+
 **Problem:** `track_share_click` has `@csrf.exempt`. This is a state-changing POST (increments metrics), enabling metric inflation attacks.
 
 **Fix:** Remove `@csrf.exempt` and ensure frontend sends CSRF token (most HTMX setups already include tokens in request headers). If AJAX calls cannot include tokens, add lightweight Content-Type validation as fallback.
@@ -203,6 +229,8 @@ if category not in topics:
 ---
 
 ### 2.8: Fix health test contamination in `test_routes.py`
+
+**Status:** COMPLETE ✅ — Test already has `@pytest.mark.skip` decorator with explanation.
 
 **Problem:** `tests/test_routes.py` — `test_health_returns_json` hits `/admin/api/health` with a login, which contaminates SQLAlchemy's SQLite connection state for subsequent tests.
 
@@ -219,6 +247,8 @@ if category not in topics:
 **Execution:** Items independent unless noted — parallelize across sub-agents.
 
 ### 3.1: f-strings in log calls — remaining instances
+
+**Status:** NEEDS VERIFICATION
 
 **Problem:** Multiple files use f-strings in log calls, violating the project convention of %-formatting.
 
@@ -246,6 +276,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.2: Inconsistent `PipelineStatus` usage — string literals to constants
 
+**Status:** NEEDS VERIFICATION
+
 **Problem:** Many files use string literals (`"researching"`, `"writing"`, `"editing"`, `"pending"`, `"failed"`, `"skipped"`) instead of `PipelineStatus` enum constants from `constants.py`.
 
 **Files to update:**
@@ -263,6 +295,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.3: Deduplicate tag-assignment logic
 
+**Status:** COMPLETE ✅ — Already extracted to helper functions in routes.
+
 **Problem:** `routes/admin/api.py` (bulk `add_tags` action) and `tasks/pipeline.py` (`_assign_tags`) implement near-identical logic.
 
 **Fix:** Refactor `_assign_tags` in `tasks/pipeline.py` to accept multiple articles, then call it from the route.
@@ -272,6 +306,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 3.4: Deduplicate health check logic
+
+**Status:** COMPLETE ✅ — Already uses `run_health_checks()` at routes/admin/api.py:19.
 
 **Problem:** `routes/admin/api.py` re-implements database, Redis, Celery, and limiter health checks that already exist in `services/health.py:run_health_checks()`.
 
@@ -283,6 +319,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.5: Deduplicate `_parse_article` function
 
+**Status:** COMPLETE ✅ — Uses shared `parse_article_headline` from utils.
+
 **Problem:** `services/newsletter.py` and `services/newsletter_pipeline.py` define identical `_parse_article()` functions.
 
 **Fix:** Remove both wrapper functions and import `parse_article_headline` directly from `services.utils`.
@@ -292,6 +330,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 3.6: Break up `_generate_newsletters_impl` (217 lines)
+
+**Status:** NOT STARTED
 
 **Problem:** `tasks/newsletter.py` handles main newsletter, per-topic loops, dry-run, subscriber queries, and run-status in a single function.
 
@@ -306,6 +346,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.7: Data-drive `_degrade_and_advance` (152 lines, 4 copy-pasted blocks)
 
+**Status:** NOT STARTED
+
 **Problem:** `tasks/pipeline.py` has four near-identical blocks (select/research/write/edit). Each follows the same pattern with only content generation and field names differing.
 
 **Fix:** Extract `_degrade_stage` helper for common commit/log/dispatch pattern, then use a config dict `_STAGE_DEGRADE_MAP` for field mappings. Keep edit stage's unique review-routing logic separate.
@@ -315,6 +357,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 3.8: Break up `bulk_article_operations` (173 lines)
+
+**Status:** COMPLETE ✅ — Already extracted to `_bulk_delete`, `_bulk_set_status`, `_bulk_set_category`, `_bulk_reprocess`, `_bulk_add_tags`.
 
 **Problem:** `routes/admin/api.py` — Five separate actions in a single route handler.
 
@@ -331,6 +375,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.9: Break up `run_stage` (108 lines)
 
+**Status:** NOT STARTED
+
 **Problem:** `tasks/pipeline.py:run_stage` combines lock acquisition, limiter, execution, failure handling, and cleanup.
 
 **Fix:** Extract helper functions:
@@ -345,6 +391,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.10: Deduplicate `_evict_stale()` logic in cache classes
 
+**Status:** NOT STARTED
+
 **Problem:** `ResponseCache._evict_stale()` and `ConfigCache._evict_stale()` implement identical LRU eviction logic with the same `_MAX_MEMORY_ENTRIES = 500` constant.
 
 **Fix:** Extract into a shared `MemoryCacheMixin` in `services/cache_base.py`. Both classes inherit from the mixin and remove their duplicate `_evict_stale` methods.
@@ -354,6 +402,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 3.11: Redis import style in `services/pipeline_monitor.py`
+
+**Status:** NEEDS VERIFICATION — Still uses `from redis.exceptions import RedisError`.
 
 **Problem:** Uses `from redis.exceptions import RedisError` instead of the AGENTS.md convention of `import redis.exceptions`.
 
@@ -365,6 +415,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 3.12: Lowercase `any` type hint in `services/redis_utils.py`
 
+**Status:** COMPLETE ✅ — Already uses `from typing import Any` at line 4.
+
 **Problem:** Uses `dict[int, any]` — lowercase `any` is not a valid type hint.
 
 **Fix:** Change to `dict[int, Any]` with `from typing import Any`.
@@ -374,6 +426,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 3.13: Fix hardcoded limiter timeout in log message
+
+**Status:** NOT STARTED
 
 **Problem:** `services/limiter.py` — Log message says `"(slot will leak until TTL=%ds expires)"` with hardcoded `300`, but the acquire timeout is configurable.
 
@@ -391,6 +445,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 4.1: Deduplicate Redis mock implementations
 
+**Status:** COMPLETE ✅ — Shared `MockRedis` class exists in `tests/mock_redis.py`.
+
 **Problem:** `tests/conftest.py` and `tests/test_pipeline_monitor.py` both implement in-memory Redis mocks.
 
 **Fix:** Extract a shared `MockRedis` class in `tests/mock_redis.py` with all needed methods (get, set, setex, delete, keys, scan_iter, mget, incr, expire, pipeline, flushdb). Update both files to import and use it.
@@ -401,6 +457,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 4.2: Extract `_reset_singletons` helper in `conftest.py`
 
+**Status:** NOT STARTED
+
 **Problem:** `tests/conftest.py` — The `_reset_redis` fixture has verbatim duplicate setup/teardown blocks.
 
 **Fix:** Extract into a `_reset_singletons()` function that resets all cached singletons. Call from both setup and teardown.
@@ -410,6 +468,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 4.3: Test app fixture should use `create_app()`
+
+**Status:** NOT STARTED
 
 **Problem:** `tests/conftest.py` — The test fixture manually builds a Flask app, bypassing `create_app()`. This means Talisman, Flask-Compress, SQLite PRAGMAs, custom template filters, and error handlers are never tested.
 
@@ -423,6 +483,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 
 ### 4.4: Fix test env var cleanup
 
+**Status:** NOT STARTED
+
 **Problem:** `tests/conftest.py` — Sets env vars globally without restoring originals. Leaks between test sessions.
 
 **Fix:** Use `monkeypatch` or save/restore originals pattern.
@@ -432,6 +494,8 @@ logger.warning("Default %s provider %s failed: %s", self.category, pdef.id, e)
 ---
 
 ### 4.5: Guard config `int()` calls against ValueError
+
+**Status:** NOT STARTED
 
 **Problem:** `config.py` — `int(os.environ.get("MAX_STAGE_RETRIES", "3"))` crashes at import time on malformed env vars.
 
@@ -453,6 +517,8 @@ def _safe_int(env_var, default):
 ---
 
 ### 4.6: Missing `SoftTimeLimitExceeded` handlers in non-pipeline tasks
+
+**Status:** COMPLETE ✅ — Already handled in all tasks (cleanup.py, extract.py, pipeline.py, crawl.py, newsletter.py).
 
 **Problem:** Tasks with `soft_time_limit` lacking explicit `SoftTimeLimitExceeded` catch blocks:
 - `process_item` (tasks/extract.py)
@@ -497,6 +563,8 @@ except SoftTimeLimitExceeded:
 
 ### 5.1: Move `theme.js` to `<head>` to eliminate FOUC
 
+**Status:** COMPLETE ✅ — Already in `<head>` at line 16.
+
 **Problem:** `theme.js` is loaded at the bottom of `<body>`, causing a flash of the wrong theme on first paint.
 
 **Files:** `templates/base.html`, `templates/base_admin.html`
@@ -508,6 +576,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 5.2: Extract duplicate inline scripts to shared JS file
+
+**Status:** COMPLETE ✅ — Already extracted to `static/js/share-a11y.js`.
 
 **Problem:** The share dropdown accessibility JS is copy-pasted identically in `base.html` and `base_admin.html`.
 
@@ -521,6 +591,8 @@ except SoftTimeLimitExceeded:
 
 ### 5.3: Add missing ARIA labels to search inputs
 
+**Status:** COMPLETE ✅ — Already has `aria-label="Search articles"` in admin articles.html.
+
 **Problem:** Admin articles search input lacks `aria-label`, making it inaccessible to screen readers.
 
 **Files:** `templates/admin/articles.html`
@@ -532,6 +604,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 5.4: Add focus styles to filter buttons
+
+**Status:** NOT STARTED
 
 **Problem:** Filter buttons have `:hover` but no `:focus-visible` styles, making keyboard navigation invisible.
 
@@ -551,6 +625,8 @@ except SoftTimeLimitExceeded:
 
 ### 5.5: Add aria-haspopup to share buttons
 
+**Status:** COMPLETE ✅ — Already has `aria-haspopup="true"` in share_macro.html.
+
 **Problem:** Share buttons open dropdowns but lack `aria-haspopup` attribute.
 
 **Files:** `templates/partials/share_macro.html`
@@ -563,6 +639,8 @@ except SoftTimeLimitExceeded:
 
 ### 5.6: Make admin tables responsive on mobile
 
+**Status:** PARTIAL — `table-responsive` class exists in articles.html but not on all admin tables.
+
 **Problem:** Tables have no horizontal scroll wrapper, causing overflow/breakage on small screens.
 
 **Files:** All admin templates with tables, `static/css/style.css`
@@ -574,6 +652,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 5.7: Increase touch targets for small buttons on mobile
+
+**Status:** NOT STARTED
 
 **Problem:** `.btn-delete` and `.btn-logout` have minimal padding, below 44px recommended touch target.
 
@@ -598,6 +678,8 @@ except SoftTimeLimitExceeded:
 
 ### 5.8: Add role="alert" to error pages
 
+**Status:** COMPLETE ✅ — Already has `role="alert"` on all error pages.
+
 **Problem:** Error pages use generic `<div>` instead of `role="alert"` for important messages.
 
 **Files:** `templates/errors/404.html`, `templates/errors/429.html`, `templates/errors/500.html`
@@ -616,6 +698,8 @@ except SoftTimeLimitExceeded:
 
 ### 6.1: Add mobile hamburger menu to admin nav
 
+**Status:** COMPLETE ✅ — Already uses checkbox pattern in base_admin.html.
+
 **Problem:** `base_admin.html` has no hamburger toggle. On mobile (<640px), the admin nav links overflow/wrap poorly.
 
 **Files:** `templates/base_admin.html`, `static/css/style.css`
@@ -627,6 +711,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 6.2: Add admin nav active state highlighting
+
+**Status:** NOT STARTED
 
 **Problem:** Admin nav doesn't highlight the current page like the public nav does.
 
@@ -640,6 +726,8 @@ except SoftTimeLimitExceeded:
 
 ### 6.3: Add HTMX loading indicators to admin table swaps
 
+**Status:** COMPLETE ✅ — Already has `hx-indicator` in articles.html.
+
 **Problem:** When HTMX swaps the articles table during search/filter, there's no visual feedback.
 
 **Files:** `templates/admin/articles.html`, `templates/admin/partials/articles_table.html`
@@ -652,6 +740,8 @@ except SoftTimeLimitExceeded:
 
 ### 6.4: Add loading state for article detail HTMX swap
 
+**Status:** COMPLETE ✅ — Already has `hx-indicator="#content-loading"` in article_card.html.
+
 **Problem:** Clicking an article card triggers an HTMX swap into `#content` with no loading indicator.
 
 **Files:** `templates/partials/article_card.html`, `templates/base.html`
@@ -663,6 +753,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 6.5: Prevent `hx-boost` from intercepting external links and special forms
+
+**Status:** NOT STARTED
 
 **Problem:** `hx-boost="true"` on `<body>` intercepts ALL links and forms. RSS feed link and logout form should not be boosted.
 
@@ -678,6 +770,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 6.6: Add CSS table of contents comment
+
+**Status:** NOT STARTED
 
 **Problem:** `style.css` is 2559 lines with no navigation aid.
 
@@ -697,6 +791,8 @@ except SoftTimeLimitExceeded:
 
 ### 7.1: Add Open Graph and Twitter Card meta tags
 
+**Status:** COMPLETE ✅ — Already present in base.html (lines 8-11).
+
 **Problem:** No social sharing metadata. Articles shared on social media lack proper previews.
 
 **Files:** `templates/base.html`, `templates/article.html`
@@ -708,6 +804,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 7.2: Add keyboard shortcut for search
+
+**Status:** NOT STARTED
 
 **Problem:** No `/` key shortcut to focus search input — a common pattern for developer-facing sites.
 
@@ -721,6 +819,8 @@ except SoftTimeLimitExceeded:
 
 ### 7.3: Add pagination controls to admin tables
 
+**Status:** NOT STARTED
+
 **Problem:** Only a "next page" link exists. No "previous" link or page info display.
 
 **Files:** Admin table partials, route handlers, `static/css/style.css`
@@ -733,6 +833,8 @@ except SoftTimeLimitExceeded:
 
 ### 7.4: Add form validation feedback to article edit
 
+**Status:** COMPLETE ✅ — Already has error display with `role="alert"`.
+
 **Problem:** Article edit form has no server error display. Backend returns `error` on DB failure but template doesn't show it.
 
 **Files:** `templates/admin/article_edit.html`, `static/css/style.css`
@@ -744,6 +846,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 7.5: Add sources management link to dashboard
+
+**Status:** NOT STARTED
 
 **Problem:** Dashboard sources table has no link to sources management page.
 
@@ -763,6 +867,8 @@ except SoftTimeLimitExceeded:
 
 ### 8.1: Add favicon
 
+**Status:** COMPLETE ✅ — Already exists at `static/favicon.svg` and linked in both base templates.
+
 **Problem:** No `<link rel="icon">` in either base template.
 
 **Files:** `templates/base.html`, `templates/base_admin.html`, `static/favicon.svg` (new)
@@ -774,6 +880,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 8.2: Add empty state illustrations
+
+**Status:** NOT STARTED
 
 **Problem:** "no articles yet" and "no articles found" are plain text.
 
@@ -787,6 +895,8 @@ except SoftTimeLimitExceeded:
 
 ### 8.3: Replace share checkbox hack with `<details>` element
 
+**Status:** COMPLETE ✅ — Already uses `<details>`/`<summary>` in share_macro.html.
+
 **Problem:** The hidden checkbox hack for share dropdowns is less accessible than native HTML.
 
 **Files:** `templates/partials/share_macro.html`, `static/css/style.css`, `static/js/app.js`
@@ -798,6 +908,8 @@ except SoftTimeLimitExceeded:
 ---
 
 ### 8.4: Add offline detection toast
+
+**Status:** COMPLETE ✅ — Already has offline toast in base.html with event listeners.
 
 **Problem:** No user feedback when network is unavailable.
 
@@ -812,93 +924,93 @@ except SoftTimeLimitExceeded:
 ## Execution Strategy
 
 ### Wave 1: Critical Backend Bugs (Parallel)
-| Agent | Item | Scope |
-|-------|------|-------|
-| A | 1.1 Newsletter lock race condition | `tasks/newsletter.py` |
-| B | 1.2 Pipeline lock leak | `tasks/pipeline.py` |
-| C | 1.3 Crawl failure health tracking | `tasks/crawl.py` |
-| D | 1.4 Subscriber.get_active filter | `models.py` |
-| E | 1.5 Missing statuses in stage maps | `tasks/pipeline.py` |
-| F | 1.6 Non-atomic newsletter lock | `tasks/newsletter.py` |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| A | 1.1 Newsletter lock race condition | `tasks/newsletter.py` | ✅ DONE |
+| B | 1.2 Pipeline lock leak | `tasks/pipeline.py` | |
+| C | 1.3 Crawl failure health tracking | `tasks/crawl.py` | ✅ DONE |
+| D | 1.4 Subscriber.get_active filter | `models.py` | ✅ DONE |
+| E | 1.5 Missing statuses in stage maps | `tasks/pipeline.py` | ✅ DONE |
+| F | 1.6 Non-atomic newsletter lock | `tasks/newsletter.py` | ✅ DONE |
 
 ### Wave 2: Security & Error Handling (Parallel, after Wave 1)
-| Agent | Item | Scope |
-|-------|------|-------|
-| G | 2.1 Escape URLs in email HTML | `services/email.py` |
-| H | 2.2 Guard db.session.commit() calls | Multiple task files |
-| I | 2.3 RedisError on lock acquisition | Multiple task files |
-| J | 2.4 reset_response_cache thread safety | `services/cache.py` |
-| K | 2.5 Missing reset functions | `services/limiter.py`, `services/config_cache.py` |
-| L | 2.6 set_category validation | `routes/admin/api.py` |
-| M | 2.7 CSRF-exempt POST | `routes/public/links.py` |
-| N | 2.8 Skip contaminated health test | `tests/test_routes.py` |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| G | 2.1 Escape URLs in email HTML | `services/email.py` | ✅ DONE |
+| H | 2.2 Guard db.session.commit() calls | Multiple task files | ⚠️ PARTIAL |
+| I | 2.3 RedisError on lock acquisition | Multiple task files | ✅ DONE |
+| J | 2.4 reset_response_cache thread safety | `services/cache.py` | ✅ DONE |
+| K | 2.5 Missing reset functions | `services/limiter.py`, `services/config_cache.py` | ✅ DONE |
+| L | 2.6 set_category validation | `routes/admin/api.py` | ✅ DONE |
+| M | 2.7 CSRF-exempt POST | `routes/public/links.py` | ✅ DONE |
+| N | 2.8 Skip contaminated health test | `tests/test_routes.py` | ✅ DONE |
 
 ### Wave 3: Code Quality (Parallel, after Wave 2)
-| Agent | Item | Scope |
-|-------|------|-------|
-| O | 3.1 f-strings in log calls | Multiple files |
-| P | 3.2 PipelineStatus constants | Multiple task files |
-| Q | 3.3 Deduplicate tag assignment | `tasks/pipeline.py`, `routes/admin/api.py` |
-| R | 3.4 Deduplicate health checks | `routes/admin/api.py`, `services/health.py` |
-| S | 3.5 Deduplicate _parse_article | `services/newsletter.py`, `services/newsletter_pipeline.py` |
-| T | 3.6 Break up _generate_newsletters_impl | `tasks/newsletter.py` |
-| U | 3.7 Data-drive _degrade_and_advance | `tasks/pipeline.py` |
-| V | 3.8 Break up bulk_article_operations | `routes/admin/api.py` |
-| W | 3.9 Break up run_stage | `tasks/pipeline.py` |
-| X | 3.10 Deduplicate _evict_stale | `services/cache.py`, `services/config_cache.py` |
-| Y | 3.11 Redis import style | `services/pipeline_monitor.py` |
-| Z | 3.12 Type hint fix | `services/redis_utils.py` |
-| AA | 3.13 Limiter timeout log message | `services/limiter.py` |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| O | 3.1 f-strings in log calls | Multiple files | ⚠️ TODO |
+| P | 3.2 PipelineStatus constants | Multiple task files | ⚠️ TODO |
+| Q | 3.3 Deduplicate tag assignment | `tasks/pipeline.py`, `routes/admin/api.py` | ✅ DONE |
+| R | 3.4 Deduplicate health checks | `routes/admin/api.py`, `services/health.py` | ✅ DONE |
+| S | 3.5 Deduplicate _parse_article | `services/newsletter.py`, `services/newsletter_pipeline.py` | ✅ DONE |
+| T | 3.6 Break up _generate_newsletters_impl | `tasks/newsletter.py` | |
+| U | 3.7 Data-drive _degrade_and_advance | `tasks/pipeline.py` | |
+| V | 3.8 Break up bulk_article_operations | `routes/admin/api.py` | ✅ DONE |
+| W | 3.9 Break up run_stage | `tasks/pipeline.py` | |
+| X | 3.10 Deduplicate _evict_stale | `services/cache.py`, `services/config_cache.py` | |
+| Y | 3.11 Redis import style | `services/pipeline_monitor.py` | ⚠️ TODO |
+| Z | 3.12 Type hint fix | `services/redis_utils.py` | ✅ DONE |
+| AA | 3.13 Limiter timeout log message | `services/limiter.py` | |
 
 ### Wave 4: Test & Config (Parallel, after Wave 3)
-| Agent | Item | Scope |
-|-------|------|-------|
-| AB | 4.1 Deduplicate Redis mock | Test files |
-| AC | 4.2 Extract _reset_singletons | `tests/conftest.py` |
-| AD | 4.3 Test app fixture uses create_app() | `tests/conftest.py` |
-| AE | 4.4 Fix test env var cleanup | `tests/conftest.py` |
-| AF | 4.5 Guard config int() calls | `config.py` |
-| AG | 4.6 SoftTimeLimitExceeded handlers | `tasks/extract.py`, `tasks/cleanup.py` |
-| AH | 4.7 Test suite improvements | Multiple test files |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| AB | 4.1 Deduplicate Redis mock | Test files | ✅ DONE |
+| AC | 4.2 Extract _reset_singletons | `tests/conftest.py` | |
+| AD | 4.3 Test app fixture uses create_app() | `tests/conftest.py` | |
+| AE | 4.4 Fix test env var cleanup | `tests/conftest.py` | |
+| AF | 4.5 Guard config int() calls | `config.py` | |
+| AG | 4.6 SoftTimeLimitExceeded handlers | `tasks/extract.py`, `tasks/cleanup.py` | ✅ DONE |
+| AH | 4.7 Test suite improvements | Multiple test files | |
 
 ### Wave 5: UI Critical Fixes (Parallel, after Wave 4)
-| Agent | Item | Scope |
-|-------|------|-------|
-| AI | 5.1 Move theme.js to <head> | `templates/base.html`, `templates/base_admin.html` |
-| AJ | 5.2 Extract duplicate inline scripts | `static/js/share-a11y.js`, templates |
-| AK | 5.3 ARIA labels on search inputs | `templates/admin/articles.html` |
-| AL | 5.4 Focus styles on filter buttons | `static/css/style.css` |
-| AM | 5.5 aria-haspopup on share buttons | `templates/partials/share_macro.html` |
-| AN | 5.6 Responsive admin tables | Multiple admin templates |
-| AO | 5.7 Touch targets for mobile | `static/css/style.css` |
-| AP | 5.8 role="alert" on error pages | `templates/errors/*.html` |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| AI | 5.1 Move theme.js to <head> | `templates/base.html`, `templates/base_admin.html` | ✅ DONE |
+| AJ | 5.2 Extract duplicate inline scripts | `static/js/share-a11y.js`, templates | ✅ DONE |
+| AK | 5.3 ARIA labels on search inputs | `templates/admin/articles.html` | ✅ DONE |
+| AL | 5.4 Focus styles on filter buttons | `static/css/style.css` | |
+| AM | 5.5 aria-haspopup on share buttons | `templates/partials/share_macro.html` | ✅ DONE |
+| AN | 5.6 Responsive admin tables | Multiple admin templates | ⚠️ PARTIAL |
+| AO | 5.7 Touch targets for mobile | `static/css/style.css` | |
+| AP | 5.8 role="alert" on error pages | `templates/errors/*.html` | ✅ DONE |
 
 ### Wave 6: UI Structural (Parallel, after Wave 5)
-| Agent | Item | Scope |
-|-------|------|-------|
-| AQ | 6.1 Admin hamburger menu | `templates/base_admin.html`, CSS |
-| AR | 6.2 Admin nav active state | `templates/base_admin.html` |
-| AS | 6.3 HTMX loading indicators | Admin article templates |
-| AT | 6.4 Article detail loading state | `templates/partials/article_card.html`, `templates/base.html` |
-| AU | 6.5 Prevent hx-boost interception | `templates/base.html`, `templates/base_admin.html` |
-| AV | 6.6 CSS TOC comment | `static/css/style.css` |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| AQ | 6.1 Admin hamburger menu | `templates/base_admin.html`, CSS | ✅ DONE |
+| AR | 6.2 Admin nav active state | `templates/base_admin.html` | |
+| AS | 6.3 HTMX loading indicators | Admin article templates | ✅ DONE |
+| AT | 6.4 Article detail loading state | `templates/partials/article_card.html`, `templates/base.html` | ✅ DONE |
+| AU | 6.5 Prevent hx-boost interception | `templates/base.html`, `templates/base_admin.html` | |
+| AV | 6.6 CSS TOC comment | `static/css/style.css` | |
 
 ### Wave 7: UI UX Enhancements (Parallel, after Wave 6)
-| Agent | Item | Scope |
-|-------|------|-------|
-| AW | 7.1 Meta/OG tags | `templates/base.html`, `templates/article.html` |
-| AX | 7.2 Search keyboard shortcut | `static/js/app.js` |
-| AY | 7.3 Pagination controls | Admin templates and routes |
-| AZ | 7.4 Form validation feedback | `templates/admin/article_edit.html` |
-| BA | 7.5 Sources link to dashboard | `templates/admin/dashboard.html` |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| AW | 7.1 Meta/OG tags | `templates/base.html`, `templates/article.html` | ✅ DONE |
+| AX | 7.2 Search keyboard shortcut | `static/js/app.js` | |
+| AY | 7.3 Pagination controls | Admin templates and routes | |
+| AZ | 7.4 Form validation feedback | `templates/admin/article_edit.html` | ✅ DONE |
+| BA | 7.5 Sources link to dashboard | `templates/admin/dashboard.html` | |
 
 ### Wave 8: UI Polish (Parallel, after Wave 7)
-| Agent | Item | Scope |
-|-------|------|-------|
-| BB | 8.1 Favicon | `static/favicon.svg`, base templates |
-| BC | 8.2 Empty state illustrations | Multiple templates, CSS |
-| BD | 8.3 Replace checkbox hack with <details> | Share macro, CSS, JS |
-| BE | 8.4 Offline detection toast | `static/js/app.js`, CSS, base template |
+| Agent | Item | Scope | Status |
+|-------|------|-------|--------|
+| BB | 8.1 Favicon | `static/favicon.svg`, base templates | ✅ DONE |
+| BC | 8.2 Empty state illustrations | Multiple templates, CSS | |
+| BD | 8.3 Replace checkbox hack with <details> | Share macro, CSS, JS | ✅ DONE |
+| BE | 8.4 Offline detection toast | `static/js/app.js`, CSS, base template | ✅ DONE |
 
 ### Verification
 After each wave:

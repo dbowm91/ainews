@@ -188,7 +188,19 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`short_url` library API**: Version 1.2.2 does not support `alphabet` parameter on module-level `encode_url()`/`decode_url()` functions. Must instantiate `short_url.UrlEncoder(alphabet=...)` and use its methods. See `models.py:8-10`.
 
+**Dead template partials**: Several partials exist but are never `{% include %}`'d: `partials/article_detail.html`, `partials/cards.html`, `partials/skeleton_loading.html`, `partials/skeleton_card.html`, `admin/partials/pipeline_logs.html`. However, `admin/partials/source_row.html` IS actively used as an HTMX swap target by `routes/admin/sources.py:66` — do not delete it.
+
+**SVG files in `static/svg/`**: `ai.svg`, `privacy.svg`, `security.svg` are referenced by `topics.yaml` via `icon:` fields. They are NOT dead files — do not delete.
+
+**`_hash_password()` in `services/validation.py`**: Dead code using bare SHA256 with no salt. Never called anywhere — the actual login system uses `werkzeug.security.check_password_hash()`. Safe to remove.
+
+**Password hashing in production**: The admin login uses werkzeug's `check_password_hash()` with scrypt/pbkdf2/argon2. The `_hash_password()` function in validation.py is unused dead code — do not rely on it.
+
 **Health endpoint test contamination**: Calling `auth_client.get("/admin/api/health")` in tests changes SQLAlchemy's SQLite connection state, causing naive/aware datetime comparison failures in downstream tests. The authenticated health test is intentionally skipped. See `tests/test_admin_api.py`.
+
+**Subscriber export streaming**: `routes/admin/subscribers.py:57-61` loads all subscribers into memory at once with `.all()`. Use `yield_per(500)` with a generator for streaming at scale.
+
+**Dashboard N+1 potential**: `routes/admin/dashboard.py:26` fetches articles without `joinedload(Article.source)`. The current template doesn't access `article.source` but the query lacks eager loading — add `joinedload` if template changes to include source info.
 
 **Flask-Migrate config path**: `migrations/env.py` calls `fileConfig(config.config_file_name)` which expects `alembic.ini` in the `migrations/` directory. In the test environment, `alembic.ini` is at the project root. The call is wrapped in `try/except (OSError, TypeError)` since it's only for logging setup.
 
@@ -246,7 +258,7 @@ System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each
 
 ### Improvement plan
 
-All improvements tracked in `plan.md` are now complete (93/93 items). The plan covers bugs, security, performance, accessibility, code quality, template DRY, pipeline resilience, testing, and documentation. See `plan.md` for full history and details.
+Active improvements tracked in `plan.md`. Organized into 12 waves for parallel sub-agent execution. Each wave contains independent items that can be worked on simultaneously across different files. See `plan.md` for full details.
 
 ### Jinja2 macro conventions
 

@@ -93,7 +93,7 @@ When adding columns with `server_default` in migrations, also set `nullable=Fals
 
 ### DNS cache in SSRF validation
 
-`services/url.py` uses a bounded `_TTLCache` (1024 entries, 60s TTL) to prevent DNS rebinding between validation and fetch. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
+`services/url.py` uses a bounded `_TTLCache` (1024 entries, 300s TTL) to prevent DNS rebinding between validation and fetch. The longer TTL covers typical pipeline delays between validation and fetch. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
 ```python
 from services.url import _dns_cache
 
@@ -248,7 +248,12 @@ System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each
 
 ### Improvement plan
 
-All pending improvements are tracked in `plan.md`. It is organized into 8 waves (backend bugs → security → code quality → tests → UI critical → UI structural → UI UX → UI polish). Each wave is designed for parallel execution with sub-agents. Check `plan.md` for the current status and execution strategy before starting work.
+All pending improvements are tracked in `plan.md`. It is organized into 10 waves (bugs → security → performance → accessibility/UX → code quality/CSS → template DRY → pipeline resilience → testing → documentation). Each wave contains independent tasks designed for parallel execution with sub-agents. Check `plan.md` for the current status, execution strategy, and parallelization guidance before starting work.
+
+### Known issues (to be fixed)
+
+- **Config reload doesn't invalidate unified config singleton**: `routes/admin/api.py:reload_config` calls `clear_provider_cache()`, `clear_app_cache()`, and `get_config_cache().invalidate_all()` — but never `reset_config()`. After config reload, `get_config()` returns stale `AppConfig`. See plan.md item 1.1.
+- **Admin base template missing HTMX**: `templates/base_admin.html` uses `hx-*` attributes extensively but does not load `htmx.min.js`. Admin HTMX features may not work if child templates don't load it independently. See plan.md item 6.9.
 
 ### Large refactoring strategy
 

@@ -26,27 +26,29 @@
     <h2 class="dash-card-title">
       <span class="health-dot green blink"></span> running pipelines ({{ running|length }})
     </h2>
-    <table class="dash-table">
-      <thead>
-        <tr><th>id</th><th>type</th><th>triggered</th><th>started</th><th>fetched</th><th>processed</th><th>selected</th><th>logs</th></tr>
-      </thead>
-      <tbody>
-        {% for run in running %}
-          <tr class="running-row">
-            <td>#{{ run.id }}</td>
-            <td><span class="source-type">{{ run.run_type }}</span></td>
-            <td>{{ run.triggered_by }}</td>
-            <td>{{ run.started_at.strftime('%b %d %H:%M') if run.started_at }}</td>
-            <td>{{ run.articles_fetched or 0 }}</td>
-            <td>{{ run.articles_processed or 0 }}</td>
-            <td>{{ run.articles_selected or 0 }}</td>
-            <td>
-              <a href="/admin/pipelines/{{ run.id }}/logs" class="newsletter-preview-link">view logs</a>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="dash-table">
+        <thead>
+          <tr><th>id</th><th>type</th><th>triggered</th><th>started</th><th>fetched</th><th>processed</th><th>selected</th><th>logs</th></tr>
+        </thead>
+        <tbody>
+          {% for run in running %}
+            <tr class="running-row">
+              <td>#{{ run.id }}</td>
+              <td><span class="source-type">{{ run.run_type }}</span></td>
+              <td>{{ run.triggered_by }}</td>
+              <td>{{ run.started_at.strftime('%b %d %H:%M') if run.started_at }}</td>
+              <td>{{ run.articles_fetched or 0 }}</td>
+              <td>{{ run.articles_processed or 0 }}</td>
+              <td>{{ run.articles_selected or 0 }}</td>
+              <td>
+                <a href="/admin/pipelines/{{ run.id }}/logs" class="newsletter-preview-link">view logs</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
   {% endif %}
 
@@ -59,7 +61,8 @@
       <a href="/admin/pipelines?type=newsletter" class="filter-btn {% if run_type == 'newsletter' %}active{% endif %}">newsletter</a>
     </div>
     {% if runs %}
-    <table class="dash-table" aria-label="Running pipelines">
+    <div class="table-responsive">
+      <table class="dash-table" aria-label="Running pipelines">
         <thead>
           <tr><th>id</th><th>type</th><th>status</th><th>triggered</th><th>fetched</th><th>processed</th><th>selected</th><th>started</th><th>finished</th><th>logs</th></tr>
         </thead>
@@ -86,7 +89,8 @@
           {% endfor %}
         </tbody>
       </table>
-      {% if has_next %}
+    </div>
+    {% if has_next %}
         <a href="/admin/pipelines?page={{ next_page }}{% if run_type %}&type={{ run_type }}{% endif %}" class="dash-link">next page &rarr;</a>
       {% endif %}
     {% else %}

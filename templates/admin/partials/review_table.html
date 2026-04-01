@@ -1,52 +1,54 @@
 {% if articles %}
-  <table class="dash-table" aria-label="Review queue">
-    <thead>
-      <tr><th>title</th><th>category</th><th>impact</th><th>created</th><th>actions</th></tr>
-    </thead>
-    <tbody>
-      {% for article in articles %}
-        <tr>
-          <td>
-            <a href="/article/{{ article.id }}" class="article-link" target="_blank">
-              {{ article.original_title[:80] if article.original_title }}
-            </a>
-            {% if article._fa and article._fa.tldr %}
-              <br><small style="color:var(--text-muted)">{{ article._fa.tldr[:120] }}</small>
-            {% endif %}
-          </td>
-          <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
-          <td>
-            {% if article.impact_score %}
-              <span class="impact-score impact-{% if article.impact_score >= 75 %}high{% elif article.impact_score >= 50 %}mid{% elif article.impact_score >= 25 %}low{% else %}minor{% endif %}">
-                {{ article.impact_score }}
-              </span>
-            {% endif %}
-          </td>
-          <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
-          <td class="actions-cell">
-            <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
-            <form method="POST" action="/admin/review/{{ article.id }}/approve" style="display:inline"
-                  hx-post="/admin/review/{{ article.id }}/approve"
-                  hx-target="closest tr"
-                  hx-swap="outerHTML"
-                  hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn-primary" style="padding:0.25rem 0.5rem;font-size:0.75rem">approve</button>
-            </form>
-            <form method="POST" action="/admin/review/{{ article.id }}/reject" style="display:inline"
-                  hx-post="/admin/review/{{ article.id }}/reject"
-                  hx-confirm="Reject this article?"
-                  hx-target="closest tr"
-                  hx-swap="outerHTML"
-                  hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn-delete">reject</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-responsive">
+    <table class="dash-table" aria-label="Review queue">
+      <thead>
+        <tr><th>title</th><th>category</th><th>impact</th><th>created</th><th>actions</th></tr>
+      </thead>
+      <tbody>
+        {% for article in articles %}
+          <tr>
+            <td>
+              <a href="/article/{{ article.id }}" class="article-link" target="_blank">
+                {{ article.original_title[:80] if article.original_title }}
+              </a>
+              {% if article._fa and article._fa.tldr %}
+                <br><small style="color:var(--text-muted)">{{ article._fa.tldr[:120] }}</small>
+              {% endif %}
+            </td>
+            <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+            <td>
+              {% if article.impact_score %}
+                <span class="impact-score impact-{% if article.impact_score >= 75 %}high{% elif article.impact_score >= 50 %}mid{% elif article.impact_score >= 25 %}low{% else %}minor{% endif %}">
+                  {{ article.impact_score }}
+                </span>
+              {% endif %}
+            </td>
+            <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
+            <td class="actions-cell">
+              <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
+              <form method="POST" action="/admin/review/{{ article.id }}/approve" style="display:inline"
+                    hx-post="/admin/review/{{ article.id }}/approve"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML"
+                    hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-primary" style="padding:0.25rem 0.5rem;font-size:0.75rem">approve</button>
+              </form>
+              <form method="POST" action="/admin/review/{{ article.id }}/reject" style="display:inline"
+                    hx-post="/admin/review/{{ article.id }}/reject"
+                    hx-confirm="Reject this article?"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML"
+                    hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-delete">reject</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   <nav class="pagination" aria-label="Review pagination">
     {% if page > 1 %}
       <a href="/admin/review?page={{ page - 1 }}" class="pag-link">&larr; prev</a>

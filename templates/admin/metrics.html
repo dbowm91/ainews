@@ -67,21 +67,23 @@
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">top articles by page loads</h2>
     {% if top_by_views %}
-      <table class="dash-table" aria-label="Top articles by page loads">
-        <thead>
-          <tr><th>#</th><th>article</th><th>category</th><th>page loads</th></tr>
-        </thead>
-        <tbody>
-          {% for article, views in top_by_views %}
-            <tr>
-              <td>{{ loop.index }}</td>
-              <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
-              <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
-              <td><strong>{{ views }}</strong></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="dash-table" aria-label="Top articles by page loads">
+          <thead>
+            <tr><th>#</th><th>article</th><th>category</th><th>page loads</th></tr>
+          </thead>
+          <tbody>
+            {% for article, views in top_by_views %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
+                <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+                <td><strong>{{ views }}</strong></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
       <p class="empty-state">no data yet</p>
     {% endif %}
@@ -91,21 +93,23 @@
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">top articles by share clicks</h2>
     {% if top_by_shares %}
-      <table class="dash-table" aria-label="Top articles by share clicks">
-        <thead>
-          <tr><th>#</th><th>article</th><th>category</th><th>share clicks</th></tr>
-        </thead>
-        <tbody>
-          {% for article, clicks in top_by_shares %}
-            <tr>
-              <td>{{ loop.index }}</td>
-              <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
-              <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
-              <td><strong>{{ clicks }}</strong></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="dash-table" aria-label="Top articles by share clicks">
+          <thead>
+            <tr><th>#</th><th>article</th><th>category</th><th>share clicks</th></tr>
+          </thead>
+          <tbody>
+            {% for article, clicks in top_by_shares %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
+                <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+                <td><strong>{{ clicks }}</strong></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
       <p class="empty-state">no data yet</p>
     {% endif %}
@@ -115,21 +119,23 @@
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">top articles by share link views</h2>
     {% if top_by_link_views %}
-      <table class="dash-table" aria-label="Top articles by share link views">
-        <thead>
-          <tr><th>#</th><th>article</th><th>category</th><th>link views</th></tr>
-        </thead>
-        <tbody>
-          {% for article, link_views in top_by_link_views %}
-            <tr>
-              <td>{{ loop.index }}</td>
-              <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
-              <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
-              <td><strong>{{ link_views }}</strong></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="dash-table" aria-label="Top articles by share link views">
+          <thead>
+            <tr><th>#</th><th>article</th><th>category</th><th>link views</th></tr>
+          </thead>
+          <tbody>
+            {% for article, link_views in top_by_link_views %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td><a href="/article/{{ article.id }}" target="_blank" class="article-link">{{ article.original_title[:80] if article.original_title }}</a></td>
+                <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+                <td><strong>{{ link_views }}</strong></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
       <p class="empty-state">no data yet</p>
     {% endif %}

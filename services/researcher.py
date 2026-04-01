@@ -80,6 +80,7 @@ def build_research_prompt(
     web_results: list[dict],
     related_articles: list[dict],
     max_text_length: int = 6000,
+    web_synthesis: str = "",
 ) -> str:
     # User-controlled content is wrapped in XML tags to separate from instructions
     parts = [
@@ -94,6 +95,12 @@ def build_research_prompt(
         "</source_article>",
         "",
     ]
+
+    if web_synthesis:
+        parts.append("<external_sources_synthesis>")
+        parts.append(esc_xml_text(web_synthesis))
+        parts.append("</external_sources_synthesis>")
+        parts.append("")
 
     if web_results:
         parts.append("<external_sources>")

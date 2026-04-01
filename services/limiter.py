@@ -70,7 +70,9 @@ class ModelLimiter:
 
                 get_metrics().counter_inc("limiter.release_failure")
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to record limiter release failure metric", exc_info=True
+                )
 
     def get_active(self, provider_id: str, model: str) -> int | None:
         """Get active slot count. Returns None if Redis is unavailable."""

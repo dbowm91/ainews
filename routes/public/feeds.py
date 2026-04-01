@@ -183,6 +183,11 @@ def feed_topic(category: str) -> Response:
     from services.rss import generate_rss_feed
     from schemas.topic import load_topics
     from services.cache import get_response_cache
+    from flask import abort
+
+    topics = load_topics().topics
+    if category not in topics:
+        abort(404)
 
     cache = get_response_cache()
     site_url = request.host_url.rstrip("/")
@@ -190,7 +195,6 @@ def feed_topic(category: str) -> Response:
 
     xml = cache.get(cache_key)
     if xml is None:
-        topics = load_topics().topics
         topic_def = topics.get(category)
         topic_name = topic_def.display_name if topic_def else category
 

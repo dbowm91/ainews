@@ -1,6 +1,7 @@
 """Shared pipeline helpers used across stage modules."""
 
 import json
+import threading
 import time
 
 from billiard.exceptions import SoftTimeLimitExceeded
@@ -66,6 +67,7 @@ _STAGE_TASKS = {
 
 # Cache for resolved task functions to avoid repeated importlib calls
 _task_fn_cache: dict[str, tuple] = {}
+_task_fn_cache_lock = threading.Lock()
 
 
 def clear_task_fn_cache() -> None:
@@ -97,16 +99,17 @@ def _dispatch_next(
     status = next_status or (article.pipeline_status if article else None)
     if not status:
         return
-    if status not in _task_fn_cache:
-        module_path, task_name = _STAGE_TASKS.get(status, (None, None))
-        if module_path:
-            import importlib
+    with _task_fn_cache_lock:
+        if status not in _task_fn_cache:
+            module_path, task_name = _STAGE_TASKS.get(status, (None, None))
+            if module_path:
+                import importlib
 
-            module = importlib.import_module(module_path)
-            _task_fn_cache[status] = (module, task_name)
-        else:
-            return
-    module, task_name = _task_fn_cache[status]
+                module = importlib.import_module(module_path)
+                _task_fn_cache[status] = (module, task_name)
+            else:
+                return
+        module, task_name = _task_fn_cache[status]
     task_fn = getattr(module, task_name)
     task_fn.delay(article_id, run_id=run_id)
 
@@ -184,10 +187,6 @@ def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
         metrics.counter_inc(
             "pipeline.log_write_failed", labels={"stage": stage, "level": level}
         )
-
-        # Re-raise for fatal stages (error level) after logging failure
-        if level == "error":
-            raise
 
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
@@ -650,7 +649,7 @@ def run_stage(
     task_id = task_self.request.id or "manual"
     redis_client = get_redis()
     lock_acquired = _acquire_stage_lock(
-        redis_client, lock_key, task_id, rc.timeout_seconds + 60
+        redis_client, lock_key, task_id, rc.timeout_seconds + 120
     )
 
     model = None
@@ -673,6 +672,10 @@ def run_stage(
         record_provider_success(rc.provider, model, tokens_used=max_tokens)
         article.retry_count = 0
         article.last_error = None
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
         record_stage_result(stage, success=True, run_id=run_id)
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",

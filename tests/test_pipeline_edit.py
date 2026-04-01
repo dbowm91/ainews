@@ -26,7 +26,9 @@ class TestEditStage:
             }
         )
 
-    def test_edit_populates_final_article(self, app, create_article):
+    def test_edit_populates_final_article(
+        self, app, create_article, setup_pipeline_mocks
+    ):
         """Edit stage should populate final_article and original_ai_article."""
         with app.app_context():
             article = create_article(pipeline_status="editing")
@@ -35,7 +37,6 @@ class TestEditStage:
             )
 
             from tasks.pipeline import run_stage
-            from tests.helpers.pipeline_mocks import setup_pipeline_mocks
 
             edited = self._make_edited_article_json()
             work_result = {
@@ -44,15 +45,10 @@ class TestEditStage:
             }
             work_fn = MagicMock(return_value=work_result)
 
-            patches, mocks = setup_pipeline_mocks()
-            try:
-                result = run_stage("editor", article.id, work_fn, MagicMock())
+            result = run_stage("editor", article.id, work_fn, MagicMock())
 
-                assert result == work_result
-                work_fn.assert_called_once()
-            finally:
-                for p in patches.values():
-                    p.stop()
+            assert result == work_result
+            work_fn.assert_called_once()
 
     def test_edit_degrades_to_done(self, app, create_article):
         """When edit fails, article should degrade to done with draft as final."""

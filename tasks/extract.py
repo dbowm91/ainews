@@ -164,12 +164,12 @@ def process_item(
                     )
                     db.session.commit()
                     logger.info(
-                        f"Added citation to article {duplicate.id} from {url[:60]}"
+                        "Added citation to article %s from %s", duplicate.id, url[:60]
                     )
             except Exception as exc:
                 db.session.rollback()
                 logger.warning(
-                    f"Failed to add citation for duplicate {duplicate.id}: {exc}"
+                    "Failed to add citation for duplicate %s: %s", duplicate.id, exc
                 )
         return {"article_id": duplicate.id, "duplicate": True}
 

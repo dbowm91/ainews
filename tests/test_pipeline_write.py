@@ -26,14 +26,13 @@ class TestWriteStage:
             }
         )
 
-    def test_write_populates_draft(self, app, create_article):
+    def test_write_populates_draft(self, app, create_article, setup_pipeline_mocks):
         """Write stage should populate draft_article."""
         with app.app_context():
             article = create_article(pipeline_status="writing")
             article.research_brief = json.dumps({"source_summary": "Summary"})
 
             from tasks.pipeline import run_stage
-            from tests.helpers.pipeline_mocks import setup_pipeline_mocks
 
             work_result = {
                 "article_id": article.id,
@@ -41,15 +40,10 @@ class TestWriteStage:
             }
             work_fn = MagicMock(return_value=work_result)
 
-            patches, mocks = setup_pipeline_mocks()
-            try:
-                result = run_stage("writer", article.id, work_fn, MagicMock())
+            result = run_stage("writer", article.id, work_fn, MagicMock())
 
-                assert result == work_result
-                work_fn.assert_called_once()
-            finally:
-                for p in patches.values():
-                    p.stop()
+            assert result == work_result
+            work_fn.assert_called_once()
 
     def test_write_degrades_to_edit(self, app, create_article):
         """When write fails, article should degrade to editing stage."""

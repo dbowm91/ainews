@@ -102,7 +102,7 @@ def trigger_newsletter():
         ), 202
     except Exception:
         current_app.logger.exception("Failed to trigger newsletter")
-        return jsonify({"message": "Failed to start newsletter generation"}), 503
+        return jsonify({"error": "Failed to start newsletter generation"}), 503
 
 
 @admin_bp.route("/newsletters/dry-run", methods=["POST"])
@@ -121,7 +121,7 @@ def newsletter_dry_run():
                 '<span class="health-dot red"></span> <span class="form-hint">Invalid email address</span>',
                 400,
             )
-        return jsonify({"message": "Invalid email address"}), 400
+        return jsonify({"error": "Invalid email address"}), 400
 
     try:
         result = generate_daily_newsletters.delay(dry_run_email=test_email)
@@ -139,7 +139,7 @@ def newsletter_dry_run():
                 '<span class="health-dot red"></span> <span class="form-hint">Failed to start dry run</span>',
                 503,
             )
-        return jsonify({"message": "Failed to start dry run"}), 503
+        return jsonify({"error": "Failed to start dry run"}), 503
 
 
 @admin_bp.route("/api/newsletter/preview", methods=["POST"])
@@ -170,7 +170,7 @@ def newsletter_preview():
     )
 
     if not articles:
-        return jsonify({"message": "No articles available for preview"}), 400
+        return jsonify({"error": "No articles available for preview"}), 400
 
     try:
         result = generate_executive_summary(articles, topic_key="main")
@@ -187,7 +187,7 @@ def newsletter_preview():
         )
     except Exception as e:
         logger.exception("Preview HTML generation failed")
-        return jsonify({"message": f"Failed to generate preview: {e}"}), 500
+        return jsonify({"error": f"Failed to generate preview: {e}"}), 500
 
     safe_html = _sanitize_newsletter_html(html)
     return jsonify(

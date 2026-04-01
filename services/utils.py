@@ -3,7 +3,6 @@ import re
 from typing import Optional, Any
 
 
-
 # Simple but effective email pattern - catches common mistakes
 _EMAIL_RE = re.compile(
     r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
@@ -51,3 +50,13 @@ def parse_article_headline(
         except (json.JSONDecodeError, TypeError):
             pass
     return headline, tldr
+
+
+def get_admin_categories() -> list[str]:
+    """Get category names from pipeline config, with fallback."""
+    try:
+        from schemas.topic import load_topics
+
+        return list(load_topics().topics.keys())
+    except Exception:
+        return ["ai", "privacy", "security", "programming", "hardware"]

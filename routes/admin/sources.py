@@ -81,7 +81,7 @@ def enable_source(source_id):
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"message": "Failed to enable source"}), 500
+        return jsonify({"error": "Failed to enable source"}), 500
     return jsonify({"message": f"Source {source.name} enabled"}), 200
 
 
@@ -99,5 +99,5 @@ def disable_source(source_id):
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"message": "Failed to disable source"}), 500
+        return jsonify({"error": "Failed to disable source"}), 500
     return jsonify({"message": f"Source {source.name} disabled"}), 200

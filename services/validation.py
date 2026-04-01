@@ -123,10 +123,3 @@ def _is_password_hash(value: str) -> bool:
     if not value or len(value) != 64:
         return False
     return bool(re.match(r"^[a-f0-9]{64}$", value))
-
-
-def _hash_password(password: str) -> str:
-    """Hash a password using SHA256."""
-    import hashlib
-
-    return hashlib.sha256(password.encode()).hexdigest()

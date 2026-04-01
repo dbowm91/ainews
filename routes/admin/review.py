@@ -54,7 +54,7 @@ def approve_article(article_id):
 
     article = Article.query.get_or_404(article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:
-        return jsonify({"message": "Article is not in review"}), 400
+        return jsonify({"error": "Article is not in review"}), 400
 
     article.pipeline_status = PipelineStatus.DONE
     article.retry_count = 0
@@ -64,9 +64,11 @@ def approve_article(article_id):
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to approve article %s", article_id)
-        return jsonify({"message": "Failed to approve article"}), 500
+        return jsonify({"error": "Failed to approve article"}), 500
 
-    logger.info("Approved article %s: %s", article_id, article.original_title[:50])
+    logger.info(
+        "Approved article %s: %s", article_id, (article.original_title or "")[:50]
+    )
 
     if request.headers.get("HX-Request"):
         return "", 200
@@ -81,7 +83,7 @@ def reject_article(article_id):
 
     article = Article.query.get_or_404(article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:
-        return jsonify({"message": "Article is not in review"}), 400
+        return jsonify({"error": "Article is not in review"}), 400
 
     article.pipeline_status = PipelineStatus.SKIPPED
     try:
@@ -89,9 +91,11 @@ def reject_article(article_id):
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to reject article %s", article_id)
-        return jsonify({"message": "Failed to reject article"}), 500
+        return jsonify({"error": "Failed to reject article"}), 500
 
-    logger.info("Rejected article %s: %s", article_id, article.original_title[:50])
+    logger.info(
+        "Rejected article %s: %s", article_id, (article.original_title or "")[:50]
+    )
 
     if request.headers.get("HX-Request"):
         return "", 200

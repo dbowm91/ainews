@@ -1,3 +1,5 @@
+import threading
+
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from constants import PipelineStatus, truncate_for_log
@@ -10,19 +12,47 @@ plog = get_pipeline_logger("edit")
 _TAG_CACHE: list[str] | None = None
 _TAG_CACHE_TIME: float = 0
 _TAG_CACHE_TTL = 300
+_TAG_CACHE_LOCK = threading.Lock()
+
+
+def _format_topic_notes(notes_by_topic: dict[str, list[str]]) -> str:
+    if not notes_by_topic:
+        return "(no topic notes)"
+    parts = []
+    for topic, notes in notes_by_topic.items():
+        parts.append(f"Topic: {topic}")
+        for note in notes:
+            parts.append(f"  - {note}")
+    return "\n".join(parts) if parts else "(no topic notes)"
+
+
+def _format_related_articles(articles: list[dict]) -> str:
+    if not articles:
+        return "(no related articles)"
+    parts = []
+    for a in articles:
+        parts.append(f"- {a.get('title', 'Unknown')} ({a.get('category', 'general')})")
+        if a.get("snippet"):
+            parts.append(f"  {a['snippet'][:200]}")
+    return "\n".join(parts) if parts else "(no related articles)"
 
 
 def _get_cached_tag_names() -> list[str]:
     global _TAG_CACHE, _TAG_CACHE_TIME
     now = time.time()
+    # Fast path: check without lock
     if _TAG_CACHE is not None and (now - _TAG_CACHE_TIME) < _TAG_CACHE_TTL:
         return _TAG_CACHE
-    from models import Tag
+    with _TAG_CACHE_LOCK:
+        # Double-check inside lock
+        if _TAG_CACHE is not None and (now - _TAG_CACHE_TIME) < _TAG_CACHE_TTL:
+            return _TAG_CACHE
+        from models import Tag
 
-    tags = Tag.query.order_by(Tag.name).limit(100).all()
-    _TAG_CACHE = [t.name for t in tags]
-    _TAG_CACHE_TIME = now
-    return _TAG_CACHE
+        tags = Tag.query.order_by(Tag.name).limit(100).all()
+        _TAG_CACHE = [t.name for t in tags]
+        _TAG_CACHE_TIME = now
+        return _TAG_CACHE
 
 
 @shared_task(
@@ -40,7 +70,10 @@ def edit_article(self, article_id: int, run_id=None):
     from extensions import db
     from schemas.pipeline import get_role_config
     from services.writer import CondensedArticle
-    from services.editor import get_editor_system_prompt, build_editor_prompt
+    from services.editor import (
+        get_editor_system_prompt,
+        build_editor_prompt_with_context,
+    )
     from tasks.pipeline import (
         run_stage,
         _log_pipeline,
@@ -49,14 +82,49 @@ def edit_article(self, article_id: int, run_id=None):
     )
 
     def work(article, provider, model, max_tokens):
+        from services.context_service import (
+            get_topic_notes_for_topics,
+            get_related_articles_for_edit,
+        )
+        from services.subagent import (
+            run_subagent,
+            EditContextualizationResponse,
+        )
+
         rc = get_role_config("editor")
         existing_tags = _get_cached_tag_names()
 
-        prompt = build_editor_prompt(
+        contextualization = ""
+        if article.topics:
+            topic_notes = get_topic_notes_for_topics(article.topics)
+            related_articles = get_related_articles_for_edit(
+                article.topics, article.id, limit=5
+            )
+            if topic_notes or related_articles:
+                context_result = run_subagent(
+                    task_type="edit_contextualization",
+                    stage="edit",
+                    prompt_data={
+                        "draft": article.draft_article or "",
+                        "brief": article.research_brief or "",
+                        "topic_notes": _format_topic_notes(topic_notes),
+                        "related_articles": _format_related_articles(related_articles),
+                    },
+                    response_model=EditContextualizationResponse,
+                )
+                contextualization = context_result.synthesis
+                if context_result.used_fallback:
+                    plog.warning(
+                        "Edit contextualization subagent failed, proceeding without context",
+                        article_id=article.id,
+                    )
+
+        prompt = build_editor_prompt_with_context(
             draft_json=article.draft_article or "",
             research_brief=article.research_brief or "",
             existing_tags=existing_tags,
             max_tags=rc.max_tags or 3,
+            contextualization=contextualization,
         )
 
         from services.metrics import time_histogram

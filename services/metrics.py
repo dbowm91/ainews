@@ -85,19 +85,38 @@ class MetricsCollector:
     def get_prometheus(self) -> str:
         """Return metrics in Prometheus exposition format."""
         lines = []
+        seen_types: set[str] = set()
+
+        def _base_name(key: str) -> str:
+            """Extract base metric name before any '{'."""
+            brace_idx = key.find("{")
+            return key if brace_idx == -1 else key[:brace_idx]
+
         with self._lock:
             # Counters
             for key, value in self._counters.items():
-                lines.append(f"# TYPE {key} counter")
+                base = _base_name(key)
+                if base not in seen_types:
+                    seen_types.add(base)
+                    lines.append(f"# HELP {base} Incrementing counter metric")
+                    lines.append(f"# TYPE {base} counter")
                 lines.append(f"{key} {value}")
             # Gauges
             for key, value in self._gauges.items():
-                lines.append(f"# TYPE {key} gauge")
+                base = _base_name(key)
+                if base not in seen_types:
+                    seen_types.add(base)
+                    lines.append(f"# HELP {base} Current gauge value")
+                    lines.append(f"# TYPE {base} gauge")
                 lines.append(f"{key} {value}")
             # Histograms (simplified as counters for now)
             for key, values in self._histograms.items():
                 if values:
-                    lines.append(f"# TYPE {key} histogram")
+                    base = _base_name(key)
+                    if base not in seen_types:
+                        seen_types.add(base)
+                        lines.append(f"# HELP {base} Histogram metric")
+                        lines.append(f"# TYPE {base} histogram")
                     # Could add buckets but skip for simplicity
                     lines.append(f"{key}_count {len(values)}")
                     lines.append(f"{key}_sum {sum(values)}")

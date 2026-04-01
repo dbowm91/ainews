@@ -2,7 +2,8 @@ import json
 import logging
 from flask import render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
-from routes.admin import admin_bp, require_auth, _admin_categories
+from routes.admin import admin_bp, require_auth
+from services.utils import get_admin_categories as _admin_categories
 from services.article import _escape_like_pattern
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 
@@ -14,8 +15,7 @@ def _query_looks_like_url(query: str) -> bool:
     return bool(query) and (
         query.startswith("http://")
         or query.startswith("https://")
-        or "/" in query
-        and "." in query
+        or ("/" in query and "." in query)
     )
 
 
@@ -229,7 +229,7 @@ def view_original_article(article_id):
     article = Article.query.get_or_404(article_id)
 
     if not article.original_ai_article:
-        return jsonify({"message": "No original AI version available"}), 404
+        return jsonify({"error": "No original AI version available"}), 404
 
     return article.original_ai_article, 200, {"Content-Type": "application/json"}
 
@@ -264,7 +264,7 @@ def rollback_article(article_id, version_id):
     version = ArticleVersion.query.get_or_404(version_id)
 
     if version.article_id != article_id:
-        return jsonify({"message": "Version does not belong to this article"}), 400
+        return jsonify({"error": "Version does not belong to this article"}), 400
 
     # Create a version snapshot of current state before rollback
     create_article_version(article, change_reason="pre_rollback", changed_by="admin")
@@ -283,7 +283,7 @@ def rollback_article(article_id, version_id):
         logger.exception(
             "Failed to rollback article %s to version %s", article_id, version_id
         )
-        return jsonify({"message": "Rollback failed"}), 500
+        return jsonify({"error": "Rollback failed"}), 500
 
     logger.info(
         "Rolled back article %s to version %s", article_id, version.version_number
@@ -311,7 +311,7 @@ def delete_article(article_id):
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to delete article %s", article_id)
-        return jsonify({"message": "Failed to delete article"}), 500
+        return jsonify({"error": "Failed to delete article"}), 500
 
     if request.headers.get("HX-Request"):
         return "", 200
@@ -330,7 +330,7 @@ def reprocess_article(article_id):
     if stage not in valid_stages:
         return jsonify(
             {
-                "message": f"Invalid stage. Must be one of: {', '.join(sorted(valid_stages))}"
+                "error": f"Invalid stage. Must be one of: {', '.join(sorted(valid_stages))}"
             }
         ), 400
 
@@ -353,7 +353,7 @@ def reprocess_article(article_id):
             logger.exception(
                 "Failed to reprocess article %s (select stage)", article_id
             )
-            return jsonify({"message": "Failed to reprocess article"}), 500
+            return jsonify({"error": "Failed to reprocess article"}), 500
         select_article.delay(article.id)
     elif stage == "research":
         from tasks import research_article
@@ -373,7 +373,7 @@ def reprocess_article(article_id):
             logger.exception(
                 "Failed to reprocess article %s (research stage)", article_id
             )
-            return jsonify({"message": "Failed to reprocess article"}), 500
+            return jsonify({"error": "Failed to reprocess article"}), 500
         research_article.delay(article.id)
     elif stage == "write":
         from tasks import write_article
@@ -390,7 +390,7 @@ def reprocess_article(article_id):
         except SQLAlchemyError:
             db.session.rollback()
             logger.exception("Failed to reprocess article %s (write stage)", article_id)
-            return jsonify({"message": "Failed to reprocess article"}), 500
+            return jsonify({"error": "Failed to reprocess article"}), 500
         write_article.delay(article.id)
 
     return redirect(url_for("admin.articles"))

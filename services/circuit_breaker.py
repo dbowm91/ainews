@@ -165,13 +165,21 @@ class CircuitBreaker:
             ``True`` if the call may proceed, ``False`` if it should be
             short-circuited.
         """
-        state = self.state
-        if state == State.CLOSED:
-            return True
-        if state == State.OPEN:
-            return False
-        if state == State.HALF_OPEN:
-            with self._lock:
+        with self._lock:
+            # Check for OPEN -> HALF_OPEN transition (same logic as state property)
+            if self._state == State.OPEN:
+                if time.monotonic() - self._opened_at >= self.recovery_timeout:
+                    old = self._state
+                    self._state = State.HALF_OPEN
+                    self._half_open_calls = 0
+                    logger.info("Circuit %s: OPEN -> HALF_OPEN", self.name)
+                    self._on_state_change(old, self._state)
+                else:
+                    return False
+
+            if self._state == State.CLOSED:
+                return True
+            if self._state == State.HALF_OPEN:
                 if self._half_open_calls < self.half_open_max_calls:
                     self._half_open_calls += 1
                     return True

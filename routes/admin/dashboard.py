@@ -1,5 +1,6 @@
 from flask import render_template
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 
 
@@ -23,7 +24,12 @@ def dashboard():
         .all()
     )
 
-    recent = Article.query.order_by(Article.created_at.desc()).limit(15).all()
+    recent = (
+        Article.query.options(joinedload(Article.source))
+        .order_by(Article.created_at.desc())
+        .limit(15)
+        .all()
+    )
 
     try:
         llm_info = get_provider_info()
@@ -41,7 +47,11 @@ def dashboard():
         pass
 
     # Subscriber stats
-    total_subs = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).filter_by(active=True).count()
+    total_subs = (
+        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+        .filter_by(active=True)
+        .count()
+    )
     subs_by_type = dict(
         db.session.query(Subscriber.newsletter_type, func.count(Subscriber.id))
         .filter(Subscriber.deleted_at.is_(None))

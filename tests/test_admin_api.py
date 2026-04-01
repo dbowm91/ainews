@@ -1,28 +1,23 @@
 """Tests for admin API endpoints."""
 
-import pytest
 from unittest.mock import MagicMock, patch
-from werkzeug.security import generate_password_hash
-
-
-@pytest.fixture
-def auth_client(app, client):
-    hashed = generate_password_hash("testpass123")
-    app.config["ADMIN_PASSWORD"] = hashed
-    with client.session_transaction() as sess:
-        sess["admin"] = True
-    return client
 
 
 class TestHealth:
     def test_requires_auth(self, client):
         assert client.get("/admin/api/health").status_code in (302, 401)
 
-    @pytest.mark.skip(
-        reason="Health endpoint HTTP request changes SQLAlchemy SQLite connection state, "
-        "causing naive/aware datetime comparison failures in downstream tests"
-    )
-    def test_authenticated(self, auth_client, mock_redis):
+    def test_authenticated(self, auth_client, mock_redis, app):
+        import pytest
+
+        pytest.skip(
+            "Health endpoint call corrupts SQLite connection state at C level, "
+            "causing naive/aware datetime comparison failures in downstream tests. "
+            "db.session.remove() and db.engine.dispose() do not fix this. "
+            "Would require moving to separate process or isolated test database."
+        )
+        from extensions import db
+
         with (
             patch("extensions.get_redis", return_value=mock_redis),
             patch("services.llm.get_provider_info") as mi,
@@ -40,6 +35,8 @@ class TestHealth:
             assert resp.status_code == 200
             data = resp.get_json()
             assert "flask" in data
+        db.session.remove()
+        db.engine.dispose()
 
 
 class TestConfigReload:
@@ -153,3 +150,120 @@ class TestSourcesHealth:
         assert resp.status_code == 200
         data = resp.get_json()
         assert len(data["sources"]) == 1
+
+
+class TestArticleEdit:
+    def test_edit_requires_auth(self, client):
+        resp = client.get("/admin/articles/1/edit")
+        assert resp.status_code == 302
+
+    def test_edit_get_renders(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            aid = create_article().id
+            db.session.commit()
+        resp = auth_client.get(f"/admin/articles/{aid}/edit")
+        assert resp.status_code == 200
+
+    def test_edit_post_updates_article(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            aid = create_article(category="main").id
+            db.session.commit()
+        resp = auth_client.post(
+            f"/admin/articles/{aid}/edit",
+            data={
+                "headline": "Updated Headline",
+                "tldr": "Updated summary",
+                "why_it_matters": "Because",
+                "body": "Body content",
+                "what_to_watch": "Watch this",
+                "key_points": "Point 1\nPoint 2",
+                "tags": "ai, news",
+                "category": "ai",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code == 302
+        with app.app_context():
+            from models import Article
+
+            article = db.session.get(Article, aid)
+            import json
+
+            fa = json.loads(article.final_article)
+            assert fa["headline"] == "Updated Headline"
+            assert fa["tldr"] == "Updated summary"
+
+
+class TestBulkAddTags:
+    def test_add_tags(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            aid = create_article().id
+            db.session.commit()
+        resp = auth_client.post(
+            "/admin/api/articles/bulk",
+            json={
+                "article_ids": [aid],
+                "action": "add_tags",
+                "tags": ["breaking", "ai"],
+            },
+        )
+        assert resp.status_code == 200
+        with app.app_context():
+            from models import Article
+
+            article = db.session.get(Article, aid)
+            tag_names = {t.name for t in article.tags}
+            assert "breaking" in tag_names
+            assert "ai" in tag_names
+
+    def test_add_tags_empty_list(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            aid = create_article().id
+            db.session.commit()
+        resp = auth_client.post(
+            "/admin/api/articles/bulk",
+            json={"article_ids": [aid], "action": "add_tags", "tags": []},
+        )
+        assert resp.status_code == 400
+
+    def test_add_tags_too_many(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            aid = create_article().id
+            db.session.commit()
+        resp = auth_client.post(
+            "/admin/api/articles/bulk",
+            json={"article_ids": [aid], "action": "add_tags", "tags": ["t"] * 11},
+        )
+        assert resp.status_code == 400
+
+
+class TestNewsletterPreview:
+    def test_preview_requires_auth(self, client):
+        resp = client.post("/admin/api/newsletter/preview")
+        assert resp.status_code in (302, 401)
+
+    def test_preview_generates_html(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            create_article(pipeline_status="done", impact_score=50)
+            db.session.commit()
+        resp = auth_client.post("/admin/api/newsletter/preview")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "html" in data
+        assert "subject" in data
+
+    def test_preview_no_articles(self, auth_client, app):
+        resp = auth_client.post("/admin/api/newsletter/preview")
+        assert resp.status_code == 400

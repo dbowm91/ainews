@@ -87,12 +87,29 @@ class NewsletterPipelineConfig(BaseModel):
     )
 
 
+class SubagentStageConfig(BaseModel):
+    enabled: bool = False
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    max_tokens: int = MAX_TOKENS_FIELD
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
+    system_prompt: Optional[str] = None
+
+
+class SubagentConfig(BaseModel):
+    default: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
+    research: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
+    edit: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
+
+
 class PipelineRootConfig(BaseModel):
     pipeline: PipelineConfig
     newsletter: NewsletterConfig = Field(default_factory=NewsletterConfig)
     newsletter_pipeline: NewsletterPipelineConfig = Field(
         default_factory=NewsletterPipelineConfig
     )
+    subagent: SubagentConfig = Field(default_factory=SubagentConfig)
 
 
 def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:
@@ -124,3 +141,24 @@ def get_role_config(role: str) -> RoleConfig:
         if section is not None:
             return getattr(section, parts[1])
     return getattr(config.pipeline, role)
+
+
+def resolve_subagent_config(stage: str) -> SubagentStageConfig:
+    config = load_pipeline_config()
+    stage_config = getattr(config.subagent, stage, None)
+    if stage_config and stage_config.enabled:
+        kwargs = {
+            "enabled": True,
+            "provider": stage_config.provider or config.pipeline.editor.provider,
+            "model": stage_config.model or config.pipeline.editor.model,
+        }
+        if stage_config.max_tokens is not None:
+            kwargs["max_tokens"] = stage_config.max_tokens
+        if stage_config.temperature is not None:
+            kwargs["temperature"] = stage_config.temperature
+        if stage_config.timeout_seconds is not None:
+            kwargs["timeout_seconds"] = stage_config.timeout_seconds
+        if stage_config.system_prompt is not None:
+            kwargs["system_prompt"] = stage_config.system_prompt
+        return SubagentStageConfig(**kwargs)
+    return SubagentStageConfig(enabled=False)

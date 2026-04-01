@@ -66,6 +66,28 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Pipeline duration histograms**: `pipeline.stage_duration_seconds` recorded for select, research, write, and edit stages.
 - **Backup verification**: `scripts/verify_backup.sh` validates SQLite integrity and required tables. Called automatically from `scripts/backup.sh`.
 
+### Subagent system
+
+`services/subagent.py` provides `run_subagent()` for running lightweight subagent tasks synchronously within parent Celery tasks. Uses `services/context_service.py` for topic note CRUD and related article lookup. Configuration in `pipeline.yaml` under `subagent:` section. Failures degrade gracefully — subagent errors never crash the parent pipeline.
+
+### CSS module architecture
+
+`static/css/style.css` imports from focused modules in `static/css/`:
+- `variables.css` — Theme variables with semantic aliases
+- `base.css` — Reset, accessibility, typography
+- `layout.css` — Container, navigation, footer, responsive
+- `components.css` — Badges, buttons, forms, share UI
+- `articles.css` — Article cards, detail, feed, tags, pagination
+- `pages.css` — Login, admin dashboard, forms
+- `utilities.css` — Utility classes, print, reduced motion
+- `critical.css` — Inlined above-the-fold styles in `base.html`
+
+Add new rules to the appropriate module, not to `style.css` directly.
+
+### API response format
+
+All error responses (4xx/5xx) use `{"error": "..."}`. Success responses (2xx) use `{"message": "..."}`. Do not mix conventions.
+
 ### Redis error handling
 
 Always catch `redis.exceptions.RedisError` (not bare `Exception`) for Redis operations in `services/`, `routes/`, and `tasks/`. This includes `ModelLimiter`, `ConfigCache`, and lock operations. Import as `import redis.exceptions` at module level.
@@ -188,19 +210,17 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`short_url` library API**: Version 1.2.2 does not support `alphabet` parameter on module-level `encode_url()`/`decode_url()` functions. Must instantiate `short_url.UrlEncoder(alphabet=...)` and use its methods. See `models.py:8-10`.
 
-**Dead template partials**: Several partials exist but are never `{% include %}`'d: `partials/article_detail.html`, `partials/cards.html`, `partials/skeleton_loading.html`, `partials/skeleton_card.html`, `admin/partials/pipeline_logs.html`. However, `admin/partials/source_row.html` IS actively used as an HTMX swap target by `routes/admin/sources.py:66` — do not delete it.
+**Template partials**: `admin/partials/source_row.html` is actively used as an HTMX swap target by `routes/admin/sources.py:66` — do not delete it. `templates/partials/article_body.html` is a shared partial used by `article.html` via `{% include %}`.
 
 **SVG files in `static/svg/`**: `ai.svg`, `privacy.svg`, `security.svg` are referenced by `topics.yaml` via `icon:` fields. They are NOT dead files — do not delete.
 
-**`_hash_password()` in `services/validation.py`**: Dead code using bare SHA256 with no salt. Never called anywhere — the actual login system uses `werkzeug.security.check_password_hash()`. Safe to remove.
-
-**Password hashing in production**: The admin login uses werkzeug's `check_password_hash()` with scrypt/pbkdf2/argon2. The `_hash_password()` function in validation.py is unused dead code — do not rely on it.
+**Password hashing in production**: The admin login uses werkzeug's `check_password_hash()` with scrypt/pbkdf2/argon2. The `_hash_password()` function in validation.py was removed (dead code). `_is_password_hash()` remains for detection purposes.
 
 **Health endpoint test contamination**: Calling `auth_client.get("/admin/api/health")` in tests changes SQLAlchemy's SQLite connection state, causing naive/aware datetime comparison failures in downstream tests. The authenticated health test is intentionally skipped. See `tests/test_admin_api.py`.
 
-**Subscriber export streaming**: `routes/admin/subscribers.py:57-61` loads all subscribers into memory at once with `.all()`. Use `yield_per(500)` with a generator for streaming at scale.
+**Subscriber export streaming**: `routes/admin/subscribers.py` uses `yield_per(500)` with a generator to stream CSV output via `stream_with_context`. Do not revert to `.all()` loading — it causes OOM at scale.
 
-**Dashboard N+1 potential**: `routes/admin/dashboard.py:26` fetches articles without `joinedload(Article.source)`. The current template doesn't access `article.source` but the query lacks eager loading — add `joinedload` if template changes to include source info.
+**Dashboard N+1 potential**: `routes/admin/dashboard.py:26` now uses `joinedload(Article.source)` preventively. The template doesn't currently access `article.source` but the eager loading is in place to prevent N+1 if that changes.
 
 **Flask-Migrate config path**: `migrations/env.py` calls `fileConfig(config.config_file_name)` which expects `alembic.ini` in the `migrations/` directory. In the test environment, `alembic.ini` is at the project root. The call is wrapped in `try/except (OSError, TypeError)` since it's only for logging setup.
 
@@ -258,7 +278,7 @@ System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each
 
 ### Improvement plan
 
-Active improvements tracked in `plan.md`. Organized into 12 waves for parallel sub-agent execution. Each wave contains independent items that can be worked on simultaneously across different files. See `plan.md` for full details.
+Improvement plan in `plan.md` was completed 2026-04-01 across 12 waves. All items verified. The plan covered: security fixes, pipeline correctness, CSS architecture, template cleanup, testing, code quality, API standardization, and the subagent system feature.
 
 ### Jinja2 macro conventions
 
@@ -266,12 +286,14 @@ Shared macros live in `templates/macros/` (e.g., `badges.html` for `pipeline_bad
 
 ### CSS utility classes
 
-Common utility classes are defined at the bottom of `static/css/style.css` in the Utilities section. Use these instead of inline `style=` attributes:
+Common utility classes are defined in `static/css/utilities.css` in the Utilities section. Use these instead of inline `style=` attributes:
 - `.inline`, `.inline-block` — display utilities
 - `.ml-05`, `.ml-1`, `.mt-05`, `.mt-15`, `.mb-1` — spacing utilities
 - `.text-muted`, `.text-danger` — text color utilities
 - `.no-decoration`, `.cursor-pointer` — behavior utilities
 - `.btn-sm` — small button variant
+
+Do not add new inline styles to templates — add CSS classes to the appropriate module instead.
 
 ### Large refactoring strategy
 

@@ -342,3 +342,22 @@ def _article_before_update(mapper, connection, target):
 @db.event.listens_for(ArticleMetric, "before_update")
 def _metric_before_update(mapper, connection, target):
     target.updated_at = datetime.now(timezone.utc)
+
+
+class TopicNote(db.Model):
+    __tablename__ = "topic_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    topic = db.Column(db.String(128), nullable=False, index=True)
+    note = db.Column(db.Text, nullable=False)
+    source = db.Column(db.String(256))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (db.UniqueConstraint("topic", "source", name="uq_topic_source"),)
+
+    def __repr__(self):
+        return f"<TopicNote {self.topic}>"

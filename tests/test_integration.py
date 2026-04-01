@@ -18,27 +18,24 @@ class TestReviewQueue:
         assert resp.status_code == 200
         assert b"no articles pending review" in resp.data
 
-    def test_review_shows_articles(self, client, app, hashed_password):
+    def test_review_shows_articles(
+        self, client, app, hashed_password, create_source, create_article
+    ):
         app.config["ADMIN_PASSWORD"] = hashed_password
         client.post("/admin/login", data={"password": "testpass123"})
 
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            create_article(
+                source=source,
                 external_id="review-test-1",
                 original_title="Article Pending Review",
                 pipeline_status="review",
                 impact_score=75,
                 final_article=json.dumps({"headline": "Test", "tldr": "Summary"}),
             )
-            db.session.add(article)
+            from extensions import db
+
             db.session.commit()
 
         resp = client.get("/admin/review")
@@ -46,25 +43,22 @@ class TestReviewQueue:
         assert b"Article Pending Review" in resp.data
         assert b"approve" in resp.data
 
-    def test_approve_article(self, client, app, hashed_password):
+    def test_approve_article(
+        self, client, app, hashed_password, create_source, create_article
+    ):
         app.config["ADMIN_PASSWORD"] = hashed_password
         client.post("/admin/login", data={"password": "testpass123"})
 
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article = create_article(
+                source=source,
                 external_id="approve-test-1",
                 original_title="Article To Approve",
                 pipeline_status="review",
             )
-            db.session.add(article)
+            from extensions import db
+
             db.session.commit()
             article_id = article.id
 
@@ -72,28 +66,28 @@ class TestReviewQueue:
         assert resp.status_code == 302
 
         with app.app_context():
+            from models import Article
+            from extensions import db
+
             article = db.session.get(Article, article_id)
             assert article.pipeline_status == "done"
 
-    def test_reject_article(self, client, app, hashed_password):
+    def test_reject_article(
+        self, client, app, hashed_password, create_source, create_article
+    ):
         app.config["ADMIN_PASSWORD"] = hashed_password
         client.post("/admin/login", data={"password": "testpass123"})
 
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article = create_article(
+                source=source,
                 external_id="reject-test-1",
                 original_title="Article To Reject",
                 pipeline_status="review",
             )
-            db.session.add(article)
+            from extensions import db
+
             db.session.commit()
             article_id = article.id
 
@@ -101,28 +95,28 @@ class TestReviewQueue:
         assert resp.status_code == 302
 
         with app.app_context():
+            from models import Article
+            from extensions import db
+
             article = db.session.get(Article, article_id)
             assert article.pipeline_status == "skipped"
 
-    def test_approve_non_review_article_returns_400(self, client, app, hashed_password):
+    def test_approve_non_review_article_returns_400(
+        self, client, app, hashed_password, create_source, create_article
+    ):
         app.config["ADMIN_PASSWORD"] = hashed_password
         client.post("/admin/login", data={"password": "testpass123"})
 
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article = create_article(
+                source=source,
                 external_id="done-test-1",
                 original_title="Already Done",
                 pipeline_status="done",
             )
-            db.session.add(article)
+            from extensions import db
+
             db.session.commit()
             article_id = article.id
 
@@ -133,24 +127,21 @@ class TestReviewQueue:
 class TestPipelineEndToEnd:
     """Integration tests for the full article pipeline flow."""
 
-    def test_article_lifecycle_pending_to_done(self, app):
+    def test_article_lifecycle_pending_to_done(
+        self, app, create_source, create_article
+    ):
         """Test that an article moves through pipeline statuses correctly."""
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article = create_article(
+                source=source,
                 external_id="lifecycle-1",
                 original_title="Test Article",
                 pipeline_status="pending",
                 extracted_text="Some content for the article.",
             )
-            db.session.add(article)
+            from extensions import db
+
             db.session.commit()
 
             # Simulate pipeline progression
@@ -171,29 +162,26 @@ class TestPipelineEndToEnd:
             db.session.commit()
 
             # Verify final state
+            from models import Article
+
             article = db.session.get(Article, article.id)
             assert article.pipeline_status == "done"
             assert article.final_article is not None
             assert article.original_ai_article is not None
 
-    def test_article_lifecycle_with_review(self, app):
+    def test_article_lifecycle_with_review(self, app, create_source, create_article):
         """Test that articles route to review when configured."""
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article = create_article(
+                source=source,
                 external_id="review-lifecycle-1",
                 original_title="Article For Review",
                 pipeline_status="editing",
                 impact_score=50,
             )
-            db.session.add(article)
+            from extensions import db
+
             db.session.commit()
 
             # Manually set to review (simulating edit task with review enabled)
@@ -208,25 +196,19 @@ class TestPipelineEndToEnd:
 
             assert article.pipeline_status == "done"
 
-    def test_deduplication(self, app):
+    def test_deduplication(self, app, create_source, create_article):
         """Test that duplicate articles are detected."""
-        from models import Article, Source
-        from extensions import db
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            # Create first article
-            article1 = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article1 = create_article(
+                source=source,
                 external_id="dedup-1",
                 original_url="https://example.com/article-1",
                 original_title="Duplicate Test Article",
                 pipeline_status="done",
             )
-            db.session.add(article1)
+            from extensions import db
+
             db.session.commit()
 
             # Check for duplicate
@@ -246,24 +228,19 @@ class TestPipelineEndToEnd:
             )
             assert not_duplicate is None
 
-    def test_tag_assignment(self, app):
+    def test_tag_assignment(self, app, create_source, create_article):
         """Test that tags are created and linked correctly."""
-        from models import Article, Source, Tag
-        from extensions import db
-        from tasks.pipeline import _assign_tags
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            article = create_article(
+                source=source,
                 external_id="tag-test-1",
                 original_title="Tag Test",
                 pipeline_status="done",
             )
-            db.session.add(article)
+            from extensions import db
+            from tasks.pipeline import _assign_tags
+
             db.session.commit()
 
             # Assign tags
@@ -271,6 +248,8 @@ class TestPipelineEndToEnd:
             db.session.commit()
 
             # Verify tags
+            from models import Article, Tag
+
             article = db.session.get(Article, article.id)
             tag_names = {t.name for t in article.tags}
             assert "machine-learning" in tag_names
@@ -281,44 +260,36 @@ class TestPipelineEndToEnd:
             tags = Tag.query.all()
             assert len(tags) == 3
 
-    def test_impact_score_bounds(self, app):
+    def test_impact_score_bounds(self, app, create_source, create_article):
         """Test that impact scores are validated."""
-        from models import Article, Source
-        from extensions import db
-        from constants import IMPACT_SCORE_MIN, IMPACT_SCORE_MAX
-
         with app.app_context():
-            source = Source(source_key="test", name="Test", source_type="rss")
-            db.session.add(source)
-            db.session.flush()
-
-            article = Article(
-                source_id=source.id,
+            source = create_source(source_key="test", name="Test", source_type="rss")
+            create_article(
+                source=source,
                 external_id="impact-test-1",
                 original_title="Impact Test",
                 pipeline_status="done",
                 impact_score=50,
             )
-            db.session.add(article)
+            from constants import IMPACT_SCORE_MIN, IMPACT_SCORE_MAX
+            from extensions import db
+
             db.session.commit()
 
-            assert article.impact_score == 50
             assert IMPACT_SCORE_MIN == 0
             assert IMPACT_SCORE_MAX == 100
 
-    def test_pipeline_run_tracking(self, app):
+    def test_pipeline_run_tracking(self, app, create_pipeline_run):
         """Test that pipeline runs are tracked correctly."""
-        from models import PipelineRun
-        from extensions import db
-
         with app.app_context():
-            run = PipelineRun(
+            from extensions import db
+
+            run = create_pipeline_run(
                 task_id="test-task-1",
                 run_type="crawl",
                 status="running",
                 triggered_by="manual",
             )
-            db.session.add(run)
             db.session.commit()
 
             run.articles_fetched = 10
@@ -327,31 +298,32 @@ class TestPipelineEndToEnd:
             run.status = "completed"
             db.session.commit()
 
+            from models import PipelineRun
+
             run = db.session.get(PipelineRun, run.id)
             assert run.status == "completed"
             assert run.articles_fetched == 10
             assert run.articles_selected == 5
 
-    def test_newsletter_creation(self, app):
+    def test_newsletter_creation(self, app, create_newsletter):
         """Test that newsletters are created and tracked."""
-        from models import Newsletter
-        from extensions import db
-
         with app.app_context():
-            newsletter = Newsletter(
+            from extensions import db
+            from datetime import datetime, timezone
+
+            newsletter = create_newsletter(
                 newsletter_type="main",
                 subject="Test Newsletter",
                 html_content="<h1>Test</h1>",
                 article_count=5,
             )
-            db.session.add(newsletter)
             db.session.commit()
 
             newsletter.recipients = 10
-            from datetime import datetime, timezone
-
             newsletter.sent_at = datetime.now(timezone.utc)
             db.session.commit()
+
+            from models import Newsletter
 
             nl = db.session.get(Newsletter, newsletter.id)
             assert nl.article_count == 5

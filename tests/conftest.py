@@ -108,6 +108,15 @@ def hashed_password():
     return generate_password_hash("testpass123")
 
 
+@pytest.fixture
+def auth_client(app, client, hashed_password):
+    """Return an authenticated test client with admin session set."""
+    app.config["ADMIN_PASSWORD"] = hashed_password
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    return client
+
+
 # Test data factory fixtures
 @pytest.fixture
 def create_source(app):
@@ -147,3 +156,34 @@ def seed_articles(app):
     from tests.factories import seed_articles
 
     return seed_articles
+
+
+@pytest.fixture
+def create_pipeline_run(app):
+    """Factory fixture for creating test pipeline runs."""
+    from tests.factories import create_pipeline_run
+
+    return create_pipeline_run
+
+
+@pytest.fixture
+def create_newsletter(app):
+    """Factory fixture for creating test newsletters."""
+    from tests.factories import create_newsletter
+
+    return create_newsletter
+
+
+@pytest.fixture
+def setup_pipeline_mocks():
+    """Shared mock setup for pipeline stage tests with automatic cleanup.
+
+    Yields:
+        Dictionary of mock objects. Patches are automatically stopped on cleanup.
+    """
+    from tests.helpers.pipeline_mocks import setup_pipeline_mocks as _setup
+
+    patches, mocks = _setup()
+    yield mocks
+    for p in patches.values():
+        p.stop()

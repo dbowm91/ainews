@@ -7,6 +7,18 @@ logger = get_task_logger(__name__)
 plog = get_pipeline_logger("research")
 
 
+def _format_web_results(web_results: list[dict]) -> str:
+    if not web_results:
+        return "(no web results)"
+    parts = []
+    for wr in web_results:
+        parts.append(f"Source: {wr.get('title', 'Unknown')}")
+        parts.append(f"URL: {wr.get('url', '')}")
+        parts.append(f"Snippet: {wr.get('snippet', '')[:300]}")
+        parts.append("")
+    return "\n".join(parts)
+
+
 @shared_task(
     bind=True,
     max_retries=2,
@@ -39,8 +51,8 @@ def research_article(self, article_id: int, run_id=None):
             db.session.rollback()
             raise
 
-        # Web search
         web_results = []
+        web_synthesis = ""
         if rc.web_search:
             search_query = f"{article.original_title} {' '.join(article.topics or [])}"
             if rc.web_search_provider:
@@ -57,6 +69,26 @@ def research_article(self, article_id: int, run_id=None):
                 for s in search_results
             ]
 
+            if web_results:
+                from services.subagent import run_subagent, ResearchSynthesisResponse
+
+                web_synthesis_result = run_subagent(
+                    task_type="research_synthesis",
+                    stage="research",
+                    prompt_data={
+                        "title": article.original_title or "",
+                        "body": article.extracted_text or "",
+                        "web_results": _format_web_results(web_results),
+                    },
+                    response_model=ResearchSynthesisResponse,
+                )
+                web_synthesis = web_synthesis_result.synthesis
+                if web_synthesis_result.used_fallback:
+                    plog.warning(
+                        "Research web synthesis subagent failed, proceeding without synthesis",
+                        article_id=article.id,
+                    )
+
         # DB lookup for related articles
         related = find_related_articles_dicts(
             article.topics or [], article.id, limit=rc.db_related_max or 5
@@ -72,6 +104,7 @@ def research_article(self, article_id: int, run_id=None):
             web_results=web_results,
             related_articles=related,
             max_text_length=rc.max_article_text_length or 6000,
+            web_synthesis=web_synthesis,
         )
 
         from services.metrics import time_histogram

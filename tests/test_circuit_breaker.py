@@ -200,6 +200,30 @@ class TestCircuitProtected:
         breaker = get_breaker("fail-test")
         assert breaker._failure_count == 1
 
+    def test_failure_in_half_open_reopens_circuit(self):
+        from services.circuit_breaker import circuit_protected, get_breaker, _breakers
+
+        _breakers.clear()
+
+        breaker = get_breaker(
+            "half-open-fail",
+            failure_threshold=2,
+            recovery_timeout=0.1,
+            half_open_max_calls=2,
+        )
+        breaker.record_failure()
+        breaker.record_failure()
+        advance_time(0.15)
+        breaker.can_execute()
+
+        @circuit_protected("half-open-fail")
+        def my_func():
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError):
+            my_func()
+        assert breaker.state.value == "open"
+
     def test_records_success_on_return(self):
         from services.circuit_breaker import circuit_protected, get_breaker, _breakers
 

@@ -111,3 +111,29 @@ def build_editor_prompt(
     )
 
     return "\n".join(parts)
+
+
+def build_editor_prompt_with_context(
+    draft_json: str,
+    research_brief: str,
+    existing_tags: list[str] | None = None,
+    max_tags: int = 3,
+    contextualization: str = "",
+) -> str:
+    base_prompt = build_editor_prompt(
+        draft_json=draft_json,
+        research_brief=research_brief,
+        existing_tags=existing_tags,
+        max_tags=max_tags,
+    )
+
+    if contextualization:
+        base_prompt += "\n\n<contextualization>\n"
+        base_prompt += esc_xml_text(contextualization)
+        base_prompt += "\n</contextualization>\n"
+        base_prompt += (
+            "\nUse this contextualization to identify gaps in the draft, "
+            "missing attribution, and claims that need additional support."
+        )
+
+    return base_prompt

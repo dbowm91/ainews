@@ -138,6 +138,15 @@ def _dead_letter(article):
         article.retry_count,
     )
 
+    from services.article import create_article_version
+
+    try:
+        create_article_version(
+            article, change_reason="dead_letter", changed_by="retry_stuck"
+        )
+    except Exception as e:
+        logger.warning("Failed to create article version for dead-letter: %s", e)
+
     _apply_fallback(article)
     article.pipeline_status = PipelineStatus.FAILED
     article.retry_count = 0

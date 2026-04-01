@@ -23,7 +23,7 @@ def toggle_share(config_id):
         db.session.commit()
     except Exception:
         db.session.rollback()
-        return jsonify({"message": "Failed to toggle share config"}), 500
+        return jsonify({"error": "Failed to toggle share config"}), 500
 
     if request.headers.get("HX-Request"):
         return render_template("admin/partials/share_row.html", config=config)

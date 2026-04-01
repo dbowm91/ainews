@@ -1,4 +1,4 @@
-from flask import render_template, request, Response
+from flask import render_template, request, Response, stream_with_context
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_ADMIN_SUBSCRIBERS
 
@@ -54,27 +54,34 @@ def export_subscribers():
     import csv
     import io
 
-    subs = (
-        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-        .order_by(Subscriber.subscribed_at.desc())
-        .all()
-    )
+    def generate():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["email", "newsletter_type", "subscribed_at", "active"])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["email", "newsletter_type", "subscribed_at", "active"])
-    for sub in subs:
-        writer.writerow(
-            [
-                sub.email,
-                sub.newsletter_type,
-                sub.subscribed_at.isoformat() if sub.subscribed_at else "",
-                sub.active,
-            ]
+        query = (
+            Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+            .order_by(Subscriber.subscribed_at.desc())
+            .yield_per(500)
         )
+        for sub in query:
+            writer.writerow(
+                [
+                    sub.email,
+                    sub.newsletter_type,
+                    sub.subscribed_at.isoformat() if sub.subscribed_at else "",
+                    sub.active,
+                ]
+            )
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
 
     return Response(
-        output.getvalue(),
+        stream_with_context(generate()),
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=subscribers.csv"},
+        headers={"Content-Disposition": "attachment; filename=subscribers.csv"},
     )

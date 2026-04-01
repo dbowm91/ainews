@@ -203,7 +203,9 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                     if "reader" not in fallback_stages:
                         fallback_stages.append("reader")
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to parse brief JSON for fallback check", exc_info=True
+                )
 
     # Writer
     if nlp.writer.enabled:

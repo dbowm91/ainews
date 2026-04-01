@@ -1,0 +1,113 @@
+/* ainews - Utilities */
+
+.inline { display: inline; }
+.inline-block { display: inline-block; }
+.no-decoration { text-decoration: none; }
+.cursor-pointer { cursor: pointer; }
+.text-muted { color: var(--text-muted); }
+.text-danger { color: var(--red); }
+.ml-05 { margin-left: 0.5rem; }
+.ml-1 { margin-left: 1rem; }
+.mt-05 { margin-top: 0.5rem; }
+.mt-15 { margin-top: 1.5rem; }
+.mb-1 { margin-bottom: 1rem; }
+.opacity-06 { opacity: 0.6; }
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  a,
+  a:visited {
+    text-decoration: underline;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    font-weight: normal;
+  }
+
+  a[href^="#"]::after,
+  a[href^="javascript:"]::after {
+    content: "";
+  }
+
+  .site-header,
+  .site-footer,
+  .nav-meta,
+  .theme-toggle,
+  .share-trigger,
+  .subscribe-box,
+  .htmx-indicator,
+  .loading-indicator,
+  .filter-bar,
+  .search-container,
+  .active-filters,
+  .article-nav,
+  .related-articles,
+  .admin-header,
+  .btn-primary,
+  .btn-secondary,
+  .btn-delete,
+  .btn-logout,
+  .skip-link {
+    display: none !important;
+  }
+
+  .container {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .article-card {
+    break-inside: avoid;
+    border: 1px solid #ccc;
+    margin-bottom: 1rem;
+  }
+
+  .article-title {
+    font-size: 18pt;
+  }
+
+  .article-body {
+    font-size: 11pt;
+  }
+
+  .card-summary,
+  .article-tldr,
+  .article-why-matters,
+  .article-what-to-watch {
+    border: 1px solid #ccc;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .category-badge,
+  .pipeline-badge,
+  .tag-pill {
+    border: 1px solid #999;
+  }
+}

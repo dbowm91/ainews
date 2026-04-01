@@ -92,12 +92,9 @@ def _verify_password(stored: str, provided: str) -> bool:
 
 def _admin_categories():
     """Get category names from pipeline config, with fallback."""
-    try:
-        from schemas.topic import load_topics
+    from services.utils import get_admin_categories
 
-        return list(load_topics().topics.keys())
-    except Exception:
-        return ["ai", "privacy", "security", "programming", "hardware"]
+    return get_admin_categories()
 
 
 def _is_locked_out(ip: str) -> bool:

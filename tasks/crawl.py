@@ -266,6 +266,8 @@ def run_all_sources(self, run_id=None):
                 run.status = "timeout"
             elif errors > 0 and total_new == 0:
                 run.status = "failed"
+            else:
+                run.status = "completed"
             db.session.commit()
         except Exception:
             db.session.rollback()

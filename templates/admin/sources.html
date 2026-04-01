@@ -96,9 +96,9 @@
               </td>
               <td>
                 {% if s.disabled_at or not s.active %}
-                  <button class="btn-small" hx-post="/admin/sources/{{ s.id }}/enable" hx-swap="outerHTML" hx-target="closest tr">enable</button>
+                  <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/enable" hx-swap="outerHTML" hx-target="closest tr">enable</button>
                 {% else %}
-                  <button class="btn-small" hx-post="/admin/sources/{{ s.id }}/disable" hx-swap="outerHTML" hx-target="closest tr">disable</button>
+                  <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/disable" hx-swap="outerHTML" hx-target="closest tr">disable</button>
                 {% endif %}
               </td>
             </tr>

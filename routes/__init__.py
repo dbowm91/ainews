@@ -13,7 +13,7 @@ def limit_content_length(max_bytes: int):
         def wrapped(*args, **kwargs):
             content_length = request.content_length
             if content_length and content_length > max_bytes:
-                return jsonify({"message": "Request too large"}), 413
+                return jsonify({"error": "Request too large"}), 413
             return f(*args, **kwargs)
 
         return wrapped

@@ -120,4 +120,4 @@ def trigger_crawl():
                 f'<div class="dash-action"><span class="health-dot red"></span> {message}</div>',
                 503,
             )
-        return jsonify({"message": message}), 503
+        return jsonify({"error": message}), 503

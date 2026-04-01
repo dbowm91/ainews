@@ -156,7 +156,7 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 
 ### Redis variable shadowing
 
-When working with any file that uses Redis, avoid naming local variables `redis` as it shadows the module import. This applies to `services/pipeline_monitor.py`, `tasks/crawl.py`, `tasks/newsletter.py`, and all other files. Name the local variable `redis_client` or `r`. Modules that import `from redis.exceptions import RedisError` are already safe from shadowing the exception import.
+When working with any file that uses Redis, avoid naming local variables `redis` as it shadows the module import. This applies to `services/pipeline_monitor.py`, `tasks/crawl.py`, `tasks/newsletter.py`, and all other files. Name the local variable `redis_client` or `r`. Modules that use `import redis.exceptions` (not `from redis.exceptions import RedisError`) are already safe from shadowing the exception import.
 
 ### Request size limiting
 

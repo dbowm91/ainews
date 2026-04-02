@@ -439,7 +439,13 @@
   z-index: var(--z-index-toast);
   opacity: 1;
   transition: opacity 0.2s;
+  animation: toast-slide-up 0.3s ease-out;
   white-space: nowrap;
+}
+
+@keyframes toast-slide-up {
+  from { transform: translateX(-50%) translateY(1rem); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
 }
 
 .toast-hidden {

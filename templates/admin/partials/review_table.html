@@ -47,23 +47,8 @@
       </tbody>
     </table>
   </div>
-  <nav class="pagination" aria-label="Review pagination">
-    {% if page > 1 %}
-      <a href="/admin/review?page={{ page - 1 }}" class="pag-link">&larr; prev</a>
-    {% else %}
-      <span class="pag-link pag-disabled">&larr; prev</span>
-    {% endif %}
-    <span class="pag-info">
-      {% set start = (page - 1) * 20 + 1 %}
-      {% set end = start + articles|length - 1 %}
-      {{ start }}–{{ end }} of {{ total_count }}
-    </span>
-    {% if has_next %}
-      <a href="/admin/review?page={{ next_page }}" class="pag-link">next &rarr;</a>
-    {% else %}
-      <span class="pag-link pag-disabled">next &rarr;</span>
-    {% endif %}
-  </nav>
+  {% from "partials/pagination.html" import pagination_nav %}
+  {{ pagination_nav(page, has_next, next_page, total_count, per_page=per_page, base_url="/admin/review") }}
 {% else %}
   <div class="empty-state">
     <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

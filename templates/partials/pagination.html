@@ -1,10 +1,5 @@
 {% macro pagination_nav(page, has_next, next_page, total_count=None, per_page=20, base_url="/", query_params={}) %}
-{% set qs = "" %}
-{% for k, v in query_params.items() %}
-  {% if v %}
-    {% set qs = qs ~ "&" ~ k ~ "=" ~ v %}
-  {% endif %}
-{% endfor %}
+{% set _qs = [] %}{% for k, v in query_params.items() %}{% if v %}{% if _qs.append('&' ~ k ~ '=' ~ v|urlencode) %}{% endif %}{% endif %}{% endfor %}{% set qs = _qs|join('') %}
 <nav class="pagination" aria-label="Pagination">
   {% if page > 1 %}
     <a href="{{ base_url }}?page={{ page - 1 }}{{ qs }}" class="pag-link">&larr; prev</a>

@@ -9,6 +9,35 @@ from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 
 logger = logging.getLogger(__name__)
 
+_REPROCESS_STAGES = {
+    "select": {
+        "status": PipelineStatus.PENDING,
+        "fields": [
+            "selector_result",
+            "research_brief",
+            "draft_article",
+            "final_article",
+            "original_ai_article",
+        ],
+        "task": "select_article",
+    },
+    "research": {
+        "status": PipelineStatus.RESEARCHING,
+        "fields": [
+            "research_brief",
+            "draft_article",
+            "final_article",
+            "original_ai_article",
+        ],
+        "task": "research_article",
+    },
+    "write": {
+        "status": PipelineStatus.WRITING,
+        "fields": ["draft_article", "final_article", "original_ai_article"],
+        "task": "write_article",
+    },
+}
+
 
 def _query_looks_like_url(query: str) -> bool:
     """Check if the query string looks like a URL."""
@@ -323,74 +352,38 @@ def delete_article(article_id):
 def reprocess_article(article_id):
     from models import Article
     from extensions import db
-    from tasks import select_article
+    from tasks import select_article, research_article, write_article
 
-    valid_stages = {"select", "research", "write"}
     stage = request.form.get("from_stage", "select")
-    if stage not in valid_stages:
+    if stage not in _REPROCESS_STAGES:
         return jsonify(
             {
-                "error": f"Invalid stage. Must be one of: {', '.join(sorted(valid_stages))}"
+                "error": f"Invalid stage. Must be one of: {', '.join(sorted(_REPROCESS_STAGES))}"
             }
         ), 400
 
+    cfg = _REPROCESS_STAGES[stage]
     article = Article.query.get_or_404(article_id)
 
-    if stage == "select":
-        article.pipeline_status = PipelineStatus.PENDING
-        article.selector_result = None
-        article.research_brief = None
-        article.draft_article = None
-        article.final_article = None
-        article.original_ai_article = None
-        article.retry_count = 0
-        article.total_retries = 0
-        article.last_error = None
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            logger.exception(
-                "Failed to reprocess article %s (select stage)", article_id
-            )
-            return jsonify({"error": "Failed to reprocess article"}), 500
-        select_article.delay(article.id)
-    elif stage == "research":
-        from tasks import research_article
+    article.pipeline_status = cfg["status"]
+    for field in cfg["fields"]:
+        setattr(article, field, None)
+    article.retry_count = 0
+    article.total_retries = 0
+    article.last_error = None
 
-        article.pipeline_status = PipelineStatus.RESEARCHING
-        article.research_brief = None
-        article.draft_article = None
-        article.final_article = None
-        article.original_ai_article = None
-        article.retry_count = 0
-        article.total_retries = 0
-        article.last_error = None
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            logger.exception(
-                "Failed to reprocess article %s (research stage)", article_id
-            )
-            return jsonify({"error": "Failed to reprocess article"}), 500
-        research_article.delay(article.id)
-    elif stage == "write":
-        from tasks import write_article
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.exception("Failed to reprocess article %s (%s stage)", article_id, stage)
+        return jsonify({"error": "Failed to reprocess article"}), 500
 
-        article.pipeline_status = PipelineStatus.WRITING
-        article.draft_article = None
-        article.final_article = None
-        article.original_ai_article = None
-        article.retry_count = 0
-        article.total_retries = 0
-        article.last_error = None
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            logger.exception("Failed to reprocess article %s (write stage)", article_id)
-            return jsonify({"error": "Failed to reprocess article"}), 500
-        write_article.delay(article.id)
+    _TASKS = {
+        "select_article": select_article,
+        "research_article": research_article,
+        "write_article": write_article,
+    }
+    _TASKS[cfg["task"]].delay(article.id)
 
     return redirect(url_for("admin.articles"))

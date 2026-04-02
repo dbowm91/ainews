@@ -12,6 +12,7 @@
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
 <body class="admin-body" hx-boost="true">
+  <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>
   <div id="offline-toast" class="offline-toast" hidden>You are offline.</div>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
   <a href="#content" class="skip-link">Skip to content</a>
@@ -32,9 +33,9 @@
         <a href="/admin/metrics" {% if request.path == '/admin/metrics' %}class="active"{% endif %}>metrics</a>
         <a href="/admin/subscribers" {% if request.path.startswith('/admin/subscribers') %}class="active"{% endif %}>subscribers</a>
         <a href="/admin/shares" {% if request.path.startswith('/admin/shares') %}class="active"{% endif %}>shares</a>
+        {% include "partials/theme_toggle.html" %}
       </div>
       <div class="nav-meta">
-        {% include "partials/theme_toggle.html" %}
         <form method="POST" action="/admin/logout" style="display:inline" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn-logout">logout</button>

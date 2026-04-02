@@ -642,8 +642,6 @@ def run_stage(
         return {"article_id": article_id, "decision": f"skip_{stage}"}
 
     limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
-    if not limiter:
-        return {"article_id": article_id, "skipped": True, "reason": "limiter_rejected"}
 
     lock_key = f"ainews:stage_lock:{article_id}:{stage}"
     task_id = task_self.request.id or "manual"

@@ -33,6 +33,7 @@ def review_queue():
             has_next=has_next,
             next_page=next_page,
             page=page,
+            per_page=per_page,
             total_count=total_review,
         )
     return render_template(
@@ -41,6 +42,7 @@ def review_queue():
         has_next=has_next,
         next_page=next_page,
         page=page,
+        per_page=per_page,
         total_count=total_review,
         total_review=total_review,
     )

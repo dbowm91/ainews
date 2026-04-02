@@ -266,3 +266,23 @@ Consolidated from plan2–plan7 (original review date: 2026-04-01). Items verifi
 - **Wave 12** (CSS architecture) is a large refactoring — do after waves 3-5 fix immediate CSS issues
 
 All other waves are fully independent and can be parallelized.
+
+---
+
+## Follow-up Fixes (2026-04-02)
+
+Code review found 11 items from the original plan that were marked "Done" but not fully implemented.
+
+| # | Wave | Issue | Fix |
+|---|------|-------|-----|
+| 1 | 2.1 | Dead `if not limiter:` branch still in `tasks/pipeline.py` | Removed the unreachable branch (limiter is always truthy or raises) |
+| 2 | 4.4 | `review_table.html` used inline pagination | Converted to `pagination_nav` macro import with correct `per_page` |
+| 3 | 4.5 | `pagination.html` query param concatenation broken (Jinja2 scoping) | Replaced `{% set %}` loop with list-append workaround; params now properly encoded |
+| 4 | 5.2 | `share_redirect.html` missing `theme.js` | Added `<script>` tag before `app.js` |
+| 5 | 5.3 | `admin/login.html` missing `data-theme="dark"` | Added attribute to `<html>` tag |
+| 6 | 5.7 | No `<noscript>` blocks in base templates | Added to both `base.html` and `base_admin.html` with `.noscript-warning` CSS |
+| 7 | 8.1 | `reprocess_article` used if/elif duplication | Refactored to `_REPROCESS_STAGES` data-driven table |
+| 8 | 9.2 | No tablet breakpoint | Added `@media (641px–768px)` breakpoint in `layout.css` |
+| 9 | 9.3 | No toast entrance animation | Added `@keyframes toast-slide-up` to `.toast` in `components.css` |
+| 10 | 9 | Inlined critical CSS used hardcoded z-index values | Added z-index custom properties to inlined `:root`; replaced hardcoded `1000`/`100`/`9999` with `var()` |
+| 11 | 9.4 | RSS link & theme toggle hidden on mobile (in `.nav-meta`) | Moved into `.nav-links` in both `base.html` and `base_admin.html` |

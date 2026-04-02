@@ -103,10 +103,11 @@ Consolidated from plan2–plan7 (original review date: 2026-04-01). Items verifi
 - `templates/base_admin.html`: Added `app.js`, `#offline-toast`, `#toast-container`
 - `templates/share_redirect.html`: Added `theme.js` script
 - `templates/admin/login.html`: Added `data-theme="dark"`
-- `templates/verify.html`: Rewrote to use CSS classes instead of inline styles
+- `templates/verify.html`: Rewrote to use CSS classes instead of inline styles (fixed 2026-04-02)
 - `static/js/app.js`: Removed duplicate share toggle listener
 - `static/js/share-a11y.js`: Consolidated toggle listener
-- `static/css/style.css`: Added `.verify-page`, `.share-redirect-*`, `.noscript-warning` classes
+- `static/css/pages.css`: Added `.verify-page` and sub-classes (fixed 2026-04-02)
+- `static/css/style.css`: Added `.share-redirect-*`, `.noscript-warning` classes
 - `templates/base.html`, `templates/base_admin.html`: Added `<noscript>` blocks
 
 ---
@@ -286,3 +287,5 @@ Code review found 11 items from the original plan that were marked "Done" but no
 | 9 | 9.3 | No toast entrance animation | Added `@keyframes toast-slide-up` to `.toast` in `components.css` |
 | 10 | 9 | Inlined critical CSS used hardcoded z-index values | Added z-index custom properties to inlined `:root`; replaced hardcoded `1000`/`100`/`9999` with `var()` |
 | 11 | 9.4 | RSS link & theme toggle hidden on mobile (in `.nav-meta`) | Moved into `.nav-links` in both `base.html` and `base_admin.html` |
+| 12 | 5.6 | `verify.html` still had inline `<style>` block, never rewritten to CSS classes | Replaced inline styles with `.verify-page` CSS classes in `pages.css`; linked `style.css` via `<link>` tag |
+| 13 | 5.9 | `.verify-page` CSS class was missing | Added `.verify-page` and sub-classes to `pages.css` |

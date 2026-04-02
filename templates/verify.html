@@ -4,26 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Verify Email — ainews//</title>
-  <style>
-    body { margin:0;padding:24px;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;display:flex;justify-content:center; }
-    .card { max-width:600px;width:100%;background:#fff;border-radius:8px;overflow:hidden; }
-    .header { padding:24px 32px;background:#0d1117;color:#fff; }
-    .header span { font-family:monospace;font-size:20px;font-weight:700; }
-    .header span em { color:#58a6ff;font-style:normal; }
-    .body { padding:24px 32px; }
-    h1 { font-size:18px;font-weight:700;color:#111;margin:0 0 12px 0; }
-    p { color:#555;font-size:14px;line-height:1.6;margin:0 0 16px 0; }
-    .footer { padding:16px 32px;background:#f9f9f9;border-top:1px solid #eaeaea;text-align:center; }
-    .footer p { font-family:monospace;font-size:11px;color:#888;margin:0; }
-    a { color:#58a6ff; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
-  <div class="card">
-    <div class="header">
+<body class="verify-page">
+  <div class="verify-card">
+    <div class="verify-header">
       <span>ainews<em>//</em></span>
     </div>
-    <div class="body">
+    <div class="verify-body">
       {% if found %}
         <h1>Email confirmed!</h1>
         <p>Your subscription has been verified. You'll start receiving newsletters when new articles are published.</p>
@@ -35,7 +23,7 @@
         <p>This verification link is invalid or has already been used. If you need to subscribe, please <a href="/">visit the homepage</a>.</p>
       {% endif %}
     </div>
-    <div class="footer">
+    <div class="verify-footer">
       <p>condensed by agents</p>
     </div>
   </div>

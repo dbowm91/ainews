@@ -20,6 +20,8 @@ All waves (1-5) completed successfully. All items (1A-1P, 2A-2O, 3A-3G, 4A-4D, 5
 - **3G**: Updated `feed.html` empty states to use `.empty-title` and `.empty-description` classes
 - **5E**: Added `TestProvidersYamlValidation` class with 4 tests (test_llm_adapters.py:558-637)
 - **Tests**: Fixed `test_task_select.py` mock to return 4 values from `get_provider_for_role()`
+- **2A**: Corrected line reference from 449-519 to 526-597 (code was always correct)
+- **2M**: Verified as PASS — all 4 selectors (`.btn-primary`, `.btn-secondary`, `.filter-btn`, `.nav-links a`) have `transition: all 0.15s ease`. Subagent incorrectly flagged `.article-card` which is a 4B selector, not 2M.
 
 ---
 
@@ -189,7 +191,7 @@ All CSS/template-only changes. No pipeline, schema, or model logic touched.
 
 ### 2A. Fix verify page theming
 
-**File:** `static/css/pages.css:449-519`
+**File:** `static/css/pages.css:526-597`
 
 Replace 12 hardcoded color values with CSS custom properties:
 

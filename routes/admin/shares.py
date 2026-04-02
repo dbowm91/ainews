@@ -17,7 +17,7 @@ def toggle_share(config_id):
     from models import ShareConfig
     from extensions import db
 
-    config = ShareConfig.query.get_or_404(config_id)
+    config = db.get_or_404(ShareConfig, config_id)
     config.active = not config.active
     try:
         db.session.commit()

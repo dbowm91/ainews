@@ -11,6 +11,13 @@ every wave before proceeding.
 
 All waves (1-5) completed successfully. All items (1A-1P, 2A-2O, 3A-3G, 4A-4D, 5A-5E) implemented and verified.
 
+### Follow-up fixes (April 2, 2026)
+
+- **1O**: Fixed remaining `Model.query.get_or_404()` in `newsletters.py`, `shares.py`, `pipelines.py`
+- **2A**: Fixed hardcoded `color: #fff` in `.unsubscribe-confirm-btn` (pages.css:510)
+- **3F**: Verified `.card-source` CSS rule exists (articles.css:125-127)
+- **3G**: Updated `feed.html` empty states to use `.empty-title` and `.empty-description` classes
+
 ---
 
 ## Verification (run after each wave)

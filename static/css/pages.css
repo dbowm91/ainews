@@ -507,7 +507,7 @@
   font-size: var(--text-base);
   padding: var(--space-3) var(--space-6);
   background: var(--red);
-  color: #fff;
+  color: var(--text-primary);
   border: none;
   border-radius: 5px;
   cursor: pointer;

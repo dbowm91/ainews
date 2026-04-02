@@ -2,6 +2,7 @@ import logging
 from flask import render_template, request, jsonify, current_app
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_NEWSLETTERS
+from extensions import db
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def newsletters():
 def view_newsletter(newsletter_id):
     from models import Newsletter
 
-    nl = Newsletter.query.get_or_404(newsletter_id)
+    nl = db.get_or_404(Newsletter, newsletter_id)
     safe_html = _sanitize_newsletter_html(nl.html_content or "")
     return safe_html, 200, {"Content-Type": "text/html"}
 

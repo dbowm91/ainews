@@ -1,6 +1,7 @@
 from flask import render_template, request, jsonify, current_app
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
+from extensions import db
 
 
 @admin_bp.route("/pipelines")
@@ -37,7 +38,7 @@ def pipeline_logs(run_id):
     from models import PipelineRun, PipelineLog
     from services.utils import paginate_query
 
-    run = PipelineRun.query.get_or_404(run_id)
+    run = db.get_or_404(PipelineRun, run_id)
     level = request.args.get("level", "", type=str).strip()
     page = max(1, request.args.get("page", 1, type=int))
     per_page = PER_PAGE_PIPELINE_LOGS

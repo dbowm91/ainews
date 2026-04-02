@@ -1,291 +1,512 @@
-# Consolidated Improvement Plan
+# Consolidated Improvement Plan — April 2026
 
-Consolidated from plan2–plan7 (original review date: 2026-04-01). Items verified against the codebase before inclusion. Organized into waves for parallel sub-agent execution — each wave contains independent items that can be worked on simultaneously.
+Merges plan2 (LLM providers), plan3 (code review fixes), plan4 (UI fixes),
+plan5 (code quality + providers), and plan6 (UI enhancements) into a single
+sequenced plan. Organized into waves for parallel sub-agent execution.
 
-**Status: Complete (all 12 waves done 2026-04-01)**
-
----
-
-## Wave 1 — Security & Critical Bugs (parallel: different files)
-
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 1.1 | plan3 #5 | Critical | Remove dead `_hash_password()` | Done |
-| 1.2 | plan3 #1 | Critical | `run_stage()` commit after retry reset | Done |
-| 1.3 | plan3 #2 | Critical | `run_all_sources` mark as completed | Done |
-| 1.4 | plan3 #3 | Critical | `_dead_letter()` audit trail | Done |
-| 1.5 | plan3 #4 | Critical | Redis error handling in newsletter lock | Done |
-
-**Changes made:**
-- `services/validation.py`: Deleted `_hash_password()`, kept `_is_password_hash`
-- `tasks/pipeline.py:674-678`: Added `db.session.commit()` with try/except after retry counter reset
-- `tasks/crawl.py:268-269`: Added `else: run.status = "completed"` in success path
-- `tasks/retry.py:141-147`: Added `create_article_version()` call before `_apply_fallback()`
-- `tasks/newsletter.py:305-320`: Lock check wrapped in `try/except redis.exceptions.RedisError`
+Each wave's items are independent and can run concurrently. Verify after
+every wave before proceeding.
 
 ---
 
-## Wave 2 — Pipeline Correctness & Concurrency (parallel: different files)
+## Verification (run after each wave)
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 2.1 | plan2 #5 | Medium | Limiter slot leak | Done |
-| 2.2 | plan2 #6 | Medium | Circuit breaker TOCTOU race | Done |
-| 2.3 | plan2 #7 | Medium | None dereference in review.py | Done |
-| 2.4 | plan2 #13 | Low | Dead code `_check_stage_limiter()` | Done |
-| 2.5 | plan2 #15 | Low | Non-thread-safe `_task_fn_cache` | Done |
-| 2.6 | plan3 #10 | Medium | `_bulk_reprocess` non-atomic | Done |
-| 2.7 | plan3 #11 | Medium | `_log_pipeline` error re-raise | Done |
-
-**Changes made:**
-- `tasks/pipeline.py`: Removed dead `if not limiter:` branch, added `_task_fn_cache_lock`, changed lock TTL +60→+120, removed `_log_pipeline` error re-raise
-- `services/circuit_breaker.py`: `can_execute()` now holds lock for entire state check + half-open increment, includes OPEN→HALF_OPEN recovery timeout check
-- `routes/admin/review.py:69,94`: Added `(original_title or "")[:50]` guard
-- `routes/admin/api.py:284-312`: `_bulk_reprocess` now dispatches tasks first, commits after
+```bash
+.venv/bin/ruff check . --exclude .venv
+.venv/bin/python -m pytest tests/ -x -q
+```
 
 ---
 
-## Wave 3 — UI: Missing CSS Classes (parallel: single file additions)
+## Wave 1: Bug fixes & code quality (parallel-safe: different files)
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 3.1 | plan5 #1 | High | Error page CSS | Done |
-| 3.2 | plan5 #2 | High | `.unsubscribe-confirm-btn` CSS | Done |
-| 3.3 | plan5 #3 | High | `btn-small` → `btn-sm` rename | Done |
-| 3.4 | plan6 #10 | Low | `.card-author` CSS | Done |
-| 3.5 | plan6 #11 | Medium | `.btn-primary` display fix | Done |
+These are the highest-impact fixes — bugs that cause runtime failures or
+incorrect behavior. All verified present in the codebase as of 2026-04-02.
 
-**Changes made:**
-- `static/css/pages.css`: Added `.error-page`, `.error-title`, `.error-message` rules for error pages
-- `static/css/pages.css`: Added `.unsubscribe-confirm-btn` with hover styles
-- `static/css/pages.css`: Added `.card-author` for article card author display
-- `static/css/components.css`: Added `display: inline-block` to `.btn-primary`
-- `templates/admin/sources.html:99,101`: Renamed `btn-small` → `btn-sm`
-- `templates/admin/partials/source_row.html:33,35`: Renamed `btn-small` → `btn-sm`
+### 1A. Fix `track_metric()` unguarded commit
 
----
+**Severity:** Critical
+**File:** `services/article.py:46-48`
 
-## Wave 4 — Template Cleanup & Deduplication (parallel: different files)
+`db.session.commit()` without try/except rollback. Wrap per convention:
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 4.1 | plan6 #4 | High | Delete dead template partials | Done |
-| 4.2 | plan5 #4 | Medium | Extract article_body partial | Done |
-| 4.3 | plan5 #5 | Medium | Use shared pagination_nav macro | Done |
-| 4.4 | plan5 #6 | Medium | Fix pagination urlencode | Done |
+```python
+try:
+    db.session.execute(stmt)
+    db.session.commit()
+except SQLAlchemyError:
+    db.session.rollback()
+    raise
+db.session.expire_all()
+```
 
-**Changes made:**
-- Deleted: `partials/article_detail.html`, `partials/cards.html`, `partials/skeleton_loading.html`, `partials/skeleton_card.html`, `admin/partials/pipeline_logs.html`
-- Created: `templates/partials/article_body.html` with shared rendering logic for summary/fallback article paths
-- `templates/article.html`: Uses `{% include "partials/article_body.html" %}` for non-condensed articles
-- `templates/admin/partials/review_table.html`: Uses `pagination_nav` macro
-- `templates/partials/pagination.html`: Added `urlencode` filter
+### 1B. Fix Celery task dispatch before DB commit
 
-**Note:** `admin/partials/source_row.html` was NOT deleted — it's used as HTMX swap target by `routes/admin/sources.py:66`.
+**Severity:** Critical
+**File:** `routes/admin/api.py:298-313`
 
----
+Tasks dispatched with `.delay()` (line 300) before `db.session.commit()` (line 310).
+Worker may pick up task before commit is visible. Move commit before dispatch.
 
-## Wave 5 — Admin Templates & Script Gaps (parallel: different files)
+### 1C. Fix lock re-acquire race condition in newsletter task
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 5.1 | plan6 #6 | High | `base_admin.html` missing `app.js` | Done |
-| 5.2 | plan6 #13 | Low | `base_admin.html` missing offline toast | Done |
-| 5.3 | plan6 #14 | Low | `base_admin.html` missing toast container | Done |
-| 5.4 | plan6 #7 | High | `share_redirect.html` missing `theme.js` | Done |
-| 5.5 | plan5 #8 | Medium | `admin/login.html` missing `data-theme` | Done |
-| 5.6 | plan5 #7 | Medium | `verify.html` inline colors | Done |
-| 5.7 | plan5 #9 | Medium | Inline styles extraction | Done |
-| 5.8 | plan6 #12 | Low | Duplicate share toggle listeners | Done |
-| 5.9 | plan5 #17 | Low | Noscript fallback | Done |
+**Severity:** Critical
+**File:** `tasks/newsletter.py:308-314`
 
-**Changes made:**
-- `templates/base_admin.html`: Added `app.js`, `#offline-toast`, `#toast-container`
-- `templates/share_redirect.html`: Added `theme.js` script
-- `templates/admin/login.html`: Added `data-theme="dark"`
-- `templates/verify.html`: Rewrote to use CSS classes instead of inline styles (fixed 2026-04-02)
-- `static/js/app.js`: Removed duplicate share toggle listener
-- `static/js/share-a11y.js`: Consolidated toggle listener
-- `static/css/pages.css`: Added `.verify-page` and sub-classes (fixed 2026-04-02)
-- `static/css/style.css`: Added `.share-redirect-*`, `.noscript-warning` classes
-- `templates/base.html`, `templates/base_admin.html`: Added `<noscript>` blocks
+GET-then-SET pattern is not atomic. Add a Lua script to `services/redis_utils.py`:
 
----
+```lua
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('expire', KEYS[1], tonumber(ARGV[2]))
+else
+    return 0
+end
+```
 
-## Wave 6 — Subscriber Export & Dashboard (parallel: different files)
+Replace the GET-then-SET in `generate_daily_newsletters` with a call to this
+Lua script.
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 6.1 | plan2 #8 | Medium | Subscriber export streaming | Done |
-| 6.2 | plan2 #1 | Low | Dashboard N+1 potential | Done |
+### 1D. Fix `model` may be `None` in limiter release
 
-**Changes made:**
-- `routes/admin/subscribers.py`: Replaced `.all()` with `yield_per(500)` generator using `stream_with_context`
-- `routes/admin/dashboard.py:26`: Added `joinedload(Article.source)` to query
+**Severity:** Warning
+**File:** `tasks/pipeline.py:723`
 
----
+If `get_provider_for_role()` raises, `model` stays `None`. Change
+`"model" in locals()` guard to `model is not None`.
 
-## Wave 7 — Testing & Coverage (parallel: different test files)
+### 1E. Fix crawl failures double-counted
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 7.1 | plan2 #3 | High | Skipped health endpoint test | Done |
-| 7.2 | plan2 #12 | Medium | Missing test coverage | Done |
-| 7.3 | plan3 #6 | Medium | pytest-cov with threshold | Done |
-| 7.4 | plan3 #7 | Medium | Convert patches to fixtures | Done |
-| 7.5 | plan3 #8 | Medium | Consolidate auth_client fixture | Done |
-| 7.6 | plan3 #18 | Low | Use factory fixtures | Done |
+**Severity:** Warning
+**File:** `tasks/crawl.py:248-256`
 
-**Changes made:**
-- Added tests for: article edit GET/POST, newsletter preview, bulk add_tags, circuit breaker HALF_OPEN→OPEN
-- `pyproject.toml`: Added `[tool.coverage]` config with 70% threshold
-- `tests/test_pipeline.py`: Converted mock patterns to fixtures
-- `tests/conftest.py`: Added `auth_client`, `create_pipeline_run`, `create_newsletter` fixtures
-- `tests/test_integration.py`: Converted to factory fixtures
+`record_crawl_failure` called in aggregation loop, but `crawl_source` already
+calls it in its exception handler (line 162). Remove the duplicate call.
 
----
+### 1F. Fix error response format in `bulk_article_operations`
 
-## Wave 8 — Code Quality & Maintenance (parallel: different files)
+**File:** `routes/admin/api.py:403-408`
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 8.1 | plan2 #2 | High | Duplicated reprocess logic | Done |
-| 8.2 | plan2 #10 | Medium | Silent exception swallowing | Done |
-| 8.3 | plan2 #14 | Low | Duplicate dead-letter logic | Done |
-| 8.4 | plan2 #16 | Low | Misleading operator precedence | Done |
-| 8.5 | plan3 #12 | Low | F-string log calls | Done |
-| 8.6 | plan3 #13 | Low | Non-thread-safe `_TAG_CACHE` | Done |
-| 8.7 | plan3 #14 | Low | Duplicate `_admin_categories()` | Done |
-| 8.8 | plan2 #18 | Low | Lock TTL buffer too tight | Done |
+Returns `{"message": "Invalid action..."}` with 400. Per convention, errors
+must use `{"error": "..."}`.
 
-**Changes made:**
-- `routes/admin/articles.py`: Data-driven `_STAGE_HANDLERS` table; explicit parentheses in `_query_looks_like_url()`
-- `services/newsletter_pipeline.py`: Replaced `except Exception: pass` with logging
-- `services/limiter.py`: Replaced `except Exception: pass` with logging
-- `tasks/retry.py`: `_dead_letter()` calls `create_article_version()`
-- `tasks/extract.py`: Converted f-string logs to %-formatting
-- `tasks/edit.py`: Added `_TAG_CACHE_LOCK` with double-checked locking
-- `services/utils.py`: Created `get_admin_categories()`
-- `routes/admin/__init__.py`: Delegates to `services.utils.get_admin_categories()`
-- `tasks/pipeline.py:652`: Lock TTL changed from +60 to +120
+### 1G. Narrow exception catch in `redis_utils.py:release_lock`
 
----
+**File:** `services/redis_utils.py:42`
 
-## Wave 9 — UI Polish & Responsive (parallel: different CSS areas)
+Catches bare `Exception`. Change to `except redis.exceptions.RedisError:`.
+Add `import redis.exceptions` at module level.
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 9.1 | plan5 #10 | Medium | Tablet breakpoint | Done |
-| 9.2 | plan5 #11 | Medium | Mobile hamburger menu accessibility | Done |
-| 9.3 | plan5 #12 | Low | Toast entrance animation | Done |
-| 9.4 | plan5 #13 | Low | Hamburger menu transition | Done |
-| 9.5 | plan5 #14 | Low | CSS z-index custom properties | Done |
-| 9.6 | plan5 #15 | Low | Standard `line-clamp` | Done |
-| 9.7 | plan5 #16 | Low | `.DS_Store` removal | Skipped (not in git) |
-| 9.8 | plan6 #9 | Medium | Font size scale naming | Done |
+### 1H. Narrow exception catch in `config.py:_validate_llm_providers`
 
-**Changes made:**
-- `static/css/variables.css`: Added `--z-index-sticky`, `--z-index-share-dropdown`, `--z-index-skip-link`, `--z-index-toast` custom properties
-- `static/css/critical.css`, `layout.css`, `base.css`, `components.css`: Replaced all hardcoded `z-index` values with CSS custom properties
-- `static/css/critical.css`, `layout.css`: Added tablet breakpoint, toast animation, hamburger transition, font size scale comments
-- `templates/base.html`, `templates/base_admin.html`: Added RSS link and theme toggle inside `.nav-links` for mobile
+**File:** `config.py:190-191`
 
----
+Change `except Exception` to `except (ImportError, RuntimeError, KeyError, ValueError)`.
 
-## Wave 10 — API Standardization & Deployment (parallel: different concerns)
+### 1I. Fix `_is_password_hash` in `services/validation.py`
 
-| # | Source | Severity | Item | Status |
-|---|--------|----------|------|--------|
-| 10.1 | plan2 #9 | Medium | API error response format | Done |
-| 10.2 | plan2 #4 | High | Duplicate dependency declarations | Done |
-| 10.3 | plan2 #11 | Low | Pin granian version | Done |
-| 10.4 | plan2 #19 | Low | Pin dev dependencies | Done |
-| 10.5 | plan2 #17 | Low | Return type annotations | Done |
-| 10.6 | plan3 #15 | Low | Feed route category validation | Done |
-| 10.7 | plan3 #16 | Low | Wasted query in track_share_click | Done |
-| 10.8 | plan3 #17 | Low | Prometheus HELP lines | Done |
+**File:** `services/validation.py:121-125`
 
-**Changes made:**
-- All admin route files: Standardized error responses to `{"error": "..."}`, success to `{"message": "..."}`
-- `pyproject.toml`: Granian pinned, dev deps pinned to compatible ranges
-- `Dockerfile`: Pinned `granian>=1.0.0,<2`
-- `routes/public/feeds.py`: Category validated against topic config
-- `routes/public/links.py`: Removed unused Article query
-- `services/metrics.py`: Added `# HELP` lines before `# TYPE`
+Checks for SHA256 hex (`^[a-f0-9]{64}$`) but werkzeug produces
+`scrypt:...`/`pbkdf2:...`/`argon2:...` format. Fix to detect werkzeug format.
+Remove duplicate in `routes/admin/__init__.py:73-75`, import from
+`services/validation.py` instead.
+
+### 1J. Fix ThreadPoolExecutor shutdown in `services/url.py`
+
+**File:** `services/url.py:111-118`
+
+`with ThreadPoolExecutor` calls `shutdown(wait=True)` which blocks
+indefinitely, negating the 10s timeout. Replace with explicit
+`executor.shutdown(wait=False, cancel_futures=True)` in `finally` block.
+
+### 1K. Add retry to `ModelLimiter.release()`
+
+**File:** `services/limiter.py:54-75`
+
+When `release()` fails due to transient Redis error, the slot leaks until
+TTL expiry. Add a single retry with short backoff.
+
+### 1L. Fix 5xx errors returning raw SDK exceptions
+
+**Severity:** Warning
+**File:** `services/llm/errors.py:49`
+
+5xx errors return the original SDK exception. Add `ProviderServerError` class,
+return it for 5xx responses. Add to `autoretry_for` tuples in Celery tasks.
+
+### 1M. Fix `record_provider_success()` fallback tracking
+
+**Severity:** Warning
+**File:** `services/llm/__init__.py:72-87`
+
+Records primary provider ID even when fallback was used. Change
+`get_provider_for_role()` return type to include actual provider ID.
+Update `run_stage()` to pass actual provider ID to `record_provider_success()`.
+
+### 1N. Add LRU eviction to ResponseCache in-memory layer
+
+**Severity:** Warning
+**File:** `services/cache.py:78`
+
+L1 in-memory cache grows without bound. Add max size limit with LRU eviction,
+similar to `_TTLCache` in `services/url.py`.
+
+### 1O. Replace deprecated `Model.query.get_or_404()`
+
+**Severity:** Minor
+**Files:** `routes/admin/articles.py` (7 occurrences), `routes/admin/review.py`,
+`routes/admin/sources.py`
+
+Replace with `db.get_or_404(Model, id)`.
+
+### 1P. Fix `_script_cache` memory leak
+
+**Severity:** Minor
+**File:** `services/redis_utils.py:35`
+
+Uses plain dict with `id(redis_client)` as key. Clear cache on config reload
+or use `weakref.WeakValueDictionary`.
 
 ---
 
-## Wave 11 — New Feature: Subagent System + Editor Contextualization
+## Wave 2: CSS fixes (parallel-safe: different CSS modules)
 
-| # | Source | Item | Status |
-|---|--------|------|--------|
-| 11.1 | plan7 #1 | Schema: SubagentConfig, SubagentStageConfig | Done |
-| 11.2 | plan7 #2 | DB: TopicNote model + migration | Done |
-| 11.3 | plan7 #3 | Service: `services/subagent.py` | Done |
-| 11.4 | plan7 #4 | Service: `services/context_service.py` | Done |
-| 11.5 | plan7 #5 | Editor contextualization phase | Done |
-| 11.6 | plan7 #6 | Research subagent for web results | Done |
-| 11.7 | plan7 | Config: subagent section in pipeline.yaml | Done |
-| 11.8 | plan7 #9 | Tests | Done |
+All CSS/template-only changes. No pipeline, schema, or model logic touched.
 
-**New files:**
-- `services/subagent.py` — `run_subagent()`, task templates, response models
-- `services/context_service.py` — Topic note CRUD, related articles lookup
-- `migrations/versions/013_topic_notes.py` — TopicNote table with unique constraint on `(topic, source)`
-- `schemas/pipeline.py` — `SubagentStageConfig`, `SubagentConfig`, `resolve_subagent_config()`
-- `tests/test_subagent.py` (16 tests), `tests/test_context_service.py` (11 tests), `tests/test_edit_contextualization.py` (6 tests), `tests/test_research_subagent.py` (5 tests)
+### 2A. Fix verify page theming
+
+**File:** `static/css/pages.css:449-519`
+
+Replace 12 hardcoded color values with CSS custom properties:
+
+| Selector | Property | Current | Replace with |
+|----------|----------|---------|-------------|
+| `.verify-page` | `background` | `#f5f5f5` | `var(--color-bg-page)` |
+| `.verify-page` | `font-family` | hardcoded stack | `var(--font-sans)` |
+| `.verify-card` | `background` | `#fff` | `var(--bg-primary)` |
+| `.verify-card` | `color` | (inherited) | `var(--text-primary)` |
+| `.verify-header` | `background` | `#0d1117` | `var(--bg-secondary)` |
+| `.verify-header` | `color` | `#fff` | `var(--text-primary)` |
+| `.verify-header span em` | `color` | `#58a6ff` | `var(--accent)` |
+| `.verify-body h1` | `color` | `#111` | `var(--color-text-heading)` |
+| `.verify-body p` | `color` | `#555` | `var(--text-secondary)` |
+| `.verify-body a` | `color` | `#58a6ff` | `var(--accent)` |
+| `.verify-footer` | `background` | `#f9f9f9` | `var(--bg-subtle)` |
+| `.verify-footer` | `border-top` | `#eaeaea` | `var(--border)` |
+| `.verify-footer p` | `color` | `#888` | `var(--text-muted)` |
+
+### 2B. Add theme support to verify page
+
+**File:** `templates/verify.html`
+
+Add `data-theme="dark"` to `<html>` tag and load `theme.js` before `</head>`.
+
+### 2C. Extract share redirect inline styles
+
+**Files:** `static/css/articles.css`, `templates/share_redirect.html`
+
+Move 6 inline `style=` attributes to new CSS classes:
+`.share-redirect-container`, `.share-redirect-title`,
+`.share-redirect-description`, `.share-redirect-input-wrapper`,
+`.share-redirect-input`, `.share-redirect-link`.
+
+### 2D. Fix admin offline toast selector mismatch
+
+**File:** `templates/base_admin.html:16`
+
+`class="offline-toast"` doesn't exist in CSS. Change to
+`class="toast toast-hidden" role="status" aria-live="polite"`. Remove `hidden`
+attribute — `.toast-hidden` handles visibility via opacity.
+
+### 2E. Fix login input focus style
+
+**File:** `static/css/pages.css:47-49`
+
+Add `focus-visible` rule with outline after existing `.login-input:focus`:
+
+```css
+.login-input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+```
+
+### 2F. Add theme toggle and noscript to login page
+
+**File:** `templates/admin/login.html`
+
+Add `theme.js` script after stylesheet link. Add `<noscript>` warning inside
+`<body>` before `<main>`.
+
+### 2G. Add "back to site" link on login page
+
+**Files:** `templates/admin/login.html`, `static/css/pages.css`
+
+Add link below login form pointing to `/`. Add `.login-back-link` CSS rule.
+
+### 2H. Remove inline style on admin logout form
+
+**File:** `templates/base_admin.html`
+
+Change `style="display:inline"` to `class="inline"` (utility class exists).
+
+### 2I. Move subscribe spinner animation to CSS
+
+**Files:** `static/css/layout.css`, `templates/partials/subscribe_box.html`
+
+Add `.htmx-indicator.spinner { animation: pulse 1.5s ease-in-out infinite; }`
+to layout.css. Remove inline `style="animation:..."` from template.
+
+### 2J. Refine typography scale
+
+**Files:** `static/css/variables.css`, `static/css/base.css`
+
+Update `html { font-size: 16px; }` and expand the type scale for better
+visual hierarchy. Conservative approach — increase sizes incrementally.
+
+### 2K. Expand spacing scale
+
+**File:** `static/css/variables.css`
+
+Add `--space-11` through `--space-16` for card padding and section gaps.
+
+### 2L. Add card elevation
+
+**Files:** `static/css/pages.css`, `static/css/components.css`
+
+Subtle `box-shadow` on `.dash-card` and `.article-card` for depth.
+
+### 2M. Standardize hover transitions
+
+**Files:** `static/css/components.css`, `static/css/articles.css`
+
+`transition: all 0.15s ease` on `.btn-primary`, `.btn-secondary`,
+`.filter-btn`, `.nav-links a`.
+
+### 2N. Enhance global focus-visible
+
+**File:** `static/css/base.css`
+
+```css
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+```
+
+### 2O. Add high contrast mode
+
+**File:** `static/css/variables.css`
+
+`@media (prefers-contrast: high)` with stronger border/muted-text values.
 
 ---
 
-## Wave 12 — CSS Architecture & Documentation
+## Wave 3: Template improvements (parallel-safe: different templates)
 
-| # | Source | Item | Status |
-|---|--------|------|--------|
-| 12.1 | plan4 #1.1 | CSS module extraction | Done |
-| 12.2 | plan4 #1.2 | Component documentation | Done |
-| 12.3 | plan4 #1.3 | CSS custom properties audit | Done |
-| 12.4 | plan4 #2.1 | Critical CSS extraction | Done |
+### 3A. Deduplicate source rows via partial include
 
-**New files:**
-- `static/css/variables.css` (186 lines) — Theme variables with semantic aliases
-- `static/css/base.css` (102 lines) — Reset, accessibility, typography
-- `static/css/layout.css` (251 lines) — Container, navigation, footer
-- `static/css/components.css` (711 lines) — Badges, buttons, forms, share UI
-- `static/css/articles.css` (948 lines) — Article cards, detail, feed
-- `static/css/pages.css` (396 lines) — Login, admin dashboard
-- `static/css/utilities.css` (113 lines) — Utility classes, print
-- `static/css/critical.css` (409 lines) — Above-the-fold styles
-- `docs/components/badge.md`, `article-card.md`, `share-button.md`, `theme-toggle.md`
+**File:** `templates/admin/sources.html`
+
+Replace inline source row loop (lines 66-105) with:
+```jinja2
+{% for s in sources %}
+  {% include "admin/partials/source_row.html" %}
+{% endfor %}
+```
+
+### 3B. Dashboard stats visual hierarchy
+
+**Files:** `templates/admin/dashboard.html`, `static/css/pages.css`
+
+Add `.stat-item`, `.stat-value`, `.stat-label` classes for better stat display.
+
+### 3C. Pipeline status visualization
+
+**Files:** `templates/admin/dashboard.html`, `static/css/pages.css`
+
+Horizontal bar chart showing pipeline status distribution with colored segments.
+
+### 3D. Admin table improvements
+
+**Files:** `templates/admin/articles.html`, `static/css/pages.css`
+
+Sticky table headers, row hover highlighting.
+
+### 3E. Quick actions bar on dashboard
+
+**File:** `templates/admin/dashboard.html`
+
+Section with trigger crawl, review queue, send newsletter, view pipelines buttons.
+
+### 3F. Article card metadata enhancement
+
+**Files:** `templates/partials/article_card.html`, `static/css/articles.css`
+
+Source attribution and clearer timestamps in `.card-meta`.
+
+### 3G. Improved empty states
+
+**Files:** `templates/partials/feed.html`, `static/css/components.css`
+
+Add `.empty-title`, `.empty-description` classes with actionable suggestions.
 
 ---
 
-## Dependencies Between Waves
+## Wave 4: Mobile & animation (parallel-safe)
 
-- **Wave 4.1** (delete dead partials) should precede **Wave 4.2** (extract article_body partial)
-- **Wave 5.1** (add app.js to admin) should precede **Wave 5.2/5.3** (add offline toast and toast container)
-- **Wave 11** (subagent system) is a large feature — do after waves 1-8 are stable
-- **Wave 12** (CSS architecture) is a large refactoring — do after waves 3-5 fix immediate CSS issues
+### 4A. Touch-friendly targets
 
-All other waves are fully independent and can be parallelized.
+**File:** `static/css/layout.css`
+
+44px minimum touch target via `@media (pointer: coarse)`.
+
+### 4B. Mobile article card layout
+
+**File:** `static/css/articles.css`
+
+Compact padding and wrapping metadata at `@media (max-width: 640px)`.
+
+### 4C. Mobile admin navigation
+
+**File:** `static/css/pages.css`
+
+Horizontal scroll with hidden scrollbar for admin nav links on mobile.
+
+### 4D. Smooth infinite scroll animation
+
+**Files:** `static/css/articles.css`, `static/js/app.js`
+
+`fade-in-up` keyframe animation for HTMX-loaded articles. Add/remove
+`.article-card-new` class in JS.
 
 ---
 
-## Follow-up Fixes (2026-04-02)
+## Wave 5: New LLM providers (parallel-safe: different provider files)
 
-Code review found 11 items from the original plan that were marked "Done" but not fully implemented.
+### 5A. Google Gemini adapter
 
-| # | Wave | Issue | Fix |
-|---|------|-------|-----|
-| 1 | 2.1 | Dead `if not limiter:` branch still in `tasks/pipeline.py` | Removed the unreachable branch (limiter is always truthy or raises) |
-| 2 | 4.4 | `review_table.html` used inline pagination | Converted to `pagination_nav` macro import with correct `per_page` |
-| 3 | 4.5 | `pagination.html` query param concatenation broken (Jinja2 scoping) | Replaced `{% set %}` loop with list-append workaround; params now properly encoded |
-| 4 | 5.2 | `share_redirect.html` missing `theme.js` | Added `<script>` tag before `app.js` |
-| 5 | 5.3 | `admin/login.html` missing `data-theme="dark"` | Added attribute to `<html>` tag |
-| 6 | 5.7 | No `<noscript>` blocks in base templates | Added to both `base.html` and `base_admin.html` with `.noscript-warning` CSS |
-| 7 | 8.1 | `reprocess_article` used if/elif duplication | Refactored to `_REPROCESS_STAGES` data-driven table |
-| 8 | 9.2 | No tablet breakpoint | Added `@media (641px–768px)` breakpoint in `layout.css` |
-| 9 | 9.3 | No toast entrance animation | Added `@keyframes toast-slide-up` to `.toast` in `components.css` |
-| 10 | 9 | Inlined critical CSS used hardcoded z-index values | Added z-index custom properties to inlined `:root`; replaced hardcoded `1000`/`100`/`9999` with `var()` |
-| 11 | 9.4 | RSS link & theme toggle hidden on mobile (in `.nav-meta`) | Moved into `.nav-links` in both `base.html` and `base_admin.html` |
-| 12 | 5.6 | `verify.html` still had inline `<style>` block, never rewritten to CSS classes | Replaced inline styles with `.verify-page` CSS classes in `pages.css`; linked `style.css` via `<link>` tag |
-| 13 | 5.9 | `.verify-page` CSS class was missing | Added `.verify-page` and sub-classes to `pages.css` |
+**Files:** `pyproject.toml`, `schemas/llm.py`, `services/llm/gemini.py` (new),
+`services/llm/__init__.py`, `providers.yaml`, `tests/test_llm_adapters.py`
+
+Dedicated adapter. Key differences from OpenAI:
+- Message format: `contents` with `parts`, not flat `messages`
+- System prompt: `GenerateContentConfig(system_instruction=...)`, not in messages
+- Structured output: `response_mime_type="application/json"` + `response_schema`
+- Error mapping: `google.genai.errors.ClientError` with `.code` attribute
+- Add `google-genai>=1.0.0,<2.0.0` dependency
+
+### 5B. Z.AI provider
+
+**File:** `providers.yaml`
+
+OpenAI-compatible at `https://open.bigmodel.cn/api/paas/v4`. Reuse
+`type: openai` with custom `base_url`. No new adapter needed.
+Contingency: build custom adapter if Z.AI deviates from OpenAI spec.
+
+### 5C. OpenCode Go / OpenCode Zen
+
+**Files:** `providers.yaml`, optionally `services/llm/opencode.py` (new)
+
+Verify API format first. If OpenAI-compatible → config-only. If custom →
+dedicated adapter using `requests` (no new dependency).
+
+### 5D. OpenAI-compatible providers
+
+**File:** `providers.yaml`
+
+Config-only additions. All `type: openai`, disabled by default:
+DeepSeek, Groq, OpenRouter, xAI, Together AI, Fireworks AI, Cerebras.
+
+### 5E. Provider tests
+
+**File:** `tests/test_llm_adapters.py`
+
+- `TestGeminiProvider` — mock `google.genai` SDK, test chat, schema, errors
+- Registry tests — verify all provider types resolve via `get_provider_class()`
+- Config tests — verify `ADAPTER_CONFIGS` entries validate correctly
+- `providers.yaml` validation — verify all entries load without errors
+
+---
+
+## Parallelization summary
+
+Each wave is independent. Within a wave, items can run concurrently via
+separate sub-agents since they touch different files. Dependency graph:
+
+```
+Wave 1 (bug fixes) ──→ Wave 2 (CSS fixes) ──→ Wave 3 (templates)
+                                           ──→ Wave 4 (mobile/animation)
+     Wave 1 (bug fixes) ──→ Wave 5 (LLM providers)
+```
+
+Waves 2+3+4 can run together after Wave 1. Wave 5 can also start after
+Wave 1 (no dependency on CSS/template waves).
+
+---
+
+## Files changed summary
+
+### Wave 1 — Bug fixes
+- `services/article.py` — 1A
+- `routes/admin/api.py` — 1B, 1F
+- `tasks/newsletter.py` — 1C
+- `services/redis_utils.py` — 1C (Lua script), 1G, 1P
+- `tasks/pipeline.py` — 1D
+- `tasks/crawl.py` — 1E
+- `config.py` — 1H
+- `services/validation.py` — 1I
+- `routes/admin/__init__.py` — 1I
+- `services/url.py` — 1J
+- `services/limiter.py` — 1K
+- `services/llm/errors.py` — 1L
+- `services/llm/__init__.py` — 1M
+- `services/cache.py` — 1N
+- `routes/admin/articles.py` — 1O
+- `routes/admin/review.py` — 1O
+- `routes/admin/sources.py` — 1O
+
+### Wave 2 — CSS fixes
+- `static/css/pages.css` — 2A, 2E, 2G, 3B, 3C, 3D, 4C
+- `templates/verify.html` — 2B
+- `static/css/articles.css` — 2C, 2M, 3F, 4B, 4D
+- `templates/share_redirect.html` — 2C
+- `templates/base_admin.html` — 2D, 2H
+- `templates/admin/login.html` — 2F, 2G
+- `static/css/layout.css` — 2I, 4A
+- `static/css/variables.css` — 2J, 2K, 2O
+- `static/css/base.css` — 2J, 2N
+- `static/css/components.css` — 2L, 2M, 3G
+
+### Wave 3 — Template improvements
+- `templates/admin/sources.html` — 3A
+- `templates/admin/dashboard.html` — 3B, 3C, 3E
+- `templates/admin/articles.html` — 3D
+- `templates/partials/article_card.html` — 3F
+- `templates/partials/feed.html` — 3G
+
+### Wave 4 — Mobile & animation
+- `static/js/app.js` — 4D
+
+### Wave 5 — LLM providers
+- `pyproject.toml` — 5A
+- `schemas/llm.py` — 5A
+- `services/llm/gemini.py` — 5A (new file)
+- `services/llm/__init__.py` — 5A
+- `services/llm/opencode.py` — 5C (new file, if needed)
+- `providers.yaml` — 5A, 5B, 5C, 5D
+- `tests/test_llm_adapters.py` — 5E
+
+---
+
+## Risk assessment
+
+| Risk | Mitigation |
+|------|-----------|
+| Typography scale breakage | Conservative increments; visual regression check at each step |
+| Gemini SDK API changes | Pin `google-genai>=1.0.0,<2.0.0` |
+| Z.AI not fully OpenAI-compatible | Start config-only, escalate to custom adapter if needed |
+| OpenCode API format unknown | Verify before building; fall back to OpenAI adapter |
+| Template partial dedup regression | Manual check that HTMX enable/disable toggles still work |
+| Lock race condition Lua fix | Test concurrent newsletter generation scenarios |

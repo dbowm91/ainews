@@ -276,10 +276,6 @@ System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each
 
 ## Working with this codebase
 
-### Improvement plan
-
-Improvement plan in `plan.md` was completed 2026-04-01 across 12 waves. All items verified. The plan covered: security fixes, pipeline correctness, CSS architecture, template cleanup, testing, code quality, API standardization, and the subagent system feature.
-
 ### Jinja2 macro conventions
 
 Shared macros live in `templates/macros/` (e.g., `badges.html` for `pipeline_badge` and `impact_score`). Shared partials live in `templates/partials/` (e.g., `pagination.html` for `pagination_nav`). Import with `{% from "macros/badges.html" import pipeline_badge %}` or `{% from "partials/pagination.html" import pagination_nav %}`.

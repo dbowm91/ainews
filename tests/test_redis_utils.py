@@ -28,8 +28,10 @@ class TestReleaseLock:
 
     def test_graceful_on_redis_error(self):
         """Redis errors should return False, not raise."""
+        from redis.exceptions import RedisError
+
         mock_redis = MagicMock()
-        mock_redis.register_script.side_effect = Exception("Redis down")
+        mock_redis.register_script.side_effect = RedisError("Redis down")
 
         result = release_lock(mock_redis, "lock:key", "task-123")
         assert result is False

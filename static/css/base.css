@@ -100,3 +100,9 @@ html {
   background: var(--accent-alpha-25);
   color: var(--text-primary);
 }
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

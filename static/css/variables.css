@@ -96,6 +96,12 @@
   --space-8: 1.25rem;
   --space-9: 1.5rem;
   --space-10: 2rem;
+  --space-11: 2.5rem;
+  --space-12: 3rem;
+  --space-13: 3.5rem;
+  --space-14: 4rem;
+  --space-15: 4.5rem;
+  --space-16: 5rem;
 
   /* ─────────────────────────────────────────────────────────────────
      4. ALPHA VARIANTS
@@ -188,4 +194,20 @@
   --skeleton-base: #eaeef2;
   --skeleton-shine: #d0d7de;
   --bg-subtle: #eaeef2;
+}
+
+@media (prefers-contrast: high) {
+  :root {
+    --border: #5a5a5a;
+    --border-light: #3a3a3a;
+    --text-muted: #5a5a5a;
+    --text-dim: #3a3a3a;
+  }
+
+  [data-theme="light"] {
+    --border: #4a4a4a;
+    --border-light: #2a2a2a;
+    --text-muted: #4a4a4a;
+    --text-dim: #2a2a2a;
+  }
 }

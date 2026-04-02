@@ -159,8 +159,8 @@ def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
         article_id: Optional article ID for correlation.
 
     Raises:
-        Exception: Re-raised only when *level* is ``"error"`` and the
-            log write itself fails.
+        No exceptions are re-raised. Errors are logged and a metric is
+        incremented.
     """
     from models import PipelineLog
     from extensions import db
@@ -651,6 +651,7 @@ def run_stage(
     )
 
     model = None
+    provider_id = None
     t0 = time.monotonic()
     try:
         if not lock_acquired:
@@ -663,11 +664,11 @@ def run_stage(
         if not article:
             return {"article_id": article_id, "error": "not found"}
 
-        provider, model, max_tokens = get_provider_for_role(stage)
+        provider, model, max_tokens, provider_id = get_provider_for_role(stage)
 
         result = work_fn(article, provider, model, max_tokens)
 
-        record_provider_success(rc.provider, model, tokens_used=max_tokens)
+        record_provider_success(provider_id, model, tokens_used=max_tokens)
         article.retry_count = 0
         article.last_error = None
         try:
@@ -696,7 +697,7 @@ def run_stage(
         raise
     except Exception as e:
         db.session.rollback()
-        record_provider_failure(rc.provider, model)
+        record_provider_failure(provider_id or rc.provider, model)
         record_stage_result(stage, success=False, run_id=run_id)
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",
@@ -720,7 +721,7 @@ def run_stage(
         raise
     finally:
         limiter.release(
-            rc.provider, model if "model" in locals() else None, rc.timeout_seconds
+            rc.provider, model if model is not None else None, rc.timeout_seconds
         )
         try:
             from services.redis_utils import release_lock

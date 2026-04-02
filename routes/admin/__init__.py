@@ -1,11 +1,11 @@
 from functools import wraps
 import logging
 import os
-import re
 import time
 import redis.exceptions
 from flask import Blueprint, redirect, url_for, session, request
 from logging_config import get_request_id
+from services.validation import _is_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +68,6 @@ def _get_redis():
     from extensions import get_redis
 
     return get_redis()
-
-
-def _is_password_hash(value: str) -> bool:
-    """Check if a value is a Werkzeug password hash (scrypt:, pbkdf2:, or argon2:)."""
-    return bool(re.match(r"^(scrypt|pbkdf2|argon2):", value))
 
 
 def _verify_password(stored: str, provided: str) -> bool:

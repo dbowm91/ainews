@@ -64,44 +64,7 @@
         </thead>
         <tbody id="sources-body">
           {% for s in sources %}
-            <tr>
-              <td>
-                <strong>{{ s.name }}</strong>
-                <br><small class="text-muted">{{ s.source_key }}</small>
-              </td>
-              <td>{{ s.source_type }}</td>
-              <td>
-                {% if s.disabled_at %}
-                  <span class="pipeline-badge pipeline-failed">disabled</span>
-                {% elif s.active %}
-                  <span class="pipeline-badge pipeline-done">active</span>
-                {% else %}
-                  <span class="pipeline-badge pipeline-skipped">inactive</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if s.consecutive_failures > 0 %}
-                  <span class="{% if s.consecutive_failures >= 5 %}text-danger{% endif %}">{{ s.consecutive_failures }}</span>
-                {% else %}
-                  <span class="text-muted">0</span>
-                {% endif %}
-              </td>
-              <td>{{ s.last_success_at.strftime('%b %d %H:%M') if s.last_success_at else '—' }}</td>
-              <td>
-                {% if s.last_error %}
-                  <small title="{{ s.last_error }}" class="text-muted">{{ s.last_error[:80] }}{% if s.last_error|length > 80 %}...{% endif %}</small>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if s.disabled_at or not s.active %}
-                  <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/enable" hx-swap="outerHTML" hx-target="closest tr">enable</button>
-                {% else %}
-                  <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/disable" hx-swap="outerHTML" hx-target="closest tr">disable</button>
-                {% endif %}
-              </td>
-            </tr>
+            {% include "admin/partials/source_row.html" %}
           {% endfor %}
         </tbody>
       </table>

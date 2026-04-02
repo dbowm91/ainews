@@ -73,7 +73,11 @@ class TestResponseCacheGet:
         cache = ResponseCache(redis_client)
         cache.set("key1", "value", ttl=120)
         full_key = cache._make_key("key1")
-        cache._memory[full_key] = (time.monotonic() - 1, '"stale"')
+        cache._memory[full_key] = (
+            time.monotonic() - 1,
+            time.monotonic() - 1,
+            '"stale"',
+        )
         assert cache.get("key1") == "value"
 
 

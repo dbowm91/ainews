@@ -337,19 +337,9 @@ class TestRunStage:
     @pytest.fixture
     def mock_run_stage_deps(self):
         """Set up common mocks for run_stage tests with automatic cleanup."""
-        patches = {
-            "Article": patch("models.Article"),
-            "db": patch("extensions.db"),
-            "get_role_config": patch("schemas.pipeline.get_role_config"),
-            "get_provider_for_role": patch("services.llm.get_provider_for_role"),
-            "record_success": patch("services.llm.record_provider_success"),
-            "record_failure": patch("services.llm.record_provider_failure"),
-            "get_limiter": patch("services.limiter.get_limiter"),
-            "get_redis": patch("extensions.get_redis"),
-        }
-        mocks = {}
-        for name, p in patches.items():
-            mocks[name] = p.start()
+        from tests.helpers.pipeline_mocks import setup_pipeline_mocks
+
+        patches, mocks = setup_pipeline_mocks()
         yield mocks
         for p in patches.values():
             p.stop()
@@ -373,6 +363,7 @@ class TestRunStage:
             MagicMock(),
             "qwen3:8b",
             2048,
+            "ollama",
         )
 
         limiter = MagicMock()
@@ -421,6 +412,7 @@ class TestRunStage:
             MagicMock(),
             "qwen3:8b",
             2048,
+            "ollama",
         )
 
         limiter = MagicMock()
@@ -462,6 +454,7 @@ class TestRunStage:
             MagicMock(),
             "qwen3:8b",
             2048,
+            "ollama",
         )
 
         limiter = MagicMock()
@@ -523,6 +516,7 @@ class TestRunStage:
             MagicMock(),
             "qwen3:8b",
             2048,
+            "ollama",
         )
 
         limiter = MagicMock()
@@ -595,6 +589,7 @@ class TestRunStage:
             MagicMock(),
             "qwen3:8b",
             2048,
+            "ollama",
         )
 
         limiter = MagicMock()

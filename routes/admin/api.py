@@ -294,6 +294,12 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         article.draft_article = None
         article.final_article = None
 
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
+
     dispatched = 0
     for article in articles:
         try:
@@ -301,16 +307,9 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             dispatched += 1
         except Exception:
             logger.warning("Failed to dispatch reprocess for article %s", article.id)
-            db.session.rollback()
             return jsonify(
                 {"error": f"Failed to dispatch reprocess for article {article.id}"}
             ), 500
-
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
 
     return jsonify(
         {"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
@@ -403,6 +402,6 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     else:
         return jsonify(
             {
-                "message": "Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags"
+                "error": "Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags"
             }
         ), 400

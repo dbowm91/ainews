@@ -13,7 +13,7 @@
 </head>
 <body class="admin-body" hx-boost="true">
   <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>
-  <div id="offline-toast" class="offline-toast" hidden>You are offline.</div>
+  <div id="offline-toast" class="toast toast-hidden" role="status" aria-live="polite">You are offline.</div>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
   <a href="#content" class="skip-link">Skip to content</a>
   <header class="admin-header">
@@ -36,7 +36,7 @@
         {% include "partials/theme_toggle.html" %}
       </div>
       <div class="nav-meta">
-        <form method="POST" action="/admin/logout" style="display:inline" hx-boost="false">
+        <form method="POST" action="/admin/logout" class="inline" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn-logout">logout</button>
         </form>

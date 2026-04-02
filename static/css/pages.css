@@ -48,6 +48,11 @@
   border-color: var(--accent);
 }
 
+.login-input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .login-btn {
   width: 100%;
   padding: 0.6rem;
@@ -63,6 +68,19 @@
 
 .login-btn:hover {
   background: var(--accent);
+}
+
+.login-back-link {
+  display: block;
+  text-align: center;
+  margin-top: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.login-back-link:hover {
+  color: var(--accent);
 }
 
 .login-error {
@@ -121,6 +139,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .dash-card-full {
@@ -367,12 +386,21 @@
 }
 
 .admin-header .nav-links {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   gap: 0.3rem;
+  padding-bottom: 0.25rem;
+}
+
+.admin-header .nav-links::-webkit-scrollbar {
+  display: none;
 }
 
 .admin-header .nav-links a {
   font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 .dash-link {
@@ -393,6 +421,55 @@
 .table-responsive {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.admin-table-wrapper {
+  position: relative;
+}
+
+.admin-table-wrapper .dash-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+}
+
+.pipeline-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  margin-bottom: 1rem;
+}
+
+.pipeline-bar-segment {
+  height: 100%;
+  min-width: 2px;
+}
+
+.pipeline-bar-pending { background: var(--text-dim); }
+.pipeline-bar-researching { background: var(--purple); }
+.pipeline-bar-writing { background: var(--orange); }
+.pipeline-bar-editing { background: var(--accent); }
+.pipeline-bar-review { background: var(--purple); }
+.pipeline-bar-done { background: var(--green); }
+.pipeline-bar-skipped { background: var(--border); }
+
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quick-actions form {
+  margin: 0;
+}
+
+.quick-actions .btn-primary,
+.quick-actions .btn-secondary {
+  font-size: 0.75rem;
+  padding: var(--space-2) var(--space-4);
 }
 
 /* Error pages */
@@ -449,8 +526,8 @@
 .verify-page {
   margin: 0;
   padding: 24px;
-  background: #f5f5f5;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--color-bg-page);
+  font-family: var(--font-sans);
   display: flex;
   justify-content: center;
   min-height: 100vh;
@@ -459,7 +536,8 @@
 .verify-card {
   max-width: 600px;
   width: 100%;
-  background: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   border-radius: 8px;
   overflow: hidden;
   align-self: center;
@@ -467,8 +545,8 @@
 
 .verify-header {
   padding: 24px 32px;
-  background: #0d1117;
-  color: #fff;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .verify-header span {
@@ -478,7 +556,7 @@
 }
 
 .verify-header span em {
-  color: #58a6ff;
+  color: var(--accent);
   font-style: normal;
 }
 
@@ -489,32 +567,32 @@
 .verify-body h1 {
   font-size: 18px;
   font-weight: 700;
-  color: #111;
+  color: var(--color-text-heading);
   margin: 0 0 12px 0;
 }
 
 .verify-body p {
-  color: #555;
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
   margin: 0 0 16px 0;
 }
 
 .verify-body a {
-  color: #58a6ff;
+  color: var(--accent);
 }
 
 .verify-footer {
   padding: 16px 32px;
-  background: #f9f9f9;
-  border-top: 1px solid #eaeaea;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border);
   text-align: center;
 }
 
 .verify-footer p {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #888;
+  color: var(--text-muted);
   margin: 0;
 }
 

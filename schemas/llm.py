@@ -30,10 +30,17 @@ class AnthropicConfig(BaseModel):
     max_tokens: int = MAX_TOKENS_FIELD
 
 
+class GeminiConfig(BaseModel):
+    api_key: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
+    max_tokens: int = MAX_TOKENS_FIELD
+
+
 ADAPTER_CONFIGS: dict[str, type[BaseModel]] = {
     "ollama": OllamaConfig,
     "openai": OpenAIConfig,
     "anthropic": AnthropicConfig,
+    "gemini": GeminiConfig,
 }
 
 

@@ -106,5 +106,13 @@ document.addEventListener("DOMContentLoaded", function () {
       heading.setAttribute("tabindex", "-1");
       heading.focus();
     }
+
+    var cards = content.querySelectorAll(".article-card:not(.article-card-new)");
+    cards.forEach(function (card) {
+      card.classList.add("article-card-new");
+      card.addEventListener("animationend", function () {
+        card.classList.remove("article-card-new");
+      }, { once: true });
+    });
   });
 });

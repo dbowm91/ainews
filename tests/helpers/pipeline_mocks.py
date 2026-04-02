@@ -40,6 +40,7 @@ def setup_pipeline_mocks():
         MagicMock(),
         "qwen3:8b",
         2048,
+        "ollama",
     )
 
     limiter = MagicMock()

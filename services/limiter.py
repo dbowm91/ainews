@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 
 import redis.exceptions
 
@@ -65,14 +66,18 @@ class ModelLimiter:
                 timeout,
                 exc_info=True,
             )
+            time.sleep(0.1)
             try:
-                from services.metrics import get_metrics
+                self._release_script(keys=[key])
+            except redis.exceptions.RedisError:
+                try:
+                    from services.metrics import get_metrics
 
-                get_metrics().counter_inc("limiter.release_failure")
-            except Exception:
-                logger.warning(
-                    "Failed to record limiter release failure metric", exc_info=True
-                )
+                    get_metrics().counter_inc("limiter.release_failure")
+                except Exception:
+                    logger.warning(
+                        "Failed to record limiter release failure metric", exc_info=True
+                    )
 
     def get_active(self, provider_id: str, model: str) -> int | None:
         """Get active slot count. Returns None if Redis is unavailable."""

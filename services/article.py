@@ -8,6 +8,7 @@ import logging
 from typing import Optional
 
 from sqlalchemy import Column
+from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from models import Article, ArticleMetric
@@ -43,8 +44,12 @@ def track_metric(article_id: int, column: Column) -> None:
         index_elements=["article_id"],
         set_={column_key: current_col + 1},
     )
-    db.session.execute(stmt)
-    db.session.commit()
+    try:
+        db.session.execute(stmt)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
     db.session.expire_all()
 
 

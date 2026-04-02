@@ -63,7 +63,7 @@ class TestHandleProviderError:
         assert isinstance(result, RateLimitError)
 
     def test_server_error_passes_through(self):
-        from services.llm.errors import handle_provider_error
+        from services.llm.errors import handle_provider_error, ProviderServerError
 
         err = RuntimeError("server down")
         err.status_code = 500
@@ -74,7 +74,8 @@ class TestHandleProviderError:
             auth_exc=(TypeError,),
             timeout_exc=(TypeError,),
         )
-        assert result is err
+        assert isinstance(result, ProviderServerError)
+        assert str(result) == "server down"
 
     def test_unknown_error_passes_through(self):
         from services.llm.errors import handle_provider_error
@@ -343,3 +344,213 @@ class TestOllamaErrorHandling:
             timeout_exc=(ConnectionError, TimeoutError),
         )
         assert isinstance(result, RateLimitError)
+
+
+class TestGeminiProvider:
+    """Tests for GeminiProvider with mocked google.genai SDK."""
+
+    def _make_provider(self, **config):
+        from services.llm.gemini import GeminiProvider
+
+        cfg = {"api_key": "test-key", "model": "gemini-test", **config}
+        return GeminiProvider("gemini-test", cfg)
+
+    def test_lazy_client_initialization(self):
+        provider = self._make_provider()
+        assert provider._client is None
+
+    def test_client_property_creates_client(self):
+        import sys
+        from types import ModuleType
+
+        provider = self._make_provider()
+        assert provider._client is None
+
+        mock_client = MagicMock()
+        mock_genai = ModuleType("google.genai")
+        mock_genai.Client = MagicMock(return_value=mock_client)
+
+        saved_google = sys.modules.pop("google", None)
+        saved_genai = sys.modules.pop("google.genai", None)
+        sys.modules["google"] = ModuleType("google")
+        sys.modules["google.genai"] = mock_genai
+        try:
+            c = provider.client
+            assert c is mock_client
+            mock_genai.Client.assert_called_once()
+        finally:
+            sys.modules.pop("google", None)
+            sys.modules.pop("google.genai", None)
+            if saved_google is not None:
+                sys.modules["google"] = saved_google
+            if saved_genai is not None:
+                sys.modules["google.genai"] = saved_genai
+
+    def test_client_caching(self):
+        provider = self._make_provider()
+        mock_client = MagicMock()
+        provider._client = mock_client
+        assert provider.client is mock_client
+
+    def test_chat_returns_llm_response(self):
+        provider = self._make_provider()
+        mock_resp = MagicMock()
+        mock_resp.text = "Hello!"
+        provider._client = MagicMock()
+        provider._client.models.generate_content.return_value = mock_resp
+
+        resp = provider.chat([{"role": "user", "content": "hi"}])
+        assert resp.text == "Hello!"
+        assert resp.model == "gemini-test"
+
+    def test_chat_with_system(self):
+        provider = self._make_provider()
+        mock_resp = MagicMock()
+        mock_resp.text = "Response"
+        provider._client = MagicMock()
+        provider._client.models.generate_content.return_value = mock_resp
+
+        provider.chat(
+            [{"role": "user", "content": "hello"}],
+            system="be helpful",
+            temperature=0.5,
+            max_tokens=100,
+        )
+        call_args = provider._client.models.generate_content.call_args
+        assert (
+            call_args.kwargs["system_instruction"]["parts"][0]["text"] == "be helpful"
+        )
+        assert call_args.kwargs["generation_config"]["temperature"] == 0.5
+        assert call_args.kwargs["generation_config"]["max_output_tokens"] == 100
+
+    def test_chat_error_converted(self):
+        from services.llm.errors import ProviderTimeoutError
+
+        provider = self._make_provider()
+        provider._client = MagicMock()
+        provider._client.models.generate_content.side_effect = ConnectionError(
+            "refused"
+        )
+
+        with pytest.raises(ProviderTimeoutError):
+            provider.chat([{"role": "user", "content": "hi"}])
+
+    def test_chat_with_schema(self):
+        provider = self._make_provider()
+        mock_resp = MagicMock()
+        mock_resp.text = '{"name": "test", "value": 42}'
+        provider._client = MagicMock()
+        provider._client.models.generate_content.return_value = mock_resp
+
+        class TestModel(BaseModel):
+            name: str
+            value: int
+
+        result = provider.chat_structured(
+            [{"role": "user", "content": "give me data"}],
+            response_model=TestModel,
+        )
+        assert result.name == "test"
+        assert result.value == 42
+        call_args = provider._client.models.generate_content.call_args
+        assert (
+            call_args.kwargs["generation_config"]["response_mime_type"]
+            == "application/json"
+        )
+        assert "response_schema" in call_args.kwargs["generation_config"]
+
+    def test_health_check_ok(self):
+        provider = self._make_provider()
+        mock_models = MagicMock()
+        mock_models.models = [MagicMock(name="gemini-test")]
+        provider._client = MagicMock()
+        provider._client.models.list.return_value = mock_models
+
+        result = provider.health_check()
+        assert result["status"] == "ok"
+        assert result["model"] == "gemini-test"
+
+    def test_health_check_error(self):
+        provider = self._make_provider()
+        provider._client = MagicMock()
+        provider._client.models.list.side_effect = ConnectionError("down")
+
+        result = provider.health_check()
+        assert "error" in result["status"]
+
+
+class TestProviderRegistryFull:
+    """Tests for get_provider_class registry - all provider types."""
+
+    def test_ollama_registered(self):
+        from services.llm.base import get_provider_class
+        from services.llm.ollama import OllamaProvider
+
+        cls = get_provider_class("ollama")
+        assert cls is OllamaProvider
+
+    def test_openai_registered(self):
+        from services.llm.base import get_provider_class
+        from services.llm.openai import OpenAIProvider
+
+        cls = get_provider_class("openai")
+        assert cls is OpenAIProvider
+
+    def test_anthropic_registered(self):
+        from services.llm.base import get_provider_class
+        from services.llm.anthropic import AnthropicProvider
+
+        cls = get_provider_class("anthropic")
+        assert cls is AnthropicProvider
+
+    def test_gemini_registered(self):
+        from services.llm.base import get_provider_class
+        from services.llm.gemini import GeminiProvider
+
+        cls = get_provider_class("gemini")
+        assert cls is GeminiProvider
+
+    def test_unknown_provider_raises_keyerror(self):
+        from services.llm.base import get_provider_class
+
+        with pytest.raises(KeyError, match="llm provider"):
+            get_provider_class("nonexistent_provider_xyz")
+
+
+class TestAdapterConfigsSchema:
+    """Tests that ADAPTER_CONFIGS entries validate correctly."""
+
+    def test_ollama_config_valid(self):
+        from schemas.llm import OllamaConfig
+
+        cfg = OllamaConfig(
+            host="http://localhost:11434", model="qwen3:8b", max_tokens=4096
+        )
+        assert cfg.model == "qwen3:8b"
+
+    def test_openai_config_valid(self):
+        from schemas.llm import OpenAIConfig
+
+        cfg = OpenAIConfig(
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            model="gpt-4o-mini",
+            max_tokens=4096,
+        )
+        assert cfg.model == "gpt-4o-mini"
+
+    def test_anthropic_config_valid(self):
+        from schemas.llm import AnthropicConfig
+
+        cfg = AnthropicConfig(
+            api_key="sk-ant-test", model="claude-sonnet-4-5-20250929", max_tokens=4096
+        )
+        assert cfg.model == "claude-sonnet-4-5-20250929"
+
+    def test_gemini_config_valid(self):
+        from schemas.llm import GeminiConfig
+
+        cfg = GeminiConfig(
+            api_key="AIza-test", model="gemini-2.0-flash", max_tokens=4096
+        )
+        assert cfg.model == "gemini-2.0-flash"

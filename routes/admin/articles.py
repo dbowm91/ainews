@@ -147,7 +147,7 @@ def edit_article(article_id):
     from models import Article
     from extensions import db
 
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
 
     if request.method == "POST":
         from constants import (
@@ -254,8 +254,9 @@ def edit_article(article_id):
 @require_auth
 def view_original_article(article_id):
     from models import Article
+    from extensions import db
 
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
 
     if not article.original_ai_article:
         return jsonify({"error": "No original AI version available"}), 404
@@ -267,9 +268,10 @@ def view_original_article(article_id):
 @require_auth
 def article_versions(article_id):
     from models import Article
+    from extensions import db
     from services.article import get_article_versions, parse_article_json
 
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
     parse_article_json(article)
     versions = get_article_versions(article_id)
 
@@ -289,8 +291,8 @@ def rollback_article(article_id, version_id):
     from extensions import db
     from services.article import create_article_version
 
-    article = Article.query.get_or_404(article_id)
-    version = ArticleVersion.query.get_or_404(version_id)
+    article = db.get_or_404(Article, article_id)
+    version = db.get_or_404(ArticleVersion, version_id)
 
     if version.article_id != article_id:
         return jsonify({"error": "Version does not belong to this article"}), 400
@@ -326,7 +328,7 @@ def delete_article(article_id):
     from models import Article, Citation, ArticleMetric, ArticleVersion, article_tags
     from extensions import db
 
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
 
     try:
         Citation.query.filter_by(article_id=article_id).delete()
@@ -363,7 +365,7 @@ def reprocess_article(article_id):
         ), 400
 
     cfg = _REPROCESS_STAGES[stage]
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
 
     article.pipeline_status = cfg["status"]
     for field in cfg["fields"]:

@@ -21,6 +21,12 @@ class ProviderTimeoutError(Exception):
     pass
 
 
+class ProviderServerError(Exception):
+    """Raised when an LLM API returns a 5xx server error."""
+
+    pass
+
+
 def handle_provider_error(
     e: Exception,
     provider_name: str,
@@ -46,5 +52,5 @@ def handle_provider_error(
             return AuthError(str(e))
         elif status >= 500:
             logger.error("%s server error (%s): %s", provider_name, status, e)
-            return e
+            return ProviderServerError(str(e))
     return e

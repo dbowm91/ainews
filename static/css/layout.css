@@ -1,5 +1,9 @@
 /* ainews - Layout */
 
+.htmx-indicator.spinner {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .site-header {
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
@@ -46,7 +50,7 @@
   color: var(--text-muted);
   padding: var(--space-1) var(--space-4);
   border-radius: var(--radius-md);
-  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+  transition: all 0.15s ease;
 }
 
 .nav-links a:hover,
@@ -247,6 +251,18 @@
 
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (pointer: coarse) {
+  a, button, input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .nav-toggle-label {
+    min-height: 44px;
+    min-width: 44px;
   }
 }
 

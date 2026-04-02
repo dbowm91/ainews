@@ -36,11 +36,18 @@
       {% endfor %}
     </div>
   {% endif %}
-  <div class="card-footer">
+  <div class="card-meta">
+    {% if article.source %}
+      <span class="card-source">{{ article.source.name }}</span>
+      <span class="meta-separator">&middot;</span>
+    {% endif %}
     {% if article.original_author %}
       <span class="card-author">{{ article.original_author }}</span>
       <span class="meta-separator">&middot;</span>
     {% endif %}
+    <span class="card-time-relative">{{ article.created_at.strftime('%b %d, %Y') if article.created_at }}</span>
+  </div>
+  <div class="card-footer">
     {% if article.original_url %}
       <a href="{{ article.original_url|safe_href }}" target="_blank" rel="noopener" class="card-source-link" aria-label="Read original article">&nearr;</a>
     {% endif %}

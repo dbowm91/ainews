@@ -2,6 +2,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
+from services.llm.errors import ProviderServerError
 
 logger = get_task_logger(__name__)
 plog = get_pipeline_logger("write")
@@ -13,7 +14,7 @@ plog = get_pipeline_logger("write")
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,
-    autoretry_for=(ConnectionError, TimeoutError),
+    autoretry_for=(ConnectionError, TimeoutError, ProviderServerError),
     retry_backoff=30,
     retry_backoff_max=300,
     retry_jitter=True,

@@ -72,7 +72,7 @@ def enable_source(source_id):
     from models import Source
     from extensions import db
 
-    source = Source.query.get_or_404(source_id)
+    source = db.get_or_404(Source, source_id)
     source.active = True
     source.disabled_at = None
     source.consecutive_failures = 0
@@ -92,7 +92,7 @@ def disable_source(source_id):
     from extensions import db
     from datetime import datetime, timezone
 
-    source = Source.query.get_or_404(source_id)
+    source = db.get_or_404(Source, source_id)
     source.active = False
     source.disabled_at = datetime.now(timezone.utc)
     try:

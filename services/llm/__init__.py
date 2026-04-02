@@ -4,6 +4,7 @@ from typing import Tuple
 import services.llm.ollama  # noqa: F401
 import services.llm.openai  # noqa: F401
 import services.llm.anthropic  # noqa: F401
+import services.llm.gemini  # noqa: F401
 
 from services.llm.base import BaseLLMProvider, _manager
 from schemas.llm import load_providers_config
@@ -26,8 +27,8 @@ def get_provider_by_id(provider_id: str) -> BaseLLMProvider:
     return _manager.get_cached(provider_id, load_providers_config)
 
 
-def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
-    """Returns (provider, model, max_tokens) for a pipeline role.
+def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
+    """Returns (provider, model, max_tokens, provider_id) for a pipeline role.
 
     Falls back to other enabled providers when the primary circuit is open.
     Raises CircuitOpenError only if ALL enabled providers have open circuits.
@@ -40,7 +41,7 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
     )
     if breaker.can_execute():
         provider = get_provider_by_id(rc.provider)
-        return provider, rc.model, rc.max_tokens
+        return provider, rc.model, rc.max_tokens, rc.provider
 
     # Primary circuit is open — try other enabled providers
     logger.warning(
@@ -62,6 +63,7 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int]:
                 provider,
                 pdef.config.get("model", ""),
                 pdef.config.get("max_tokens", rc.max_tokens),
+                pdef.id,
             )
 
     raise CircuitOpenError(

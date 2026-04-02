@@ -20,15 +20,18 @@ logger = logging.getLogger(__name__)
 _cache_instance: Optional["ResponseCache"] = None
 _cache_lock = threading.Lock()
 
+_L1_CACHE_MAXSIZE = 1000
+
 
 class ResponseCache(MemoryCacheMixin):
     """Redis-backed cache with in-memory L1 layer.
 
     Designed for read-heavy routes (article detail, RSS feeds).
     Uses short TTLs by default since articles are written infrequently.
+    Implements LRU eviction when the in-memory cache reaches max size.
     """
 
-    _memory: dict[str, tuple[float, str]]
+    _memory: dict[str, tuple[float, float, str]]
 
     def __init__(self, redis_client, prefix: str = "ainews:cache"):
         self.redis = redis_client
@@ -36,6 +39,15 @@ class ResponseCache(MemoryCacheMixin):
         self._memory = {}
         self._hits = 0
         self._misses = 0
+        self._memory_lock = threading.Lock()
+
+    def _evict_stale(self) -> None:
+        """Remove expired entries from the in-memory cache."""
+        now = time.monotonic()
+        with self._memory_lock:
+            expired = [k for k, (exp, _, _) in self._memory.items() if now >= exp]
+            for k in expired:
+                del self._memory[k]
 
     def _make_key(self, key: str) -> str:
         """Create a namespaced cache key. Hash long keys to avoid Redis key limits."""
@@ -50,11 +62,14 @@ class ResponseCache(MemoryCacheMixin):
         # L1: in-memory
         mem_entry = self._memory.get(full_key)
         if mem_entry is not None:
-            expires_at, raw = mem_entry
+            expires_at, access_time, raw = mem_entry
             if time.monotonic() < expires_at:
+                with self._memory_lock:
+                    self._memory[full_key] = (expires_at, time.monotonic(), raw)
                 self._hits += 1
                 return json.loads(raw)
-            del self._memory[full_key]
+            with self._memory_lock:
+                self._memory.pop(full_key, None)
 
         # L2: Redis
         try:
@@ -74,9 +89,14 @@ class ResponseCache(MemoryCacheMixin):
         full_key = self._make_key(key)
         raw = json.dumps(value)
 
-        # L1: in-memory with eviction
+        # L1: in-memory with LRU eviction
         self._evict_stale()
-        self._memory[full_key] = (time.monotonic() + ttl, raw)
+        with self._memory_lock:
+            if len(self._memory) >= _L1_CACHE_MAXSIZE and full_key not in self._memory:
+                # Evict least recently used entry (lowest access_time)
+                lru_key = min(self._memory, key=lambda k: self._memory[k][1])
+                del self._memory[lru_key]
+            self._memory[full_key] = (time.monotonic() + ttl, time.monotonic(), raw)
 
         # L2: Redis
         try:
@@ -105,9 +125,12 @@ class ResponseCache(MemoryCacheMixin):
     def invalidate_prefix(self, prefix: str) -> None:
         """Invalidate all keys matching a prefix pattern."""
         pattern = f"{self._make_key(prefix)}*"
-        to_remove = [k for k in self._memory if k.startswith(self._make_key(prefix))]
-        for k in to_remove:
-            del self._memory[k]
+        with self._memory_lock:
+            to_remove = [
+                k for k in self._memory if k.startswith(self._make_key(prefix))
+            ]
+            for k in to_remove:
+                del self._memory[k]
         try:
             cursor = 0
             while True:

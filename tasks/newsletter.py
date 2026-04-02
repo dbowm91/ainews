@@ -309,7 +309,9 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         existing = redis_client.get(lock_key)
         if existing and existing.decode() == task_id:
             try:
-                redis_client.set(lock_key, task_id, nx=False, ex=600)
+                from services.redis_utils import refresh_lock
+
+                refresh_lock(redis_client, lock_key, task_id, 600)
             except redis.exceptions.RedisError:
                 pass
         else:

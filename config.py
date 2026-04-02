@@ -187,7 +187,7 @@ def _validate_llm_providers():
                 raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
             elif pdef.type == "ollama" and not pdef.config.get("model"):
                 raise RuntimeError(f"Provider '{pdef.id}': missing model")
-    except Exception as e:
+    except (ImportError, RuntimeError, KeyError, ValueError) as e:
         logger.warning("Could not validate LLM providers: %s", e)
 
     if not enabled_providers:

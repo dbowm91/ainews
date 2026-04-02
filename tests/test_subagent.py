@@ -123,9 +123,7 @@ class TestRunSubagent:
             mock_provider.chat_structured.side_effect = Exception("LLM error")
 
             with patch("services.subagent.resolve_subagent_config") as mock_resolve:
-                with patch(
-                    "services.subagent.get_provider_for_role"
-                ) as mock_get_provider:
+                with patch("services.llm.get_provider_by_id") as mock_get_provider:
                     from services.subagent import SubagentResponse
                     from schemas.pipeline import SubagentStageConfig
 
@@ -136,7 +134,7 @@ class TestRunSubagent:
                         max_tokens=2048,
                         temperature=0.0,
                     )
-                    mock_get_provider.return_value = (mock_provider, "qwen3:8b", 2048)
+                    mock_get_provider.return_value = mock_provider
 
                     from services.subagent import (
                         run_subagent,

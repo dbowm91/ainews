@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ainews// login</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </head>
+<body class="admin-body">
+  <noscript><p class="noscript-warning">JavaScript is required for theme toggle and full functionality.</p></noscript>
 <body class="admin-body">
   <main class="login-container">
     <div class="login-box">
@@ -28,6 +31,7 @@
         >
         <button type="submit" class="login-btn">login</button>
       </form>
+      <a href="/" class="login-back-link">back to site</a>
     </div>
   </main>
 </body>

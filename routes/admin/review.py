@@ -54,7 +54,7 @@ def approve_article(article_id):
     from models import Article
     from extensions import db
 
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:
         return jsonify({"error": "Article is not in review"}), 400
 
@@ -83,7 +83,7 @@ def reject_article(article_id):
     from models import Article
     from extensions import db
 
-    article = Article.query.get_or_404(article_id)
+    article = db.get_or_404(Article, article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:
         return jsonify({"error": "Article is not in review"}), 400
 

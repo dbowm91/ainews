@@ -6,6 +6,7 @@
   padding: 1rem 1.15rem;
   margin-bottom: 0.75rem;
   background: var(--bg-secondary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
@@ -17,6 +18,21 @@
 
 .article-card:active {
   transform: translateY(0);
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.article-card-new {
+  animation: fade-in-up 0.35s ease-out forwards;
 }
 
 .card-header {
@@ -94,6 +110,24 @@
   font-size: 0.72rem;
   color: var(--text-dim);
   flex-wrap: wrap;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.card-source {
+  color: var(--text-muted);
+}
+
+.card-time-relative {
+  color: var(--text-dim);
 }
 
 .meta-separator {
@@ -567,6 +601,25 @@
   .article-title {
     font-size: 1.3rem;
   }
+
+  .article-card {
+    padding: 0.75rem;
+  }
+
+  .card-footer {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .card-meta {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+}
+
+  .article-title {
+    font-size: 1.3rem;
+  }
 }
 
 .feed-header {
@@ -945,4 +998,34 @@
   padding: 1.25rem;
   margin: 0 auto 1rem;
   max-width: 500px;
+}
+
+.share-redirect-container {
+  max-width: 600px;
+  margin: 4rem auto;
+  text-align: center;
+}
+
+.share-redirect-title {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.share-redirect-description {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.share-redirect-input-wrapper {
+  margin-bottom: 1rem;
+}
+
+.share-redirect-input {
+  text-align: center;
+  width: 100%;
+}
+
+.share-redirect-link {
+  color: var(--accent);
+  font-size: 0.8rem;
 }

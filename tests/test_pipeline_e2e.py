@@ -66,6 +66,7 @@ class TestPipelineEndToEnd:
                 MagicMock(),
                 "qwen3:8b",
                 2048,
+                "ollama",
             )
 
             with app.app_context():
@@ -179,6 +180,7 @@ class TestPipelineEndToEnd:
                 MagicMock(),
                 "qwen3:8b",
                 2048,
+                "ollama",
             )
 
             with app.app_context():

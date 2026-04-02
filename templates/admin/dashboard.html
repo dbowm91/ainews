@@ -20,6 +20,21 @@
           </div>
         {% endfor %}
       </div>
+      <div class="pipeline-bar" aria-label="Pipeline distribution">
+        {% set total = namespace(value=0) %}
+        {% for status in statuses %}
+          {% set total.value = total.value + pipeline_stats.get(status, 0) %}
+        {% endfor %}
+        {% if total.value > 0 %}
+          {% for status in statuses %}
+            {% set count = pipeline_stats.get(status, 0) %}
+            {% if count > 0 %}
+              {% set pct = (count / total.value * 100)|round|int %}
+              <div class="pipeline-bar-segment pipeline-bar-{{ status }}" style="width: {{ pct }}%" title="{{ status }}: {{ count }} ({{ pct }}%)"></div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      </div>
       {% if running_count %}
         <div class="running-indicator">
           <span class="health-dot green blink"></span>
@@ -33,6 +48,20 @@
       </form>
       <a href="/admin/pipelines" class="dash-link">pipelines &rarr;</a>
       <a href="/admin/newsletters" class="dash-link ml-1">newsletters &rarr;</a>
+    </section>
+
+    {# ── Quick Actions ── #}
+    <section class="dash-card">
+      <h2 class="dash-card-title">quick actions</h2>
+      <div class="quick-actions">
+        <form method="POST" action="/admin/trigger-crawl" hx-post="/admin/trigger-crawl" hx-swap="none">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-primary">trigger crawl</button>
+        </form>
+        <a href="/admin/review" class="btn-secondary">review queue</a>
+        <a href="/admin/newsletters/send" class="btn-secondary">send newsletter</a>
+        <a href="/admin/pipelines" class="btn-secondary">view pipelines</a>
+      </div>
     </section>
 
     {# ── System Health ── #}

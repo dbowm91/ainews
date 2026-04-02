@@ -111,7 +111,7 @@ def _run_pipeline_stage(
     from services.llm import get_provider_for_role
 
     try:
-        provider, model, max_tokens = get_provider_for_role(
+        provider, model, max_tokens, _ = get_provider_for_role(
             f"newsletter_pipeline.{role}"
         )
         if limiter.acquire(

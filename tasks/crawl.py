@@ -246,14 +246,6 @@ def run_all_sources(self, run_id=None):
         if isinstance(res, dict):
             if "error" in res:
                 errors += 1
-                from services.crawling import record_crawl_failure
-                from models import Source
-
-                source_id = res.get("source_id")
-                if source_id:
-                    src = Source.query.filter_by(source_key=source_id).first()
-                    if src:
-                        record_crawl_failure(src, res["error"])
             total_fetched += res.get("fetched", 0)
             total_new += res.get("new", 0)
 

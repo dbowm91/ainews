@@ -108,14 +108,16 @@ def _resolve_and_check(hostname: str) -> list[str]:
     if cached is not None:
         return cached
 
+    executor = ThreadPoolExecutor(max_workers=1)
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(socket.getaddrinfo, hostname, None)
-            addr_infos = future.result(timeout=_DNS_RESOLVE_TIMEOUT)
+        future = executor.submit(socket.getaddrinfo, hostname, None)
+        addr_infos = future.result(timeout=_DNS_RESOLVE_TIMEOUT)
     except socket.gaierror:
         raise UnsafeURLError(f"DNS resolution failed for {hostname}")
     except TimeoutError:
         raise UnsafeURLError(f"DNS resolution timed out for {hostname}")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
     safe_ips: list[str] = []

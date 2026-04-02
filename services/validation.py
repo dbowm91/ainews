@@ -119,7 +119,5 @@ def validate_bulk_ids(article_ids: list, max_count: int = 500) -> list[int]:
 
 
 def _is_password_hash(value: str) -> bool:
-    """Check if a string looks like a SHA256 hash (64 hex chars)."""
-    if not value or len(value) != 64:
-        return False
-    return bool(re.match(r"^[a-f0-9]{64}$", value))
+    """Check if a value is a Werkzeug password hash (scrypt:, pbkdf2:, or argon2:)."""
+    return bool(re.match(r"^(scrypt|pbkdf2|argon2):", value))

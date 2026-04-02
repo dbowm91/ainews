@@ -554,3 +554,63 @@ class TestAdapterConfigsSchema:
             api_key="AIza-test", model="gemini-2.0-flash", max_tokens=4096
         )
         assert cfg.model == "gemini-2.0-flash"
+
+
+class TestProvidersYamlValidation:
+    """Tests that all providers.yaml entries load without errors."""
+
+    def test_providers_yaml_loads_successfully(self):
+        from schemas.llm import load_providers_config
+
+        config = load_providers_config()
+        assert config.providers is not None
+        assert len(config.providers) > 0
+
+    def test_all_provider_entries_have_required_fields(self):
+        from schemas.llm import load_providers_config
+
+        config = load_providers_config()
+        for provider in config.providers:
+            assert provider.id, f"Provider missing id: {provider}"
+            assert provider.type, f"Provider {provider.id} missing type"
+            assert provider.enabled is not None
+            assert provider.config, f"Provider {provider.id} missing config"
+
+    def test_all_provider_types_are_recognized(self):
+        from schemas.llm import load_providers_config
+        from services.llm.base import get_provider_class
+
+        config = load_providers_config()
+        for provider in config.providers:
+            try:
+                cls = get_provider_class(provider.type)
+                assert cls is not None
+            except KeyError:
+                pytest.fail(
+                    f"Unknown provider type '{provider.type}' for provider '{provider.id}'"
+                )
+
+    def test_providers_yaml_has_expected_providers(self):
+        from schemas.llm import load_providers_config
+
+        config = load_providers_config()
+        provider_ids = {p.id for p in config.providers}
+
+        expected = {
+            "ollama-local",
+            "openai",
+            "anthropic",
+            "gemini",
+            "deepseek",
+            "groq",
+            "openrouter",
+            "xai",
+            "togetherai",
+            "fireworks",
+            "cerebras",
+            "zai",
+            "opencode",
+        }
+        assert expected.issubset(provider_ids), (
+            f"Missing providers: {expected - provider_ids}"
+        )

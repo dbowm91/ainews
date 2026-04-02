@@ -48,7 +48,7 @@ class TestSelectArticle:
             "reason": "important",
         }
         provider.chat_structured.return_value = result_obj
-        mock_get_prov.return_value = (provider, "test-model", 1024)
+        mock_get_prov.return_value = (provider, "test-model", 1024, "ollama-local")
 
         limiter = MagicMock()
         limiter.acquire.return_value = True
@@ -107,7 +107,7 @@ class TestSelectArticle:
             "reason": "not newsworthy",
         }
         provider.chat_structured.return_value = result_obj
-        mock_get_prov.return_value = (provider, "test-model", 1024)
+        mock_get_prov.return_value = (provider, "test-model", 1024, "ollama-local")
 
         limiter = MagicMock()
         limiter.acquire.return_value = True
@@ -191,7 +191,7 @@ class TestSelectArticle:
 
         provider = MagicMock()
         provider.chat_structured.side_effect = ConnectionError("LLM down")
-        mock_get_prov.return_value = (provider, "test-model", 1024)
+        mock_get_prov.return_value = (provider, "test-model", 1024, "ollama-local")
 
         limiter = MagicMock()
         limiter.acquire.return_value = True
@@ -250,7 +250,7 @@ class TestSelectArticle:
             "reason": "exactly threshold",
         }
         provider.chat_structured.return_value = result_obj
-        mock_get_prov.return_value = (provider, "test-model", 1024)
+        mock_get_prov.return_value = (provider, "test-model", 1024, "ollama-local")
 
         limiter = MagicMock()
         limiter.acquire.return_value = True

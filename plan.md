@@ -15,8 +15,11 @@ All waves (1-5) completed successfully. All items (1A-1P, 2A-2O, 3A-3G, 4A-4D, 5
 
 - **1O**: Fixed remaining `Model.query.get_or_404()` in `newsletters.py`, `shares.py`, `pipelines.py`
 - **2A**: Fixed hardcoded `color: #fff` in `.unsubscribe-confirm-btn` (pages.css:510)
+- **2J**: Fixed base font-size from 15px to 16px (base.css:10)
 - **3F**: Verified `.card-source` CSS rule exists (articles.css:125-127)
 - **3G**: Updated `feed.html` empty states to use `.empty-title` and `.empty-description` classes
+- **5E**: Added `TestProvidersYamlValidation` class with 4 tests (test_llm_adapters.py:558-637)
+- **Tests**: Fixed `test_task_select.py` mock to return 4 values from `get_provider_for_role()`
 
 ---
 

@@ -210,3 +210,57 @@ def generate_topic_newsletter(
         hours=hours,
         executive_summary=executive_summary,
     )
+
+
+def generate_personalized_newsletter(
+    subscriber_preferences: dict,
+    site_url: str = "",
+    max_articles: int = 10,
+    hours: int = 24,
+    executive_summary: str = "",
+) -> tuple[str, str, int]:
+    """Generate a personalized newsletter based on subscriber topic preferences.
+
+    Args:
+        subscriber_preferences: Dict with 'topics' key containing list of topic keys
+        site_url: Base URL for article links
+        max_articles: Maximum number of articles to include
+        hours: Lookback window in hours
+        executive_summary: Optional executive summary text
+
+    Returns:
+        Tuple of (html, subject, article_count)
+    """
+    from models import Article
+    from schemas.topic import load_topics
+
+    topics = load_topics().topics
+    preferred_topics = subscriber_preferences.get("topics", [])
+
+    if not preferred_topics:
+        return generate_main_newsletter(
+            site_url=site_url,
+            max_articles=max_articles,
+            hours=hours,
+            executive_summary=executive_summary,
+        )
+
+    def filter_preferred(query):
+        return query.filter(
+            Article.impact_score > 0,
+            Article.category.in_(preferred_topics),
+        )
+
+    topic_names = [
+        topics.get(t).display_name if topics.get(t) else t for t in preferred_topics
+    ]
+    title = "Your Personalized: " + ", ".join(topic_names[:3])
+
+    return _generate_newsletter(
+        title=title,
+        articles_filter=filter_preferred,
+        site_url=site_url,
+        max_articles=max_articles,
+        hours=hours,
+        executive_summary=executive_summary,
+    )

@@ -11,11 +11,11 @@ class TestCeleryBeatSchedule:
         assert hasattr(Config, "CELERY_BEAT_SCHEDULE")
         assert isinstance(Config.CELERY_BEAT_SCHEDULE, dict)
 
-    def test_all_five_tasks_present(self):
+    def test_all_six_tasks_present(self):
         from config import Config
 
         schedule = Config.CELERY_BEAT_SCHEDULE
-        assert len(schedule) == 5
+        assert len(schedule) == 6
 
     def test_run_all_sources_task(self):
         from config import Config
@@ -66,4 +66,17 @@ class TestCeleryBeatSchedule:
         )
         assert schedule["cleanup-expired-verifications"]["schedule"] == timedelta(
             minutes=15
+        )
+
+    def test_publish_scheduled_articles_task(self):
+        from config import Config
+
+        schedule = Config.CELERY_BEAT_SCHEDULE
+        assert "publish-scheduled-articles" in schedule
+        assert (
+            schedule["publish-scheduled-articles"]["task"]
+            == "tasks.pipeline.publish_scheduled_articles"
+        )
+        assert schedule["publish-scheduled-articles"]["schedule"] == timedelta(
+            minutes=5
         )

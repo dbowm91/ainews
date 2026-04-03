@@ -53,7 +53,7 @@ def _query_looks_like_url(query: str) -> bool:
 @admin_bp.route("/articles")
 @require_auth
 def articles():
-    from models import Article, Source
+    from models import Article, Source, Tag
     from services.utils import paginate_query
     from datetime import datetime
 
@@ -64,6 +64,9 @@ def articles():
     source_id = request.args.get("source_id", "", type=str).strip()
     date_from = request.args.get("date_from", "", type=str).strip()
     date_to = request.args.get("date_to", "", type=str).strip()
+    impact_min = request.args.get("impact_min", "", type=str).strip()
+    impact_max = request.args.get("impact_max", "", type=str).strip()
+    tag_slug = request.args.get("tag", "", type=str).strip()
 
     q = Article.query.order_by(Article.created_at.desc())
 
@@ -100,6 +103,20 @@ def articles():
         except ValueError:
             logger.warning("Invalid date_to filter: %s", date_to)
             date_errors.append(f"Invalid end date: {date_to}")
+    if impact_min:
+        try:
+            q = q.filter(Article.impact_score >= int(impact_min))
+        except ValueError:
+            pass
+    if impact_max:
+        try:
+            q = q.filter(Article.impact_score <= int(impact_max))
+        except ValueError:
+            pass
+    if tag_slug:
+        tag = Tag.query.filter_by(slug=tag_slug).first()
+        if tag:
+            q = q.filter(Article.tags.any(Tag.id == tag.id))
 
     per_page = PER_PAGE_ADMIN_ARTICLES
     total_count = q.count()
@@ -125,11 +142,15 @@ def articles():
             source_id=source_id,
             date_from=date_from,
             date_to=date_to,
+            impact_min=impact_min,
+            impact_max=impact_max,
+            tag_slug=tag_slug,
             categories=_admin_categories(),
             sources=sources,
         )
 
     categories = _admin_categories()
+    all_tags = Tag.query.order_by(Tag.name).all()
 
     return render_template(
         "admin/articles.html",
@@ -144,8 +165,12 @@ def articles():
         source_id=source_id,
         date_from=date_from,
         date_to=date_to,
+        impact_min=impact_min,
+        impact_max=impact_max,
+        tag_slug=tag_slug,
         categories=categories,
         sources=sources,
+        all_tags=all_tags,
     )
 
 

@@ -122,6 +122,7 @@ class Article(db.Model):
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),
     )
+    scheduled_publish_at = db.Column(db.DateTime, nullable=True, index=True)
 
     citations = db.relationship(
         "Citation", backref="article", lazy="select", cascade="all, delete-orphan"
@@ -199,6 +200,7 @@ class Subscriber(db.Model):
     confirmed_at = db.Column(db.DateTime, nullable=True)
     active = db.Column(db.Boolean, default=True)
     deleted_at = db.Column(db.DateTime, nullable=True)
+    preferences = db.Column(db.JSON, nullable=True, default=dict)
 
     __table_args__ = (
         db.UniqueConstraint("email", "newsletter_type", name="uq_email_newsletter"),
@@ -361,3 +363,45 @@ class TopicNote(db.Model):
 
     def __repr__(self):
         return f"<TopicNote {self.topic}>"
+
+
+class Webhook(db.Model):
+    __tablename__ = "webhooks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    url = db.Column(db.String(2048), nullable=False)
+    secret = db.Column(db.String(128), nullable=False)
+    events = db.Column(db.JSON, nullable=False, default=list)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    last_triggered_at = db.Column(db.DateTime, nullable=True)
+    last_success_at = db.Column(db.DateTime, nullable=True)
+    last_failure_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    failure_count = db.Column(db.Integer, default=0)
+
+    def __repr__(self):
+        return f"<Webhook {self.name}>"
+
+
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(64), nullable=False, index=True)
+    target_type = db.Column(db.String(32))
+    target_id = db.Column(db.Integer)
+    user = db.Column(db.String(64), default="admin")
+    details = db.Column(db.JSON, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (db.Index("ix_audit_logs_target", "target_type", "target_id"),)
+
+    def __repr__(self):
+        return f"<AuditLog {self.action} {self.target_type}:{self.target_id}>"

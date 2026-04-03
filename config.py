@@ -126,6 +126,10 @@ class Config:
             "task": "tasks.cleanup.cleanup_expired_verifications",
             "schedule": timedelta(minutes=15),
         },
+        "publish-scheduled-articles": {
+            "task": "tasks.pipeline.publish_scheduled_articles",
+            "schedule": timedelta(minutes=5),
+        },
     }
 
 

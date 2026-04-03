@@ -1,0 +1,72 @@
+{% macro search_form(q='', status='', category='', tag_slug='', impact_min='', impact_max='', action='/admin/articles', all_tags=None, categories=None) %}
+<div class="search-container">
+  <input type="text" class="search-input" name="q" aria-label="Search articles" placeholder="search articles..."
+         value="{{ q }}"
+         hx-get="{{ action }}"
+         hx-trigger="input changed delay:300ms"
+         hx-target="#articles-table"
+         hx-include="[name='status'],[name='category'],[name='tag'],[name='impact_min'],[name='impact_max']"
+         hx-indicator="#articles-table-spinner">
+  <div class="filter-bar mt-05">
+    <select name="status" class="filter-select" aria-label="Filter by status"
+            hx-get="{{ action }}"
+            hx-trigger="change"
+            hx-target="#articles-table"
+            hx-include="[name='q'],[name='category'],[name='tag'],[name='impact_min'],[name='impact_max']"
+            hx-indicator="#articles-table-spinner"
+            hx-push-url="true">
+      <option value="">all statuses</option>
+      {% for s in ['pending', 'researching', 'writing', 'editing', 'review', 'done', 'skipped'] %}
+        <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    {% if categories %}
+    <select name="category" class="filter-select" aria-label="Filter by category"
+            hx-get="{{ action }}"
+            hx-trigger="change"
+            hx-target="#articles-table"
+            hx-include="[name='q'],[name='status'],[name='tag'],[name='impact_min'],[name='impact_max']"
+            hx-indicator="#articles-table-spinner"
+            hx-push-url="true">
+      <option value="">all categories</option>
+      {% for c in categories %}
+        <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    {% if all_tags %}
+    <select name="tag" class="filter-select" aria-label="Filter by tag"
+            hx-get="{{ action }}"
+            hx-trigger="change"
+            hx-target="#articles-table"
+            hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max']"
+            hx-indicator="#articles-table-spinner"
+            hx-push-url="true">
+      <option value="">all tags</option>
+      {% for t in all_tags %}
+        <option value="{{ t.slug }}" {% if tag_slug == t.slug %}selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <div class="filter-group">
+      <label class="filter-label">impact:</label>
+      <input type="number" name="impact_min" class="filter-input" aria-label="Min impact score"
+             placeholder="min" value="{{ impact_min }}" min="0" max="100"
+             hx-get="{{ action }}"
+             hx-trigger="change"
+             hx-target="#articles-table"
+             hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_max']"
+             hx-indicator="#articles-table-spinner"
+             hx-push-url="true">
+      <input type="number" name="impact_max" class="filter-input" aria-label="Max impact score"
+             placeholder="max" value="{{ impact_max }}" min="0" max="100"
+             hx-get="{{ action }}"
+             hx-trigger="change"
+             hx-target="#articles-table"
+             hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_min']"
+             hx-indicator="#articles-table-spinner"
+             hx-push-url="true">
+    </div>
+  </div>
+</div>
+{% endmacro %}

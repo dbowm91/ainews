@@ -30,6 +30,13 @@ def subscribe() -> Response:
     if newsletter_type not in valid_types:
         newsletter_type = "main"
 
+    # Parse topic preferences
+    preferences = {"topics": []}
+    topics_raw = request.form.getlist("topics")
+    if topics_raw:
+        valid_topic_keys = set(_get_categories())
+        preferences["topics"] = [t for t in topics_raw if t in valid_topic_keys][:10]
+
     if not is_valid_email(email):
         if request.headers.get("HX-Request"):
             return render_template(
@@ -63,15 +70,18 @@ def subscribe() -> Response:
         existing.unsubscribe_token = unsub_token
         existing.verification_token = verify_token
         existing.confirmed_at = None
+        existing.preferences = preferences
     elif existing and existing.active and existing.confirmed_at is None:
         existing.verification_token = verify_token
         unsub_token = existing.unsubscribe_token
+        existing.preferences = preferences
     else:
         subscriber = Subscriber(
             email=email,
             newsletter_type=newsletter_type,
             unsubscribe_token=unsub_token,
             verification_token=verify_token,
+            preferences=preferences,
         )
         db.session.add(subscriber)
 

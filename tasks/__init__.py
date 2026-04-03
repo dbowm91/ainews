@@ -7,6 +7,7 @@ from tasks.pipeline import (
     _finalize,
     _assign_tags,
     MAX_STAGE_RETRIES,
+    publish_scheduled_articles,
 )
 from tasks.crawl import run_all_sources
 from tasks.extract import process_item
@@ -24,6 +25,7 @@ __all__ = [
     "write_article",
     "edit_article",
     "retry_stuck",
+    "publish_scheduled_articles",
     "_log_pipeline",
     "_degrade_and_advance",
     "_handle_stage_failure",

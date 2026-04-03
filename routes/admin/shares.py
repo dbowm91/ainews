@@ -1,5 +1,6 @@
-from flask import render_template, request, redirect, url_for, jsonify
+from flask import render_template, request, redirect, url_for
 from routes.admin import admin_bp, require_auth
+from routes.decorators import commit
 
 
 @admin_bp.route("/shares")
@@ -16,16 +17,12 @@ def shares():
 def toggle_share(config_id):
     from models import ShareConfig
     from extensions import db
-    from sqlalchemy.exc import SQLAlchemyError
 
     config = db.get_or_404(ShareConfig, config_id)
     config.active = not config.active
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to toggle share config"}), 500
-
+    error = commit(db, "Failed to toggle share config")
+    if error:
+        return error
     if request.headers.get("HX-Request"):
         return render_template("admin/partials/share_row.html", config=config)
     return redirect(url_for("admin.shares"))

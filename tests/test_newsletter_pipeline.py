@@ -8,7 +8,7 @@ class TestNewsletterBriefModel:
     """Test NewsletterBrief Pydantic model."""
 
     def test_model_accepts_valid_data(self):
-        from services.newsletter_pipeline import NewsletterBrief
+        from schemas.llm_responses import NewsletterBrief
 
         brief = NewsletterBrief(
             themes=["AI safety"],
@@ -19,13 +19,13 @@ class TestNewsletterBriefModel:
         assert brief.connections == []
 
     def test_model_connections_default(self):
-        from services.newsletter_pipeline import NewsletterBrief
+        from schemas.llm_responses import NewsletterBrief
 
         brief = NewsletterBrief(themes=["test"], highlights=["h1"])
         assert brief.connections == []
 
     def test_serialization(self):
-        from services.newsletter_pipeline import NewsletterBrief
+        from schemas.llm_responses import NewsletterBrief
 
         brief = NewsletterBrief(themes=["test"], highlights=["h1"])
         dumped = brief.model_dump()
@@ -37,13 +37,13 @@ class TestExecutiveSummaryModel:
     """Test ExecutiveSummary Pydantic model."""
 
     def test_required_summary_field(self):
-        from services.newsletter_pipeline import ExecutiveSummary
+        from schemas.llm_responses import ExecutiveSummary
 
         summary = ExecutiveSummary(summary="Test summary")
         assert summary.summary == "Test summary"
 
     def test_serialization(self):
-        from services.newsletter_pipeline import ExecutiveSummary
+        from schemas.llm_responses import ExecutiveSummary
 
         summary = ExecutiveSummary(summary="Full summary")
         json_str = summary.model_dump_json()

@@ -1,55 +1,15 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 import logging
+
+# Backward-compat re-exports (canonical definitions in schemas.llm_responses)
+from schemas.llm_responses import (  # noqa: F401
+    CitationItem,
+    OriginalAttribution,
+    CondensedArticle,
+)
 
 from services.prompts import esc_xml_text
 
 logger = logging.getLogger(__name__)
-
-
-class CitationItem(BaseModel):
-    title: str
-    url: str
-    author: Optional[str] = None
-    type: str = "article"  # article, web, db
-
-
-class OriginalAttribution(BaseModel):
-    source: str
-    author: Optional[str] = None
-    url: Optional[str] = None
-    published_at: Optional[str] = None
-
-
-class CondensedArticle(BaseModel):
-    headline: str = Field(description="Catchy but accurate headline")
-    tldr: str = Field(description="One-sentence summary for busy readers")
-    why_it_matters: str = Field(
-        default="",
-        description="1-2 sentences on why this matters to the reader. Connect to a bigger trend or consequence.",
-    )
-    body: str = Field(
-        description=(
-            "The full condensed article. Write in a clear, engaging style "
-            "for a tech-savvy audience. Include context from external sources. "
-            "Use markdown formatting."
-        )
-    )
-    key_points: list[str] = Field(
-        description="3-5 bullet points of the most important takeaways"
-    )
-    what_to_watch: str = Field(
-        default="",
-        description="Forward-looking indicator: what happens next, a key date, or why this story isn't over.",
-    )
-    citations: list[CitationItem] = Field(
-        description="All sources referenced in the article"
-    )
-    original_attribution: OriginalAttribution
-    tags: list[str] = Field(
-        default_factory=list,
-        description="1-3 concise tags describing the article's specific topics (lowercase, hyphenated)",
-    )
 
 
 def get_writer_system_prompt() -> str:

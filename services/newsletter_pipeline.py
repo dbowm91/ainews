@@ -1,27 +1,13 @@
 import json
 import logging
-from pydantic import BaseModel, Field
+
+# Backward-compat re-exports (canonical definitions in schemas.llm_responses)
+from schemas.llm_responses import (  # noqa: F401
+    NewsletterBrief,
+    ExecutiveSummary,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class NewsletterBrief(BaseModel):
-    themes: list[str] = Field(description="Major themes across the selected articles")
-    highlights: list[str] = Field(description="Most notable individual stories")
-    connections: list[str] = Field(
-        default_factory=list,
-        description="Patterns or threads connecting multiple articles",
-    )
-
-
-class ExecutiveSummary(BaseModel):
-    summary: str = Field(
-        description=(
-            "3-4 paragraph executive summary. Sharp, slightly informal tone. "
-            "Lead with the most important takeaway. "
-            "Reference specific articles where relevant."
-        )
-    )
 
 
 def _get_nl_role_config(role: str):

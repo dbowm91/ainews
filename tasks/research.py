@@ -40,8 +40,8 @@ def _format_web_results(web_results: list[dict]) -> str:
 def research_article(self, article_id: int, run_id=None):
     from extensions import db
     from schemas.pipeline import get_role_config
+    from schemas.llm_responses import ResearchBrief
     from services.researcher import (
-        ResearchBrief,
         get_researcher_system_prompt,
         build_research_prompt,
     )
@@ -77,7 +77,8 @@ def research_article(self, article_id: int, run_id=None):
             ]
 
             if web_results:
-                from services.subagent import run_subagent, ResearchSynthesisResponse
+                from services.subagent import run_subagent
+                from schemas.llm_responses import ResearchSynthesisResponse
 
                 web_synthesis_result = run_subagent(
                     task_type="research_synthesis",

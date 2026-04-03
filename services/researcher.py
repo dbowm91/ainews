@@ -1,66 +1,17 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 import logging
+
+# Backward-compat re-exports (canonical definitions in schemas.llm_responses)
+from schemas.llm_responses import (  # noqa: F401
+    ExternalSource,
+    KeyClaim,
+    DirectQuote,
+    RelatedArticle,
+    ResearchBrief,
+)
 
 from services.prompts import esc_xml_text
 
 logger = logging.getLogger(__name__)
-
-
-class ExternalSource(BaseModel):
-    title: str
-    url: str
-    snippet: str
-
-
-class KeyClaim(BaseModel):
-    claim: str
-    source: str  # "source_article" or URL
-    confidence: str  # high/medium/low
-
-
-class DirectQuote(BaseModel):
-    quote: str
-    attribution: str  # Who said it
-    source_url: Optional[str] = None
-
-
-class RelatedArticle(BaseModel):
-    title: str
-    category: str
-    summary_snippet: str  # First 200 chars of our summary
-    created_at: str
-
-
-class ResearchBrief(BaseModel):
-    source_summary: str = Field(description="TL;DR of the source article")
-    key_claims: list[KeyClaim] = Field(
-        description="Factual claims with source attribution"
-    )
-    direct_quotes: list[DirectQuote] = Field(
-        default=[], description="Verbatim quotes from the article"
-    )
-    external_sources: list[ExternalSource] = Field(
-        default=[], description="Additional web sources found during research"
-    )
-    related_articles: list[RelatedArticle] = Field(
-        default=[], description="Related articles from our database"
-    )
-    context_notes: str = Field(
-        default="",
-        description="Additional context, background, or significance",
-    )
-    newsworthiness: str = Field(description="Why this matters to a tech audience")
-    impact_score: int = Field(
-        ge=0,
-        le=100,
-        description=(
-            "Impact score 0-100 reflecting: importance of subject matter, "
-            "original article popularity, research findings significance, "
-            "community excitement, and engagement potential. "
-            "0-25: niche/minor. 26-50: notable. 51-75: significant. 76-100: major/breaking."
-        ),
-    )
 
 
 def get_researcher_system_prompt() -> str:

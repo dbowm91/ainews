@@ -28,15 +28,10 @@ plog = get_pipeline_logger("select")
 def select_article(self, article_id: int, run_id=None):
     from models import PipelineRun
     from extensions import db
-    from pydantic import BaseModel, Field
     from schemas.pipeline import get_role_config
+    from schemas.llm_responses import SelectionResult
     from services.prompts import get_system_prompt
     from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next
-
-    class SelectionResult(BaseModel):
-        selected: bool
-        score: int = Field(ge=1, le=10)
-        reason: str
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("selector")

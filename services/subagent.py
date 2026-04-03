@@ -2,25 +2,20 @@ from __future__ import annotations
 import logging
 from typing import Type
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from schemas.pipeline import resolve_subagent_config, SubagentStageConfig
+from schemas.llm_responses import SubagentResponse
 from services.llm import get_provider_for_role
+
+# Backward-compat re-exports (canonical definitions in schemas.llm_responses)
+from schemas.llm_responses import (  # noqa: F401
+    ResearchSynthesisResponse,
+    EditContextualizationResponse,
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-class SubagentResponse(BaseModel):
-    synthesis: str = Field(description="Synthesized output from the subagent")
-    used_fallback: bool = Field(
-        default=False,
-        description="Whether a fallback response was used due to subagent failure",
-    )
-    fallback_stages: list[str] = Field(
-        default=[],
-        description="Which stages used fallback responses",
-    )
 
 
 _SUBAGENT_TASK_TEMPLATES = {
@@ -125,13 +120,3 @@ def run_subagent(
             used_fallback=True,
             fallback_stages=[stage],
         )
-
-
-class ResearchSynthesisResponse(BaseModel):
-    synthesis: str = Field(description="Synthesized summary of web research results")
-
-
-class EditContextualizationResponse(BaseModel):
-    synthesis: str = Field(
-        description="Contextualization notes for the editor about gaps, attribution, and claims needing support"
-    )

@@ -2,8 +2,8 @@ import logging
 import secrets
 
 from flask import jsonify, request, Response
-from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
+from routes.decorators import commit
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +72,9 @@ def create_webhook() -> tuple[Response, int] | Response:
         active=True,
     )
     db.session.add(webhook)
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to create webhook"}), 500
+    error = commit(db, "Failed to create webhook")
+    if error:
+        return error
 
     return jsonify(
         {
@@ -159,11 +157,9 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if "active" in data:
         webhook.active = bool(data["active"])
 
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to update webhook"}), 500
+    error = commit(db, "Failed to update webhook")
+    if error:
+        return error
 
     return jsonify({"message": "Webhook updated"})
 
@@ -176,12 +172,10 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     from extensions import db
 
     webhook = db.get_or_404(Webhook, webhook_id)
-    try:
-        db.session.delete(webhook)
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to delete webhook"}), 500
+    db.session.delete(webhook)
+    error = commit(db, "Failed to delete webhook")
+    if error:
+        return error
 
     return jsonify({"message": "Webhook deleted"})
 

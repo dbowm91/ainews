@@ -85,7 +85,7 @@ def clear_tag_cache() -> None:
 def edit_article(self, article_id: int, run_id=None):
     from extensions import db
     from schemas.pipeline import get_role_config
-    from services.writer import CondensedArticle
+    from schemas.llm_responses import CondensedArticle
     from services.editor import (
         get_editor_system_prompt,
         build_editor_prompt_with_context,

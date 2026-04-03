@@ -92,8 +92,9 @@ class TestProcessItem:
     @patch("tasks.select.select_article")
     @patch("services.crawling.get_or_create_source")
     @patch("tasks.extract._find_duplicate_article")
+    @patch("services.content_extractor.extract_article")
     def test_duplicate_returns_existing(
-        self, mock_dedup, mock_get_source, mock_select, app
+        self, mock_extract, mock_dedup, mock_get_source, mock_select, app
     ):
         """Duplicate article returns existing ID without creating new article."""
         mock_article = MagicMock()

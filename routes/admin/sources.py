@@ -3,6 +3,7 @@ import time
 from flask import render_template, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
+from routes.decorators import commit
 
 
 def _generate_source_key(name: str) -> str:
@@ -78,11 +79,9 @@ def enable_source(source_id):
     source.disabled_at = None
     source.consecutive_failures = 0
     source.last_error = None
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to enable source"}), 500
+    error = commit(db, "Failed to enable source")
+    if error:
+        return error
     return jsonify({"message": f"Source {source.name} enabled"}), 200
 
 
@@ -96,9 +95,7 @@ def disable_source(source_id):
     source = db.get_or_404(Source, source_id)
     source.active = False
     source.disabled_at = datetime.now(timezone.utc)
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to disable source"}), 500
+    error = commit(db, "Failed to disable source")
+    if error:
+        return error
     return jsonify({"message": f"Source {source.name} disabled"}), 200

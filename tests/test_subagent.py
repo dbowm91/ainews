@@ -7,7 +7,7 @@ class TestSubagentResponse:
     """Test SubagentResponse model."""
 
     def test_subagent_response_defaults(self):
-        from services.subagent import SubagentResponse
+        from schemas.llm_responses import SubagentResponse
 
         resp = SubagentResponse(synthesis="test synthesis")
         assert resp.synthesis == "test synthesis"
@@ -19,7 +19,7 @@ class TestResearchSynthesisResponse:
     """Test ResearchSynthesisResponse model."""
 
     def test_research_synthesis_response(self):
-        from services.subagent import ResearchSynthesisResponse
+        from schemas.llm_responses import ResearchSynthesisResponse
 
         resp = ResearchSynthesisResponse(synthesis="web synthesis content")
         assert resp.synthesis == "web synthesis content"
@@ -29,7 +29,7 @@ class TestEditContextualizationResponse:
     """Test EditContextualizationResponse model."""
 
     def test_edit_contextualization_response(self):
-        from services.subagent import EditContextualizationResponse
+        from schemas.llm_responses import EditContextualizationResponse
 
         resp = EditContextualizationResponse(synthesis="context notes")
         assert resp.synthesis == "context notes"
@@ -62,7 +62,7 @@ class TestRunSubagent:
         """When subagent is disabled, returns fallback response."""
         with app.app_context():
             with patch("services.subagent.resolve_subagent_config") as mock_resolve:
-                from services.subagent import SubagentResponse
+                from schemas.llm_responses import SubagentResponse
                 from schemas.pipeline import SubagentStageConfig
 
                 mock_resolve.return_value = SubagentStageConfig(enabled=False)
@@ -101,10 +101,8 @@ class TestRunSubagent:
                     )
                     mock_get_provider.return_value = mock_provider
 
-                    from services.subagent import (
-                        run_subagent,
-                        ResearchSynthesisResponse,
-                    )
+                    from services.subagent import run_subagent
+                    from schemas.llm_responses import ResearchSynthesisResponse
 
                     result = run_subagent(
                         task_type="research_synthesis",
@@ -124,7 +122,7 @@ class TestRunSubagent:
 
             with patch("services.subagent.resolve_subagent_config") as mock_resolve:
                 with patch("services.llm.get_provider_by_id") as mock_get_provider:
-                    from services.subagent import SubagentResponse
+                    from schemas.llm_responses import SubagentResponse
                     from schemas.pipeline import SubagentStageConfig
 
                     mock_resolve.return_value = SubagentStageConfig(
@@ -136,10 +134,8 @@ class TestRunSubagent:
                     )
                     mock_get_provider.return_value = mock_provider
 
-                    from services.subagent import (
-                        run_subagent,
-                        ResearchSynthesisResponse,
-                    )
+                    from services.subagent import run_subagent
+                    from schemas.llm_responses import ResearchSynthesisResponse
 
                     result = run_subagent(
                         task_type="research_synthesis",

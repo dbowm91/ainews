@@ -49,12 +49,16 @@ def login():
         admin_password = current_app.config.get("ADMIN_PASSWORD", "")
         if admin_password and _verify_password(admin_password, password):
             _clear_attempts(ip)
-            # Clear session to prevent fixation, then set admin flag
             session.clear()
             session["admin"] = True
+            try:
+                from services.audit import log_admin_action
+
+                log_admin_action("admin_login", user="admin")
+            except Exception:
+                pass
             next_url = request.args.get("next", "")
             return redirect(_safe_redirect_url(next_url))
-        # Atomically check lockout AND record attempt (prevents TOCTOU race)
         locked = _check_and_record_attempt(ip)
         if locked:
             error = "Too many failed attempts. Try again later."
@@ -65,5 +69,11 @@ def login():
 
 @admin_bp.route("/logout", methods=["POST"])
 def logout():
+    try:
+        from services.audit import log_admin_action
+
+        log_admin_action("admin_logout", user="admin")
+    except Exception:
+        pass
     session.pop("admin", None)
     return redirect("/")

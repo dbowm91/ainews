@@ -7,6 +7,8 @@ via structured logging for accountability and debugging.
 import logging
 from typing import Any, Optional
 
+from flask import request
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,11 +19,11 @@ def log_admin_action(
     details: Optional[dict[str, Any]] = None,
     user: str = "admin",
 ) -> None:
-    """Record an admin action via structured logging.
+    """Record an admin action via structured logging and database.
 
     Uses the JSON formatter's `extra` fields so the audit trail is
-    captured in application logs. PipelineLog is not used because
-    its run_id column is NOT NULL (audit entries have no pipeline run).
+    captured in application logs. Also writes to the AuditLog database
+    table for persistent storage and admin UI.
 
     Args:
         action: Action performed (e.g., "article_edit", "source_disable")
@@ -49,3 +51,27 @@ def log_admin_action(
         ctx["details"] = details
 
     logger.info(msg, extra=ctx)
+
+    ip_address = None
+    try:
+        if request:
+            ip_address = request.remote_addr
+    except RuntimeError:
+        pass
+
+    try:
+        from models import AuditLog
+        from extensions import db
+
+        log_entry = AuditLog(
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            user=user,
+            details=details,
+            ip_address=ip_address,
+        )
+        db.session.add(log_entry)
+        db.session.commit()
+    except Exception:
+        logger.warning("Failed to write audit log to database")

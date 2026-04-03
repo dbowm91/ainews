@@ -68,6 +68,18 @@ def approve_article(article_id):
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"error": "Failed to approve article"}), 500
 
+    try:
+        from services.cache import get_response_cache
+
+        cache = get_response_cache()
+        cache.invalidate_prefix("index")
+        cache.invalidate_prefix("topic")
+        cache.invalidate_prefix("rss")
+        if article.category:
+            cache.invalidate_prefix(f"topic:{article.category}")
+    except Exception:
+        pass
+
     logger.info(
         "Approved article %s: %s", article_id, (article.original_title or "")[:50]
     )

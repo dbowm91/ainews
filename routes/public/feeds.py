@@ -44,9 +44,18 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
 
 @public_bp.route("/")
 def index() -> str:
+    from services.cache import get_response_cache
+
     page = max(1, request.args.get("page", 1, type=int))
     category = request.args.get("category", "", type=str).strip()
     query = request.args.get("q", "", type=str).strip()
+
+    cache = get_response_cache()
+    cache_key = f"index:page:{page}:cat:{category}:q:{query}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     articles, has_next, next_page = get_articles_paginated(
         page=page,
@@ -73,12 +82,24 @@ def index() -> str:
         share_configs=share_configs,
     )
 
-    return _render_feed_or_page(ctx, "index.html")
+    result = _render_feed_or_page(ctx, "index.html")
+    if page == 1 and not category and not query:
+        cache.set(cache_key, result, ttl=300)
+    return result
 
 
 @public_bp.route("/topic/<category>")
 def topic_feed(category: str) -> str:
+    from services.cache import get_response_cache
+
     page = max(1, request.args.get("page", 1, type=int))
+
+    cache = get_response_cache()
+    cache_key = f"topic:{category}:page:{page}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     from schemas.topic import load_topics
 
@@ -107,7 +128,10 @@ def topic_feed(category: str) -> str:
         share_configs=share_configs,
     )
 
-    return _render_feed_or_page(ctx, "topic.html")
+    result = _render_feed_or_page(ctx, "topic.html")
+    if page == 1:
+        cache.set(cache_key, result, ttl=300)
+    return result
 
 
 @public_bp.route("/tag/<slug>")
@@ -169,12 +193,12 @@ def feed_all() -> Response:
             description="Autonomous AI-curated condensed news across AI, privacy, security, programming, and hardware.",
             site_url=site_url,
         )
-        cache.set(cache_key, xml, ttl=120)
+        cache.set(cache_key, xml, ttl=600)
 
     return Response(
         xml,
         mimetype="application/rss+xml",
-        headers={"Cache-Control": "public, max-age=120, stale-while-revalidate=600"},
+        headers={"Cache-Control": "public, max-age=600, stale-while-revalidate=1200"},
     )
 
 
@@ -214,12 +238,12 @@ def feed_topic(category: str) -> Response:
             description=f"Condensed tech news: {topic_name}",
             site_url=site_url,
         )
-        cache.set(cache_key, xml, ttl=120)
+        cache.set(cache_key, xml, ttl=600)
 
     return Response(
         xml,
         mimetype="application/rss+xml",
-        headers={"Cache-Control": "public, max-age=120, stale-while-revalidate=600"},
+        headers={"Cache-Control": "public, max-age=600, stale-while-revalidate=1200"},
     )
 
 

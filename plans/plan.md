@@ -1,6 +1,6 @@
 # Consolidated Improvement Plan — April 2026
 
-**Status: Core waves complete (1-7). Remaining items (8-10) are optional enhancements.**
+**Status: All waves complete (1-10).**
 
 ## Verification
 
@@ -285,49 +285,116 @@
 
 ---
 
-## Wave 8: Test Improvements (Optional)
+## Wave 8: Test Improvements ✅
 
-These are nice-to-have enhancements, not critical for production.
+### 8A. Add test for bulk article `reprocess` action ✅
+**File:** `tests/test_admin_api.py`
+- Added `test_reprocess` to `TestBulkArticles`
 
-- **8A:** Add test for bulk article `reprocess` action
-- **8B:** Add Celery beat schedule tests
-- **8C:** Split `test_new_services.py` into focused files
-- **8D:** Add health endpoint integration test
-- **8E:** Add cascade deletion tests
-- **8F:** Add tests for `routes/admin/shares.py`
-- **8G:** Add test coverage reporting
-- **8H:** Improve test data factories
+### 8B. Add Celery beat schedule tests ✅
+**File:** `tests/test_celery_config.py` (new)
+- 7 tests verifying all 5 scheduled tasks
+
+### 8C. Split `test_new_services.py` into focused files ✅
+**Files:** Multiple new test files
+- Created 11 focused test files: `test_article_parser.py`, `test_pagination.py`, `test_config_unified.py`, `test_logging_utils.py`, `test_health.py`, `test_dead_letter.py`, `test_validation.py`, `test_audit.py`, `test_degradation.py`, `test_dns_cache.py`, `test_metrics.py`
+- Deleted original `tests/test_new_services.py`
+
+### 8D. Add health endpoint integration test ✅
+**File:** `tests/test_admin_api.py`
+- Replaced skipped test with direct `run_health_checks()` service test
+
+### 8E. Add cascade deletion tests ✅
+**File:** `tests/test_models.py` (new)
+- Tests for Citations, ArticleMetrics, ArticleVersions, article_tags cascade
+
+### 8F. Add tests for `routes/admin/shares.py` ✅
+**File:** `tests/test_admin_shares.py` (new)
+- 6 tests for share endpoint auth and toggle functionality
+
+### 8G. Add test coverage reporting ✅
+**File:** `pyproject.toml`
+- Raised `fail_under` from 70 to 80, added HTML report
+
+### 8H. Improve test data factories ✅
+**File:** `tests/factories.py`
+- Added `create_pipeline_run_with_logs()`, `create_citation()`, `create_topic_note()`, `create_article_with_relations()`, `batch_create()`
 
 ---
 
-## Wave 9: Documentation & Observability (Optional)
+## Wave 9: Documentation & Observability ✅
 
-These are documentation enhancements.
+### 9A. Create API documentation ✅
+**File:** `docs/api.md` (new)
+- Documents all public and admin API endpoints
 
-- **9A:** Create API documentation (`docs/api.md`)
-- **9B:** Create deployment guide (`docs/deployment.md`)
-- **9C:** Create developer onboarding guide (`docs/development.md`)
-- **9D:** Create security documentation (`docs/security.md`)
-- **9E:** Create troubleshooting guide (`docs/troubleshooting.md`)
-- **9F:** Add alerting thresholds documentation (`docs/monitoring.md`)
-- **9G:** Add structured query logging
-- **9H:** Add health check endpoint enhancements
-- **9I:** Add log aggregation hints
+### 9B. Create deployment guide ✅
+**File:** `docs/deployment.md` (expanded)
+- Added systemd services, Docker Compose, backup/restore, upgrade procedures
+
+### 9C. Create developer onboarding guide ✅
+**File:** `docs/development.md` (new)
+- Local setup, code structure, common tasks, debugging tools
+
+### 9D. Create security documentation ✅
+**File:** `docs/security.md` (new)
+- Security architecture, secrets management, incident response
+
+### 9E. Create troubleshooting guide ✅
+**File:** `docs/troubleshooting.md` (new)
+- Common issues, diagnostic commands, log reference
+
+### 9F. Add alerting thresholds documentation ✅
+**File:** `docs/monitoring.md` (new)
+- Metrics thresholds, Prometheus rules, Grafana dashboard recommendations
+
+### 9G. Add structured query logging ✅
+**Files:** `logging_config.py`, `config.py`
+- SQLAlchemy event listener for slow query logging (>500ms)
+
+### 9H. Add health check endpoint enhancements ✅
+**Files:** `services/health.py`, `routes/public/__init__.py`
+- Added `?detailed=true` support, version info (commit hash, build time)
+
+### 9I. Add log aggregation hints ✅
+**Files:** `logging_config.py`, `docs/logging.md` (new)
+- Correlation ID tracking, log format documentation for ELK/Loki/Datadog
 
 ---
 
-## Wave 10: Feature Enhancements (Optional)
+## Wave 10: Feature Enhancements ✅
 
-These are new feature requests.
+### 10A. Add article version history UI ✅
+**Files:** `templates/admin/article_versions.html`, `routes/admin/review.py`, `models.py`
+- Already existed
 
-- **10A:** Add article version history UI
-- **10B:** Add scheduled article publishing
-- **10C:** Add article search filters
-- **10D:** Add newsletter personalization
-- **10E:** Add webhook notifications
-- **10F:** Add response caching for read-only endpoints
-- **10G:** Add Prometheus metrics exporter
-- **10H:** Add audit logging
+### 10B. Add scheduled article publishing ✅
+**Files:** `models.py`, `routes/admin/api.py`, `tasks/pipeline.py`, `config.py`
+- Added `scheduled_publish_at` field, `publish_scheduled_articles` Celery task and beat schedule
+
+### 10C. Add article search filters ✅
+**Files:** `routes/admin/articles.py`, `templates/admin/articles.html`, `templates/partials/search.html` (new)
+- Added impact score and tag filters, created reusable search macro
+
+### 10D. Add newsletter personalization ✅
+**Files:** `models.py`, `services/newsletter.py`, `routes/public/subscribe.py`
+- Added `preferences` JSON field to Subscriber, `generate_personalized_newsletter()`
+
+### 10E. Add webhook notifications ✅
+**Files:** `models.py`, `services/webhooks.py` (new), `routes/admin/api.py`
+- Added `Webhook` model, CRUD endpoints, dispatcher with retry/exponential backoff
+
+### 10F. Add response caching for read-only endpoints ✅
+**Files:** `services/cache.py`, `routes/public/feeds.py`
+- Added `cached_response` decorator, caching for homepage (5min), RSS (10min), topic pages (5min), cache invalidation on publish/edit
+
+### 10G. Add Prometheus metrics exporter ✅
+**File:** `routes/admin/metrics.py`
+- Already existed at `/admin/api/metrics/prometheus`
+
+### 10H. Add audit logging ✅
+**Files:** `models.py`, `services/audit.py`, `routes/admin/api.py`, `routes/admin/auth.py`
+- Added `AuditLog` model, integrated into admin operations, added `GET /api/audit-logs` endpoint
 
 ---
 
@@ -345,13 +412,20 @@ These are new feature requests.
 
 ## Files Changed Summary
 
-### Core Fixes (Waves 1-7)
-- `tasks/crawl.py` — 1A, 2A
+### Wave 1 — Critical Bugs
+- `tasks/crawl.py` — 1A
 - `tasks/extract.py` — 1B, 1C
 - `services/context_service.py` — 1D
-- `tasks/newsletter.py` — 1E, 1F, 5D, 5F
+- `tasks/newsletter.py` — 1E, 1F
 - `tests/test_context_service.py` — 1G
+
+### Wave 2 — Race Conditions & Cache
+- `tasks/pipeline.py`, `tasks/crawl.py` — 2A
+- `routes/admin/api.py` — 2B
 - `services/limiter.py` — 2D
+- `routes/admin/articles.py` — 2E
+
+### Wave 3 — Service-Level Fixes
 - `services/llm/anthropic.py`, `openai.py`, `ollama.py`, `gemini.py` — 3A
 - `services/llm/errors.py` — 3B
 - `services/llm/gemini.py` — 3C
@@ -361,22 +435,87 @@ These are new feature requests.
 - `services/metrics.py` — 3G
 - `services/cache_base.py` — 3H
 - `services/article.py` — 3I, 3J
-- `routes/admin/api.py` — 4A, 4B, 7H
-- `routes/admin/articles.py` — 4D
-- `routes/admin/pipelines.py` — 4B
-- `routes/admin/dashboard.py` — 4G
-- `routes/admin/sources.py` — 4E
-- `services/degradation.py` — 5F
-- `templates/base_admin.html` — 6M
-- `templates/base.html` — 6O
-- `services/redis_utils.py` — 5E
-- `logging_config.py` — Commented out dead code
-- `services/crawling.py` — Fixed SourceConfig import
 
-### Test Updates
-- `tests/test_crawl_task.py` — Updated for chord-based behavior
-- `tests/test_admin_api.py` — Fixed import for mock patching
-- `tests/test_models.py` — Fixed unused variable
-- `tests/factories.py` — Fixed undefined imports
+### Wave 4 — Route & Input Validation
+- `routes/admin/api.py` — 4A, 4B
+- `routes/admin/articles.py` — 4C, 4D
+- `routes/admin/pipelines.py` — 4B
+- `routes/admin/sources.py` — 4E
+- `routes/admin/dashboard.py` — 4F, 4G
+- `routes/admin/metrics.py` — 4F
+
+### Wave 5 — Newsletter & Task Improvements
+- `tasks/newsletter.py` — 5A, 5D
+- `tasks/retry.py` — 5B, 5C
+- `services/redis_utils.py` — 5E
+- `services/degradation.py` — 5F
+
+### Wave 6 — UI Fixes
+- `templates/partials/cards.html` — 6A (new)
+- `templates/admin/login.html` — 6B
+- `static/css/base.css` — 6C
+- `static/css/articles.css` — 6D, 6P
+- `templates/partials/topic_icon.html` — 6F
+- `static/css/components.css` — 6G, 6H, 6K
+- `static/css/pages.css` — 6I, 6L
+- `templates/verify.html` — 6I, 6J
+- `templates/share_redirect.html` — 6J
+- `templates/base_admin.html` — 6M
+- `templates/admin/dashboard.html` — 6N
+- `static/css/layout.css` — 6O
+
+### Wave 7 — Configuration & Code Quality
+- `services/url.py` — 7A
+- `services/cache.py` — 7B
+- `routes/admin/__init__.py` — 7C
+- `services/article.py` — 7D
+- `services/crawling.py` — 7E
+- `services/cache_base.py` — 7F
+- `services/redis_utils.py` — 7F
+- `tasks/retry.py` — 7F
+- `services/config_cache.py` — 7G
+- `tasks/edit.py` — 7H
+- `routes/admin/api.py` — 7H
+
+### Wave 8 — Test Improvements
+- `tests/test_admin_api.py` — 8A, 8D
+- `tests/test_celery_config.py` — 8B (new)
+- `tests/test_new_services.py` — 8C (deleted, split into 11 files)
+- `tests/test_models.py` — 8E (new)
+- `tests/test_admin_shares.py` — 8F (new)
+- `pyproject.toml` — 8G
+- `tests/factories.py` — 8H
+- New test files: `test_article_parser.py`, `test_pagination.py`, `test_config_unified.py`, `test_logging_utils.py`, `test_health.py`, `test_dead_letter.py`, `test_validation.py`, `test_audit.py`, `test_degradation.py`, `test_dns_cache.py`, `test_metrics.py`
+
+### Wave 9 — Documentation & Observability
+- `docs/api.md` — 9A (new)
+- `docs/deployment.md` — 9B
+- `docs/development.md` — 9C (new)
+- `docs/security.md` — 9D (new)
+- `docs/troubleshooting.md` — 9E (new)
+- `docs/monitoring.md` — 9F (new)
+- `docs/logging.md` — 9I (new)
+- `logging_config.py` — 9G, 9I
+- `config.py` — 9G
+- `services/health.py` — 9H
+- `routes/public/__init__.py` — 9H
+
+### Wave 10 — Feature Enhancements
+- `models.py` — 10B, 10D, 10E, 10H
+- `routes/admin/api.py` — 10B, 10E, 10H
+- `tasks/pipeline.py` — 10B
+- `tasks/__init__.py` — 10B
+- `config.py` — 10B
+- `routes/admin/articles.py` — 10C
+- `templates/admin/articles.html` — 10C
+- `templates/partials/search.html` — 10C (new)
+- `routes/public/subscribe.py` — 10D
+- `services/newsletter.py` — 10D
+- `services/webhooks.py` — 10E (new)
+- `services/cache.py` — 10F
+- `routes/public/feeds.py` — 10F
+- `routes/admin/review.py` — 10F
+- `routes/admin/auth.py` — 10H
+- `services/audit.py` — 10H
 
 (End of file - ~250 lines)

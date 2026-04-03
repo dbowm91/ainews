@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
-import redis.exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +113,7 @@ def dispatch_webhook(
         Tuple of (success, error_message)
     """
     from extensions import db
+    from models import Webhook
 
     payload = {
         "event": event_type,
@@ -158,7 +158,7 @@ def trigger_event(
         event_type: Event type string (e.g., "article.published")
         event_data: Event payload data
     """
-    from extensions import db
+    from models import Webhook
 
     webhooks = Webhook.query.filter_by(active=True).all()
     for webhook in webhooks:

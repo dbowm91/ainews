@@ -265,6 +265,17 @@ def edit_article(article_id):
                 categories=_admin_categories(),
                 error="Failed to save changes. Please try again.",
             ), 500
+
+        try:
+            from services.cache import get_response_cache
+
+            cache = get_response_cache()
+            cache.invalidate_prefix("index")
+            cache.invalidate_prefix("topic")
+            cache.invalidate_prefix("rss")
+        except Exception:
+            pass
+
         return redirect(url_for("admin.articles"))
 
     # Parse current final_article for form

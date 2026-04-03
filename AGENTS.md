@@ -182,6 +182,8 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 
 When working with any file that uses Redis, avoid naming local variables `redis` as it shadows the module import. This applies to `services/pipeline_monitor.py`, `tasks/crawl.py`, `tasks/newsletter.py`, and all other files. Name the local variable `redis_client` or `r`. Modules that use `import redis.exceptions` (not `from redis.exceptions import RedisError`) are already safe from shadowing the exception import.
 
+Similarly, avoid `self.redis` as an instance attribute — use `self._redis` instead (see `services/limiter.py:ModelLimiter`).
+
 ### Request size limiting
 
 `limit_content_length(max_bytes)` decorator in `routes/public.py` checks `request.content_length` before processing. Applied to subscribe (1KB) and admin login (1KB). Global `MAX_CONTENT_LENGTH=64KB` remains as fallback in Flask config.
@@ -255,6 +257,24 @@ During crawling, articles from different sources with near-duplicate titles are 
 **`services/url.py:_TTLCache`**: Docstring claims LRU eviction but implements oldest-first (FIFO) eviction via `min()` on timestamps. DNS cache behavior is acceptable — docstring was corrected to describe FIFO behavior.
 
 **`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. Pre-compilation at module load was implemented.
+
+**`tasks/pipeline.py:run_stage()` unbound variable bug**: `limiter`, `redis_client`, `lock_key`, `task_id`, `model`, and `provider_id` are assigned after `_check_stage_limiter()` call. If that function raises `self.retry()`, the `finally` block crashes with `NameError`. Variables must be initialized before the `try` block and guarded in `finally`.
+
+**`services/subagent.py` redundant conditionals**: `_get_subagent_provider_and_config()` has unnecessary `if stage_config.temperature:` / `else: temperature = 0.0` checks — Pydantic already guarantees `default=0.0`. Simplify both branches consistently.
+
+**Duplicate `_safe_int()` implementations**: Two nearly identical `_safe_int()` functions exist in `config.py` and `services/config_unified.py`. Consolidate into a single `safe_int()` in `config_unified.py`.
+
+**`extensions.py` import-time side effects**: `Limiter` is created at module import time, reading env vars that depend on `config` being imported first. Defer to a factory function `get_limiter_flask()` with double-checked locking.
+
+**`app.py` error handler imports**: Error handlers (404, 500, 429, 413) import `render_template`, `jsonify`, `request` from Flask on every call. Move `render_template` and `jsonify` to module-level imports.
+
+**`routes/admin/__init__.py` threading import**: Uses `__import__("threading").Lock()` — replace with standard `import threading` at module top and `threading.Lock()`.
+
+**`services/cache_base.py` is empty**: Single-line docstring only, no imports reference it. Safe to delete.
+
+**`constants.py` dual source of truth**: `PipelineStatus` class and `VALID_PIPELINE_STATUSES` frozenset must be manually kept in sync. Derive the frozenset from the class constants.
+
+**`DevelopmentConfig.__init__` side effects**: Config classes should be data containers. Move validation warnings to `app.py:create_app()`.
 
 ### Model cascade rules
 

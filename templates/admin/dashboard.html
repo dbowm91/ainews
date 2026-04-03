@@ -30,7 +30,7 @@
             {% set count = pipeline_stats.get(status, 0) %}
             {% if count > 0 %}
               {% set pct = (count / total.value * 100)|round|int %}
-              <div class="pipeline-bar-segment pipeline-bar-{{ status }}" style="width: {{ pct }}%" title="{{ status }}: {{ count }} ({{ pct }}%)"></div>
+              <div class="pipeline-bar-segment pipeline-bar-{{ status }}" style="--bar-width: {{ pct }}%" title="{{ status }}: {{ count }} ({{ pct }}%)"></div>
             {% endif %}
           {% endfor %}
         {% endif %}

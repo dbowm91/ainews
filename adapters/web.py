@@ -103,7 +103,7 @@ class WebAdapter(BaseSourceAdapter):
             if body_el:
                 body = body_el.get_text(separator=" ", strip=True)
         # Fallback: use trafilatura on the full HTML
-        from constants import MIN_CONTENT_LENGTH
+        from services.config_unified import MIN_CONTENT_LENGTH
 
         if not body or len(body) < MIN_CONTENT_LENGTH:
             try:

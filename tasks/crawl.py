@@ -90,7 +90,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
         existing_ids = get_existing_external_ids(source) if source else set()
         new_items = filter_new_items(filtered, existing_ids)
 
-        from constants import MIN_CONTENT_LENGTH
+        from services.config_unified import MIN_CONTENT_LENGTH
 
         min_content = (
             getattr(adapter.adapter_config, "min_content_length", MIN_CONTENT_LENGTH)

@@ -46,9 +46,9 @@ _None — all deferred items have been completed._
 - ✅ 2.4 Moved config side effects out of `DevelopmentConfig.__init__` to `app.py`
 - ✅ 2.5 Fixed `extensions.py` import-time ordering with `get_limiter_flask()` factory
 
-### Wave 3: Consolidation ✅ (Partial)
+### Wave 3: Consolidation ✅ (All Items)
 - ✅ 3.1 Consolidated duplicate `_safe_int()` → `safe_int()` in `services/config_unified.py`
-- ✅ 3.2 Cleaned up `constants.py` - added lazy imports to `config_unified.py` to avoid circular imports
+- ✅ 3.2 Removed duplicate `MIN_CONTENT_LENGTH`, `STUCK_THRESHOLD_MINUTES`, `RETRY_SOFT_CUTOFF_MINUTES` from `constants.py` (importers updated to use `services.config_unified`)
 - ⚠️ 3.3 Skipped - webhook CRUD pattern doesn't lend itself to easy helper extraction
 
 ### Wave 4: Major Refactoring ✅ (All 10 items)
@@ -831,11 +831,13 @@ Add labels ("impact:", "to") and styled number inputs for min/max impact score f
 
 ---
 
-### 8.19 Remove inline style attributes
+### 8.19 Remove inline style attributes ✅
 
 Search for `style=` in templates and replace with CSS utility classes. Add needed utilities to `utilities.css`.
 
-**Files:** Multiple templates, `utilities.css`
+**Note:** `templates/admin/dashboard.html:33` uses `style="--bar-width: {{ pct }}%"` instead of `style="width: {{ pct }}%"` — the dynamic percentage widths are passed via CSS custom property `--bar-width` with a fallback, which is cleaner than a raw inline width. All other static inline styles have been replaced with utility classes.
+
+**Files:** Multiple templates, `utilities.css`, `pages.css`, `dashboard.html`
 
 ---
 

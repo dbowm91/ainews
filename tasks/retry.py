@@ -7,10 +7,10 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from constants import (
-    _get_stuck_threshold_minutes,
-    _get_retry_soft_cutoff_minutes,
-    PipelineStatus,
+from constants import PipelineStatus
+from services.config_unified import (
+    get_stuck_threshold_minutes,
+    get_retry_soft_cutoff_minutes,
 )
 from tasks.pipeline import _get_max_stage_retries
 
@@ -48,7 +48,7 @@ def retry_stuck(self):
 
     try:
         now = datetime.now(timezone.utc)
-        soft_cutoff = now - timedelta(minutes=_get_retry_soft_cutoff_minutes())
+        soft_cutoff = now - timedelta(minutes=get_retry_soft_cutoff_minutes())
 
         stuck = Article.query.filter(
             Article.pipeline_status.in_(
@@ -69,7 +69,7 @@ def retry_stuck(self):
         for article in stuck:
             age_minutes = (now - article.updated_at).total_seconds() / 60
 
-            if age_minutes >= _get_stuck_threshold_minutes():
+            if age_minutes >= get_stuck_threshold_minutes():
                 try:
                     _dead_letter(article)
                 except Exception:
@@ -162,7 +162,7 @@ def _dead_letter(article):
     article.retry_count = 0
     article.last_error = (
         f"Dead-lettered: stuck in '{original_status}' "
-        f"beyond {_get_stuck_threshold_minutes()} minutes"
+        f"beyond {get_stuck_threshold_minutes()} minutes"
     )
     try:
         db.session.commit()

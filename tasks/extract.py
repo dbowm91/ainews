@@ -89,7 +89,7 @@ def process_item(
     from models import Article, Citation, encode_short_url
     from extensions import db
     from tasks.pipeline import _log_pipeline
-    from constants import MIN_CONTENT_LENGTH
+    from services.config_unified import MIN_CONTENT_LENGTH
 
     if min_content_length is None:
         min_content_length = MIN_CONTENT_LENGTH

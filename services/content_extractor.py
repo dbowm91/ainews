@@ -43,7 +43,7 @@ def _detect_paywall(html: str) -> bool:
 
 
 def extract_article(url: str) -> ExtractionResult:
-    from constants import MIN_CONTENT_LENGTH
+    from services.config_unified import MIN_CONTENT_LENGTH
     from services.url import validate_url_safe, UnsafeURLError
 
     try:

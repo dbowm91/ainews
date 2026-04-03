@@ -24,16 +24,6 @@
   text-align: center;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
 @media print {
   *,
   *::before,
@@ -119,5 +109,35 @@
   .pipeline-badge,
   .tag-pill {
     border: 1px solid #999;
+  }
+
+  .dash-card {
+    break-inside: avoid;
+    border: 1px solid #ccc;
+  }
+
+  .dash-table {
+    font-size: 10pt;
+  }
+
+  .stat-value {
+    font-size: 14pt;
+  }
+
+  .health-dot {
+    border: 1px solid #999;
+  }
+
+  .pipeline-bar {
+    break-inside: avoid;
+  }
+
+  .pipeline-bar-segment {
+    min-height: 6px;
+  }
+
+  .running-indicator {
+    border: 1px solid #ccc;
+    padding: 0.25rem;
   }
 }

@@ -10,8 +10,8 @@
       type="search"
       name="q"
       value="{{ query }}"
-      placeholder="search articles... [ / ]"
-      aria-label="Search articles"
+      placeholder="search articles..."
+      aria-label="Search articles (press / to focus)"
       class="search-input"
       hx-get="{{ url_for('public.index') }}"
       hx-trigger="keyup changed delay:500ms, search"
@@ -21,6 +21,7 @@
       hx-indicator="#search-spinner"
       hx-include="[name='category']"
     >
+    <kbd class="search-kbd">/</kbd>
     <span id="search-spinner" class="htmx-indicator spinner" aria-hidden="true">...</span>
     <input type="hidden" name="category" value="{{ category }}">
   </form>
@@ -62,7 +63,12 @@
   {% include "partials/subscribe_box.html" %}
 </div>
 
-<div id="feed" role="feed" aria-label="Article feed">
+<div id="feed" role="feed" aria-label="Article feed" class="htmx-skeleton-target">
+  {% if page == 1 and not articles %}
+  {% for i in range(5) %}
+    {% include "partials/skeleton_card.html" %}
+  {% endfor %}
+  {% endif %}
   {% for article in articles %}
     {% include "partials/article_card.html" %}
   {% endfor %}
@@ -78,6 +84,9 @@
     <div id="scroll-spinner" class="loading-indicator">
       <span class="spinner" aria-live="polite">loading more...</span>
     </div>
+    <noscript>
+      <a href="{{ url_for('public.index', page=next_page, category=category, q=query) }}" class="btn-secondary mt-05">load more articles</a>
+    </noscript>
   </div>
   {% endif %}
 </div>

@@ -7,8 +7,8 @@ from tasks.pipeline import (
     _finalize,
     _assign_tags,
     MAX_STAGE_RETRIES,
-    publish_scheduled_articles,
 )
+from tasks.scheduler import publish_scheduled_articles
 from tasks.crawl import run_all_sources
 from tasks.extract import process_item
 from tasks.select import select_article

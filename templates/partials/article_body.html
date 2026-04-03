@@ -18,14 +18,24 @@
   <div class="article-summary">{{ article.summary }}</div>
 {% endif %}
 
+{% if sd and sd.why_it_matters %}
+  <section class="article-why-matters">
+    <h2 class="section-heading">why it matters</h2>
+    <div class="why-matters-text">{{ sd.why_it_matters }}</div>
+  </section>
+{% endif %}
+
 {% if sd and sd.key_points %}
   <section class="article-keypoints">
-    <h2 class="section-heading">key takeaways</h2>
+    <h2 class="section-heading">key takeaways{% if sd.key_points|length > 5 %} <span class="keypoints-count">({{ sd.key_points|length }} total)</span>{% endif %}</h2>
     <ul class="keypoints-list">
       {% for p in sd.key_points[:5] %}
         <li>{{ p }}</li>
       {% endfor %}
     </ul>
+    {% if sd.key_points|length > 5 %}
+      <a href="#" class="keypoints-show-all">view all {{ sd.key_points|length }} points</a>
+    {% endif %}
   </section>
 {% endif %}
 

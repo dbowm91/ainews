@@ -1,5 +1,5 @@
 /* ainews - Critical CSS (above-the-fold styles) */
-/* Inlined in base.html for performance */
+/* Source of truth for templates/partials/critical_css.html and critical_css_admin.html */
 
 :root {
   --bg-primary: #0d1117;
@@ -62,7 +62,7 @@
 }
 
 html {
-  font-size: 15px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -85,7 +85,7 @@ body {
   color: #fff;
   padding: 0.5rem 1rem;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: var(--text-lg);
   z-index: var(--z-index-skip-link);
   transition: top 0.15s;
   text-decoration: none;
@@ -161,7 +161,7 @@ a:hover {
 
 .nav-links a {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--text-md);
   color: var(--text-muted);
   padding: var(--space-1) var(--space-4);
   border-radius: var(--radius-md);
@@ -181,7 +181,7 @@ a:hover {
 
 .nav-tag {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   color: var(--text-dim);
   border: 1px solid var(--border);
   padding: 0.15rem 0.5rem;
@@ -231,7 +231,7 @@ a:hover {
 
 .site-footer p {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
@@ -296,7 +296,7 @@ a:hover {
 
 .rss-link {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--orange);
 }
 

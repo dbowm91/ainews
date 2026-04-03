@@ -1,5 +1,6 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
@@ -62,7 +63,7 @@ def write_article(self, article_id: int, run_id=None):
         article.pipeline_status = PipelineStatus.EDITING
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
 

@@ -286,6 +286,13 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`extensions.py` import-time Limiter creation**: ✅ Fixed — `get_limiter_flask()` factory with double-checked locking defers `Limiter()` construction.
 
+**Wave 4 refactoring completed**:
+- `tasks/pipeline.py` extracted to `services/pipeline_failure.py` (failure handling), `services/pipeline_degradation.py` (degradation logic), and `tasks/scheduler.py` (scheduled publishing)
+- `routes/admin/api.py` split into `routes/admin/api/` package (health, config, pipeline, articles, webhooks, audit modules)
+- `tests/test_pipeline.py` split into `tests/test_pipeline/` package (test_dispatch, test_stages, test_retry, test_run_stage, test_integration)
+- `tests/test_llm_adapters.py` split into `tests/test_llm_adapters/` package (test_openai, test_anthropic, test_ollama, test_google, test_shared)
+- `services/config_utils.py` added with `get_config_with_default()` helper for Flask config access with fallbacks
+
 ### Model cascade rules
 
 All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `cascade="all, delete-orphan"` where appropriate. Migration `011_cascade_deletes.py` documents this — SQLite can't ALTER TABLE FKs, so cascade is enforced at the SQLAlchemy model level for existing databases.

@@ -1,9 +1,9 @@
-from functools import wraps
 import logging
 import os
 import threading
 import time
 import redis.exceptions
+from functools import wraps
 from flask import Blueprint, redirect, url_for, session, request
 from logging_config import get_request_id
 from services.validation import _is_password_hash
@@ -11,6 +11,29 @@ from services.validation import _is_password_hash
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("admin"):
+            return redirect(url_for("admin.login"))
+        request_id = get_request_id()
+        logger.info(
+            "Admin access: %s %s",
+            request.method,
+            request.path,
+            extra={
+                "user": "admin",
+                "ip": request.remote_addr,
+                "request_id": request_id,
+                "admin": True,
+            },
+        )
+        return f(*args, **kwargs)
+
+    return decorated
+
 
 # Login attempt lockout
 _LOGIN_MAX_ATTEMPTS = 5
@@ -20,22 +43,16 @@ _LOGIN_ATTEMPT_PREFIX = "ainews:login_attempts:"
 
 def _get_login_max_attempts() -> int:
     """Get max login attempts from Flask config, falling back to default."""
-    try:
-        from flask import current_app
+    from services.config_utils import get_config_with_default
 
-        return current_app.config.get("LOGIN_MAX_ATTEMPTS", _LOGIN_MAX_ATTEMPTS)
-    except RuntimeError:
-        return _LOGIN_MAX_ATTEMPTS
+    return get_config_with_default("LOGIN_MAX_ATTEMPTS", _LOGIN_MAX_ATTEMPTS)
 
 
 def _get_login_lockout_seconds() -> int:
     """Get login lockout seconds from Flask config, falling back to default."""
-    try:
-        from flask import current_app
+    from services.config_utils import get_config_with_default
 
-        return current_app.config.get("LOGIN_LOCKOUT_SECONDS", _LOGIN_LOCKOUT_SECONDS)
-    except RuntimeError:
-        return _LOGIN_LOCKOUT_SECONDS
+    return get_config_with_default("LOGIN_LOCKOUT_SECONDS", _LOGIN_LOCKOUT_SECONDS)
 
 
 # In-memory fallback when Redis is unavailable (per-worker protection)
@@ -225,29 +242,6 @@ def _clear_attempts(ip: str) -> None:
     # Always clear in-memory fallback (used when Redis is unavailable)
     with _memory_lock:
         _login_attempts_memory.pop(ip, None)
-
-
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get("admin"):
-            return redirect(url_for("admin.login"))
-        # Log admin access with context
-        request_id = get_request_id()
-        logger.info(
-            "Admin access: %s %s",
-            request.method,
-            request.path,
-            extra={
-                "user": "admin",
-                "ip": request.remote_addr,
-                "request_id": request_id,
-                "admin": True,
-            },
-        )
-        return f(*args, **kwargs)
-
-    return decorated
 
 
 # Import all sub-modules to register routes with the blueprint

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ def dispatch_webhook(
             webhook.last_error = error
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
 
     if success:

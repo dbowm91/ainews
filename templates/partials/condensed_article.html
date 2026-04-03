@@ -40,12 +40,15 @@
 {# Key Takeaways #}
 {% if fa.key_points %}
   <section class="article-keypoints">
-    <h2 class="section-heading">key takeaways</h2>
+    <h2 class="section-heading">key takeaways{% if fa.key_points|length > (max_key_points or 5) %} <span class="keypoints-count">({{ fa.key_points|length }} total)</span>{% endif %}</h2>
     <ul class="keypoints-list">
       {% for point in fa.key_points[:max_key_points or 5] %}
         <li>{{ point }}</li>
       {% endfor %}
     </ul>
+    {% if fa.key_points|length > (max_key_points or 5) %}
+      <a href="#" class="keypoints-show-all">view all {{ fa.key_points|length }} points</a>
+    {% endif %}
   </section>
 {% endif %}
 

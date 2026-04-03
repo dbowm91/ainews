@@ -20,14 +20,9 @@ MAX_CONSECUTIVE_FAILURES = 10
 
 def _get_max_consecutive_failures() -> int:
     """Get max consecutive failures from Flask config, falling back to default."""
-    try:
-        from flask import current_app
+    from services.config_utils import get_config_with_default
 
-        return current_app.config.get(
-            "MAX_CONSECUTIVE_FAILURES", MAX_CONSECUTIVE_FAILURES
-        )
-    except RuntimeError:
-        return MAX_CONSECUTIVE_FAILURES
+    return get_config_with_default("MAX_CONSECUTIVE_FAILURES", MAX_CONSECUTIVE_FAILURES)
 
 
 def create_pipeline_run(task_id: str, triggered_by: str = "scheduled") -> PipelineRun:

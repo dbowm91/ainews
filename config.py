@@ -97,7 +97,7 @@ class Config:
             "schedule": timedelta(minutes=15),
         },
         "publish-scheduled-articles": {
-            "task": "tasks.pipeline.publish_scheduled_articles",
+            "task": "tasks.scheduler.publish_scheduled_articles",
             "schedule": timedelta(minutes=5),
         },
     }

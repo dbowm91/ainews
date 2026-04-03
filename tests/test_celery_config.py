@@ -75,7 +75,7 @@ class TestCeleryBeatSchedule:
         assert "publish-scheduled-articles" in schedule
         assert (
             schedule["publish-scheduled-articles"]["task"]
-            == "tasks.pipeline.publish_scheduled_articles"
+            == "tasks.scheduler.publish_scheduled_articles"
         )
         assert schedule["publish-scheduled-articles"]["schedule"] == timedelta(
             minutes=5

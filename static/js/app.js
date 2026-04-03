@@ -35,6 +35,19 @@ document.addEventListener("DOMContentLoaded", function () {
     if (summary) {
       summary.setAttribute("aria-expanded", e.target.open);
     }
+    var dropdown = e.target.querySelector(".share-dropdown");
+    if (!dropdown) return;
+    if (e.target.open) {
+      var rect = dropdown.getBoundingClientRect();
+      var viewportHeight = window.innerHeight;
+      if (rect.bottom > viewportHeight - 20) {
+        dropdown.classList.add("flip-top");
+      } else {
+        dropdown.classList.remove("flip-top");
+      }
+    } else {
+      dropdown.classList.remove("flip-top");
+    }
   });
 
   /* Copy button: copy share URL to clipboard */
@@ -114,5 +127,87 @@ document.addEventListener("DOMContentLoaded", function () {
         card.classList.remove("article-card-new");
       }, { once: true });
     });
+
+    /* Remove skeleton cards after HTMX swap (8.1) */
+    var skeletonTarget = document.querySelector(".htmx-skeleton-target");
+    if (skeletonTarget) {
+      var skeletons = skeletonTarget.querySelectorAll(".skeleton-card");
+      skeletons.forEach(function (sk) {
+        sk.remove();
+      });
+    }
   });
+
+  /* Keyboard navigation for share dropdown (8.11) */
+  document.addEventListener("keydown", function (e) {
+    var details = e.target.closest(".share-details");
+    if (!details || !details.open) return;
+    var links = details.querySelectorAll(".share-social-link");
+    if (links.length === 0) return;
+    var firstLink = links[0];
+    var lastLink = links[links.length - 1];
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (document.activeElement === lastLink) {
+        firstLink.focus();
+      } else {
+        var next = document.activeElement.nextElementSibling || firstLink;
+        if (next.classList.contains("share-social-link")) next.focus();
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (document.activeElement === firstLink) {
+        lastLink.focus();
+      } else {
+        var prev = document.activeElement.previousElementSibling || lastLink;
+        if (prev.classList.contains("share-social-link")) prev.focus();
+      }
+    }
+  });
+
+  /* Close share dropdown on focusout (8.11) */
+  document.addEventListener("focusout", function (e) {
+    var details = e.target.closest(".share-details");
+    if (!details) return;
+    var relatedTarget = e.relatedTarget;
+    if (relatedTarget && details.contains(relatedTarget)) return;
+    details.open = false;
+  });
+
+  /* Admin filter button groups: update hidden inputs and active state */
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-filter-name]");
+    if (!btn) return;
+    var filterName = btn.getAttribute("data-filter-name");
+    var filterValue = btn.getAttribute("data-filter-value");
+    var filterBar = document.getElementById("filter-bar");
+    if (!filterBar) return;
+    var hiddenInput = filterBar.querySelector("input[name='" + filterName + "']");
+    if (!hiddenInput) return;
+    hiddenInput.value = filterValue;
+    var group = btn.closest(".filter-btn-group");
+    if (!group) return;
+    group.querySelectorAll(".filter-btn").forEach(function (b) {
+      b.classList.remove("active");
+    });
+    btn.classList.add("active");
+  });
+
+  /* Password visibility toggle (8.22) */
+  var passwordToggle = document.querySelector(".password-toggle");
+  if (passwordToggle) {
+    passwordToggle.addEventListener("click", function () {
+      var wrapper = passwordToggle.closest(".login-password-wrapper");
+      if (!wrapper) return;
+      var input = document.querySelector("#login-password");
+      if (!input) return;
+      if (input.type === "password") {
+        input.type = "text";
+        wrapper.classList.add("password-visible");
+      } else {
+        input.type = "password";
+        wrapper.classList.remove("password-visible");
+      }
+    });
+  }
 });

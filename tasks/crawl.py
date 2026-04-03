@@ -1,6 +1,7 @@
 from celery import shared_task, group, chord
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
 
 import redis.exceptions
 
@@ -205,7 +206,7 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
             else:
                 run.status = "completed"
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
 
@@ -249,7 +250,7 @@ def run_all_sources(self, run_id=None):
             run.status = "failed"
             try:
                 db.session.commit()
-            except Exception:
+            except SQLAlchemyError:
                 db.session.rollback()
                 raise
         raise self.retry(exc=exc)

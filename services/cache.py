@@ -4,7 +4,6 @@ Provides Redis-backed caching with in-memory L1 fallback.
 Used for article detail pages, RSS feeds, and other frequently accessed data.
 """
 
-import functools
 import hashlib
 import json
 import logging
@@ -22,76 +21,11 @@ _cache_lock = threading.Lock()
 _L1_CACHE_MAXSIZE = 1000
 
 
-def cached_response(ttl: int = 300, key_prefix: str = ""):
-    """Decorator that caches Flask route responses.
-
-    Args:
-        ttl: Cache TTL in seconds (default 5 minutes)
-        key_prefix: Prefix for the cache key (default uses endpoint + args)
-
-    The response must be a string (HTML/JSON) that can be JSON-serialized.
-    For template rendered responses, ensure they are returned as strings.
-    """
-
-    def decorator(f):
-        @functools.wraps(f)
-        def wrapper(*args, **kwargs):
-            from flask import request
-
-            cache = get_response_cache()
-
-            cache_key_parts = [key_prefix, request.endpoint or f.__name__]
-            if request.args:
-                cache_key_parts.append(request.args.to_string())
-            cache_key = ":".join(str(p) for p in cache_key_parts)
-
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return cached
-
-            result = f(*args, **kwargs)
-
-            if isinstance(result, tuple):
-                response_body = result[0]
-            elif hasattr(result, "get_data"):
-                response_body = result.get_data(as_text=True)
-            else:
-                response_body = str(result)
-
-            if isinstance(result, tuple) and len(result) > 1:
-                response = result[1]
-                if hasattr(response, "headers") and hasattr(response, "mimetype"):
-                    headers = dict(response.headers)
-                    mimetype = response.mimetype
-                    cache.set(cache_key, (response_body, headers, mimetype), ttl=ttl)
-                    from flask import Response
-
-                    return Response(
-                        response_body,
-                        status=response.status_code,
-                        headers=headers,
-                        mimetype=mimetype,
-                    )
-
-            cache.set(cache_key, response_body, ttl=ttl)
-
-            if isinstance(result, tuple) and len(result) > 1:
-                return result[0], result[1]
-            return result
-
-        return wrapper
-
-    return decorator
-
-
 def _get_l1_cache_maxsize() -> int:
     """Get L1 cache max size from Flask config, falling back to default."""
-    try:
-        from flask import current_app
+    from services.config_utils import get_config_with_default
 
-        return current_app.config.get("L1_CACHE_MAXSIZE", _L1_CACHE_MAXSIZE)
-    except RuntimeError:
-        return _L1_CACHE_MAXSIZE
+    return get_config_with_default("L1_CACHE_MAXSIZE", _L1_CACHE_MAXSIZE)
 
 
 class ResponseCache:

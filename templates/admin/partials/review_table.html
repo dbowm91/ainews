@@ -8,8 +8,8 @@
         {% for article in articles %}
           <tr>
             <td>
-              <a href="/article/{{ article.id }}" class="article-link" target="_blank">
-                {{ article.original_title[:80] if article.original_title }}
+              <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title }}">
+                {{ article.original_title if article.original_title }}
               </a>
               {% if article._fa and article._fa.tldr %}
                 <br><small class="text-muted">{{ article._fa.tldr[:120] }}</small>

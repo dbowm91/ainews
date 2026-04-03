@@ -1,5 +1,8 @@
 """Test data factories for creating test fixtures."""
 
+# ---------------------------------------------------------------------------
+# Module setup
+# ---------------------------------------------------------------------------
 import json
 import secrets
 from datetime import datetime, timezone
@@ -18,6 +21,11 @@ def _next_id() -> int:
     global _counter
     _counter += 1
     return _counter
+
+
+# ---------------------------------------------------------------------------
+# Source factory
+# ---------------------------------------------------------------------------
 
 
 def create_source(
@@ -52,6 +60,11 @@ def create_source(
     db.session.add(source)
     db.session.flush()
     return source
+
+
+# ---------------------------------------------------------------------------
+# Article factory
+# ---------------------------------------------------------------------------
 
 
 def create_article(
@@ -115,6 +128,11 @@ def create_article(
     return article
 
 
+# ---------------------------------------------------------------------------
+# Tag factory
+# ---------------------------------------------------------------------------
+
+
 def create_tag(name: str = "test-tag", slug: Optional[str] = None) -> Tag:
     """Create a test tag.
 
@@ -134,6 +152,11 @@ def create_tag(name: str = "test-tag", slug: Optional[str] = None) -> Tag:
     db.session.add(tag)
     db.session.flush()
     return tag
+
+
+# ---------------------------------------------------------------------------
+# Subscriber factory
+# ---------------------------------------------------------------------------
 
 
 def create_subscriber(
@@ -179,6 +202,11 @@ def create_subscriber(
     return subscriber
 
 
+# ---------------------------------------------------------------------------
+# Newsletter factory
+# ---------------------------------------------------------------------------
+
+
 def create_newsletter(
     newsletter_type: str = "main",
     subject: str = "Test Newsletter",
@@ -213,6 +241,11 @@ def create_newsletter(
     return newsletter
 
 
+# ---------------------------------------------------------------------------
+# Pipeline run factories
+# ---------------------------------------------------------------------------
+
+
 def create_pipeline_run(
     task_id: str = "test-task-123",
     run_type: str = "crawl",
@@ -239,6 +272,11 @@ def create_pipeline_run(
     db.session.add(run)
     db.session.flush()
     return run
+
+
+# ---------------------------------------------------------------------------
+# Batch article helpers
+# ---------------------------------------------------------------------------
 
 
 def seed_articles(count: int = 5, **kwargs) -> list[Article]:
@@ -305,6 +343,11 @@ def create_pipeline_run_with_logs(
     return run
 
 
+# ---------------------------------------------------------------------------
+# Citation factory
+# ---------------------------------------------------------------------------
+
+
 def create_citation(
     article: Optional[Article] = None,
     article_id: Optional[int] = None,
@@ -338,6 +381,11 @@ def create_citation(
     return citation
 
 
+# ---------------------------------------------------------------------------
+# Topic note factory
+# ---------------------------------------------------------------------------
+
+
 def create_topic_note(
     topic: str = "AI",
     note: str = "Test topic note",
@@ -361,6 +409,11 @@ def create_topic_note(
     db.session.add(topic_note)
     db.session.flush()
     return topic_note
+
+
+# ---------------------------------------------------------------------------
+# Article with relations factory
+# ---------------------------------------------------------------------------
 
 
 def create_article_with_relations(
@@ -426,6 +479,11 @@ def create_article_with_relations(
 
     db.session.flush()
     return article
+
+
+# ---------------------------------------------------------------------------
+# Generic batch factory
+# ---------------------------------------------------------------------------
 
 
 def batch_create(factory_fn, count: int = 5, **kwargs):

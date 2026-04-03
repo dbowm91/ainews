@@ -27,10 +27,10 @@ class TestHealth:
         self, auth_client, mock_redis, app
     ):
         with (
-            patch("routes.admin.api.run_health_checks") as m_health,
-            patch("routes.admin.api.get_all_breaker_status") as m_circuit,
-            patch("routes.admin.api.get_limiter") as m_limiter,
-            patch("routes.admin.api.get_response_cache") as m_cache,
+            patch("routes.admin.api.health.run_health_checks") as m_health,
+            patch("routes.admin.api.health.get_all_breaker_status") as m_circuit,
+            patch("routes.admin.api.health.get_limiter") as m_limiter,
+            patch("routes.admin.api.health.get_response_cache") as m_cache,
         ):
             from services.health import HealthResult
 

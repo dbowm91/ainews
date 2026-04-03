@@ -1,0 +1,7 @@
+/* ainews - Admin-specific Critical CSS */
+/* Included after critical_css.html in base_admin.html */
+.admin-header { border-bottom: 1px solid var(--border); background: var(--bg-secondary); position: sticky; top: 0; z-index: var(--z-index-sticky); }
+.noscript-warning { background: var(--orange); color: var(--bg-primary); padding: 0.75rem 1rem; font-family: var(--font-mono); font-size: var(--text-md); text-align: center; }
+.toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); padding: 0.75rem 1.25rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-mono); font-size: var(--text-md); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); z-index: var(--z-index-toast); opacity: 1; transition: opacity 0.2s; animation: toast-slide-up 0.3s ease-out; white-space: nowrap; }
+@keyframes toast-slide-up { from { transform: translateX(-50%) translateY(1rem); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+.toast-hidden { opacity: 0; pointer-events: none; }

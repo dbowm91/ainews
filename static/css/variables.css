@@ -35,7 +35,7 @@
   --text-primary: #e6edf3;
   --text-secondary: #c9d1d9;
   --text-muted: #8b949e;
-  --text-dim: #9ea7b0;
+  --text-dim: #adbac7;
 
   /* Accent colors */
   --accent: #58a6ff;
@@ -46,6 +46,7 @@
   --orange: #d29922;
   --red: #f85149;
   --purple: #bc8cff;
+  --pink: #f778ba;
 
   /* Skeleton loader colors */
   --skeleton-base: #161b22;
@@ -59,19 +60,18 @@
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
 
   /* Font sizes (rem-based for accessibility) */
-  --text-xs: 0.7rem;
-  --text-sm: 0.72rem;
-  --text-base: 0.75rem;
-  --text-md: 0.8rem;
-  --text-lg: 0.85rem;
-  --text-xl: 0.9rem;
-  --text-2xl: 0.95rem;
-  --text-3xl: 1rem;
-  --text-4xl: 1.15rem;
-  --text-5xl: 1.2rem;
-  --text-6xl: 1.4rem;
-  --text-7xl: 1.5rem;
-  --text-8xl: 1.6rem;
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-md: 0.9375rem;  /* 15px */
+  --text-lg: 1rem;       /* 16px */
+  --text-xl: 1.0625rem;  /* 17px */
+  --text-2xl: 1.125rem;  /* 18px */
+  --text-3xl: 1.25rem;   /* 20px */
+  --text-4xl: 1.375rem;  /* 22px */
+  --text-5xl: 1.5rem;    /* 24px */
+  --text-6xl: 1.75rem;   /* 28px */
+  --text-7xl: 2rem;      /* 32px */
 
   /* ─────────────────────────────────────────────────────────────────
      3. LAYOUT
@@ -184,7 +184,7 @@
   --text-primary: #1f2328;
   --text-secondary: #57606a;
   --text-muted: #6e7781;
-  --text-dim: #6e7781;
+  --text-dim: #57606a;
   --accent: #0969da;
   --accent-dim: #0550ae;
   --green: #1a7f37;

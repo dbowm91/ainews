@@ -23,31 +23,49 @@
              hx-target="#articles-table"
              hx-include="[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
              hx-indicator="#articles-table-spinner">
-      <div class="filter-bar mt-05">
-        <select name="status" class="filter-select" aria-label="Filter by status"
-                hx-get="/admin/articles"
-                hx-trigger="change"
-                hx-target="#articles-table"
-                hx-include="[name='q'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
-                hx-indicator="#articles-table-spinner"
-                hx-push-url="true">
-          <option value="">all statuses</option>
+      <div class="filter-bar mt-05" id="filter-bar">
+        <input type="hidden" name="status" value="{{ status }}">
+        <input type="hidden" name="category" value="{{ category }}">
+        <div class="filter-btn-group" role="group" aria-label="Filter by status">
+          <button type="button" class="filter-btn {% if not status %}active{% endif %}"
+                  data-filter-name="status" data-filter-value=""
+                  hx-get="/admin/articles"
+                  hx-trigger="click"
+                  hx-target="#articles-table"
+                  hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
+                  hx-indicator="#articles-table-spinner"
+                  hx-push-url="true">all</button>
           {% for s in ['pending', 'researching', 'writing', 'editing', 'review', 'done', 'skipped'] %}
-            <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+            <button type="button" class="filter-btn {% if status == s %}active{% endif %}"
+                    data-filter-name="status" data-filter-value="{{ s }}"
+                    hx-get="/admin/articles"
+                    hx-trigger="click"
+                    hx-target="#articles-table"
+                    hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
+                    hx-indicator="#articles-table-spinner"
+                    hx-push-url="true">{{ s }}</button>
           {% endfor %}
-        </select>
-        <select name="category" class="filter-select" aria-label="Filter by category"
-                hx-get="/admin/articles"
-                hx-trigger="change"
-                hx-target="#articles-table"
-                hx-include="[name='q'],[name='status'],[name='impact_min'],[name='impact_max'],[name='tag']"
-                hx-indicator="#articles-table-spinner"
-                hx-push-url="true">
-          <option value="">all categories</option>
+        </div>
+        <div class="filter-btn-group" role="group" aria-label="Filter by category">
+          <button type="button" class="filter-btn {% if not category %}active{% endif %}"
+                  data-filter-name="category" data-filter-value=""
+                  hx-get="/admin/articles"
+                  hx-trigger="click"
+                  hx-target="#articles-table"
+                  hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
+                  hx-indicator="#articles-table-spinner"
+                  hx-push-url="true">all</button>
           {% for c in categories %}
-            <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+            <button type="button" class="filter-btn {% if category == c %}active{% endif %}"
+                    data-filter-name="category" data-filter-value="{{ c }}"
+                    hx-get="/admin/articles"
+                    hx-trigger="click"
+                    hx-target="#articles-table"
+                    hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
+                    hx-indicator="#articles-table-spinner"
+                    hx-push-url="true">{{ c }}</button>
           {% endfor %}
-        </select>
+        </div>
         <select name="tag" class="filter-select" aria-label="Filter by tag"
                 hx-get="/admin/articles"
                 hx-trigger="change"
@@ -61,8 +79,8 @@
           {% endfor %}
         </select>
         <div class="filter-group">
-          <label class="filter-label">impact:</label>
-          <input type="number" name="impact_min" class="filter-input" aria-label="Min impact score"
+          <label class="filter-label" for="impact_min">impact:</label>
+          <input type="number" name="impact_min" id="impact_min" class="filter-input" aria-label="Min impact score"
                  placeholder="min" value="{{ impact_min }}" min="0" max="100"
                  hx-get="/admin/articles"
                  hx-trigger="change"
@@ -70,7 +88,8 @@
                  hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_max']"
                  hx-indicator="#articles-table-spinner"
                  hx-push-url="true">
-          <input type="number" name="impact_max" class="filter-input" aria-label="Max impact score"
+          <span class="filter-separator">to</span>
+          <input type="number" name="impact_max" id="impact_max" class="filter-input" aria-label="Max impact score"
                  placeholder="max" value="{{ impact_max }}" min="0" max="100"
                  hx-get="/admin/articles"
                  hx-trigger="change"

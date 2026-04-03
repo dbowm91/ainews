@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 import smtplib
 
 from celery import shared_task, group
+from sqlalchemy.exc import SQLAlchemyError
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
 
@@ -191,7 +192,7 @@ def _generate_topic_newsletter_impl(
     newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         raise
 

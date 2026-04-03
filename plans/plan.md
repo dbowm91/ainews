@@ -1,6 +1,6 @@
 # Consolidated Improvement Plan
 
-**Status:** Partially Completed (Waves 1-3)
+**Status:** Completed (All Waves)
 **Created:** April 3, 2026
 **Completed:** April 3, 2026
 **Scope:** Code quality, bug fixes, UI improvements, and maintainability across ~27K lines
@@ -16,13 +16,19 @@ This plan consolidates all improvement items from four source plans into a singl
 | Category | Items | Estimated Effort | Status |
 |----------|-------|------------------|--------|
 | Bug Fixes | 5 items | 1-2 hours | ✅ Completed |
-| Code Quality & Refactoring | 11 items (Waves 2-3) | 8-12 hours | ✅ Completed (partial) |
-| UI: Typography & CSS Architecture | 3 items | 3-4 hours | ⏳ Pending |
-| UI: Accessibility | 6 items | 2-3 hours | ⏳ Pending |
-| UI: Consistency & Polish | 6 items | 2-3 hours | ⏳ Pending |
-| UI: Features & Enhancements | 22 items | 6-10 hours | ⏳ Pending |
-| **Wave 4 Refactoring** | 10 items | 20-30 hours | ⏳ Pending |
-| **Total completed** | **16 items** | **~10-14 hours** | |
+| Code Quality & Refactoring | 11 items (Waves 2-3) | 8-12 hours | ✅ Completed |
+| Wave 4 Refactoring | 10 items | 20-30 hours | ✅ Completed (7 items) |
+| UI: Typography & CSS Architecture | 3 items | 3-4 hours | ✅ Completed |
+| UI: Accessibility | 6 items | 2-3 hours | ✅ Completed |
+| UI: Consistency & Polish | 6 items | 2-3 hours | ✅ Completed |
+| UI: Features & Enhancements | 22 items | 6-10 hours | ✅ Completed |
+| **Total completed** | **59 items** | **~40-55 hours** | |
+
+### Skipped Items
+
+- **4.8** Pydantic schemas for LLM responses (existing local schemas work well; deferred until larger refactoring)
+- **4.9** Error handler decorator (pattern variations too diverse for generic decorator)
+- **4.10** Test performance optimization (requires investigation with profiling tools)
 
 ---
 

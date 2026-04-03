@@ -60,6 +60,12 @@ _FALLBACK_PATTERNS = {
     ],
 }
 
+_COMPILED_PATTERNS: dict[str, list[re.Pattern]] = {
+    topic: [re.compile(p, re.I) for p in pats]
+    for topic, pats in _FALLBACK_PATTERNS.items()
+}
+_COMPILED_CACHE: dict[str, list[re.Pattern]] = {}
+
 
 def _load_patterns_from_file() -> dict[str, list[str]]:
     try:
@@ -92,13 +98,24 @@ def _load_patterns() -> dict[str, list[str]]:
         return _load_patterns_from_file()
 
 
+def _get_compiled_patterns() -> dict[str, list[re.Pattern]]:
+    global _COMPILED_CACHE
+    if not _COMPILED_CACHE:
+        string_patterns = _load_patterns()
+        _COMPILED_CACHE = {
+            topic: [re.compile(p, re.I) for p in pats]
+            for topic, pats in string_patterns.items()
+        }
+    return _COMPILED_CACHE
+
+
 def classify(title: str, text: str = "") -> list[str]:
-    patterns = _load_patterns()
+    patterns = _get_compiled_patterns()
     combined = f"{title} {text}".lower()
     matched = [
         topic
         for topic, pats in patterns.items()
-        if any(re.search(p, combined, re.I) for p in pats)
+        if any(p.search(combined) for p in pats)
     ]
     return matched or ["other"]
 

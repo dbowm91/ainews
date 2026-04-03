@@ -7,7 +7,7 @@ Exposes metrics via a JSON endpoint suitable for scraping or health checks.
 import logging
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from contextlib import contextmanager
 from typing import Any, Optional
 
@@ -28,7 +28,9 @@ class MetricsCollector:
         self._lock = threading.Lock()
         self._counters: dict[str, int] = defaultdict(int)
         self._gauges: dict[str, float] = {}
-        self._histograms: dict[str, list[float]] = defaultdict(list)
+        self._histograms: dict[str, deque[float]] = defaultdict(
+            lambda: deque(maxlen=1000)
+        )
         self._start_time = time.monotonic()
 
     def counter_inc(self, name: str, value: int = 1, labels: dict = None) -> None:
@@ -48,9 +50,6 @@ class MetricsCollector:
         key = self._make_key(name, labels)
         with self._lock:
             self._histograms[key].append(value)
-            # Keep only last 1000 observations per metric
-            if len(self._histograms[key]) > 1000:
-                self._histograms[key] = self._histograms[key][-1000:]
 
     def _make_key(self, name: str, labels: dict = None) -> str:
         """Create a metric key with optional labels."""

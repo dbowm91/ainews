@@ -7,17 +7,17 @@
   margin-bottom: 0.75rem;
   background: var(--bg-secondary);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .article-card:hover {
   border-color: var(--border-light);
   background: var(--bg-tertiary);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .article-card:active {
-  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 @keyframes fade-in-up {
@@ -614,11 +614,6 @@
   .card-meta {
     flex-wrap: wrap;
     gap: 0.25rem;
-  }
-}
-
-  .article-title {
-    font-size: 1.3rem;
   }
 }
 

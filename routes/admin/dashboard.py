@@ -1,13 +1,16 @@
+import logging
 from flask import render_template
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 
+logger = logging.getLogger(__name__)
+
 
 @admin_bp.route("/")
 @require_auth
 def dashboard():
-    from models import Article, Source, Subscriber, PipelineRun
+    from models import Article, Source, PipelineRun
     from extensions import db
     from services.llm import get_provider_info
 
@@ -33,8 +36,9 @@ def dashboard():
 
     try:
         llm_info = get_provider_info()
-    except Exception:
-        llm_info = {"status": "error"}
+    except Exception as e:
+        logger.warning("Provider info failed: %s", e)
+        llm_info = {"status": "error", "error": str(e)}
 
     redis_ok = False
     try:
@@ -43,22 +47,13 @@ def dashboard():
         r = get_redis()
         r.ping()
         redis_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Redis ping failed: %s", e)
 
     # Subscriber stats
-    total_subs = (
-        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=True)
-        .count()
-    )
-    subs_by_type = dict(
-        db.session.query(Subscriber.newsletter_type, func.count(Subscriber.id))
-        .filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=True)
-        .group_by(Subscriber.newsletter_type)
-        .all()
-    )
+    from services.subscribers import get_subscriber_stats
+
+    total_subs, subs_by_type, _ = get_subscriber_stats(db)
 
     # Recent pipeline runs
     recent_runs = (

@@ -54,11 +54,28 @@ class Config:
     # Dead-letter threshold
     STUCK_THRESHOLD_MINUTES = _safe_int("STUCK_THRESHOLD_MINUTES", "60")
 
+    # Soft cutoff for retry stuck (minutes)
+    RETRY_SOFT_CUTOFF_MINUTES = _safe_int("RETRY_SOFT_CUTOFF_MINUTES", "15")
+
+    # DNS cache (SSRF prevention)
+    DNS_CACHE_TTL = _safe_int("DNS_CACHE_TTL", "300")
+    DNS_CACHE_MAX = _safe_int("DNS_CACHE_MAX", "1024")
+
+    # L1 cache size (ResponseCache in-memory layer)
+    L1_CACHE_MAXSIZE = _safe_int("L1_CACHE_MAXSIZE", "1000")
+
+    # Login lockout
+    LOGIN_MAX_ATTEMPTS = _safe_int("LOGIN_MAX_ATTEMPTS", "5")
+    LOGIN_LOCKOUT_SECONDS = _safe_int("LOGIN_LOCKOUT_SECONDS", "900")
+
     # Content extraction
     MIN_CONTENT_LENGTH = _safe_int("MIN_CONTENT_LENGTH", "200")
 
     # Email verification
     VERIFICATION_EXPIRY_SECONDS = _safe_int("VERIFICATION_EXPIRY_SECONDS", "3600")
+
+    # Database query logging
+    DB_QUERY_LOG_LEVEL = os.environ.get("DB_QUERY_LOG_LEVEL", "WARNING").upper()
 
     # SMTP
     SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")

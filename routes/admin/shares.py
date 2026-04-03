@@ -16,12 +16,13 @@ def shares():
 def toggle_share(config_id):
     from models import ShareConfig
     from extensions import db
+    from sqlalchemy.exc import SQLAlchemyError
 
     config = db.get_or_404(ShareConfig, config_id)
     config.active = not config.active
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         return jsonify({"error": "Failed to toggle share config"}), 500
 

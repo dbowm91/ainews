@@ -6,6 +6,12 @@
     <path d="M12 2L4 6v5c0 5.5 3.4 10.3 8 12 4.6-1.7 8-6.5 8-12V6l-8-4z"/><rect x="9" y="10" width="6" height="5" rx="1"/><path d="M10 10V8a2 2 0 014 0v2"/>
   {% elif category == 'security' %}
     <path d="M12 2L4 6v5c0 5.5 3.4 10.3 8 12 4.6-1.7 8-6.5 8-12V6l-8-4z"/><path d="M12 8v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/>
+  {% elif category == 'programming' %}
+    <path d="M8 6l-4 6 4 6"/><path d="M16 6l4 6-4 6"/><path d="M14 4l-4 16"/>
+  {% elif category == 'hardware' %}
+    <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>
+  {% elif category == 'other' %}
+    <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/>
   {% endif %}
 </svg>
 {% endmacro %}

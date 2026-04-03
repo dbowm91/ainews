@@ -1,4 +1,5 @@
 import re
+import time
 from flask import render_template, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
@@ -42,7 +43,7 @@ def add_source():
     source_key = _generate_source_key(name)
     existing = Source.query.filter_by(source_key=source_key).first()
     if existing:
-        source_key = f"{source_key}-{existing.id + 1}"
+        source_key = f"{source_key}-{int(time.time()) % 10000:04d}"
 
     source = Source(
         source_key=source_key,

@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from extensions import db
 from models import Article, Source, PipelineRun
@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 if TYPE_CHECKING:
     from adapters.base import RawItem
+
+from schemas.source import SourceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +159,7 @@ def get_or_create_source(
     return source
 
 
-def update_source_crawl_time(source: Optional[Source], cfg: Any) -> Source:
+def update_source_crawl_time(source: Optional[Source], cfg: SourceConfig) -> Source:
     """Update or create source record with current crawl time.
 
     Args:

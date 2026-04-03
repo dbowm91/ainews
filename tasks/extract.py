@@ -204,9 +204,11 @@ def process_item(
             category=topics[0] if topics else "other",
             topics=topics,
             raw_metadata=raw_metadata or {},
-            extraction_status=extraction.status.value
-            if extraction
-            else ("no_url" if not url else "success"),
+            extraction_status=(
+                extraction.status.value
+                if extraction
+                else ("no_url" if not url else "fallback")
+            ),
         )
         db.session.add(article)
         db.session.flush()
@@ -252,5 +254,12 @@ def process_item(
 
     from tasks.select import select_article
 
-    select_article.delay(article.id, run_id=run_id)
+    try:
+        select_article.delay(article.id, run_id=run_id)
+    except Exception:
+        article.pipeline_status = "failed"
+        article.last_error = "Failed to dispatch to pipeline"
+        db.session.commit()
+        logger.error("Failed to dispatch select_article for article %s", article.id)
+
     return {"article_id": article.id}

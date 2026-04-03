@@ -82,6 +82,12 @@
   border: 1px solid rgba(248, 81, 73, 0.3);
 }
 
+.pipeline-failed {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+}
+
 .impact-score {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -115,33 +121,6 @@
   color: var(--text-dim);
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-}
-
-.confidence-label {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.confidence-high {
-  color: var(--green);
-  background: var(--green-alpha-10);
-  border: 1px solid var(--green-alpha-25);
-}
-
-.confidence-medium {
-  color: var(--orange);
-  background: var(--orange-alpha-10);
-  border: 1px solid var(--orange-alpha-25);
-}
-
-.confidence-low {
-  color: var(--red);
-  background: var(--red-alpha-10);
-  border: 1px solid var(--red-alpha-25);
 }
 
 .btn-primary {
@@ -720,7 +699,14 @@
 
 @media (max-width: 640px) {
   .btn-delete,
-  .btn-logout {
+  .btn-logout,
+  .btn-primary,
+  .btn-secondary,
+  .subscribe-btn,
+  .share-btn,
+  .share-copy-btn,
+  .filter-btn,
+  .login-btn {
     min-width: 44px;
     min-height: 44px;
     display: inline-flex;

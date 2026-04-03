@@ -1,6 +1,7 @@
 import json
 import logging
-from flask import render_template, request, redirect, url_for, jsonify
+from urllib.parse import urlparse
+from flask import flash, render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from services.utils import get_admin_categories as _admin_categories
@@ -41,11 +42,12 @@ _REPROCESS_STAGES = {
 
 def _query_looks_like_url(query: str) -> bool:
     """Check if the query string looks like a URL."""
-    return bool(query) and (
-        query.startswith("http://")
-        or query.startswith("https://")
-        or ("/" in query and "." in query)
-    )
+    if not query:
+        return False
+    if query.startswith("http://") or query.startswith("https://"):
+        return True
+    parsed = urlparse(query)
+    return bool(parsed.scheme and parsed.netloc)
 
 
 @admin_bp.route("/articles")
@@ -83,18 +85,21 @@ def articles():
             q = q.filter_by(source_id=int(source_id))
         except ValueError:
             pass
+    date_errors = []
     if date_from:
         try:
             dt_from = datetime.fromisoformat(date_from)
             q = q.filter(Article.created_at >= dt_from)
         except ValueError:
-            pass
+            logger.warning("Invalid date_from filter: %s", date_from)
+            date_errors.append(f"Invalid start date: {date_from}")
     if date_to:
         try:
             dt_to = datetime.fromisoformat(date_to)
             q = q.filter(Article.created_at <= dt_to)
         except ValueError:
-            pass
+            logger.warning("Invalid date_to filter: %s", date_to)
+            date_errors.append(f"Invalid end date: {date_to}")
 
     per_page = PER_PAGE_ADMIN_ARTICLES
     total_count = q.count()
@@ -102,6 +107,9 @@ def articles():
 
     # Get sources for filter dropdown
     sources = Source.query.order_by(Source.name).all()
+
+    for err in date_errors:
+        flash(err, "warning")
 
     if request.headers.get("HX-Request"):
         return render_template(
@@ -325,18 +333,12 @@ def rollback_article(article_id, version_id):
 @admin_bp.route("/articles/<int:article_id>/delete", methods=["POST"])
 @require_auth
 def delete_article(article_id):
-    from models import Article, Citation, ArticleMetric, ArticleVersion, article_tags
+    from models import Article
     from extensions import db
 
     article = db.get_or_404(Article, article_id)
 
     try:
-        Citation.query.filter_by(article_id=article_id).delete()
-        ArticleMetric.query.filter_by(article_id=article_id).delete()
-        ArticleVersion.query.filter_by(article_id=article_id).delete()
-        db.session.execute(
-            article_tags.delete().where(article_tags.c.article_id == article_id)
-        )
         db.session.delete(article)
         db.session.commit()
     except SQLAlchemyError:

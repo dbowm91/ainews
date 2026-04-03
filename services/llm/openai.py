@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
@@ -34,6 +35,7 @@ class OpenAIProvider(BaseLLMProvider):
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
         self._client = None
+        self._client_lock = threading.Lock()
         self._client_kwargs = {
             "api_key": cfg.api_key,
             "base_url": cfg.base_url,
@@ -42,9 +44,11 @@ class OpenAIProvider(BaseLLMProvider):
     @property
     def client(self):
         if self._client is None:
-            from openai import OpenAI
+            with self._client_lock:
+                if self._client is None:
+                    from openai import OpenAI
 
-            self._client = OpenAI(**self._client_kwargs)
+                    self._client = OpenAI(**self._client_kwargs)
         return self._client
 
     def chat(

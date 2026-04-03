@@ -70,13 +70,20 @@ class ModelLimiter:
             try:
                 self._release_script(keys=[key])
             except redis.exceptions.RedisError:
+                logger.error(
+                    "Slot leak detected for %s:%s (both release attempts failed)",
+                    provider_id,
+                    model,
+                )
                 try:
                     from services.metrics import get_metrics
 
-                    get_metrics().counter_inc("limiter.release_failure")
+                    get_metrics().increment(
+                        "limiter.slot_leak", {"provider": provider_id, "model": model}
+                    )
                 except Exception:
                     logger.warning(
-                        "Failed to record limiter release failure metric", exc_info=True
+                        "Failed to record limiter slot leak metric", exc_info=True
                     )
 
     def get_active(self, provider_id: str, model: str) -> int | None:

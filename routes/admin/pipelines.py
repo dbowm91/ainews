@@ -2,6 +2,7 @@ from flask import render_template, request, jsonify, current_app
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
+from sqlalchemy.exc import SQLAlchemyError
 
 
 @admin_bp.route("/pipelines")
@@ -92,7 +93,7 @@ def trigger_crawl():
         db.session.add(run)
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
 
@@ -100,7 +101,7 @@ def trigger_crawl():
         run.task_id = result.id
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
 
@@ -113,7 +114,7 @@ def trigger_crawl():
         return jsonify(
             {"message": message, "task_id": result.id, "run_id": run.id}
         ), 202
-    except Exception as e:
+    except SQLAlchemyError as e:
         current_app.logger.exception("Failed to trigger crawl")
         message = f"Failed to start crawl: {str(e)[:200]}"
         if request.headers.get("HX-Request"):

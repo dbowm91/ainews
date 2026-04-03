@@ -5,15 +5,15 @@ from unittest.mock import patch
 
 import pytest
 
-from services.url import validate_url_safe, UnsafeURLError, _dns_cache
+from services.url import validate_url_safe, UnsafeURLError, clear_dns_cache
 
 
 @pytest.fixture(autouse=True)
 def _clear_dns_cache():
     """Clear DNS cache between tests to prevent cross-test contamination."""
-    _dns_cache.clear()
+    clear_dns_cache()
     yield
-    _dns_cache.clear()
+    clear_dns_cache()
 
 
 class TestValidateUrlSafe:

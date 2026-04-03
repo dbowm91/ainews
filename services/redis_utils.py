@@ -27,6 +27,26 @@ end
 _script_cache: weakref.WeakValueDictionary[int, Any] = weakref.WeakValueDictionary()
 
 
+def acquire_lock(redis_client, lock_key: str, lock_value: str, ttl: int) -> bool:
+    """Atomically acquire a Redis lock using SET NX EX.
+
+    Args:
+        redis_client: Redis client instance.
+        lock_key: The lock key.
+        lock_value: The lock value (typically task_id).
+        ttl: TTL in seconds.
+
+    Returns:
+        True if lock was acquired, False if already held by another.
+    """
+    try:
+        acquired = redis_client.set(lock_key, lock_value, nx=True, ex=ttl)
+        return bool(acquired)
+    except redis.exceptions.RedisError:
+        logger.warning("Failed to acquire lock %s", lock_key)
+        return False
+
+
 def release_lock(redis_client, lock_key: str, lock_value: str) -> bool:
     """Atomically release a Redis lock only if we own it.
 

@@ -23,7 +23,11 @@ def get_all_topic_notes(topic: str) -> list[TopicNote]:
 def create_topic_note(topic: str, note: str, source: Optional[str] = None) -> TopicNote:
     topic_note = TopicNote(topic=topic, note=note, source=source)
     db.session.add(topic_note)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return topic_note
 
 
@@ -33,7 +37,11 @@ def update_topic_note(
     topic_note = get_topic_note(topic, source)
     if topic_note:
         topic_note.note = note
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
     return topic_note
 
 
@@ -41,7 +49,11 @@ def delete_topic_note(topic: str, source: Optional[str] = None) -> bool:
     topic_note = get_topic_note(topic, source)
     if topic_note:
         db.session.delete(topic_note)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         return True
     return False
 

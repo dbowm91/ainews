@@ -4,6 +4,10 @@ from flask import jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from constants import PipelineStatus
+from services.circuit_breaker import get_all_breaker_status
+from services.limiter import get_limiter
+from services.cache import get_response_cache
+from services.health import run_health_checks
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +15,6 @@ logger = logging.getLogger(__name__)
 @admin_bp.route("/api/health")
 @require_auth
 def health() -> Response:
-    from services.circuit_breaker import get_all_breaker_status
-    from services.limiter import get_limiter
-    from services.cache import get_response_cache
-    from services.health import run_health_checks
-
     health_result = run_health_checks(include_celery=True)
     status = {
         "flask": "ok",
@@ -35,16 +34,16 @@ def health() -> Response:
 
     try:
         status["cache"] = get_response_cache().get_stats()
-    except Exception:
-        logger.exception("Health check: cache stats failed")
+    except Exception as e:
+        logger.warning("Health check: cache stats failed: %s", e)
         status["cache"] = "error"
 
     try:
-        from services.url import _dns_cache
+        from services.url import _get_dns_cache
 
-        status["dns_cache"] = _dns_cache.get_stats()
-    except Exception:
-        logger.exception("Health check: DNS cache stats failed")
+        status["dns_cache"] = _get_dns_cache().get_stats()
+    except Exception as e:
+        logger.warning("Health check: DNS cache stats failed: %s", e)
         status["dns_cache"] = "error"
 
     return jsonify(status)
@@ -124,6 +123,7 @@ def reload_config() -> tuple[Response, int] | Response:
     from services.llm import clear_provider_cache
     from celery_support import clear_app_cache
     from tasks.pipeline import clear_task_fn_cache
+    from tasks.edit import clear_tag_cache
 
     is_valid, errors = validate_config()
     if not is_valid:
@@ -134,6 +134,7 @@ def reload_config() -> tuple[Response, int] | Response:
     clear_app_cache()
     reset_config()
     clear_task_fn_cache()
+    clear_tag_cache()
     return jsonify({"message": "Config cache cleared"}), 200
 
 
@@ -301,15 +302,25 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
 
     dispatched = 0
+    failed_ids = []
     for article in articles:
         try:
             select_article.delay(article.id)
             dispatched += 1
-        except Exception:
-            logger.warning("Failed to dispatch reprocess for article %s", article.id)
-            return jsonify(
-                {"error": f"Failed to dispatch reprocess for article {article.id}"}
-            ), 500
+        except Exception as e:
+            logger.warning(
+                "Failed to dispatch reprocess for article %s: %s", article.id, e
+            )
+            failed_ids.append(article.id)
+
+    if failed_ids:
+        return jsonify(
+            {
+                "message": f"Partial success: {dispatched} dispatched, {len(failed_ids)} failed",
+                "dispatched": dispatched,
+                "failed_article_ids": failed_ids,
+            }
+        ), 207
 
     return jsonify(
         {"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
@@ -318,6 +329,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
 
 def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
     from tasks.pipeline import _assign_tags
+    from tasks.edit import clear_tag_cache
 
     tag_names = data.get("tags", [])
     if not tag_names or not isinstance(tag_names, list):
@@ -328,10 +340,12 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
     try:
         _assign_tags(articles, tag_names, db)
         db.session.commit()
-    except SQLAlchemyError:
+    except Exception as e:
+        logger.warning("Bulk add tags failed: %s", e)
         db.session.rollback()
         return jsonify({"error": "Failed to add tags"}), 500
 
+    clear_tag_cache()
     return jsonify(
         {"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"}
     )

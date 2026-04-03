@@ -1,10 +1,16 @@
-from celery import shared_task, group
+from celery import shared_task, group, chord
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
 
 import redis.exceptions
 
 logger = get_task_logger(__name__)
+
+# Error response convention:
+# - Leaf tasks (e.g., crawl_source): re-raise exceptions for Celery retry
+# - Pipeline stages (select, research, write, edit): re-raise for Celery retry
+# - Orchestration tasks (run_all_sources, generate_daily_newsletters): return
+#   error dict with aggregated results
 
 
 @shared_task(
@@ -160,7 +166,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
 
         if source:
             record_crawl_failure(source, str(e))
-        return {"source_id": source_id, "error": str(e)}
+        raise
     finally:
         try:
             from services.redis_utils import release_lock
@@ -168,6 +174,48 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             release_lock(redis_client, lock_key, task_id)
         except Exception:
             logger.warning("Failed to release crawl lock for %s", source_id)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
+    """Aggregate crawl results and update pipeline run stats.
+
+    Called as a Celery chord callback after all crawl_source tasks complete.
+    """
+    from models import PipelineRun
+    from extensions import db
+    from services.crawling import update_pipeline_run_stats
+
+    total_fetched = 0
+    total_new = 0
+    errors = 0
+    for res in results:
+        if isinstance(res, dict):
+            if "error" in res:
+                errors += 1
+            total_fetched += res.get("fetched", 0)
+            total_new += res.get("new", 0)
+
+    run = db.session.get(PipelineRun, run_id)
+    if run:
+        update_pipeline_run_stats(run, total_fetched, total_new)
+        try:
+            if errors > 0 and total_new == 0:
+                run.status = "failed"
+            else:
+                run.status = "completed"
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+    logger.info("All sources complete: %s", results)
+    return {
+        "total_fetched": total_fetched,
+        "total_new": total_new,
+        "errors": errors,
+        "results": results,
+    }
 
 
 @shared_task(
@@ -188,7 +236,6 @@ def run_all_sources(self, run_id=None):
     )
     from tasks.pipeline import _log_pipeline
 
-    # Create PipelineRun if manual trigger
     if run_id is None:
         run = create_pipeline_run(self.request.id, triggered_by="scheduled")
         run_id = run.id
@@ -214,56 +261,11 @@ def run_all_sources(self, run_id=None):
             update_pipeline_run_stats(run, 0, 0)
         return []
 
-    # Dispatch all sources as a group for parallel execution
     source_configs = [cfg.model_dump() for cfg in configs]
-    job = group(
+    crawl_group = group(
         crawl_source.s(source_config=cfg, run_id=run_id) for cfg in source_configs
     )
-    result = job.apply_async()
+    chord_task = chord(crawl_group, aggregate_crawl_results.s(run_id=run_id))
+    chord_task.apply_async()
 
-    # Wait for all tasks to complete (with timeout)
-    results = []
-    timed_out = False
-    try:
-        results = result.get(timeout=360, propagate=False)
-    except TimeoutError:
-        timed_out = True
-        logger.error("Source crawl timed out after 360s, aggregating partial results")
-        # Try to get whatever results are available
-        try:
-            results = result.get(timeout=1, propagate=False) or []
-        except Exception:
-            results = []
-    except Exception as e:
-        logger.error("Error waiting for source crawl results: %s", e)
-        results = []
-
-    # Aggregate results
-    total_fetched = 0
-    total_new = 0
-    errors = 0
-    for res in results:
-        if isinstance(res, dict):
-            if "error" in res:
-                errors += 1
-            total_fetched += res.get("fetched", 0)
-            total_new += res.get("new", 0)
-
-    # Update run stats
-    run = db.session.get(PipelineRun, run_id)
-    if run:
-        update_pipeline_run_stats(run, total_fetched, total_new)
-        try:
-            if timed_out:
-                run.status = "timeout"
-            elif errors > 0 and total_new == 0:
-                run.status = "failed"
-            else:
-                run.status = "completed"
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            raise
-
-    logger.info("All sources complete: %s", results)
-    return results
+    return {"message": f"Dispatched {len(source_configs)} sources for crawling"}

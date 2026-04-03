@@ -7,7 +7,7 @@ from routes.admin import admin_bp, require_auth
 @admin_bp.route("/metrics")
 @require_auth
 def metrics():
-    from models import Article, ArticleMetric, Subscriber
+    from models import Article, ArticleMetric
     from extensions import db
 
     # Date range
@@ -69,23 +69,9 @@ def metrics():
     )
 
     # Subscriber metrics
-    total_subs = (
-        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=True)
-        .count()
-    )
-    subs_by_type = dict(
-        db.session.query(Subscriber.newsletter_type, func.count(Subscriber.id))
-        .filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=True)
-        .group_by(Subscriber.newsletter_type)
-        .all()
-    )
-    inactive_subs = (
-        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=False)
-        .count()
-    )
+    from services.subscribers import get_subscriber_stats
+
+    total_subs, subs_by_type, inactive_subs = get_subscriber_stats(db)
 
     return render_template(
         "admin/metrics.html",

@@ -109,7 +109,8 @@ def _get_share_configs() -> list[dict]:
 def health() -> tuple[Response, int]:
     from services.health import run_health_checks
 
-    result = run_health_checks(include_celery=True)
+    detailed = request.args.get("detailed", "false").lower() == "true"
+    result = run_health_checks(include_celery=True, detailed=detailed)
     code = 200 if result.is_healthy else 503
     return jsonify(result.to_dict()), code
 

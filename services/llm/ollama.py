@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
@@ -30,13 +31,16 @@ class OllamaProvider(BaseLLMProvider):
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
         self._client = None
+        self._client_lock = threading.Lock()
 
     @property
     def client(self):
         if self._client is None:
-            import ollama
+            with self._client_lock:
+                if self._client is None:
+                    import ollama
 
-            self._client = ollama.Client(host=self.host, timeout=120)
+                    self._client = ollama.Client(host=self.host, timeout=120)
         return self._client
 
     def _extract_text(self, resp) -> str:

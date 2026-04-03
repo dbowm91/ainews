@@ -7,6 +7,7 @@ from typing import Optional
 
 from extensions import db
 from models import Article, Source, Tag, Subscriber, Newsletter, PipelineRun
+from models import Citation, TopicNote
 
 # Counter for generating unique IDs within a test session
 _counter = 0
@@ -261,3 +262,196 @@ def seed_articles(count: int = 5, **kwargs) -> list[Article]:
         articles.append(article)
     db.session.flush()
     return articles
+
+
+def create_pipeline_run_with_logs(
+    task_id: str = "test-task-logs",
+    run_type: str = "crawl",
+    status: str = "completed",
+    triggered_by: str = "manual",
+    article: Optional[Article] = None,
+) -> PipelineRun:
+    """Create a test pipeline run with associated logs.
+
+    Args:
+        task_id: Celery task ID
+        run_type: Run type ("crawl" or "newsletter")
+        status: Run status
+        triggered_by: How the run was triggered
+        article: Optional article to associate with the log entry
+
+    Returns:
+        The created PipelineRun instance
+    """
+    from models import PipelineLog
+
+    run = create_pipeline_run(
+        task_id=task_id,
+        run_type=run_type,
+        status=status,
+        triggered_by=triggered_by,
+    )
+    db.session.flush()
+
+    log = PipelineLog(
+        run_id=run.id,
+        article_id=article.id if article else None,
+        stage="crawl",
+        level="info",
+        message="Test log entry",
+    )
+    db.session.add(log)
+    db.session.flush()
+    return run
+
+
+def create_citation(
+    article: Optional[Article] = None,
+    article_id: Optional[int] = None,
+    url: str = "https://example.com/citation",
+    title: str = "Citation Title",
+    context: Optional[str] = None,
+    position: int = 1,
+) -> Citation:
+    """Create a test citation.
+
+    Args:
+        article: Article instance (mutually exclusive with article_id)
+        article_id: Article ID (mutually exclusive with article)
+        url: Citation URL
+        title: Citation title
+        context: Citation context
+        position: Citation position
+
+    Returns:
+        The created Citation instance
+    """
+    citation = Citation(
+        article_id=article_id,
+        url=url,
+        title=title,
+        context=context,
+        position=position,
+    )
+    db.session.add(citation)
+    db.session.flush()
+    return citation
+
+
+def create_topic_note(
+    topic: str = "AI",
+    note: str = "Test topic note",
+    source: Optional[str] = None,
+) -> TopicNote:
+    """Create a test topic note.
+
+    Args:
+        topic: Topic name
+        note: Note content
+        source: Optional source
+
+    Returns:
+        The created TopicNote instance
+    """
+    topic_note = TopicNote(
+        topic=topic,
+        note=note,
+        source=source,
+    )
+    db.session.add(topic_note)
+    db.session.flush()
+    return topic_note
+
+
+def create_article_with_relations(
+    source: Optional[Source] = None,
+    pipeline_status: str = "done",
+    with_citations: bool = False,
+    with_metrics: bool = False,
+    with_versions: bool = False,
+    with_tags: bool = False,
+    tag_names: Optional[list[str]] = None,
+) -> Article:
+    """Create an article with related objects.
+
+    Args:
+        source: Source instance
+        pipeline_status: Pipeline status
+        with_citations: Whether to create citations
+        with_metrics: Whether to create article metrics
+        with_versions: Whether to create article versions
+        with_tags: Whether to associate tags
+        tag_names: List of tag names (used if with_tags=True)
+
+    Returns:
+        The created Article instance with relations
+    """
+    from models import Citation, ArticleMetric, ArticleVersion
+
+    article = create_article(source=source, pipeline_status=pipeline_status)
+    db.session.flush()
+
+    if with_citations:
+        citation = Citation(
+            article_id=article.id,
+            url="https://example.com/ref",
+            title="Reference",
+            position=1,
+        )
+        db.session.add(citation)
+
+    if with_metrics:
+        metric = ArticleMetric(
+            article_id=article.id,
+            page_loads=10,
+            share_button_clicks=5,
+        )
+        db.session.add(metric)
+
+    if with_versions:
+        version = ArticleVersion(
+            article_id=article.id,
+            version_number=1,
+            final_article='{"headline": "Version 1"}',
+            change_reason="initial",
+        )
+        db.session.add(version)
+
+    if with_tags:
+        if tag_names is None:
+            tag_names = ["test-tag-1", "test-tag-2"]
+        for tag_name in tag_names:
+            tag = create_tag(name=tag_name)
+            article.tags.append(tag)
+
+    db.session.flush()
+    return article
+
+
+def batch_create(factory_fn, count: int = 5, **kwargs):
+    """Create multiple instances using a factory function.
+
+    Args:
+        factory_fn: Factory function to call (e.g., create_article)
+        count: Number of instances to create
+        **kwargs: Arguments passed to each factory call
+
+    Returns:
+        List of created instances
+    """
+    batch_id = _next_id()
+    instances = []
+    for i in range(count):
+        kwargs_copy = dict(kwargs)
+        if "original_title" in kwargs_copy:
+            kwargs_copy["original_title"] = (
+                f"{kwargs_copy['original_title']} {batch_id}-{i + 1}"
+            )
+        if "external_id" in kwargs_copy:
+            kwargs_copy["external_id"] = (
+                f"{kwargs_copy['external_id']}-{batch_id}-{i + 1}"
+            )
+        instance = factory_fn(**kwargs_copy)
+        instances.append(instance)
+    db.session.flush()
+    return instances

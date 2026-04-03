@@ -16,6 +16,27 @@ _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_LOCKOUT_SECONDS = 900  # 15 minutes
 _LOGIN_ATTEMPT_PREFIX = "ainews:login_attempts:"
 
+
+def _get_login_max_attempts() -> int:
+    """Get max login attempts from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("LOGIN_MAX_ATTEMPTS", _LOGIN_MAX_ATTEMPTS)
+    except RuntimeError:
+        return _LOGIN_MAX_ATTEMPTS
+
+
+def _get_login_lockout_seconds() -> int:
+    """Get login lockout seconds from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("LOGIN_LOCKOUT_SECONDS", _LOGIN_LOCKOUT_SECONDS)
+    except RuntimeError:
+        return _LOGIN_LOCKOUT_SECONDS
+
+
 # In-memory fallback when Redis is unavailable (per-worker protection)
 _login_attempts_memory: dict[str, tuple[int, float]] = {}
 _memory_lock = __import__("threading").Lock()
@@ -28,7 +49,7 @@ def _cleanup_stale_entries() -> None:
         now = time.monotonic()
         stale_keys = []
         for ip, (count, first_time) in _login_attempts_memory.items():
-            if now - first_time >= _LOGIN_LOCKOUT_SECONDS:
+            if now - first_time >= _get_login_lockout_seconds():
                 stale_keys.append(ip)
 
         for ip in stale_keys:
@@ -105,7 +126,7 @@ def _is_locked_out(ip: str) -> bool:
         if not data:
             return False
         count = int(data.get(b"count", 0))
-        return count >= _LOGIN_MAX_ATTEMPTS
+        return count >= _get_login_max_attempts()
     except redis.exceptions.RedisError as e:
         logger.warning("Redis error checking lockout for %s: %s", ip, e)
         # Fallback to in-memory tracking
@@ -120,10 +141,10 @@ def _is_locked_out_memory(ip: str) -> bool:
         if entry is None:
             return False
         count, first_time = entry
-        if time.monotonic() - first_time >= _LOGIN_LOCKOUT_SECONDS:
+        if time.monotonic() - first_time >= _get_login_lockout_seconds():
             del _login_attempts_memory[ip]
             return False
-        return count >= _LOGIN_MAX_ATTEMPTS
+        return count >= _get_login_max_attempts()
 
 
 def _check_and_record_attempt(ip: str) -> bool:
@@ -142,8 +163,8 @@ def _check_and_record_attempt(ip: str) -> bool:
             1,
             key,
             str(time.time()),
-            str(_LOGIN_LOCKOUT_SECONDS),
-            str(_LOGIN_MAX_ATTEMPTS),
+            str(_get_login_lockout_seconds()),
+            str(_get_login_max_attempts()),
         )
         return result == 1
     except redis.exceptions.RedisError as e:
@@ -167,7 +188,7 @@ def _record_failed_attempt(ip: str) -> None:
         pipe = r.pipeline()
         pipe.hincrby(key, "count", 1)
         pipe.hsetnx(key, "first_attempt", str(time.time()))
-        pipe.expire(key, _LOGIN_LOCKOUT_SECONDS)
+        pipe.expire(key, _get_login_lockout_seconds())
         pipe.execute()
     except redis.exceptions.RedisError as e:
         logger.warning("Redis error recording attempt for %s: %s", ip, e)
@@ -184,7 +205,7 @@ def _record_failed_attempt_memory(ip: str) -> None:
             _login_attempts_memory[ip] = (1, now)
         else:
             count, first_time = entry
-            if now - first_time >= _LOGIN_LOCKOUT_SECONDS:
+            if now - first_time >= _get_login_lockout_seconds():
                 _login_attempts_memory[ip] = (1, now)
             else:
                 _login_attempts_memory[ip] = (count + 1, first_time)

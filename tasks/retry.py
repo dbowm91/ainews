@@ -1,3 +1,5 @@
+"""Retry logic for stuck articles and dead-letter handling."""
+
 import os
 from datetime import datetime, timezone, timedelta
 
@@ -5,7 +7,11 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from constants import _get_stuck_threshold_minutes, PipelineStatus
+from constants import (
+    _get_stuck_threshold_minutes,
+    _get_retry_soft_cutoff_minutes,
+    PipelineStatus,
+)
 from tasks.pipeline import _get_max_stage_retries
 
 logger = get_task_logger(__name__)
@@ -42,7 +48,7 @@ def retry_stuck(self):
 
     try:
         now = datetime.now(timezone.utc)
-        soft_cutoff = now - timedelta(minutes=15)
+        soft_cutoff = now - timedelta(minutes=_get_retry_soft_cutoff_minutes())
 
         stuck = Article.query.filter(
             Article.pipeline_status.in_(
@@ -64,7 +70,11 @@ def retry_stuck(self):
             age_minutes = (now - article.updated_at).total_seconds() / 60
 
             if age_minutes >= _get_stuck_threshold_minutes():
-                _dead_letter(article)
+                try:
+                    _dead_letter(article)
+                except Exception:
+                    logger.error("Failed to dead-letter article %s", article.id)
+                    continue
                 dead_lettered += 1
             elif (article.retry_count or 0) >= _get_max_stage_retries():
                 _degrade_and_advance(article, article.pipeline_status)

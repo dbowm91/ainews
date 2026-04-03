@@ -7,36 +7,50 @@ class TestHealth:
     def test_requires_auth(self, client):
         assert client.get("/admin/api/health").status_code in (302, 401)
 
-    def test_authenticated(self, auth_client, mock_redis, app):
-        import pytest
+    def test_run_health_checks_service(self, app):
+        from services.health import run_health_checks
 
-        pytest.skip(
-            "Health endpoint call corrupts SQLite connection state at C level, "
-            "causing naive/aware datetime comparison failures in downstream tests. "
-            "db.session.remove() and db.engine.dispose() do not fix this. "
-            "Would require moving to separate process or isolated test database."
-        )
-        from extensions import db
+        result = run_health_checks(include_celery=False)
+        assert result.status in ("ok", "degraded", "unhealthy")
+        assert "database" in result.checks
+        assert "redis" in result.checks
 
+    def test_health_result_to_dict(self, app):
+        from services.health import HealthResult
+
+        result = HealthResult(status="ok", checks={"database": "ok"})
+        d = result.to_dict()
+        assert d["status"] == "ok"
+        assert "database" in d["checks"]
+
+    def test_authenticated_route_returns_correct_structure(
+        self, auth_client, mock_redis, app
+    ):
         with (
-            patch("extensions.get_redis", return_value=mock_redis),
-            patch("services.llm.get_provider_info") as mi,
-            patch("services.limiter.get_limiter") as ml,
-            patch("services.cache.get_response_cache") as mc,
-            patch("services.circuit_breaker.get_all_breaker_status") as mb,
+            patch("routes.admin.api.run_health_checks") as m_health,
+            patch("routes.admin.api.get_all_breaker_status") as m_circuit,
+            patch("routes.admin.api.get_limiter") as m_limiter,
+            patch("routes.admin.api.get_response_cache") as m_cache,
         ):
-            mi.return_value = {"status": "ok"}
-            ml.return_value = MagicMock()
-            ml.return_value.is_healthy.return_value = True
-            mc.return_value = MagicMock()
-            mc.return_value.get_stats.return_value = {}
-            mb.return_value = {}
+            from services.health import HealthResult
+
+            m_health.return_value = HealthResult(
+                status="ok",
+                checks={"database": "ok", "redis": "ok", "celery": "ok"},
+            )
+            m_limiter.return_value = MagicMock()
+            m_limiter.return_value.is_healthy.return_value = True
+            m_cache.return_value = MagicMock()
+            m_cache.return_value.get_stats.return_value = {}
+            m_circuit.return_value = {}
+
             resp = auth_client.get("/admin/api/health")
             assert resp.status_code == 200
             data = resp.get_json()
             assert "flask" in data
-        db.session.remove()
-        db.engine.dispose()
+            assert "database" in data
+            assert "redis" in data
+            assert "circuit_breakers" in data
 
 
 class TestConfigReload:
@@ -245,6 +259,35 @@ class TestBulkAddTags:
             json={"article_ids": [aid], "action": "add_tags", "tags": ["t"] * 11},
         )
         assert resp.status_code == 400
+
+    def test_reprocess(
+        self, auth_client, create_article, create_source, app, mock_celery_tasks
+    ):
+        from extensions import db
+
+        with app.app_context():
+            source = create_source(source_key="reprocess-test")
+            article = create_article(source=source, pipeline_status="done")
+            db.session.commit()
+            aid = article.id
+
+        resp = auth_client.post(
+            "/admin/api/articles/bulk",
+            json={"article_ids": [aid], "action": "reprocess"},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "message" in data
+        assert "dispatched" in data or "reprocessing" in data["message"].lower()
+        mock_celery_tasks["select"].delay.assert_called_once_with(aid)
+
+        with app.app_context():
+            from models import Article
+
+            article = db.session.get(Article, aid)
+            assert article.pipeline_status == "pending"
+            assert article.retry_count == 0
+            assert article.total_retries == 0
 
 
 class TestNewsletterPreview:

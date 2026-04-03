@@ -54,16 +54,23 @@ class CircuitBreaker:
         self._half_open_calls = 0
         self._lock = Lock()
 
+    def _check_state_transition(self) -> None:
+        """Check and perform OPEN -> HALF_OPEN transition if timeout elapsed.
+
+        Must be called while holding ``_lock``.
+        """
+        if self._state == State.OPEN:
+            if time.monotonic() - self._opened_at >= self.recovery_timeout:
+                old = self._state
+                self._state = State.HALF_OPEN
+                self._half_open_calls = 0
+                logger.info("Circuit %s: OPEN -> HALF_OPEN", self.name)
+                self._on_state_change(old, self._state)
+
     @property
     def state(self) -> State:
         with self._lock:
-            if self._state == State.OPEN:
-                if time.monotonic() - self._opened_at >= self.recovery_timeout:
-                    old = self._state
-                    self._state = State.HALF_OPEN
-                    self._half_open_calls = 0
-                    logger.info("Circuit %s: OPEN -> HALF_OPEN", self.name)
-                    self._on_state_change(old, self._state)
+            self._check_state_transition()
             return self._state
 
     def _on_state_change(self, old_state: State, new_state: State) -> None:
@@ -166,16 +173,10 @@ class CircuitBreaker:
             short-circuited.
         """
         with self._lock:
-            # Check for OPEN -> HALF_OPEN transition (same logic as state property)
+            self._check_state_transition()
+
             if self._state == State.OPEN:
-                if time.monotonic() - self._opened_at >= self.recovery_timeout:
-                    old = self._state
-                    self._state = State.HALF_OPEN
-                    self._half_open_calls = 0
-                    logger.info("Circuit %s: OPEN -> HALF_OPEN", self.name)
-                    self._on_state_change(old, self._state)
-                else:
-                    return False
+                return False
 
             if self._state == State.CLOSED:
                 return True

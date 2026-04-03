@@ -1,5 +1,10 @@
 """Tests for the context service."""
 
+import pytest
+from unittest.mock import patch
+
+from sqlalchemy.exc import SQLAlchemyError
+
 
 class TestTopicNoteCrud:
     """Test topic note CRUD operations."""
@@ -86,6 +91,69 @@ class TestTopicNoteCrud:
 
             result = delete_topic_note("non-existent", "src")
             assert result is False
+
+    def test_create_topic_note_rollback_on_commit_failure(self, app):
+        """Creating a topic note should rollback on commit failure."""
+        with app.app_context():
+            from services.context_service import create_topic_note
+            from extensions import db
+
+            with patch.object(
+                db.session, "commit", side_effect=SQLAlchemyError("commit failed")
+            ):
+                with patch.object(db.session, "rollback") as mock_rollback:
+                    with pytest.raises(SQLAlchemyError):
+                        create_topic_note(
+                            "rollback-test", note="should fail", source="src"
+                        )
+                    mock_rollback.assert_called_once()
+
+    def test_update_topic_note_rollback_on_commit_failure(self, app):
+        """Updating a topic note should rollback on commit failure."""
+        with app.app_context():
+            from services.context_service import create_topic_note, update_topic_note
+            from extensions import db
+
+            note = create_topic_note("rollback-update", note="original", source="src")
+
+            with patch.object(
+                db.session, "commit", side_effect=SQLAlchemyError("commit failed")
+            ):
+                with patch.object(db.session, "rollback") as mock_rollback:
+                    with pytest.raises(SQLAlchemyError):
+                        update_topic_note(
+                            "rollback-update", note="updated", source="src"
+                        )
+                    mock_rollback.assert_called_once()
+
+            db.session.rollback()
+            db.session.commit()
+            retrieved = db.session.get(type(note), note.id)
+            assert retrieved.note == "original"
+
+    def test_delete_topic_note_rollback_on_commit_failure(self, app):
+        """Deleting a topic note should rollback on commit failure."""
+        with app.app_context():
+            from services.context_service import create_topic_note, delete_topic_note
+            from extensions import db
+
+            note = create_topic_note(
+                "rollback-delete", note="to be deleted", source="src"
+            )
+            note_id = note.id
+
+            with patch.object(
+                db.session, "commit", side_effect=SQLAlchemyError("commit failed")
+            ):
+                with patch.object(db.session, "rollback") as mock_rollback:
+                    with pytest.raises(SQLAlchemyError):
+                        delete_topic_note("rollback-delete", "src")
+                    mock_rollback.assert_called_once()
+
+            db.session.rollback()
+            db.session.commit()
+            retrieved = db.session.get(type(note), note_id)
+            assert retrieved is not None
 
 
 class TestGetTopicNotesForTopics:

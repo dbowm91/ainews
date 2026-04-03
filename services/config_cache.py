@@ -8,12 +8,11 @@ from typing import Any, Callable, Optional
 import redis.exceptions
 from pydantic import BaseModel
 
-from services.cache_base import MemoryCacheMixin
-
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ConfigCache"] = None
 _cache_lock = threading.Lock()
+_MAX_MEMORY_ENTRIES = 500
 
 
 def _serialize(value: Any) -> str:
@@ -73,7 +72,7 @@ def _import_class(dotted_path: str) -> type:
     return cls
 
 
-class ConfigCache(MemoryCacheMixin):
+class ConfigCache:
     _memory: dict[str, tuple[float, Any]]
 
     def __init__(self, redis_client, prefix: str = "ainews:config"):
@@ -81,6 +80,18 @@ class ConfigCache(MemoryCacheMixin):
         self.prefix = prefix
         self._memory = {}
         self._lock = threading.RLock()
+
+    def _evict_stale(self) -> None:
+        if len(self._memory) <= _MAX_MEMORY_ENTRIES:
+            return
+        now = time.monotonic()
+        expired = [k for k, (exp, _) in self._memory.items() if now >= exp]
+        for k in expired:
+            del self._memory[k]
+        if len(self._memory) > _MAX_MEMORY_ENTRIES:
+            sorted_items = sorted(self._memory.items(), key=lambda x: x[1][0])
+            for k, _ in sorted_items[: len(self._memory) - _MAX_MEMORY_ENTRIES]:
+                del self._memory[k]
 
     def get(
         self,
@@ -105,10 +116,6 @@ class ConfigCache(MemoryCacheMixin):
                 expires_at, value = mem_entry
                 if time.monotonic() < expires_at:
                     return value
-
-            # Not in memory cache, try Redis (outside lock to avoid blocking other threads)
-            # We'll release lock temporarily
-            pass
 
         # Redis operations outside lock
         try:

@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
@@ -29,16 +30,19 @@ class GeminiProvider(BaseLLMProvider):
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
         self._client = None
+        self._client_lock = threading.Lock()
 
     @property
     def client(self):
         if self._client is None:
-            from google import genai
+            with self._client_lock:
+                if self._client is None:
+                    from google import genai
 
-            self._client = genai.Client(
-                api_key=self.config.get("api_key"),
-                http_options={"timeout": 120},
-            )
+                    self._client = genai.Client(
+                        api_key=self.config.get("api_key"),
+                        http_options={"timeout": 120},
+                    )
         return self._client
 
     def _build_contents(
@@ -82,10 +86,12 @@ class GeminiProvider(BaseLLMProvider):
             )
         except Exception as e:
             raise _handle_gemini_error(e) from e
+        usage = resp.usage_metadata
+        tokens_used = usage.total_token_count if usage else 0
         return LLMResponse(
             text=resp.text or "",
             model=model,
-            tokens_used=0,
+            tokens_used=tokens_used,
         )
 
     def _chat_with_schema(

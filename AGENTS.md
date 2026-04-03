@@ -250,45 +250,11 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`ModelLimiter` slot leak**: If both release attempts fail with Redis errors, the slot leaks until TTL expires. This is acknowledged behavior with explicit logging. A metric is emitted for monitoring.
 
-**Topic icons**: Only `ai`, `privacy`, and `security` have SVG paths in `templates/partials/topic_icon.html`. Categories `programming`, `hardware`, and `other` render empty icons.
+**`run_all_sources` blocking**: Uses `result.get(timeout=360)` which blocks the calling Celery worker thread. Celery chord for non-blocking aggregation was implemented.
 
-**Pipeline badge classes**: `components.css` defines `.pipeline-done`, `.pipeline-skipped`, `.pipeline-active`, `.pipeline-error`. `.pipeline-failed` is NOT defined but is used in `admin/partials/source_row.html`.
+**`services/url.py:_TTLCache`**: Docstring claims LRU eviction but implements oldest-first (FIFO) eviction via `min()` on timestamps. DNS cache behavior is acceptable — docstring was corrected to describe FIFO behavior.
 
-**`run_all_sources` blocking**: Uses `result.get(timeout=360)` which blocks the calling Celery worker thread. Consider Celery chord for non-blocking aggregation.
-
-**`templates/partials/cards.html`**: Referenced by `routes/public/__init__.py` for HTMX paginated requests (page > 1) but does not exist. Causes `TemplateNotFound` on infinite scroll past page 1.
-
-**`tests/.DS_Store`**: macOS artifact exists in tests directory. Should be in `.gitignore`.
-
-**`services/redis_utils.py`**: Contains `release_lock` and `refresh_lock` but no `acquire_lock`. Lock acquisition is done inline in calling code.
-
-**`services/metrics.py`**: Uses `list` for histogram storage with manual slicing (`[-1000:]`). `collections.deque(maxlen=...)` would be more efficient.
-
-**`services/url.py:_TTLCache`**: Docstring claims LRU eviction but implements oldest-first (FIFO) eviction via `min()` on timestamps. DNS cache behavior is acceptable — just document correctly.
-
-**`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. `re.search()` compiles on every call. Pre-compiling at module load would be more efficient.
-
-**`services/circuit_breaker.py`**: OPEN→HALF_OPEN transition logic is duplicated in both the `state` property and `can_execute()` method.
-
-**LLM provider lazy init**: All four providers (`anthropic.py`, `openai.py`, `ollama.py`, `gemini.py`) use simple lazy initialization via `@property` without thread safety. Two threads could both see `_client is None` and create duplicate clients.
-
-**`services/llm/gemini.py`**: Hardcodes `tokens_used=0` in `LLMResponse`. Unlike Anthropic and OpenAI providers, does not extract token counts from response metadata.
-
-**`services/context_service.py`**: `create_topic_note`, `update_topic_note`, and `delete_topic_note` call `db.session.commit()` without try/except/rollback. Violates project convention.
-
-**`tasks/newsletter.py:_send_emails_parallel`**: Returns 0 on ANY exception from `result.get()`, even if some emails were already sent. Causes duplicate sends on retry.
-
-**`tasks/extract.py:extraction_status`**: Sets `"success"` when extraction is None but URL is present (fallback case). Should be `"fallback"`.
-
-**`tasks/retry.py`**: 15-minute soft cutoff for selecting stuck articles is hardcoded. Dead-letter threshold is configurable via env var but soft cutoff is not.
-
-**`routes/admin/sources.py:_generate_source_key`**: Collision handling appends `-<existing.id + 1>` without checking if the resulting key also exists. Not deterministic.
-
-**`routes/admin/articles.py` date parsing**: `datetime.fromisoformat` failures are caught and silently ignored. User gets no feedback that their date filter was invalid.
-
-**`routes/admin/shares.py` and `routes/admin/pipelines.py`**: Catch bare `Exception` instead of specific exception types (`SQLAlchemyError`).
-
-**`routes/admin/dashboard.py`**: `get_provider_info()` and Redis `ping()` exceptions caught and silently set to error dicts without logging.
+**`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. Pre-compilation at module load was implemented.
 
 ### Model cascade rules
 

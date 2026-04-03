@@ -13,8 +13,6 @@ from typing import Any, Callable, Optional
 
 import redis.exceptions
 
-from services.cache_base import MemoryCacheMixin
-
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ResponseCache"] = None
@@ -23,7 +21,17 @@ _cache_lock = threading.Lock()
 _L1_CACHE_MAXSIZE = 1000
 
 
-class ResponseCache(MemoryCacheMixin):
+def _get_l1_cache_maxsize() -> int:
+    """Get L1 cache max size from Flask config, falling back to default."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("L1_CACHE_MAXSIZE", _L1_CACHE_MAXSIZE)
+    except RuntimeError:
+        return _L1_CACHE_MAXSIZE
+
+
+class ResponseCache:
     """Redis-backed cache with in-memory L1 layer.
 
     Designed for read-heavy routes (article detail, RSS feeds).
@@ -92,7 +100,10 @@ class ResponseCache(MemoryCacheMixin):
         # L1: in-memory with LRU eviction
         self._evict_stale()
         with self._memory_lock:
-            if len(self._memory) >= _L1_CACHE_MAXSIZE and full_key not in self._memory:
+            if (
+                len(self._memory) >= _get_l1_cache_maxsize()
+                and full_key not in self._memory
+            ):
                 # Evict least recently used entry (lowest access_time)
                 lru_key = min(self._memory, key=lambda k: self._memory[k][1])
                 del self._memory[lru_key]

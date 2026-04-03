@@ -12,6 +12,27 @@ from contextvars import ContextVar
 # Context variable to store request ID across async contexts
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 
+# Slow query threshold in milliseconds
+SLOW_QUERY_THRESHOLD_MS = 500
+
+# Correlation ID for pipeline/lifecycle tracking
+correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
+
+
+def get_correlation_id() -> str:
+    """Get the current correlation ID from context."""
+    return correlation_id_var.get()
+
+
+def set_correlation_id(correlation_id: str) -> None:
+    """Set the correlation ID in context."""
+    correlation_id_var.set(correlation_id)
+
+
+def generate_correlation_id() -> str:
+    """Generate a new correlation ID."""
+    return uuid.uuid4().hex[:12]
+
 
 def get_request_id() -> str:
     """Get the current request ID from context."""
@@ -173,3 +194,52 @@ def setup_logging(app=None, level=logging.INFO):
         app.wsgi_app = RequestIDMiddleware(app.wsgi_app)
 
     return root_logger
+
+
+def setup_query_logging(engine):
+    """Set up SQLAlchemy query logging with slow query detection.
+
+    Args:
+        engine: SQLAlchemy engine to attach listeners to
+    """
+    import traceback
+
+    query_logger = logging.getLogger("db.query")
+    slow_logger = logging.getLogger("db.slow_query")
+
+    def before_cursor_execute(
+        conn, cursor, statement, parameters, context, executemany
+    ):
+        conn.info.setdefault("query_start_time", []).append(time.monotonic())
+
+    def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        total_time_ms = (time.monotonic() - conn.info["query_start_time"].pop()) * 1000
+
+        request_id = get_request_id()
+        corr_id = get_correlation_id()
+
+        log_data = {
+            "duration_ms": round(total_time_ms, 2),
+            "statement": statement[:500] if statement else "",
+            "request_id": request_id or None,
+            "correlation_id": corr_id or None,
+        }
+
+        if total_time_ms > SLOW_QUERY_THRESHOLD_MS:
+            log_data["stack"] = traceback.format_stack()
+            slow_logger.warning(
+                "Slow query: %.2fms",
+                total_time_ms,
+                extra=log_data,
+            )
+        else:
+            query_logger.debug(
+                "Query: %.2fms",
+                total_time_ms,
+                extra=log_data,
+            )
+
+    from sqlalchemy import event
+
+    event.listen(engine, "before_cursor_execute", before_cursor_execute)
+    event.listen(engine, "after_cursor_execute", after_cursor_execute)

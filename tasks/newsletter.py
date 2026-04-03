@@ -7,6 +7,11 @@ from billiard.exceptions import SoftTimeLimitExceeded
 
 logger = get_task_logger(__name__)
 
+# Error response convention:
+# - Leaf tasks (e.g., send_single_email): re-raise for Celery retry
+# - Pipeline stages: re-raise for Celery retry
+# - Orchestration tasks (generate_daily_newsletters): return error dict
+
 
 @shared_task(
     bind=True,
@@ -76,8 +81,7 @@ def _send_emails_parallel(subscribers, subject, html, site_url):
         return sent
     except Exception as e:
         logger.error("Error waiting for email results: %s", e)
-        # Fallback: count as 0 sent
-        return 0
+        raise
 
 
 def _fetch_articles_for_newsletter(
@@ -179,7 +183,7 @@ def _generate_topic_newsletter_impl(
             Subscriber.query.filter(Subscriber.deleted_at.is_(None))
             .filter(Subscriber.confirmed_at.isnot(None))
             .filter_by(newsletter_type=topic_key, active=True)
-            .all()
+            .yield_per(500)
         )
         sent = _send_emails_parallel(subscribers, subject, html, site_url)
 
@@ -309,11 +313,22 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         existing = redis_client.get(lock_key)
         if existing and existing.decode() == task_id:
             try:
-                from services.redis_utils import refresh_lock
+                from services.redis_utils import refresh_lock, acquire_lock
 
-                refresh_lock(redis_client, lock_key, task_id, 600)
+                if not refresh_lock(redis_client, lock_key, task_id, 600):
+                    if not acquire_lock(redis_client, lock_key, task_id, 600):
+                        logger.info(
+                            "Newsletter generation already in progress (task %s), skipping",
+                            existing.decode() if existing else "unknown",
+                        )
+                        return {"skipped": True, "reason": "locked"}
             except redis.exceptions.RedisError:
-                pass
+                if not acquire_lock(redis_client, lock_key, task_id, 600):
+                    logger.info(
+                        "Failed to refresh newsletter lock, aborting (task %s)",
+                        task_id,
+                    )
+                    return {"skipped": True, "reason": "lock_refresh_failed"}
         else:
             logger.info(
                 "Newsletter generation already in progress (task %s), skipping",
@@ -325,9 +340,34 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         return _generate_newsletters_impl(self, dry_run_email, run_id)
     except SoftTimeLimitExceeded:
         from extensions import db
+        from models import PipelineRun
 
         db.session.rollback()
+        if run_id is not None:
+            run = db.session.get(PipelineRun, run_id)
+            if run:
+                run.status = "failed"
+                run.finished_at = datetime.now(timezone.utc)
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
         logger.error("Newsletter generation exceeded soft time limit")
+        raise
+    except Exception:
+        from extensions import db
+        from models import PipelineRun
+
+        db.session.rollback()
+        if run_id is not None:
+            run = db.session.get(PipelineRun, run_id)
+            if run:
+                run.status = "failed"
+                run.finished_at = datetime.now(timezone.utc)
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
         raise
     finally:
         try:

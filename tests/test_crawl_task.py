@@ -140,9 +140,8 @@ class TestCrawlSource:
                 "adapters.base.get_adapter_class",
                 side_effect=RuntimeError("adapter init failed"),
             ):
-                result = _call_crawl(cfg)
-        assert "error" in result
-        assert "adapter init failed" in result["error"]
+                with pytest.raises(RuntimeError, match="adapter init failed"):
+                    _call_crawl(cfg)
 
     @patch("extensions.get_redis")
     def test_lock_held_by_different_task_skips(
@@ -208,10 +207,10 @@ class TestRunAllSources:
             with pytest.raises(Exception):
                 run_all_sources.__wrapped__()
 
-    @patch("tasks.crawl.group")
+    @patch("tasks.crawl.chord")
     @patch("services.crawling.create_pipeline_run")
     @patch("schemas.source.load_sources")
-    def test_dispatches_sources(self, mock_load, mock_create_run, mock_group, app):
+    def test_dispatches_sources(self, mock_load, mock_create_run, mock_chord, app):
         mock_run = MagicMock()
         mock_run.id = 1
         mock_create_run.return_value = mock_run
@@ -220,26 +219,18 @@ class TestRunAllSources:
         source_cfg.model_dump.return_value = {"id": "s1", "name": "S1"}
         mock_load.return_value = [source_cfg]
 
-        mock_result = MagicMock()
-        mock_result.get.return_value = [{"source_id": "s1", "fetched": 5, "new": 2}]
-        mock_group.return_value.apply_async.return_value = mock_result
-
         from tasks.crawl import run_all_sources
 
         with app.app_context():
             result = run_all_sources.__wrapped__()
-        assert len(result) == 1
-        assert result[0]["fetched"] == 5
-        mock_group.assert_called_once()
+        assert result["message"] == "Dispatched 1 sources for crawling"
+        mock_chord.assert_called_once()
 
-    @patch("services.crawling.update_pipeline_run_stats")
-    @patch("tasks.crawl.group")
+    @patch("tasks.crawl.chord")
     @patch("services.crawling.create_pipeline_run")
     @patch("schemas.source.load_sources")
-    def test_timeout_error_handling(
-        self, mock_load, mock_create_run, mock_group, mock_update_stats, app
-    ):
-        """TimeoutError from result.get() should set run status to timeout."""
+    def test_timeout_error_handling(self, mock_load, mock_create_run, mock_chord, app):
+        """With chord-based dispatch, run_all_sources returns immediately."""
         mock_run = MagicMock()
         mock_run.id = 1
         mock_run.status = "running"
@@ -249,17 +240,11 @@ class TestRunAllSources:
         source_cfg.model_dump.return_value = {"id": "s1", "name": "S1"}
         mock_load.return_value = [source_cfg]
 
-        mock_group_result = MagicMock()
-        # First call raises TimeoutError, second call returns empty list
-        mock_group_result.get.side_effect = [TimeoutError("timed out"), []]
-        mock_group.return_value.apply_async.return_value = mock_group_result
-
         from tasks.crawl import run_all_sources
         from extensions import db
         from models import PipelineRun
 
         with app.app_context():
-            # Pre-create the pipeline run so db.session.get finds it
             from datetime import datetime, timezone
 
             pr = PipelineRun(
@@ -272,6 +257,5 @@ class TestRunAllSources:
             db.session.add(pr)
             db.session.commit()
             result = run_all_sources.__wrapped__()
-            db.session.refresh(pr)
-        assert result == []
-        assert pr.status == "timeout"
+        assert result["message"] == "Dispatched 1 sources for crawling"
+        mock_chord.assert_called_once()

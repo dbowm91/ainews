@@ -53,5 +53,8 @@ source = ["."]
 omit = [".venv/**", "migrations/**", "instance/**"]
 
 [tool.coverage.report]
-fail_under = 70
+fail_under = 80
 skip_empty = true
+
+[tool.coverage.html]
+directory = "htmlcov"

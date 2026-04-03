@@ -5,7 +5,7 @@ For pagination and FTS search, see services/pagination.py.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import Column
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,6 +23,25 @@ logger = logging.getLogger(__name__)
 # Threshold for Jaccard similarity on title word sets (0–1).
 # Pairs with similarity >= this value are considered duplicates.
 TITLE_SIMILARITY_THRESHOLD = 0.5
+
+# Default number of days to look back for duplicate titles.
+_DEFAULT_DUPLICATE_DETECTION_DAYS = 7
+
+_BATCH_SIZE = 500
+
+
+def _get_duplicate_detection_days() -> int:
+    """Get the duplicate detection window from environment or default."""
+    import os
+
+    try:
+        return int(
+            os.environ.get(
+                "DUPLICATE_DETECTION_DAYS", _DEFAULT_DUPLICATE_DETECTION_DAYS
+            )
+        )
+    except (ValueError, TypeError):
+        return _DEFAULT_DUPLICATE_DETECTION_DAYS
 
 
 def track_metric(article_id: int, column: Column) -> None:
@@ -118,7 +137,7 @@ def create_article_version(
     article: Article,
     change_reason: str = "edit",
     changed_by: str = "admin",
-    source_fields: dict | None = None,
+    source_fields: dict[str, Any] | None = None,
 ) -> None:
     """Create a version snapshot of an article before changes.
 
@@ -237,23 +256,22 @@ def find_duplicate_titles(
     if not candidate_words:
         return []
 
-    # Fetch recent articles from other sources to compare against.
-    # Limit to last 7 days to keep the comparison set manageable.
     from datetime import datetime, timezone, timedelta
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-    candidates = (
+    days = _get_duplicate_detection_days()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    matched_ids = []
+    query = (
         Article.query.filter(
             Article.source_id != source_id,
             Article.created_at >= cutoff,
             Article.original_title.isnot(None),
         )
-        .with_entities(Article.id, Article.original_title, Article.source_id)
-        .all()
+        .with_entities(Article.id, Article.original_title)
+        .yield_per(_BATCH_SIZE)
     )
-
-    matched_ids = []
-    for article_id, other_title, _ in candidates:
+    for article_id, other_title in query:
         other_words = _title_word_set(other_title)
         if jaccard_similarity(candidate_words, other_words) >= threshold:
             matched_ids.append(article_id)

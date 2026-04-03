@@ -53,4 +53,18 @@ def handle_provider_error(
         elif status >= 500:
             logger.error("%s server error (%s): %s", provider_name, status, e)
             return ProviderServerError(str(e))
+    msg_lower = str(e).lower()
+    if any(
+        ind in msg_lower
+        for ind in (
+            "500",
+            "internal server error",
+            "service unavailable",
+            "502",
+            "503",
+            "504",
+        )
+    ):
+        logger.error("%s server error (5xx-like): %s", provider_name, e)
+        return ProviderServerError(str(e))
     return e

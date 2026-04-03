@@ -44,7 +44,8 @@
       {% endif %}
       <form method="POST" action="/admin/trigger-crawl" class="dash-action" hx-post="/admin/trigger-crawl" hx-swap="outerHTML" hx-target="closest .dash-action">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn-primary" hx-disable="true">trigger crawl now</button>
+        <button type="submit" class="btn-primary" hx-disable="true" hx-indicator="#crawl-spinner">trigger crawl now</button>
+        <span id="crawl-spinner" class="htmx-indicator">working...</span>
       </form>
       <a href="/admin/pipelines" class="dash-link">pipelines &rarr;</a>
       <a href="/admin/newsletters" class="dash-link ml-1">newsletters &rarr;</a>
@@ -56,7 +57,8 @@
       <div class="quick-actions">
         <form method="POST" action="/admin/trigger-crawl" hx-post="/admin/trigger-crawl" hx-swap="none">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-primary">trigger crawl</button>
+          <button type="submit" class="btn-primary" hx-indicator="#quick-crawl-spinner">trigger crawl</button>
+          <span id="quick-crawl-spinner" class="htmx-indicator">working...</span>
         </form>
         <a href="/admin/review" class="btn-secondary">review queue</a>
         <a href="/admin/newsletters/send" class="btn-secondary">send newsletter</a>

@@ -49,10 +49,16 @@ def degrade_on_failure(
     return decorator
 
 
-def fallback_chain(*functions: Callable):
+def fallback_chain(
+    *functions: Callable, exceptions: tuple[type[Exception], ...] = (Exception,)
+):
     """Try multiple functions in order, returning the first successful result.
 
     Raises the last exception if all functions fail.
+
+    Args:
+        functions: Callables to try in order.
+        exceptions: Tuple of exception types to catch.
 
     Usage:
         result = fallback_chain(
@@ -64,12 +70,12 @@ def fallback_chain(*functions: Callable):
     Note: Each function should be a zero-arg callable. Use lambdas to bind args.
     """
 
-    def execute():
+    def execute(exceptions=exceptions):
         last_exc = None
         for fn in functions:
             try:
                 return fn()
-            except Exception as e:
+            except exceptions as e:
                 last_exc = e
                 logger.debug("Fallback chain: %s failed with %s", fn.__name__, e)
         raise last_exc

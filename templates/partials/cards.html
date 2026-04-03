@@ -1,0 +1,19 @@
+<div id="feed" role="feed" aria-label="Article feed">
+  {% for article in articles %}
+    {% include "partials/article_card.html" %}
+  {% endfor %}
+
+  {% if has_next %}
+  <div id="scroll-sentinel"
+       hx-get="{{ url_for('public.index', page=next_page, category=category, q=query) }}"
+       hx-trigger="revealed"
+       hx-swap="outerHTML"
+       hx-target="#scroll-sentinel"
+       hx-indicator="#scroll-spinner"
+       aria-label="Load more articles">
+    <div id="scroll-spinner" class="loading-indicator">
+      <span class="spinner" aria-live="polite">loading more...</span>
+    </div>
+  </div>
+  {% endif %}
+</div>

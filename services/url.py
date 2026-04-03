@@ -34,10 +34,23 @@ _DNS_CACHE_TTL = 300  # seconds
 _DNS_CACHE_MAX = 1024
 
 
+def _get_dns_cache_config() -> tuple[int, int]:
+    """Get DNS cache TTL and max size from Flask config, falling back to defaults."""
+    try:
+        from flask import current_app
+
+        return (
+            current_app.config.get("DNS_CACHE_TTL", _DNS_CACHE_TTL),
+            current_app.config.get("DNS_CACHE_MAX", _DNS_CACHE_MAX),
+        )
+    except RuntimeError:
+        return _DNS_CACHE_TTL, _DNS_CACHE_MAX
+
+
 class _TTLCache:
     """Bounded TTL cache for DNS results with explicit locking for thread safety.
 
-    Tracks hit/miss statistics and uses LRU eviction when full.
+    Tracks hit/miss statistics and uses oldest-first eviction when full.
     """
 
     def __init__(self, maxsize: int, ttl: float) -> None:
@@ -88,7 +101,26 @@ class _TTLCache:
             }
 
 
-_dns_cache = _TTLCache(maxsize=_DNS_CACHE_MAX, ttl=_DNS_CACHE_TTL)
+_dns_cache: _TTLCache | None = None
+_dns_cache_lock = threading.Lock()
+
+
+def _get_dns_cache() -> _TTLCache:
+    """Get or create the DNS cache (lazy initialization for config access)."""
+    global _dns_cache
+    if _dns_cache is not None:
+        return _dns_cache
+    with _dns_cache_lock:
+        if _dns_cache is not None:
+            return _dns_cache
+        ttl, maxsize = _get_dns_cache_config()
+        _dns_cache = _TTLCache(maxsize=maxsize, ttl=ttl)
+        return _dns_cache
+
+
+def clear_dns_cache() -> None:
+    """Clear the DNS cache (for testing and config reload)."""
+    _get_dns_cache().clear()
 
 
 class UnsafeURLError(ValueError):
@@ -104,7 +136,7 @@ def _resolve_and_check(hostname: str) -> list[str]:
     Returns list of resolved IP strings if all are safe.
     Raises UnsafeURLError if any IP is in a blocked range.
     """
-    cached = _dns_cache.get(hostname)
+    cached = _get_dns_cache().get(hostname)
     if cached is not None:
         return cached
 
@@ -137,7 +169,7 @@ def _resolve_and_check(hostname: str) -> list[str]:
                 )
         safe_ips.append(ip_str)
 
-    _dns_cache.set(hostname, safe_ips)
+    _get_dns_cache().set(hostname, safe_ips)
     return safe_ips
 
 

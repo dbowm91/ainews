@@ -5,7 +5,9 @@ into a single service used by both public and admin health endpoints.
 """
 
 import logging
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import redis.exceptions
@@ -19,13 +21,17 @@ class HealthResult:
 
     status: str  # "ok", "degraded", "unhealthy"
     checks: dict[str, Any] = field(default_factory=dict)
+    version: dict[str, str] | None = None
 
     @property
     def is_healthy(self) -> bool:
         return self.status in ("ok", "degraded")
 
     def to_dict(self) -> dict[str, Any]:
-        return {"status": self.status, "checks": self.checks}
+        result: dict[str, Any] = {"status": self.status, "checks": self.checks}
+        if self.version:
+            result["version"] = self.version
+        return result
 
 
 def check_database() -> tuple[str, Any]:
@@ -110,11 +116,14 @@ def check_limiter() -> tuple[str, Any]:
         return "limiter", "error"
 
 
-def run_health_checks(include_celery: bool = True) -> HealthResult:
+def run_health_checks(
+    include_celery: bool = True, detailed: bool = False
+) -> HealthResult:
     """Run all health checks and return consolidated result.
 
     Args:
         include_celery: Whether to check Celery workers (can be slow).
+        detailed: Whether to include version info and expanded pool stats.
 
     Returns:
         HealthResult with overall status and individual checks.
@@ -147,4 +156,35 @@ def run_health_checks(include_celery: bool = True) -> HealthResult:
         if overall != "unhealthy":
             overall = "degraded"
 
-    return HealthResult(status=overall, checks=checks)
+    version = None
+    if detailed:
+        version = get_version_info()
+
+    return HealthResult(status=overall, checks=checks, version=version)
+
+
+def get_version_info() -> dict[str, str]:
+    """Get version information for health response.
+
+    Returns dict with commit hash and build time if available.
+    """
+    version_info: dict[str, str] = {}
+
+    try:
+        commit_file = Path(__file__).parent.parent / ".git" / "HEAD"
+        if commit_file.exists():
+            content = commit_file.read_text().strip()
+            if content.startswith("ref: "):
+                ref_file = Path(__file__).parent.parent / ".git" / content[5:]
+                if ref_file.exists():
+                    version_info["commit"] = ref_file.read_text().strip()[:12]
+            else:
+                version_info["commit"] = content[:12]
+    except Exception:
+        pass
+
+    build_time = os.environ.get("BUILD_TIME")
+    if build_time:
+        version_info["build_time"] = build_time
+
+    return version_info

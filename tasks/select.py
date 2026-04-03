@@ -7,6 +7,11 @@ from services.llm.errors import ProviderServerError
 logger = get_task_logger(__name__)
 plog = get_pipeline_logger("select")
 
+# Error response convention:
+# - Leaf tasks: re-raise for Celery retry
+# - Pipeline stages (select, research, write, edit): re-raise for Celery retry
+# - Orchestration tasks: return error dict with aggregated results
+
 
 @shared_task(
     bind=True,

@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
@@ -34,14 +35,17 @@ class AnthropicProvider(BaseLLMProvider):
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
         self._client = None
+        self._client_lock = threading.Lock()
         self._api_key = cfg.api_key
 
     @property
     def client(self):
         if self._client is None:
-            from anthropic import Anthropic
+            with self._client_lock:
+                if self._client is None:
+                    from anthropic import Anthropic
 
-            self._client = Anthropic(api_key=self._api_key)
+                    self._client = Anthropic(api_key=self._api_key)
         return self._client
 
     def chat(

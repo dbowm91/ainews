@@ -331,6 +331,410 @@ journalctl -u ainews-web -p err
 
 ---
 
+## Systemd Service Configuration
+
+Create `/etc/systemd/system/ainews-web.service`:
+
+```ini
+[Unit]
+Description=AI News Flask Application
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=notify
+User=ainews
+Group=ainews
+WorkingDirectory=/opt/ainews
+Environment="PATH=/opt/ainews/.venv/bin"
+Environment="FLASK_CONFIG=production"
+ExecStart=/opt/ainews/.venv/bin/granian --host 127.0.0.1 --port 5000 --workers 5 --threading --interface wsgi app:app
+Restart=always
+RestartSec=5
+MemoryMax=1G
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Create `/etc/systemd/system/ainews-celery-worker.service`:
+
+```ini
+[Unit]
+Description=AI News Celery Worker
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=ainews
+Group=ainews
+WorkingDirectory=/opt/ainews
+Environment="PATH=/opt/ainews/.venv/bin"
+Environment="FLASK_CONFIG=production"
+ExecStart=/opt/ainews/.venv/bin/celery -A celery_app worker --loglevel=info --concurrency=4
+Restart=always
+RestartSec=10
+MemoryMax=2G
+TimeoutStartSec=60
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Create `/etc/systemd/system/ainews-celery-beat.service`:
+
+```ini
+[Unit]
+Description=AI News Celery Beat Scheduler
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=ainews
+Group=ainews
+WorkingDirectory=/opt/ainews
+Environment="PATH=/opt/ainews/.venv/bin"
+Environment="FLASK_CONFIG=production"
+ExecStart=/opt/ainews/.venv/bin/celery -A celery_app beat --loglevel=info
+Restart=always
+RestartSec=10
+MemoryMax=512M
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Reload systemd after creating services:
+```bash
+sudo systemctl daemon-reload
+```
+
+---
+
+## Docker Compose Production Example
+
+Create `docker-compose.prod.yml`:
+
+```yaml
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - FLASK_CONFIG=production
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=sqlite:////data/ainews.db
+      - REDIS_URL=redis://redis:6379/2
+    volumes:
+      - ./data:/data
+      - ./instance:/opt/ainews/instance
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    command: celery -A celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - FLASK_CONFIG=production
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=sqlite:////data/ainews.db
+      - REDIS_URL=redis://redis:6379/2
+    volumes:
+      - ./data:/data
+      - ./instance:/opt/ainews/instance
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    command: celery -A celery_app beat --loglevel=info
+    environment:
+      - FLASK_CONFIG=production
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DATABASE_URL=sqlite:////data/ainews.db
+      - REDIS_URL=redis://redis:6379/2
+    volumes:
+      - ./data:/data
+      - ./instance:/opt/ainews/instance
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+volumes:
+  redis_data:
+  data:
+
+networks:
+  default:
+    name: anews_network
+```
+
+Deploy with:
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+## Backup and Restore
+
+### Automated Backup Script
+
+The `scripts/backup.sh` script performs the following:
+1. Creates WAL checkpoint to ensure consistency
+2. Copies the SQLite database file
+3. Compresses with gzip
+4. Rotates old backups (keeps last 30 days)
+5. Creates SHA256 checksum for verification
+
+### Manual Backup
+
+```bash
+# Create backup directory
+mkdir -p /opt/ainews/backups
+
+# Checkpoint WAL
+sqlite3 /opt/ainews/instance/prod.db "PRAGMA wal_checkpoint(TRUNCATE);"
+
+# Copy and compress
+cp /opt/ainews/instance/prod.db /opt/ainews/backups/ainews-$(date +%Y%m%d-%H%M%S).db
+gzip /opt/ainews/backups/ainews-*.db
+
+# Create checksum
+sha256sum /opt/ainews/backups/ainews-*.db.gz > /opt/ainews/backups/checksums.txt
+```
+
+### Restore from Backup
+
+```bash
+# Stop services
+sudo systemctl stop ainews-web ainews-celery-worker ainews-celery-beat
+
+# List available backups
+ls -la /opt/ainews/backups/
+
+# Restore (replace date with your backup date)
+gunzip -c /opt/ainews/backups/ainews-20240101-020000.db.gz > /opt/ainews/instance/prod.db
+sudo chown ainews:ainews /opt/ainews/instance/prod.db
+
+# Verify integrity
+sqlite3 /opt/ainews/instance/prod.db "PRAGMA integrity_check;"
+
+# Start services
+sudo systemctl start ainews-web ainews-celery-worker ainews-celery-beat
+```
+
+### Docker Backup
+
+```bash
+# Create backup container
+docker compose exec -T web sh -c 'sqlite3 /data/ainews.db "PRAGMA wal_checkpoint(TRUNCATE);"'
+docker compose cp web:/data/ainews.db ./backups/ainews-$(date +%Y%m%d-%H%M%S).db
+gzip ./backups/ainews-*.db
+```
+
+---
+
+## Upgrade and Migration
+
+### Docker Upgrade
+
+```bash
+# Pull latest code
+git pull origin main
+
+# Rebuild images
+docker compose -f docker-compose.prod.yml build
+
+# Restart services (graceful rolling update)
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### Bare Metal Upgrade
+
+```bash
+# Pull latest code
+cd /opt/ainews
+sudo -u ainews git pull origin main
+
+# Activate virtual environment and update dependencies
+sudo -u ainews -i
+source .venv/bin/activate
+pip install -r requirements.txt
+deactivate
+
+# Restart services
+sudo systemctl restart ainews-web ainews-celery-worker ainews-celery-beat
+```
+
+### Database Migration
+
+```bash
+# Run pending migrations
+cd /opt/ainews
+source .venv/bin/activate
+FLASK_CONFIG=production alembic upgrade head
+deactivate
+```
+
+### Rollback
+
+```bash
+# Docker
+docker compose -f docker-compose.prod.yml down
+git checkout <previous-commit>
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Bare metal
+sudo systemctl stop ainews-web ainews-celery-worker ainews-celery-beat
+sudo -u ainews git checkout <previous-commit>
+sudo systemctl start ainews-web ainews-celery-worker ainews-celery-beat
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### Web server won't start
+
+```bash
+# Check logs
+journalctl -u ainews-web -n 50
+
+# Verify configuration
+sudo -u ainews -i
+source .venv/bin/activate
+python -c "from config import config; print(config['production'].SECRET_KEY)"
+deactivate
+
+# Check port availability
+ss -tlnp | grep 5000
+```
+
+#### Celery workers not processing tasks
+
+```bash
+# Check worker status
+sudo systemctl status ainews-celery-worker
+
+# View worker logs
+journalctl -u ainews-celery-worker -n 50
+
+# Ping workers
+sudo -u ainews -i
+source .venv/bin/activate
+celery -A celery_app inspect ping
+deactivate
+
+# Check Redis connectivity
+redis-cli ping
+```
+
+#### Database locked errors
+
+```bash
+# Check for running processes
+ps aux | grep -E '(granian|celery|sqlite)'
+
+# Restart services
+sudo systemctl restart ainews-web ainews-celery-worker
+
+# If using Docker
+docker compose restart web celery-worker
+```
+
+#### High memory usage
+
+```bash
+# Check memory usage by service
+systemctl status ainews-web ainews-celery-worker ainews-celery-beat
+
+# Reduce worker count
+sudo systemctl edit ainews-web
+# Add: Environment="GRANIAN_WORKERS=3"
+
+# Restart
+sudo systemctl restart ainews-web
+```
+
+### Performance Tuning
+
+#### Database
+
+```bash
+# SQLite WAL mode is automatic; verify
+sqlite3 /opt/ainews/instance/prod.db "PRAGMA journal_mode;"
+
+# Vacuum database monthly
+sqlite3 /opt/ainews/instance/prod.db "VACUUM;"
+```
+
+#### Celery
+
+```bash
+# Adjust concurrency based on CPU cores
+# Edit /etc/systemd/system/ainews-celery-worker.service
+# Change: --concurrency=4 to --concurrency=<2*CPU+1>
+
+# Restart after changes
+sudo systemctl daemon-reload
+sudo systemctl restart ainews-celery-worker
+```
+
+---
+
 ## Security
 
 1. **Secrets:** Never commit `.env` to version control. Use `chmod 600 .env`.

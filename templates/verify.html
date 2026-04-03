@@ -6,8 +6,12 @@
   <title>Verify Email — ainews//</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
 <body class="verify-page">
+  <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>
+  <div id="offline-toast" class="toast toast-hidden" role="status" aria-live="polite">You appear to be offline. Some content may be unavailable.</div>
   <div class="verify-card">
     <div class="verify-header">
       <span>ainews<em>//</em></span>

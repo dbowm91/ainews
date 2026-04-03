@@ -10,6 +10,12 @@ import time
 logger = get_task_logger(__name__)
 plog = get_pipeline_logger("edit")
 
+# Error response convention:
+# - Leaf tasks: re-raise for Celery retry
+# - Pipeline stages (select, research, write, edit): re-raise for Celery retry
+# - Orchestration tasks: return error dict with aggregated results
+
+
 _TAG_CACHE: list[str] | None = None
 _TAG_CACHE_TIME: float = 0
 _TAG_CACHE_TTL = 300
@@ -54,6 +60,14 @@ def _get_cached_tag_names() -> list[str]:
         _TAG_CACHE = [t.name for t in tags]
         _TAG_CACHE_TIME = now
         return _TAG_CACHE
+
+
+def clear_tag_cache() -> None:
+    """Clear the tag cache (call after tag changes)."""
+    global _TAG_CACHE, _TAG_CACHE_TIME
+    with _TAG_CACHE_LOCK:
+        _TAG_CACHE = None
+        _TAG_CACHE_TIME = 0
 
 
 @shared_task(

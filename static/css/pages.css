@@ -526,7 +526,7 @@
 
 .verify-page {
   margin: 0;
-  padding: 24px;
+  padding: var(--space-9);
   background: var(--color-bg-page);
   font-family: var(--font-sans);
   display: flex;
@@ -545,7 +545,7 @@
 }
 
 .verify-header {
-  padding: 24px 32px;
+  padding: var(--space-9) var(--space-10);
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
@@ -562,7 +562,7 @@
 }
 
 .verify-body {
-  padding: 24px 32px;
+  padding: var(--space-9) var(--space-10);
 }
 
 .verify-body h1 {

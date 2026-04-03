@@ -63,16 +63,6 @@ a:hover {
   text-decoration: underline;
 }
 
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-label[tabindex]:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-
 ::-webkit-scrollbar {
   width: 8px;
 }

@@ -33,25 +33,31 @@ class MetricsCollector:
         )
         self._start_time = time.monotonic()
 
-    def counter_inc(self, name: str, value: int = 1, labels: dict = None) -> None:
+    def counter_inc(
+        self, name: str, value: int = 1, labels: dict[str, str] | None = None
+    ) -> None:
         """Increment a counter."""
         key = self._make_key(name, labels)
         with self._lock:
             self._counters[key] += value
 
-    def gauge_set(self, name: str, value: float, labels: dict = None) -> None:
+    def gauge_set(
+        self, name: str, value: float, labels: dict[str, str] | None = None
+    ) -> None:
         """Set a gauge value."""
         key = self._make_key(name, labels)
         with self._lock:
             self._gauges[key] = value
 
-    def histogram_observe(self, name: str, value: float, labels: dict = None) -> None:
+    def histogram_observe(
+        self, name: str, value: float, labels: dict[str, str] | None = None
+    ) -> None:
         """Record a histogram observation."""
         key = self._make_key(name, labels)
         with self._lock:
             self._histograms[key].append(value)
 
-    def _make_key(self, name: str, labels: dict = None) -> str:
+    def _make_key(self, name: str, labels: dict[str, str] | None = None) -> str:
         """Create a metric key with optional labels."""
         if not labels:
             return name
@@ -142,7 +148,7 @@ def reset_metrics() -> None:
 
 
 @contextmanager
-def time_histogram(name: str, labels: dict = None):
+def time_histogram(name: str, labels: dict[str, str] | None = None):
     """Context manager that records duration as a histogram observation.
 
     Usage:

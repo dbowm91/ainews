@@ -1,6 +1,7 @@
 from functools import wraps
 import logging
 import os
+import threading
 import time
 import redis.exceptions
 from flask import Blueprint, redirect, url_for, session, request
@@ -39,7 +40,7 @@ def _get_login_lockout_seconds() -> int:
 
 # In-memory fallback when Redis is unavailable (per-worker protection)
 _login_attempts_memory: dict[str, tuple[int, float]] = {}
-_memory_lock = __import__("threading").Lock()
+_memory_lock = threading.Lock()
 _MAX_MEMORY_ENTRIES = 1000
 
 

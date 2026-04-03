@@ -14,8 +14,12 @@ from constants import MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
 
 logger = logging.getLogger(__name__)
 
+MIN_CONTENT_LENGTH = 200
+STUCK_THRESHOLD_MINUTES = 60
+RETRY_SOFT_CUTOFF_MINUTES = 15
 
-def _safe_int(key: str, default: int) -> int:
+
+def safe_int(key: str, default: int) -> int:
     """Safely parse an environment variable as an integer.
 
     Returns default if the value is missing or not a valid integer.
@@ -30,6 +34,40 @@ def _safe_int(key: str, default: int) -> int:
             "Invalid integer value for %s: %r, using default %d", key, value, default
         )
         return default
+
+
+def get_min_content_length() -> int:
+    """Get min content length from Flask config or environment."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get("MIN_CONTENT_LENGTH", MIN_CONTENT_LENGTH)
+    except RuntimeError:
+        return MIN_CONTENT_LENGTH
+
+
+def get_stuck_threshold_minutes() -> int:
+    """Get stuck threshold from Flask config or environment."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get(
+            "STUCK_THRESHOLD_MINUTES", STUCK_THRESHOLD_MINUTES
+        )
+    except RuntimeError:
+        return STUCK_THRESHOLD_MINUTES
+
+
+def get_retry_soft_cutoff_minutes() -> int:
+    """Get retry soft cutoff from Flask config or environment."""
+    try:
+        from flask import current_app
+
+        return current_app.config.get(
+            "RETRY_SOFT_CUTOFF_MINUTES", RETRY_SOFT_CUTOFF_MINUTES
+        )
+    except RuntimeError:
+        return RETRY_SOFT_CUTOFF_MINUTES
 
 
 @dataclass
@@ -110,22 +148,22 @@ class AppConfig:
         """Build config from environment variables only (no Flask context)."""
         return cls(
             pipeline=PipelineConfig(
-                max_stage_retries=_safe_int("MAX_STAGE_RETRIES", 3),
-                max_total_retries=_safe_int("MAX_TOTAL_RETRIES", 10),
-                stuck_threshold_minutes=_safe_int("STUCK_THRESHOLD_MINUTES", 60),
-                min_content_length=_safe_int("MIN_CONTENT_LENGTH", 200),
+                max_stage_retries=safe_int("MAX_STAGE_RETRIES", 3),
+                max_total_retries=safe_int("MAX_TOTAL_RETRIES", 10),
+                stuck_threshold_minutes=safe_int("STUCK_THRESHOLD_MINUTES", 60),
+                min_content_length=safe_int("MIN_CONTENT_LENGTH", 200),
             ),
             security=SecurityConfig(
                 session_cookie_secure=os.environ.get("SESSION_COOKIE_SECURE", "false")
                 .lower()
                 .startswith("t"),
-                max_content_length=_safe_int("MAX_CONTENT_LENGTH", 64 * 1024),
-                verification_expiry_seconds=_safe_int(
+                max_content_length=safe_int("MAX_CONTENT_LENGTH", 64 * 1024),
+                verification_expiry_seconds=safe_int(
                     "VERIFICATION_EXPIRY_SECONDS", 3600
                 ),
             ),
             sources=SourceConfig(
-                max_consecutive_failures=_safe_int("MAX_CONSECUTIVE_FAILURES", 10),
+                max_consecutive_failures=safe_int("MAX_CONSECUTIVE_FAILURES", 10),
             ),
         )
 

@@ -31,10 +31,10 @@ return 0
 
 class ModelLimiter:
     def __init__(self, redis_client):
-        self.redis = redis_client
+        self._redis = redis_client
         self._prefix = "ainews:llm"
-        self._acquire_script = self.redis.register_script(_ACQUIRE_SCRIPT)
-        self._release_script = self.redis.register_script(_RELEASE_SCRIPT)
+        self._acquire_script = self._redis.register_script(_ACQUIRE_SCRIPT)
+        self._release_script = self._redis.register_script(_RELEASE_SCRIPT)
 
     def acquire(
         self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300
@@ -90,14 +90,14 @@ class ModelLimiter:
         """Get active slot count. Returns None if Redis is unavailable."""
         key = f"{self._prefix}:{provider_id}:{model}"
         try:
-            return int(self.redis.get(key) or 0)
+            return int(self._redis.get(key) or 0)
         except redis.exceptions.RedisError:
             return None
 
     def is_healthy(self) -> bool:
         """Check if the underlying Redis connection is responsive."""
         try:
-            self.redis.ping()
+            self._redis.ping()
             return True
         except redis.exceptions.RedisError:
             return False

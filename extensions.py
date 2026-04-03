@@ -22,18 +22,40 @@ def _get_limiter_storage_uri() -> str:
     Falls back to in-memory if Redis is unavailable.
     """
     broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
-    # Parse broker URL and use DB 15 for rate limiting
     if "://" in broker_url:
         base = broker_url.rsplit("/", 1)[0]
         return f"{base}/15"
     return "memory://"
 
 
-limiter = Limiter(
-    get_remote_address,
-    storage_uri=_get_limiter_storage_uri(),
-    default_limits=[os.environ.get("RATELIMIT_DEFAULT", "60 per minute")],
-)
+_limiter: Limiter | None = None
+_limiter_lock = threading.Lock()
+
+
+def get_limiter_flask() -> Limiter:
+    """Get or create the singleton Flask Limiter instance."""
+    global _limiter
+    if _limiter is not None:
+        return _limiter
+    with _limiter_lock:
+        if _limiter is not None:
+            return _limiter
+        _limiter = Limiter(
+            get_remote_address,
+            storage_uri=_get_limiter_storage_uri(),
+            default_limits=[os.environ.get("RATELIMIT_DEFAULT", "60 per minute")],
+        )
+        return _limiter
+
+
+def reset_limiter() -> None:
+    """Reset the limiter singleton (for testing)."""
+    global _limiter
+    with _limiter_lock:
+        _limiter = None
+
+
+limiter = get_limiter_flask()
 
 _redis_client = None
 _redis_pool = None

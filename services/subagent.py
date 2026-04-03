@@ -72,10 +72,7 @@ def _get_subagent_provider_and_config(
         provider, model, max_tokens, _ = get_provider_for_role("editor")
         if stage_config.max_tokens:
             max_tokens = stage_config.max_tokens
-        if stage_config.temperature:
-            temperature = stage_config.temperature
-        else:
-            temperature = 0.0
+        temperature = stage_config.temperature
     return provider, model, max_tokens, temperature
 
 

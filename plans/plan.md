@@ -1,7 +1,8 @@
 # Consolidated Improvement Plan
 
-**Status:** Draft
+**Status:** Partially Completed (Waves 1-3)
 **Created:** April 3, 2026
+**Completed:** April 3, 2026
 **Scope:** Code quality, bug fixes, UI improvements, and maintainability across ~27K lines
 
 ---
@@ -12,15 +13,43 @@ This plan consolidates all improvement items from four source plans into a singl
 
 ### Key Findings Summary
 
-| Category | Items | Estimated Effort |
-|----------|-------|-----------------|
-| Bug Fixes | 2 confirmed bugs | 1-2 hours |
-| Code Quality & Refactoring | 14 items (exception handling, file splitting, config, schemas, decorators) | 20-30 hours |
-| UI: Typography & CSS Architecture | 3 items | 3-4 hours |
-| UI: Accessibility | 6 items | 2-3 hours |
-| UI: Consistency & Polish | 6 items | 2-3 hours |
-| UI: Features & Enhancements | 22 items | 6-10 hours |
-| **Total** | **53 items** | **34-52 hours** |
+| Category | Items | Estimated Effort | Status |
+|----------|-------|------------------|--------|
+| Bug Fixes | 5 items | 1-2 hours | ✅ Completed |
+| Code Quality & Refactoring | 11 items (Waves 2-3) | 8-12 hours | ✅ Completed (partial) |
+| UI: Typography & CSS Architecture | 3 items | 3-4 hours | ⏳ Pending |
+| UI: Accessibility | 6 items | 2-3 hours | ⏳ Pending |
+| UI: Consistency & Polish | 6 items | 2-3 hours | ⏳ Pending |
+| UI: Features & Enhancements | 22 items | 6-10 hours | ⏳ Pending |
+| **Wave 4 Refactoring** | 10 items | 20-30 hours | ⏳ Pending |
+| **Total completed** | **16 items** | **~10-14 hours** | |
+
+---
+
+## Completed Items Summary
+
+### Wave 1: Bug Fixes ✅
+- ✅ 1.1 Fixed `run_stage()` unbound `limiter` in `finally` block (tasks/pipeline.py)
+- ✅ 1.2 Cleaned up `subagent.py` redundant conditionals
+- ✅ 1.3 Removed empty `services/cache_base.py`
+- ✅ 1.4 Fixed `__import__("threading")` in admin routes
+- ✅ 1.5 Renamed `self.redis` to `self._redis` in `ModelLimiter`
+
+### Wave 2: Small Cleanups ✅
+- ✅ 2.1 Added type hints to `services/metrics.py` (`labels: dict[str, str] | None`)
+- ✅ 2.2 Moved imports to module level in `app.py` (render_template, jsonify, request)
+- ✅ 2.3 Derived `VALID_PIPELINE_STATUSES` from `PipelineStatus` class
+- ✅ 2.4 Moved config side effects out of `DevelopmentConfig.__init__` to `app.py`
+- ✅ 2.5 Fixed `extensions.py` import-time ordering with `get_limiter_flask()` factory
+
+### Wave 3: Consolidation ✅ (Partial)
+- ✅ 3.1 Consolidated duplicate `_safe_int()` → `safe_int()` in `services/config_unified.py`
+- ✅ 3.2 Cleaned up `constants.py` - added lazy imports to `config_unified.py` to avoid circular imports
+- ⚠️ 3.3 Skipped - webhook CRUD pattern doesn't lend itself to easy helper extraction
+
+---
+
+## Remaining Items
 
 ---
 

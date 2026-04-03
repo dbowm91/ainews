@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask
+from flask import Flask, render_template, jsonify, request
 from sqlalchemy import event
 from config import config
 from extensions import db, limiter, csrf, migrate
@@ -63,6 +63,17 @@ def create_app(config_name=None):
         static_folder="static",
     )
     app.config.from_object(config[config_name])
+
+    # Development config warnings
+    if config_name == "development":
+        dev_cfg = config["development"]
+        if not dev_cfg.ADMIN_PASSWORD:
+            logger.warning("ADMIN_PASSWORD not set - admin login disabled")
+        if dev_cfg.SECRET_KEY == "dev-secret-key-change-me":
+            logger.warning(
+                "SECRET_KEY is using default value 'dev-secret-key-change-me' — "
+                "sessions are insecure. Set SECRET_KEY env var for production."
+            )
 
     # Setup structured logging
     setup_logging(
@@ -146,8 +157,6 @@ def create_app(config_name=None):
 
     def _wants_json() -> bool:
         """Detect if the client expects a JSON response."""
-        from flask import request
-
         return (
             request.path.startswith("/api/")
             or request.path.startswith("/admin/api/")
@@ -158,8 +167,6 @@ def create_app(config_name=None):
     # Global error handlers
     @app.errorhandler(404)
     def not_found(e):
-        from flask import request, render_template, jsonify
-
         logger.warning("404 Not Found: %s %s", request.method, request.path)
         if _wants_json():
             return jsonify({"error": "Not found"}), 404
@@ -167,8 +174,6 @@ def create_app(config_name=None):
 
     @app.errorhandler(500)
     def internal_error(e):
-        from flask import request, render_template, jsonify
-
         logger.error(
             "500 Internal Server Error: %s %s",
             request.method,
@@ -181,8 +186,6 @@ def create_app(config_name=None):
 
     @app.errorhandler(429)
     def rate_limited(e):
-        from flask import request, render_template, jsonify
-
         logger.warning(
             "429 Rate Limited: %s %s from %s",
             request.method,
@@ -199,8 +202,6 @@ def create_app(config_name=None):
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
-        from flask import request, jsonify
-
         logger.warning("413 Request too large: %s %s", request.method, request.path)
         if _wants_json():
             return jsonify({"error": "Request too large"}), 413

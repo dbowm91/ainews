@@ -642,19 +642,19 @@ def run_stage(
             _dispatch_next(article_id, run_id=run_id, next_status=skip_next)
         return {"article_id": article_id, "decision": f"skip_{stage}"}
 
-    limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
-
+    limiter = None
+    redis_client = None
     lock_key = f"ainews:stage_lock:{article_id}:{stage}"
     task_id = task_self.request.id or "manual"
-    redis_client = get_redis()
-    lock_acquired = _acquire_stage_lock(
-        redis_client, lock_key, task_id, rc.timeout_seconds + 120
-    )
-
     model = None
     provider_id = None
     t0 = time.monotonic()
     try:
+        limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
+        redis_client = get_redis()
+        lock_acquired = _acquire_stage_lock(
+            redis_client, lock_key, task_id, rc.timeout_seconds + 120
+        )
         if not lock_acquired:
             logger.info(
                 "Stage %s already running for article %s, skipping", stage, article_id
@@ -721,15 +721,17 @@ def run_stage(
         logger.error("%s failed for article %s: %s", stage.title(), article_id, e)
         raise
     finally:
-        limiter.release(
-            rc.provider, model if model is not None else None, rc.timeout_seconds
-        )
-        try:
-            from services.redis_utils import release_lock
+        if limiter is not None:
+            limiter.release(
+                rc.provider, model if model is not None else None, rc.timeout_seconds
+            )
+        if redis_client is not None:
+            try:
+                from services.redis_utils import release_lock
 
-            release_lock(redis_client, lock_key, task_id)
-        except Exception as e:
-            logger.warning("Failed to release stage lock %s: %s", lock_key, e)
+                release_lock(redis_client, lock_key, task_id)
+            except Exception as e:
+                logger.warning("Failed to release stage lock %s: %s", lock_key, e)
 
 
 @shared_task(bind=True, soft_time_limit=120, time_limit=180)

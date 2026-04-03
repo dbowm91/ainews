@@ -266,15 +266,25 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`extensions.py` import-time side effects**: `Limiter` is created at module import time, reading env vars that depend on `config` being imported first. Defer to a factory function `get_limiter_flask()` with double-checked locking.
 
-**`app.py` error handler imports**: Error handlers (404, 500, 429, 413) import `render_template`, `jsonify`, `request` from Flask on every call. Move `render_template` and `jsonify` to module-level imports.
+**`app.py` error handler imports**: ✅ Fixed — `render_template`, `jsonify`, `request` moved to module-level imports.
 
-**`routes/admin/__init__.py` threading import**: Uses `__import__("threading").Lock()` — replace with standard `import threading` at module top and `threading.Lock()`.
+**`routes/admin/__init__.py` threading import**: ✅ Fixed — uses standard `import threading` at module top and `threading.Lock()`.
 
-**`services/cache_base.py` is empty**: Single-line docstring only, no imports reference it. Safe to delete.
+**`services/cache_base.py` is empty**: ✅ Deleted — single-line docstring file removed.
 
-**`constants.py` dual source of truth**: `PipelineStatus` class and `VALID_PIPELINE_STATUSES` frozenset must be manually kept in sync. Derive the frozenset from the class constants.
+**`constants.py` dual source of truth**: ✅ Fixed — `VALID_PIPELINE_STATUSES` derived from `PipelineStatus` class constants.
 
-**`DevelopmentConfig.__init__` side effects**: Config classes should be data containers. Move validation warnings to `app.py:create_app()`.
+**`DevelopmentConfig.__init__` side effects**: ✅ Fixed — validation warnings moved to `app.py:create_app()`, `DevelopmentConfig.__init__` removed.
+
+**`services/limiter.py` `self.redis` shadowing**: ✅ Fixed — `self.redis` renamed to `self._redis` throughout `ModelLimiter` class.
+
+**`tasks/pipeline.py` `run_stage()` unbound variable**: ✅ Fixed — `limiter` and `redis_client` initialized before `try` block, `finally` block guarded against `None`.
+
+**`services/subagent.py` redundant conditionals**: ✅ Fixed — removed unnecessary `else: temperature = 0.0` branch (Pydantic guarantees default).
+
+**Duplicate `_safe_int()` in `config.py`**: ✅ Fixed — consolidated to `safe_int()` in `services/config_unified.py`, `config.py` imports from there.
+
+**`extensions.py` import-time Limiter creation**: ✅ Fixed — `get_limiter_flask()` factory with double-checked locking defers `Limiter()` construction.
 
 ### Model cascade rules
 

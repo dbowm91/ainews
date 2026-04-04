@@ -317,6 +317,7 @@ def run_stage(
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
+            raise
         record_stage_result(stage, success=True, run_id=run_id)
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",

@@ -104,12 +104,13 @@ Distributed locks in Celery tasks must be retry-aware. Use the task's `self.requ
 
 ### Celery beat schedule
 
-Five scheduled tasks are configured in `config.py`:
+Six scheduled tasks are configured in `config.py`:
 - `run-all-sources` — crawl all sources every 30 minutes
 - `retry-stuck-articles` — retry stuck articles every 60 minutes
 - `generate-newsletters` — daily at 8:00 AM (cron)
 - `cleanup-old-logs` — daily at 3:00 AM (cron)
 - `cleanup-expired-verifications` — every 15 minutes
+- `cleanup-stale-limiter-slots` — every 5 minutes
 
 ### Model column defaults
 

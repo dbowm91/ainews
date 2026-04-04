@@ -233,6 +233,32 @@ document.addEventListener("DOMContentLoaded", function () {
     details.open = false;
   });
 
+  /* Focus trap for share dropdown — cycle Tab/Shift+Tab within open dropdown */
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Tab") return;
+    var openDetails = document.querySelector(".share-details[open]");
+    if (!openDetails) return;
+    var dropdown = openDetails.querySelector(".share-dropdown");
+    if (!dropdown) return;
+    var focusable = dropdown.querySelectorAll(
+      "a[href], button, input, [tabindex]:not([tabindex='-1'])"
+    );
+    if (focusable.length === 0) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+
   /* Admin filter button groups: update hidden inputs and active state */
   document.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-filter-name]");

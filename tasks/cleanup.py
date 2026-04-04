@@ -68,3 +68,19 @@ def cleanup_expired_verifications(self):
         db.session.rollback()
         logger.error("Expired verification cleanup failed: %s", e)
         raise
+
+
+@shared_task(bind=True, soft_time_limit=60, time_limit=120)
+def cleanup_stale_limiter_slots(self):
+    """Clean up stale model limiter slots in Redis.
+
+    Runs every 5 minutes via Celery Beat to reclaim slots from tasks
+    that exited without releasing their limiter slot (e.g., crashes).
+    """
+    from services.limiter import get_limiter
+
+    limiter = get_limiter()
+    cleaned = limiter.cleanup_stale_slots()
+    if cleaned:
+        logger.info("Cleaned up %d stale limiter slots", cleaned)
+    return {"cleaned": cleaned}

@@ -18,7 +18,8 @@
        hx-target="#content"
        hx-swap="innerHTML"
        hx-push-url="true"
-       hx-indicator="#content-loading">
+       hx-indicator="#content-loading"
+       aria-label="Read article: {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}">
       {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
     </a>
   </h2>

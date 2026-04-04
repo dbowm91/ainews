@@ -73,13 +73,21 @@ def _apply_fallback(article):
     article.original_ai_article = fallback
 
 
-def _apply_degrade_config(article, config: dict, run_id):
+def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
     from extensions import db
+    from services.metrics import get_metrics
     from sqlalchemy.exc import SQLAlchemyError
 
     config["set_fields"](article)
     article.degradation_count = (article.degradation_count or 0) + 1
     article.pipeline_status = config["next_status"]
+
+    get_metrics().counter_inc(
+        "pipeline.degradation",
+        labels={"stage": stage, "reason": config.get("log_message", "degraded")},
+    )
+    if article.degradation_count >= 2:
+        get_metrics().counter_inc("pipeline.multi_stage_degradation")
     article.retry_count = 0
     article.last_error = None
 
@@ -129,6 +137,7 @@ def _apply_degrade_config(article, config: dict, run_id):
 
 def _degrade_edit_stage(article, run_id):
     from extensions import db
+    from services.metrics import get_metrics
     from sqlalchemy.exc import SQLAlchemyError
     from tasks.pipeline import _should_route_to_review
 
@@ -136,6 +145,13 @@ def _degrade_edit_stage(article, run_id):
     article.degradation_count = (article.degradation_count or 0) + 1
     article.retry_count = 0
     article.last_error = None
+
+    get_metrics().counter_inc(
+        "pipeline.degradation",
+        labels={"stage": "edit", "reason": "edit_stage_failed"},
+    )
+    if article.degradation_count >= 2:
+        get_metrics().counter_inc("pipeline.multi_stage_degradation")
 
     if article.degradation_count >= 2 or _should_route_to_review(article):
         article.pipeline_status = PipelineStatus.REVIEW
@@ -199,7 +215,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         )
         return
 
-    _apply_degrade_config(article, stage_config, run_id)
+    _apply_degrade_config(article, stage_config, run_id, stage=failed_stage)
 
 
 def _finalize(article_id: int):

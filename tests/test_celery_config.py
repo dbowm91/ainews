@@ -11,11 +11,11 @@ class TestCeleryBeatSchedule:
         assert hasattr(Config, "CELERY_BEAT_SCHEDULE")
         assert isinstance(Config.CELERY_BEAT_SCHEDULE, dict)
 
-    def test_all_six_tasks_present(self):
+    def test_all_seven_tasks_present(self):
         from config import Config
 
         schedule = Config.CELERY_BEAT_SCHEDULE
-        assert len(schedule) == 6
+        assert len(schedule) == 7
 
     def test_run_all_sources_task(self):
         from config import Config

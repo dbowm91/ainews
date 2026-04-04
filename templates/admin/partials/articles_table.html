@@ -1,6 +1,9 @@
 {% from "partials/pagination.html" import pagination_nav %}
 {% from "macros/badges.html" import pipeline_badge, impact_score %}
 {% if articles %}
+  <p class="result-count" id="result-count">
+    Showing {{ articles|length }} of {{ total_count }} articles
+  </p>
   <div class="bulk-actions-bar" id="bulk-actions-bar" style="display:none;">
     <span class="bulk-count" id="bulk-count">0 selected</span>
     <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"

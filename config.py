@@ -104,6 +104,10 @@ class Config:
             "task": "tasks.scheduler.publish_scheduled_articles",
             "schedule": timedelta(minutes=5),
         },
+        "cleanup-stale-limiter-slots": {
+            "task": "tasks.cleanup.cleanup_stale_limiter_slots",
+            "schedule": timedelta(minutes=5),
+        },
     }
 
 

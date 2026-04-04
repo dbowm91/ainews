@@ -94,6 +94,28 @@ class ModelLimiter:
         except redis.exceptions.RedisError:
             return None
 
+    def cleanup_stale_slots(self) -> int:
+        """Scan for stale limiter keys and release them if holder task is no longer active.
+
+        Returns the number of stale slots cleaned up.
+        """
+        cleaned = 0
+        try:
+            pattern = f"{self._prefix}:*"
+            for key in self._redis.scan_iter(match=pattern):
+                ttl = self._redis.ttl(key)
+                if 0 < ttl < 60:
+                    count = int(self._redis.get(key) or 0)
+                    if count > 0:
+                        self._redis.delete(key)
+                        cleaned += 1
+                        logger.info(
+                            "Cleaned up stale limiter slot: %s (count=%d)", key, count
+                        )
+        except redis.exceptions.RedisError as e:
+            logger.error("Limiter stale slot cleanup failed: %s", e)
+        return cleaned
+
     def is_healthy(self) -> bool:
         """Check if the underlying Redis connection is responsive."""
         try:

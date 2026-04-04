@@ -242,7 +242,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
         db.session.add(run)
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
         run_id = run.id
@@ -281,7 +281,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
         run.finished_at = datetime.now(timezone.utc)
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
 
@@ -351,7 +351,7 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
                 run.finished_at = datetime.now(timezone.utc)
                 try:
                     db.session.commit()
-                except Exception:
+                except SQLAlchemyError:
                     db.session.rollback()
         logger.error("Newsletter generation exceeded soft time limit")
         raise
@@ -367,7 +367,7 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
                 run.finished_at = datetime.now(timezone.utc)
                 try:
                     db.session.commit()
-                except Exception:
+                except SQLAlchemyError:
                     db.session.rollback()
         raise
     finally:
@@ -375,5 +375,5 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
             from services.redis_utils import release_lock
 
             release_lock(redis_client, lock_key, task_id)
-        except Exception:
+        except redis.exceptions.RedisError:
             logger.warning("Failed to release newsletter lock")

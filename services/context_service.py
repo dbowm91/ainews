@@ -2,6 +2,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from extensions import db
 from models import TopicNote
 
@@ -25,7 +27,7 @@ def create_topic_note(topic: str, note: str, source: Optional[str] = None) -> To
     db.session.add(topic_note)
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         raise
     return topic_note
@@ -39,7 +41,7 @@ def update_topic_note(
         topic_note.note = note
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
     return topic_note
@@ -51,7 +53,7 @@ def delete_topic_note(topic: str, source: Optional[str] = None) -> bool:
         db.session.delete(topic_note)
         try:
             db.session.commit()
-        except Exception:
+        except SQLAlchemyError:
             db.session.rollback()
             raise
         return True

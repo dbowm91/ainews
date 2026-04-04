@@ -124,7 +124,7 @@ def retry_stuck(self):
             from services.redis_utils import release_lock
 
             release_lock(redis_client, lock_key, task_id)
-        except Exception:
+        except redis.exceptions.RedisError:
             logger.warning("Failed to release retry_stuck lock")
 
 

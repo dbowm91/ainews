@@ -176,7 +176,7 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 
 ### Pipeline retry configuration
 
-`MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are now configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers in `tasks/pipeline.py`.
+`MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers. Note: these helpers exist in both `tasks/pipeline.py` and `services/pipeline_failure.py` — the `pipeline_failure.py` version uses `get_config_with_default()` (correct for Celery context), while the `pipeline.py` version uses `current_app.config.get()` with RuntimeError fallback. Consolidation is planned.
 
 ### Redis variable shadowing
 
@@ -258,40 +258,52 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. Pre-compilation at module load was implemented.
 
-**`tasks/pipeline.py:run_stage()` unbound variable bug**: `limiter`, `redis_client`, `lock_key`, `task_id`, `model`, and `provider_id` are assigned after `_check_stage_limiter()` call. If that function raises `self.retry()`, the `finally` block crashes with `NameError`. Variables must be initialized before the `try` block and guarded in `finally`.
-
-**`services/subagent.py` redundant conditionals**: `_get_subagent_provider_and_config()` has unnecessary `if stage_config.temperature:` / `else: temperature = 0.0` checks — Pydantic already guarantees `default=0.0`. Simplify both branches consistently.
-
-**Duplicate `_safe_int()` implementations**: Two nearly identical `_safe_int()` functions exist in `config.py` and `services/config_unified.py`. Consolidate into a single `safe_int()` in `config_unified.py`.
-
-**`extensions.py` import-time side effects**: `Limiter` is created at module import time, reading env vars that depend on `config` being imported first. Defer to a factory function `get_limiter_flask()` with double-checked locking.
-
-**`app.py` error handler imports**: ✅ Fixed — `render_template`, `jsonify`, `request` moved to module-level imports.
-
-**`routes/admin/__init__.py` threading import**: ✅ Fixed — uses standard `import threading` at module top and `threading.Lock()`.
-
-**`services/cache_base.py` is empty**: ✅ Deleted — single-line docstring file removed.
-
-**`constants.py` dual source of truth**: ✅ Fixed — `VALID_PIPELINE_STATUSES` derived from `PipelineStatus` class constants.
-
-**`DevelopmentConfig.__init__` side effects**: ✅ Fixed — validation warnings moved to `app.py:create_app()`, `DevelopmentConfig.__init__` removed.
-
-**`services/limiter.py` `self.redis` shadowing**: ✅ Fixed — `self.redis` renamed to `self._redis` throughout `ModelLimiter` class.
-
-**`tasks/pipeline.py` `run_stage()` unbound variable**: ✅ Fixed — `limiter` and `redis_client` initialized before `try` block, `finally` block guarded against `None`.
-
-**`services/subagent.py` redundant conditionals**: ✅ Fixed — removed unnecessary `else: temperature = 0.0` branch (Pydantic guarantees default).
-
-**Duplicate `_safe_int()` in `config.py`**: ✅ Fixed — consolidated to `safe_int()` in `services/config_unified.py`, `config.py` imports from there.
-
-**`extensions.py` import-time Limiter creation**: ✅ Fixed — `get_limiter_flask()` factory with double-checked locking defers `Limiter()` construction.
-
 **Wave 4 refactoring completed**:
 - `tasks/pipeline.py` extracted to `services/pipeline_failure.py` (failure handling), `services/pipeline_degradation.py` (degradation logic), and `tasks/scheduler.py` (scheduled publishing)
 - `routes/admin/api.py` split into `routes/admin/api/` package (health, config, pipeline, articles, webhooks, audit modules)
 - `tests/test_pipeline.py` split into `tests/test_pipeline/` package (test_dispatch, test_stages, test_retry, test_run_stage, test_integration)
 - `tests/test_llm_adapters.py` split into `tests/test_llm_adapters/` package (test_openai, test_anthropic, test_ollama, test_google, test_shared)
 - `services/config_utils.py` added with `get_config_with_default()` helper for Flask config access with fallbacks
+
+### Celery tasks must not use `current_app.config`
+
+Celery tasks run outside the Flask app context. Using `current_app.config.get()` raises `RuntimeError: Working outside of application context`. Use `get_config_with_default()` from `services/config_utils.py` instead. This pattern is already used by other tasks — follow it consistently.
+
+### `db.session.commit()` failures must re-raise
+
+When catching `db.session.commit()` failures, rolling back, and continuing to return a success result, the caller receives inconsistent state. Always re-raise after rollback so Celery can retry. The `finally` block will still clean up locks and limiter slots.
+
+### `datetime.fromisoformat()` produces naive datetimes
+
+When parsing ISO format dates without timezone info, `datetime.fromisoformat()` returns naive datetimes. These will raise `TypeError` when compared against timezone-aware columns (like `Article.created_at`). Normalize: if the result is naive, call `.replace(tzinfo=timezone.utc)`.
+
+### `session.clear()` wipes CSRF tokens
+
+Using `session.clear()` on login or other operations wipes the CSRF token and any other session data. Use `session.pop("key", None)` to remove specific keys while preserving the rest of the session.
+
+### `socket.getaddrinfo` raises multiple exception types
+
+DNS resolution via `socket.getaddrinfo` can raise `socket.gaierror`, `socket.herror`, `socket.timeout`, and `TimeoutError`. Catch all four to handle DNS failures gracefully.
+
+### Template `.format()` calls need error handling
+
+When using `template.format(**data)` with user-supplied or LLM-generated data, wrap in try/except `KeyError` to handle missing keys gracefully. Return a fallback value rather than crashing.
+
+### Dict key access on API responses should use `.get()`
+
+When accessing nested dict keys from API responses (e.g., `resp["message"]["content"]`), use `.get()` with defaults or add existence checks. API response formats can change unexpectedly.
+
+### `raise last_exc` pattern needs None guard
+
+When accumulating exceptions in a loop and re-raising the last one, initialize `last_exc` to `None` and guard the final `raise` — if the loop body never executes, `last_exc` remains `None` and `raise last_exc` raises `TypeError`.
+
+### CSS `.search-kbd` belongs in `articles.css`
+
+The `.search-kbd` class is used in the public feed (`feed.html`), not admin pages. It belongs in `static/css/articles.css` alongside `.search-container` and `.search-input`, not in `pages.css`.
+
+### `critical.css` tokens must match `variables.css`
+
+`critical.css` is inlined in templates for first-paint performance. Its CSS custom properties (especially color tokens like `--text-dim`) must exactly match `variables.css`. Any drift causes a color flash on first paint.
 
 ### Model cascade rules
 

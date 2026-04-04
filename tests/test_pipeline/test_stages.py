@@ -14,6 +14,7 @@ class TestDegradeAndAdvance:
         article.id = 1
         article.original_title = "Test Article"
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "select")
@@ -33,6 +34,7 @@ class TestDegradeAndAdvance:
         article.original_title = "Test Article"
         article.extracted_text = "Some text content"
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "research")
@@ -53,6 +55,7 @@ class TestDegradeAndAdvance:
         article.original_author = "Author"
         article.extracted_text = "Content"
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "write")
@@ -70,6 +73,7 @@ class TestDegradeAndAdvance:
         article.id = 1
         article.draft_article = '{"headline": "Test"}'
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "edit")
@@ -89,6 +93,7 @@ class TestDegradeAndAdvance:
         article.original_title = "Test"
         article.extracted_text = "Content"
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "researching")
@@ -109,6 +114,7 @@ class TestDegradeAndAdvance:
         article.original_author = "Author"
         article.extracted_text = "Content"
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "writing")
@@ -125,6 +131,7 @@ class TestDegradeAndAdvance:
         article.id = 1
         article.draft_article = '{"headline": "Test"}'
         article.retry_count = 3
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "editing")
@@ -140,6 +147,7 @@ class TestDegradeAndAdvance:
         article.draft_article = '{"headline": "Test"}'
         article.retry_count = 5
         article.last_error = "write: some error"
+        article.degradation_count = 0
 
         with app.app_context():
             _degrade_and_advance(article, "edit")
@@ -154,20 +162,18 @@ class TestFinalize:
     def test_finalize_handles_commit_failure(self):
         from tasks.pipeline import _finalize
 
-        with patch("models.Article") as MockArticle:
+        with patch("extensions.db") as mock_db:
             article = MagicMock()
-            MockArticle.query.get.return_value = article
+            mock_db.session.get.return_value = article
 
-            with patch("extensions.db") as mock_db:
-                mock_db.session.commit.side_effect = Exception("DB error")
+            mock_db.session.commit.side_effect = Exception("DB error")
 
-                _finalize(1)
+            _finalize(1)
 
     def test_finalize_handles_missing_article(self):
         from tasks.pipeline import _finalize
 
-        with patch("models.Article") as MockArticle:
-            MockArticle.query.get.return_value = None
+        with patch("extensions.db") as mock_db:
+            mock_db.session.get.return_value = None
 
-            with patch("extensions.db"):
-                _finalize(999)
+            _finalize(999)

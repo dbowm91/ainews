@@ -256,5 +256,6 @@ from routes.admin import (  # noqa: E402, F401
     metrics as metrics,
     shares as shares,
     sources as sources,
+    topic_notes as topic_notes,
     api as api,
 )

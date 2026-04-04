@@ -97,17 +97,76 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  /* HTMX error handling - show toast on failed requests */
+  /* HTMX error handling - show toast with retry on failed requests */
   document.addEventListener("htmx:responseError", function (e) {
     var container = document.getElementById("toast-container");
     if (!container) return;
+
+    var detail = e.detail;
+    var status = detail ? detail.status : 0;
+    var statusText = detail ? detail.statusText : "";
+    var errorMsg = "Request failed. Please try again.";
+
+    if (detail && detail.xhr && detail.xhr.responseText) {
+      try {
+        var resp = JSON.parse(detail.xhr.responseText);
+        if (resp && resp.error) {
+          errorMsg = resp.error;
+        }
+      } catch (err) {
+        if (statusText) errorMsg = statusText;
+      }
+    }
+
     var toast = document.createElement("div");
-    toast.className = "toast";
-    toast.textContent = "Request failed. Please try again.";
+    toast.className = "toast toast-error";
+
+    var msgSpan = document.createElement("span");
+    msgSpan.textContent = (status ? "[" + status + "] " : "") + errorMsg;
+    toast.appendChild(msgSpan);
+
+    if (detail && detail.requestConfig && detail.requestConfig.requestBody) {
+      var retryBtn = document.createElement("button");
+      retryBtn.className = "toast-retry-btn";
+      retryBtn.textContent = "retry";
+      retryBtn.setAttribute("data-hx", "true");
+      retryBtn.addEventListener("click", function () {
+        var target = detail.target;
+        var verb = detail.requestConfig.verb || "get";
+        var path = detail.path;
+        if (detail.requestConfig.requestBody && verb === "get") {
+          path = path + (path.includes("?") ? "&" : "?") + detail.requestConfig.requestBody;
+        }
+        var hxAttrs = {
+          "hx-get": path,
+          "hx-target": target,
+          "hx-swap": "innerHTML",
+          "hx-indicator": ".htmx-indicator",
+        };
+        for (var attr in hxAttrs) {
+          toast.setAttribute(attr, hxAttrs[attr]);
+        }
+        htmx.process(toast);
+        htmx.trigger(toast, "click");
+        toast.remove();
+      });
+      toast.appendChild(retryBtn);
+    }
+
     container.appendChild(toast);
-    setTimeout(function () {
-      toast.remove();
-    }, 5000);
+
+    var dismissTimer = setTimeout(function () {
+      if (toast.parentNode) toast.remove();
+    }, 8000);
+
+    toast._dismissTimer = dismissTimer;
+
+    toast.addEventListener("click", function (e) {
+      if (e.target !== retryBtn) {
+        clearTimeout(dismissTimer);
+        toast.remove();
+      }
+    });
   });
 
   /* Focus management after HTMX content swaps */

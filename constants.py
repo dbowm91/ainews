@@ -4,6 +4,9 @@
 MAX_STAGE_RETRIES = 3
 MAX_TOTAL_RETRIES = 10
 
+# Pipeline hard timeout (article can be in pipeline for at most this many seconds)
+PIPELINE_TIMEOUT_SECONDS = 3600
+
 # Pagination constants
 PER_PAGE_PUBLIC = 20
 PER_PAGE_ADMIN_ARTICLES = 25
@@ -27,6 +30,25 @@ class PipelineStatus:
     DONE = "done"
     SKIPPED = "skipped"
     FAILED = "failed"
+
+
+STAGE_STATUS_MAP = {
+    "pending": "select",
+    "selecting": "select",
+    "selected": "research",
+    "researching": "research",
+    "writing": "write",
+    "written": "edit",
+    "editing": "edit",
+    "selector": "select",
+    "researcher": "research",
+    "writer": "write",
+    "editor": "edit",
+    "select": "select",
+    "research": "research",
+    "write": "write",
+    "edit": "edit",
+}
 
 
 VALID_PIPELINE_STATUSES = frozenset(

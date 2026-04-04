@@ -3,28 +3,10 @@
 import json
 
 from celery.utils.log import get_task_logger
-from constants import PipelineStatus
+from constants import PipelineStatus, STAGE_STATUS_MAP
 from services.article_fallback import build_fallback_article_json
 
 logger = get_task_logger(__name__)
-
-_STAGE_STATUS_MAP = {
-    "pending": "select",
-    "selecting": "select",
-    "selected": "research",
-    "researching": "research",
-    "writing": "write",
-    "written": "edit",
-    "editing": "edit",
-    "selector": "select",
-    "researcher": "research",
-    "writer": "write",
-    "editor": "edit",
-    "select": "select",
-    "research": "research",
-    "write": "write",
-    "edit": "edit",
-}
 
 
 def _degrade_research(article):
@@ -96,9 +78,35 @@ def _apply_degrade_config(article, config: dict, run_id):
     from sqlalchemy.exc import SQLAlchemyError
 
     config["set_fields"](article)
+    article.degradation_count = (article.degradation_count or 0) + 1
     article.pipeline_status = config["next_status"]
     article.retry_count = 0
     article.last_error = None
+
+    if article.degradation_count >= 2:
+        article.pipeline_status = PipelineStatus.REVIEW
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+        if run_id:
+            from tasks.pipeline import _log_pipeline
+
+            _log_pipeline(
+                run_id,
+                "degradation",
+                "warning",
+                "Multi-stage degradation, routed to review: %s",
+                article_id=article.id,
+            )
+        logger.warning(
+            "Article %s has degradation_count=%s, routing to review",
+            article.id,
+            article.degradation_count,
+        )
+        return
+
     try:
         db.session.commit()
     except SQLAlchemyError:
@@ -109,7 +117,7 @@ def _apply_degrade_config(article, config: dict, run_id):
 
         _log_pipeline(
             run_id,
-            _STAGE_STATUS_MAP.get(config["next_status"], config["next_status"]),
+            STAGE_STATUS_MAP.get(config["next_status"], config["next_status"]),
             "warning",
             config["log_message"],
             article_id=article.id,
@@ -125,10 +133,11 @@ def _degrade_edit_stage(article, run_id):
     from tasks.pipeline import _should_route_to_review
 
     _apply_fallback(article)
+    article.degradation_count = (article.degradation_count or 0) + 1
     article.retry_count = 0
     article.last_error = None
 
-    if _should_route_to_review(article):
+    if article.degradation_count >= 2 or _should_route_to_review(article):
         article.pipeline_status = PipelineStatus.REVIEW
         try:
             db.session.commit()
@@ -142,7 +151,8 @@ def _degrade_edit_stage(article, run_id):
                 run_id,
                 "edit",
                 "warning",
-                "Degraded to review: %s",
+                "Degraded to review (degradation_count=%s): %s",
+                article.degradation_count,
                 article_id=article.id,
             )
         return
@@ -167,7 +177,7 @@ def _degrade_edit_stage(article, run_id):
 
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
-    failed_stage = _STAGE_STATUS_MAP.get(failed_stage, failed_stage)
+    failed_stage = STAGE_STATUS_MAP.get(failed_stage, failed_stage)
 
     logger.warning(
         "Degrading article %s from stage '%s' (retry_count=%s)",

@@ -95,12 +95,30 @@ class SubagentStageConfig(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     timeout_seconds: int = Field(default=120, ge=10, le=600)
     system_prompt: Optional[str] = None
+    max_retries: int = Field(default=1, ge=0, le=5)
+    retry_delay: float = Field(default=5.0, ge=0.0, le=60.0)
+    task_template: Optional[str] = None
+    tools: list[str] = Field(default_factory=list)
+
+
+class SubagentChainStep(BaseModel):
+    task_type: str
+    prompt_data_template: str
+    response_model: Optional[str] = None
+    condition: Optional[str] = None
+
+
+class SubagentChainConfig(BaseModel):
+    enabled: bool = False
+    max_length: int = Field(default=5, ge=1, le=10)
+    steps: list[SubagentChainStep] = Field(default_factory=list)
 
 
 class SubagentConfig(BaseModel):
     default: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
     research: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
     edit: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
+    chains: dict[str, SubagentChainConfig] = Field(default_factory=dict)
 
 
 class PipelineRootConfig(BaseModel):
@@ -143,14 +161,19 @@ def get_role_config(role: str) -> RoleConfig:
     return getattr(config.pipeline, role)
 
 
-def resolve_subagent_config(stage: str) -> SubagentStageConfig:
+def resolve_subagent_config(
+    stage: str, default_role: Optional[str] = None
+) -> SubagentStageConfig:
     config = load_pipeline_config()
     stage_config = getattr(config.subagent, stage, None)
+    if default_role is None:
+        default_role = "editor"
     if stage_config and stage_config.enabled:
+        role_config = get_role_config(default_role)
         kwargs = {
             "enabled": True,
-            "provider": stage_config.provider or config.pipeline.editor.provider,
-            "model": stage_config.model or config.pipeline.editor.model,
+            "provider": stage_config.provider or role_config.provider,
+            "model": stage_config.model or role_config.model,
         }
         if stage_config.max_tokens is not None:
             kwargs["max_tokens"] = stage_config.max_tokens
@@ -160,5 +183,11 @@ def resolve_subagent_config(stage: str) -> SubagentStageConfig:
             kwargs["timeout_seconds"] = stage_config.timeout_seconds
         if stage_config.system_prompt is not None:
             kwargs["system_prompt"] = stage_config.system_prompt
+        if stage_config.max_retries is not None:
+            kwargs["max_retries"] = stage_config.max_retries
+        if stage_config.retry_delay is not None:
+            kwargs["retry_delay"] = stage_config.retry_delay
+        if stage_config.task_template is not None:
+            kwargs["task_template"] = stage_config.task_template
         return SubagentStageConfig(**kwargs)
     return SubagentStageConfig(enabled=False)

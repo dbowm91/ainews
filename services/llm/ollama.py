@@ -1,9 +1,16 @@
+import json
 import logging
 import threading
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from schemas.common import resolve_env_vars
-from services.llm.base import BaseLLMProvider, LLMResponse, register_provider
+from services.llm.base import (
+    BaseLLMProvider,
+    LLMResponse,
+    ToolCallingResponse,
+    ToolDefinition,
+    register_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +51,13 @@ class OllamaProvider(BaseLLMProvider):
         return self._client
 
     def _extract_text(self, resp) -> str:
-        content = resp["message"]["content"]
+        message = resp.get("message", {})
+        content = message.get("content")
         if not content:
-            thinking = resp.get("message", {}).get("thinking")
+            thinking = message.get("thinking")
             if thinking:
                 return thinking
-        return content
+        return content or ""
 
     def chat(
         self,
@@ -98,6 +106,107 @@ class OllamaProvider(BaseLLMProvider):
         except Exception as e:
             raise _handle_ollama_error(e) from e
         return self._extract_text(resp)
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        max_iterations: int = 5,
+    ) -> ToolCallingResponse:
+        model = model or self.default_model
+        all_messages = list(messages)
+        if system:
+            all_messages.insert(0, {"role": "system", "content": system})
+
+        tool_call_map: dict[str, tuple[str, Callable]] = {}
+        for tool in tools:
+            if hasattr(tool, "fn") and callable(tool.fn):
+                tool_call_map[tool.name] = (tool.name, tool.fn)
+
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+            call_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": all_messages,
+                "options": {"temperature": temperature, "num_predict": max_tokens},
+            }
+            if tools:
+                call_kwargs["tools"] = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        },
+                    }
+                    for t in tools
+                ]
+
+            try:
+                resp = self.client.chat(**call_kwargs)
+            except Exception as e:
+                raise _handle_ollama_error(e) from e
+
+            msg = resp.get("message", {})
+            content = msg.get("content", "")
+
+            if content:
+                all_messages.append({"role": "assistant", "content": content})
+
+            tool_calls = msg.get("tool_calls") or []
+            if not tool_calls:
+                return ToolCallingResponse(
+                    text=content or "",
+                    model=model,
+                    tool_calls=[],
+                    tokens_used=resp.get("prompt_eval_count", 0)
+                    + resp.get("eval_count", 0),
+                )
+
+            for tc in tool_calls:
+                fn_name = tc.get("function", {}).get("name", "")
+                fn_args = tc.get("function", {}).get("arguments", {})
+                if isinstance(fn_args, str):
+                    fn_args = json.loads(fn_args)
+
+                all_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": content,
+                        "tool_calls": [tc],
+                    }
+                )
+
+                result_content = ""
+                if fn_name in tool_call_map:
+                    try:
+                        _, fn = tool_call_map[fn_name]
+                        result_content = str(fn(**fn_args))
+                    except Exception as e:
+                        result_content = f"Error: {e}"
+                else:
+                    result_content = f"Unknown tool: {fn_name}"
+
+                all_messages.append(
+                    {
+                        "role": "tool",
+                        "content": result_content,
+                    }
+                )
+
+        return ToolCallingResponse(
+            text="",
+            model=model,
+            tool_calls=[],
+            tokens_used=0,
+        )
 
     def health_check(self) -> dict[str, Any]:
         try:

@@ -76,7 +76,7 @@ class ConfigCache:
     _memory: dict[str, tuple[float, Any]]
 
     def __init__(self, redis_client, prefix: str = "ainews:config"):
-        self.redis = redis_client
+        self._redis = redis_client
         self.prefix = prefix
         self._memory = {}
         self._lock = threading.RLock()
@@ -119,7 +119,7 @@ class ConfigCache:
 
         # Redis operations outside lock
         try:
-            cached = self.redis.get(full_key)
+            cached = self._redis.get(full_key)
             if cached is not None:
                 if isinstance(cached, bytes):
                     cached = cached.decode("utf-8")
@@ -134,7 +134,7 @@ class ConfigCache:
         value = loader_fn()
 
         try:
-            self.redis.setex(full_key, ttl, _serialize(value))
+            self._redis.setex(full_key, ttl, _serialize(value))
         except redis.exceptions.RedisError as e:
             logger.warning("Config cache write failed for %s: %s", key, e)
 
@@ -148,7 +148,7 @@ class ConfigCache:
         with self._lock:
             self._memory.pop(full_key, None)
         try:
-            self.redis.delete(full_key)
+            self._redis.delete(full_key)
         except redis.exceptions.RedisError as e:
             logger.warning("Config cache invalidate failed for %s: %s", key, e)
 
@@ -159,9 +159,9 @@ class ConfigCache:
         try:
             cursor = 0
             while True:
-                cursor, keys = self.redis.scan(cursor=cursor, match=pattern, count=100)
+                cursor, keys = self._redis.scan(cursor=cursor, match=pattern, count=100)
                 if keys:
-                    pipe = self.redis.pipeline()
+                    pipe = self._redis.pipeline()
                     for key in keys:
                         pipe.delete(key)
                     pipe.execute()
@@ -179,7 +179,7 @@ class ConfigCache:
             return
         mtime_key = f"{self.prefix}:{key}:mtime"
         try:
-            cached_mtime_raw = self.redis.get(mtime_key)
+            cached_mtime_raw = self._redis.get(mtime_key)
             if cached_mtime_raw is not None:
                 cached_mtime = float(
                     cached_mtime_raw.decode()
@@ -201,7 +201,7 @@ class ConfigCache:
             return
         mtime_key = f"{self.prefix}:{key}:mtime"
         try:
-            self.redis.setex(mtime_key, 86400, str(p.stat().st_mtime))
+            self._redis.setex(mtime_key, 86400, str(p.stat().st_mtime))
         except (redis.exceptions.RedisError, OSError) as e:
             logger.warning("Failed to record mtime for %s: %s", key, e)
 

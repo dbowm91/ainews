@@ -9,6 +9,7 @@ from typing import Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from constants import PipelineStatus
 from services.article_fallback import build_fallback_article_json
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ def get_dead_lettered_articles(limit: int = 50) -> list:
     from models import Article
 
     return (
-        Article.query.filter_by(pipeline_status="failed")
+        Article.query.filter_by(pipeline_status=PipelineStatus.FAILED)
         .order_by(Article.updated_at.desc())
         .limit(limit)
         .all()

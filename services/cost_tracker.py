@@ -104,8 +104,18 @@ def get_cost_summary() -> CostSummary:
             mc.call_count += value
 
     # Estimate costs
-    input_ratio = float(os.environ.get("COST_INPUT_RATIO", "0.6"))
-    output_ratio = float(os.environ.get("COST_OUTPUT_RATIO", "0.4"))
+    input_ratio_str = os.environ.get("COST_INPUT_RATIO", "0.6")
+    output_ratio_str = os.environ.get("COST_OUTPUT_RATIO", "0.4")
+    try:
+        input_ratio = float(input_ratio_str)
+    except ValueError:
+        logger.warning("Invalid COST_INPUT_RATIO: %r, using 0.6", input_ratio_str)
+        input_ratio = 0.6
+    try:
+        output_ratio = float(output_ratio_str)
+    except ValueError:
+        logger.warning("Invalid COST_OUTPUT_RATIO: %r, using 0.4", output_ratio_str)
+        output_ratio = 0.4
     for model_key, mc in model_costs.items():
         rate = rates.get(model_key)
         if rate and mc.total_tokens > 0:

@@ -38,11 +38,15 @@ def publish_scheduled_articles(self):
 
     try:
         now = datetime.now(timezone.utc)
-        due = Article.query.filter(
-            Article.scheduled_publish_at.isnot(None),
-            Article.scheduled_publish_at <= now,
-            Article.pipeline_status == PipelineStatus.REVIEW,
-        ).all()
+        due = (
+            Article.query.filter(
+                Article.scheduled_publish_at.isnot(None),
+                Article.scheduled_publish_at <= now,
+                Article.pipeline_status == PipelineStatus.REVIEW,
+            )
+            .yield_per(100)
+            .all()
+        )
 
         published = 0
         for article in due:
@@ -69,5 +73,5 @@ def publish_scheduled_articles(self):
             from services.redis_utils import release_lock
 
             release_lock(redis_client, lock_key, task_id)
-        except Exception:
+        except redis.exceptions.RedisError:
             logger.warning("Failed to release publish_scheduled lock")

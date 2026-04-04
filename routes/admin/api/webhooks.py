@@ -61,6 +61,12 @@ def create_webhook() -> tuple[Response, int] | Response:
         return jsonify({"error": "name is required"}), 400
     if not url:
         return jsonify({"error": "url is required"}), 400
+    try:
+        from services.url import validate_url_safe
+
+        validate_url_safe(url)
+    except Exception as e:
+        return jsonify({"error": f"Invalid URL: {e}"}), 400
     if not events or not isinstance(events, list):
         return jsonify({"error": "events must be a non-empty list"}), 400
 
@@ -149,7 +155,14 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if "name" in data:
         webhook.name = data["name"].strip()
     if "url" in data:
-        webhook.url = data["url"].strip()
+        new_url = data["url"].strip()
+        try:
+            from services.url import validate_url_safe
+
+            validate_url_safe(new_url)
+        except Exception as e:
+            return jsonify({"error": f"Invalid URL: {e}"}), 400
+        webhook.url = new_url
     if "events" in data:
         if not isinstance(data["events"], list):
             return jsonify({"error": "events must be a list"}), 400

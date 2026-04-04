@@ -1,0 +1,12 @@
+<source_article>
+  <title>{title}</title>
+  <body>{body}</body>
+</source_article>
+
+<web_results>
+{web_results}
+</web_results>
+
+Synthesize the external sources into a coherent summary that supplements the source article.
+Focus on facts, context, and perspectives not already covered in the source article.
+Return your synthesis as a concise paragraph.

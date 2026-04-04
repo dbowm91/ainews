@@ -1,12 +1,12 @@
 """Re-export all Celery tasks for backward compatibility."""
 
+from constants import MAX_STAGE_RETRIES
 from tasks.pipeline import (
     _log_pipeline,
     _degrade_and_advance,
     _handle_stage_failure,
     _finalize,
     _assign_tags,
-    MAX_STAGE_RETRIES,
 )
 from tasks.scheduler import publish_scheduled_articles
 from tasks.crawl import run_all_sources

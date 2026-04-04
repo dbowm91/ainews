@@ -44,11 +44,11 @@ def cleanup_expired_verifications(self):
     Runs every 15 minutes via Celery Beat. A subscriber is removed if
     they never confirmed their email and the verification window has passed.
     """
-    from flask import current_app
     from models import Subscriber
     from extensions import db
+    from services.config_utils import get_config_with_default
 
-    expiry_seconds = current_app.config.get("VERIFICATION_EXPIRY_SECONDS", 3600)
+    expiry_seconds = get_config_with_default("VERIFICATION_EXPIRY_SECONDS", 3600, int)
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=expiry_seconds)
     try:
         deleted = (

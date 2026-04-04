@@ -172,3 +172,22 @@ class EditContextualizationResponse(BaseModel):
     synthesis: str = Field(
         description="Contextualization notes for the editor about gaps, attribution, and claims needing support"
     )
+
+
+class ToolCall(BaseModel):
+    id: str
+    name: str
+    arguments: dict
+
+
+class ToolResult(BaseModel):
+    id: str
+    name: str
+    content: str
+
+
+class ToolCallingResponse(BaseModel):
+    text: str
+    model: str
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    tokens_used: int = 0

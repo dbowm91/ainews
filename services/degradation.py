@@ -78,6 +78,8 @@ def fallback_chain(
             except exceptions as e:
                 last_exc = e
                 logger.debug("Fallback chain: %s failed with %s", fn.__name__, e)
+        if last_exc is None:
+            raise ValueError("fallback_chain called with empty functions tuple")
         raise last_exc
 
     return execute

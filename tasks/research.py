@@ -89,6 +89,7 @@ def research_article(self, article_id: int, run_id=None):
                         "web_results": _format_web_results(web_results),
                     },
                     response_model=ResearchSynthesisResponse,
+                    article_id=article.id,
                 )
                 web_synthesis = web_synthesis_result.synthesis
                 if web_synthesis_result.used_fallback:

@@ -31,7 +31,6 @@ def log_pipeline_event(
         level: Log level (debug, info, warning, error)
         **extra: Additional context fields
     """
-    msg = f"Pipeline [{stage}]: {event}"
     ctx = {"stage": stage, "event": event}
     if article_id is not None:
         ctx["article_id"] = article_id
@@ -40,7 +39,7 @@ def log_pipeline_event(
     ctx.update(extra)
 
     log_fn = getattr(logger, level, logger.info)
-    log_fn(msg, extra=ctx)
+    log_fn("Pipeline [%s]: %s", stage, event, extra=ctx)
 
 
 def log_article_event(
@@ -57,12 +56,11 @@ def log_article_event(
         level: Log level
         **extra: Additional context fields
     """
-    msg = f"Article {article_id}: {event}"
     ctx = {"article_id": article_id, "event": event}
     ctx.update(extra)
 
     log_fn = getattr(logger, level, logger.info)
-    log_fn(msg, extra=ctx)
+    log_fn("Article %s: %s", article_id, event, extra=ctx)
 
 
 def log_admin_event(
@@ -81,13 +79,12 @@ def log_admin_event(
         target: Optional target of the action
         **extra: Additional context fields
     """
-    msg = f"Admin [{user}] {action}"
     ctx = {"action": action, "user": user}
     if target:
         ctx["target"] = target
     ctx.update(extra)
 
-    logger.info(msg, extra=ctx)
+    logger.info("Admin [%s] %s", user, action, extra=ctx)
 
 
 class PipelineLogger:

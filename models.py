@@ -116,6 +116,7 @@ class Article(db.Model):
     extraction_status = db.Column(db.String(32), default="pending")
     retry_count = db.Column(db.Integer, default=0)
     total_retries = db.Column(db.Integer, nullable=False, default=0)
+    degradation_count = db.Column(db.Integer, nullable=False, default=0)
     last_error = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(

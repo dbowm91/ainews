@@ -1,0 +1,85 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — topic notes{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">topic notes</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">topic notes</h1>
+
+  <section class="dash-card dash-card-full">
+    <div class="form-hint">
+      Topic notes provide background context for the research and editing pipeline.
+      They are referenced by subagents when processing articles.
+    </div>
+
+    <div class="form-row mt-1 mb-1">
+      <div class="form-group-half">
+        <form method="get" action="{{ url_for('admin.topic_notes_list') }}">
+          <input type="text" name="topic" class="form-input" placeholder="Filter by topic..."
+                 value="{{ topic }}" hx-get="{{ url_for('admin.topic_notes_list') }}"
+                 hx-trigger="input changed delay:300ms" hx-target="#notes-table"
+                 hx-include="[name='source']">
+      </div>
+      <div class="form-group-half">
+        <input type="text" name="source" class="form-input" placeholder="Filter by source..."
+               value="{{ source }}" hx-get="{{ url_for('admin.topic_notes_list') }}"
+               hx-trigger="input changed delay:300ms" hx-target="#notes-table"
+               hx-include="[name='topic']">
+      </div>
+    </div>
+
+    <div id="notes-table">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>topic</th>
+            <th>source</th>
+            <th>note preview</th>
+            <th>updated</th>
+            <th>actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for note in notes %}
+          {% include "admin/partials/topic_note_row.html" %}
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted">No topic notes found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="dash-section-header mt-1">
+      <h2>create new note</h2>
+    </div>
+    <form method="post" action="{{ url_for('admin.topic_notes_create') }}" class="form-row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group-half">
+        <label for="new-topic">topic</label>
+        <input type="text" id="new-topic" name="topic" class="form-input" required>
+      </div>
+      <div class="form-group-half">
+        <label for="new-source">source (optional)</label>
+        <input type="text" id="new-source" name="source" class="form-input">
+      </div>
+      <div class="form-group-full">
+        <label for="new-note">note</label>
+        <textarea id="new-note" name="note" class="form-textarea" rows="3" required></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">create note</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

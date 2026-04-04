@@ -11,6 +11,12 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg-primary);
@@ -19,6 +25,12 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-transitioning,
+.theme-transitioning * {
+  transition: background-color 0.15s ease, color 0.15s ease !important;
 }
 
 .skip-link {

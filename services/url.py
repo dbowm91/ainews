@@ -144,7 +144,7 @@ def _resolve_and_check(hostname: str) -> list[str]:
     try:
         future = executor.submit(socket.getaddrinfo, hostname, None)
         addr_infos = future.result(timeout=_DNS_RESOLVE_TIMEOUT)
-    except socket.gaierror:
+    except (socket.gaierror, socket.herror, socket.timeout):
         raise UnsafeURLError(f"DNS resolution failed for {hostname}")
     except TimeoutError:
         raise UnsafeURLError(f"DNS resolution timed out for {hostname}")

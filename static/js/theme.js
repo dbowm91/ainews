@@ -44,7 +44,11 @@
   window.toggleTheme = function() {
     var current = document.documentElement.getAttribute('data-theme') || DARK;
     var next = current === DARK ? LIGHT : DARK;
+    document.body.classList.add('theme-transitioning');
     setTheme(next);
+    requestAnimationFrame(function() {
+      document.body.classList.remove('theme-transitioning');
+    });
   };
 
   // Event delegation for theme toggle - CSP compliant

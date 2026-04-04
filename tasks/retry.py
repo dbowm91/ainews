@@ -50,17 +50,21 @@ def retry_stuck(self):
         now = datetime.now(timezone.utc)
         soft_cutoff = now - timedelta(minutes=get_retry_soft_cutoff_minutes())
 
-        stuck = Article.query.filter(
-            Article.pipeline_status.in_(
-                [
-                    PipelineStatus.RESEARCHING,
-                    PipelineStatus.WRITING,
-                    PipelineStatus.EDITING,
-                    PipelineStatus.PENDING,
-                ]
-            ),
-            Article.updated_at < soft_cutoff,
-        ).all()
+        stuck = (
+            Article.query.filter(
+                Article.pipeline_status.in_(
+                    [
+                        PipelineStatus.RESEARCHING,
+                        PipelineStatus.WRITING,
+                        PipelineStatus.EDITING,
+                        PipelineStatus.PENDING,
+                    ]
+                ),
+                Article.updated_at < soft_cutoff,
+            )
+            .yield_per(100)
+            .all()
+        )
 
         retried = 0
         degraded = 0

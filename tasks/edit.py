@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
+from services.article_validation import validate_and_raise, ValidationError
 import time
 
 logger = get_task_logger(__name__)
@@ -127,6 +128,7 @@ def edit_article(self, article_id: int, run_id=None):
                         "related_articles": _format_related_articles(related_articles),
                     },
                     response_model=EditContextualizationResponse,
+                    article_id=article.id,
                 )
                 contextualization = context_result.synthesis
                 if context_result.used_fallback:
@@ -170,12 +172,39 @@ def edit_article(self, article_id: int, run_id=None):
             article, change_reason="pipeline_edit", changed_by="pipeline:editor"
         )
 
+        # Validate content quality before transitioning to DONE or REVIEW
+        try:
+            validate_and_raise(article.final_article)
+        except ValidationError as e:
+            plog.warning(
+                "Article validation failed, routing to review: %s",
+                e,
+                article_id=article.id,
+            )
+            article.pipeline_status = PipelineStatus.REVIEW
+            article.last_error = f"Content validation failed: {e}"
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+            if run_id:
+                _log_pipeline(
+                    run_id,
+                    "edit",
+                    "info",
+                    "Validation failed, queued for review: %s",
+                    truncate_for_log(article.original_title),
+                    article_id=article.id,
+                )
+            return {"article_id": article_id, "status": "review"}
+
         # Route to review if enabled and article doesn't meet auto-publish threshold
         if _should_route_to_review(article):
             article.pipeline_status = PipelineStatus.REVIEW
             try:
                 db.session.commit()
-            except Exception:
+            except SQLAlchemyError:
                 db.session.rollback()
                 raise
             if run_id:

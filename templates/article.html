@@ -13,7 +13,10 @@
 {% endblock %}
 
 {% block content %}
-<article class="article-full">
+<article class="article-full htmx-skeleton-target">
+  <div class="htmx-indicator" id="article-skeleton">
+    {% include "partials/skeleton_article_detail.html" %}
+  </div>
   {% if article._fa %}
     {% set fa = article._fa %}
     {% include "partials/condensed_article.html" %}

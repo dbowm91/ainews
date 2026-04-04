@@ -32,6 +32,7 @@ class TestHandleStageFailure:
         article.id = 1
         article.retry_count = max_retries - 1
         article.total_retries = 0
+        article.degradation_count = 0
         article.original_title = "Test"
         article.original_url = "https://example.com"
         article.original_author = "Author"
@@ -93,7 +94,7 @@ class TestRetryStuck:
             MockArticle.updated_at.__ge__ = MagicMock(return_value=MagicMock())
             MockArticle.retry_count = MagicMock()
             MockArticle.retry_count.__ge__ = MagicMock(return_value=MagicMock())
-            mock_query.filter.return_value.all.return_value = []
+            mock_query.filter.return_value.yield_per.return_value.all.return_value = []
             yield MockArticle, mock_query
 
     def test_degrades_articles_over_max_retries(
@@ -106,7 +107,9 @@ class TestRetryStuck:
         max_retries = _get_max_stage_retries()
         MockArticle, mock_query = mock_article_query
         article = self._create_mock_article(retry_count=max_retries)
-        mock_query.filter.return_value.all.return_value = [article]
+        mock_query.filter.return_value.yield_per.return_value.all.return_value = [
+            article
+        ]
 
         with patch("extensions.db"):
             with patch("tasks.pipeline._degrade_and_advance") as mock_degrade:
@@ -122,7 +125,9 @@ class TestRetryStuck:
 
         MockArticle, mock_query = mock_article_query
         article = self._create_mock_article(retry_count=1)
-        mock_query.filter.return_value.all.return_value = [article]
+        mock_query.filter.return_value.yield_per.return_value.all.return_value = [
+            article
+        ]
 
         with patch("extensions.db"):
             with patch("tasks.pipeline._degrade_and_advance") as mock_degrade:
@@ -158,7 +163,8 @@ class TestRetryBudget:
 
     def test_fails_article_on_budget_exceeded(self, app):
         """When total_retries >= MAX_TOTAL_RETRIES, article should be marked failed."""
-        from tasks.pipeline import _handle_stage_failure, MAX_TOTAL_RETRIES
+        from tasks.pipeline import _handle_stage_failure
+        from constants import MAX_TOTAL_RETRIES
         from models import Article
 
         article = MagicMock(spec=Article)
@@ -197,6 +203,7 @@ class TestRetryBudget:
         article = MagicMock(spec=Article)
         article.retry_count = max_retries - 1
         article.total_retries = 2
+        article.degradation_count = 0
         article.id = 1
         article.original_title = "Test"
         article.original_url = "https://example.com"

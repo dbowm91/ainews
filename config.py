@@ -5,6 +5,7 @@ from celery.schedules import crontab
 from constants import (
     MAX_STAGE_RETRIES as _DEFAULT_STAGE_RETRIES,
     MAX_TOTAL_RETRIES as _DEFAULT_TOTAL_RETRIES,
+    PIPELINE_TIMEOUT_SECONDS as _DEFAULT_PIPELINE_TIMEOUT_SECONDS,
 )
 from dotenv import load_dotenv
 from services.config_unified import safe_int
@@ -33,6 +34,9 @@ class Config:
     # Pipeline retry limits
     MAX_STAGE_RETRIES = safe_int("MAX_STAGE_RETRIES", _DEFAULT_STAGE_RETRIES)
     MAX_TOTAL_RETRIES = safe_int("MAX_TOTAL_RETRIES", _DEFAULT_TOTAL_RETRIES)
+    PIPELINE_TIMEOUT_SECONDS = safe_int(
+        "PIPELINE_TIMEOUT_SECONDS", _DEFAULT_PIPELINE_TIMEOUT_SECONDS
+    )
     MAX_CONSECUTIVE_FAILURES = safe_int("MAX_CONSECUTIVE_FAILURES", 10)
     STUCK_THRESHOLD_MINUTES = safe_int("STUCK_THRESHOLD_MINUTES", 60)
     RETRY_SOFT_CUTOFF_MINUTES = safe_int("RETRY_SOFT_CUTOFF_MINUTES", 15)

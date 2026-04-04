@@ -49,7 +49,7 @@ def login():
         admin_password = current_app.config.get("ADMIN_PASSWORD", "")
         if admin_password and _verify_password(admin_password, password):
             _clear_attempts(ip)
-            session.clear()
+            session.pop("admin", None)
             session["admin"] = True
             try:
                 from services.audit import log_admin_action

@@ -1,6 +1,5 @@
 """Shared tests for LLM provider error handling and base functionality."""
 
-
 import pytest
 
 
@@ -103,6 +102,9 @@ class TestBuildMessages:
             def _chat_with_schema(self, *a, **kw):
                 pass
 
+            def chat_with_tools(self, *a, **kw):
+                pass
+
         provider = DummyProvider("dummy", {})
         result = provider._build_messages([{"role": "user", "content": "hi"}], None)
         assert result == [{"role": "user", "content": "hi"}]
@@ -117,6 +119,9 @@ class TestBuildMessages:
             def _chat_with_schema(self, *a, **kw):
                 pass
 
+            def chat_with_tools(self, *a, **kw):
+                pass
+
         provider = DummyProvider("dummy", {})
         result = provider._build_messages(
             [{"role": "user", "content": "hi"}], "system prompt"
@@ -127,16 +132,6 @@ class TestBuildMessages:
 
 class TestProviderRegistry:
     """Tests for get_provider_class registry."""
-
-    def test_unknown_provider_raises_keyerror(self):
-        from services.llm.base import get_provider_class
-
-        with pytest.raises(KeyError, match="llm provider"):
-            get_provider_class("nonexistent_provider_xyz")
-
-
-class TestProviderRegistryFull:
-    """Tests for get_provider_class registry - all provider types."""
 
     def test_unknown_provider_raises_keyerror(self):
         from services.llm.base import get_provider_class

@@ -41,6 +41,17 @@ def add_source():
     if source_type not in ("rss", "web", "api"):
         return '<div class="form-error" role="alert">invalid source type</div>', 400
 
+    if source_url:
+        try:
+            from services.url import validate_url_safe
+
+            validate_url_safe(source_url)
+        except Exception as e:
+            return (
+                f'<div class="form-error" role="alert">Invalid source URL: {e}</div>',
+                400,
+            )
+
     source_key = _generate_source_key(name)
     existing = Source.query.filter_by(source_key=source_key).first()
     if existing:

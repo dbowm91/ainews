@@ -183,26 +183,34 @@ subagent:
     max_tokens: 2048
     temperature: 0.0
     timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
   research:
-    enabled: false
+    enabled: true
     provider: null
     model: null
     max_tokens: 2048
     temperature: 0.0
     timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
     system_prompt: |
       You are a research synthesizer. Analyze external sources and the source article
       to provide a coherent synthesis that supplements the main research brief.
       Focus on facts, context, and perspectives not already covered in the source article.
       Return your synthesis as a concise paragraph.
+    task_template: prompts/subagent_research_synthesis.txt
   edit:
-    enabled: false
+    enabled: true
     provider: null
     model: null
     max_tokens: 2048
     temperature: 0.0
     timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
     system_prompt: |
       You are an editorial contextualizer. Review the draft in light of the research
       brief, topic notes, and related articles to identify gaps, missing attribution,
       and claims that need additional support. Return a concise contextualization.
+    task_template: prompts/subagent_edit_contextualization.txt

@@ -1,9 +1,15 @@
 import logging
 import threading
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from schemas.common import resolve_env_vars
-from services.llm.base import BaseLLMProvider, LLMResponse, register_provider
+from services.llm.base import (
+    BaseLLMProvider,
+    LLMResponse,
+    ToolCallingResponse,
+    ToolDefinition,
+    register_provider,
+)
 from services.llm.errors import handle_provider_error
 
 logger = logging.getLogger(__name__)
@@ -110,6 +116,117 @@ class AnthropicProvider(BaseLLMProvider):
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp.content[0].text
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        max_iterations: int = 5,
+    ) -> ToolCallingResponse:
+        model = model or self.default_model
+        all_messages = list(messages)
+        if system:
+            system_instruction = system
+        else:
+            system_instruction = None
+
+        tool_call_map: dict[str, tuple[str, Callable]] = {}
+        for tool in tools:
+            if hasattr(tool, "fn") and callable(tool.fn):
+                tool_call_map[tool.name] = (tool.name, tool.fn)
+
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+            call_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": all_messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if tools:
+                call_kwargs["tools"] = [
+                    {
+                        "name": t.name,
+                        "description": t.description,
+                        "input_schema": t.parameters,
+                    }
+                    for t in tools
+                ]
+            if system_instruction:
+                call_kwargs["system"] = system_instruction
+
+            try:
+                resp = self.client.messages.create(**call_kwargs)
+            except Exception as e:
+                raise _handle_anthropic_error(e)
+
+            if not resp.content:
+                raise RuntimeError(
+                    f"Anthropic returned empty content for model {model}"
+                )
+
+            text_content = ""
+            tool_use_results = []
+            for block in resp.content:
+                if block.type == "text":
+                    text_content += block.text
+                elif block.type == "tool_use":
+                    tool_use_results.append(block)
+
+            if not tool_use_results:
+                return ToolCallingResponse(
+                    text=text_content,
+                    model=model,
+                    tool_calls=[],
+                    tokens_used=(
+                        (resp.usage.input_tokens or 0) + (resp.usage.output_tokens or 0)
+                        if resp.usage
+                        else 0
+                    ),
+                )
+
+            for block in tool_use_results:
+                tool_name = block.name
+                tool_input = block.input
+                tool_id = block.id
+
+                all_messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_id,
+                                "content": "",
+                            }
+                        ],
+                    }
+                )
+
+                result_content = ""
+                if tool_name in tool_call_map:
+                    try:
+                        _, fn = tool_call_map[tool_name]
+                        result_content = str(fn(**tool_input))
+                    except Exception as e:
+                        result_content = f"Error: {e}"
+                else:
+                    result_content = f"Unknown tool: {tool_name}"
+
+                all_messages[-1]["content"][0]["content"] = result_content
+
+        return ToolCallingResponse(
+            text="",
+            model=model,
+            tool_calls=[],
+            tokens_used=0,
+        )
 
     def health_check(self) -> dict[str, Any]:
         try:

@@ -449,7 +449,8 @@
   top: 0;
   bottom: 0;
   width: 2rem;
-  background: linear-gradient(to right, transparent, var(--bg-secondary));
+  background: linear-gradient(to right, transparent, currentColor);
+  opacity: 0.1;
   pointer-events: none;
 }
 
@@ -727,29 +728,7 @@
   color: var(--text-dim);
 }
 
-/* Search keyboard hint (8.17) */
-
-.search-kbd {
-  position: absolute;
-  right: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 0.15rem 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-dim);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-}
-
-.search-container {
-  position: relative;
-}
-
-.search-container .search-input {
-  padding-right: 2rem;
-}
+/* Search keyboard hint (8.17) - moved to articles.css */
 
 /* Password visibility toggle (8.22) */
 

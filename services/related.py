@@ -2,6 +2,8 @@ import logging
 
 from sqlalchemy.orm import joinedload
 
+from constants import PipelineStatus
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ def find_related_articles(article, limit: int = 5):
         Article.query.options(joinedload(Article.tags))
         .filter(
             Article.id != article.id,
-            Article.pipeline_status == "done",
+            Article.pipeline_status == PipelineStatus.DONE,
             Article.final_article.isnot(None),
         )
         .order_by(Article.created_at.desc())
@@ -73,7 +75,7 @@ def find_related_articles_dicts(
     candidates = (
         Article.query.filter(
             Article.id != exclude_id,
-            Article.pipeline_status == "done",
+            Article.pipeline_status == PipelineStatus.DONE,
             Article.final_article.isnot(None),
         )
         .order_by(Article.created_at.desc())

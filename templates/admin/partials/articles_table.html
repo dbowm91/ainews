@@ -1,14 +1,41 @@
 {% from "partials/pagination.html" import pagination_nav %}
 {% from "macros/badges.html" import pipeline_badge, impact_score %}
 {% if articles %}
+  <div class="bulk-actions-bar" id="bulk-actions-bar" style="display:none;">
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
+            data-action="set_status"
+            hx-post="/admin/api/articles/bulk"
+            hx-vals='{"action": "set_status"}'
+            hx-indicator=".bulk-spinner">
+      set status
+    </button>
+    <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
+            data-action="reprocess"
+            hx-post="/admin/api/articles/bulk"
+            hx-vals='{"action": "reprocess"}'
+            hx-indicator=".bulk-spinner">
+      reprocess
+    </button>
+    <button type="button" class="btn btn-sm btn-danger bulk-action-btn"
+            data-action="delete"
+            hx-post="/admin/api/articles/bulk"
+            hx-vals='{"action": "delete"}'
+            hx-confirm="Delete selected articles?"
+            hx-indicator=".bulk-spinner">
+      delete
+    </button>
+    <span class="bulk-spinner htmx-indicator">processing...</span>
+  </div>
   <div class="table-responsive">
   <table class="dash-table" aria-label="Articles list">
     <thead>
-      <tr><th>title</th><th>category</th><th>status</th><th>impact</th><th>created</th><th>actions</th></tr>
+      <tr><th><input type="checkbox" id="select-all-checkbox" aria-label="Select all"></th><th>title</th><th>category</th><th>status</th><th>impact</th><th>created</th><th>actions</th></tr>
     </thead>
     <tbody>
       {% for article in articles %}
         <tr>
+          <td><input type="checkbox" class="article-checkbox" value="{{ article.id }}" aria-label="Select article {{ article.id }}"></td>
           <td>
             <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title }}">
               {{ article.original_title if article.original_title }}
@@ -35,6 +62,51 @@
   </table>
   </div>
   {{ pagination_nav(page, has_next, next_page, total_count, 20, "/admin/articles", {"q": query, "status": status, "category": category}) }}
+  <script>
+  (function() {
+    var bar = document.getElementById('bulk-actions-bar');
+    var count = document.getElementById('bulk-count');
+    var checkboxes = document.querySelectorAll('.article-checkbox');
+    var selectAll = document.getElementById('select-all-checkbox');
+
+    function updateBar() {
+      var checked = document.querySelectorAll('.article-checkbox:checked');
+      var n = checked.length;
+      if (n > 0) {
+        bar.style.display = 'flex';
+        count.textContent = n + ' selected';
+      } else {
+        bar.style.display = 'none';
+      }
+    }
+
+    selectAll.addEventListener('change', function() {
+      checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+      updateBar();
+    });
+
+    checkboxes.forEach(function(cb) {
+      cb.addEventListener('change', updateBar);
+    });
+
+    var bulkForm = document.getElementById('bulk-form');
+    document.querySelectorAll('.bulk-action-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var checked = document.querySelectorAll('.article-checkbox:checked');
+        var ids = Array.from(checked).map(function(c) { return parseInt(c.value, 10); });
+        if (ids.length === 0) return;
+        var action = btn.getAttribute('data-action');
+        var hxVals = btn.getAttribute('hx-vals');
+        var vals = JSON.parse(hxVals);
+        vals.article_ids = ids;
+        vals.csrf_token = '{{ csrf_token() }}';
+        btn.setAttribute('hx-vals', JSON.stringify(vals));
+        htmx.process(btn);
+        htmx.trigger(btn, 'click');
+      });
+    });
+  })();
+  </script>
 {% else %}
   <div class="empty-state">
     <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

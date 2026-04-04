@@ -39,7 +39,7 @@ class ResponseCache:
     _memory: dict[str, tuple[float, float, str]]
 
     def __init__(self, redis_client, prefix: str = "ainews:cache"):
-        self.redis = redis_client
+        self._redis = redis_client
         self.prefix = prefix
         self._memory = {}
         self._hits = 0
@@ -78,7 +78,7 @@ class ResponseCache:
 
         # L2: Redis
         try:
-            cached = self.redis.get(full_key)
+            cached = self._redis.get(full_key)
             if cached is not None:
                 raw = cached.decode("utf-8") if isinstance(cached, bytes) else cached
                 self._hits += 1
@@ -108,7 +108,7 @@ class ResponseCache:
 
         # L2: Redis
         try:
-            self.redis.setex(full_key, ttl, raw)
+            self._redis.setex(full_key, ttl, raw)
         except redis.exceptions.RedisError as e:
             logger.warning("Cache write failed for %s: %s", key, e)
 
@@ -126,7 +126,7 @@ class ResponseCache:
         full_key = self._make_key(key)
         self._memory.pop(full_key, None)
         try:
-            self.redis.delete(full_key)
+            self._redis.delete(full_key)
         except redis.exceptions.RedisError as e:
             logger.warning("Cache invalidate failed for %s: %s", key, e)
 
@@ -142,9 +142,9 @@ class ResponseCache:
         try:
             cursor = 0
             while True:
-                cursor, keys = self.redis.scan(cursor=cursor, match=pattern, count=100)
+                cursor, keys = self._redis.scan(cursor=cursor, match=pattern, count=100)
                 if keys:
-                    pipe = self.redis.pipeline()
+                    pipe = self._redis.pipeline()
                     for key in keys:
                         pipe.delete(key)
                     pipe.execute()

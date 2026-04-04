@@ -116,6 +116,14 @@ def dispatch_webhook(
     from extensions import db
     from models import Webhook
 
+    try:
+        from services.url import validate_url_safe
+
+        validate_url_safe(url)
+    except Exception as e:
+        logger.error("Webhook '%s' rejected due to unsafe URL %s: %s", name, url, e)
+        return False, f"Unsafe URL: {e}"
+
     payload = {
         "event": event_type,
         "timestamp": datetime.now(timezone.utc).isoformat(),

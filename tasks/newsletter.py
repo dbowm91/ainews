@@ -311,7 +311,10 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         acquired = True
 
     if not acquired:
-        existing = redis_client.get(lock_key)
+        try:
+            existing = redis_client.get(lock_key)
+        except redis.exceptions.RedisError:
+            existing = None
         if existing and existing.decode() == task_id:
             try:
                 from services.redis_utils import refresh_lock, acquire_lock

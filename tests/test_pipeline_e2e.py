@@ -27,7 +27,20 @@ class TestPipelineEndToEnd:
         mocks = {}
         for name, p in patches.items():
             mocks[name] = p.start()
-        return patches, mocks
+
+        class PatchesContext:
+            def __init__(self, patches, mocks):
+                self.patches = patches
+                self.mocks = mocks
+
+            def __enter__(self):
+                return self.patches, self.mocks
+
+            def __exit__(self, *args):
+                for p in self.patches.values():
+                    p.stop()
+
+        return PatchesContext(patches, mocks)
 
     def _configure_rc(self, mocks, enabled=True, provider="ollama"):
         """Configure a standard RoleConfig mock."""
@@ -56,8 +69,7 @@ class TestPipelineEndToEnd:
 
     def test_full_pipeline_select_through_edit(self, app, create_article):
         """Article progresses through all stages: select -> research -> write -> edit -> done."""
-        patches, mocks = self._mock_run_stage_deps()
-        try:
+        with self._mock_run_stage_deps() as (patches, mocks):
             self._configure_rc(mocks)
             self._configure_limiter(mocks)
             self._configure_redis(mocks)
@@ -81,7 +93,6 @@ class TestPipelineEndToEnd:
             task_self = MagicMock()
             task_self.request.id = "task-e2e"
 
-            # Stage 1: Select — work fn sets status to researching
             def select_work(article, provider, model, max_tokens):
                 article.selector_result = {
                     "selected": True,
@@ -100,7 +111,6 @@ class TestPipelineEndToEnd:
                 article = db.session.get(Article, article_id)
                 assert article.pipeline_status == "researching"
 
-            # Stage 2: Research — work fn sets status to writing
             def research_work(article, provider, model, max_tokens):
                 article.research_brief = json.dumps(
                     {
@@ -120,7 +130,6 @@ class TestPipelineEndToEnd:
                 article = db.session.get(Article, article_id)
                 assert article.pipeline_status == "writing"
 
-            # Stage 3: Write — work fn sets status to editing
             def write_work(article, provider, model, max_tokens):
                 article.draft_article = json.dumps(
                     {
@@ -138,7 +147,6 @@ class TestPipelineEndToEnd:
                 article = db.session.get(Article, article_id)
                 assert article.pipeline_status == "editing"
 
-            # Stage 4: Edit — work fn sets final_article and status to done
             def edit_work(article, provider, model, max_tokens):
                 final = json.dumps(
                     {
@@ -164,14 +172,10 @@ class TestPipelineEndToEnd:
                         assert article.pipeline_status == "done"
                         assert article.final_article is not None
                         assert article.retry_count == 0
-        finally:
-            for p in patches.values():
-                p.stop()
 
     def test_pipeline_degrades_on_max_retries(self, app, create_article):
         """Article degrades to next stage after MAX_STAGE_RETRIES failures."""
-        patches, mocks = self._mock_run_stage_deps()
-        try:
+        with self._mock_run_stage_deps() as (patches, mocks):
             self._configure_rc(mocks)
             self._configure_limiter(mocks)
             self._configure_redis(mocks)
@@ -192,7 +196,8 @@ class TestPipelineEndToEnd:
                 db.session.commit()
                 article_id = article.id
 
-            from tasks.pipeline import _handle_stage_failure, MAX_STAGE_RETRIES
+            from tasks.pipeline import _handle_stage_failure
+            from constants import MAX_STAGE_RETRIES
 
             with app.app_context():
                 article = db.session.get(Article, article_id)
@@ -202,20 +207,15 @@ class TestPipelineEndToEnd:
                     article = db.session.get(Article, article_id)
                     assert article.pipeline_status == "researching"
 
-                # Last retry triggers degradation to writing
                 with patch("tasks.write.write_article"):
                     _handle_stage_failure(article, "research", Exception("fail"))
                 article = db.session.get(Article, article_id)
                 assert article.pipeline_status == "writing"
                 assert article.retry_count == 0
-        finally:
-            for p in patches.values():
-                p.stop()
 
     def test_pipeline_fails_on_global_budget(self, app, create_article):
         """Article marked failed when total_retries exceeds MAX_TOTAL_RETRIES."""
-        patches, mocks = self._mock_run_stage_deps()
-        try:
+        with self._mock_run_stage_deps() as (patches, mocks):
             self._configure_rc(mocks)
             self._configure_limiter(mocks)
             self._configure_redis(mocks)
@@ -230,7 +230,8 @@ class TestPipelineEndToEnd:
                 db.session.commit()
                 article_id = article.id
 
-            from tasks.pipeline import _handle_stage_failure, MAX_TOTAL_RETRIES
+            from tasks.pipeline import _handle_stage_failure
+            from constants import MAX_TOTAL_RETRIES
 
             with app.app_context():
                 article = db.session.get(Article, article_id)
@@ -238,19 +239,15 @@ class TestPipelineEndToEnd:
                 article = db.session.get(Article, article_id)
                 assert article.total_retries == MAX_TOTAL_RETRIES
                 assert article.pipeline_status == "failed"
-        finally:
-            for p in patches.values():
-                p.stop()
 
     def test_stage_lock_prevents_duplicate_processing(self, app, create_article):
         """When stage lock is held by another task, run_stage returns skipped."""
-        patches, mocks = self._mock_run_stage_deps()
-        try:
+        with self._mock_run_stage_deps() as (patches, mocks):
             self._configure_rc(mocks)
             self._configure_limiter(mocks)
 
             redis_mock = MagicMock()
-            redis_mock.set.return_value = False  # Lock not acquired
+            redis_mock.set.return_value = False
             mocks["get_redis"].return_value = redis_mock
 
             with app.app_context():
@@ -270,6 +267,3 @@ class TestPipelineEndToEnd:
                 result = run_stage("writer", article_id, work, task_self)
                 assert result["skipped"] is True
                 assert result["reason"] == "stage_locked"
-        finally:
-            for p in patches.values():
-                p.stop()

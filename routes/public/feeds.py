@@ -144,7 +144,7 @@ def tag_feed(slug: str) -> str:
 
     q = Article.query.filter(
         Article.tags.any(Tag.id == tag.id),
-        Article.pipeline_status.in_(["done", "skipped"]),
+        Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
     ).order_by(Article.created_at.desc())
 
     articles, has_next, next_page = paginate_query(q, page, PER_PAGE)
@@ -182,7 +182,11 @@ def feed_all() -> Response:
     xml = cache.get(cache_key)
     if xml is None:
         articles = (
-            Article.query.filter(Article.pipeline_status.in_(["done", "skipped"]))
+            Article.query.filter(
+                Article.pipeline_status.in_(
+                    [PipelineStatus.DONE, PipelineStatus.SKIPPED]
+                )
+            )
             .order_by(Article.created_at.desc())
             .limit(50)
             .all()
@@ -225,7 +229,9 @@ def feed_topic(category: str) -> Response:
         articles = (
             Article.query.filter(
                 Article.category == category,
-                Article.pipeline_status.in_(["done", "skipped"]),
+                Article.pipeline_status.in_(
+                    [PipelineStatus.DONE, PipelineStatus.SKIPPED]
+                ),
             )
             .order_by(Article.created_at.desc())
             .limit(50)
@@ -252,7 +258,9 @@ def sitemap() -> Response:
     from services.rss import generate_sitemap
 
     rows = (
-        Article.query.filter(Article.pipeline_status.in_(["done", "skipped"]))
+        Article.query.filter(
+            Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED])
+        )
         .with_entities(Article.id, Article.created_at)
         .order_by(Article.created_at.desc())
         .limit(200)

@@ -1,0 +1,19 @@
+<draft_article>
+{draft}
+</draft_article>
+
+<research_brief>
+{brief}
+</research_brief>
+
+<topic_notes>
+{topic_notes}
+</topic_notes>
+
+<related_articles>
+{related_articles}
+</related_articles>
+
+Review the draft in light of the research brief, topic notes, and related articles.
+Identify gaps in context, missing attribution, or claims that need additional support.
+Return a concise contextualization that addresses what the editor should know.

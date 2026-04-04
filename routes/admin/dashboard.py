@@ -1,4 +1,5 @@
 import logging
+import redis.exceptions
 from flask import render_template
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -47,7 +48,7 @@ def dashboard():
         r = get_redis()
         r.ping()
         redis_ok = True
-    except Exception as e:
+    except redis.exceptions.RedisError as e:
         logger.warning("Redis ping failed: %s", e)
 
     # Subscriber stats

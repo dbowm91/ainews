@@ -3,10 +3,13 @@
 import threading
 import time
 
+import redis.exceptions
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
-from constants import MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
+from constants import (
+    PIPELINE_TIMEOUT_SECONDS,
+)
 
 from services.pipeline_degradation import (  # noqa: F401
     degrade_stage as _degrade_and_advance,
@@ -15,47 +18,22 @@ from services.pipeline_degradation import (  # noqa: F401
     should_route_to_review as _should_route_to_review,
 )
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure  # noqa: F401
+from services.pipeline_failure import _get_max_total_retries, _get_max_stage_retries  # noqa: F401
 
 logger = get_task_logger(__name__)
 
 
-def _get_max_stage_retries() -> int:
-    """Get max stage retries from Flask config, falling back to default."""
+def _get_pipeline_timeout_seconds() -> int:
+    """Get pipeline hard timeout from Flask config, falling back to default."""
     try:
         from flask import current_app
 
-        return current_app.config.get("MAX_STAGE_RETRIES", MAX_STAGE_RETRIES)
+        return current_app.config.get(
+            "PIPELINE_TIMEOUT_SECONDS", PIPELINE_TIMEOUT_SECONDS
+        )
     except RuntimeError:
-        return MAX_STAGE_RETRIES
+        return PIPELINE_TIMEOUT_SECONDS
 
-
-def _get_max_total_retries() -> int:
-    """Get max total retries from Flask config, falling back to default."""
-    try:
-        from flask import current_app
-
-        return current_app.config.get("MAX_TOTAL_RETRIES", MAX_TOTAL_RETRIES)
-    except RuntimeError:
-        return MAX_TOTAL_RETRIES
-
-
-_STAGE_STATUS_MAP = {
-    "pending": "select",
-    "selecting": "select",
-    "selected": "research",
-    "researching": "research",
-    "writing": "write",
-    "written": "edit",
-    "editing": "edit",
-    "selector": "select",
-    "researcher": "research",
-    "writer": "write",
-    "editor": "edit",
-    "select": "select",
-    "research": "research",
-    "write": "write",
-    "edit": "edit",
-}
 
 _STAGE_TASKS = {
     "pending": ("tasks.select", "select_article"),
@@ -393,5 +371,5 @@ def run_stage(
                 from services.redis_utils import release_lock
 
                 release_lock(redis_client, lock_key, task_id)
-            except Exception as e:
+            except redis.exceptions.RedisError as e:
                 logger.warning("Failed to release stage lock %s: %s", lock_key, e)

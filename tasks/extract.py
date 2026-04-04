@@ -29,9 +29,13 @@ def _find_duplicate_article(url: str, title: str):
             if domain:
                 # Only load articles from the same domain — avoids full table scan
                 escaped_domain = _escape_like_pattern(domain)
-                candidates = Article.query.filter(
-                    Article.original_url.ilike(f"%{escaped_domain}%", escape="\\"),
-                ).all()
+                candidates = (
+                    Article.query.filter(
+                        Article.original_url.ilike(f"%{escaped_domain}%", escape="\\"),
+                    )
+                    .limit(20)
+                    .all()
+                )
                 for cand in candidates:
                     if (
                         cand.original_url
@@ -252,10 +256,10 @@ def process_item(
         )
     logger.info("Extracted [%s]: %s", topics[0] if topics else "?", title[:60])
 
-    from tasks.select import select_article
+    from tasks.pipeline import _dispatch_next
 
     try:
-        select_article.delay(article.id, run_id=run_id)
+        _dispatch_next(article.id, run_id=run_id, next_status="pending")
     except Exception:
         article.pipeline_status = "failed"
         article.last_error = "Failed to dispatch to pipeline"

@@ -55,7 +55,7 @@ def _query_looks_like_url(query: str) -> bool:
 def articles():
     from models import Article, Source, Tag
     from services.utils import paginate_query
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     page = max(1, request.args.get("page", 1, type=int))
     query = request.args.get("q", "", type=str).strip()
@@ -92,6 +92,8 @@ def articles():
     if date_from:
         try:
             dt_from = datetime.fromisoformat(date_from)
+            if dt_from.tzinfo is None:
+                dt_from = dt_from.replace(tzinfo=timezone.utc)
             q = q.filter(Article.created_at >= dt_from)
         except ValueError:
             logger.warning("Invalid date_from filter: %s", date_from)
@@ -99,6 +101,8 @@ def articles():
     if date_to:
         try:
             dt_to = datetime.fromisoformat(date_to)
+            if dt_to.tzinfo is None:
+                dt_to = dt_to.replace(tzinfo=timezone.utc)
             q = q.filter(Article.created_at <= dt_to)
         except ValueError:
             logger.warning("Invalid date_to filter: %s", date_to)

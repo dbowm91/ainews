@@ -1,8 +1,8 @@
 from __future__ import annotations
 import abc
 import logging
-from dataclasses import dataclass
-from typing import Any, Optional, TypeVar, Type
+from dataclasses import dataclass, field
+from typing import Any, Callable, Optional, TypeVar, Type
 
 from pydantic import BaseModel
 
@@ -17,6 +17,37 @@ T = TypeVar("T", bound=BaseModel)
 class LLMResponse:
     text: str
     model: str
+    tokens_used: int = 0
+
+
+@dataclass
+class ToolDefinition:
+    name: str
+    description: str
+    parameters: dict
+    required: list[str] = field(default_factory=list)
+    fn: Optional[Callable[..., Any]] = field(default=None, repr=False)
+
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass
+class ToolResult:
+    id: str
+    name: str
+    content: str
+
+
+@dataclass
+class ToolCallingResponse:
+    text: str
+    model: str
+    tool_calls: list[ToolCall] = field(default_factory=list)
     tokens_used: int = 0
 
 
@@ -47,13 +78,41 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         system: Optional[str] = None,
         temperature: float = 0.0,
         max_tokens: int = 4096,
+        max_validation_retries: int = 1,
     ) -> T:
         """Chat with structured output, returns validated Pydantic model."""
         schema = response_model.model_json_schema()
         resp = self._chat_with_schema(
             messages, response_model, model, system, temperature, max_tokens, schema
         )
-        return response_model.model_validate_json(resp)
+        try:
+            return response_model.model_validate_json(resp)
+        except Exception as e:
+            logger.warning(
+                "Validation failed for %s: %s. Raw response: %s",
+                response_model.__name__,
+                e,
+                resp[:500] if resp else "(empty)",
+            )
+            if max_validation_retries > 0:
+                retry_messages = list(messages)
+                retry_messages.append(
+                    {
+                        "role": "user",
+                        "content": f"Your previous response failed validation: {e}. Please correct and try again.",
+                    }
+                )
+                resp = self._chat_with_schema(
+                    retry_messages,
+                    response_model,
+                    model,
+                    system,
+                    temperature,
+                    max_tokens,
+                    schema,
+                )
+                return response_model.model_validate_json(resp)
+            raise
 
     @abc.abstractmethod
     def _chat_with_schema(
@@ -67,6 +126,25 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         schema: dict,
     ) -> str:
         """Provider-specific schema-guided chat, returns raw JSON string."""
+        ...
+
+    @abc.abstractmethod
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        max_iterations: int = 5,
+    ) -> ToolCallingResponse:
+        """Chat with tool/function calling support.
+
+        Provider handles the conversation loop (tool call -> execute -> continue)
+        up to max_iterations.
+        """
         ...
 
     def _build_messages(

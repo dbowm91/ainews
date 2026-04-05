@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from flask import flash, render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
@@ -410,6 +411,7 @@ def reprocess_article(article_id):
     article = db.get_or_404(Article, article_id)
 
     article.pipeline_status = cfg["status"]
+    article.pipeline_started_at = datetime.now(timezone.utc)
     for field in cfg["fields"]:
         setattr(article, field, None)
     article.retry_count = 0

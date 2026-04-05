@@ -205,6 +205,7 @@ def process_item(
             original_published_at=pub_date,
             extracted_text=extracted_text,
             pipeline_status="pending",
+            pipeline_started_at=datetime.now(timezone.utc),
             category=topics[0] if topics else "other",
             topics=topics,
             raw_metadata=raw_metadata or {},

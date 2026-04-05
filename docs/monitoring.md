@@ -19,6 +19,9 @@
 | `pipeline.stuck_articles` | > 5 | > 10 | Articles stuck in pipeline |
 | `pipeline.failed_articles` | > 20 | > 50 | Permanently failed articles |
 | `dead_letter.count` | > 10 | > 25 | Dead letter queue size |
+| `pipeline.degradation` | rate > 2% over 15m | rate > 5% over 15m | Pipeline degradation rate |
+| `pipeline.multi_stage_degradation` | > 3 over 1h | > 10 over 1h | Articles degraded 2+ times |
+| `pipeline.timeout_exceeded` | > 0 | > 5 | Articles exceeding pipeline timeout |
 
 ### Source Health
 
@@ -124,6 +127,24 @@ groups:
         annotations:
           summary: "AINews dead letter queue high"
           description: "{{ $value }} items in dead letter queue"
+
+      - alert: AinewsHighDegradationRate
+        expr: rate(pipeline_degradation_total[15m]) / rate(pipeline_stage_completions_total[15m]) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AINews high pipeline degradation rate"
+          description: "Degradation rate is {{ $value | humanizePercentage }} over 15 minutes"
+
+      - alert: AinewsMultiStageDegradation
+        expr: increase(pipeline_multi_stage_degradation_total[1h]) > 10
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "AINews excessive multi-stage degradations"
+          description: "{{ $value }} articles degraded 2+ times in the last hour"
 
       # Performance
       - alert: AinewsSlowResponses

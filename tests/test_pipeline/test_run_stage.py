@@ -28,6 +28,7 @@ class TestRunStage:
 
         article = MagicMock()
         article.retry_count = 0
+        article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
         mocks["get_provider_for_role"].return_value = (
@@ -77,6 +78,7 @@ class TestRunStage:
 
         article = MagicMock()
         article.retry_count = 0
+        article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
         mocks["get_provider_for_role"].return_value = (
@@ -119,6 +121,7 @@ class TestRunStage:
 
         article = MagicMock()
         article.retry_count = 0
+        article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
         mocks["get_provider_for_role"].return_value = (
@@ -181,6 +184,7 @@ class TestRunStage:
         article = MagicMock()
         article.total_retries = 0
         article.retry_count = 0
+        article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
         mocks["get_provider_for_role"].return_value = (
@@ -254,6 +258,7 @@ class TestRunStage:
 
         article = MagicMock()
         article.retry_count = 0
+        article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
         mocks["get_provider_for_role"].return_value = (

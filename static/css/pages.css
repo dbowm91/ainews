@@ -449,9 +449,10 @@
   top: 0;
   bottom: 0;
   width: 2rem;
-  background: linear-gradient(to right, transparent, currentColor);
-  opacity: 0.1;
   pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--bg-secondary));
+  mask-image: linear-gradient(to right, transparent, black);
+  -webkit-mask-image: linear-gradient(to right, transparent, black);
 }
 
 .admin-header .nav-links::-webkit-scrollbar {

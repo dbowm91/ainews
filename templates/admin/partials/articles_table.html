@@ -10,14 +10,16 @@
             data-action="set_status"
             hx-post="/admin/api/articles/bulk"
             hx-vals='{"action": "set_status"}'
-            hx-indicator=".bulk-spinner">
+            hx-indicator=".bulk-spinner"
+            hx-disabled-elt="this">
       set status
     </button>
     <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
             data-action="reprocess"
             hx-post="/admin/api/articles/bulk"
             hx-vals='{"action": "reprocess"}'
-            hx-indicator=".bulk-spinner">
+            hx-indicator=".bulk-spinner"
+            hx-disabled-elt="this">
       reprocess
     </button>
     <button type="button" class="btn btn-sm btn-danger bulk-action-btn"
@@ -25,7 +27,8 @@
             hx-post="/admin/api/articles/bulk"
             hx-vals='{"action": "delete"}'
             hx-confirm="Delete selected articles?"
-            hx-indicator=".bulk-spinner">
+            hx-indicator=".bulk-spinner"
+            hx-disabled-elt="this">
       delete
     </button>
     <span class="bulk-spinner htmx-indicator">processing...</span>

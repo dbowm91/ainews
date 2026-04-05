@@ -2,6 +2,7 @@
 
 import threading
 import time
+from datetime import datetime, timezone
 
 import redis.exceptions
 from billiard.exceptions import SoftTimeLimitExceeded
@@ -9,6 +10,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import (
     PIPELINE_TIMEOUT_SECONDS,
+    PipelineStatus,
 )
 
 from services.pipeline_degradation import (  # noqa: F401
@@ -305,6 +307,32 @@ def run_stage(
         article = db.session.get(Article, article_id)
         if not article:
             return {"article_id": article_id, "error": "not found"}
+
+        if article.pipeline_started_at is not None:
+            elapsed = (
+                datetime.now(timezone.utc) - article.pipeline_started_at
+            ).total_seconds()
+            timeout = _get_pipeline_timeout_seconds()
+            if elapsed > timeout:
+                logger.error(
+                    "Article %s exceeded pipeline timeout (%.0fs > %ds), dead-lettering",
+                    article_id,
+                    elapsed,
+                    timeout,
+                )
+                article.pipeline_status = PipelineStatus.FAILED
+                article.last_error = "pipeline timeout exceeded (%.0fs)" % elapsed
+                try:
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+                    raise
+                record_stage_result(stage, success=False, run_id=run_id)
+                get_metrics().counter_inc(
+                    "pipeline.timeout_exceeded",
+                    labels={"stage": stage},
+                )
+                return {"article_id": article_id, "error": "pipeline_timeout"}
 
         provider, model, max_tokens, provider_id = get_provider_for_role(stage)
 

@@ -15,6 +15,23 @@ Consolidated plan merging all prior planning documents into a single source of t
 
 ---
 
+## Completion Status
+
+**All 65 items across 8 waves are COMPLETED.** Last updated: 2026-04-05.
+
+| Wave | Items | Status |
+|------|-------|--------|
+| 1 — Critical Bugs & Security | 11 | ✅ All completed |
+| 2 — Conventions & DRY | 8 | ✅ All completed |
+| 3 — UI Bug Fixes | 5 | ✅ All completed |
+| 4 — Subagent Observability | 7 | ✅ All completed |
+| 5 — Pipeline Quality | 7 | ✅ All completed |
+| 6 — New Features | 9 | ✅ All completed |
+| 7 — Accessibility & Performance | 11 | ✅ All completed |
+| 8 — Test Improvements | 7 | ✅ All completed |
+
+---
+
 ## Wave 1: Critical Bugs & Security Fixes
 
 **Priority**: Highest — fix immediately. These are runtime errors and security gaps.
@@ -185,12 +202,12 @@ Consolidated plan merging all prior planning documents into a single source of t
 
 #### 4.3 Fix Admin Nav Scroll Fade Background Dependency
 - **Problem**: `pages.css:445-454` uses `var(--bg-secondary)` for gradient fade. Brittle if header background changes.
-- **Fix**: Use `inherit` or `currentColor` with alpha, or `mask-image` gradient approach.
+- **Fix**: Use `inherit` or `currentColor` with alpha, or `mask-image` gradient approach. ✅ COMPLETED — Uses mask-image gradient with --bg-secondary background.
 - **Files**: `static/css/pages.css`
 
 #### 4.4 Standardize Button Border-Radius
 - **Problem**: Button variants use inconsistent border-radius: `.btn` = `5px`, `.subscribe-btn` = `4px`, `--radius-md` = `4px`, `--radius-lg` = `6px`.
-- **Fix**: Use `var(--radius-md)` or `var(--radius-lg)` consistently.
+- **Fix**: Use `var(--radius-md)` or `var(--radius-lg)` consistently. ✅ COMPLETED — All 14 hardcoded border-radius values replaced with var(--radius-*) variables.
 - **Files**: `static/css/components.css`
 
 ### Agent B — JS & Template Fixes
@@ -296,7 +313,7 @@ Consolidated plan merging all prior planning documents into a single source of t
 
 #### 6.3 Add Pipeline-Level Timeout Tracking
 - **Problem**: Individual stages have `soft_time_limit=300s`, but an article can cycle through retries and autoretries for 30+ minutes.
-- **Fix**: Track article pipeline start time and add hard timeout check in `run_stage()`. If `now - start_time > PIPELINE_TIMEOUT_SECONDS` (default 3600s), mark as `FAILED` and dead-letter.
+- **Fix**: Track article pipeline start time and add hard timeout check in `run_stage()`. If `now - start_time > PIPELINE_TIMEOUT_SECONDS` (default 3600s), mark as `FAILED` and dead-letter. ✅ COMPLETED — Added pipeline_started_at column (migration 015), timeout check in run_stage(), timestamp set in extract.py and reprocess routes.
 - **Files**: `config.py`, `tasks/pipeline.py`, `constants.py`, `models.py` (add `pipeline_started_at` column or reuse `created_at`), `tests/test_pipeline/`
 
 #### 6.4 Improve Degradation Quality for Multi-Stage Failures
@@ -316,7 +333,7 @@ Consolidated plan merging all prior planning documents into a single source of t
   - Emit `pipeline.degradation` counter with labels `{stage, reason}`
   - Emit `pipeline.multi_stage_degradation` counter when `degradation_count >= 2`
   - Add degradation rate to admin pipeline stats endpoint
-  - Add Prometheus alert rule for degradation rate > 5% over 15 minutes
+  - Add Prometheus alert rule for degradation rate > 5% over 15 minutes ✅ COMPLETED — Degradation rate added to pipeline_stats endpoint, Prometheus alert rules documented in monitoring.md.
 - **Files**: `services/pipeline_degradation.py`, `services/metrics.py`, `routes/admin/api.py` (or relevant pipeline stats module), `docs/monitoring.md`
 
 #### 6.6 Harden Limiter Slot Release
@@ -363,7 +380,7 @@ Consolidated plan merging all prior planning documents into a single source of t
   - Supports built-in tool registry (web search, DB lookup, topic notes)
   - Expose `context_service.py` functions as callable tools
   - Wrap `services/search/__init__.py` `search_web` and `get_search_provider` as tool definitions
-  - Add `tools` list under subagent stage configs in `pipeline.yaml`
+  - Add `tools` list under subagent stage configs in `pipeline.yaml` ✅ COMPLETED — tools lists added to research and edit subagent stages in pipeline.yaml.
 - **Files**: `services/subagent.py`, `services/context_service.py`, `services/search/`, `pipeline.yaml`, `schemas/pipeline.py`, `tests/test_subagent.py`
 
 #### 7.3 Subagent Chaining & Multi-Step Orchestration
@@ -375,7 +392,7 @@ Consolidated plan merging all prior planning documents into a single source of t
   - Max chain length enforced (default 5)
   - Each step independently respects enabled/disabled config
   - Add `SubagentChainStep` and `SubagentChainConfig` models to `schemas/pipeline.py`
-  - Add `chains` section under `subagent` in `pipeline.yaml`
+  - Add `chains` section under `subagent` in `pipeline.yaml` ✅ COMPLETED — chains section added with research_deep and edit_review configs in pipeline.yaml.
 - **Design decisions**:
   - Chains are synchronous (each step waits for previous)
   - If any step fails, chain returns partial results with fallback markers
@@ -419,7 +436,7 @@ Consolidated plan merging all prior planning documents into a single source of t
 
 #### 7.9 Add Loading States to Admin Bulk Operations
 - **Problem**: Bulk article operations have no visual feedback. Button doesn't show spinner or disabled state.
-- **Fix**: Add `hx-indicator` and `hx-disabled-elt` attributes to bulk action buttons. Style disabled state with spinner.
+- **Fix**: Add `hx-indicator` and `hx-disabled-elt` attributes to bulk action buttons. Style disabled state with spinner. ✅ COMPLETED — hx-disabled-elt="this" added to all three bulk action buttons.
 - **Files**: `templates/admin/articles.html`, `static/css/components.css`
 
 ---

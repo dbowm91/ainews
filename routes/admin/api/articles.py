@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from flask import jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
@@ -34,6 +35,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
 
     for article in articles:
         article.pipeline_status = PipelineStatus.PENDING
+        article.pipeline_started_at = datetime.now(timezone.utc)
         article.retry_count = 0
         article.total_retries = 0
         article.last_error = None

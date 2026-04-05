@@ -12,11 +12,33 @@ logger = logging.getLogger(__name__)
 def pipeline_stats() -> Response:
     """Get pipeline stage success/failure statistics."""
     from services.pipeline_monitor import get_all_stages_stats
+    from services.metrics import get_metrics
 
     minutes = request.args.get("minutes", 15, type=int)
     minutes = max(1, min(minutes, 120))
 
     stats = get_all_stages_stats(minutes)
+
+    metrics = get_metrics().get_metrics()
+    degradation_count = metrics.get("counters", {}).get("pipeline.degradation", 0)
+    multi_stage_count = metrics.get("counters", {}).get(
+        "pipeline.multi_stage_degradation", 0
+    )
+    total_stage_completions = sum(
+        s.get("success", 0) + s.get("failure", 0)
+        for s in stats.get("stages", {}).values()
+    )
+    degradation_rate = (
+        round(degradation_count / total_stage_completions * 100, 2)
+        if total_stage_completions > 0
+        else 0.0
+    )
+
+    stats["degradation"] = {
+        "total_degradations": degradation_count,
+        "multi_stage_degradations": multi_stage_count,
+        "rate_percent": degradation_rate,
+    }
     return jsonify(stats)
 
 

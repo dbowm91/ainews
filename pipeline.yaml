@@ -194,6 +194,10 @@ subagent:
     timeout_seconds: 120
     max_retries: 1
     retry_delay: 5.0
+    tools:
+      - web_search
+      - context_notes
+      - related_articles
     system_prompt: |
       You are a research synthesizer. Analyze external sources and the source article
       to provide a coherent synthesis that supplements the main research brief.
@@ -209,8 +213,31 @@ subagent:
     timeout_seconds: 120
     max_retries: 1
     retry_delay: 5.0
+    tools:
+      - context_notes
+      - related_articles
     system_prompt: |
       You are an editorial contextualizer. Review the draft in light of the research
       brief, topic notes, and related articles to identify gaps, missing attribution,
       and claims that need additional support. Return a concise contextualization.
     task_template: prompts/subagent_edit_contextualization.txt
+
+  chains:
+    research_deep:
+      max_length: 3
+      steps:
+        - task_type: research
+          prompt_data_template: ""
+          condition: "article.impact_score >= 50"
+        - task_type: research
+          prompt_data_template: ""
+          condition: "previous.steps[0].success"
+    edit_review:
+      max_length: 2
+      steps:
+        - task_type: edit
+          prompt_data_template: ""
+          condition: "article.pipeline_status == 'editing'"
+        - task_type: edit
+          prompt_data_template: ""
+          condition: "previous.steps[0].success and article.degradation_count == 0"

@@ -104,6 +104,15 @@ providers:
       model: "glm-4"
       max_tokens: 4096
 
+  - id: minimax
+    type: openai
+    enabled: false
+    config:
+      api_key: "${MINIMAX_API_KEY}"
+      base_url: "https://api.minimax.io/v1"
+      model: "MiniMax-M2.5"
+      max_tokens: 4096
+
   - id: opencode
     type: openai
     enabled: false

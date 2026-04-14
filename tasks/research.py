@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
 from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
+from services.prompts import esc_xml_text
 
 logger = get_task_logger(__name__)
 plog = get_pipeline_logger("research")
@@ -19,9 +20,9 @@ def _format_web_results(web_results: list[dict]) -> str:
         return "(no web results)"
     parts = []
     for wr in web_results:
-        parts.append(f"Source: {wr.get('title', 'Unknown')}")
-        parts.append(f"URL: {wr.get('url', '')}")
-        parts.append(f"Snippet: {wr.get('snippet', '')[:300]}")
+        parts.append(f"Source: {esc_xml_text(wr.get('title', 'Unknown'))}")
+        parts.append(f"URL: {esc_xml_text(wr.get('url', ''))}")
+        parts.append(f"Snippet: {esc_xml_text(wr.get('snippet', '')[:300])}")
         parts.append("")
     return "\n".join(parts)
 

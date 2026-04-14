@@ -16,6 +16,7 @@ from services.llm.base import ToolDefinition
 from services.metrics import time_histogram, get_metrics
 from services.logging_utils import log_pipeline_event
 from services.llm.errors import ProviderTimeoutError, AuthError, ProviderServerError
+from services.prompts import esc_xml_text
 
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
 from schemas.llm_responses import (  # noqa: F401
@@ -134,6 +135,45 @@ def _build_context_tools() -> list[ToolDefinition]:
         )
     )
 
+    def _get_trend_memory(
+        topics: list[str], min_importance: int = 1, max_age_days: int | None = None
+    ) -> str:
+        from services.trend_memory import get_memory_for_topics
+
+        entries = get_memory_for_topics(topics, min_importance, max_age_days)
+        if not entries:
+            return "No trend memory found for these topics."
+        return "\n".join(
+            f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
+        )
+
+    tools.append(
+        ToolDefinition(
+            name="get_trend_memory",
+            description="Get stored trend memory entries for topics. Use to identify patterns and prior coverage before editing.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "topics": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of topic names",
+                    },
+                    "min_importance": {
+                        "type": "integer",
+                        "description": "Minimum importance tier: 1=low, 2=medium, 3=high. Default 1.",
+                    },
+                    "max_age_days": {
+                        "type": "integer",
+                        "description": "Only return entries younger than this many days. Default all.",
+                    },
+                },
+                "required": ["topics"],
+            },
+            fn=_get_trend_memory,
+        )
+    )
+
     return tools
 
 
@@ -234,7 +274,11 @@ Return your synthesis as a concise paragraph.""",
 {related_articles}
 </related_articles>
 
-Review the draft in light of the research brief, topic notes, and related articles.
+<trend_memory>
+{trend_memory}
+</trend_memory>
+
+Review the draft in light of the research brief, topic notes, related articles, and trend memory.
 Identify gaps in context, missing attribution, or claims that need additional support.
 Return a concise contextualization that addresses what the editor should know.""",
 }
@@ -245,6 +289,23 @@ def _load_prompt_template(path: str) -> str | None:
     if p.exists():
         return p.read_text()
     return None
+
+
+def _escape_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Escape all string values in prompt_data for safe XML embedding."""
+    result = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            result[key] = esc_xml_text(value)
+        elif isinstance(value, dict):
+            result[key] = _escape_prompt_data(value)
+        elif isinstance(value, list):
+            result[key] = [
+                esc_xml_text(str(v)) if isinstance(v, str) else v for v in value
+            ]
+        else:
+            result[key] = value
+    return result
 
 
 def _get_task_template(task_type: str, stage_config: SubagentStageConfig) -> str:
@@ -300,7 +361,8 @@ def run_subagent(
 
     template = _get_task_template(task_type, stage_config)
     try:
-        prompt = template.format(**prompt_data)
+        prompt_data_escaped = _escape_prompt_data(prompt_data)
+        prompt = template.format(**prompt_data_escaped)
     except KeyError as e:
         logger.warning(
             "Subagent %s/%s template missing key: %s",
@@ -478,7 +540,8 @@ def run_subagent_with_tools(
 
     template = _get_task_template(task_type, stage_config)
     try:
-        prompt = template.format(**prompt_data)
+        prompt_data_escaped = _escape_prompt_data(prompt_data)
+        prompt = template.format(**prompt_data_escaped)
     except KeyError as e:
         logger.warning(
             "Subagent %s/%s template missing key: %s",
@@ -732,12 +795,87 @@ def run_subagent_chain(
 
 
 def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
-    """Evaluate a condition expression against the context."""
+    """Evaluate a condition expression against the context using AST-based parsing."""
+    import ast
+    import operator
+
+    _ALLOWED_OPS = {
+        ast.Eq: operator.eq,
+        ast.NotEq: operator.ne,
+        ast.Lt: operator.lt,
+        ast.LtE: operator.le,
+        ast.Gt: operator.gt,
+        ast.GtE: operator.ge,
+        ast.And: operator.and_,
+        ast.Or: operator.or_,
+        ast.Not: operator.not_,
+        ast.In: lambda a, b: a in b,
+        ast.NotIn: lambda a, b: a not in b,
+    }
+
+    _ALLOWED_NAMES = {"True", "False", "None", "results"}
+
+    def _eval_node(node: ast.AST) -> Any:
+        if isinstance(node, ast.Expression):
+            return _eval_node(node.body)
+        elif isinstance(node, ast.BoolOp):
+            op = _ALLOWED_OPS[type(node.op)]
+            values = [_eval_node(v) for v in node.values]
+            return op(values[0], values[1]) if len(values) == 2 else op(*values)
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return not _eval_node(node.operand)
+        elif isinstance(node, ast.Compare):
+            left = _eval_node(node.left)
+            for op_node, comparator in zip(node.ops, node.comparators):
+                op = _ALLOWED_OPS[type(op_node)]
+                right = _eval_node(comparator)
+                if not op(left, right):
+                    return False
+                left = right
+            return True
+        elif isinstance(node, ast.Name):
+            if node.id not in _ALLOWED_NAMES:
+                raise ValueError(f"Unknown identifier: {node.id}")
+            if node.id == "results":
+                return context
+            result = context.get(node.id)
+            if result is None:
+                raise ValueError(f"Context has no key '{node.id}'")
+            return result
+        elif isinstance(node, ast.Constant):
+            return node.value
+        elif isinstance(node, ast.Attribute):
+            obj = _eval_node(node.value)
+            if isinstance(obj, dict):
+                key = node.attr
+                if key not in obj:
+                    raise ValueError(f"Dict has no key '{key}'")
+                return obj[key]
+            if node.attr.startswith("__") or node.attr.startswith("_"):
+                raise ValueError(
+                    f"Access to protected attribute '{node.attr}' is not allowed"
+                )
+            return getattr(obj, node.attr)
+        elif isinstance(node, ast.Subscript):
+            obj = _eval_node(node.value)
+            idx = _eval_node(node.slice)
+            if isinstance(obj, dict):
+                return obj[idx]
+            elif isinstance(obj, (list, tuple)):
+                if isinstance(idx, int):
+                    return obj[idx]
+                raise ValueError("List index must be an integer")
+            raise ValueError("Subscript target must be dict or list")
+        else:
+            raise ValueError(f"Unsupported node type: {type(node).__name__}")
+
     try:
-        local_vars = {"results": context}
-        for key, value in context.items():
-            local_vars[key] = value
-        return bool(eval(condition, {"__builtins__": {}}, local_vars))
+        tree = ast.parse(condition, mode="eval")
+    except (SyntaxError, ValueError):
+        return False
+
+    try:
+        return bool(_eval_node(tree))
     except Exception:
         return False
 

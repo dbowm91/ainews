@@ -19,16 +19,16 @@
        hx-swap="innerHTML"
        hx-push-url="true"
        hx-indicator="#content-loading"
-       aria-label="Read article: {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}">
-      {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
+       aria-label="Read article: {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}">
+      {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}
     </a>
   </h2>
   {% if article._fa and article._fa.tldr %}
-    <p class="card-summary">{{ article._fa.tldr }}</p>
+    <p class="card-summary">{{ article._fa.tldr|e }}</p>
   {% elif article._summary and article._summary.tldr %}
-    <p class="card-summary">{{ article._summary.tldr }}</p>
+    <p class="card-summary">{{ article._summary.tldr|e }}</p>
   {% elif article.summary and not article._summary %}
-    <p class="card-summary">{{ article.summary }}</p>
+    <p class="card-summary">{{ article.summary|e }}</p>
   {% endif %}
   {% if article.tags %}
     <div class="card-tags">

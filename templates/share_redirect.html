@@ -15,7 +15,7 @@
   <div id="offline-toast" class="toast toast-hidden" role="status" aria-live="polite">You appear to be offline. Some content may be unavailable.</div>
   <main class="container share-redirect-container">
     <h1 class="article-title share-redirect-title">
-      {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
+      {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}
     </h1>
     <p class="share-redirect-description">redirecting to article...</p>
 

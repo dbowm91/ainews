@@ -7,9 +7,9 @@
            hx-get="{{ url_for('public.article_detail', article_id=rel.id) }}"
            hx-target="#content" hx-swap="innerHTML" hx-push-url="true">
           <span class="related-category cat-{{ rel.category }}">{{ rel.category }}</span>
-          <span class="related-title">{{ rel.original_title }}</span>
+          <span class="related-title">{{ rel.original_title|e }}</span>
           {% if rel._fa and rel._fa.tldr %}
-            <span class="related-tldr">{{ rel._fa.tldr[:100] }}{% if rel._fa.tldr|length > 100 %}...{% endif %}</span>
+            <span class="related-tldr">{{ rel._fa.tldr[:100]|e }}{% if rel._fa.tldr|length > 100 %}...{% endif %}</span>
           {% endif %}
         </a>
       {% endfor %}

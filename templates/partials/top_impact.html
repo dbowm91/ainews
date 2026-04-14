@@ -15,10 +15,10 @@
             <span class="card-time">{{ article.created_at.strftime('%b %d') if article.created_at }}</span>
           </div>
           <span class="top-impact-headline">
-            {% if article._fa and article._fa.headline %}{{ article._fa.headline }}{% else %}{{ article.original_title }}{% endif %}
+            {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}
           </span>
           {% if article._fa and article._fa.tldr %}
-            <span class="top-impact-tldr">{{ article._fa.tldr[:120] }}{% if article._fa.tldr|length > 120 %}...{% endif %}</span>
+            <span class="top-impact-tldr">{{ article._fa.tldr[:120]|e }}{% if article._fa.tldr|length > 120 %}...{% endif %}</span>
           {% endif %}
         </a>
       {% endfor %}

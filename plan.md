@@ -923,11 +923,11 @@ op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
 
 ## Implementation Order
 
-### Phase 1: Wave 1 - Critical Security (Do First)
-- W1.1: Fix XSS in templates
-- W1.2: Fix subagent prompt injection
-- W1.3: Replace eval() in condition evaluation
-- W1.4: Add security tests
+### Phase 1: Wave 1 - Critical Security (Do First) ✅ COMPLETE
+- [x] W1.1: Fix XSS in templates — `|e` filter added to all LLM-generated and crawled content in 7 template files
+- [x] W1.2: Fix subagent prompt injection — `_escape_prompt_data()` added to `services/subagent.py`, `esc_xml_text()` added to `tasks/research.py:_format_web_results()`
+- [x] W1.3: Replace eval() in condition evaluation — AST-based parser with safe operator allowlist
+- [x] W1.4: Add security tests — `tests/test_security_conditions.py` with 35 passing tests
 
 ### Phase 2: Wave 2 - High-Priority Security
 - W2.1-W2.8: Session fixation, webhook secrets, Redis URL, RSS XML, trend memory, select/newsletter, CSRF exemption, SECRET_KEY logs

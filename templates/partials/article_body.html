@@ -4,24 +4,24 @@
 {% set sd = article._summary if article._summary is defined else none %}
 
 {% if sd and sd.headline %}
-  <h1 class="article-title">{{ sd.headline }}</h1>
+  <h1 class="article-title">{{ sd.headline|e }}</h1>
 {% else %}
-  <h1 class="article-title">{{ article.original_title }}</h1>
+  <h1 class="article-title">{{ article.original_title|e }}</h1>
 {% endif %}
 
 {% if sd and sd.tldr %}
   <div class="article-tldr">
     <span class="tldr-label">tl;dr</span>
-    {{ sd.tldr }}
+    {{ sd.tldr|e }}
   </div>
 {% elif article.summary and not sd %}
-  <div class="article-summary">{{ article.summary }}</div>
+  <div class="article-summary">{{ article.summary|e }}</div>
 {% endif %}
 
 {% if sd and sd.why_it_matters %}
   <section class="article-why-matters">
     <h2 class="section-heading">why it matters</h2>
-    <div class="why-matters-text">{{ sd.why_it_matters }}</div>
+    <div class="why-matters-text">{{ sd.why_it_matters|e }}</div>
   </section>
 {% endif %}
 
@@ -30,7 +30,7 @@
     <h2 class="section-heading">key takeaways{% if sd.key_points|length > 5 %} <span class="keypoints-count">({{ sd.key_points|length }} total)</span>{% endif %}</h2>
     <ul class="keypoints-list">
       {% for p in sd.key_points[:5] %}
-        <li>{{ p }}</li>
+        <li>{{ p|e }}</li>
       {% endfor %}
     </ul>
     {% if sd.key_points|length > 5 %}

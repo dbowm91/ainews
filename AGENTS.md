@@ -70,6 +70,22 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 
 `services/subagent.py` provides `run_subagent()` for running lightweight subagent tasks synchronously within parent Celery tasks. Uses `services/context_service.py` for topic note CRUD and related article lookup. Configuration in `pipeline.yaml` under `subagent:` section. Failures degrade gracefully — subagent errors never crash the parent pipeline.
 
+### Trend memory system
+
+`services/trend_memory.py` provides tiered, LLM-judged memory for the editor agent. After an article is finalized, `propose_trend_memory(article)` asks the LLM to extract 0–3 high-signal memory entries (topic, importance 1–3, factual signal). Future editor contextualization calls inject stored memory via `get_memory_for_topics()` so the LLM sees prior patterns before editing.
+
+Key components:
+- `TrendMemory` model (`models.py`) — topic, signal, importance (1=low/7d TTL, 2=medium/30d TTL, 3=high/no expiry), source_article_id, expires_at
+- `MemoryImportance` enum in `services/trend_memory.py` — LOW/MEDIUM/HIGH tiers
+- `consolidate_trend_memory` Celery task — nightly at 3:30 AM; promotes low-importance entries to medium when a high-importance entry exists for the same topic
+- Configuration in `pipeline.yaml` under `memory:` section (all values configurable)
+
+The editor subagent template (`edit_contextualization` in `services/subagent.py`) includes `{trend_memory}` which is resolved at call time in `tasks/edit.py`.
+
+### LLM provider support
+
+MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`). Enable by setting `enabled: true` in `providers.yaml` and providing `MINIMAX_API_KEY`. DeepSeek and Zai (BigModel.cn) are also pre-configured as OpenAI-compatible providers.
+
 ### CSS module architecture
 
 `static/css/style.css` imports from focused modules in `static/css/`:
@@ -111,6 +127,7 @@ Six scheduled tasks are configured in `config.py`:
 - `cleanup-old-logs` — daily at 3:00 AM (cron)
 - `cleanup-expired-verifications` — every 15 minutes
 - `cleanup-stale-limiter-slots` — every 5 minutes
+- `consolidate-trend-memory` — daily at 3:30 AM (cron)
 
 ### Model column defaults
 
@@ -136,6 +153,10 @@ def _clear_dns_cache():
 ### Login lockout
 
 The login lockout mechanism has two code paths: primary Redis-based (via Lua script) and in-memory fallback for when Redis is unavailable. Both are intentional — do not remove the fallback path.
+
+### Session fixation prevention
+
+On successful admin login, use `session.clear()` or `session.regenerate_id()` before setting `session["admin"] = True`. Simply popping and setting the admin key without regenerating the session ID allows session fixation attacks. See `routes/admin/auth.py:52-53`.
 
 ### Pipeline retry budget
 
@@ -177,7 +198,7 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 
 ### Pipeline retry configuration
 
-`MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers. Note: these helpers exist in both `tasks/pipeline.py` and `services/pipeline_failure.py` — the `pipeline_failure.py` version uses `get_config_with_default()` (correct for Celery context), while the `pipeline.py` version uses `current_app.config.get()` with RuntimeError fallback. Consolidation is planned.
+`MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers. Celery tasks must use `get_config_with_default()` from `services/config_utils.py` (correct for Celery context), not `current_app.config.get()` which raises `RuntimeError` outside Flask request context.
 
 ### Redis variable shadowing
 
@@ -278,6 +299,8 @@ When catching `db.session.commit()` failures, rolling back, and continuing to re
 
 When parsing ISO format dates without timezone info, `datetime.fromisoformat()` returns naive datetimes. These will raise `TypeError` when compared against timezone-aware columns (like `Article.created_at`). Normalize: if the result is naive, call `.replace(tzinfo=timezone.utc)`.
 
+**Naive vs aware datetime mixing**: The database uses naive datetimes for some columns (e.g., `Article.original_published_at`). When comparing `datetime.now(timezone.utc)` (aware) against naive database columns, normalize to naive: `datetime.now(timezone.utc).replace(tzinfo=None)`. See `routes/public/feeds.py` and `tasks/extract.py` for proper handling.
+
 ### `session.clear()` wipes CSRF tokens
 
 Using `session.clear()` on login or other operations wipes the CSRF token and any other session data. Use `session.pop("key", None)` to remove specific keys while preserving the rest of the session.
@@ -314,6 +337,10 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 **HTML escaping in email templates**: All text content embedded in email HTML (headlines, categories, TL;DR text) must be escaped with `html.escape()` before insertion. LLM-generated content from `final_article` JSON is untrusted and may contain HTML/JS. See `services/newsletter.py` and `services/email.py`.
 
+**HTML escaping in Jinja2 templates**: LLM-generated content from `final_article` JSON (headline, tldr, why_it_matters, body, what_to_watch, key_points, citations) and crawled content (original_title, original_url) must be escaped with the `|e` filter when rendered in templates. This applies to all templates under `templates/partials/` that render article content. The `safe_href` filter exists for URL fields but does NOT escape HTML — use `|e` for text content.
+
+**Safe expression evaluation**: Use AST-based evaluation instead of `eval()` for condition parsing in subagent logic (`services/subagent.py:_evaluate_condition`). The `ast` module approach with allowlisted operators is preferred over regex-based parsing for future extensibility.
+
 **Deserialization allowlists**: Any function that calls `importlib.import_module()` with data from external storage (Redis, user input) must validate against an allowlist of permitted class paths. See `services/config_cache.py:_import_class()`.
 
 ### Concurrency patterns
@@ -331,6 +358,8 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 **ThreadPoolExecutor shutdown**: When implementing timeouts with `ThreadPoolExecutor`, use `executor.shutdown(wait=False, cancel_futures=True)` in the `finally` block — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout. Python 3.9+ supports `cancel_futures=True` (project uses 3.12).
 
 **`autoretry_for` over manual `self.retry()`**: Prefer the `autoretry_for` / `dont_autoretry_for` decorator parameters over manual `raise self.retry()` calls. This is cleaner and supports `retry_backoff` and `retry_jitter` out of the box. See `tasks/newsletter.py:send_single_email` for the reference pattern — uses `autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError)` with `dont_autoretry_for=(smtplib.SMTPResponseException,)` to distinguish transient from permanent SMTP errors.
+
+**LLM client timeouts**: All LLM provider clients should specify explicit timeouts. OpenAI uses `_client_kwargs` with `timeout` parameter; Anthropic uses instance `_timeout` variable. Ollama and Gemini already hardcode 120s. Use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from constants for consistency.
 
 ### Celery task timeout handling
 

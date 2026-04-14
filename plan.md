@@ -939,8 +939,17 @@ op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
 - [x] W2.7: Remove CSRF exemption on tracking endpoint — `@csrf.exempt` removed from `routes/public/links.py`
 - [x] W2.8: Fix default SECRET_KEY in warning logs — warning message no longer contains the literal default key value in `app.py`
 
-### Phase 3: Wave 3 - Code Quality & Reliability
-- W3.1-W3.10: Config access, datetime, error handling, timeouts, logging, transaction safety
+### Phase 3: Wave 3 - Code Quality & Reliability ✅ COMPLETE
+- [x] W3.1: Fix current_app.config.get() — `_get_pipeline_timeout_seconds()` and `_get_dns_cache_config()` now use `get_config_with_default()` from `services/config_utils.py`
+- [x] W3.2: Fix datetime naive/aware mixing — `feeds.py` normalizes to naive datetime; `extract.py` handles tzinfo from `fromisoformat()` and uses `datetime.utcnow()` fallback
+- [x] W3.3: Add error handling to `_fetch_item` — `adapters/api.py` now logs warning instead of silently swallowing exceptions
+- [x] W3.4: Fix ValidationError inheritance — `services/article_validation.py` now inherits from `ValueError` instead of `Exception`
+- [x] W3.5: Add explicit timeouts to LLM clients — OpenAI uses `_client_kwargs["timeout"]=120.0`; Anthropic uses `self._timeout=120.0` passed to client constructor
+- [x] W3.6: Fix token tracking in pipeline — `tasks/pipeline.py:335` now uses `result.tokens_used` instead of `max_tokens`
+- [x] W3.7: Convert f-string logs to %-formatting — `services/limiter.py` was already using %-formatting (no change needed)
+- [x] W3.8: Verify database transaction rollback patterns — All modules use proper `try/except/rollback` patterns; `routes/decorators.py` provides `commit()` and `commit_or_rollback()` helpers
+- [x] W3.9: Add type hints to utility modules — `services/redis_utils.py` already has full type hints
+- [x] W3.10: Extract magic numbers to config — `LOGIN_LOCKOUT_SECONDS=900` and `LOGIN_MAX_ATTEMPTS=5` already defined in `config.py` and accessed via `get_config_with_default()`
 
 ### Phase 4: Wave 4 - Performance Optimization
 - W4.1-W4.11: Regex pre-compile, eager loading, cache stampede, concurrency fixes

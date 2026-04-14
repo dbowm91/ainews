@@ -38,15 +38,16 @@ def get_newsletter_editor_system_prompt() -> str:
 
 
 def build_reader_prompt(articles, topic_context: str) -> str:
+    from services.prompts import esc_xml_text
     from services.utils import parse_article_headline
 
     parts = [f"TOPIC CONTEXT: {topic_context}", "", "TODAY'S ARTICLES:"]
     for i, article in enumerate(articles, 1):
         headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
         category = article.category or ""
-        parts.append(f"{i}. [{category}] {headline}")
+        parts.append(f"{i}. [{esc_xml_text(category)}] {esc_xml_text(headline)}")
         if tldr:
-            parts.append(f"   {tldr[:200]}")
+            parts.append(f"   {esc_xml_text(tldr[:200])}")
     parts.append("")
     parts.append(
         "Analyze these articles. Identify themes, highlights, and connections."
@@ -55,9 +56,11 @@ def build_reader_prompt(articles, topic_context: str) -> str:
 
 
 def build_writer_prompt(brief_json: str, topic_context: str) -> str:
+    from services.prompts import esc_xml_text
+
     return (
         f"TOPIC CONTEXT: {topic_context}\n\n"
-        f"NEWS ANALYSIS:\n{brief_json}\n\n"
+        f"NEWS ANALYSIS:\n{esc_xml_text(brief_json)}\n\n"
         f"Write an executive summary for today's newsletter. "
         f"Be welcoming and contextual. Reference specific articles by headline. "
         f"Keep it 3-4 paragraphs, sharp and direct."
@@ -65,8 +68,10 @@ def build_writer_prompt(brief_json: str, topic_context: str) -> str:
 
 
 def build_editor_prompt(summary_json: str) -> str:
+    from services.prompts import esc_xml_text
+
     return (
-        f"DRAFT EXECUTIVE SUMMARY:\n{summary_json}\n\n"
+        f"DRAFT EXECUTIVE SUMMARY:\n{esc_xml_text(summary_json)}\n\n"
         f"Review and improve this summary. "
         f"Ensure sharp tone, smooth flow, correct article references, and brevity. "
         f"Return the corrected version in the same format."

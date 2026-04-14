@@ -1,3 +1,4 @@
+import html
 import logging
 from datetime import datetime, timezone
 from xml.etree.ElementTree import Element, SubElement, tostring, indent
@@ -25,14 +26,14 @@ def generate_rss_feed(
 
         headline, tldr = _parse_final_article(article)
 
-        title_text = headline or article.original_title or "Untitled"
+        title_text = html.escape(headline or article.original_title or "Untitled")
         SubElement(item, "title").text = title_text
 
         link = f"{site_url}/article/{article.id}"
         SubElement(item, "link").text = link
         SubElement(item, "guid").text = link
 
-        SubElement(item, "description").text = tldr or ""
+        SubElement(item, "description").text = html.escape(tldr or "")
 
         if article.original_published_at:
             SubElement(item, "pubDate").text = _format_date(

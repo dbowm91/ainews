@@ -34,12 +34,16 @@ def select_article(self, article_id: int, run_id=None):
     from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next
 
     def work(article, provider, model, max_tokens):
+        from services.prompts import esc_xml_text
+
         rc = get_role_config("selector")
         text_preview = (article.extracted_text or article.original_title or "")[:500]
         prompt = (
-            f"ARTICLE: {article.original_title}\n"
-            f"TOPICS: {', '.join(article.topics or [])}\n"
-            f"PREVIEW: {text_preview}\n\n"
+            f"<article>\n"
+            f"<title>{esc_xml_text(article.original_title or '')}</title>\n"
+            f"<topics>{esc_xml_text(', '.join(article.topics or []))}</topics>\n"
+            f"<preview>{esc_xml_text(text_preview)}</preview>\n"
+            f"</article>\n\n"
             "Should we write a condensed news article about this? "
             "Score 1-10 for newsworthiness to a tech audience. "
             "Return JSON with selected (bool), score (1-10), reason (string)."

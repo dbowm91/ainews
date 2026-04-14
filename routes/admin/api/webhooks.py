@@ -8,6 +8,12 @@ from routes.decorators import commit
 logger = logging.getLogger(__name__)
 
 
+def _mask_secret(secret: str) -> str:
+    if len(secret) <= 8:
+        return "***"
+    return f"{secret[:4]}...{secret[-4:]}"
+
+
 @admin_bp.route("/api/webhooks", methods=["GET"])
 @require_auth
 def list_webhooks() -> Response:
@@ -89,7 +95,7 @@ def create_webhook() -> tuple[Response, int] | Response:
                 "id": webhook.id,
                 "name": webhook.name,
                 "url": webhook.url,
-                "secret": webhook.secret,
+                "secret": _mask_secret(webhook.secret),
                 "events": webhook.events,
             },
         }

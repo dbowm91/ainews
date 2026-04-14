@@ -929,8 +929,15 @@ op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
 - [x] W1.3: Replace eval() in condition evaluation — AST-based parser with safe operator allowlist
 - [x] W1.4: Add security tests — `tests/test_security_conditions.py` with 35 passing tests
 
-### Phase 2: Wave 2 - High-Priority Security
-- W2.1-W2.8: Session fixation, webhook secrets, Redis URL, RSS XML, trend memory, select/newsletter, CSRF exemption, SECRET_KEY logs
+### Phase 2: Wave 2 - High-Priority Security ✅ COMPLETE
+- [x] W2.1: Fix session fixation on login — `session.clear()` before setting admin session in `routes/admin/auth.py`
+- [x] W2.2: Mask webhook secrets in API responses — `_mask_secret()` added to `routes/admin/api/webhooks.py`
+- [x] W2.3: Fix Redis credential URL parsing — uses `urlparse`/`urlunparse` in `extensions.py` to preserve credentials when switching databases
+- [x] W2.4: Fix RSS XML injection — `html.escape()` applied to headline and description in `services/rss.py`
+- [x] W2.5: Fix trend memory prompt injection — `esc_xml_text()` applied to draft and summary in `services/trend_memory.py`
+- [x] W2.6: Fix select/newsletter prompt injection — `esc_xml_text()` applied to all LLM-generated and external content in `tasks/select.py` and `services/newsletter_pipeline.py`
+- [x] W2.7: Remove CSRF exemption on tracking endpoint — `@csrf.exempt` removed from `routes/public/links.py`
+- [x] W2.8: Fix default SECRET_KEY in warning logs — warning message no longer contains the literal default key value in `app.py`
 
 ### Phase 3: Wave 3 - Code Quality & Reliability
 - W3.1-W3.10: Config access, datetime, error handling, timeouts, logging, transaction safety

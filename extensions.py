@@ -21,10 +21,13 @@ def _get_limiter_storage_uri() -> str:
     Uses a separate Redis DB (15) to avoid conflicting with Celery's broker.
     Falls back to in-memory if Redis is unavailable.
     """
+    from urllib.parse import urlparse, urlunparse
+
     broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
     if "://" in broker_url:
-        base = broker_url.rsplit("/", 1)[0]
-        return f"{base}/15"
+        parsed = urlparse(broker_url)
+        new_parsed = parsed._replace(path="/15")
+        return urlunparse(new_parsed)
     return "memory://"
 
 

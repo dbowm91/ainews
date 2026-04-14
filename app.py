@@ -71,7 +71,7 @@ def create_app(config_name=None):
             logger.warning("ADMIN_PASSWORD not set - admin login disabled")
         if dev_cfg.SECRET_KEY == "dev-secret-key-change-me":
             logger.warning(
-                "SECRET_KEY is using default value 'dev-secret-key-change-me' — "
+                "SECRET_KEY is using a default value — "
                 "sessions are insecure. Set SECRET_KEY env var for production."
             )
 

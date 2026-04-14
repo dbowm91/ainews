@@ -25,6 +25,15 @@ f"<title>{esc_xml_text(title)}</title>"
 f"<citation title='{esc_xml_attr(c.get('title', ''))}' />"
 ```
 
+For subagent prompt templates (`services/subagent.py`), use the `_escape_prompt_data()` helper which recursively escapes all string values in a prompt_data dict:
+
+```python
+prompt_data_escaped = _escape_prompt_data(prompt_data)
+prompt = template.format(**prompt_data_escaped)
+```
+
+This replaces `template.format(**prompt_data)` directly and prevents XML-breaking injection from malicious content.
+
 ### URL fetching
 
 All outbound HTTP requests must validate URLs against private IP ranges via `services/url.py:validate_url_safe()` to prevent SSRF. Catch `UnsafeURLError` to handle blocked URLs gracefully.

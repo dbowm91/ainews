@@ -287,6 +287,20 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`services/url.py:_TTLCache`**: Docstring claims LRU eviction but implements oldest-first (FIFO) eviction via `min()` on timestamps. DNS cache behavior is acceptable — docstring was corrected to describe FIFO behavior.
 
+**Pre-compiled regex patterns**: When using `re.findall()` or `re.sub()` in frequently-called functions, pre-compile the pattern at module level as `_NAME_RE = re.compile(r"...")` and use `pattern.findall(text)` or `pattern.sub(replacement, text)`. This avoids re-compilation on every call.
+
+**Eager loading for list queries**: When querying collections that will access related objects (source, tags), use `joinedload()` to avoid N+1 queries:
+```python
+from sqlalchemy.orm import joinedload
+q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+```
+
+**ResponseCache stampede protection**: `get_or_set()` uses per-key Redis locking with `SET NX EX` + polling fallback. When adding new caching, follow this pattern to prevent thundering herd.
+
+**Limiter acquire with timeout**: `ModelLimiter.acquire()` now polls with exponential backoff (0.05s → 0.5s) up to the timeout. Redis errors on acquire still fail closed (return False). Don't change this behavior — fail closed is intentional.
+
+**Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates.
+
 **`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. Pre-compilation at module load was implemented.
 
 **Wave 4 refactoring completed**:

@@ -275,3 +275,18 @@ Wave 3 implemented in commit `5891b10`:
 - W3.8: Transaction rollback patterns verified
 - W3.9: `services/redis_utils.py` already has full type hints
 - W3.10: Login lockout magic numbers in `config.py`
+
+## Wave 4 Changes (Completed)
+
+Wave 4 implemented in commit `86b877d`:
+- W4.1: Pre-compiled regex patterns — `_TITLE_WORDS_RE` (article.py), `_NORMALIZE_WHITESPACE_RE` (url.py), `_FOOTER_WITH_AGENTS_RE` / `_CLOSING_TABLE_RE` (email.py), `_CONTROL_CHAR_RE` (validation.py), `_SLUGIFY_INVALID_RE` / `_SLUGIFY_WHITESPACE_RE` (models.py)
+- W4.2: Eager loading — `joinedload(Article.source)`, `joinedload(Article.tags)` added to `routes/admin/articles.py`, `routes/admin/review.py`, `routes/public/feeds.py` (tag feed, RSS feeds), `services/related.py`
+- W4.3: ResponseCache stampede protection — per-key Redis locking with `SET NX EX` + polling fallback in `services/cache.py:get_or_set()`
+- W4.4: Subagent ThreadPoolExecutor — added `future.cancel()` before `executor.shutdown(wait=False, cancel_futures=True)` in `run_subagent()` and `run_subagent_with_tools()`
+- W4.5: Limiter acquire timeout — polling loop with exponential backoff (0.05s → 0.5s) and deadline tracking in `services/limiter.py:acquire()`
+- W4.6: Circuit breaker fallback state — confirmed `get_provider_for_role()` already iterates fallback providers with individual circuit breaker per provider
+- W4.7: Lock acquisition race condition — confirmed `services/redis_utils.py` already uses Lua scripts for atomic check-and-delete
+- W4.8: String concatenation → list/join in `services/newsletter.py:generate_newsletter_html()` (`para_parts`, `items_parts`)
+- W4.9: find_duplicate_titles() optimization — already uses `yield_per(_BATCH_SIZE)` with batch query; confirmed no N+1 issue
+- W4.10: ConfigCache LRU eviction — already implemented via expiration-based eviction with max entries limit
+- W4.11: Article detail caching — `routes/public/links.py:article_detail()` now uses `get_response_cache()` with key `article_detail:{article_id}` and 300s TTL

@@ -88,10 +88,11 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 - `retry-stuck-articles` — retry/dead-letter stuck articles every 60 min
 - `generate-newsletters` — daily at 8:00 AM
 - `cleanup-old-logs` — daily at 3:00 AM
-- `cleanup-stale-limiter-slots` — every 5 min
+- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup)
 - `consolidate-trend-memory` — daily at 3:30 AM
 - `cleanup-expired-verifications` — every 15 min
 - `publish-scheduled-articles` — every 5 min
+- `cleanup-stale-limiter-slots` — every 5 min
 
 **Lock pattern:** Distributed locks use task's `self.request.id` as lock value so retries can re-acquire.
 
@@ -290,3 +291,18 @@ Wave 4 implemented in commit `86b877d`:
 - W4.9: find_duplicate_titles() optimization — already uses `yield_per(_BATCH_SIZE)` with batch query; confirmed no N+1 issue
 - W4.10: ConfigCache LRU eviction — already implemented via expiration-based eviction with max entries limit
 - W4.11: Article detail caching — `routes/public/links.py:article_detail()` now uses `get_response_cache()` with key `article_detail:{article_id}` and 300s TTL
+
+## Wave 5 Changes (Completed)
+
+Wave 5 implemented in commit `d865ab8`:
+- W5.1: Newsletter parallelization — `_generate_newsletters_impl()` fetches all articles upfront and dispatches topic newsletter tasks via Celery group
+- W5.2: Email batching — `_send_emails_parallel()` now sends in batches of 500 to reduce Celery task overhead
+- W5.3: Retry batching — `retry_stuck()` now batches article commits (50 per batch) before dispatching
+- W5.6: Article version cleanup — `cleanup_old_article_versions()` task added with daily schedule at 3:45 AM
+- W5.7: Source health hysteresis — `record_crawl_success()` requires `HEALTHY_THRESHOLD=3` consecutive successes before re-enabling disabled sources; `record_crawl_failure()` resets `consecutive_successes`
+- W5.9: Trend memory optimization — `consolidate_topic()` batches low-entry lookups instead of N queries per high entry
+- W5.10: Newsletter transaction safety — `_generate_topic_newsletter_impl()` rolls back Newsletter records if email delivery fails partially
+- W5.12: Composite indexes — Migration 017 adds `ix_subscribers_newsletter_active_deleted`; Migration 018 adds `ix_pipeline_logs_run_created`
+- W5.13: Tag cloud cache TTL — increased from 60s to 600s in `routes/public/__init__.py:_get_tag_cloud()`
+
+Note: W5.4 (SoftTimeLimitExceeded handling), W5.5 (pipeline stage timeout metrics), W5.8 (webhook retry), W5.11 (request ID tracing) were already implemented correctly.

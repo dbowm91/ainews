@@ -22,11 +22,14 @@ def generate_newsletter_html(
     summary_html = ""
     if executive_summary:
         paragraphs = executive_summary.split("\n\n")
-        para_html = ""
+        para_parts = []
         for p in paragraphs:
             p = p.strip()
             if p:
-                para_html += f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{html.escape(p)}</p>'
+                para_parts.append(
+                    f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{html.escape(p)}</p>'
+                )
+        para_html = "".join(para_parts)
         if para_html:
             summary_html = f"""
         <tr>
@@ -40,7 +43,7 @@ def generate_newsletter_html(
         </tr>"""
 
     # Article items
-    items_html = ""
+    items_parts = []
     for i, article in enumerate(articles, 1):
         headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
         link = f"{site_url}/article/{article.id}"
@@ -50,7 +53,7 @@ def generate_newsletter_html(
         safe_category = html.escape(category)
         safe_tldr = html.escape(tldr)
 
-        items_html += f"""
+        items_parts.append(f"""
         <tr>
           <td style="padding:16px 0;border-bottom:1px solid #eaeaea;">
             <table width="100%" cellpadding="0" cellspacing="0">
@@ -64,7 +67,8 @@ def generate_newsletter_html(
               </tr>
             </table>
           </td>
-        </tr>"""
+        </tr>""")
+    items_html = "".join(items_parts)
 
     if unsubscribe_url:
         unsub = unsubscribe_url.replace("{site_url}", site_url)

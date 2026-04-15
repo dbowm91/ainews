@@ -9,6 +9,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
+from services.config_utils import get_config_with_default
+
 logger = logging.getLogger(__name__)
 
 _DNS_RESOLVE_TIMEOUT = 10  # seconds
@@ -36,15 +38,9 @@ _DNS_CACHE_MAX = 1024
 
 def _get_dns_cache_config() -> tuple[int, int]:
     """Get DNS cache TTL and max size from Flask config, falling back to defaults."""
-    try:
-        from flask import current_app
-
-        return (
-            current_app.config.get("DNS_CACHE_TTL", _DNS_CACHE_TTL),
-            current_app.config.get("DNS_CACHE_MAX", _DNS_CACHE_MAX),
-        )
-    except RuntimeError:
-        return _DNS_CACHE_TTL, _DNS_CACHE_MAX
+    ttl = get_config_with_default("DNS_CACHE_TTL", _DNS_CACHE_TTL)
+    max_size = get_config_with_default("DNS_CACHE_MAX", _DNS_CACHE_MAX)
+    return ttl, max_size
 
 
 class _TTLCache:
@@ -206,6 +202,8 @@ def validate_url_safe(url: str) -> str:
     return url
 
 
+_NORMALIZE_WHITESPACE_RE = re.compile(r"\s+")
+
 TRACKING_PARAMS = {
     "utm_source",
     "utm_medium",
@@ -275,4 +273,4 @@ def normalize_title(title: str) -> str:
     """
     if not title:
         return ""
-    return re.sub(r"\s+", " ", title.lower().strip())
+    return _NORMALIZE_WHITESPACE_RE.sub(" ", title.lower().strip())

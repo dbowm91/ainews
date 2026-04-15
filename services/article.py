@@ -5,6 +5,7 @@ For pagination and FTS search, see services/pagination.py.
 """
 
 import logging
+import re
 from typing import Any, Optional
 
 from sqlalchemy import Column
@@ -14,11 +15,13 @@ from extensions import db
 from models import Article, ArticleMetric
 from sqlalchemy.orm import joinedload
 
-# Re-export from extracted modules for backward compatibility
-from services.article_parser import parse_article_json, parse_articles  # noqa: F401
-from services.pagination import paginate_query, search_fts, _escape_like_pattern  # noqa: F401
-
 logger = logging.getLogger(__name__)
+
+_TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
+
+# Re-export from extracted modules for backward compatibility
+from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402
+from services.pagination import paginate_query, search_fts, _escape_like_pattern  # noqa: F401, E402
 
 # Threshold for Jaccard similarity on title word sets (0–1).
 # Pairs with similarity >= this value are considered duplicates.
@@ -209,12 +212,9 @@ def _title_word_set(title: str | None) -> set[str]:
 
     Strips punctuation, lowercases, and splits on whitespace.
     """
-    import re
-
     if not title:
         return set()
-    words = re.findall(r"[a-z0-9]+", title.lower())
-    # Filter out very short words (articles, prepositions) that inflate similarity
+    words = _TITLE_WORDS_RE.findall(title.lower())
     return {w for w in words if len(w) > 2}
 
 

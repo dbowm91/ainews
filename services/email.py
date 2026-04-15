@@ -7,6 +7,12 @@ from email.mime.multipart import MIMEMultipart
 
 logger = logging.getLogger(__name__)
 
+_FOOTER_WITH_AGENTS_RE = re.compile(
+    r"<tr>\s*<td[^>]*>.*?condensed by agents.*?</td>\s*</tr>\s*</table>\s*</td></tr>\s*</table>",
+    flags=re.DOTALL,
+)
+_CLOSING_TABLE_RE = re.compile(r"(</table>\s*</td></tr>\s*</table>)", flags=re.DOTALL)
+
 
 def get_smtp_config():
     """Get SMTP settings from Flask app config or env."""
@@ -155,20 +161,16 @@ def send_newsletter_email(
 
     # Replace existing footer or inject before closing table tags
     if "condensed by agents" in html_content:
-        html_content = re.sub(
-            r"<tr>\s*<td[^>]*>.*?condensed by agents.*?</td>\s*</tr>\s*</table>\s*</td></tr>\s*</table>",
+        html_content = _FOOTER_WITH_AGENTS_RE.sub(
             footer_html + "</table></td></tr></table>",
             html_content,
-            flags=re.DOTALL,
         )
     else:
         # Find last </table> pair and inject footer before it
-        html_content = re.sub(
-            r"(</table>\s*</td></tr>\s*</table>)",
+        html_content = _CLOSING_TABLE_RE.sub(
             footer_html + r"\1",
             html_content,
             count=1,
-            flags=re.DOTALL,
         )
 
     _send_smtp(email, subject, html_content)

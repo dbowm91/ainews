@@ -19,11 +19,21 @@ def article_detail(article_id: int) -> Response:
     from schemas.topic import load_topics
     from services.related import find_related_articles
     from services.article import parse_articles
+    from services.cache import get_response_cache
+
+    cache = get_response_cache()
+    cache_key = f"article_detail:{article_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        resp = make_response(cached)
+        resp.headers["Cache-Control"] = (
+            "public, max-age=300, stale-while-revalidate=600"
+        )
+        return resp
 
     article = Article.query.get_or_404(article_id)
     parse_article_json(article)
 
-    # Track page load
     track_metric(article_id, ArticleMetric.page_loads)
 
     topics = load_topics().topics
@@ -44,9 +54,6 @@ def article_detail(article_id: int) -> Response:
     else:
         response = render_template("article.html", **ctx)
 
-    # Add cache headers - short TTL since article content can be edited
-    from flask import Response
-
     if not isinstance(response, Response):
         resp = make_response(response)
     else:
@@ -56,6 +63,7 @@ def article_detail(article_id: int) -> Response:
         resp.headers["Last-Modified"] = article.updated_at.strftime(
             "%a, %d %b %Y %H:%M:%S GMT"
         )
+    cache.set(cache_key, resp.get_data(), ttl=300)
     return resp
 
 

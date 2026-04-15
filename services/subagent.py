@@ -422,6 +422,7 @@ def run_subagent(
                     try:
                         result = future.result(timeout=stage_config.timeout_seconds)
                     except ConcurrentTimeoutError:
+                        future.cancel()
                         executor.shutdown(wait=False, cancel_futures=True)
                         logger.warning(
                             "Subagent %s/%s timed out after %ss",
@@ -595,6 +596,7 @@ def run_subagent_with_tools(
                             {"synthesis": tc_resp.text}
                         )
                     except ConcurrentTimeoutError:
+                        future.cancel()
                         executor.shutdown(wait=False, cancel_futures=True)
                         logger.warning(
                             "Subagent %s/%s timed out after %ss",

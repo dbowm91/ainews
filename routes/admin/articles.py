@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from flask import flash, render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 from services.utils import get_admin_categories as _admin_categories
 from services.article import _escape_like_pattern
@@ -69,7 +70,10 @@ def articles():
     impact_max = request.args.get("impact_max", "", type=str).strip()
     tag_slug = request.args.get("tag", "", type=str).strip()
 
-    q = Article.query.order_by(Article.created_at.desc())
+    q = Article.query.options(
+        joinedload(Article.source),
+        joinedload(Article.tags),
+    ).order_by(Article.created_at.desc())
 
     if query:
         if _query_looks_like_url(query):

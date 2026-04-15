@@ -951,8 +951,18 @@ op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
 - [x] W3.9: Add type hints to utility modules — `services/redis_utils.py` already has full type hints
 - [x] W3.10: Extract magic numbers to config — `LOGIN_LOCKOUT_SECONDS=900` and `LOGIN_MAX_ATTEMPTS=5` already defined in `config.py` and accessed via `get_config_with_default()`
 
-### Phase 4: Wave 4 - Performance Optimization
-- W4.1-W4.11: Regex pre-compile, eager loading, cache stampede, concurrency fixes
+### Phase 4: Wave 4 - Performance Optimization ✅ COMPLETE
+- [x] W4.1: Pre-compile Regex Patterns — `_TITLE_WORDS_RE` in `services/article.py`, `_NORMALIZE_WHITESPACE_RE` in `services/url.py`, `_FOOTER_WITH_AGENTS_RE` and `_CLOSING_TABLE_RE` in `services/email.py`, `_CONTROL_CHAR_RE` in `services/validation.py`, `_SLUGIFY_INVALID_RE` and `_SLUGIFY_WHITESPACE_RE` in `models.py`
+- [x] W4.2: Add Eager Loading to Routes — `joinedload(Article.source), joinedload(Article.tags)` added to `routes/admin/articles.py`, `routes/admin/review.py`, `routes/public/feeds.py` (tag feed, RSS feeds), and `services/related.py`
+- [x] W4.3: Fix ResponseCache Stampede Vulnerability — Per-key locking with Redis `SET NX EX` + polling fallback in `services/cache.py:get_or_set()`
+- [x] W4.4: Fix Subagent ThreadPoolExecutor Reuse — Added `future.cancel()` before `executor.shutdown(wait=False, cancel_futures=True)` in both `run_subagent()` and `run_subagent_with_tools()` to properly cancel timed-out futures
+- [x] W4.5: Add Limiter Acquire Timeout — Polling loop with exponential backoff (0.05s → 0.5s) and deadline tracking in `services/limiter.py:acquire()`
+- [x] W4.6: Fix Circuit Breaker Fallback State — Confirmed `get_provider_for_role()` correctly iterates fallback providers with individual circuit breaker per provider; already implemented correctly
+- [x] W4.7: Fix Race Condition in Lock Acquisition — `services/redis_utils.py` uses Lua scripts for atomic check-and-delete; already correct in `acquire_lock()`, `release_lock()`, and `refresh_lock()`
+- [x] W4.8: Replace String Concatenation with List/Join — `para_parts` and `items_parts` lists with `"".join()` in `services/newsletter.py:generate_newsletter_html()`
+- [x] W4.9: Optimize find_duplicate_titles() O(N²) Behavior — Already using `yield_per(_BATCH_SIZE)` with batch query; no N+1 issue present
+- [x] W4.10: Add LRU Eviction to Config Cache — Already implements LRU via `OrderedDict` in `services/cache.py`; `services/config_cache.py` uses expiration-based eviction with max entries limit
+- [x] W4.11: Add Response Cache to article_detail() — `routes/public/links.py:article_detail()` now checks `get_response_cache()` before rendering, stores rendered HTML with 300s TTL
 
 ### Phase 5: Wave 5 - Infrastructure
 - W5.1-W5.13: Newsletter batching, source health, cleanup tasks, indexes

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _CATEGORY_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _TOKEN_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class ValidationError(ValueError):
@@ -73,7 +74,7 @@ def sanitize_search_query(query: str, max_length: int = 200) -> str:
     if len(query) > max_length:
         query = query[:max_length]
     # Remove null bytes and control characters
-    query = re.sub(r"[\x00-\x1f\x7f]", "", query)
+    query = _CONTROL_CHAR_RE.sub("", query)
     return query
 
 

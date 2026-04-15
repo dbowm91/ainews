@@ -39,18 +39,40 @@ class ModelLimiter:
     def acquire(
         self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300
     ) -> bool:
+        """Acquire a slot with timeout. Returns True if slot acquired, False on timeout."""
         key = f"{self._prefix}:{provider_id}:{model}"
-        try:
-            result = self._acquire_script(keys=[key], args=[max_concurrent, timeout])
-            return bool(result)
-        except redis.exceptions.RedisError as e:
-            logger.error(
-                "Limiter acquire failed for %s/%s: %s",
-                provider_id,
-                model,
-                e,
-            )
-            return False  # fail closed — deny slot if Redis is unavailable
+        deadline = time.monotonic() + timeout
+        poll_interval = 0.05
+
+        while time.monotonic() < deadline:
+            try:
+                result = self._acquire_script(
+                    keys=[key], args=[max_concurrent, timeout]
+                )
+                if result:
+                    return True
+            except redis.exceptions.RedisError as e:
+                logger.error(
+                    "Limiter acquire failed for %s/%s: %s",
+                    provider_id,
+                    model,
+                    e,
+                )
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sleep_time = min(poll_interval, remaining)
+            time.sleep(sleep_time)
+            poll_interval = min(poll_interval * 1.5, 0.5)
+
+        logger.warning(
+            "Limiter acquire timed out for %s/%s after %ss",
+            provider_id,
+            model,
+            timeout,
+        )
+        return False
 
     def release(self, provider_id: str, model: str, timeout: int = 300) -> None:
         key = f"{self._prefix}:{provider_id}:{model}"

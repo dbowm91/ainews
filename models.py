@@ -8,11 +8,14 @@ import short_url
 _SHORT_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 _short_encoder = short_url.UrlEncoder(alphabet=_SHORT_ALPHABET)
 
+_SLUGIFY_INVALID_RE = re.compile(r"[^a-z0-9\s-]")
+_SLUGIFY_WHITESPACE_RE = re.compile(r"[\s]+")
+
 
 def slugify(name: str) -> str:
     slug = name.lower().strip()
-    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
-    slug = re.sub(r"[\s]+", "-", slug)
+    slug = _SLUGIFY_INVALID_RE.sub("", slug)
+    slug = _SLUGIFY_WHITESPACE_RE.sub("-", slug)
     return slug[:64] or "untagged"
 
 
@@ -365,6 +368,29 @@ class TopicNote(db.Model):
 
     def __repr__(self):
         return f"<TopicNote {self.topic}>"
+
+
+class TrendMemory(db.Model):
+    __tablename__ = "trend_memory"
+
+    id = db.Column(db.Integer, primary_key=True)
+    topic = db.Column(db.String(128), nullable=False, index=True)
+    signal = db.Column(db.Text, nullable=False)
+    importance = db.Column(db.Integer, nullable=False, default=1)
+    source_article_id = db.Column(
+        db.Integer, db.ForeignKey("articles.id", ondelete="SET NULL"), nullable=True
+    )
+    expires_at = db.Column(db.DateTime, nullable=True)
+    last_consolidated_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        db.Index("ix_trend_memory_topic_importance", "topic", "importance"),
+        db.Index("ix_trend_memory_expires_at", "expires_at"),
+    )
+
+    def __repr__(self):
+        return f"<TrendMemory {self.topic} importance={self.importance}>"
 
 
 class Webhook(db.Model):

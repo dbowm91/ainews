@@ -3,6 +3,7 @@
 from flask import request, Response
 from datetime import datetime, timezone, timedelta
 from collections import namedtuple
+from sqlalchemy.orm import joinedload
 
 from models import Article, Tag
 from constants import PER_PAGE_PUBLIC, PipelineStatus
@@ -25,7 +26,7 @@ PER_PAGE = PER_PAGE_PUBLIC
 def _get_top_impact(limit: int = 3) -> list[Article]:
     from sqlalchemy import or_
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
     return (
         Article.query.filter(
             Article.pipeline_status == PipelineStatus.DONE,
@@ -142,10 +143,14 @@ def tag_feed(slug: str) -> str:
 
     tag = Tag.query.filter_by(slug=slug).first_or_404()
 
-    q = Article.query.filter(
-        Article.tags.any(Tag.id == tag.id),
-        Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
-    ).order_by(Article.created_at.desc())
+    q = (
+        Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+        .filter(
+            Article.tags.any(Tag.id == tag.id),
+            Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
+        )
+        .order_by(Article.created_at.desc())
+    )
 
     articles, has_next, next_page = paginate_query(q, page, PER_PAGE)
     parse_articles(articles)
@@ -182,7 +187,8 @@ def feed_all() -> Response:
     xml = cache.get(cache_key)
     if xml is None:
         articles = (
-            Article.query.filter(
+            Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+            .filter(
                 Article.pipeline_status.in_(
                     [PipelineStatus.DONE, PipelineStatus.SKIPPED]
                 )
@@ -227,7 +233,8 @@ def feed_topic(category: str) -> Response:
         topic_name = topic_def.display_name if topic_def else category
 
         articles = (
-            Article.query.filter(
+            Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+            .filter(
                 Article.category == category,
                 Article.pipeline_status.in_(
                     [PipelineStatus.DONE, PipelineStatus.SKIPPED]

@@ -1,6 +1,7 @@
 import logging
 from flask import render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 
@@ -16,8 +17,14 @@ def review_queue():
     page = max(1, request.args.get("page", 1, type=int))
     per_page = PER_PAGE_ADMIN_ARTICLES
 
-    q = Article.query.filter_by(pipeline_status=PipelineStatus.REVIEW).order_by(
-        Article.impact_score.desc()
+    q = (
+        Article.query.options(
+            joinedload(Article.source),
+            joinedload(Article.tags),
+            joinedload(Article.metrics),
+        )
+        .filter_by(pipeline_status=PipelineStatus.REVIEW)
+        .order_by(Article.impact_score.desc())
     )
     total_review = q.count()
     articles, has_next, next_page = paginate_query(q, page, per_page)

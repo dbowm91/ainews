@@ -113,13 +113,36 @@ class ResponseCache:
             logger.warning("Cache write failed for %s: %s", key, e)
 
     def get_or_set(self, key: str, loader_fn: Callable[[], Any], ttl: int = 120) -> Any:
-        """Get from cache or compute and cache."""
+        """Get from cache or compute and cache. Uses per-key locking to prevent stampede."""
         cached = self.get(key)
         if cached is not None:
             return cached
-        value = loader_fn()
-        self.set(key, value, ttl)
-        return value
+
+        full_key = self._make_key(key)
+        lock_key = f"lock:{full_key}"
+
+        if self._redis.set(lock_key, "1", nx=True, ex=10):
+            try:
+                cached = self.get(key)
+                if cached is not None:
+                    return cached
+                value = loader_fn()
+                self.set(key, value, ttl)
+                return value
+            finally:
+                try:
+                    self._redis.delete(lock_key)
+                except redis.exceptions.RedisError:
+                    pass
+        else:
+            for _ in range(50):
+                time.sleep(0.1)
+                cached = self.get(key)
+                if cached is not None:
+                    return cached
+            value = loader_fn()
+            self.set(key, value, ttl)
+            return value
 
     def invalidate(self, key: str) -> None:
         """Remove a specific cache entry."""

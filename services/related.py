@@ -15,7 +15,7 @@ def find_related_articles(article, limit: int = 5):
     from models import Article
 
     candidates = (
-        Article.query.options(joinedload(Article.tags))
+        Article.query.options(joinedload(Article.tags), joinedload(Article.source))
         .filter(
             Article.id != article.id,
             Article.pipeline_status == PipelineStatus.DONE,

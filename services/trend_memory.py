@@ -272,7 +272,11 @@ def _find_overlapping_low_entries(
 
 
 def consolidate_topic(topic: str) -> int:
-    """Consolidate low-importance entries for a topic when a high-importance entry arrives."""
+    """Consolidate low-importance entries for a topic when a high-importance entry arrives.
+
+    Optimized to batch low-entry lookups: fetches all candidate low entries
+    in one query instead of N queries (one per high entry).
+    """
     config = _get_config()
     if not _should_consolidate_topic(topic):
         return 0
@@ -288,12 +292,31 @@ def consolidate_topic(topic: str) -> int:
     if not high_entries:
         return 0
 
+    most_recent_high = min(h.created_at for h in high_entries)
+    window_start = most_recent_high - timedelta(
+        hours=config.consolidation_merge_window_hours
+    )
+
+    candidate_lows = (
+        TrendMemory.query.filter(
+            TrendMemory.topic == topic,
+            TrendMemory.importance == MemoryImportance.LOW,
+            TrendMemory.created_at >= window_start,
+        )
+        .order_by(TrendMemory.created_at.desc())
+        .all()
+    )
+
     merged = 0
     for high in high_entries:
-        low_entries = _find_overlapping_low_entries(
-            topic, high, config.consolidation_merge_window_hours
+        high_window_start = high.created_at - timedelta(
+            hours=config.consolidation_merge_window_hours
         )
-        for low in low_entries:
+        for low in candidate_lows:
+            if low.id == high.id:
+                continue
+            if low.created_at < high_window_start:
+                break
             low.importance = MemoryImportance.MEDIUM
             low.expires_at = _ttl_for_importance(MemoryImportance.MEDIUM)
             low.last_consolidated_at = datetime.now(timezone.utc)

@@ -62,6 +62,7 @@ class Source(db.Model):
 
     # Crawl health tracking
     consecutive_failures = db.Column(db.Integer, nullable=False, default=0)
+    consecutive_successes = db.Column(db.Integer, nullable=False, default=0)
     last_success_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
     disabled_at = db.Column(db.DateTime, nullable=True)

@@ -54,35 +54,39 @@ def send_single_email(
 def _send_emails_parallel(subscribers, subject, html, site_url):
     """Send emails to subscribers in parallel using Celery group.
 
+    Emails are sent in batches of 500 to reduce Celery task overhead.
     Returns the count of successfully sent emails.
     """
     if not subscribers:
         return 0
 
-    # Build email tasks
-    email_tasks = []
-    for sub in subscribers:
-        unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
-        email_tasks.append(
-            send_single_email.s(
-                email=sub.email,
-                subject=subject,
-                html=html,
-                unsub_url=unsub_url,
+    BATCH_SIZE = 500
+    total_sent = 0
+
+    for i in range(0, len(subscribers), BATCH_SIZE):
+        batch = subscribers[i : i + BATCH_SIZE]
+        email_tasks = []
+        for sub in batch:
+            unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
+            email_tasks.append(
+                send_single_email.s(
+                    email=sub.email,
+                    subject=subject,
+                    html=html,
+                    unsub_url=unsub_url,
+                )
             )
-        )
 
-    # Execute in parallel
-    job = group(email_tasks)
-    result = job.apply_async()
+        job = group(email_tasks)
+        try:
+            results = job.apply_async().get(timeout=300, propagate=False)
+            total_sent += sum(
+                1 for r in results if isinstance(r, dict) and r.get("sent")
+            )
+        except Exception as e:
+            logger.error("Email batch %d failed: %s", i // BATCH_SIZE, e)
 
-    try:
-        results = result.get(timeout=120, propagate=False)
-        sent = sum(1 for r in results if isinstance(r, dict) and r.get("sent"))
-        return sent
-    except Exception as e:
-        logger.error("Error waiting for email results: %s", e)
-        raise
+    return total_sent
 
 
 def _fetch_articles_for_newsletter(
@@ -171,6 +175,7 @@ def _generate_topic_newsletter_impl(
 
     is_dry_run = bool(dry_run_email)
     sent = 0
+    email_error = None
     if is_dry_run:
         unsub_url = f"{site_url}/unsubscribe/test"
         try:
@@ -179,14 +184,27 @@ def _generate_topic_newsletter_impl(
             logger.info("Dry run: sent main newsletter to %s", dry_run_email)
         except Exception as e:
             logger.error("Dry run failed for %s: %s", dry_run_email, e)
+            email_error = str(e)
     else:
-        subscribers = (
+        subscriber_query = (
             Subscriber.query.filter(Subscriber.deleted_at.is_(None))
             .filter(Subscriber.confirmed_at.isnot(None))
             .filter_by(newsletter_type=topic_key, active=True)
-            .yield_per(500)
         )
-        sent = _send_emails_parallel(subscribers, subject, html, site_url)
+        subscriber_list = list(subscriber_query.yield_per(500))
+        subscriber_count = len(subscriber_list)
+        sent = _send_emails_parallel(subscriber_list, subject, html, site_url)
+        if sent < subscriber_count and subscriber_count > 0:
+            email_error = f"Only {sent} of {subscriber_count} emails sent"
+
+    if email_error:
+        db.session.rollback()
+        logger.error(
+            "%s newsletter failed email delivery: %s",
+            topic_key,
+            email_error,
+        )
+        return {"type": topic_key, "articles": count, "sent": 0, "error": email_error}
 
     newsletter.recipients = sent
     newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
@@ -216,7 +234,14 @@ def _generate_topic_newsletter_impl(
 
 
 def _generate_newsletters_impl(task_self, dry_run_email, run_id):
-    """Implementation of newsletter generation logic."""
+    """Implementation of newsletter generation logic.
+
+    Newsletter generation is parallelized using Celery group for each
+    topic (main + per-topic newsletters). Article fetching happens upfront
+    before dispatching parallel tasks.
+    """
+    from celery import group
+
     from schemas.pipeline import load_pipeline_config
     from schemas.topic import load_topics
     from models import PipelineRun
@@ -228,8 +253,6 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     topics = load_topics().topics
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    results = []
-
     is_dry_run = bool(dry_run_email)
 
     if run_id is None:
@@ -247,33 +270,34 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
             raise
         run_id = run.id
 
-    # Main newsletter
-    try:
-        articles = _fetch_articles_for_newsletter("main", cutoff, nl.max_articles)
-        result = _generate_topic_newsletter_impl(
-            "main", articles, site_url, nl.max_articles, dry_run_email, nl
-        )
-        results.append(result)
-    except Exception as e:
-        db.session.rollback()
-        logger.error("Main newsletter failed: %s", e)
-        results.append({"type": "main", "error": str(e)})
+    all_topic_keys = ["main"] + list(topics.keys())
 
-    # Per-topic newsletters (skip in dry run for main only)
-    if not is_dry_run:
-        for topic_key in topics:
-            try:
-                articles = _fetch_articles_for_newsletter(
-                    topic_key, cutoff, nl.max_articles
-                )
-                result = _generate_topic_newsletter_impl(
-                    topic_key, articles, site_url, nl.max_articles, None, nl
-                )
-                results.append(result)
-            except Exception as e:
-                db.session.rollback()
-                logger.error("%s newsletter failed: %s", topic_key, e)
-                results.append({"type": topic_key, "error": str(e)})
+    all_articles = {
+        topic_key: _fetch_articles_for_newsletter(topic_key, cutoff, nl.max_articles)
+        for topic_key in all_topic_keys
+    }
+
+    task_signatures = []
+    for topic_key in all_topic_keys:
+        dry_run = dry_run_email if topic_key == "main" and is_dry_run else None
+        task_signatures.append(
+            _generate_topic_newsletter_impl.s(
+                topic_key,
+                all_articles[topic_key],
+                site_url,
+                nl.max_articles,
+                dry_run,
+                nl,
+            )
+        )
+
+    job = group(task_signatures)
+    try:
+        results_list = job.apply_async()
+        all_results = results_list.get(timeout=600, propagate=False)
+    except Exception as e:
+        logger.error("Newsletter group dispatch failed: %s", e)
+        all_results = [{"error": str(e)} for _ in task_signatures]
 
     run = db.session.get(PipelineRun, run_id)
     if run:
@@ -285,8 +309,8 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
             db.session.rollback()
             raise
 
-    logger.info("Newsletter generation complete: %s", results)
-    return results
+    logger.info("Newsletter generation complete: %s", all_results)
+    return all_results
 
 
 @shared_task(

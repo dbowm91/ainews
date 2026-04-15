@@ -79,7 +79,7 @@ def _get_tag_cloud() -> list[dict]:
             for r in results
         ]
 
-    return get_config_cache().get("tag_cloud", _load, ttl=60)
+    return get_config_cache().get("tag_cloud", _load, ttl=600)
 
 
 def _get_share_configs() -> list[dict]:

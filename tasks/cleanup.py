@@ -84,3 +84,67 @@ def cleanup_stale_limiter_slots(self):
     if cleaned:
         logger.info("Cleaned up %d stale limiter slots", cleaned)
     return {"cleaned": cleaned}
+
+
+@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+def consolidate_trend_memory(self):
+    """Consolidate low-importance trend memory entries when high-importance entries arrive.
+
+    Runs nightly via Celery Beat. When a high-importance entry exists for a topic,
+    any overlapping low-importance entries are promoted to medium importance and TTL'd.
+    Also purges all expired entries.
+    """
+    from services.trend_memory import consolidate_all_topics, purge_expired
+
+    try:
+        results = consolidate_all_topics()
+        total_merged = sum(results.values())
+        purged = purge_expired()
+        logger.info(
+            "Trend memory consolidation: merged=%s across topics=%s, purged expired=%d",
+            total_merged,
+            results,
+            purged,
+        )
+        return {"merged": total_merged, "topics": results, "purged": purged}
+    except SoftTimeLimitExceeded:
+        logger.error("consolidate_trend_memory exceeded soft time limit")
+        raise
+    except Exception as e:
+        logger.error("Trend memory consolidation failed: %s", e)
+        raise
+
+
+@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+def cleanup_old_article_versions(self, days_to_keep: int = 90):
+    """Delete article versions older than specified days.
+
+    Runs daily via Celery Beat to prevent unbounded growth of the
+    article_versions table.
+
+    Args:
+        days_to_keep: Number of days to retain article versions.
+    """
+    from models import ArticleVersion
+    from extensions import db
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+    try:
+        deleted = ArticleVersion.query.filter(
+            ArticleVersion.created_at < cutoff
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        logger.info(
+            "Cleaned up %s article versions older than %d days",
+            deleted,
+            days_to_keep,
+        )
+        return {"deleted": deleted}
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        logger.error("cleanup_old_article_versions exceeded soft time limit")
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error("Article version cleanup failed: %s", e)
+        raise

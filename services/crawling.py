@@ -16,6 +16,7 @@ from schemas.source import SourceConfig
 logger = logging.getLogger(__name__)
 
 MAX_CONSECUTIVE_FAILURES = 10
+HEALTHY_THRESHOLD = 3
 
 
 def _get_max_consecutive_failures() -> int:
@@ -212,16 +213,25 @@ def update_pipeline_run_stats(
 def record_crawl_success(source: Source) -> None:
     """Record a successful crawl for a source.
 
-    Resets consecutive failures, updates last_success_at, re-enables if disabled.
+    Increments consecutive successes, resets consecutive failures. Source is
+    re-enabled only after HEALTHY_THRESHOLD consecutive successes to prevent
+    flapping between disabled and enabled states.
     """
     now = datetime.now(timezone.utc)
     source.consecutive_failures = 0
+    source.consecutive_successes = (source.consecutive_successes or 0) + 1
     source.last_success_at = now
     source.last_error = None
-    if source.disabled_at:
+
+    if source.disabled_at and source.consecutive_successes >= HEALTHY_THRESHOLD:
         source.disabled_at = None
         source.active = True
-        logger.info("Re-enabled source %s after successful crawl", source.source_key)
+        logger.info(
+            "Re-enabled source %s after %d consecutive successful crawls",
+            source.source_key,
+            source.consecutive_successes,
+        )
+
     try:
         db.session.commit()
     except SQLAlchemyError:
@@ -232,9 +242,11 @@ def record_crawl_success(source: Source) -> None:
 def record_crawl_failure(source: Source, error_message: str) -> None:
     """Record a failed crawl for a source.
 
-    Increments consecutive_failures and auto-disables after MAX_CONSECUTIVE_FAILURES.
+    Increments consecutive_failures, resets consecutive_successes, and
+    auto-disables after MAX_CONSECUTIVE_FAILURES.
     """
     source.consecutive_failures = (source.consecutive_failures or 0) + 1
+    source.consecutive_successes = 0
     source.last_error = error_message[:2000] if error_message else None
     max_failures = _get_max_consecutive_failures()
     if source.consecutive_failures >= max_failures:

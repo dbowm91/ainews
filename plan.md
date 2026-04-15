@@ -964,8 +964,20 @@ op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
 - [x] W4.10: Add LRU Eviction to Config Cache — Already implements LRU via `OrderedDict` in `services/cache.py`; `services/config_cache.py` uses expiration-based eviction with max entries limit
 - [x] W4.11: Add Response Cache to article_detail() — `routes/public/links.py:article_detail()` now checks `get_response_cache()` before rendering, stores rendered HTML with 300s TTL
 
-### Phase 5: Wave 5 - Infrastructure
-- W5.1-W5.13: Newsletter batching, source health, cleanup tasks, indexes
+### Phase 5: Wave 5 - Infrastructure ✅ COMPLETE
+- [x] W5.1: Parallelize Newsletter Generation with Celery group — `_generate_newsletters_impl` now fetches all articles upfront and dispatches topic newsletter tasks in parallel via Celery group
+- [x] W5.2: Batch Email Sending (500/recipient) — `_send_emails_parallel` now sends in batches of 500 using nested loops, committing each batch before moving to the next
+- [x] W5.3: Batch retry_stuck Commits (50/article) — `retry_stuck` now batches articles (50 per batch) for commits and dispatches
+- [x] W5.4: SoftTimeLimitExceeded Handling — Already implemented correctly via `run_stage()` in pipeline tasks; all stage tasks use `run_stage()` which handles it properly
+- [x] W5.5: Pipeline Stage Timeout Metrics — Already implemented; `run_stage()` records `pipeline.stage_duration_seconds` histogram on timeout
+- [x] W5.6: Add Article Version Cleanup Task — `cleanup_old_article_versions` task added to `tasks/cleanup.py` with daily Celery beat schedule at 3:45 AM
+- [x] W5.7: Source Health Hysteresis — `record_crawl_success()` now requires `HEALTHY_THRESHOLD=3` consecutive successes before re-enabling disabled sources; `record_crawl_failure()` resets consecutive_successes
+- [x] W5.8: Webhook Retry with Backoff — Already implemented in `services/webhooks.py:_send_webhook_with_retry()` with exponential backoff
+- [x] W5.9: Trend Memory Consolidation Optimization — `consolidate_topic()` now batches low-entry lookups instead of N queries per high entry
+- [x] W5.10: Newsletter Batch Transaction Safety — `_generate_topic_newsletter_impl` now checks for partial email delivery failures and rolls back Newsletter records if emails fail
+- [x] W5.11: Request ID Tracing — Celery task ID is already captured in `PipelineRun.task_id`; `PipelineLog` uses `run_id` for correlation
+- [x] W5.12: Add Composite Indexes — Migration 017 adds `ix_subscribers_newsletter_active_deleted` on subscribers; Migration 018 adds `ix_pipeline_logs_run_created` on pipeline_logs
+- [x] W5.13: Increase Tag Cloud Cache TTL (60s → 600s) — `routes/public/__init__.py:_get_tag_cloud()` now uses `ttl=600`
 
 ---
 
@@ -996,9 +1008,10 @@ scripts/verify_backup.sh
 
 ## Notes
 
-- Database schema unchanged except for new indexes (migrations 017, 018)
+- Database schema additions: migration 017 (subscriber composite index), migration 018 (pipeline_logs composite index), migration 019 (source consecutive_successes column)
 - No new external dependencies required (uses stdlib `ast`, `OrderedDict`)
 - All security improvements use existing `html` and `services.prompts` utilities
 - Template changes require thorough browser testing for UX
 - CSP nonce implementation deferred to future hardening work
 - Backward compatible — all changes are internal refactoring with no API contract changes
+- Wave 5 adds `consecutive_successes` field to Source model for health hysteresis

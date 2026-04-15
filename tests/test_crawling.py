@@ -162,13 +162,15 @@ class TestRecordCrawlSuccess:
             assert source.last_error is None
 
     def test_re_enables_disabled(self, app, create_source):
-        from services.crawling import record_crawl_success
+        from services.crawling import record_crawl_success, HEALTHY_THRESHOLD
 
         with app.app_context():
             source = create_source(active=False)
             source.disabled_at = datetime.now(timezone.utc)
-            record_crawl_success(source)
+            for _ in range(HEALTHY_THRESHOLD):
+                record_crawl_success(source)
             assert source.active is True
+            assert source.consecutive_successes >= HEALTHY_THRESHOLD
 
 
 class TestRecordCrawlFailure:

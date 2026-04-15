@@ -96,6 +96,15 @@ class Config:
             "task": "tasks.cleanup.cleanup_old_pipeline_logs",
             "schedule": crontab(hour=3, minute=0),
         },
+        "consolidate-trend-memory": {
+            "task": "tasks.cleanup.consolidate_trend_memory",
+            "schedule": crontab(hour=3, minute=30),
+        },
+        "cleanup-old-versions": {
+            "task": "tasks.cleanup.cleanup_old_article_versions",
+            "schedule": crontab(hour=3, minute=45),
+            "kwargs": {"days_to_keep": 90},
+        },
         "cleanup-expired-verifications": {
             "task": "tasks.cleanup.cleanup_expired_verifications",
             "schedule": timedelta(minutes=15),

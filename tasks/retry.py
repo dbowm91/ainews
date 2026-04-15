@@ -27,6 +27,8 @@ def retry_stuck(self):
     - If stuck >= STUCK_THRESHOLD_MINUTES: dead-letter (mark as "failed")
     - Elif retry_count >= MAX_STAGE_RETRIES: degrade and advance
     - Else: re-dispatch the current stage with incremented retry_count
+
+    Retried articles are batched (50 per batch) to reduce database commits.
     """
     import redis.exceptions
 
@@ -45,6 +47,8 @@ def retry_stuck(self):
             return {"skipped": True, "reason": "already_running"}
     except redis.exceptions.RedisError:
         logger.warning("Could not acquire retry_stuck lock, proceeding without")
+
+    BATCH_SIZE = 50
 
     try:
         now = datetime.now(timezone.utc)
@@ -66,37 +70,54 @@ def retry_stuck(self):
             .all()
         )
 
-        retried = 0
-        degraded = 0
-        dead_lettered = 0
+        articles_to_retry = []
+        articles_to_degrade = []
+        articles_to_dead_letter = []
 
         for article in stuck:
             age_minutes = (now - article.updated_at).total_seconds() / 60
 
             if age_minutes >= get_stuck_threshold_minutes():
-                try:
-                    _dead_letter(article)
-                except Exception:
-                    logger.error("Failed to dead-letter article %s", article.id)
-                    continue
-                dead_lettered += 1
+                articles_to_dead_letter.append(article)
             elif (article.retry_count or 0) >= _get_max_stage_retries():
-                _degrade_and_advance(article, article.pipeline_status)
-                degraded += 1
-                logger.warning(
-                    "Degraded stuck article %s from %s",
-                    article.id,
-                    article.pipeline_status,
-                )
+                articles_to_degrade.append(article)
             else:
+                articles_to_retry.append(article)
+
+        retried = 0
+        degraded = 0
+        dead_lettered = 0
+
+        for article in articles_to_dead_letter:
+            try:
+                _dead_letter(article)
+            except Exception:
+                logger.error("Failed to dead-letter article %s", article.id)
+                continue
+            dead_lettered += 1
+
+        for article in articles_to_degrade:
+            _degrade_and_advance(article, article.pipeline_status)
+            degraded += 1
+            logger.warning(
+                "Degraded stuck article %s from %s",
+                article.id,
+                article.pipeline_status,
+            )
+
+        for i in range(0, len(articles_to_retry), BATCH_SIZE):
+            batch = articles_to_retry[i : i + BATCH_SIZE]
+            for article in batch:
                 article.retry_count = (article.retry_count or 0) + 1
-                try:
-                    db.session.commit()
-                except SQLAlchemyError:
-                    db.session.rollback()
-                    raise
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+
+            for article in batch:
                 _dispatch_stage(article)
-                retried += 1
+            retried += len(batch)
 
         if retried or degraded or dead_lettered:
             logger.info(

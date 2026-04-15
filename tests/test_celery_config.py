@@ -15,7 +15,7 @@ class TestCeleryBeatSchedule:
         from config import Config
 
         schedule = Config.CELERY_BEAT_SCHEDULE
-        assert len(schedule) == 7
+        assert len(schedule) == 9
 
     def test_run_all_sources_task(self):
         from config import Config
@@ -79,4 +79,30 @@ class TestCeleryBeatSchedule:
         )
         assert schedule["publish-scheduled-articles"]["schedule"] == timedelta(
             minutes=5
+        )
+
+    def test_consolidate_trend_memory_task(self):
+        from config import Config
+
+        schedule = Config.CELERY_BEAT_SCHEDULE
+        assert "consolidate-trend-memory" in schedule
+        assert (
+            schedule["consolidate-trend-memory"]["task"]
+            == "tasks.cleanup.consolidate_trend_memory"
+        )
+        assert schedule["consolidate-trend-memory"]["schedule"] == crontab(
+            hour=3, minute=30
+        )
+
+    def test_cleanup_old_article_versions_task(self):
+        from config import Config
+
+        schedule = Config.CELERY_BEAT_SCHEDULE
+        assert "cleanup-old-versions" in schedule
+        assert (
+            schedule["cleanup-old-versions"]["task"]
+            == "tasks.cleanup.cleanup_old_article_versions"
+        )
+        assert schedule["cleanup-old-versions"]["schedule"] == crontab(
+            hour=3, minute=45
         )

@@ -68,7 +68,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Subscriber validation**: Newsletter type is validated against known topic keys (`routes/public.py`). Invalid types default to "main".
 - **Admin auth**: All `/admin/api/*` routes use `@require_auth` decorator. The health endpoint, task status, and config reload are all authenticated.
 - **Config validation**: `services/config_unified.py:validate_config()` validates pipeline, topic, source, and LLM provider configs. Returns `(is_valid, errors)` tuple.
-- **Structured logging**: `services/logging_utils.py` provides `PipelineLogger`, `log_pipeline_event()`, `log_article_event()`, and `log_duration()` context manager for structured log output.
+- **Structured logging**: `services/logging_utils.py` provides `PipelineLogger`, `log_pipeline_event()`, `log_article_event()`, and `log_duration()` context manager for structured log output. Task ID tracing is integrated — pass `task_id` to `get_pipeline_logger()` for Celery task correlation.
 - **Health check degradation**: `services/health.py` returns "unhealthy" for database errors (core functionality broken), "degraded" for Redis/Celery/limiter errors (non-core). `HealthResult.is_healthy` returns True for both "ok" and "degraded".
 - **Dead letter alerting**: `pipeline.stuck_articles` gauge emitted by `retry_stuck`. Alert threshold configurable via `DEAD_LETTER_ALERT_THRESHOLD` env var (default 10). Stats at `GET /admin/api/pipeline/dead-letter/stats`.
 - **Circuit breaker metrics**: Emits `circuit_breaker.state_change` counter with `provider`, `from`, `to` labels and `circuit_breaker.opened` on OPEN transitions.
@@ -305,13 +305,13 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Items marked "COMPLETE" in plan.md have been found NOT done during verification (e.g., database indexes, LLM provider refactoring, circular import resolution). Always grep/search to verify before starting related work.
 
-**LLM provider refactoring needs completion**: Each LLM provider (`services/llm/openai.py`, `anthropic.py`, `ollama.py`, `gemini.py`) still has its own `_handle_*_error()` function — consolidation via `make_error_handler()` factory is NOT done. Client initialization with double-checked locking is still per-provider, not in `BaseLLMProvider`. Tool calling loop (~100+ lines) is still duplicated per provider.
+**LLM provider refactoring**: Wave 1 completed — `make_error_handler()` factory in `services/llm/errors.py`, client initialization moved to `BaseLLMProvider`, tool calling loop consolidated with hooks (`_call_api_with_tools`, `_extract_text_and_tool_calls`, `_format_tool_result`).
 
-**Items appearing incomplete despite plan claims**:
-- `services/article.py:75`: `db.session.expire_all()` is unreachable after `raise`
-- `services/article.py:264-280`: `find_duplicate_titles()` still uses two-query pattern (scan + fetch)
-- Database indexes on `Article.source_id` and `Source.name` NOT added
-- Circular import between `tasks/pipeline.py` and `services/pipeline_degradation.py` NOT resolved
+**Items previously incomplete (now resolved)**:
+- `services/article.py:75`: `db.session.expire_all()` removed (W4.2)
+- `services/article.py:264-280`: `find_duplicate_titles()` uses single batched query (W5.4)
+- Database indexes on `Article.source_id` and `Source.name` added via migration `020_article_source_index` (W3.1, W3.2)
+- Circular import resolved — `services/pipeline_utils.py` created with `_log_pipeline` and `_dispatch_next` (W4.1)
 
 **Unreachable code after raise**: Always check for code after `raise` or `return` statements in try blocks — such code is unreachable. Example: `services/article.py:75` has `db.session.expire_all()` after `raise` which should be removed.
 

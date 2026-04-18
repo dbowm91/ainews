@@ -263,7 +263,27 @@ end
 - **RSS XML**: Headlines/descriptions escaped with `html.escape()` before insertion
 - **Login lockout**: Redis Lua script for atomic check-and-record; in-memory fallback
 
-## Wave 3 Changes (Completed)
+## Wave 6 Changes (Completed)
+
+Wave 6 implemented in commit `99a1ca6`:
+- W1.1: `make_error_handler()` factory in `services/llm/errors.py` — all providers use this instead of individual `_handle_*_error()` functions
+- W1.2: Client initialization moved to `BaseLLMProvider` — abstract `_create_client()` method, shared `client` property with double-checked locking
+- W1.3: Tool calling loop consolidated in `BaseLLMProvider` with hooks: `_call_api_with_tools()`, `_extract_text_and_tool_calls()`, `_format_tool_result()`
+- W3.1/W3.2: Migration `020_article_source_index` adds `ix_articles_source_id` and `ix_sources_name` indexes
+- W4.1: Circular dependency broken — `services/pipeline_utils.py` created with `_log_pipeline()` and `_dispatch_next()`
+- W4.2: `db.session.expire_all()` removed from `services/article.py:track_metric()` (unreachable after raise)
+- W4.3: Search providers use `type(e).__name__` in log messages (duckduckgo.py, searxng.py)
+- W4.4: API adapter uses `requests.RequestException` with `type(e).__name__` logging
+- W5.1: Related articles candidate limit reduced from 200 to 50
+- W5.2: Dashboard stats cached in Redis with 60s TTL
+- W5.3: Redis pool tuned: 100 connections, 5s socket_timeout, 3s connect_timeout, keepalive enabled
+- W5.4: `find_duplicate_titles()` uses single batched `.all()` query (replaces yield_per streaming)
+- W5.5: Top impact articles cached in Redis with key `top_impact:{limit}` and 300s TTL
+- W5.6: `max_retries` changed from 3 to 2 in `create_article_version()`
+- W5.7: HTTP request metrics middleware via `before_request`/`after_request` hooks calling `record_request()`
+- W5.8: `task_id` parameter added to `PipelineLogger` and propagated through pipeline stages
+- W6.1: `TestNewsletterHtmlEscaping` class with comprehensive XSS escape tests
+- W6.2: `TestEscapePromptData` class with 6 test cases for `_escape_prompt_data()`
 
 Wave 3 implemented in commit `5891b10`:
 - W3.1: Config access via `get_config_with_default()` (`tasks/pipeline.py`, `services/url.py`)
@@ -306,3 +326,25 @@ Wave 5 implemented in commit `d865ab8`:
 - W5.13: Tag cloud cache TTL — increased from 60s to 600s in `routes/public/__init__.py:_get_tag_cloud()`
 
 Note: W5.4 (SoftTimeLimitExceeded handling), W5.5 (pipeline stage timeout metrics), W5.8 (webhook retry), W5.11 (request ID tracing) were already implemented correctly.
+
+## Wave 6 Changes (Completed)
+
+Wave 6 implemented in commit `99a1ca6`:
+- W1.1: `make_error_handler()` factory in `services/llm/errors.py` — all providers use this instead of individual `_handle_*_error()` functions
+- W1.2: Client initialization moved to `BaseLLMProvider` — abstract `_create_client()` method, shared `client` property with double-checked locking
+- W1.3: Tool calling loop consolidated in `BaseLLMProvider` with hooks: `_call_api_with_tools()`, `_extract_text_and_tool_calls()`, `_format_tool_result()`
+- W3.1/W3.2: Migration `020_article_source_index` adds `ix_articles_source_id` and `ix_sources_name` indexes
+- W4.1: Circular dependency broken — `services/pipeline_utils.py` created with `_log_pipeline()` and `_dispatch_next()`
+- W4.2: `db.session.expire_all()` removed from `services/article.py:track_metric()` (unreachable after raise)
+- W4.3: Search providers use `type(e).__name__` in log messages (duckduckgo.py, searxng.py)
+- W4.4: API adapter uses `requests.RequestException` with `type(e).__name__` logging
+- W5.1: Related articles candidate limit reduced from 200 to 50
+- W5.2: Dashboard stats cached in Redis with 60s TTL
+- W5.3: Redis pool tuned: 100 connections, 5s socket_timeout, 3s connect_timeout, keepalive enabled
+- W5.4: `find_duplicate_titles()` uses single batched `.all()` query (replaces yield_per streaming)
+- W5.5: Top impact articles cached in Redis with key `top_impact:{limit}` and 300s TTL
+- W5.6: `max_retries` changed from 3 to 2 in `create_article_version()`
+- W5.7: HTTP request metrics middleware via `before_request`/`after_request` hooks calling `record_request()`
+- W5.8: `task_id` parameter added to `PipelineLogger` and propagated through pipeline stages
+- W6.1: `TestNewsletterHtmlEscaping` class with comprehensive XSS escape tests
+- W6.2: `TestEscapePromptData` class with 6 test cases for `_escape_prompt_data()`

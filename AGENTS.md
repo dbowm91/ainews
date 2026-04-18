@@ -108,6 +108,8 @@ MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`
 
 `static/css/critical.css` exists but is NOT imported in `style.css`. Critical CSS is inlined in `templates/base.html` for first-paint performance. `base_admin.html` also inlines critical CSS. Do not import `critical.css` in `style.css` — the inlined approach is intentional.
 
+**CSS consolidation note**: `critical.css`, `base.css`, and `layout.css` have intentional overlap. `critical.css` (inlined) contains reset and base styles needed for first paint. `base.css` expands critical styles plus adds theme-specific rules. `layout.css` contains navigation, container, and responsive rules. When modifying CSS, ensure changes go to the correct file — do not duplicate rules across these files.
+
 Add new rules to the appropriate module, not to `style.css` directly.
 
 ### API response format
@@ -137,6 +139,8 @@ Six scheduled tasks are configured in `config.py`:
 - `cleanup-expired-verifications` — every 15 minutes
 - `cleanup-stale-limiter-slots` — every 5 minutes
 - `consolidate-trend-memory` — daily at 3:30 AM (cron)
+- `cleanup-old-article-versions` — daily at 3:45 AM (cron)
+- `publish-scheduled-articles` — every 5 minutes
 
 ### Model column defaults
 
@@ -241,7 +245,7 @@ Admin article list (`/admin/articles`) supports:
 
 During crawling, articles from different sources with near-duplicate titles are filtered out using Jaccard similarity on title word sets (`services/article.py:find_duplicate_titles()`). Threshold is 0.5 (configurable via `TITLE_SIMILARITY_THRESHOLD`). Only compares against articles from the last 7 days and from other sources. Same-source duplicates are handled by the `external_id` uniqueness constraint.
 
-### Additional lessons learned
+## Additional lessons learned
 
 **`short_url` library API**: Version 1.2.2 does not support `alphabet` parameter on module-level `encode_url()`/`decode_url()` functions. Must instantiate `short_url.UrlEncoder(alphabet=...)` and use its methods. See `models.py:8-10`.
 
@@ -301,26 +305,11 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates.
 
-**`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. Pre-compilation at module load was implemented.
+**Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Always grep/search to verify before starting related work.
 
-**Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Items marked "COMPLETE" in plan.md have been found NOT done during verification (e.g., database indexes, LLM provider refactoring, circular import resolution). Always grep/search to verify before starting related work.
+**Plans directory**: The `plans/` directory contains historical implementation plans. When reviewing plans, always verify against the actual codebase — items marked as "already correct" may have regressed, and items marked as "pending" may have been fixed since the plan was written.
 
-**LLM provider refactoring**: Wave 1 completed — `make_error_handler()` factory in `services/llm/errors.py`, client initialization moved to `BaseLLMProvider`, tool calling loop consolidated with hooks (`_call_api_with_tools`, `_extract_text_and_tool_calls`, `_format_tool_result`).
-
-**Items previously incomplete (now resolved)**:
-- `services/article.py:75`: `db.session.expire_all()` removed (W4.2)
-- `services/article.py:264-280`: `find_duplicate_titles()` uses single batched query (W5.4)
-- Database indexes on `Article.source_id` and `Source.name` added via migration `020_article_source_index` (W3.1, W3.2)
-- Circular import resolved — `services/pipeline_utils.py` created with `_log_pipeline` and `_dispatch_next` (W4.1)
-
-**Unreachable code after raise**: Always check for code after `raise` or `return` statements in try blocks — such code is unreachable. Example: `services/article.py:75` has `db.session.expire_all()` after `raise` which should be removed.
-
-**Wave 4 refactoring completed** (historical context):
-- `tasks/pipeline.py` extracted to `services/pipeline_failure.py`, `services/pipeline_degradation.py`, `tasks/scheduler.py`
-- `routes/admin/api.py` split into `routes/admin/api/` package
-- `tests/test_pipeline.py` split into `tests/test_pipeline/` package
-- `tests/test_llm_adapters.py` split into `tests/test_llm_adapters/` package
-- `services/config_utils.py` added
+## Critical patterns
 
 ### Celery tasks must not use `current_app.config`
 

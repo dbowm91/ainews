@@ -151,12 +151,13 @@ class RequestIDMiddleware:
             request_id_var.reset(token)
 
 
-def setup_logging(app=None, level=logging.INFO):
+def setup_logging(app=None, level=logging.INFO, config_name=None):
     """Configure structured logging for the application.
 
     Args:
         app: Flask application instance (optional)
         level: Logging level (default: INFO)
+        config_name: Configuration name for environment-specific settings
     """
     # Get the root logger
     root_logger = logging.getLogger()
@@ -183,6 +184,11 @@ def setup_logging(app=None, level=logging.INFO):
     # Set specific loggers
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+    if config_name == "production":
+        db_log_level = os.environ.get("DB_QUERY_LOG_LEVEL", "WARNING").upper()
+        if hasattr(logging, db_log_level):
+            logging.getLogger("sqlalchemy.engine").setLevel(getattr(logging, db_log_level))
 
     if app:
         # Configure Flask app logger

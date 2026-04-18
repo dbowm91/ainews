@@ -42,10 +42,10 @@ class OllamaProvider(BaseLLMProvider):
 
         return ollama.Client(host=self.host, timeout=120)
 
-    def _extract_text(self, resp) -> str:
+    def _extract_text(self, resp, return_thinking: bool = False) -> str:
         message = resp.get("message", {})
         content = message.get("content")
-        if not content:
+        if not content and return_thinking:
             thinking = message.get("thinking")
             if thinking:
                 return thinking
@@ -145,7 +145,7 @@ class OllamaProvider(BaseLLMProvider):
                 fn_args = json.loads(fn_args)
             tool_calls.append(
                 ToolCall(
-                    id=f"call_{i}",  # Ollama doesn't provide ids
+                    id="",
                     name=fn.get("name", ""),
                     arguments=fn_args,
                 )

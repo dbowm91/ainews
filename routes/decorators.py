@@ -1,9 +1,30 @@
 """Shared helpers for route handlers."""
 
+from functools import wraps
 from contextlib import contextmanager
 
-from flask import jsonify
+from flask import jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
+
+
+def validate_csrf_json(f):
+    """Decorator to validate CSRF token for JSON API endpoints.
+
+    Flask-WTF CSRF only validates form/multipart requests.
+    Use this decorator on JSON endpoints to validate X-CSRFToken header.
+    """
+    from flask_wtf.csrf import validate_csrf
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get("X-CSRFToken")
+        if not token:
+            return jsonify({"error": "CSRF token missing"}), 400
+        try:
+            validate_csrf(token)
+        except Exception:
+            return jsonify({"error": "CSRF token invalid"}), 400
+        return f(*args, **kwargs)
+    return decorated
 
 
 def commit(db, error_message="Operation failed"):

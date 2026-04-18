@@ -55,13 +55,12 @@ def _send_emails_parallel(subscribers, subject, html, site_url):
     """Send emails to subscribers in parallel using Celery group.
 
     Emails are sent in batches of 500 to reduce Celery task overhead.
-    Returns the count of successfully sent emails.
+    Uses non-blocking apply_async - does not wait for results.
     """
     if not subscribers:
         return 0
 
     BATCH_SIZE = 500
-    total_sent = 0
 
     for i in range(0, len(subscribers), BATCH_SIZE):
         batch = subscribers[i : i + BATCH_SIZE]
@@ -78,15 +77,9 @@ def _send_emails_parallel(subscribers, subject, html, site_url):
             )
 
         job = group(email_tasks)
-        try:
-            results = job.apply_async().get(timeout=300, propagate=False)
-            total_sent += sum(
-                1 for r in results if isinstance(r, dict) and r.get("sent")
-            )
-        except Exception as e:
-            logger.error("Email batch %d failed: %s", i // BATCH_SIZE, e)
+        job.apply_async()
 
-    return total_sent
+    return 0
 
 
 def _fetch_articles_for_newsletter(
@@ -292,12 +285,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
         )
 
     job = group(task_signatures)
-    try:
-        results_list = job.apply_async()
-        all_results = results_list.get(timeout=600, propagate=False)
-    except Exception as e:
-        logger.error("Newsletter group dispatch failed: %s", e)
-        all_results = [{"error": str(e)} for _ in task_signatures]
+    job.apply_async()
 
     run = db.session.get(PipelineRun, run_id)
     if run:
@@ -309,8 +297,8 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
             db.session.rollback()
             raise
 
-    logger.info("Newsletter generation complete: %s", all_results)
-    return all_results
+    logger.info("Newsletter generation dispatched for %d topics", len(task_signatures))
+    return []
 
 
 @shared_task(
@@ -329,43 +317,43 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     lock_key = "ainews:newsletter_lock"
     redis_client = get_redis()
 
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    idempotency_key = f"idempotency:newsletter:{today}"
+    if redis_client.exists(idempotency_key):
+        logger.info("Newsletter generation already completed today, skipping")
+        return {"skipped": True, "reason": "already_generated_today"}
+
+    _NEWSLETTER_LOCK_SCRIPT = """
+    local current = redis.call('GET', KEYS[1])
+    if current == ARGV[1] then
+        redis.call('EXPIRE', KEYS[1], ARGV[2])
+        return 1
+    elseif not current then
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+        return 2
+    else
+        return 0
+    end
+    """
+    _newsletter_lock = redis_client.register_script(_NEWSLETTER_LOCK_SCRIPT)
+
     try:
-        acquired = redis_client.set(lock_key, task_id, nx=True, ex=600)
+        lock_status = _newsletter_lock(keys=[lock_key], args=[task_id, 600])
     except redis.exceptions.RedisError:
-        acquired = True
+        lock_status = 2
 
-    if not acquired:
-        try:
-            existing = redis_client.get(lock_key)
-        except redis.exceptions.RedisError:
-            existing = None
-        if existing and existing.decode() == task_id:
-            try:
-                from services.redis_utils import refresh_lock, acquire_lock
-
-                if not refresh_lock(redis_client, lock_key, task_id, 600):
-                    if not acquire_lock(redis_client, lock_key, task_id, 600):
-                        logger.info(
-                            "Newsletter generation already in progress (task %s), skipping",
-                            existing.decode() if existing else "unknown",
-                        )
-                        return {"skipped": True, "reason": "locked"}
-            except redis.exceptions.RedisError:
-                if not acquire_lock(redis_client, lock_key, task_id, 600):
-                    logger.info(
-                        "Failed to refresh newsletter lock, aborting (task %s)",
-                        task_id,
-                    )
-                    return {"skipped": True, "reason": "lock_refresh_failed"}
-        else:
-            logger.info(
-                "Newsletter generation already in progress (task %s), skipping",
-                existing.decode() if existing else "unknown",
-            )
-            return {"skipped": True, "reason": "locked"}
+    if lock_status == 0:
+        logger.info("Newsletter generation already in progress, skipping")
+        return {"skipped": True, "reason": "locked"}
+    elif lock_status == 1:
+        logger.debug("Refreshed existing newsletter lock")
+    else:
+        logger.debug("Acquired new newsletter lock")
 
     try:
-        return _generate_newsletters_impl(self, dry_run_email, run_id)
+        result = _generate_newsletters_impl(self, dry_run_email, run_id)
+        redis_client.setex(idempotency_key, 86400 * 2, "1")
+        return result
     except SoftTimeLimitExceeded:
         from extensions import db
         from models import PipelineRun

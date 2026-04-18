@@ -58,7 +58,16 @@ class ProviderManager:
         for pdef in config.providers:
             if pdef.id == provider_id and pdef.enabled:
                 cls = self.get_class(pdef.type)
-                provider = cls(pdef.id, pdef.config)
+                try:
+                    provider = cls(pdef.id, pdef.config)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to instantiate %s provider %s: %s",
+                        self.category,
+                        provider_id,
+                        e,
+                    )
+                    raise
                 self._cache[provider_id] = provider
                 return provider
 

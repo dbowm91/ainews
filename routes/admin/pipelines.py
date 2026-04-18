@@ -1,4 +1,4 @@
-from flask import render_template, request, jsonify, current_app
+from flask import render_template, request, jsonify, current_app, g
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
@@ -20,7 +20,7 @@ def pipelines():
     per_page = PER_PAGE_PIPELINE
     runs, has_next, next_page = paginate_query(q, page, per_page)
 
-    running = PipelineRun.query.filter_by(status="running").all()
+    running = PipelineRun.query.filter_by(status="running").order_by(PipelineRun.started_at.desc()).limit(100).all()
 
     return render_template(
         "admin/pipelines.html",
@@ -97,7 +97,9 @@ def trigger_crawl():
             db.session.rollback()
             raise
 
-        result = run_all_sources.delay(run_id=run.id)
+        request_id = getattr(g, "request_id", None)
+        headers = {"request_id": request_id} if request_id else None
+        result = run_all_sources.apply_async(kwargs={"run_id": run.id}, headers=headers)
         run.task_id = result.id
         try:
             db.session.commit()

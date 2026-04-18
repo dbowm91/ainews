@@ -1,5 +1,6 @@
 import logging
-from flask import render_template, request, jsonify, current_app
+from flask import render_template, request, jsonify, current_app, g
+from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_NEWSLETTERS
 from extensions import db
@@ -97,7 +98,9 @@ def trigger_newsletter():
     from tasks.newsletter import generate_daily_newsletters
 
     try:
-        result = generate_daily_newsletters.delay()
+        request_id = getattr(g, "request_id", None)
+        headers = {"request_id": request_id} if request_id else None
+        result = generate_daily_newsletters.apply_async(headers=headers)
         return jsonify(
             {"message": "Newsletter generation started", "task_id": result.id}
         ), 202
@@ -125,7 +128,11 @@ def newsletter_dry_run():
         return jsonify({"error": "Invalid email address"}), 400
 
     try:
-        result = generate_daily_newsletters.delay(dry_run_email=test_email)
+        request_id = getattr(g, "request_id", None)
+        headers = {"request_id": request_id} if request_id else None
+        result = generate_daily_newsletters.apply_async(
+            kwargs={"dry_run_email": test_email}, headers=headers
+        )
         msg = f"Dry run started — will send to {test_email}"
         if is_htmx:
             return (
@@ -165,6 +172,7 @@ def newsletter_preview():
             Article.impact_score > 0,
             Article.created_at >= cutoff,
         )
+        .options(joinedload(Article.source), joinedload(Article.tags))
         .order_by(Article.impact_score.desc())
         .limit(20)
         .all()

@@ -4,7 +4,7 @@
   {% if page > 1 %}
     <a href="{{ base_url }}?page={{ page - 1 }}{{ qs }}" class="pag-link">&larr; prev</a>
   {% else %}
-    <span class="pag-link pag-disabled">&larr; prev</span>
+    <span class="pag-link pag-disabled" aria-disabled="true">&larr; prev</span>
   {% endif %}
   {% if total_count is not none %}
     <span class="pag-info">
@@ -18,7 +18,7 @@
   {% if has_next %}
     <a href="{{ base_url }}?page={{ next_page }}{{ qs }}" class="pag-link">next &rarr;</a>
   {% else %}
-    <span class="pag-link pag-disabled">next &rarr;</span>
+    <span class="pag-link pag-disabled" aria-disabled="true">next &rarr;</span>
   {% endif %}
 </nav>
 {% endmacro %}

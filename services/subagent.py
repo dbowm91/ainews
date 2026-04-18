@@ -1,10 +1,7 @@
 from __future__ import annotations
 import logging
 import time
-from concurrent.futures import (
-    ThreadPoolExecutor,
-    TimeoutError as ConcurrentTimeoutError,
-)
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Type
 
 from pydantic import BaseModel
@@ -421,7 +418,7 @@ def run_subagent(
                     future = executor.submit(_call_with_timeout)
                     try:
                         result = future.result(timeout=stage_config.timeout_seconds)
-                    except ConcurrentTimeoutError:
+                    except TimeoutError:
                         future.cancel()
                         executor.shutdown(wait=False, cancel_futures=True)
                         logger.warning(
@@ -595,7 +592,7 @@ def run_subagent_with_tools(
                         result = response_model.model_validate(
                             {"synthesis": tc_resp.text}
                         )
-                    except ConcurrentTimeoutError:
+                    except TimeoutError:
                         future.cancel()
                         executor.shutdown(wait=False, cancel_futures=True)
                         logger.warning(

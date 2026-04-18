@@ -1,7 +1,7 @@
 import os
 import logging
 import time
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, g
 from sqlalchemy import event
 from config import config
 from extensions import db, limiter, csrf, migrate
@@ -79,7 +79,9 @@ def create_app(config_name=None):
 
     # Setup structured logging
     setup_logging(
-        app, level=logging.DEBUG if config_name == "development" else logging.INFO
+        app,
+        level=logging.DEBUG if config_name == "development" else logging.INFO,
+        config_name=config_name,
     )
 
     # Production secret validation
@@ -124,7 +126,10 @@ def create_app(config_name=None):
 
     @app.before_request
     def start_request_timer():
+        from logging_config import get_request_id
+
         request._request_start_time = time.monotonic()
+        g.request_id = get_request_id()
 
     @app.after_request
     def record_request_metrics(response):
@@ -238,7 +243,8 @@ def create_app(config_name=None):
 
             validate_url_safe(value)
             return value
-        except Exception:
+        except Exception as e:
+            logger.warning("safe_href validation failed for %s: %s", value, e)
             return "#"
 
     return app

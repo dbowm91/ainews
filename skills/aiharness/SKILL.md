@@ -71,7 +71,7 @@ After defining tools, call `register_tool()` in `initialize_tool_registry()` and
 - **LLM-as-judge**: After an article is finalized, `propose_trend_memory(article)` asks the LLM to extract 0–3 high-signal entries. The LLM decides importance tier — not rules.
 - **Tiered TTL**: Low=7 days, medium=30 days, high=no expiry (configurable in `pipeline.yaml:memory:`)
 - **Automatic consolidation**: Nightly Celery task `consolidate_trend_memory` promotes low→medium when a high-importance entry exists for the same topic
-- **Editor-only (initially)**: The writer does not yet have trend memory access; the system is designed to generalize
+- **Editor-only**: The writer does not currently have trend memory access; the system is designed to generalize
 
 **Key functions:**
 
@@ -101,12 +101,6 @@ memory:
   max_entries_per_propose: 3         # LLM extracts max 3 entries per article
   consolidation_merge_window_hours: 72  # Low entries within 72h of a high entry get promoted
 ```
-
-**Adding trend memory to the writer (future):**
-1. In `services/writer.py`, add a `build_writer_prompt_with_memory()` variant that fetches `get_memory_for_topics(topics)` and formats it
-2. In `tasks/write.py`, call the memory fetch before building the writer prompt
-3. Add `trend_memory` to the `tools:` list in `pipeline.yaml: subagent.research` if the research subagent also needs access
-4. Wire into `propose_trend_memory` after the writer stage finalizes (change the call site from `tasks/edit.py` to the finalize hook)
 
 ## Agentic Patterns to Know
 

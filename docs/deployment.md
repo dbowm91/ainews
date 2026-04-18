@@ -735,6 +735,49 @@ sudo systemctl restart ainews-celery-worker
 
 ---
 
+## Rate Limiting
+
+### Infrastructure-Level Rate Limiting
+
+Public endpoints (subscribe, article feeds, API) do **not** have per-route rate limiting configured in the application. Instead, rate limiting is handled by the infrastructure layer:
+
+- **WAF (Web Application Firewall)**: For production deployments behind a WAF (Cloudflare, AWS WAF, etc.), configure rate limiting rules there
+- **Reverse Proxy (Nginx)**: Rate limiting can be configured in Nginx for production bare-metal deployments
+
+Example Nginx rate limiting configuration:
+
+```nginx
+# Rate limit zone - 10 requests per second per IP
+limit_req_zone $binary_remote_addr zone=general:10m rate=10r/s;
+
+# Apply to public endpoints
+location /subscribe {
+    limit_req zone=general burst=20 nodelay;
+    proxy_pass http://127.0.0.1:5000;
+}
+
+location /article {
+    limit_req zone=general burst=50 nodelay;
+    proxy_pass http://127.0.0.1:5000;
+}
+```
+
+### Admin Login Lockout
+
+The only application-level rate limiting is for admin login:
+
+- **5 failed attempts** within 15 minutes → **15 minute lockout** per IP
+- Implementation: Redis Lua script (atomic, distributed) with in-memory fallback
+- Redis key format: `ainews:login_attempts:<ip>`
+
+###Celery Task Rate Limiting
+
+LLM provider slot limiting is handled separately via `services/limiter.py`:
+- Per-provider, per-model concurrency limits
+- Configurable via provider `concurrency` settings in pipeline.yaml
+
+---
+
 ## Security
 
 1. **Secrets:** Never commit `.env` to version control. Use `chmod 600 .env`.

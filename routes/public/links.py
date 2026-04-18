@@ -3,6 +3,7 @@
 import logging
 
 from flask import request, render_template, redirect, make_response, Response
+from sqlalchemy.orm import joinedload
 
 from models import Article, ArticleMetric
 from services.article import parse_article_json, track_metric
@@ -31,7 +32,7 @@ def article_detail(article_id: int) -> Response:
         )
         return resp
 
-    article = Article.query.get_or_404(article_id)
+    article = Article.query.options(joinedload(Article.tags)).get_or_404(article_id)
     parse_article_json(article)
 
     track_metric(article_id, ArticleMetric.page_loads)
@@ -87,10 +88,9 @@ def short_url_tracking_page(short_id: str) -> str:
     )
 
 
-# CSRF exemption: this endpoint is called from client-side JS when user clicks
-# share button - no form involved and requiring CSRF tokens would require
-# additional JS complexity. The endpoint is read-only (just records a metric)
-# and is rate-limited globally via Flask-Limiter (configured in extensions.py).
+# Note: This endpoint is CSRF-protected via Flask-WTF but the read-only nature
+# (metrics recording only) limits impact. The endpoint is also rate-limited
+# globally via Flask-Limiter (configured in extensions.py).
 
 
 @public_bp.route("/api/track/share-click/<int:article_id>", methods=["POST"])

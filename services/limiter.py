@@ -124,7 +124,7 @@ class ModelLimiter:
         cleaned = 0
         try:
             pattern = f"{self._prefix}:*"
-            for key in self._redis.scan_iter(match=pattern):
+            for key in self._redis.scan_iter(match=pattern, count=1000):
                 ttl = self._redis.ttl(key)
                 if 0 < ttl < 60:
                     count = int(self._redis.get(key) or 0)

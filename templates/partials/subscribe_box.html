@@ -20,7 +20,7 @@
           hx-swap="outerHTML"
           hx-target="closest .subscribe-box"
           hx-indicator="#subscribe-spinner"
-          hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+          hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
       <input type="email" id="subscribe-email" name="email" placeholder="you@example.com" class="subscribe-input" required aria-describedby="subscribe-hint">
       <span id="subscribe-hint" class="sr-only">Enter your email address to subscribe</span>
       <input type="hidden" name="newsletter_type" value="{{ newsletter_type or 'main' }}">

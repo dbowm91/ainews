@@ -44,23 +44,33 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     lock_key = f"ainews:crawl_lock:{source_id}"
     redis_client = get_redis()
     task_id = self.request.id or "manual"
+
+    _CRAWL_LOCK_SCRIPT = """
+    local current = redis.call('GET', KEYS[1])
+    if current == ARGV[1] then
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+        return 1
+    elseif not current then
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+        return 2
+    else
+        return 0
+    end
+    """
+    _crawl_lock = redis_client.register_script(_CRAWL_LOCK_SCRIPT)
+
     try:
-        acquired = redis_client.set(lock_key, task_id, nx=True, ex=30)
+        lock_status = _crawl_lock(keys=[lock_key], args=[task_id, 30])
     except redis.exceptions.RedisError:
-        acquired = True
-    if not acquired:
-        try:
-            existing = redis_client.get(lock_key)
-            if existing and existing.decode() == task_id:
-                redis_client.set(lock_key, task_id, nx=False, ex=30)
-            else:
-                logger.info("Source %s already being crawled, skipping", source_id)
-                return {"source_id": source_id, "skipped": True, "reason": "locked"}
-        except redis.exceptions.RedisError:
-            logger.warning(
-                "Redis unavailable for lock check on %s, proceeding", source_id
-            )
-            acquired = True
+        lock_status = 2
+
+    if lock_status == 0:
+        logger.info("Source %s already being crawled, skipping", source_id)
+        return {"source_id": source_id, "skipped": True, "reason": "locked"}
+    elif lock_status == 1:
+        logger.debug("Refreshed existing crawl lock for source %s", source_id)
+    else:
+        logger.debug("Acquired new crawl lock for source %s", source_id)
 
     try:
         source = Source.query.filter_by(source_key=source_id).first()

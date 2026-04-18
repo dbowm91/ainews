@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from urllib.parse import urlparse
-from flask import flash, render_template, request, redirect, url_for, jsonify
+from flask import flash, render_template, request, redirect, url_for, jsonify, g
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
@@ -434,6 +434,8 @@ def reprocess_article(article_id):
         "research_article": research_article,
         "write_article": write_article,
     }
-    _TASKS[cfg["task"]].delay(article.id)
+    request_id = getattr(g, "request_id", None)
+    headers = {"request_id": request_id} if request_id else None
+    _TASKS[cfg["task"]].apply_async(args=[article.id], headers=headers)
 
     return redirect(url_for("admin.articles"))

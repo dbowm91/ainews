@@ -3,7 +3,7 @@ import secrets
 
 from flask import jsonify, request, Response
 from routes.admin import admin_bp, require_auth
-from routes.decorators import commit
+from routes.decorators import commit, validate_csrf_json
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ def list_webhooks() -> Response:
 
 @admin_bp.route("/api/webhooks", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def create_webhook() -> tuple[Response, int] | Response:
     """Create a new webhook."""
     from models import Webhook
@@ -201,6 +202,7 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
 @admin_bp.route("/api/webhooks/<int:webhook_id>/test", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Send a test event to a webhook."""
     from models import Webhook

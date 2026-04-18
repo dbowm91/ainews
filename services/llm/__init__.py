@@ -21,6 +21,8 @@ _LLM_RECOVERY_TIMEOUT = 60.0
 def clear_provider_cache() -> None:
     """Drop all cached LLM provider instances."""
     _manager.clear_cache()
+    from services.config_cache import get_config_cache
+    get_config_cache().invalidate_all()
 
 
 def get_provider_by_id(provider_id: str) -> BaseLLMProvider:
@@ -51,8 +53,11 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
     for pdef in config.providers:
         if pdef.id == rc.provider or not pdef.enabled:
             continue
+        fallback_model = pdef.config.get("model", "")
+        if not fallback_model:
+            continue
         fallback_breaker = get_breaker(
-            f"llm:{pdef.id}:{pdef.config.get('model', '')}",
+            f"llm:{pdef.id}:{fallback_model}",
             failure_threshold=_LLM_FAILURE_THRESHOLD,
             recovery_timeout=_LLM_RECOVERY_TIMEOUT,
         )
@@ -61,7 +66,7 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
             provider = get_provider_by_id(pdef.id)
             return (
                 provider,
-                pdef.config.get("model", ""),
+                fallback_model,
                 pdef.config.get("max_tokens", rc.max_tokens),
                 pdef.id,
             )

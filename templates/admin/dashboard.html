@@ -84,6 +84,30 @@
       </div>
     </section>
 
+    {# ── Pipeline Health ── #}
+    {% if pipeline_health %}
+    <section class="dash-card">
+      <h2 class="dash-card-title">pipeline health <span class="text-muted">(15m window)</span></h2>
+      <div class="health-grid">
+        {% for stage, stats in pipeline_health.items() %}
+          <div class="health-stage">
+            <span class="health-stage-name">{{ stage }}</span>
+            {% if stats.success_rate is not none %}
+              <span class="health-rate {% if stats.success_rate >= 80 %}green{% elif stats.success_rate >= 50 %}yellow{% else %}red{% endif %}">
+                {{ stats.success_rate|round|int }}%
+              </span>
+              <span class="health-counts text-muted">{{ stats.success_count }} ok / {{ stats.failure_count }} fail</span>
+            {% else %}
+              <span class="health-rate text-muted">—</span>
+              <span class="health-counts text-muted">no data</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <a href="/admin/metrics" class="dash-link">detailed metrics &rarr;</a>
+    </section>
+    {% endif %}
+
     {# ── Sources ── #}
     <section class="dash-card">
       <h2 class="dash-card-title">sources</h2>

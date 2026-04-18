@@ -1,0 +1,160 @@
+{% extends "base_admin.html" %}
+{% from "macros/badges.html" import pipeline_badge, impact_score %}
+
+{% block title %}ainews// admin — dead letters{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">dead letters</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">dead letters</h1>
+
+  <div class="dashboard-grid">
+    <section class="dash-card">
+      <h2 class="dash-card-title">overview</h2>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <span class="stat-value">{{ failed_count }}</span>
+          <span class="stat-label">failed</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{{ stuck_count }}</span>
+          <span class="stat-label">stuck</span>
+        </div>
+      </div>
+      <p class="text-muted mt-1">
+        Failed articles exceeded retry budget. Stuck articles have been in a pipeline stage for too long.
+      </p>
+    </section>
+  </div>
+
+  {# ── Failed Articles ── #}
+  <section class="dash-card dash-card-full">
+    <div class="section-header">
+      <h2 class="dash-card-title">failed articles</h2>
+      <form method="POST" action="/admin/api/articles/bulk" class="bulk-reprocess-form"
+            hx-post="/admin/api/articles/bulk"
+            hx-swap="none"
+            id="reprocess-failed-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="reprocess">
+        <input type="hidden" name="article_ids" id="reprocess-failed-ids" value="">
+        <button type="submit" class="btn btn-sm btn-secondary"
+                onclick="document.getElementById('reprocess-failed-ids').value = getAllFailedIds();">
+          reprocess all failed
+        </button>
+      </form>
+    </div>
+
+    {% if dead_letter_articles %}
+      <div class="table-responsive">
+      <table class="dash-table" aria-label="Failed articles table">
+        <thead>
+          <tr><th>title</th><th>source</th><th>category</th><th>status</th><th>error</th><th>updated</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for article in dead_letter_articles %}
+            <tr>
+              <td>
+                <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title }}">
+                  {{ article.original_title if article.original_title else '(no title)' }}
+                </a>
+              </td>
+              <td>{{ article.source.name if article.source else '—' }}</td>
+              <td><span class="category-badge cat-{{ article.category }}">{{ article.category or '—' }}</span></td>
+              <td>{{ pipeline_badge(article.pipeline_status) }}</td>
+              <td class="error-cell" title="{{ article.last_error }}">{{ article.last_error[:80] if article.last_error else '—' }}</td>
+              <td>{{ article.updated_at.strftime('%b %d %H:%M') if article.updated_at }}</td>
+              <td class="actions-cell">
+                <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="32" cy="32" r="24" stroke="currentColor" stroke-width="2"/>
+          <path d="M22 22l20 20M42 22L22 42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>no failed articles</span>
+      </div>
+    {% endif %}
+  </section>
+
+  {# ── Stuck Articles ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">stuck articles <span class="text-muted">(may still recover)</span></h2>
+
+    {% if stuck_articles %}
+      <div class="table-responsive">
+      <table class="dash-table" aria-label="Stuck articles table">
+        <thead>
+          <tr><th>title</th><th>source</th><th>category</th><th>status</th><th>impact</th><th>stuck for</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for article in stuck_articles %}
+            <tr>
+              <td>
+                <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title }}">
+                  {{ article.original_title if article.original_title else '(no title)' }}
+                </a>
+              </td>
+              <td>{{ article.source.name if article.source else '—' }}</td>
+              <td><span class="category-badge cat-{{ article.category }}">{{ article.category or '—' }}</span></td>
+              <td>{{ pipeline_badge(article.pipeline_status) }}</td>
+              <td>{{ impact_score(article.impact_score) }}</td>
+              <td>
+                {% if article.updated_at %}
+                  {% set age_minutes = (now() - article.updated_at).total_seconds() / 60 %}
+                  {% if age_minutes >= 60 %}
+                    {{ (age_minutes / 60)|round|int }}h
+                  {% else %}
+                    {{ age_minutes|round|int }}m
+                  {% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="actions-cell">
+                <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
+                      hx-post="/admin/articles/{{ article.id }}/reprocess"
+                      hx-confirm="Reprocess this article?"
+                      hx-target="closest tr"
+                      hx-swap="outerHTML"
+                      hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                  <button type="submit" class="btn-delete">reprocess</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="32" cy="32" r="24" stroke="currentColor" stroke-width="2"/>
+          <line x1="24" y1="28" x2="40" y2="28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="36" x2="36" y2="36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>no stuck articles</span>
+      </div>
+    {% endif %}
+  </section>
+</div>
+
+<script>
+function getAllFailedIds() {
+  return [{% for article in dead_letter_articles %}{{ article.id }}{% if not loop.last %},{% endif %}{% endfor %}];
+}
+</script>
+{% endblock %}

@@ -1,6 +1,8 @@
-import html
 import logging
 from datetime import datetime, timezone, timedelta
+from html import escape
+
+from sqlalchemy.orm import joinedload
 
 from services.utils import parse_article_headline
 
@@ -18,7 +20,6 @@ def generate_newsletter_html(
     """Generate email-safe newsletter HTML from a list of articles."""
     from urllib.parse import quote
 
-    # Executive summary section
     summary_html = ""
     if executive_summary:
         paragraphs = executive_summary.split("\n\n")
@@ -27,7 +28,7 @@ def generate_newsletter_html(
             p = p.strip()
             if p:
                 para_parts.append(
-                    f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{html.escape(p)}</p>'
+                    f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{escape(p)}</p>'
                 )
         para_html = "".join(para_parts)
         if para_html:
@@ -42,16 +43,15 @@ def generate_newsletter_html(
           </td>
         </tr>"""
 
-    # Article items
     items_parts = []
     for i, article in enumerate(articles, 1):
         headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
         link = f"{site_url}/article/{article.id}"
         safe_link = quote(link, safe=":/.?=&#")
         category = article.category or ""
-        safe_headline = html.escape(headline)
-        safe_category = html.escape(category)
-        safe_tldr = html.escape(tldr)
+        safe_headline = escape(headline)
+        safe_category = escape(category)
+        safe_tldr = escape(tldr)
 
         items_parts.append(f"""
         <tr>
@@ -72,7 +72,8 @@ def generate_newsletter_html(
 
     if unsubscribe_url:
         unsub = unsubscribe_url.replace("{site_url}", site_url)
-        unsub_link = f'<a href="{unsub}" style="color:#888;text-decoration:none;">unsubscribe</a>'
+        safe_unsub = escape(unsub, quote=True)
+        unsub_link = f'<a href="{safe_unsub}" style="color:#888;text-decoration:none;">unsubscribe</a>'
     else:
         unsub_link = '<span style="color:#888;">unsubscribe link unavailable</span>'
 
@@ -91,7 +92,7 @@ def generate_newsletter_html(
         </tr>
         <tr>
           <td style="padding:24px 32px 8px 32px;">
-            <h1 style="font-size:20px;font-weight:700;color:#111;margin:0;">{html.escape(title)}</h1>
+            <h1 style="font-size:20px;font-weight:700;color:#111;margin:0;">{escape(title)}</h1>
           </td>
         </tr>
         {summary_html}
@@ -146,7 +147,7 @@ def _generate_newsletter(
     base_query = Article.query.filter(
         Article.pipeline_status == PipelineStatus.DONE,
         Article.created_at >= cutoff,
-    )
+    ).options(joinedload(Article.source), joinedload(Article.tags))
     query = articles_filter(base_query)
     articles = query.order_by(Article.impact_score.desc()).limit(max_articles).all()
 
@@ -155,15 +156,15 @@ def _generate_newsletter(
         return "", "", 0
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
-    subject = f"ainews// — {title} — {date_str}"
-    html = generate_newsletter_html(
+    subject = f"ainews// — {escape(title)} — {date_str}"
+    newsletter_html = generate_newsletter_html(
         articles,
         title,
         site_url,
         date_str,
         executive_summary=executive_summary,
     )
-    return html, subject, len(articles)
+    return newsletter_html, subject, len(articles)
 
 
 def generate_main_newsletter(

@@ -299,6 +299,11 @@
 
 .article-link {
   color: var(--text-primary);
+  display: block;
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .article-link:hover {
@@ -729,7 +734,7 @@
   color: var(--text-dim);
 }
 
-/* Search keyboard hint (8.17) - moved to articles.css */
+/* Keyboard shortcut hint for search focus */
 
 /* Password visibility toggle (8.22) */
 

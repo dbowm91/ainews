@@ -50,6 +50,7 @@ def setup_pipeline_mocks():
     redis_mock = MagicMock()
     redis_mock.set.return_value = True
     redis_mock.get.return_value = b"task-test"
+    redis_mock.register_script.return_value = MagicMock()
     mocks["get_redis"].return_value = redis_mock
 
     return patches, mocks

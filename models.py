@@ -43,6 +43,7 @@ article_tags = db.Table(
         db.Integer,
         db.ForeignKey("tags.id", ondelete="CASCADE"),
         primary_key=True,
+        index=True,
     ),
 )
 
@@ -93,7 +94,7 @@ class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     short_id = db.Column(db.String(12), unique=True, index=True)
     source_id = db.Column(
-        db.Integer, db.ForeignKey("sources.id", ondelete="CASCADE"), nullable=False
+        db.Integer, db.ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
     )
     external_id = db.Column(db.String(128), index=True)
     original_url = db.Column(db.String(2048))
@@ -155,13 +156,13 @@ class Citation(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     article_id = db.Column(
-        db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False
+        db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False, index=True
     )
     url = db.Column(db.String(2048), nullable=False)
     title = db.Column(db.String(512))
     author = db.Column(db.String(128))
     context = db.Column(db.Text)
-    position = db.Column(db.Integer, default=1)
+    position = db.Column(db.Integer, nullable=False, default=1)
 
     def __repr__(self):
         return f"<Citation {(self.url or '')[:50]}>"
@@ -294,7 +295,7 @@ class PipelineLog(db.Model):
         index=True,
     )
     article_id = db.Column(
-        db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), nullable=True
+        db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), nullable=True, index=True
     )
     stage = db.Column(db.String(32), nullable=False)
     level = db.Column(db.String(8), default="info")  # info, warning, error
@@ -379,7 +380,7 @@ class TrendMemory(db.Model):
     signal = db.Column(db.Text, nullable=False)
     importance = db.Column(db.Integer, nullable=False, default=1)
     source_article_id = db.Column(
-        db.Integer, db.ForeignKey("articles.id", ondelete="SET NULL"), nullable=True
+        db.Integer, db.ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True
     )
     expires_at = db.Column(db.DateTime, nullable=True)
     last_consolidated_at = db.Column(db.DateTime, nullable=True)

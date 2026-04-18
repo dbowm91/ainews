@@ -18,6 +18,52 @@ def _get_dashboard_cache_key() -> str:
     return "dashboard:stats:v2"
 
 
+@admin_bp.route("/dead-letters")
+@require_auth
+def dead_letters():
+    from models import Article
+    from constants import PipelineStatus
+
+    dead_letter_articles = (
+        Article.query.filter_by(pipeline_status=PipelineStatus.FAILED)
+        .options(joinedload(Article.source))
+        .order_by(Article.updated_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    stuck_articles = (
+        Article.query.filter(
+            Article.pipeline_status.in_(
+                [
+                    PipelineStatus.RESEARCHING,
+                    PipelineStatus.WRITING,
+                    PipelineStatus.EDITING,
+                    PipelineStatus.PENDING,
+                ]
+            )
+        )
+        .options(joinedload(Article.source))
+        .order_by(Article.updated_at.asc())
+        .limit(50)
+        .all()
+    )
+
+    failed_count = (
+        Article.query.filter_by(pipeline_status=PipelineStatus.FAILED).count()
+    )
+
+    stuck_count = len(stuck_articles)
+
+    return render_template(
+        "admin/dead_letters.html",
+        dead_letter_articles=dead_letter_articles,
+        stuck_articles=stuck_articles,
+        failed_count=failed_count,
+        stuck_count=stuck_count,
+    )
+
+
 def _get_cached_stats(redis_client):
     try:
         cached = redis_client.get(_get_dashboard_cache_key())
@@ -45,6 +91,7 @@ def dashboard():
     from models import Article, Source, PipelineRun
     from extensions import db, get_redis
     from services.llm import get_provider_info
+    from services.pipeline_monitor import get_all_stages_stats
 
     redis_client = None
     try:
@@ -68,6 +115,7 @@ def dashboard():
                 subs_by_type=cached["subs_by_type"],
                 recent_runs=cached["recent_runs"],
                 running_count=cached["running_count"],
+                pipeline_health=cached.get("pipeline_health"),
             )
 
     pipeline_stats = dict(
@@ -108,6 +156,13 @@ def dashboard():
 
     running_count = PipelineRun.query.filter_by(status="running").count()
 
+    pipeline_health = None
+    if redis_client:
+        try:
+            pipeline_health = get_all_stages_stats(minutes=15)
+        except Exception as e:
+            logger.warning("Failed to get pipeline health stats: %s", e)
+
     if redis_client:
         cache_data = {
             "pipeline_stats": pipeline_stats,
@@ -119,6 +174,7 @@ def dashboard():
             "subs_by_type": subs_by_type,
             "recent_runs": recent_runs,
             "running_count": running_count,
+            "pipeline_health": pipeline_health,
         }
         _set_cached_stats(redis_client, cache_data)
 
@@ -134,4 +190,5 @@ def dashboard():
         subs_by_type=subs_by_type,
         recent_runs=recent_runs,
         running_count=running_count,
+        pipeline_health=pipeline_health,
     )

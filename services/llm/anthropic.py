@@ -97,7 +97,6 @@ class AnthropicProvider(BaseLLMProvider):
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "betas": ["structured-outputs-2025-11-13"],
             "output_format": {"type": "json_schema", "schema": schema},
         }
         if system:
@@ -192,7 +191,7 @@ class AnthropicProvider(BaseLLMProvider):
             self.client.messages.create(
                 model=self.default_model,
                 messages=[{"role": "user", "content": "ping"}],
-                max_tokens=1,
+                max_tokens=10,
             )
             return {
                 "provider": self.provider_id,

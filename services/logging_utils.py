@@ -1,16 +1,68 @@
 """Structured logging helpers for pipeline and article operations.
 
-Wraps standard logging with consistent structured context for
-pipeline stages, article processing, and admin actions.
+Wrappers for standard logging with consistent structured context for
+pipeline stages, article processing, and admin actions. Also provides
+OpenTelemetry tracing integration for distributed tracing.
 """
 
 import json
 import logging
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Optional
 
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.semconv.resource import ResourceAttributes
+    from opentelemetry.trace import Tracer, SpanKind
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+    trace = None
+    Tracer = object
+    SpanKind = None
+    TraceContextTextMapPropagator = None
+
 logger = logging.getLogger(__name__)
+
+_task_request_id_var: ContextVar[str] = ContextVar("task_request_id", default="")
+
+_tracer: Optional[Tracer] = None
+_propagator = None
+
+
+def get_tracer(name: str = __name__) -> Optional[Tracer]:
+    """Get or create an OpenTelemetry tracer.
+
+    Returns None if OpenTelemetry is not available.
+    """
+    global _tracer
+    if not _OTEL_AVAILABLE:
+        return None
+    if _tracer is None:
+        resource = Resource.create({ResourceAttributes.SERVICE_NAME: "ainews"})
+        provider = TracerProvider(resource=resource)
+        span_processor = BatchSpanProcessor(
+            type("NoopExporter", (), {"export": lambda *a, **k: None})()
+        )
+        provider.add_span_processor(span_processor)
+        trace.set_tracer_provider(provider)
+        _tracer = trace.get_tracer(name)
+    return _tracer
+
+
+def get_propagator():
+    """Get the trace context propagator."""
+    global _propagator
+    if _propagator is None and _OTEL_AVAILABLE:
+        _propagator = TraceContextTextMapPropagator()
+    return _propagator
 
 
 def log_pipeline_event(
@@ -137,6 +189,26 @@ def get_pipeline_logger(
     return PipelineLogger(stage, base_logger, task_id=task_id)
 
 
+def get_task_request_id() -> str:
+    """Get the current task request ID from context."""
+    return _task_request_id_var.get()
+
+
+def set_task_request_id(request_id: str) -> None:
+    """Set the task request ID in context."""
+    _task_request_id_var.set(request_id)
+
+
+@contextmanager
+def task_request_id_context(request_id: str):
+    """Context manager to set task request ID for the duration of a block."""
+    token = _task_request_id_var.set(request_id)
+    try:
+        yield
+    finally:
+        _task_request_id_var.reset(token)
+
+
 @contextmanager
 def log_duration(operation: str, **extra: Any):
     """Context manager that logs the duration of an operation.
@@ -156,3 +228,54 @@ def log_duration(operation: str, **extra: Any):
             duration_ms,
             extra={"operation": operation, "duration_ms": duration_ms, **extra},
         )
+
+
+@contextmanager
+def traced_llm_call(provider: str, model: str, stage: str):
+    """Context manager for tracing LLM calls.
+
+    Creates an OpenTelemetry span for an LLM provider call if tracing
+    is available. Works as a no-op when OpenTelemetry is not installed.
+
+    Args:
+        provider: LLM provider name (e.g., "ollama", "openai")
+        model: Model name being used
+        stage: Pipeline stage (selector, researcher, writer, editor)
+
+    Usage:
+        with traced_llm_call("ollama", "qwen3:8b", "selector"):
+            result = provider.chat_structured(...)
+    """
+    tracer = get_tracer()
+    if tracer is None:
+        yield
+        return
+
+    with tracer.start_as_current_span(f"llm.{stage}") as span:
+        span.set_attribute("llm.provider", provider)
+        span.set_attribute("llm.model", model)
+        span.set_attribute("llm.stage", stage)
+        yield
+
+
+@contextmanager
+def traced_stage(stage: str, operation: str = "execute"):
+    """Context manager for tracing pipeline stage execution.
+
+    Args:
+        stage: Pipeline stage name
+        operation: Operation being performed within the stage
+
+    Usage:
+        with traced_stage("selector", "evaluate_article"):
+            result = work_fn(article, provider, model, max_tokens)
+    """
+    tracer = get_tracer()
+    if tracer is None:
+        yield
+        return
+
+    with tracer.start_as_current_span(f"pipeline.{stage}.{operation}") as span:
+        span.set_attribute("pipeline.stage", stage)
+        span.set_attribute("pipeline.operation", operation)
+        yield

@@ -53,7 +53,7 @@ def send_verification_email(
     safe_site = html.escape(site_name)
     safe_verification_url = html.escape(verification_url, quote=True)
     safe_unsubscribe_url = html.escape(unsubscribe_url, quote=True)
-    subject = f"Confirm your subscription to {site_name} — {newsletter_label}"
+    subject = f"Confirm your subscription to {html.escape(site_name)} — {html.escape(newsletter_label)}"
     html_body = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -106,7 +106,7 @@ def send_welcome_email(
     safe_label = html.escape(newsletter_label)
     safe_site = html.escape(site_name)
     safe_unsubscribe_url = html.escape(unsubscribe_url, quote=True)
-    subject = f"Subscribed to {site_name} — {newsletter_label}"
+    subject = f"Subscribed to {html.escape(site_name)} — {html.escape(newsletter_label)}"
     html_body = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>

@@ -116,7 +116,7 @@ def consolidate_trend_memory(self):
 
 
 @shared_task(bind=True, soft_time_limit=300, time_limit=360)
-def cleanup_old_article_versions(self, days_to_keep: int = 90):
+def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = False):
     """Delete article versions older than specified days.
 
     Runs daily via Celery Beat to prevent unbounded growth of the
@@ -124,15 +124,25 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90):
 
     Args:
         days_to_keep: Number of days to retain article versions.
+        dry_run: If True, return what would be deleted without deleting.
     """
     from models import ArticleVersion
     from extensions import db
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
     try:
-        deleted = ArticleVersion.query.filter(
-            ArticleVersion.created_at < cutoff
-        ).delete(synchronize_session=False)
+        query = ArticleVersion.query.filter(ArticleVersion.created_at < cutoff)
+        if dry_run:
+            versions = query.all()
+            article_ids = list({v.article_id for v in versions})
+            oldest = min((v.created_at for v in versions), default=None)
+            return {
+                "would_delete": len(versions),
+                "oldest_version": oldest.isoformat() if oldest else None,
+                "articles_affected": len(article_ids),
+                "dry_run": True,
+            }
+        deleted = query.delete(synchronize_session=False)
         db.session.commit()
         logger.info(
             "Cleaned up %s article versions older than %d days",

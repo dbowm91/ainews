@@ -97,6 +97,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         max_validation_retries: int = 1,
     ) -> T:
         """Chat with structured output, returns validated Pydantic model."""
+        from services.metrics import get_metrics
+
         schema = response_model.model_json_schema()
         resp = self._chat_with_schema(
             messages, response_model, model, system, temperature, max_tokens, schema
@@ -110,7 +112,15 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 e,
                 resp[:500] if resp else "(empty)",
             )
+            get_metrics().counter_inc(
+                "llm.validation_failures",
+                labels={"model": model or self.default_model, "provider": self.provider_id},
+            )
             if max_validation_retries > 0:
+                get_metrics().counter_inc(
+                    "llm.validation_retries",
+                    labels={"model": model or self.default_model, "provider": self.provider_id},
+                )
                 retry_messages = list(messages)
                 retry_messages.append(
                     {
@@ -208,9 +218,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         and _format_tool_result hooks.
         """
         model = model or self.default_model
-        all_messages = list(messages)
-        if system:
-            all_messages.insert(0, {"role": "system", "content": system})
+        all_messages = self._build_messages(messages, system)
 
         tool_call_map: dict[str, tuple[str, Callable]] = {}
         for tool in tools:
@@ -221,17 +229,14 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         while iteration < max_iterations:
             iteration += 1
 
-            try:
-                response, raw_response = self._call_api_with_tools(
-                    model=model,
-                    messages=all_messages,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            except Exception as e:
-                raise e
+            response, raw_response = self._call_api_with_tools(
+                model=model,
+                messages=all_messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
             text_content, tool_calls_found = self._extract_text_and_tool_calls(response)
 

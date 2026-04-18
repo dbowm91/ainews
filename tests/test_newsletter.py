@@ -317,3 +317,108 @@ class TestNewsletterHtmlEscaping:
                 articles=[article], title="T", site_url="https://x.com"
             )
             assert "A &amp; B &lt; C &gt; D" in html
+
+
+class TestNewsletterHtmlWellFormed:
+    """Tests for HTML well-formedness in newsletter generation."""
+
+    def test_generated_html_is_well_formed(self, app):
+        """Test that generated HTML is well-formed (no unclosed tags, proper nesting)."""
+        from html.parser import HTMLParser
+        from services.newsletter import generate_newsletter_html
+
+        class WellFormednessChecker(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.stack = []
+                self.errors = []
+
+            def handle_starttag(self, tag, attrs):
+                void_elements = {
+                    "area", "base", "br", "col", "embed", "hr", "img", "input",
+                    "link", "meta", "param", "source", "track", "wbr",
+                }
+                if tag not in void_elements:
+                    self.stack.append(tag)
+
+            def handle_endtag(self, tag):
+                if self.stack and self.stack[-1] == tag:
+                    self.stack.pop()
+                elif tag in self.stack:
+                    self.errors.append(f"Unexpected close tag: {tag}")
+
+            def handle_data(self, data):
+                pass
+
+        with app.app_context():
+            article = MagicMock()
+            article.id = 1
+            article.category = "ai"
+            article.final_article = '{"headline": "Test Article", "tldr": "Test summary"}'
+
+            html = generate_newsletter_html(
+                articles=[article],
+                title="Test Newsletter",
+                site_url="https://example.com",
+                date_str="Mar 24, 2026",
+                executive_summary="This is a test summary.",
+            )
+
+            parser = WellFormednessChecker()
+            try:
+                parser.feed(html)
+                assert not parser.errors, f"HTML parsing errors: {parser.errors}"
+                assert not parser.stack, f"Unclosed tags: {parser.stack}"
+            except Exception as e:
+                assert False, f"HTML parsing failed: {e}"
+
+    def test_newsletter_with_all_article_fields_is_well_formed(self, app):
+        """Test well-formedness with a fully populated article."""
+        from html.parser import HTMLParser
+        from services.newsletter import generate_newsletter_html
+
+        class WellFormednessChecker(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.stack = []
+                self.errors = []
+
+            def handle_starttag(self, tag, attrs):
+                void_elements = {
+                    "area", "base", "br", "col", "embed", "hr", "img", "input",
+                    "link", "meta", "param", "source", "track", "wbr",
+                }
+                if tag not in void_elements:
+                    self.stack.append(tag)
+
+            def handle_endtag(self, tag):
+                if self.stack and self.stack[-1] == tag:
+                    self.stack.pop()
+                elif tag in self.stack:
+                    self.errors.append(f"Unexpected close tag: {tag}")
+
+        with app.app_context():
+            article = MagicMock()
+            article.id = 1
+            article.category = "ai"
+            article.final_article = (
+                '{"headline": "AI Breakthrough", "tldr": "Major advance", '
+                '"why_it_matters": "Significance", "body": "Paragraph 1. Paragraph 2.", '
+                '"what_to_watch": "Next steps", "key_points": ["Point 1", "Point 2"], '
+                '"citations": []}'
+            )
+
+            html = generate_newsletter_html(
+                articles=[article],
+                title="AI Newsletter",
+                site_url="https://example.com",
+                date_str="Mar 24, 2026",
+            )
+
+            parser = WellFormednessChecker()
+            try:
+                parser.feed(html)
+                assert not parser.errors, f"HTML parsing errors: {parser.errors}"
+                assert not parser.stack, f"Unclosed tags: {parser.stack}"
+            except Exception as e:
+                assert False, f"HTML parsing failed: {e}"

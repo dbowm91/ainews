@@ -1,10 +1,14 @@
 """Pipeline stage failure handling."""
 
+import redis.exceptions
 from celery.utils.log import get_task_logger
 from constants import MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
 from services.config_utils import get_config_with_default
 
 logger = get_task_logger(__name__)
+
+_STAGE_FAILURE_PREFIX = "ainews:article:stage_failures:"
+_MAX_STAGE_FAILURES = 3
 
 
 def _get_max_total_retries() -> int:
@@ -17,6 +21,23 @@ def _get_max_stage_retries() -> int:
     return get_config_with_default("MAX_STAGE_RETRIES", MAX_STAGE_RETRIES)
 
 
+def _track_stage_failure(article_id: int, stage: str) -> int:
+    """Track per-stage failure in Redis and return failure count.
+
+    Returns the total number of failures for this specific stage.
+    """
+    try:
+        from extensions import get_redis
+
+        redis_client = get_redis()
+        key = f"{_STAGE_FAILURE_PREFIX}{article_id}:{stage}"
+        count = redis_client.hincrby(key, "count", 1)
+        redis_client.expire(key, 86400 * 7)
+        return count
+    except redis.exceptions.RedisError:
+        return 0
+
+
 def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -> bool:
     """Handle failure for a pipeline stage.
 
@@ -24,6 +45,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
     counters, then decides the next action:
 
     * If the global retry budget is exceeded → mark article ``"failed"``.
+    * If the per-stage failure count >= 3 → mark article ``"failed"`` (early termination).
     * If the per-stage retry budget is exceeded → degrade and advance.
     * Otherwise → commit the incremented counters and return for retry.
 
@@ -46,6 +68,8 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
     article.retry_count = (article.retry_count or 0) + 1
     article.total_retries = (article.total_retries or 0) + 1
     article.last_error = f"{stage}: {str(exc)[:500]}"
+
+    stage_failures = _track_stage_failure(article.id, stage)
 
     max_total = _get_max_total_retries()
     max_stage = _get_max_stage_retries()
@@ -70,6 +94,27 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
             )
         logger.error(
             "Article %s exceeded global retry budget (%s)", article.id, max_total
+        )
+        return True
+
+    if stage_failures >= _MAX_STAGE_FAILURES:
+        article.pipeline_status = PipelineStatus.FAILED
+        article.last_error = f"{stage}: exceeded per-stage failure limit ({stage_failures} failures)"
+        try:
+            db.session.commit()
+        except SQLAlchemyError as commit_exc:
+            db.session.rollback()
+            logger.error(
+                "Failed to commit per-stage failure limit for article %s: %s",
+                article.id,
+                commit_exc,
+            )
+        logger.error(
+            "Article %s failed after %d failures at stage %s (run_id=%s)",
+            article.id,
+            stage_failures,
+            stage,
+            run_id,
         )
         return True
 

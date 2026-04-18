@@ -1,12 +1,12 @@
 <tr>
   <td>
-    <span class="mono">{{ note.topic }}</span>
+    <span class="mono">{{ note.topic|e }}</span>
   </td>
   <td>
-    <span class="mono text-muted">{{ note.source or "—" }}</span>
+    <span class="mono text-muted">{{ (note.source or "—")|e }}</span>
   </td>
   <td class="note-preview">
-    <span class="text-muted">{{ note.note[:100] }}{% if note.note|length > 100 %}...{% endif %}</span>
+    <span class="text-muted">{{ note.note[:100]|e }}{% if note.note|length > 100 %}...{% endif %}</span>
   </td>
   <td>
     <span class="mono text-muted">{{ note.updated_at.strftime("%Y-%m-%d %H:%M") if note.updated_at else "—" }}</span>
@@ -14,15 +14,15 @@
   <td>
     <div class="btn-group">
       <button type="button" class="btn btn-sm btn-secondary"
-              hx-get="{{ url_for('admin.topic_notes_row', topic=note.topic, source=note.source or '') }}"
+              hx-get="{{ url_for('admin.topic_notes_row', topic=note.topic|urlencode, source=(note.source or '')|urlencode) }}"
               hx-target="closest tr"
               hx-swap="outerHTML">
         edit
       </button>
       <form method="post" action="{{ url_for('admin.topic_notes_delete') }}" style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="topic" value="{{ note.topic }}">
-        <input type="hidden" name="source" value="{{ note.source or '' }}">
+        <input type="hidden" name="topic" value="{{ note.topic|e }}">
+        <input type="hidden" name="source" value="{{ (note.source or '')|e }}">
         <button type="submit" class="btn btn-sm btn-danger"
                 onclick="return confirm('Delete this note?')">delete</button>
       </form>

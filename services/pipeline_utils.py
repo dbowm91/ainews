@@ -32,6 +32,7 @@ def _dispatch_next(
     run_id: int | None = None,
     next_status: str | None = None,
     article=None,
+    request_id: str | None = None,
 ) -> None:
     """Dispatch the next pipeline stage based on article status.
 
@@ -43,7 +44,13 @@ def _dispatch_next(
         run_id: Optional pipeline-run ID for log correlation.
         next_status: Override status; if ``None``, uses ``article.pipeline_status``.
         article: Article model instance (used only when *next_status* is ``None``).
+        request_id: Optional request ID for log correlation (extracted from context if not provided).
     """
+    from services.logging_utils import get_task_request_id
+
+    if request_id is None:
+        request_id = get_task_request_id()
+
     status = next_status or (article.pipeline_status if article else None)
     if not status:
         return
@@ -59,7 +66,8 @@ def _dispatch_next(
                 return
         module, task_name = _task_fn_cache[status]
     task_fn = getattr(module, task_name)
-    task_fn.delay(article_id, run_id=run_id)
+    headers = {"request_id": request_id} if request_id else None
+    task_fn.apply_async(args=[article_id], kwargs={"run_id": run_id}, headers=headers)
 
 
 def _dispatch_for_status(article) -> None:

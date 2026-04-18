@@ -260,12 +260,22 @@ def find_duplicate_titles(
     days = _get_duplicate_detection_days()
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
+    candidate_count = len(candidate_words)
+    min_words = max(1, int(candidate_count * 0.7))
+    max_words = int(candidate_count * 1.3) + 1
+
     matched_ids = []
     rows = (
         Article.query.filter(
             Article.source_id != source_id,
             Article.created_at >= cutoff,
             Article.original_title.isnot(None),
+        )
+        .filter(
+            db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
+            >= min_words,
+            db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
+            <= max_words,
         )
         .with_entities(Article.id, Article.original_title)
         .all()
@@ -274,6 +284,7 @@ def find_duplicate_titles(
         other_words = _title_word_set(other_title)
         if jaccard_similarity(candidate_words, other_words) >= threshold:
             matched_ids.append(article_id)
+            break
 
     if matched_ids:
         return Article.query.filter(Article.id.in_(matched_ids)).all()

@@ -111,6 +111,40 @@ def _acquire_stage_lock(redis_client, lock_key, task_id, timeout_seconds):
         return True
 
 
+class InvalidStateTransitionError(Exception):
+    """Raised when an invalid pipeline status transition is attempted."""
+
+    def __init__(self, article_id: int, from_status: str, to_status: str):
+        self.article_id = article_id
+        self.from_status = from_status
+        self.to_status = to_status
+        super().__init__(
+            f"Invalid pipeline transition for article {article_id}: "
+            f"{from_status} -> {to_status}"
+        )
+
+
+def _transition_article_status(article, new_status: str) -> None:
+    """Atomically transition an article's pipeline status.
+
+    Validates the transition is allowed before updating. If validation fails,
+    raises InvalidStateTransitionError.
+
+    Args:
+        article: The Article instance
+        new_status: The target status
+
+    Raises:
+        InvalidStateTransitionError: If the transition is not valid
+    """
+    from constants import is_valid_transition  # noqa: F811
+
+    current = article.pipeline_status
+    if not is_valid_transition(current, new_status):
+        raise InvalidStateTransitionError(article.id, current, new_status)
+    article.pipeline_status = new_status
+
+
 def _check_stage_limiter(rc, task_self, retry_countdown, retry_max):
     """Acquire limiter slot or raise a retry."""
     from services.limiter import get_limiter
@@ -154,6 +188,13 @@ def run_stage(
     )
     from services.pipeline_monitor import record_stage_result
     from services.metrics import get_metrics
+    from services.logging_utils import set_task_request_id
+
+    if task_self and hasattr(task_self, "request"):
+        headers = getattr(task_self.request, "headers", None) or {}
+        req_id = headers.get("request_id") if isinstance(headers, dict) else None
+        if req_id:
+            set_task_request_id(req_id)
 
     rc = get_role_config(stage)
     if not rc.enabled:
@@ -187,9 +228,8 @@ def run_stage(
             return {"article_id": article_id, "error": "not found"}
 
         if article.pipeline_started_at is not None:
-            elapsed = (
-                datetime.now(timezone.utc) - article.pipeline_started_at
-            ).total_seconds()
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            elapsed = (now_utc - article.pipeline_started_at).total_seconds()
             timeout = _get_pipeline_timeout_seconds()
             if elapsed > timeout:
                 logger.error(
@@ -198,7 +238,7 @@ def run_stage(
                     elapsed,
                     timeout,
                 )
-                article.pipeline_status = PipelineStatus.FAILED
+                _transition_article_status(article, PipelineStatus.FAILED)
                 article.last_error = "pipeline timeout exceeded (%.0fs)" % elapsed
                 try:
                     db.session.commit()

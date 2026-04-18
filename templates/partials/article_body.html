@@ -45,6 +45,6 @@
   {% endif %}
 {% elif article.pipeline_status == 'skipped' %}
   {% if article.selector_result %}
-    <p class="article-body">Not selected. Score: {{ article.selector_result.score }}/10. {{ article.selector_result.reason }}</p>
+    <p class="article-body">Not selected. Score: {{ article.selector_result.score }}/10. {{ article.selector_result.reason|e }}</p>
   {% endif %}
 {% endif %}

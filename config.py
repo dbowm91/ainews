@@ -119,10 +119,99 @@ class Config:
         },
     }
 
+    @classmethod
+    def get_beat_schedule(cls, pipeline_cfg: dict | None = None) -> dict:
+        """Build beat schedule from pipeline.yaml config.
+
+        Args:
+            pipeline_cfg: Optional pipeline config dict from pipeline.yaml.
+                         If None, reads from file.
+
+        Returns:
+            Beat schedule dict compatible with Celery beat.
+        """
+        if pipeline_cfg is None:
+            from schemas.pipeline import load_pipeline_config
+
+            pipeline_cfg = load_pipeline_config().get("pipeline", {})
+
+        sched = pipeline_cfg.get("schedule", {})
+        crawl_interval = int(sched.get("crawl_interval_minutes", 30))
+        retry_interval = int(sched.get("retry_stuck_interval_minutes", 60))
+        cleanup_logs_hour = int(sched.get("cleanup_old_logs_hour", 3))
+        cleanup_versions_hour = int(sched.get("cleanup_old_versions_hour", 3))
+        cleanup_expired_interval = int(sched.get("cleanup_expired_verifications_interval_minutes", 15))
+        publish_interval = int(sched.get("publish_scheduled_interval_minutes", 5))
+        cleanup_limiter_interval = int(sched.get("cleanup_stale_limiter_interval_minutes", 5))
+        newsletters_hour = int(sched.get("generate_newsletters_hour", 8))
+        trend_memory_hour = int(sched.get("consolidate_trend_memory_hour", 3))
+        versions_days = int(sched.get("cleanup_old_versions_days_to_keep", 90))
+
+        return {
+            "run-all-sources": {
+                "task": "tasks.crawl.run_all_sources",
+                "schedule": timedelta(minutes=crawl_interval),
+            },
+            "retry-stuck-articles": {
+                "task": "tasks.retry.retry_stuck",
+                "schedule": timedelta(minutes=retry_interval),
+            },
+            "generate-newsletters": {
+                "task": "tasks.newsletter.generate_daily_newsletters",
+                "schedule": crontab(hour=newsletters_hour, minute=0),
+            },
+            "cleanup-old-logs": {
+                "task": "tasks.cleanup.cleanup_old_pipeline_logs",
+                "schedule": crontab(hour=cleanup_logs_hour, minute=0),
+            },
+            "consolidate-trend-memory": {
+                "task": "tasks.cleanup.consolidate_trend_memory",
+                "schedule": crontab(hour=trend_memory_hour, minute=30),
+            },
+            "cleanup-old-versions": {
+                "task": "tasks.cleanup.cleanup_old_article_versions",
+                "schedule": crontab(hour=cleanup_versions_hour, minute=45),
+                "kwargs": {"days_to_keep": versions_days},
+            },
+            "cleanup-expired-verifications": {
+                "task": "tasks.cleanup.cleanup_expired_verifications",
+                "schedule": timedelta(minutes=cleanup_expired_interval),
+            },
+            "publish-scheduled-articles": {
+                "task": "tasks.scheduler.publish_scheduled_articles",
+                "schedule": timedelta(minutes=publish_interval),
+            },
+            "cleanup-stale-limiter-slots": {
+                "task": "tasks.cleanup.cleanup_stale_limiter_slots",
+                "schedule": timedelta(minutes=cleanup_limiter_interval),
+            },
+        }
+
+    @classmethod
+    def reload_beat_schedule(cls, celery_app) -> dict:
+        """Reload beat schedule from pipeline.yaml and update Celery beat.
+
+        Args:
+            celery_app: The Celery app instance.
+
+        Returns:
+            The new beat schedule dict.
+        """
+        from schemas.pipeline import load_pipeline_config
+
+        pipeline_cfg = load_pipeline_config()
+        new_schedule = cls.get_beat_schedule(pipeline_cfg.get("pipeline", {}))
+        celery_app.conf.beat_schedule = new_schedule
+        return new_schedule
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+    SECRET_KEY = os.environ.get("SECRET_KEY")
+    if SECRET_KEY is None:
+        raise RuntimeError("SECRET_KEY environment variable must be set")
+    if SECRET_KEY == "dev-secret-key-change-me":
+        raise RuntimeError("SECRET_KEY must be changed from default value")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
 

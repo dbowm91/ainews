@@ -250,3 +250,16 @@ memory:
   consolidation_cooldown_hours: 24
   max_entries_per_propose: 3
   consolidation_merge_window_hours: 72
+
+schedule:
+  crawl_interval_minutes: 30
+  retry_stuck_interval_minutes: 60
+  cleanup_interval_minutes: 180
+  cleanup_old_logs_hour: 3
+  cleanup_old_versions_hour: 3
+  cleanup_expired_verifications_interval_minutes: 15
+  publish_scheduled_interval_minutes: 5
+  cleanup_stale_limiter_interval_minutes: 5
+  generate_newsletters_hour: 8
+  consolidate_trend_memory_hour: 3
+  cleanup_old_versions_days_to_keep: 90

@@ -303,12 +303,24 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **`services/trend_detector.py`**: Regex patterns are NOT pre-compiled. Pre-compilation at module load was implemented.
 
-**Wave 4 refactoring completed**:
-- `tasks/pipeline.py` extracted to `services/pipeline_failure.py` (failure handling), `services/pipeline_degradation.py` (degradation logic), and `tasks/scheduler.py` (scheduled publishing)
-- `routes/admin/api.py` split into `routes/admin/api/` package (health, config, pipeline, articles, webhooks, audit modules)
-- `tests/test_pipeline.py` split into `tests/test_pipeline/` package (test_dispatch, test_stages, test_retry, test_run_stage, test_integration)
-- `tests/test_llm_adapters.py` split into `tests/test_llm_adapters/` package (test_openai, test_anthropic, test_ollama, test_google, test_shared)
-- `services/config_utils.py` added with `get_config_with_default()` helper for Flask config access with fallbacks
+**Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Items marked "COMPLETE" in plan.md have been found NOT done during verification (e.g., database indexes, LLM provider refactoring, circular import resolution). Always grep/search to verify before starting related work.
+
+**LLM provider refactoring needs completion**: Each LLM provider (`services/llm/openai.py`, `anthropic.py`, `ollama.py`, `gemini.py`) still has its own `_handle_*_error()` function — consolidation via `make_error_handler()` factory is NOT done. Client initialization with double-checked locking is still per-provider, not in `BaseLLMProvider`. Tool calling loop (~100+ lines) is still duplicated per provider.
+
+**Items appearing incomplete despite plan claims**:
+- `services/article.py:75`: `db.session.expire_all()` is unreachable after `raise`
+- `services/article.py:264-280`: `find_duplicate_titles()` still uses two-query pattern (scan + fetch)
+- Database indexes on `Article.source_id` and `Source.name` NOT added
+- Circular import between `tasks/pipeline.py` and `services/pipeline_degradation.py` NOT resolved
+
+**Unreachable code after raise**: Always check for code after `raise` or `return` statements in try blocks — such code is unreachable. Example: `services/article.py:75` has `db.session.expire_all()` after `raise` which should be removed.
+
+**Wave 4 refactoring completed** (historical context):
+- `tasks/pipeline.py` extracted to `services/pipeline_failure.py`, `services/pipeline_degradation.py`, `tasks/scheduler.py`
+- `routes/admin/api.py` split into `routes/admin/api/` package
+- `tests/test_pipeline.py` split into `tests/test_pipeline/` package
+- `tests/test_llm_adapters.py` split into `tests/test_llm_adapters/` package
+- `services/config_utils.py` added
 
 ### Celery tasks must not use `current_app.config`
 

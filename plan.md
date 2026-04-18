@@ -4,764 +4,240 @@ This document consolidates all improvement items from the planning phase into a 
 
 ## Overview
 
-The implementation is organized into **4 waves** of parallelizable work:
+This plan merges items from:
+- `plans/plan2.md` — Code Quality Improvement Plan
+- `plans/plan4.md` — Performance Improvement Plan
 
-| Wave | Focus | Items | Parallelizable |
-|------|-------|-------|----------------|
-| **Wave 1** | Critical Security | XSS, Prompt Injection, eval() replacement | Yes |
-| **Wave 2** | High-Priority Security | Session fixation, webhook masking, Redis URL | Yes |
-| **Wave 3** | Code Quality & Reliability | Config access, datetime, logging, transaction safety | Yes |
-| **Wave 4** | Performance Optimization | Regex pre-compile, eager loading, cache fixes | Yes |
-| **Wave 5** | Infrastructure | Newsletter batching, source health, cleanup tasks | Yes |
+The implementation is organized into **6 waves** of parallelizable work:
+
+| Wave | Focus | Priority | Items | Parallelizable |
+|------|-------|----------|-------|----------------|
+| **Wave 1** | Security Hardening | Critical | W1.1-W1.3 | Yes |
+| **Wave 2** | LLM Provider Refactoring | High | W2.1-W2.3 | Yes (per-provider) |
+| **Wave 3** | Database & Indexing | High | W3.1-W3.3 | Yes |
+| **Wave 4** | Error Handling & Cleanup | Medium | W4.1-W4.5 | Yes |
+| **Wave 5** | Performance Optimization | Medium | W5.1-W5.8 | Partial |
+| **Wave 6** | Test Coverage | Low | W6.1-W6.2 | Yes |
 
 ---
 
-## Wave 1: Critical Security (Parallelizable)
+## Wave 1: Security Hardening
 
-### W1.1: Fix XSS in Templates - Add HTML Escaping
-**Priority**: Critical | **Impact**: Security | **Effort**: Medium
+### W1.1: Extract Error Handler Factory
+**Priority**: Critical | **Impact**: Security/DRY | **Effort**: Medium
 
-**Files**: `templates/partials/condensed_article.html`, `templates/partials/article_body.html`, `templates/partials/article_card.html`, `templates/partials/related_articles.html`, `templates/partials/top_impact.html`, `templates/admin/partials/review_table.html`, `templates/share_redirect.html`
+**Files**: `services/llm/errors.py`, `services/llm/openai.py`, `services/llm/anthropic.py`, `services/llm/ollama.py`, `services/llm/gemini.py`
 
-**Issue**: LLM-generated content (`final_article` JSON fields) and crawled content rendered without HTML escaping. Malicious LLM output could inject XSS.
+**Status**: NOT DONE — Individual `_handle_*_error` functions still exist in each provider
 
-**Solution**: Add `|e` filter to all LLM-generated and external content:
+**Problem**: All four LLM providers have nearly identical error handler functions.
 
-```html
-{{ fa.headline|e }}
-{{ fa.tldr|e }}
-{{ fa.why_it_matters|e }}
+**Current state** (each provider has its own copy):
+```python
+# services/llm/openai.py:18-33
+# services/llm/anthropic.py:18-33
+# services/llm/ollama.py:18-29
+# services/llm/gemini.py:17-28
 ```
 
-**Affected Templates and Fields**:
-| File | Fields |
-|------|--------|
-| `templates/partials/condensed_article.html` | headline, tldr, why_it_matters, point, body, what_to_watch, source, original_url, cite.title, cite.url |
-| `templates/partials/article_body.html` | sd.headline, original_title, sd.tldr, summary, sd.why_it_matters, p |
-| `templates/partials/article_card.html` | _fa.headline (2x), _fa.tldr, _summary.tldr |
-| `templates/partials/related_articles.html` | original_title, _fa.tldr |
-| `templates/partials/top_impact.html` | _fa.headline, _fa.tldr |
-| `templates/admin/partials/review_table.html` | _fa.tldr[:120] |
-| `templates/share_redirect.html` | _fa.headline |
-
----
-
-### W1.2: Fix Subagent Prompt Injection
-**Priority**: Critical | **Impact**: Security | **Effort**: Medium
-
-**Files**: `services/subagent.py` (lines 346, 524), `tasks/research.py`, `tasks/edit.py`
-
-**Issue**: `template.format()` is called with unescaped user content. Malicious content could inject `</source_article>` closing tags to break XML structure.
-
-**Solution**: Apply `esc_xml_text()` before formatting:
-
+**Solution**: Create a factory function in `services/llm/errors.py`:
 ```python
-from services.prompts import esc_xml_text
-
-prompt_data_escaped = {
-    "title": esc_xml_text(article.original_title or ""),
-    "body": esc_xml_text(article.extracted_text or ""),
-    "web_results": _format_web_results_escaped(web_results),
-}
-prompt = template.format(**prompt_data_escaped)
+def make_error_handler(
+    provider_name: str,
+    rate_limit_exc: tuple[type, ...],
+    auth_exc: type,
+    timeout_exc: tuple[type, ...],
+) -> Callable[[Exception], Exception]:
+    def handler(e: Exception) -> Exception:
+        return handle_provider_error(
+            e, provider_name,
+            rate_limit_exc=rate_limit_exc,
+            auth_exc=auth_exc,
+            timeout_exc=timeout_exc,
+        )
+    return handler
 ```
 
-**Affected Functions**:
-| Line | Function | Unescaped Fields |
-|------|----------|------------------|
-| 346 | `_call_subagent()` | title, body, web_results |
-| 524 | `_call_edit_contextualization()` | draft, brief, topic_notes, related_articles, trend_memory |
-
-Also fix `tasks/research.py:_format_web_results()` which does NOT escape XML characters.
-
----
-
-### W1.3: Replace eval() in Subagent Condition Evaluation
-**Priority**: Critical | **Impact**: Security | **Effort**: Medium
-
-**Files**: `services/subagent.py` (lines 777-785)
-
-**Issue**: `eval()` in condition evaluation is a security risk even with empty `__builtins__`.
-
-**Solution**: Replace with safe expression parser using Python's `ast` module:
-
+**Usage**:
 ```python
-import ast
-import operator
-
-_ALLOWED_OPS = {
-    ast.Eq: operator.eq,
-    ast.NotEq: operator.ne,
-    ast.Lt: operator.lt,
-    ast.LtE: operator.le,
-    ast.Gt: operator.gt,
-    ast.GtE: operator.ge,
-    ast.And: operator.and_,
-    ast.Or: operator.or_,
-    ast.Not: operator.not_,
-    ast.In: lambda a, b: a in b,
-    ast.NotIn: lambda a, b: a not in b,
-}
-
-_ALLOWED_NAMES = {"True", "False", "None", "results"}
-
-def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
-    """Safely evaluate a condition expression against the context."""
-    try:
-        tree = ast.parse(condition, mode="eval")
-    except (SyntaxError, ValueError):
-        return False
-    allowed_names = {"results": context, **context}
-    
-    def _eval_node(node: ast.AST) -> Any:
-        if isinstance(node, ast.Expression):
-            return _eval_node(node.body)
-        elif isinstance(node, ast.BoolOp):
-            op = _ALLOWED_OPS[type(node.op)]
-            values = [_eval_node(v) for v in node.values]
-            return op(values[0], values[1]) if len(values) == 2 else op(*values)
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            return not _eval_node(node.operand)
-        elif isinstance(node, ast.Compare):
-            left = _eval_node(node.left)
-            for op_node, comparator in zip(node.ops, node.comparators):
-                op = _ALLOWED_OPS[type(op_node)]
-                right = _eval_node(comparator)
-                if not op(left, right):
-                    return False
-                left = right
-            return True
-        elif isinstance(node, ast.Name):
-            if node.id not in allowed_names:
-                raise ValueError(f"Unknown identifier: {node.id}")
-            return allowed_names[node.id]
-        elif isinstance(node, ast.Constant):
-            return node.value
-        elif isinstance(node, ast.Attribute):
-            obj = _eval_node(node.value)
-            return getattr(obj, node.attr)
-        elif isinstance(node, ast.Subscript):
-            obj = _eval_node(node.value)
-            if isinstance(node.slice, ast.Constant):
-                idx = node.slice.value
-                if isinstance(obj, (list, tuple)):
-                    return obj[idx]
-                elif isinstance(obj, dict):
-                    return obj[idx]
-            raise ValueError("Only constant indices supported")
-        else:
-            raise ValueError(f"Unsupported node type: {type(node).__name__}")
-    
-    return bool(_eval_node(tree))
-```
-
----
-
-### W1.4: Add Security Tests for eval() Replacement
-**Priority**: High | **Impact**: Verification | **Effort**: Low
-
-**File**: `tests/test_security_conditions.py` (new)
-
-**Required Tests**:
-1. **Positive cases**: Numeric comparisons, string comparisons, boolean operations, attribute access, dictionary key access
-2. **Negative cases** (should return False, not raise): Import attempts, function calls, dunder access, subscript assignment, lambda definitions
-3. **Edge cases**: Empty condition, whitespace-only, non-existent context keys
-
----
-
-## Wave 2: High-Priority Security (Parallelizable)
-
-### W2.1: Fix Session Fixation on Login
-**Priority**: High | **Impact**: Security | **Effort**: Low
-
-**File**: `routes/admin/auth.py` (lines 52-53)
-
-**Issue**: `session.pop("admin", None)` followed by `session["admin"] = True` does NOT regenerate session ID.
-
-**Solution**:
-```python
-session.clear()  # or session.regenerate_id()
-session["admin"] = True
-```
-
----
-
-### W2.2: Mask Webhook Secrets in API Responses
-**Priority**: High | **Impact**: Security | **Effort**: Low
-
-**File**: `routes/admin/api/webhooks.py` (line 92)
-
-**Issue**: Full webhook secret returned in create response.
-
-**Solution**:
-```python
-def _mask_secret(secret: str) -> str:
-    if len(secret) <= 8:
-        return "***"
-    return f"{secret[:4]}...{secret[-4:]}"
-```
-
----
-
-### W2.3: Fix Redis Credential URL Parsing
-**Priority**: High | **Impact**: Security | **Effort**: Low
-
-**File**: `extensions.py` (lines 24-28)
-
-**Issue**: URL reconstruction strips credentials when switching databases.
-
-**Solution**:
-```python
-from urllib.parse import urlparse, urlunparse
-
-def _get_limiter_storage_uri() -> str:
-    broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
-    if "://" in broker_url:
-        parsed = urlparse(broker_url)
-        new_parsed = parsed._replace(path="/15")
-        return urlunparse(new_parsed)
-    return "memory://"
-```
-
----
-
-### W2.4: Fix RSS XML Injection
-**Priority**: Medium | **Impact**: Security | **Effort**: Low
-
-**File**: `services/rss.py` (lines 28-35)
-
-**Issue**: LLM-generated headlines inserted into XML without escaping.
-
-**Solution**:
-```python
-import html
-title_text = html.escape(headline or article.original_title or "")
-SubElement(item, "title").text = title_text
-description_text = html.escape(tldr or "")
-SubElement(item, "description").text = description_text
-```
-
----
-
-### W2.5: Fix Trend Memory Prompt Injection
-**Priority**: Medium | **Impact**: Security | **Effort**: Low
-
-**File**: `services/trend_memory.py` (line 178)
-
-**Solution**:
-```python
-from services.prompts import esc_xml_text
-prompt = TREND_MEMORY_PROMPT.format(
-    draft=esc_xml_text(draft),
-    topics=", ".join(topics),
-    summary=esc_xml_text(summary),
+_handle_openai_error = make_error_handler(
+    "OpenAI",
+    rate_limit_exc=(RateLimitError,),
+    auth_exc=AuthenticationError,
+    timeout_exc=(APITimeoutError, APIConnectionError),
 )
 ```
 
 ---
 
-### W2.6: Fix Select/Newsletter Prompt Injection
-**Priority**: Medium | **Impact**: Security | **Effort**: Medium
+### W1.2: Move Client Initialization to Base Class
+**Priority**: High | **Impact**: DRY | **Effort**: Medium
 
-**Files**: `tasks/select.py`, `services/newsletter_pipeline.py`
+**Files**: `services/llm/base.py`, all provider files
 
-**Issue**: Raw article content embedded without escaping.
+**Status**: NOT DONE — Each provider has its own client property with double-checked locking
 
-**Solution**:
-```python
-from services.prompts import esc_xml_text
-prompt = (
-    f"<article>\n"
-    f"<title>{esc_xml_text(article.original_title or '')}</title>\n"
-    f"<topics>{esc_xml_text(', '.join(article.topics or []))}</topics>\n"
-    f"<preview>{esc_xml_text(text_preview)}</preview>\n"
-    f"</article>\n"
-)
-```
+**Problem**: All four providers implement identical double-checked locking for client initialization.
+
+**Solution**: Move to `BaseLLMProvider` in `services/llm/base.py`:
+1. Add abstract `_create_client()` method
+2. Add shared `client` property with thread-safe lazy initialization
 
 ---
 
-### W2.7: Remove CSRF Exemption on Tracking Endpoint
-**Priority**: Medium | **Impact**: Security | **Effort**: Low
+### W1.3: Consolidate Tool Calling Loop
+**Priority**: Medium | **Impact**: DRY | **Effort**: High
 
-**File**: `routes/public/links.py` (line 90)
+**Files**: `services/llm/base.py`, `services/llm/openai.py`, `services/llm/ollama.py`, `services/llm/gemini.py`
 
-**Solution**: Remove `@csrf.exempt` from `track_share_click` endpoint.
+**Status**: NOT DONE — ~100+ lines of nearly identical tool calling logic per provider
 
----
+**Problem**: `chat_with_tools()` implementations share ~100+ lines of nearly identical logic.
 
-### W2.8: Fix Default SECRET_KEY in Warning Logs
-**Priority**: Low | **Impact**: Security | **Effort**: Low
-
-**File**: `app.py` (lines 72-75)
-
-**Issue**: Warning contains literal default SECRET_KEY value.
-
-**Solution**:
-```python
-if dev_cfg.SECRET_KEY == "dev-secret-key-change-me":
-    logger.warning(
-        "SECRET_KEY is using a default value — "
-        "sessions are insecure. Set SECRET_KEY env var for production."
-    )
-```
+**Solution**: Abstract common loop structure into `BaseLLMProvider` with provider-specific hooks.
 
 ---
 
-## Wave 3: Code Quality & Reliability (Parallelizable)
+## Wave 2: LLM Provider Refactoring
 
-### W3.1: Fix current_app.config.get() in Celery Tasks
-**Priority**: High | **Impact**: Reliability | **Effort**: Low
-
-**Files**: `tasks/pipeline.py`, `services/url.py`
-
-**Issue**: Using `current_app.config.get()` in Celery tasks is inconsistent with project conventions.
-
-**Solution** (tasks/pipeline.py):
-```python
-from services.config_utils import get_config_with_default
-
-def _get_pipeline_timeout_seconds() -> int:
-    return get_config_with_default("PIPELINE_TIMEOUT_SECONDS", PIPELINE_TIMEOUT_SECONDS)
-```
-
-**Solution** (services/url.py):
-```python
-def _get_dns_cache_config() -> tuple[int, int]:
-    ttl = get_config_with_default("DNS_CACHE_TTL", _DNS_CACHE_TTL)
-    max_size = get_config_with_default("DNS_CACHE_MAX", _DNS_CACHE_MAX)
-    return ttl, max_size
-```
-
----
-
-### W3.2: Fix Datetime Naive/Aware Mixing
-**Priority**: High | **Impact**: Reliability | **Effort**: Low
-
-**Files**: `routes/public/feeds.py`, `tasks/extract.py`
-
-**Issue**: `datetime.now(timezone.utc)` returns aware datetimes, but `Article.original_published_at` is naive. Comparisons raise `TypeError`.
-
-**Solution** (feeds.py):
-```python
-# Before: cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-# After - normalize to naive datetime
-cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
-```
-
-**Solution** (extract.py):
-```python
-if published_at:
-    pub_date = datetime.fromisoformat(published_at)
-    if pub_date.tzinfo is not None:
-        pub_date = pub_date.replace(tzinfo=None)
-else:
-    pub_date = datetime.utcnow()
-```
-
----
-
-### W3.3: Add Error Handling to _fetch_item
-**Priority**: Medium | **Impact**: Robustness | **Effort**: Low
-
-**File**: `adapters/api.py` (lines ~128-129)
-
-**Issue**: Silently swallows all exceptions.
-
-**Solution**:
-```python
-except Exception as e:
-    logger.warning("Failed to fetch item from API: %s", str(e))
-    return None
-```
-
----
-
-### W3.4: Fix ValidationError Inheritance
-**Priority**: Medium | **Impact**: Consistency | **Effort**: Low
-
-**File**: `services/article_validation.py` (line 9)
-
-**Solution**:
-```python
-class ValidationError(ValueError):
-    pass
-```
-
----
-
-### W3.5: Add Explicit Timeouts to LLM Clients
-**Priority**: High | **Impact**: Reliability | **Effort**: Low
-
-**Files**: `services/llm/openai.py`, `services/llm/anthropic.py`
-
-**Solution** (openai.py):
-```python
-self._client_kwargs = {
-    "api_key": cfg.api_key,
-    "base_url": cfg.base_url,
-    "timeout": 120.0,
-}
-```
-
-**Solution** (anthropic.py):
-```python
-self._timeout = 120.0
-# In client property:
-self._client = Anthropic(api_key=self._api_key, timeout=self._timeout)
-```
-
----
-
-### W3.6: Fix Token Tracking in Pipeline
-**Priority**: Medium | **Impact**: Accuracy | **Effort**: Low
-
-**File**: `tasks/pipeline.py` (line 341)
-
-**Issue**: `record_provider_success` called with `tokens_used=max_tokens` instead of actual usage.
-
-**Solution**:
-```python
-result = work_fn(article, provider, model, max_tokens)
-record_provider_success(provider_id, model, tokens_used=result.tokens_used)
-```
-
----
-
-### W3.7: Convert f-string Logs to %-formatting
-**Priority**: Low | **Impact**: Performance | **Effort**: Low
-
-**File**: `services/limiter.py` (lines 47-52, 60-66)
-
-**Solution**:
-```python
-logger.error("Failed to acquire slot for %s: %s", provider_id, e)
-logger.error("Failed to release slot for %s: %s", provider_id, e)
-```
-
----
-
-### W3.8: Verify Database Transaction Rollback Patterns
-**Priority**: Medium | **Impact**: Reliability | **Effort**: Medium
-
-**Files**: All modules performing database operations
-
-**Checklist**:
-- [ ] `routes/admin/__init__.py` - Login attempts
-- [ ] `routes/admin/articles.py` - Bulk operations
-- [ ] `routes/admin/sources.py` - Source CRUD
-- [ ] `routes/admin/topic_notes.py` - Note CRUD
-- [ ] `tasks/pipeline.py` - Stage updates
-- [ ] `services/article.py` - Article operations
-- [ ] `services/context_service.py` - Topic notes
-
----
-
-### W3.9: Add Type Hints to Utility Modules
-**Priority**: Low | **Impact**: DX | **Effort**: Medium
-
-**File**: `services/redis_utils.py`
-
-**Solution**: Add type hints to all function signatures following existing codebase patterns.
-
----
-
-### W3.10: Extract Magic Numbers to Config
-**Priority**: Low | **Impact**: Maintainability | **Effort**: Low
-
-**Files**: `routes/admin/__init__.py:40`, `tasks/retry.py:113`
-
-**Solution**: Define `_LOGIN_LOCKOUT_SECONDS = 900` in config.py with proper defaults.
-
----
-
-## Wave 4: Performance Optimization (Parallelizable)
-
-### W4.1: Pre-compile Regex Patterns
-**Priority**: High | **Impact**: High | **Effort**: Low
-
-**Files**: `services/article.py`, `services/url.py`, `services/email.py`, `services/validation.py`, `models.py`
-
-**Issue**: Regex patterns compiled on every function call instead of once at module load.
-
-**Solution**:
-```python
-# At module level
-_TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
-
-# In function
-other_words = set(_TITLE_WORDS_RE.findall(other_title.lower()))
-```
-
-**Affected Patterns**:
-| File | Pattern | Current Line |
-|------|---------|--------------|
-| `services/article.py` | `r"[a-z0-9]+"` | 216 |
-| `services/url.py` | `r"\s+"` | 278 |
-| `services/email.py` | Multiple | 158, 166 |
-| `services/validation.py` | `r"[\x00-\x1f\x7f]"` | 76 |
-| `models.py` | Multiple | 14-15 |
-
----
-
-### W4.2: Add Eager Loading to Routes
-**Priority**: High | **Impact**: Medium | **Effort**: Low
-
-**Files**: `routes/admin/articles.py`, `routes/public/feeds.py`, `routes/admin/review.py`
-
-**Solution**:
-```python
-from sqlalchemy.orm import joinedload, selectinload
-
-q = Article.query.options(
-    joinedload(Article.source),
-    joinedload(Article.tags),
-).order_by(Article.created_at.desc())
-```
-
-**Affected Queries**:
-| File | Line | Missing Eager Load |
-|------|------|---------------------|
-| `routes/admin/articles.py` | 72 | source, tags |
-| `routes/public/feeds.py` | 145, 184, 229, 260 | source, tags |
-| `routes/admin/review.py` | 19 | source, tags, metrics |
-| `services/related.py` | 75 | tags |
-
----
-
-### W4.3: Fix ResponseCache.get_or_set() Stampede Vulnerability
-**Priority**: Critical | **Impact**: Performance | **Effort**: Medium
-
-**File**: `services/cache.py` (lines 115-122)
-
-**Issue**: Classic cache stampede - all concurrent requests hit `loader_fn()` on cache miss.
-
-**Solution**: Add per-key mutex:
-```python
-def get_or_set(self, key: str, loader_fn: Callable[[], Any], ttl: int = 120) -> Any:
-    cached = self.get(key)
-    if cached is not None:
-        return cached
-    
-    lock_key = f"lock:{key}"
-    if self._redis_client.set(lock_key, "1", nx=True, ex=10):
-        try:
-            cached = self.get(key)
-            if cached is not None:
-                return cached
-            value = loader_fn()
-            self.set(key, value, ttl)
-            return value
-        finally:
-            self._redis_client.delete(lock_key)
-    else:
-        import time
-        for _ in range(50):
-            time.sleep(0.1)
-            cached = self.get(key)
-            if cached is not None:
-                return cached
-        return loader_fn()
-```
-
----
-
-### W4.4: Fix Subagent ThreadPoolExecutor Reuse
-**Priority**: High | **Impact**: Medium | **Effort**: Medium
-
-**File**: `services/subagent.py` (lines 393-416, 562-588)
-
-**Issue**: New ThreadPoolExecutor created for each retry attempt.
-
-**Solution**:
-```python
-with ThreadPoolExecutor(max_workers=1) as executor:
-    for attempt in range(stage_config.max_retries + 1):
-        try:
-            if attempt > 0:
-                time.sleep(stage_config.retry_delay)
-            future = executor.submit(_call_with_timeout)
-            result = future.result(timeout=stage_config.timeout_seconds)
-```
-
----
-
-### W4.5: Add Limiter Acquire Timeout
-**Priority**: High | **Impact**: High | **Effort**: Medium
-
-**File**: `services/limiter.py` (lines 39-53)
-
-**Issue**: `acquire()` blocks indefinitely with no timeout.
-
-**Solution**: Add proper timeout mechanism using Redis blocking commands or polling loop.
-
----
-
-### W4.6: Fix Circuit Breaker Fallback State
-**Priority**: High | **Impact**: High | **Effort**: Medium
-
-**File**: `services/llm/__init__.py` (lines 54-58)
-
-**Issue**: Each fallback provider creates new circuit breaker, not sharing state.
-
-**Solution**: Track fallback attempts per request context, sharing failure state across providers.
-
----
-
-### W4.7: Fix Race Condition in Lock Acquisition
-**Priority**: Medium | **Impact**: Medium | **Effort**: Medium
-
-**Files**: `tasks/crawl.py`, `tasks/newsletter.py`
-
-**Issue**: Check-then-act pattern with separate GET/SET calls.
-
-**Solution**: Use atomic Lua script (see `services/redis_utils.py:release_lock`).
-
----
-
-### W4.8: Replace String Concatenation with List/Join
-**Priority**: Medium | **Impact**: Medium | **Effort**: Low
-
-**File**: `services/newsletter.py` (lines 26-29, 53-67)
-
-**Solution**:
-```python
-para_parts = []
-for para in paragraphs:
-    para_parts.append(f"<p>{html.escape(para)}</p>")
-para_html = "".join(para_parts)
-```
-
----
-
-### W4.9: Optimize find_duplicate_titles() O(N²) Behavior
-**Priority**: High | **Impact**: Algorithm | **Effort**: Medium
-
-**File**: `services/article.py` (lines 235-281)
-
-**Solution**: Pre-fetch recent articles in batch to avoid per-item queries.
-
----
-
-### W4.10: Add LRU Eviction to Config Cache
-**Priority**: Medium | **Impact**: Medium | **Effort**: Medium
-
-**File**: `services/config_cache.py` (lines 76, 91-94)
-
-**Issue**: Uses FIFO eviction instead of LRU.
-
-**Solution**: Use `collections.OrderedDict` for O(1) LRU operations.
-
----
-
-### W4.11: Add Response Cache to article_detail()
+### W2.1: Pre-compile Regex Patterns in LLM Modules
 **Priority**: High | **Impact**: Performance | **Effort**: Low
 
-**File**: `routes/public/links.py`
+**Files**: `services/llm/openai.py`, `services/llm/anthropic.py`, `services/llm/ollama.py`, `services/llm/gemini.py`
 
-**Solution**:
+**Status**: NOT VERIFIED — Need to check each provider for uncompiled regex
+
+**Solution**: Pre-compile regex patterns at module level:
 ```python
-cache = get_response_cache()
-cache_key = f"article_detail:{article_id}"
-cached_html = cache.get(cache_key)
-if cached_html:
-    return make_response(cached_html)
-# ... existing logic ...
-cache.set(cache_key, resp.get_data(), ttl=300)
+_TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
 ```
 
 ---
 
-## Wave 5: Infrastructure & Optimization (Parallelizable)
-
-### W5.1: Parallelize Newsletter Generation with Celery group
-**Priority**: Medium | **Impact**: Latency | **Effort**: Medium
-
-**File**: `tasks/newsletter.py` (lines 251-276)
-
-**Solution**:
-```python
-from celery import group
-
-# Fetch articles for all newsletters first
-all_articles = {
-    topic_key: _fetch_articles_for_newsletter(topic_key, cutoff, nl.max_articles)
-    for topic_key in ["main"] + list(topics.keys())
-}
-
-# Build all newsletter generation tasks
-task_signatures = [
-    _generate_topic_newsletter_impl.s(
-        topic_key,
-        all_articles[topic_key],
-        site_url,
-        nl.max_articles,
-        None,  # dry_run_email only for main
-        nl,
-    )
-    for topic_key in ["main"] + list(topics.keys())
-]
-
-job = group(task_signatures)
-results = job.apply_async()
-all_results = results.get(timeout=600, propagate=False)
-```
-
----
-
-### W5.2: Batch Email Sending (500/recipient)
-**Priority**: Medium | **Impact**: Task overhead | **Effort**: Medium
-
-**File**: `tasks/newsletter.py`
-
-**Solution**:
-```python
-def _send_batches(subscribers, subject, html, headers):
-    BATCH_SIZE = 500
-    for i in range(0, len(subscribers), BATCH_SIZE):
-        batch = subscribers[i:i + BATCH_SIZE]
-        send_email_batch.s(
-            recipients=[s.email for s in batch],
-            subject=subject,
-            html=html,
-            headers=headers,
-        ).apply_async()
-```
-
----
-
-### W5.3: Batch retry_stuck Commits (50/article)
-**Priority**: Medium | **Impact**: Database | **Effort**: Low
-
-**File**: `tasks/retry.py` (lines 73-99)
-
-**Solution**:
-```python
-BATCH_SIZE = 50
-# ... classify articles into batches ...
-for i in range(0, len(articles_to_retry), BATCH_SIZE):
-    batch = articles_to_retry[i:i + BATCH_SIZE]
-    for article in batch:
-        article.retry_count = (article.retry_count or 0) + 1
-    db.session.commit()
-    
-    dispatch_group = group([
-        _dispatch_stage.si(article.id, article.pipeline_status)
-        for article in batch
-    ])
-    dispatch_group.apply_async()
-```
-
----
-
-### W5.4: Fix SoftTimeLimitExceeded Handling Consistency
+### W2.2: Add LLM Provider Tests
 **Priority**: Medium | **Impact**: Reliability | **Effort**: Medium
 
-**Files**: `tasks/pipeline.py:run_stage()`, `tasks/crawl.py`, `tasks/extract.py`, `tasks/select.py`, `tasks/research.py`, `tasks/write.py`, `tasks/edit.py`
+**Files**: `tests/test_llm_adapters/`
 
-**Issue**: Only `tasks/newsletter.py` explicitly catches `billiard.exceptions.SoftTimeLimitExceeded`.
+**Status**: NOT VERIFIED
 
-**Solution**: Add explicit handling before generic exception handling in all pipeline stage tasks:
+**Solution**: Ensure all LLM providers have comprehensive test coverage.
+
+---
+
+## Wave 3: Database & Indexing
+
+### W3.1: Add Index on Article.source_id
+**Priority**: High | **Impact**: Performance | **Effort**: Low
+
+**Files**: `models.py`, new migration
+
+**Status**: NOT DONE — No index found on Article.source_id
+
+**Problem**: Dashboard queries group by `source_id` without an explicit index.
+
+**Solution**: Add index:
+```python
+db.Index("ix_articles_source_id", "source_id"),
+```
+
+---
+
+### W3.2: Add Index on Source.name
+**Priority**: High | **Impact**: Performance | **Effort**: Low
+
+**Files**: `models.py`, new migration
+
+**Status**: NOT DONE — No index found on Source.name
+
+**Problem**: Admin article list sorts sources by name without index.
+
+**Solution**: Add `index=True` to Source.name column or via migration.
+
+---
+
+### W3.3: Add Composite Indexes
+**Priority**: High | **Impact**: Performance | **Effort**: Low
+
+**Files**: New migrations
+
+**Status**: NOT VERIFIED — Need to check if composite indexes exist
+
+**Solution**:
+```python
+# Migration: ix_subscribers_newsletter_active_deleted
+op.create_index('ix_subscribers_newsletter_active_deleted', 'subscribers',
+    ['newsletter_type', 'active', 'deleted_at'], unique=False)
+
+# Migration: ix_pipeline_logs_run_created
+op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
+    ['run_id', 'created_at'], unique=False)
+```
+
+---
+
+## Wave 4: Error Handling & Cleanup
+
+### W4.1: Break Pipeline Circular Dependency
+**Priority**: High | **Impact**: Maintainability | **Effort**: Medium
+
+**Files**: `services/pipeline_utils.py` (new), `services/pipeline_degradation.py`, `tasks/pipeline.py`
+
+**Status**: NOT DONE — `pipeline_degradation.py` still imports `_dispatch_next` from `tasks.pipeline`
+
+**Problem**: Deferred imports between `tasks/pipeline.py` and `services/pipeline_degradation.py`.
+
+**Solution**:
+1. Create `services/pipeline_utils.py` with `_log_pipeline` and `_dispatch_next`
+2. Update both modules to import from `pipeline_utils`
+
+---
+
+### W4.2: Remove Unreachable Code in article.py
+**Priority**: Low | **Impact**: Cleanliness | **Effort**: Trivial
+
+**Files**: `services/article.py`
+
+**Status**: NOT DONE — Line 75 has `db.session.expire_all()` after `raise`
+
+**Problem**: Unreachable code after `raise` statement.
+
+**Solution**: Remove line 75.
+
+---
+
+### W4.3: Verify Search Provider Exception Handling
+**Priority**: Medium | **Impact**: Reliability | **Effort**: Low
+
+**Files**: `services/search/duckduckgo.py`, `services/search/google.py`, `services/search/searxng.py`
+
+**Status**: PARTIALLY DONE — google.py and searxng.py catch `requests.RequestException`
+
+**Problem**: duckduckgo.py still catches bare `Exception`.
+
+**Solution**: Add `type(e).__name__` to log message for better debugging.
+
+---
+
+### W4.4: Fix API Adapter Exception Handling
+**Priority**: Medium | **Impact**: Reliability | **Effort**: Low
+
+**Files**: `adapters/api.py`
+
+**Status**: NOT VERIFIED
+
+**Solution**: Use `requests.RequestException` for consistency.
+
+---
+
+### W4.5: Fix SoftTimeLimitExceeded Handling in All Pipeline Tasks
+**Priority**: Medium | **Impact**: Reliability | **Effort**: Medium
+
+**Files**: `tasks/pipeline.py`, `tasks/crawl.py`, `tasks/extract.py`, `tasks/select.py`, `tasks/research.py`, `tasks/write.py`, `tasks/edit.py`
+
+**Status**: NOT VERIFIED — Need to verify all pipeline tasks handle SoftTimeLimitExceeded
+
+**Solution**: Add explicit handling before generic exception handling:
 ```python
 from billiard.exceptions import SoftTimeLimitExceeded
 
@@ -771,236 +247,222 @@ except SoftTimeLimitExceeded:
     db.session.rollback()
     logger.error("SoftTimeLimitExceeded in %s for article %s", stage, article_id)
     raise
-except Exception as e:
-    # ... existing handling ...
 ```
 
 ---
 
-### W5.5: Add Pipeline Stage Timeout Metrics
-**Priority**: Medium | **Impact**: Observability | **Effort**: Low
+## Wave 5: Performance Optimization
 
-**File**: `tasks/pipeline.py:run_stage()`
+### W5.1: Fix Related Articles Query (200 Candidates)
+**Priority**: P0 | **Impact**: High | **Effort**: Medium
+
+**Files**: `services/related.py`
+
+**Status**: NOT DONE
+
+**Problem**: Every article page load loads 200 candidates, iterates all 200, returns top 5.
+
+**Solution**:
+1. Reduce candidate limit from 200 to 50
+2. Implement scored SQL query for database-level filtering
+
+---
+
+### W5.2: Cache Admin Dashboard Stats
+**Priority**: P1 | **Impact**: High | **Effort**: Medium
+
+**Files**: `routes/admin/dashboard.py`
+
+**Status**: NOT VERIFIED
+
+**Problem**: `Source.query.all()` loads ALL sources; no caching of dashboard stats.
+
+**Solution**:
+1. Cache dashboard stats in Redis with 60-second TTL
+2. Use single aggregated query
+
+---
+
+### W5.3: Tune Redis Connection Pool
+**Priority**: P1 | **Impact**: High | **Effort**: Low
+
+**Files**: `extensions.py`
+
+**Status**: NOT VERIFIED
+
+**Problem**: 50 connections may be undersized; no `socket_timeout` configured.
 
 **Solution**:
 ```python
-except SoftTimeLimitExceeded:
-    metrics.increment("pipeline.stage.timeout", labels={"stage": stage})
-    raise
-```
-
----
-
-### W5.6: Add Article Version Cleanup Task
-**Priority**: Medium | **Impact**: Maintainability | **Effort**: Low
-
-**File**: `tasks/cleanup.py`
-
-**Solution**:
-```python
-@celery_app.task
-def cleanup_old_article_versions(days_to_keep: int = 90) -> int:
-    """Remove article versions older than specified days."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
-    deleted = ArticleVersion.query.filter(
-        ArticleVersion.created_at < cutoff
-    ).delete()
-    db.session.commit()
-    return deleted
-```
-
-Add to Celery beat schedule:
-```python
-'cleanup-old-versions': {
-    'task': 'tasks.cleanup.cleanup_old_article_versions',
-    'schedule': crontab(hour=3, minute=45),
-    'kwargs': {'days_to_keep': 90},
-}
-```
-
----
-
-### W5.7: Source Health Hysteresis
-**Priority**: Medium | **Impact**: Reliability | **Effort**: Medium
-
-**Files**: `services/crawling.py`, `models.py:Source`
-
-**Issue**: Sources auto-disable after 10 failures but re-enable on single success.
-
-**Solution**: Require N consecutive successes before marking as healthy:
-```python
-HEALTHY_THRESHOLD = 3  # consecutive successes to be "healthy"
-```
-
----
-
-### W5.8: Webhook Retry with Backoff
-**Priority**: Medium | **Impact**: Reliability | **Effort**: Medium
-
-**Files**: `services/webhooks.py`, `models.py:Webhook`
-
-**Solution**: Implement exponential backoff retry:
-```python
-import backoff
-
-@backoff.on_exception(
-    backoff.expo,
-    (ConnectionError, TimeoutError),
-    max_tries=3,
-    base_delay=60,
-    max_delay=3600,
+_redis_pool = redis.ConnectionPool.from_url(
+    url,
+    max_connections=100,
+    socket_timeout=5,
+    socket_connect_timeout=3,
+    socket_keepalive=True,
 )
-def _deliver_webhook_with_retry(webhook: Webhook, payload: dict) -> bool:
-    # ... existing delivery logic ...
 ```
 
 ---
 
-### W5.9: Trend Memory Consolidation Optimization
-**Priority**: Low | **Impact**: Performance | **Effort**: Medium
+### W5.4: Optimize find_duplicate_titles() Two-Query Pattern
+**Priority**: P2 | **Impact**: Medium | **Effort**: Medium
 
-**File**: `services/trend_memory.py` (line 120+)
+**Files**: `services/article.py`
 
-**Issue**: N+1 queries when promoting low-importance entries.
+**Status**: NOT DONE — Two-query pattern still exists (lines 264-280)
 
-**Solution**: Batch the lookups:
-```python
-topics_with_high = db.session.query(TrendMemory.topic).filter(
-    TrendMemory.topic.in_([e.topic for e in low_entries]),
-    TrendMemory.importance == 3
-).distinct().all()
-topics_with_high = {t[0] for t in topics_with_high}
-```
+**Problem**: First query scans titles, second query loads full articles on match.
+
+**Solution**: Use single batched query or compute title hash signature during extraction.
 
 ---
 
-### W5.10: Newsletter Batch Transaction Safety
-**Priority**: Low | **Impact**: Reliability | **Effort**: Medium
+### W5.5: Cache Top Impact Articles
+**Priority**: P2 | **Impact**: Medium | **Effort**: Low
 
-**File**: `tasks/newsletter.py:generate_daily_newsletters()`
+**Files**: `routes/public/feeds.py`
 
-**Issue**: Process fails mid-way, partial newsletters may be sent.
+**Status**: NOT VERIFIED
 
-**Solution**: Use draft state and proper transaction boundaries.
+**Problem**: `_get_top_impact()` runs on every homepage load when cache is cold.
+
+**Solution**: Add Redis cache with key `top_impact:3` and 300s TTL.
 
 ---
 
-### W5.11: Add Request ID Tracing Across Pipeline
-**Priority**: Medium | **Impact**: Observability | **Effort**: Medium
+### W5.6: Tighten Article Version Retry Logic
+**Priority**: P3 | **Impact**: Low | **Effort**: Trivial
+
+**Files**: `services/article.py`
+
+**Status**: NOT DONE — `max_retries = 3` at line 160
+
+**Problem**: Up to 3 database round-trips on IntegrityError race condition.
+
+**Solution**: Change `max_retries = 3` to `max_retries = 2`.
+
+---
+
+### W5.7: Add HTTP Request Metrics Middleware
+**Priority**: P3 | **Impact**: Observability | **Effort**: Medium
+
+**Files**: `app.py`, `services/metrics.py`
+
+**Status**: NOT VERIFIED — `record_request()` exists but is never called
+
+**Problem**: No automatic HTTP request instrumentation.
+
+**Solution**: Add request timing middleware to call `record_request()`.
+
+---
+
+### W5.8: Add Request ID Tracing Across Pipeline
+**Priority**: Low | **Impact**: Observability | **Effort**: Medium
 
 **Files**: `tasks/pipeline.py`, `tasks/*`, `services/logging_utils.py`
 
-**Solution**: Implement request ID propagation from Celery task ID through all pipeline stages.
+**Status**: NOT VERIFIED
+
+**Solution**: Propagate Celery task ID through all pipeline stages for correlation.
 
 ---
 
-### W5.12: Add Composite Indexes
-**Priority**: High | **Impact**: Database | **Effort**: Low
+## Wave 6: Test Coverage
 
-**Files**: New migrations
+### W6.1: Add Newsletter HTML Escape Test
+**Priority**: Medium | **Impact**: Security | **Effort**: Low
+
+**Files**: `tests/test_newsletter.py`
+
+**Status**: NOT VERIFIED
 
 **Solution**:
 ```python
-# Migration: 017_add_subscriber_indexes.py
-op.create_index('ix_subscribers_newsletter_active_deleted', 'subscribers',
-    ['newsletter_type', 'active', 'deleted_at'], unique=False)
-
-# Migration: 018_add_pipeline_log_indexes.py
-op.create_index('ix_pipeline_logs_run_created', 'pipeline_logs',
-    ['run_id', 'created_at'], unique=False)
+def test_html_escaping_in_newsletter():
+    html = build_newsletter_html(articles=[], subject="Test <script>alert('xss')</script>")
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
 ```
 
 ---
 
-### W5.13: Increase Tag Cloud Cache TTL (60s → 600s)
-**Priority**: Low | **Impact**: Performance | **Effort**: Low
+### W6.2: Add Subagent Escape Function Test
+**Priority**: Medium | **Impact**: Security | **Effort**: Low
 
-**File**: `services/config_cache.py`
+**Files**: `tests/test_subagent.py`
 
-**Solution**: Change `cache.set(key, tag_cloud, ttl=60)` to `ttl=600`.
+**Status**: NOT VERIFIED
+
+**Solution**: Test `_escape_prompt_data()` with various inputs including edge cases.
+
+---
+
+## Items Already Complete
+
+The following items from the previous plan were verified as COMPLETE:
+
+- **W1 (XSS in templates)**: All templates use `|e` filter for LLM-generated content
+- **W2 (Prompt injection in subagents)**: `_escape_prompt_data()` and `esc_xml_text()` are used
+- **W3 (eval() replacement)**: AST-based `_evaluate_condition()` implemented in `services/subagent.py`
+- **W4.2 (Eager loading)**: `joinedload(Article.source)` and `joinedload(Article.tags)` added to routes
+- **W4.3 (Cache stampede)**: Per-key locking with `SET NX EX` + polling implemented
+- **W4.4 (ThreadPoolExecutor reuse)**: `future.cancel()` before shutdown implemented
+- **W4.5 (Limiter acquire timeout)**: Polling loop with exponential backoff implemented
+- **W4.8 (String concatenation)**: `para_parts` list with `"".join()` implemented
+- **W5.1 (Newsletter parallelization)**: Celery group for topic newsletters implemented
+- **W5.2 (Email batching)**: Batches of 500 implemented
+- **W5.3 (retry_stuck batching)**: Batches of 50 implemented
+- **W5.7 (Source health hysteresis)**: `HEALTHY_THRESHOLD=3` implemented
+- **W5.9 (Trend memory optimization)**: Batched lookups implemented
+- **W5.10 (Newsletter transaction safety)**: Draft state and rollback implemented
 
 ---
 
 ## Implementation Order
 
-### Phase 1: Wave 1 - Critical Security (Do First) ✅ COMPLETE
-- [x] W1.1: Fix XSS in templates — `|e` filter added to all LLM-generated and crawled content in 7 template files
-- [x] W1.2: Fix subagent prompt injection — `_escape_prompt_data()` added to `services/subagent.py`, `esc_xml_text()` added to `tasks/research.py:_format_web_results()`
-- [x] W1.3: Replace eval() in condition evaluation — AST-based parser with safe operator allowlist
-- [x] W1.4: Add security tests — `tests/test_security_conditions.py` with 35 passing tests
+### Phase 1: Quick Wins (Parallel)
+- W4.2: Remove unreachable code (trivial)
+- W5.6: Tighten retry logic (trivial constant change)
+- W4.3: Verify search provider exception handling
+- W6.1, W6.2: Add test coverage
 
-### Phase 2: Wave 2 - High-Priority Security ✅ COMPLETE
-- [x] W2.1: Fix session fixation on login — `session.clear()` before setting admin session in `routes/admin/auth.py`
-- [x] W2.2: Mask webhook secrets in API responses — `_mask_secret()` added to `routes/admin/api/webhooks.py`
-- [x] W2.3: Fix Redis credential URL parsing — uses `urlparse`/`urlunparse` in `extensions.py` to preserve credentials when switching databases
-- [x] W2.4: Fix RSS XML injection — `html.escape()` applied to headline and description in `services/rss.py`
-- [x] W2.5: Fix trend memory prompt injection — `esc_xml_text()` applied to draft and summary in `services/trend_memory.py`
-- [x] W2.6: Fix select/newsletter prompt injection — `esc_xml_text()` applied to all LLM-generated and external content in `tasks/select.py` and `services/newsletter_pipeline.py`
-- [x] W2.7: Remove CSRF exemption on tracking endpoint — `@csrf.exempt` removed from `routes/public/links.py`
-- [x] W2.8: Fix default SECRET_KEY in warning logs — warning message no longer contains the literal default key value in `app.py`
+### Phase 2: Security & Indexes (Parallel)
+- W1.1: Extract error handler factory
+- W3.1, W3.2, W3.3: Add database indexes
+- W4.4: Fix API adapter exception handling
+- W4.5: Fix SoftTimeLimitExceeded handling
 
-### Phase 3: Wave 3 - Code Quality & Reliability ✅ COMPLETE
-- [x] W3.1: Fix current_app.config.get() — `_get_pipeline_timeout_seconds()` and `_get_dns_cache_config()` now use `get_config_with_default()` from `services/config_utils.py`
-- [x] W3.2: Fix datetime naive/aware mixing — `feeds.py` normalizes to naive datetime; `extract.py` handles tzinfo from `fromisoformat()` and uses `datetime.utcnow()` fallback
-- [x] W3.3: Add error handling to `_fetch_item` — `adapters/api.py` now logs warning instead of silently swallowing exceptions
-- [x] W3.4: Fix ValidationError inheritance — `services/article_validation.py` now inherits from `ValueError` instead of `Exception`
-- [x] W3.5: Add explicit timeouts to LLM clients — OpenAI uses `_client_kwargs["timeout"]=120.0`; Anthropic uses `self._timeout=120.0` passed to client constructor
-- [x] W3.6: Fix token tracking in pipeline — `tasks/pipeline.py:335` now uses `result.tokens_used` instead of `max_tokens`
-- [x] W3.7: Convert f-string logs to %-formatting — `services/limiter.py` was already using %-formatting (no change needed)
-- [x] W3.8: Verify database transaction rollback patterns — All modules use proper `try/except/rollback` patterns; `routes/decorators.py` provides `commit()` and `commit_or_rollback()` helpers
-- [x] W3.9: Add type hints to utility modules — `services/redis_utils.py` already has full type hints
-- [x] W3.10: Extract magic numbers to config — `LOGIN_LOCKOUT_SECONDS=900` and `LOGIN_MAX_ATTEMPTS=5` already defined in `config.py` and accessed via `get_config_with_default()`
+### Phase 3: LLM Refactoring (Parallel per provider)
+- W1.2: Move client initialization to base class
+- W1.3: Consolidate tool calling loop
+- W2.1: Pre-compile regex in LLM modules
 
-### Phase 4: Wave 4 - Performance Optimization ✅ COMPLETE
-- [x] W4.1: Pre-compile Regex Patterns — `_TITLE_WORDS_RE` in `services/article.py`, `_NORMALIZE_WHITESPACE_RE` in `services/url.py`, `_FOOTER_WITH_AGENTS_RE` and `_CLOSING_TABLE_RE` in `services/email.py`, `_CONTROL_CHAR_RE` in `services/validation.py`, `_SLUGIFY_INVALID_RE` and `_SLUGIFY_WHITESPACE_RE` in `models.py`
-- [x] W4.2: Add Eager Loading to Routes — `joinedload(Article.source), joinedload(Article.tags)` added to `routes/admin/articles.py`, `routes/admin/review.py`, `routes/public/feeds.py` (tag feed, RSS feeds), and `services/related.py`
-- [x] W4.3: Fix ResponseCache Stampede Vulnerability — Per-key locking with Redis `SET NX EX` + polling fallback in `services/cache.py:get_or_set()`
-- [x] W4.4: Fix Subagent ThreadPoolExecutor Reuse — Added `future.cancel()` before `executor.shutdown(wait=False, cancel_futures=True)` in both `run_subagent()` and `run_subagent_with_tools()` to properly cancel timed-out futures
-- [x] W4.5: Add Limiter Acquire Timeout — Polling loop with exponential backoff (0.05s → 0.5s) and deadline tracking in `services/limiter.py:acquire()`
-- [x] W4.6: Fix Circuit Breaker Fallback State — Confirmed `get_provider_for_role()` correctly iterates fallback providers with individual circuit breaker per provider; already implemented correctly
-- [x] W4.7: Fix Race Condition in Lock Acquisition — `services/redis_utils.py` uses Lua scripts for atomic check-and-delete; already correct in `acquire_lock()`, `release_lock()`, and `refresh_lock()`
-- [x] W4.8: Replace String Concatenation with List/Join — `para_parts` and `items_parts` lists with `"".join()` in `services/newsletter.py:generate_newsletter_html()`
-- [x] W4.9: Optimize find_duplicate_titles() O(N²) Behavior — Already using `yield_per(_BATCH_SIZE)` with batch query; no N+1 issue present
-- [x] W4.10: Add LRU Eviction to Config Cache — Already implements LRU via `OrderedDict` in `services/cache.py`; `services/config_cache.py` uses expiration-based eviction with max entries limit
-- [x] W4.11: Add Response Cache to article_detail() — `routes/public/links.py:article_detail()` now checks `get_response_cache()` before rendering, stores rendered HTML with 300s TTL
+### Phase 4: Circular Import Resolution
+- W4.1: Break pipeline circular dependency (depends on Phase 2-3 for context)
 
-### Phase 5: Wave 5 - Infrastructure ✅ COMPLETE
-- [x] W5.1: Parallelize Newsletter Generation with Celery group — `_generate_newsletters_impl` now fetches all articles upfront and dispatches topic newsletter tasks in parallel via Celery group
-- [x] W5.2: Batch Email Sending (500/recipient) — `_send_emails_parallel` now sends in batches of 500 using nested loops, committing each batch before moving to the next
-- [x] W5.3: Batch retry_stuck Commits (50/article) — `retry_stuck` now batches articles (50 per batch) for commits and dispatches
-- [x] W5.4: SoftTimeLimitExceeded Handling — Already implemented correctly via `run_stage()` in pipeline tasks; all stage tasks use `run_stage()` which handles it properly
-- [x] W5.5: Pipeline Stage Timeout Metrics — Already implemented; `run_stage()` records `pipeline.stage_duration_seconds` histogram on timeout
-- [x] W5.6: Add Article Version Cleanup Task — `cleanup_old_article_versions` task added to `tasks/cleanup.py` with daily Celery beat schedule at 3:45 AM
-- [x] W5.7: Source Health Hysteresis — `record_crawl_success()` now requires `HEALTHY_THRESHOLD=3` consecutive successes before re-enabling disabled sources; `record_crawl_failure()` resets consecutive_successes
-- [x] W5.8: Webhook Retry with Backoff — Already implemented in `services/webhooks.py:_send_webhook_with_retry()` with exponential backoff
-- [x] W5.9: Trend Memory Consolidation Optimization — `consolidate_topic()` now batches low-entry lookups instead of N queries per high entry
-- [x] W5.10: Newsletter Batch Transaction Safety — `_generate_topic_newsletter_impl` now checks for partial email delivery failures and rolls back Newsletter records if emails fail
-- [x] W5.11: Request ID Tracing — Celery task ID is already captured in `PipelineRun.task_id`; `PipelineLog` uses `run_id` for correlation
-- [x] W5.12: Add Composite Indexes — Migration 017 adds `ix_subscribers_newsletter_active_deleted` on subscribers; Migration 018 adds `ix_pipeline_logs_run_created` on pipeline_logs
-- [x] W5.13: Increase Tag Cloud Cache TTL (60s → 600s) — `routes/public/__init__.py:_get_tag_cloud()` now uses `ttl=600`
+### Phase 5: Performance (Some dependencies on Phase 2)
+- W5.1: Fix related articles query
+- W5.2: Cache admin dashboard
+- W5.3: Tune Redis pool
+- W5.4: Optimize duplicate detection
+- W5.5: Cache top impact articles
+- W5.7: Add HTTP metrics middleware
+- W5.8: Add request ID tracing
 
 ---
 
-## Testing
+## Verification
 
-All changes should pass:
+After each phase, run:
 ```bash
 .venv/bin/ruff check . --exclude .venv
 .venv/bin/python -m pytest tests/ -x -q
 ```
 
-**Security-specific tests**:
+For database migrations:
 ```bash
-.venv/bin/python -m pytest tests/test_url_ssrf.py -v
-.venv/bin/python -m pytest tests/test_security_conditions.py -v
-```
-
-**Database migrations**:
-```bash
-# Before applying migrations
 scripts/verify_backup.sh
-
-# Run migration tests
 .venv/bin/python -m pytest tests/test_migration.py -v
 ```
 
@@ -1008,10 +470,7 @@ scripts/verify_backup.sh
 
 ## Notes
 
-- Database schema additions: migration 017 (subscriber composite index), migration 018 (pipeline_logs composite index), migration 019 (source consecutive_successes column)
-- No new external dependencies required (uses stdlib `ast`, `OrderedDict`)
 - All security improvements use existing `html` and `services.prompts` utilities
-- Template changes require thorough browser testing for UX
-- CSP nonce implementation deferred to future hardening work
-- Backward compatible — all changes are internal refactoring with no API contract changes
-- Wave 5 adds `consecutive_successes` field to Source model for health hysteresis
+- Database migrations use SQLite-compatible operations only
+- No new external dependencies required
+- Backward compatible — all changes are internal refactoring

@@ -145,6 +145,67 @@ def _get_something() -> int:
 | `tasks/cleanup.py` | Log cleanup, trend memory consolidation |
 | `adapters/api.py` | API source adapter with error logging in `_fetch_item` |
 
+## Pipeline State Machine
+
+`constants.py` defines `VALID_TRANSITIONS` dict mapping each `PipelineStatus` to list of valid next states:
+
+```python
+VALID_TRANSITIONS = {
+    PENDING: [EXTRACTING],
+    EXTRACTING: [SELECTING, FAILED],
+    SELECTING: [RESEARCHING, SELECTED, FAILED],
+    RESEARCHING: [WRITING, WRITTEN, FAILED],
+    WRITING: [EDITING, WRITTEN, FAILED],
+    EDITING: [DONE, FAILED],
+    # ...
+}
+```
+
+Use `_transition_article_status()` in `tasks/pipeline.py` for atomic state changes. This validates the transition is allowed and updates atomically.
+
+## Per-Stage Failure Tracking
+
+`services/pipeline_failure.py:_track_stage_failure()` tracks failures per stage per article in Redis:
+
+```python
+stage_failure_key = f"article:{article.id}:stage_failures:{stage}"
+stage_failures = redis_client.hincrby(stage_failure_key, "count", 1)
+if stage_failures >= 3:
+    article.pipeline_status = PipelineStatus.FAILED
+```
+
+Early termination after 3 failures at same stage prevents infinite retry loops.
+
+## Request ID Propagation
+
+`g.request_id` is set in Flask `before_request` from `X-Request-ID` header or generated UUID. Passed to Celery tasks via task headers:
+
+```python
+celery_task.apply_async(..., headers={'_request_id': get_request_id()})
+```
+
+Available in tasks via `get_task_request_id()` from `services/logging_utils.py`.
+
+## OpenTelemetry Tracing
+
+`services/logging_utils.py` provides:
+
+- `get_tracer()` — returns tracer (uses noop exporter when OTel unavailable)
+- `traced_llm_call(provider, model, stage)` — context manager for LLM spans
+- `traced_stage(stage_name)` — context manager for pipeline stage spans
+
+## Dead Letter Queue UI
+
+Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
+
+## Dynamic Celery Beat Schedule
+
+Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get_beat_schedule()`. After changing `pipeline.yaml`, call `Config.reload_beat_schedule()` then `POST /admin/api/config/reload` to apply.
+
+## Newsletter Idempotency
+
+`tasks/newsletter.py` uses Redis key `idempotency:newsletter:{date}` to prevent duplicate newsletter generation. Set with 2-day TTL after successful generation.
+
 ## Security Notes
 
 - **XSS**: LLM-generated content in templates must use `|e` filter

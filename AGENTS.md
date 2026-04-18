@@ -74,6 +74,14 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Circuit breaker metrics**: Emits `circuit_breaker.state_change` counter with `provider`, `from`, `to` labels and `circuit_breaker.opened` on OPEN transitions.
 - **Pipeline duration histograms**: `pipeline.stage_duration_seconds` recorded for select, research, write, and edit stages.
 - **Backup verification**: `scripts/verify_backup.sh` validates SQLite integrity and required tables. Called automatically from `scripts/backup.sh`.
+- **State machine for pipeline**: `constants.py` defines `VALID_TRANSITIONS` for atomic state changes. Use `_transition_article_status()` in `tasks/pipeline.py` instead of direct assignment.
+- **Per-stage failure tracking**: `services/pipeline_failure.py:_track_stage_failure()` tracks failures per stage per article in Redis. Early termination after 3 failures at same stage.
+- **Request ID propagation**: `g.request_id` set in Flask `before_request`. Passed via Celery task headers. Available in tasks via `get_task_request_id()` from `services/logging_utils.py`.
+- **OpenTelemetry tracing**: `get_tracer()`, `traced_llm_call()`, and `traced_stage()` helpers in `services/logging_utils.py`. Uses noop exporter when OTel libraries unavailable.
+- **Newsletter idempotency**: Redis key `idempotency:newsletter:{date}` prevents duplicate newsletter generation.
+- **Dead Letter Queue UI**: `/admin/dead-letters` shows failed/stuck articles with bulk reprocess/delete actions.
+- **Dynamic Celery beat schedule**: `Config.get_beat_schedule()` reads from `pipeline.yaml` `schedule:` section. Call `Config.reload_beat_schedule()` to apply changes.
+- **CSRF validation for JSON**: `@validate_csrf_json` decorator in `routes/decorators.py` checks `X-CSRFToken` header for JSON endpoints.
 
 ### Subagent system
 

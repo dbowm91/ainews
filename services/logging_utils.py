@@ -90,9 +90,15 @@ def log_admin_event(
 class PipelineLogger:
     """Wraps a logger and adds structured pipeline context to messages."""
 
-    def __init__(self, stage: str, base_logger: logging.Logger = None):
+    def __init__(
+        self,
+        stage: str,
+        base_logger: logging.Logger = None,
+        task_id: str = None,
+    ):
         self.stage = stage
         self.logger = base_logger or logger
+        self.task_id = task_id
 
     def _format(self, msg: str, **context) -> str:
         if context:
@@ -100,21 +106,35 @@ class PipelineLogger:
             return f"[{self.stage}] {msg} | {ctx}"
         return f"[{self.stage}] {msg}"
 
+    def _build_context(self, **context):
+        ctx = dict(context)
+        if self.task_id:
+            ctx["task_id"] = self.task_id
+        return ctx
+
     def info(self, msg: str, **context):
-        self.logger.info(self._format(msg, **context))
+        self.logger.info(self._format(msg, **context), extra=self._build_context(**context))
 
     def warning(self, msg: str, **context):
-        self.logger.warning(self._format(msg, **context))
+        self.logger.warning(self._format(msg, **context), extra=self._build_context(**context))
 
     def error(self, msg: str, **context):
-        self.logger.error(self._format(msg, **context))
+        self.logger.error(self._format(msg, **context), extra=self._build_context(**context))
 
 
 def get_pipeline_logger(
-    stage: str, base_logger: logging.Logger = None
+    stage: str,
+    base_logger: logging.Logger = None,
+    task_id: str = None,
 ) -> PipelineLogger:
-    """Get a structured logger for a pipeline stage."""
-    return PipelineLogger(stage, base_logger)
+    """Get a structured logger for a pipeline stage.
+
+    Args:
+        stage: Pipeline stage name
+        base_logger: Optional base logger to wrap
+        task_id: Optional Celery task ID for request tracing
+    """
+    return PipelineLogger(stage, base_logger, task_id=task_id)
 
 
 @contextmanager

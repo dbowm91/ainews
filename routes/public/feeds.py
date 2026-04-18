@@ -25,9 +25,20 @@ PER_PAGE = PER_PAGE_PUBLIC
 
 def _get_top_impact(limit: int = 3) -> list[Article]:
     from sqlalchemy import or_
+    from services.cache import get_response_cache
+
+    cache = get_response_cache()
+    cache_key = f"top_impact:{limit}"
+
+    cached_ids = cache.get(cache_key)
+    if cached_ids is not None:
+        if not cached_ids:
+            return []
+        articles = Article.query.filter(Article.id.in_(cached_ids)).all()
+        return sorted(articles, key=lambda a: cached_ids.index(a.id)) if articles else []
 
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
-    return (
+    articles = (
         Article.query.filter(
             Article.pipeline_status == PipelineStatus.DONE,
             Article.impact_score > 0,
@@ -41,6 +52,9 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         .limit(limit)
         .all()
     )
+    if articles:
+        cache.set(cache_key, [a.id for a in articles], ttl=300)
+    return articles
 
 
 @public_bp.route("/")

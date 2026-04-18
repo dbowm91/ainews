@@ -121,6 +121,15 @@ class SubagentConfig(BaseModel):
     chains: dict[str, SubagentChainConfig] = Field(default_factory=dict)
 
 
+class MemoryConfig(BaseModel):
+    ttl_days_low: int = 7
+    ttl_days_medium: int = 30
+    ttl_days_high: int = 0
+    consolidation_cooldown_hours: int = 24
+    max_entries_per_propose: int = 3
+    consolidation_merge_window_hours: int = 72
+
+
 class PipelineRootConfig(BaseModel):
     pipeline: PipelineConfig
     newsletter: NewsletterConfig = Field(default_factory=NewsletterConfig)
@@ -128,6 +137,7 @@ class PipelineRootConfig(BaseModel):
         default_factory=NewsletterPipelineConfig
     )
     subagent: SubagentConfig = Field(default_factory=SubagentConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
 
 def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:

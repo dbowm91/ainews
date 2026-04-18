@@ -99,6 +99,67 @@ class TestSubagentTemplates:
             assert "source_article" in template
 
 
+class TestEscapePromptData:
+    """Tests for _escape_prompt_data function."""
+
+    def test_escapes_simple_strings(self):
+        from services.subagent import _escape_prompt_data
+
+        data = {"title": "<script>alert('xss')</script>", "body": "normal text"}
+        result = _escape_prompt_data(data)
+        assert result["title"] == "&lt;script&gt;alert('xss')&lt;/script&gt;"
+        assert result["body"] == "normal text"
+
+    def test_escapes_nested_dicts(self):
+        from services.subagent import _escape_prompt_data
+
+        data = {
+            "outer": {
+                "inner": "<img src=x onerror=alert(1)>",
+                "safe": "normal",
+            }
+        }
+        result = _escape_prompt_data(data)
+        assert result["outer"]["inner"] == "&lt;img src=x onerror=alert(1)&gt;"
+        assert result["outer"]["safe"] == "normal"
+
+    def test_escapes_lists(self):
+        from services.subagent import _escape_prompt_data
+
+        data = {"items": ["<b>bold</b>", "normal", "<i>italic</i>"]}
+        result = _escape_prompt_data(data)
+        assert result["items"][0] == "&lt;b&gt;bold&lt;/b&gt;"
+        assert result["items"][1] == "normal"
+        assert result["items"][2] == "&lt;i&gt;italic&lt;/i&gt;"
+
+    def test_preserves_non_string_values(self):
+        from services.subagent import _escape_prompt_data
+
+        data = {"count": 42, "enabled": True, "ratio": 3.14, "none_val": None}
+        result = _escape_prompt_data(data)
+        assert result["count"] == 42
+        assert result["enabled"] is True
+        assert result["ratio"] == 3.14
+        assert result["none_val"] is None
+
+    def test_handles_empty_strings(self):
+        from services.subagent import _escape_prompt_data
+
+        data = {"empty": "", "title": "no special chars"}
+        result = _escape_prompt_data(data)
+        assert result["empty"] == ""
+        assert result["title"] == "no special chars"
+
+    def test_escapes_xml_special_chars(self):
+        from services.subagent import _escape_prompt_data
+
+        data = {"xml": "<tag attr=\"value\">content & more</tag>"}
+        result = _escape_prompt_data(data)
+        assert "&lt;tag" in result["xml"]
+        assert "attr=\"value\"" in result["xml"]
+        assert "&amp; more" in result["xml"]
+
+
 class TestRunSubagent:
     """Test run_subagent function."""
 

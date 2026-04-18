@@ -1,16 +1,17 @@
+import json
 import logging
-import threading
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
+    ToolCall,
     ToolCallingResponse,
     ToolDefinition,
     register_provider,
 )
-from services.llm.errors import handle_provider_error
+from services.llm.errors import make_error_handler
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,12 @@ def _handle_openai_error(e: Exception) -> Exception:
         APIConnectionError,
     )
 
-    return handle_provider_error(
-        e,
+    return make_error_handler(
         "OpenAI",
         rate_limit_exc=(RateLimitError,),
         auth_exc=AuthenticationError,
         timeout_exc=(APITimeoutError, APIConnectionError),
-    )
+    )(e)
 
 
 @register_provider("openai")
@@ -40,22 +40,16 @@ class OpenAIProvider(BaseLLMProvider):
         cfg = OpenAIConfig(**self.config)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
-        self._client = None
-        self._client_lock = threading.Lock()
         self._client_kwargs = {
             "api_key": cfg.api_key,
             "base_url": cfg.base_url,
+            "timeout": 120.0,
         }
 
-    @property
-    def client(self):
-        if self._client is None:
-            with self._client_lock:
-                if self._client is None:
-                    from openai import OpenAI
+    def _create_client(self):
+        from openai import OpenAI
 
-                    self._client = OpenAI(**self._client_kwargs)
-        return self._client
+        return OpenAI(**self._client_kwargs)
 
     def chat(
         self,
@@ -122,6 +116,73 @@ class OpenAIProvider(BaseLLMProvider):
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message.content or "{}"
 
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        call_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            call_kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+                for t in tools
+            ]
+        if tool_choice:
+            call_kwargs["tool_choice"] = (
+                {"type": "function", "function": {"name": tool_choice}}
+                if tool_choice != "auto"
+                else "auto"
+            )
+        try:
+            resp = self.client.chat.completions.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_openai_error(e)
+        if not resp.choices:
+            raise RuntimeError(f"OpenAI returned empty choices for model {model}")
+        return resp.choices[0].message, resp
+
+    def _extract_text_and_tool_calls(
+        self, response: Any
+    ) -> tuple[str, list[ToolCall]]:
+        msg = response
+        tool_calls = []
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                fn_args = tc.function.arguments
+                if isinstance(fn_args, str):
+                    fn_args = json.loads(fn_args)
+                tool_calls.append(
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=fn_args,
+                    )
+                )
+        return msg.content or "", tool_calls
+
+    def _format_tool_result(self, tool_call: ToolCall, result_content: str) -> dict:
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": result_content,
+        }
+
     def chat_with_tools(
         self,
         messages: list[dict[str, str]],
@@ -133,117 +194,8 @@ class OpenAIProvider(BaseLLMProvider):
         max_tokens: int,
         max_iterations: int = 5,
     ) -> ToolCallingResponse:
-        model = model or self.default_model
-        all_messages = list(messages)
-        if system:
-            all_messages.insert(0, {"role": "system", "content": system})
-
-        tool_call_map: dict[str, tuple[str, Callable]] = {}
-        for tool in tools:
-            if hasattr(tool, "fn") and callable(tool.fn):
-                tool_call_map[tool.name] = (tool.name, tool.fn)
-
-        iteration = 0
-        while iteration < max_iterations:
-            iteration += 1
-            call_kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": all_messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            if tools:
-                call_kwargs["tools"] = [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
-                        },
-                    }
-                    for t in tools
-                ]
-            if tool_choice:
-                call_kwargs["tool_choice"] = (
-                    {"type": "function", "function": {"name": tool_choice}}
-                    if tool_choice != "auto"
-                    else "auto"
-                )
-
-            try:
-                resp = self.client.chat.completions.create(**call_kwargs)
-            except Exception as e:
-                raise _handle_openai_error(e)
-
-            if not resp.choices:
-                raise RuntimeError(f"OpenAI returned empty choices for model {model}")
-
-            msg = resp.choices[0].message
-            if msg.content:
-                all_messages.append({"role": "assistant", "content": msg.content})
-
-            if not msg.tool_calls:
-                text = msg.content or ""
-                return ToolCallingResponse(
-                    text=text,
-                    model=model,
-                    tool_calls=[],
-                    tokens_used=(
-                        (resp.usage.prompt_tokens or 0)
-                        + (resp.usage.completion_tokens or 0)
-                        if resp.usage
-                        else 0
-                    ),
-                )
-
-            for tc in msg.tool_calls:
-                all_messages.append(
-                    {
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                        ],
-                    }
-                )
-                fn_name = tc.function.name
-                fn_args = tc.function.arguments
-                if isinstance(fn_args, str):
-                    import json
-
-                    fn_args = json.loads(fn_args)
-
-                result_content = ""
-                if fn_name in tool_call_map:
-                    try:
-                        _, fn = tool_call_map[fn_name]
-                        result_content = str(fn(**fn_args))
-                    except Exception as e:
-                        result_content = f"Error: {e}"
-                else:
-                    result_content = f"Unknown tool: {fn_name}"
-
-                all_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": result_content,
-                    }
-                )
-
-        text = ""
-        return ToolCallingResponse(
-            text=text,
-            model=model,
-            tool_calls=[],
-            tokens_used=0,
+        return super().chat_with_tools(
+            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations
         )
 
     def health_check(self) -> dict[str, Any]:

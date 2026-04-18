@@ -230,6 +230,22 @@ providers:
       api_key: "${ANTHROPIC_API_KEY}"
       model: "claude-sonnet-4-5-20250929"
 
+  - id: minimax
+    type: openai
+    enabled: false
+    config:
+      api_key: "${MINIMAX_API_KEY}"
+      base_url: "https://api.minimax.io/v1"
+      model: "MiniMax-M2.5"
+
+  - id: deepseek
+    type: openai
+    enabled: false
+    config:
+      api_key: "${DEEPSEEK_API_KEY}"
+      base_url: "https://api.deepseek.com/v1"
+      model: "deepseek-chat"
+
 default_provider: ollama-local
 ```
 
@@ -240,6 +256,63 @@ default_provider: ollama-local
 | `ollama` | `host`, `model`, `max_tokens` |
 | `openai` | `api_key`, `base_url`, `model`, `max_tokens` |
 | `anthropic` | `api_key`, `model`, `max_tokens` |
+
+Any `openai`-type provider is handled by the OpenAI-compatible adapter and works with MiniMax, DeepSeek, Zai (BigModel.cn), Groq, TogetherAI, and similar providers.
+
+### `subagent:` — Subagent Configuration
+
+Subagents are lightweight AI tasks that run within pipeline stages. Configuration lives under `subagent:` in `pipeline.yaml`:
+
+```yaml
+subagent:
+  default:
+    enabled: false
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+  research:
+    enabled: true
+    tools:
+      - web_search
+      - context_notes
+      - related_articles
+  edit:
+    enabled: true
+    tools:
+      - context_notes
+      - related_articles
+      - trend_memory
+```
+
+The `tools:` list controls which subagent tools are available for each stage. Available tools: `web_search`, `context_notes`, `related_articles`, `trend_memory`.
+
+### `memory:` — Trend Memory Configuration
+
+Tiered, LLM-judged memory for the editor. After each article is finalized, the LLM extracts 0–3 high-signal memory entries. The system is configurable:
+
+```yaml
+memory:
+  ttl_days_low: 7              # Low-importance entries expire after 7 days
+  ttl_days_medium: 30           # Medium-importance entries expire after 30 days
+  ttl_days_high: 0              # High-importance entries never expire
+  consolidation_cooldown_hours: 24      # Don't re-consolidate a topic within 24h
+  max_entries_per_propose: 3     # LLM extracts max 3 entries per article
+  consolidation_merge_window_hours: 72  # Low entries within 72h of a high entry get promoted
+```
+
+**Importance tiers:**
+- `1` (low): Short-lived observations, expires in 7 days unless consolidated
+- `2` (medium): Valid observations promoted by consolidation, expires in 30 days
+- `3` (high): Major developments, no expiry — triggers consolidation of overlapping low entries
+
+**How it works:**
+1. After an article is finalized (`DONE`), `propose_trend_memory()` asks the LLM to extract 0–3 entries and stores them with tier-based TTL
+2. The `edit_contextualization` subagent receives `{trend_memory}` in its prompt, letting the editor see prior patterns
+3. Nightly at 3:30 AM, `consolidate_trend_memory` promotes low-importance entries to medium when a high-importance entry exists for the same topic, and purges expired entries
 
 ## Pipeline Stages
 

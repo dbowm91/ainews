@@ -1,6 +1,7 @@
 from __future__ import annotations
 import abc
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, TypeVar, Type
 
@@ -56,6 +57,21 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
     def __init__(self, provider_id: str, config: dict):
         super().__init__(provider_id, config)
+        self._client = None
+        self._client_lock = threading.Lock()
+
+    @property
+    def client(self):
+        if self._client is None:
+            with self._client_lock:
+                if self._client is None:
+                    self._client = self._create_client()
+        return self._client
+
+    @abc.abstractmethod
+    def _create_client(self) -> Any:
+        """Create and return the provider-specific client instance."""
+        ...
 
     @abc.abstractmethod
     def chat(
@@ -129,6 +145,52 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         ...
 
     @abc.abstractmethod
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        """Make the provider-specific API call for chat with tools.
+
+        Returns:
+            Tuple of (response, raw_response) where response is provider-specific
+            and raw_response can be used for token counting.
+        """
+        ...
+
+    @abc.abstractmethod
+    def _extract_text_and_tool_calls(
+        self, response: Any
+    ) -> tuple[str, list[ToolCall]]:
+        """Extract text content and tool calls from provider response.
+
+        Args:
+            response: Provider-specific response object from _call_api_with_tools
+
+        Returns:
+            Tuple of (text_content, list_of_tool_calls)
+        """
+        ...
+
+    @abc.abstractmethod
+    def _format_tool_result(
+        self, tool_call: ToolCall, result_content: str
+    ) -> dict:
+        """Format a tool result as a message dict for the provider's message format.
+
+        Args:
+            tool_call: The ToolCall that was executed
+            result_content: The string result of the function execution
+
+        Returns:
+            Provider-specific message dict representing the tool result
+        """
+        ...
+
     def chat_with_tools(
         self,
         messages: list[dict[str, str]],
@@ -142,10 +204,108 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
     ) -> ToolCallingResponse:
         """Chat with tool/function calling support.
 
-        Provider handles the conversation loop (tool call -> execute -> continue)
-        up to max_iterations.
+        Uses provider-specific _call_api_with_tools, _extract_text_and_tool_calls,
+        and _format_tool_result hooks.
         """
-        ...
+        model = model or self.default_model
+        all_messages = list(messages)
+        if system:
+            all_messages.insert(0, {"role": "system", "content": system})
+
+        tool_call_map: dict[str, tuple[str, Callable]] = {}
+        for tool in tools:
+            if hasattr(tool, "fn") and callable(tool.fn):
+                tool_call_map[tool.name] = (tool.name, tool.fn)
+
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+
+            try:
+                response, raw_response = self._call_api_with_tools(
+                    model=model,
+                    messages=all_messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            except Exception as e:
+                raise e
+
+            text_content, tool_calls_found = self._extract_text_and_tool_calls(response)
+
+            if text_content:
+                all_messages.append({"role": "assistant", "content": text_content})
+
+            if not tool_calls_found:
+                tokens_used = 0
+                if hasattr(raw_response, "usage"):
+                    tokens_used = (
+                        getattr(raw_response.usage, "prompt_tokens", 0) or 0
+                    ) + (getattr(raw_response.usage, "completion_tokens", 0) or 0)
+                elif hasattr(raw_response, "prompt_eval_count"):
+                    tokens_used = (
+                        getattr(raw_response, "prompt_eval_count", 0) or 0
+                    ) + (getattr(raw_response, "eval_count", 0) or 0)
+                elif hasattr(raw_response, "usage_metadata"):
+                    tokens_used = getattr(
+                        raw_response.usage_metadata, "total_token_count", 0
+                    ) or 0
+                return ToolCallingResponse(
+                    text=text_content,
+                    model=model,
+                    tool_calls=[],
+                    tokens_used=tokens_used,
+                )
+
+            for tc in tool_calls_found:
+                fn_name = tc.name
+                fn_args = tc.arguments
+                if isinstance(fn_args, str):
+                    import json
+
+                    fn_args = json.loads(fn_args)
+
+                result_content = ""
+                if fn_name in tool_call_map:
+                    try:
+                        _, fn = tool_call_map[fn_name]
+                        result_content = str(fn(**fn_args))
+                    except Exception as e:
+                        result_content = f"Error: {e}"
+                else:
+                    result_content = f"Unknown tool: {fn_name}"
+
+                all_messages.append(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": (
+                                        tc.arguments
+                                        if isinstance(tc.arguments, str)
+                                        else tc.arguments
+                                    ),
+                                },
+                            }
+                        ],
+                    }
+                )
+
+                tool_result_msg = self._format_tool_result(tc, result_content)
+                all_messages.append(tool_result_msg)
+
+        return ToolCallingResponse(
+            text="",
+            model=model,
+            tool_calls=[],
+            tokens_used=0,
+        )
 
     def _build_messages(
         self, messages: list[dict], system: Optional[str]

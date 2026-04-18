@@ -105,6 +105,18 @@ class TestBuildMessages:
             def chat_with_tools(self, *a, **kw):
                 pass
 
+            def _create_client(self):
+                pass
+
+            def _call_api_with_tools(self, *a, **kw):
+                pass
+
+            def _extract_text_and_tool_calls(self, *a, **kw):
+                return "", []
+
+            def _format_tool_result(self, *a, **kw):
+                return {}
+
         provider = DummyProvider("dummy", {})
         result = provider._build_messages([{"role": "user", "content": "hi"}], None)
         assert result == [{"role": "user", "content": "hi"}]
@@ -121,6 +133,18 @@ class TestBuildMessages:
 
             def chat_with_tools(self, *a, **kw):
                 pass
+
+            def _create_client(self):
+                pass
+
+            def _call_api_with_tools(self, *a, **kw):
+                pass
+
+            def _extract_text_and_tool_calls(self, *a, **kw):
+                return "", []
+
+            def _format_tool_result(self, *a, **kw):
+                return {}
 
         provider = DummyProvider("dummy", {})
         result = provider._build_messages(

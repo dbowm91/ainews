@@ -1,10 +1,12 @@
 import os
 import logging
+import time
 from flask import Flask, render_template, jsonify, request
 from sqlalchemy import event
 from config import config
 from extensions import db, limiter, csrf, migrate
 from logging_config import setup_logging
+from services.metrics import record_request
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,16 @@ def create_app(config_name=None):
             "geolocation": "()",
         },
     )
+
+    @app.before_request
+    def start_request_timer():
+        request._request_start_time = time.monotonic()
+
+    @app.after_request
+    def record_request_metrics(response):
+        duration_ms = (time.monotonic() - getattr(request, "_request_start_time", time.monotonic())) * 1000
+        record_request(request.method, request.path, response.status_code, duration_ms)
+        return response
 
     @app.after_request
     def add_security_headers(response):

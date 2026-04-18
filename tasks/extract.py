@@ -193,8 +193,10 @@ def process_item(
                 if published_at
                 else datetime.now(timezone.utc)
             )
+            if pub_date.tzinfo is not None:
+                pub_date = pub_date.replace(tzinfo=None)
         except (ValueError, TypeError):
-            pub_date = datetime.now(timezone.utc)
+            pub_date = datetime.utcnow()
 
         article = Article(
             source_id=source.id,

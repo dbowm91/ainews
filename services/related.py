@@ -22,7 +22,7 @@ def find_related_articles(article, limit: int = 5):
             Article.final_article.isnot(None),
         )
         .order_by(Article.created_at.desc())
-        .limit(200)
+        .limit(50)
         .all()
     )
 
@@ -79,7 +79,7 @@ def find_related_articles_dicts(
             Article.final_article.isnot(None),
         )
         .order_by(Article.created_at.desc())
-        .limit(200)
+        .limit(50)
         .all()
     )
 

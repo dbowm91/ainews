@@ -1,6 +1,37 @@
 import logging
+from typing import Callable
 
 logger = logging.getLogger(__name__)
+
+
+def make_error_handler(
+    provider_name: str,
+    rate_limit_exc: tuple[type, ...],
+    auth_exc: type,
+    timeout_exc: tuple[type, ...],
+) -> Callable[[Exception], Exception]:
+    """Factory function that creates a provider-specific error handler.
+
+    Args:
+        provider_name: Human-readable name for logging (e.g., "OpenAI")
+        rate_limit_exc: Exception types that indicate rate limiting
+        auth_exc: Exception type that indicates authentication failure
+        timeout_exc: Exception types that indicate timeout/connection errors
+
+    Returns:
+        A handler function that converts SDK exceptions to our custom exceptions
+    """
+
+    def handler(e: Exception) -> Exception:
+        return handle_provider_error(
+            e,
+            provider_name,
+            rate_limit_exc=rate_limit_exc,
+            auth_exc=auth_exc,
+            timeout_exc=timeout_exc,
+        )
+
+    return handler
 
 
 class RateLimitError(Exception):

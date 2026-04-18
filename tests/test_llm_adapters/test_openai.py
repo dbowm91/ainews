@@ -41,7 +41,7 @@ class TestOpenAIProvider:
             c = provider.client
             assert c is mock_client
             mock_openai.OpenAI.assert_called_once_with(
-                api_key="sk-test", base_url="https://api.openai.com/v1"
+                api_key="sk-test", base_url="https://api.openai.com/v1", timeout=120.0
             )
         finally:
             sys.modules.pop("openai", None)

@@ -4,13 +4,11 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
-from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
 from services.article_validation import validate_and_raise, ValidationError
 import time
 
 logger = get_task_logger(__name__)
-plog = get_pipeline_logger("edit")
 
 # Error response convention:
 # - Leaf tasks: re-raise for Celery retry
@@ -117,7 +115,15 @@ def edit_article(self, article_id: int, run_id=None):
             related_articles = get_related_articles_for_edit(
                 article.topics, article.id, limit=5
             )
-            if topic_notes or related_articles:
+            from services.trend_memory import (
+                get_memory_for_topics,
+                _format_memory_for_prompt,
+            )
+
+            trend_memory = _format_memory_for_prompt(
+                get_memory_for_topics(article.topics, min_importance=1)
+            )
+            if topic_notes or related_articles or trend_memory:
                 context_result = run_subagent(
                     task_type="edit_contextualization",
                     stage="edit",
@@ -126,15 +132,16 @@ def edit_article(self, article_id: int, run_id=None):
                         "brief": article.research_brief or "",
                         "topic_notes": _format_topic_notes(topic_notes),
                         "related_articles": _format_related_articles(related_articles),
+                        "trend_memory": trend_memory,
                     },
                     response_model=EditContextualizationResponse,
                     article_id=article.id,
                 )
                 contextualization = context_result.synthesis
                 if context_result.used_fallback:
-                    plog.warning(
+                    logger.warning(
                         "Edit contextualization subagent failed, proceeding without context",
-                        article_id=article.id,
+                        extra={"article_id": article.id},
                     )
 
         prompt = build_editor_prompt_with_context(
@@ -176,10 +183,10 @@ def edit_article(self, article_id: int, run_id=None):
         try:
             validate_and_raise(article.final_article)
         except ValidationError as e:
-            plog.warning(
+            logger.warning(
                 "Article validation failed, routing to review: %s",
                 e,
-                article_id=article.id,
+                extra={"article_id": article.id},
             )
             article.pipeline_status = PipelineStatus.REVIEW
             article.last_error = f"Content validation failed: {e}"
@@ -216,12 +223,6 @@ def edit_article(self, article_id: int, run_id=None):
                     truncate_for_log(article.original_title),
                     article_id=article.id,
                 )
-            plog.info(
-                "Article queued for review",
-                article_id=article.id,
-                tags=result.tags,
-                title=truncate_for_log(article.original_title),
-            )
             return {"article_id": article_id, "status": "review"}
 
         article.pipeline_status = PipelineStatus.DONE
@@ -241,12 +242,16 @@ def edit_article(self, article_id: int, run_id=None):
                 article_id=article.id,
             )
 
-        plog.info(
-            "Article finalized",
-            article_id=article.id,
-            tags=result.tags,
-            title=truncate_for_log(article.original_title),
-        )
+        try:
+            from services.trend_memory import propose_trend_memory
+
+            propose_trend_memory(article)
+        except Exception:
+            logger.warning(
+                "propose_trend_memory failed for article %s, continuing",
+                article.id,
+            )
+
         return {"article_id": article_id, "status": "done"}
 
     return run_stage(

@@ -72,7 +72,6 @@ def track_metric(article_id: int, column: Column) -> None:
     except SQLAlchemyError:
         db.session.rollback()
         raise
-    db.session.expire_all()
 
 
 def get_articles_paginated(
@@ -157,7 +156,7 @@ def create_article_version(
     from models import ArticleVersion
     from sqlalchemy.exc import IntegrityError
 
-    max_retries = 3
+    max_retries = 2
     for attempt in range(max_retries):
         max_version = (
             db.session.query(db.func.max(ArticleVersion.version_number))
@@ -262,16 +261,16 @@ def find_duplicate_titles(
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
     matched_ids = []
-    query = (
+    rows = (
         Article.query.filter(
             Article.source_id != source_id,
             Article.created_at >= cutoff,
             Article.original_title.isnot(None),
         )
         .with_entities(Article.id, Article.original_title)
-        .yield_per(_BATCH_SIZE)
+        .all()
     )
-    for article_id, other_title in query:
+    for article_id, other_title in rows:
         other_words = _title_word_set(other_title)
         if jaccard_similarity(candidate_words, other_words) >= threshold:
             matched_ids.append(article_id)

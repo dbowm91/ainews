@@ -2,12 +2,10 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
-from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
 from services.prompts import esc_xml_text
 
 logger = get_task_logger(__name__)
-plog = get_pipeline_logger("research")
 
 # Error response convention:
 # - Leaf tasks: re-raise for Celery retry
@@ -94,9 +92,9 @@ def research_article(self, article_id: int, run_id=None):
                 )
                 web_synthesis = web_synthesis_result.synthesis
                 if web_synthesis_result.used_fallback:
-                    plog.warning(
+                    logger.warning(
                         "Research web synthesis subagent failed, proceeding without synthesis",
-                        article_id=article.id,
+                        extra={"article_id": article.id},
                     )
 
         # DB lookup for related articles
@@ -150,15 +148,6 @@ def research_article(self, article_id: int, run_id=None):
                 brief.impact_score,
                 article_id=article.id,
             )
-
-        plog.info(
-            "Article researched",
-            article_id=article.id,
-            impact_score=brief.impact_score,
-            sources=len(web_results),
-            related=len(related),
-            title=truncate_for_log(article.original_title),
-        )
 
         _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.WRITING)
         return {"article_id": article_id}

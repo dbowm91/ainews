@@ -216,6 +216,7 @@ subagent:
     tools:
       - context_notes
       - related_articles
+      - trend_memory
     system_prompt: |
       You are an editorial contextualizer. Review the draft in light of the research
       brief, topic notes, and related articles to identify gaps, missing attribution,
@@ -241,3 +242,11 @@ subagent:
         - task_type: edit
           prompt_data_template: ""
           condition: "previous.steps[0].success and article.degradation_count == 0"
+
+memory:
+  ttl_days_low: 7
+  ttl_days_medium: 30
+  ttl_days_high: 0
+  consolidation_cooldown_hours: 24
+  max_entries_per_propose: 3
+  consolidation_merge_window_hours: 72

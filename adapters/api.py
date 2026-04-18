@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -7,6 +8,8 @@ import requests
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import APIConfig
 from services.url import validate_url_safe
+
+logger = logging.getLogger(__name__)
 
 
 @register_adapter("api")
@@ -125,8 +128,8 @@ class APIAdapter(BaseSourceAdapter):
             resp = self._session.get(url, timeout=cfg.request_timeout)
             if resp.ok:
                 return resp.json()
-        except Exception:
-            pass
+        except requests.RequestException as e:
+            logger.warning("Failed to fetch item from API: %s", type(e).__name__)
         return None
 
     @staticmethod

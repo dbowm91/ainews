@@ -83,7 +83,13 @@ def get_redis():
         import redis
 
         url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
-        _redis_pool = redis.ConnectionPool.from_url(url, max_connections=50)
+        _redis_pool = redis.ConnectionPool.from_url(
+            url,
+            max_connections=100,
+            socket_timeout=5,
+            socket_connect_timeout=3,
+            socket_keepalive=True,
+        )
         _redis_client = redis.Redis(connection_pool=_redis_pool)
         return _redis_client
 

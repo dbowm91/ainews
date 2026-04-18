@@ -6,9 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ValidationError(Exception):
-    """Raised when final_article validation fails."""
-
+class ValidationError(ValueError):
     pass
 
 

@@ -28,7 +28,7 @@ class DuckDuckGoSearchProvider(BaseSearchProvider):
                     for r in results
                 ]
         except Exception as e:
-            logger.warning("DuckDuckGo search failed for '%s': %s", query, e)
+            logger.warning("DuckDuckGo search failed for '%s': %s", query, type(e).__name__)
             return []
 
     def health_check(self) -> dict[str, Any]:

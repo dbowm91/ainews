@@ -1,15 +1,16 @@
 import logging
-import threading
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
+    ToolCall,
     ToolCallingResponse,
     ToolDefinition,
     register_provider,
 )
+from services.llm.errors import make_error_handler
 
 logger = logging.getLogger(__name__)
 
@@ -17,15 +18,13 @@ logger = logging.getLogger(__name__)
 def _handle_gemini_error(e: Exception) -> Exception:
     """Convert Google Gemini SDK exceptions to our custom exceptions."""
     from google.genai.errors import ClientError
-    from services.llm.errors import handle_provider_error
 
-    return handle_provider_error(
-        e,
+    return make_error_handler(
         "Gemini",
         rate_limit_exc=(ClientError,),
         auth_exc=(),
         timeout_exc=(ConnectionError, TimeoutError),
-    )
+    )(e)
 
 
 @register_provider("gemini")
@@ -35,21 +34,14 @@ class GeminiProvider(BaseLLMProvider):
         cfg = GeminiConfig(**self.config)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
-        self._client = None
-        self._client_lock = threading.Lock()
 
-    @property
-    def client(self):
-        if self._client is None:
-            with self._client_lock:
-                if self._client is None:
-                    from google import genai
+    def _create_client(self):
+        from google import genai
 
-                    self._client = genai.Client(
-                        api_key=self.config.get("api_key"),
-                        http_options={"timeout": 120},
-                    )
-        return self._client
+        return genai.Client(
+            api_key=self.config.get("api_key"),
+            http_options={"timeout": 120},
+        )
 
     def _build_contents(
         self, messages: list[dict[str, str]], system: Optional[str]
@@ -128,6 +120,86 @@ class GeminiProvider(BaseLLMProvider):
             raise _handle_gemini_error(e) from e
         return resp.text or "{}"
 
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        all_messages = list(messages)
+        contents, system_instruction = self._build_contents(all_messages, None)
+        call_kwargs: dict[str, Any] = {
+            "model": model,
+            "contents": contents,
+            "generation_config": {
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+            },
+        }
+        if system_instruction:
+            call_kwargs["system_instruction"] = system_instruction
+        if tools:
+            call_kwargs["tools"] = [
+                {
+                    "function_declarations": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.parameters,
+                        }
+                        for tool in tools
+                    ]
+                }
+            ]
+        try:
+            resp = self.client.models.generate_content(**call_kwargs)
+        except Exception as e:
+            raise _handle_gemini_error(e) from e
+        if not resp.candidates:
+            raise RuntimeError(f"Gemini returned no candidates for model {model}")
+        return resp, resp
+
+    def _extract_text_and_tool_calls(
+        self, response: Any
+    ) -> tuple[str, list[ToolCall]]:
+        candidate = response.candidates[0]
+        content_parts = candidate.content.parts
+        text_content = ""
+        tool_calls = []
+        for part in content_parts:
+            if hasattr(part, "text") and part.text:
+                text_content += part.text
+            if hasattr(part, "function_call") and part.function_call:
+                fc = part.function_call
+                fn_args = {}
+                if hasattr(fc, "args") and fc.args:
+                    fn_args = fc.args
+                tool_calls.append(
+                    ToolCall(
+                        id=fc.id or "",
+                        name=fc.name,
+                        arguments=fn_args,
+                    )
+                )
+        return text_content, tool_calls
+
+    def _format_tool_result(self, tool_call: ToolCall, result_content: str) -> dict:
+        return {
+            "role": "user",
+            "parts": [
+                {
+                    "function_response": {
+                        "id": tool_call.id,
+                        "name": tool_call.name,
+                        "response": {"result": result_content},
+                    }
+                }
+            ],
+        }
+
     def chat_with_tools(
         self,
         messages: list[dict[str, str]],
@@ -139,122 +211,8 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: int,
         max_iterations: int = 5,
     ) -> ToolCallingResponse:
-        model = model or self.default_model
-        all_messages = list(messages)
-        contents, system_instruction = self._build_contents(all_messages, system)
-
-        tool_call_map: dict[str, tuple[str, Callable]] = {}
-        for tool in tools:
-            if hasattr(tool, "fn") and callable(tool.fn):
-                tool_call_map[tool.name] = (tool.name, tool.fn)
-
-        iteration = 0
-        while iteration < max_iterations:
-            iteration += 1
-            call_kwargs: dict[str, Any] = {
-                "model": model,
-                "contents": contents,
-                "generation_config": {
-                    "temperature": temperature,
-                    "max_output_tokens": max_tokens,
-                },
-            }
-            if system_instruction:
-                call_kwargs["system_instruction"] = system_instruction
-            if tools:
-                call_kwargs["tools"] = [
-                    {
-                        "function_declarations": [
-                            {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "parameters": tool.parameters,
-                            }
-                            for tool in tools
-                        ]
-                    }
-                ]
-
-            try:
-                resp = self.client.models.generate_content(**call_kwargs)
-            except Exception as e:
-                raise _handle_gemini_error(e) from e
-
-            if not resp.candidates:
-                raise RuntimeError(f"Gemini returned no candidates for model {model}")
-
-            candidate = resp.candidates[0]
-            content_parts = candidate.content.parts
-
-            text_content = ""
-            function_calls = []
-            for part in content_parts:
-                if hasattr(part, "text") and part.text:
-                    text_content += part.text
-                if hasattr(part, "function_call") and part.function_call:
-                    function_calls.append(part.function_call)
-
-            if not function_calls:
-                usage = resp.usage_metadata
-                tokens_used = usage.total_token_count if usage else 0
-                return ToolCallingResponse(
-                    text=text_content,
-                    model=model,
-                    tool_calls=[],
-                    tokens_used=tokens_used,
-                )
-
-            for fc in function_calls:
-                fn_name = fc.name
-                fn_args = {}
-                if hasattr(fc, "args") and fc.args:
-                    fn_args = fc.args
-                fc_id = fc.id or ""
-
-                tool_call_msg = {
-                    "role": "model",
-                    "parts": [
-                        {
-                            "function_call": {
-                                "id": fc_id,
-                                "name": fn_name,
-                                "args": fn_args,
-                            }
-                        }
-                    ],
-                }
-                contents.append(tool_call_msg)
-
-                result_content = ""
-                if fn_name in tool_call_map:
-                    try:
-                        _, fn = tool_call_map[fn_name]
-                        result_content = str(fn(**fn_args))
-                    except Exception as e:
-                        result_content = f"Error: {e}"
-                else:
-                    result_content = f"Unknown tool: {fn_name}"
-
-                contents.append(
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "function_response": {
-                                    "id": fc_id,
-                                    "name": fn_name,
-                                    "response": {"result": result_content},
-                                }
-                            }
-                        ],
-                    }
-                )
-
-        return ToolCallingResponse(
-            text="",
-            model=model,
-            tool_calls=[],
-            tokens_used=0,
+        return super().chat_with_tools(
+            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations
         )
 
     def health_check(self) -> dict[str, Any]:

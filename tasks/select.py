@@ -2,11 +2,9 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
-from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
 
 logger = get_task_logger(__name__)
-plog = get_pipeline_logger("select")
 
 # Error response convention:
 # - Leaf tasks: re-raise for Celery retry
@@ -86,13 +84,6 @@ def select_article(self, article_id: int, run_id=None):
                     truncate_for_log(article.original_title),
                     article_id=article.id,
                 )
-
-            plog.info(
-                "Article selected",
-                article_id=article.id,
-                score=result.score,
-                title=truncate_for_log(article.original_title),
-            )
             _dispatch_next(
                 article_id, run_id=run_id, next_status=PipelineStatus.RESEARCHING
             )
@@ -115,14 +106,7 @@ def select_article(self, article_id: int, run_id=None):
                     article_id=article.id,
                 )
 
-            plog.info(
-                "Article skipped",
-                article_id=article.id,
-                score=result.score,
-                title=truncate_for_log(article.original_title),
-            )
-
-        return {"article_id": article_id, "result": article.selector_result}
+            return {"article_id": article_id, "result": article.selector_result}
 
     return run_stage(
         "selector",

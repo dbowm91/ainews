@@ -39,7 +39,7 @@ class TestAnthropicProvider:
         try:
             c = provider.client
             assert c is mock_client
-            mock_anthropic.Anthropic.assert_called_once_with(api_key="sk-ant-test")
+            mock_anthropic.Anthropic.assert_called_once_with(api_key="sk-ant-test", timeout=120.0)
         finally:
             sys.modules.pop("anthropic", None)
             if saved_anthropic is not None:

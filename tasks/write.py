@@ -2,11 +2,9 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
-from services.logging_utils import get_pipeline_logger
 from services.llm.errors import ProviderServerError
 
 logger = get_task_logger(__name__)
-plog = get_pipeline_logger("write")
 
 # Error response convention:
 # - Leaf tasks: re-raise for Celery retry
@@ -76,12 +74,6 @@ def write_article(self, article_id: int, run_id=None):
                 truncate_for_log(article.original_title),
                 article_id=article.id,
             )
-
-        plog.info(
-            "Article drafted",
-            article_id=article.id,
-            title=truncate_for_log(article.original_title),
-        )
 
         _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.EDITING)
         return {"article_id": article_id}

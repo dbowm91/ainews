@@ -1,32 +1,31 @@
 import json
 import logging
-import threading
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
+    ToolCall,
     ToolCallingResponse,
     ToolDefinition,
     register_provider,
 )
+from services.llm.errors import make_error_handler
 
 logger = logging.getLogger(__name__)
 
 
 def _handle_ollama_error(e: Exception) -> Exception:
     """Convert ollama SDK exceptions to our custom exceptions."""
-    from services.llm.errors import handle_provider_error
     from ollama import ResponseError
 
-    return handle_provider_error(
-        e,
+    return make_error_handler(
         "Ollama",
         rate_limit_exc=(ResponseError,),
         auth_exc=(),
         timeout_exc=(ConnectionError, TimeoutError),
-    )
+    )(e)
 
 
 @register_provider("ollama")
@@ -37,18 +36,11 @@ class OllamaProvider(BaseLLMProvider):
         self.host = cfg.host
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
-        self._client = None
-        self._client_lock = threading.Lock()
 
-    @property
-    def client(self):
-        if self._client is None:
-            with self._client_lock:
-                if self._client is None:
-                    import ollama
+    def _create_client(self):
+        import ollama
 
-                    self._client = ollama.Client(host=self.host, timeout=120)
-        return self._client
+        return ollama.Client(host=self.host, timeout=120)
 
     def _extract_text(self, resp) -> str:
         message = resp.get("message", {})
@@ -107,6 +99,65 @@ class OllamaProvider(BaseLLMProvider):
             raise _handle_ollama_error(e) from e
         return self._extract_text(resp)
 
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        call_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        if tools:
+            call_kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+                for t in tools
+            ]
+        try:
+            resp = self.client.chat(**call_kwargs)
+        except Exception as e:
+            raise _handle_ollama_error(e) from e
+        return resp, resp
+
+    def _extract_text_and_tool_calls(
+        self, response: Any
+    ) -> tuple[str, list[ToolCall]]:
+        msg = response.get("message", {})
+        content = msg.get("content", "")
+        tool_calls_raw = msg.get("tool_calls") or []
+        tool_calls = []
+        for i, tc in enumerate(tool_calls_raw):
+            fn = tc.get("function", {})
+            fn_args = fn.get("arguments", {})
+            if isinstance(fn_args, str):
+                fn_args = json.loads(fn_args)
+            tool_calls.append(
+                ToolCall(
+                    id=f"call_{i}",  # Ollama doesn't provide ids
+                    name=fn.get("name", ""),
+                    arguments=fn_args,
+                )
+            )
+        return content, tool_calls
+
+    def _format_tool_result(self, tool_call: ToolCall, result_content: str) -> dict:
+        return {
+            "role": "tool",
+            "content": result_content,
+        }
+
     def chat_with_tools(
         self,
         messages: list[dict[str, str]],
@@ -118,94 +169,8 @@ class OllamaProvider(BaseLLMProvider):
         max_tokens: int,
         max_iterations: int = 5,
     ) -> ToolCallingResponse:
-        model = model or self.default_model
-        all_messages = list(messages)
-        if system:
-            all_messages.insert(0, {"role": "system", "content": system})
-
-        tool_call_map: dict[str, tuple[str, Callable]] = {}
-        for tool in tools:
-            if hasattr(tool, "fn") and callable(tool.fn):
-                tool_call_map[tool.name] = (tool.name, tool.fn)
-
-        iteration = 0
-        while iteration < max_iterations:
-            iteration += 1
-            call_kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": all_messages,
-                "options": {"temperature": temperature, "num_predict": max_tokens},
-            }
-            if tools:
-                call_kwargs["tools"] = [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
-                        },
-                    }
-                    for t in tools
-                ]
-
-            try:
-                resp = self.client.chat(**call_kwargs)
-            except Exception as e:
-                raise _handle_ollama_error(e) from e
-
-            msg = resp.get("message", {})
-            content = msg.get("content", "")
-
-            if content:
-                all_messages.append({"role": "assistant", "content": content})
-
-            tool_calls = msg.get("tool_calls") or []
-            if not tool_calls:
-                return ToolCallingResponse(
-                    text=content or "",
-                    model=model,
-                    tool_calls=[],
-                    tokens_used=resp.get("prompt_eval_count", 0)
-                    + resp.get("eval_count", 0),
-                )
-
-            for tc in tool_calls:
-                fn_name = tc.get("function", {}).get("name", "")
-                fn_args = tc.get("function", {}).get("arguments", {})
-                if isinstance(fn_args, str):
-                    fn_args = json.loads(fn_args)
-
-                all_messages.append(
-                    {
-                        "role": "assistant",
-                        "content": content,
-                        "tool_calls": [tc],
-                    }
-                )
-
-                result_content = ""
-                if fn_name in tool_call_map:
-                    try:
-                        _, fn = tool_call_map[fn_name]
-                        result_content = str(fn(**fn_args))
-                    except Exception as e:
-                        result_content = f"Error: {e}"
-                else:
-                    result_content = f"Unknown tool: {fn_name}"
-
-                all_messages.append(
-                    {
-                        "role": "tool",
-                        "content": result_content,
-                    }
-                )
-
-        return ToolCallingResponse(
-            text="",
-            model=model,
-            tool_calls=[],
-            tokens_used=0,
+        return super().chat_with_tools(
+            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations
         )
 
     def health_check(self) -> dict[str, Any]:

@@ -5,6 +5,7 @@ import json
 from celery.utils.log import get_task_logger
 from constants import PipelineStatus, STAGE_STATUS_MAP
 from services.article_fallback import build_fallback_article_json
+from services.pipeline_utils import _log_pipeline, _dispatch_next
 
 logger = get_task_logger(__name__)
 
@@ -98,16 +99,6 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
         except SQLAlchemyError:
             db.session.rollback()
             raise
-        if run_id:
-            from tasks.pipeline import _log_pipeline
-
-            _log_pipeline(
-                run_id,
-                "degradation",
-                "warning",
-                "Multi-stage degradation, routed to review: %s",
-                article_id=article.id,
-            )
         logger.warning(
             "Article %s has degradation_count=%s, routing to review",
             article.id,
@@ -121,8 +112,6 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
         db.session.rollback()
         raise
     if run_id:
-        from tasks.pipeline import _log_pipeline
-
         _log_pipeline(
             run_id,
             STAGE_STATUS_MAP.get(config["next_status"], config["next_status"]),
@@ -130,8 +119,6 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
             config["log_message"],
             article_id=article.id,
         )
-    from tasks.pipeline import _dispatch_next
-
     _dispatch_next(article.id, run_id=run_id, next_status=config["next_status"])
 
 
@@ -139,7 +126,6 @@ def _degrade_edit_stage(article, run_id):
     from extensions import db
     from services.metrics import get_metrics
     from sqlalchemy.exc import SQLAlchemyError
-    from tasks.pipeline import _should_route_to_review
 
     _apply_fallback(article)
     article.degradation_count = (article.degradation_count or 0) + 1
@@ -161,8 +147,6 @@ def _degrade_edit_stage(article, run_id):
             db.session.rollback()
             raise
         if run_id:
-            from tasks.pipeline import _log_pipeline
-
             _log_pipeline(
                 run_id,
                 "edit",
@@ -180,8 +164,6 @@ def _degrade_edit_stage(article, run_id):
         db.session.rollback()
         raise
     if run_id:
-        from tasks.pipeline import _log_pipeline
-
         _log_pipeline(
             run_id,
             "edit",

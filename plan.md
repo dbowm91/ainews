@@ -146,13 +146,13 @@ db.Index("ix_articles_source_id", "source_id"),
 ### W3.2: Add Index on Source.name
 **Priority**: High | **Impact**: Performance | **Effort**: Low
 
-**Files**: `models.py`, new migration
+**Files**: `models.py`, migration `020_article_source_index`
 
-**Status**: COMPLETE — Migration `020_article_source_index` adds `ix_sources_name`
+**Status**: COMPLETE — Migration `020_article_source_index` creates `ix_sources_name`; `models.py:55` has `index=True` on Source.name column
 
 **Problem**: Admin article list sorts sources by name without index.
 
-**Solution**: Add `index=True` to Source.name column or via migration.
+**Solution**: Add `index=True` to Source.name column and create migration to add the database index.
 
 ---
 

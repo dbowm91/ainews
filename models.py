@@ -52,7 +52,7 @@ class Source(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     source_key = db.Column(db.String(64), unique=True, nullable=False)
-    name = db.Column(db.String(128), nullable=False)
+    name = db.Column(db.String(128), nullable=False, index=True)
     url = db.Column(db.String(512))
     feed_url = db.Column(db.String(512))
     source_type = db.Column(db.String(32), nullable=False)

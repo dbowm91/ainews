@@ -12,10 +12,15 @@ def validate_csrf_json(f):
 
     Flask-WTF CSRF only validates form/multipart requests.
     Use this decorator on JSON endpoints to validate X-CSRFToken header.
+
+    Respects WTF_CSRF_ENABLED = False in TestingConfig.
     """
+    from flask import current_app
     from flask_wtf.csrf import validate_csrf
     @wraps(f)
     def decorated(*args, **kwargs):
+        if not current_app.config.get("WTF_CSRF_ENABLED", True):
+            return f(*args, **kwargs)
         token = request.headers.get("X-CSRFToken")
         if not token:
             return jsonify({"error": "CSRF token missing"}), 400

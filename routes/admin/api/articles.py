@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from flask import jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 from constants import PipelineStatus, VALID_PIPELINE_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
 
 @admin_bp.route("/api/articles/bulk", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def bulk_article_operations() -> tuple[Response, int] | Response:
     """Bulk operations on articles: delete, change status, change category, reprocess, add tags."""
     from models import Article

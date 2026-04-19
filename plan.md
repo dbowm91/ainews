@@ -4,6 +4,29 @@
 
 This plan has been fully implemented. All items from Waves 1-8 have been completed.
 **Implementation completed:** April 18, 2026
+**Verification & fixes completed:** April 19, 2026
+
+---
+
+## Post-Implementation Fixes (April 19, 2026)
+
+During verification, the following issues were identified and fixed:
+
+### W5.4: Database Query Logging Not Wired (FIXED)
+- **Issue**: `setup_query_logging()` was defined in `logging_config.py` but never called — SQL query logging listeners were not attached to any engine
+- **Fix**: Moved `setup_query_logging(db.engine)` call inside `app.py:168` within `app.app_context()` where the engine is initialized
+
+### W6.1: JSON API Endpoints CSRF Validation (FIXED)
+- **Issue**: Several JSON API endpoints lacked `@validate_csrf_json` decorator
+- **Fixes applied**:
+  - `/admin/api/articles/bulk` in `routes/admin/api/articles.py`
+  - `/admin/api/newsletter/preview` in `routes/admin/newsletters.py`
+  - `/admin/api/config/reload` in `routes/admin/api/config.py`
+- Also updated `validate_csrf_json` decorator to respect `WTF_CSRF_ENABLED = False` in TestingConfig
+
+### W3.5: Ollama Tool Call ID Synthesis (FIXED)
+- **Issue**: Ollama's `_extract_text_and_tool_calls()` created `ToolCall` with `id=""` (empty string)
+- **Fix**: Added `uuid.uuid4().hex[:12]` based ID synthesis in `services/llm/ollama.py:151`
 
 ---
 

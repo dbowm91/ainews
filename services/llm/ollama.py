@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from typing import Any, Optional
 
 from schemas.common import resolve_env_vars
@@ -145,7 +146,7 @@ class OllamaProvider(BaseLLMProvider):
                 fn_args = json.loads(fn_args)
             tool_calls.append(
                 ToolCall(
-                    id="",
+                    id=f"ollama_{uuid.uuid4().hex[:12]}",
                     name=fn.get("name", ""),
                     arguments=fn_args,
                 )

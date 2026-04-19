@@ -164,6 +164,10 @@ def create_app(config_name=None):
         if config_name != "production":
             db.create_all()
 
+        # Wire query logging after engine is ready (inside app context)
+        from logging_config import setup_query_logging
+        setup_query_logging(db.engine)
+
         _seed_share_configs()
 
     from routes.public import public_bp

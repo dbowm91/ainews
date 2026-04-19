@@ -81,7 +81,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Newsletter idempotency**: Redis key `idempotency:newsletter:{date}` prevents duplicate newsletter generation.
 - **Dead Letter Queue UI**: `/admin/dead-letters` shows failed/stuck articles with bulk reprocess/delete actions.
 - **Dynamic Celery beat schedule**: `Config.get_beat_schedule()` reads from `pipeline.yaml` `schedule:` section. Call `Config.reload_beat_schedule()` to apply changes.
-- **CSRF validation for JSON**: `@validate_csrf_json` decorator in `routes/decorators.py` checks `X-CSRFToken` header for JSON endpoints.
+- **CSRF validation for JSON**: `@validate_csrf_json` decorator in `routes/decorators.py` checks `X-CSRFToken` header for JSON endpoints. Respects `WTF_CSRF_ENABLED = False` in TestingConfig for test compatibility.
 
 ### Subagent system
 

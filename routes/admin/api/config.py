@@ -2,12 +2,14 @@ import logging
 
 from flask import jsonify, Response
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 
 logger = logging.getLogger(__name__)
 
 
 @admin_bp.route("/api/config/reload", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def reload_config() -> tuple[Response, int] | Response:
     from services.config_cache import get_config_cache
     from services.config_unified import validate_config, reset_config

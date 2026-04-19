@@ -2,6 +2,7 @@ import logging
 from flask import render_template, request, jsonify, current_app, g
 from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 from constants import PER_PAGE_NEWSLETTERS
 from extensions import db
 
@@ -152,6 +153,7 @@ def newsletter_dry_run():
 
 @admin_bp.route("/api/newsletter/preview", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def newsletter_preview():
     """Generate newsletter HTML preview without sending emails."""
     from models import Article

@@ -208,6 +208,7 @@ def process_item(
             extracted_text=extracted_text,
             pipeline_status="pending",
             pipeline_started_at=datetime.now(timezone.utc),
+            crawled_at=datetime.now(timezone.utc),
             category=topics[0] if topics else "other",
             topics=topics,
             raw_metadata=raw_metadata or {},
@@ -263,10 +264,11 @@ def process_item(
 
     try:
         _dispatch_next(article.id, run_id=run_id, next_status="pending")
-    except Exception:
+    except Exception as e:
         article.pipeline_status = "failed"
         article.last_error = "Failed to dispatch to pipeline"
         db.session.commit()
-        logger.error("Failed to dispatch select_article for article %s", article.id)
+        logger.error("Failed to dispatch select_article for article %s: %s", article.id, e)
+        raise
 
     return {"article_id": article.id}

@@ -6,6 +6,7 @@ import re
 import socket
 import threading
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
@@ -14,6 +15,8 @@ from services.config_utils import get_config_with_default
 logger = logging.getLogger(__name__)
 
 _DNS_RESOLVE_TIMEOUT = 10  # seconds
+
+_dns_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns_resolver")
 
 # Private/reserved IP ranges that should never be fetched
 _BLOCKED_NETWORKS = [
@@ -50,7 +53,7 @@ class _TTLCache:
     """
 
     def __init__(self, maxsize: int, ttl: float) -> None:
-        self._store: dict[str, tuple[float, list[str]]] = {}
+        self._store: OrderedDict[str, tuple[float, list[str]]] = OrderedDict()
         self._maxsize = maxsize
         self._ttl = ttl
         self._lock = threading.Lock()
@@ -74,9 +77,7 @@ class _TTLCache:
     def set(self, key: str, value: list[str]) -> None:
         with self._lock:
             if len(self._store) >= self._maxsize and key not in self._store:
-                # Evict oldest entry (lowest timestamp)
-                oldest = min(self._store, key=lambda k: self._store[k][0])
-                del self._store[oldest]
+                self._store.popitem(last=False)
             self._store[key] = (time.monotonic(), value)
 
     def clear(self) -> None:
@@ -136,16 +137,13 @@ def _resolve_and_check(hostname: str) -> list[str]:
     if cached is not None:
         return cached
 
-    executor = ThreadPoolExecutor(max_workers=1)
+    future = _dns_executor.submit(socket.getaddrinfo, hostname, None)
     try:
-        future = executor.submit(socket.getaddrinfo, hostname, None)
         addr_infos = future.result(timeout=_DNS_RESOLVE_TIMEOUT)
     except (socket.gaierror, socket.herror, socket.timeout):
         raise UnsafeURLError(f"DNS resolution failed for {hostname}")
     except TimeoutError:
         raise UnsafeURLError(f"DNS resolution timed out for {hostname}")
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
 
     seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
     safe_ips: list[str] = []

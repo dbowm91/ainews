@@ -24,6 +24,8 @@ from schemas.llm_responses import (  # noqa: F401
 
 _TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
+_subagent_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="subagent")
+
 
 def register_tool(definition: ToolDefinition) -> None:
     """Register a tool definition in the global tool registry."""
@@ -414,22 +416,20 @@ def run_subagent(
             ):
                 if attempt > 0:
                     time.sleep(stage_config.retry_delay)
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_call_with_timeout)
-                    try:
-                        result = future.result(timeout=stage_config.timeout_seconds)
-                    except TimeoutError:
-                        future.cancel()
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        logger.warning(
-                            "Subagent %s/%s timed out after %ss",
-                            stage,
-                            task_type,
-                            stage_config.timeout_seconds,
-                        )
-                        raise ProviderTimeoutError(
-                            f"Subagent timed out after {stage_config.timeout_seconds}s"
-                        )
+                future = _subagent_executor.submit(_call_with_timeout)
+                try:
+                    result = future.result(timeout=stage_config.timeout_seconds)
+                except TimeoutError:
+                    future.cancel()
+                    logger.warning(
+                        "Subagent %s/%s timed out after %ss",
+                        stage,
+                        task_type,
+                        stage_config.timeout_seconds,
+                    )
+                    raise ProviderTimeoutError(
+                        f"Subagent timed out after {stage_config.timeout_seconds}s"
+                    )
             break
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
             last_exc = e
@@ -585,25 +585,23 @@ def run_subagent_with_tools(
             ):
                 if attempt > 0:
                     time.sleep(stage_config.retry_delay)
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_call_with_timeout)
-                    try:
-                        tc_resp = future.result(timeout=stage_config.timeout_seconds)
-                        result = response_model.model_validate(
-                            {"synthesis": tc_resp.text}
-                        )
-                    except TimeoutError:
-                        future.cancel()
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        logger.warning(
-                            "Subagent %s/%s timed out after %ss",
-                            stage,
-                            task_type,
-                            stage_config.timeout_seconds,
-                        )
-                        raise ProviderTimeoutError(
-                            f"Subagent timed out after {stage_config.timeout_seconds}s"
-                        )
+                future = _subagent_executor.submit(_call_with_timeout)
+                try:
+                    tc_resp = future.result(timeout=stage_config.timeout_seconds)
+                    result = response_model.model_validate(
+                        {"synthesis": tc_resp.text}
+                    )
+                except TimeoutError:
+                    future.cancel()
+                    logger.warning(
+                        "Subagent %s/%s timed out after %ss",
+                        stage,
+                        task_type,
+                        stage_config.timeout_seconds,
+                    )
+                    raise ProviderTimeoutError(
+                        f"Subagent timed out after {stage_config.timeout_seconds}s"
+                    )
             break
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
             last_exc = e

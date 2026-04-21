@@ -251,4 +251,8 @@ def create_app(config_name=None):
             logger.warning("safe_href validation failed for %s: %s", value, e)
             return "#"
 
+    # Warn if DEBUG is enabled in production context
+    if app.config.get("DEBUG") and config_name == "production":
+        logger.warning("DEBUG mode is enabled - do not use in production")
+
     return app

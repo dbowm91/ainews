@@ -131,6 +131,11 @@ class Article(db.Model):
     )
     scheduled_publish_at = db.Column(db.DateTime, nullable=True, index=True)
 
+    # SLA timestamps
+    crawled_at = db.Column(db.DateTime, nullable=True, index=True)
+    selected_at = db.Column(db.DateTime, nullable=True, index=True)
+    published_at = db.Column(db.DateTime, nullable=True, index=True)
+
     citations = db.relationship(
         "Citation", backref="article", lazy="select", cascade="all, delete-orphan"
     )
@@ -177,6 +182,8 @@ class Newsletter(db.Model):
     html_content = db.Column(db.Text)
     article_count = db.Column(db.Integer, default=0)
     recipients = db.Column(db.Integer, default=0)
+    delivered_count = db.Column(db.Integer, default=0)
+    error_message = db.Column(db.Text, nullable=True)
     generated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     sent_at = db.Column(db.DateTime)
 
@@ -419,6 +426,24 @@ class Webhook(db.Model):
         return f"<Webhook {self.name}>"
 
 
+class WebhookEvent(db.Model):
+    __tablename__ = "webhook_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    webhook_id = db.Column(
+        db.Integer, db.ForeignKey("webhooks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type = db.Column(db.String(64), nullable=False)
+    status_code = db.Column(db.Integer, nullable=True)
+    response_body = db.Column(db.Text, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    attempt_number = db.Column(db.Integer, nullable=False, default=1)
+    delivered_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f"<WebhookEvent webhook_id={self.webhook_id} type={self.event_type}>"
+
+
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
 
@@ -435,3 +460,20 @@ class AuditLog(db.Model):
 
     def __repr__(self):
         return f"<AuditLog {self.action} {self.target_type}:{self.target_id}>"
+
+
+class SearchQuery(db.Model):
+    __tablename__ = "search_queries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    query = db.Column(db.String(256), nullable=False, index=True)
+    results_count = db.Column(db.Integer, nullable=False, default=0)
+    clicked_article_id = db.Column(
+        db.Integer, db.ForeignKey("articles.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    clicked_article = db.relationship("Article", foreign_keys=[clicked_article_id])
+
+    def __repr__(self):
+        return f"<SearchQuery {self.query!r} ({self.results_count} results)>"

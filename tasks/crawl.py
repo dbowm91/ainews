@@ -187,7 +187,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             logger.warning("Failed to release crawl lock for %s", source_id)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+@shared_task(bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=120, time_limit=180)
 def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
     """Aggregate crawl results and update pipeline run stats.
 

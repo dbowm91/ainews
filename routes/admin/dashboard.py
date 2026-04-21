@@ -166,13 +166,30 @@ def dashboard():
     if redis_client:
         cache_data = {
             "pipeline_stats": pipeline_stats,
-            "sources": sources,
+            "sources": [{"id": s.id, "name": s.name, "active": s.active} for s in sources],
             "article_counts": article_counts,
-            "recent": recent,
+            "recent": [
+                {
+                    "id": a.id,
+                    "title": a.original_title,
+                    "pipeline_status": a.pipeline_status,
+                    "source_name": a.source.name if a.source else None,
+                }
+                for a in recent
+            ],
             "llm_info": llm_info,
             "total_subs": total_subs,
             "subs_by_type": subs_by_type,
-            "recent_runs": recent_runs,
+            "recent_runs": [
+                {
+                    "id": r.id,
+                    "status": r.status,
+                    "started_at": r.started_at.isoformat() if r.started_at else None,
+                    "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                    "error_message": r.error_message,
+                }
+                for r in recent_runs
+            ],
             "running_count": running_count,
             "pipeline_health": pipeline_health,
         }

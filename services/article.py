@@ -23,6 +23,19 @@ _TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
 from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402
 from services.pagination import paginate_query, search_fts, _escape_like_pattern  # noqa: F401, E402
 
+
+def _log_search_query(query: str, results_count: int) -> None:
+    """Log a search query to the SearchQuery table."""
+    from models import SearchQuery
+
+    sq = SearchQuery(query=query[:256], results_count=results_count)
+    db.session.add(sq)
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+
+
 # Threshold for Jaccard similarity on title word sets (0–1).
 # Pairs with similarity >= this value are considered duplicates.
 TITLE_SIMILARITY_THRESHOLD = 0.5
@@ -98,7 +111,9 @@ def get_articles_paginated(
     # Use FTS5 for text search when query is provided
     if query:
         try:
-            return search_fts(query, page, per_page, category=category)
+            articles, has_next, next_page = search_fts(query, page, per_page, category=category)
+            _log_search_query(query, len(articles))
+            return articles, has_next, next_page
         except Exception:
             # FTS5 table may not exist yet (e.g., tests, fresh install)
             logger.debug("FTS5 search failed, falling back to ILIKE", exc_info=True)

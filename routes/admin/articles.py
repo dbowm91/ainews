@@ -282,8 +282,8 @@ def edit_article(article_id):
             cache.invalidate_prefix("index")
             cache.invalidate_prefix("topic")
             cache.invalidate_prefix("rss")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to invalidate article cache: %s", e)
 
         return redirect(url_for("admin.articles"))
 

@@ -61,7 +61,7 @@ class GeminiProvider(BaseLLMProvider):
             system_instruction = {"parts": [{"text": system}]}
         return contents, system_instruction
 
-    def chat(
+    def _do_chat(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -72,18 +72,15 @@ class GeminiProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         contents, system_instruction = self._build_contents(messages, system)
-        try:
-            resp = self.client.models.generate_content(
-                model=model,
-                contents=contents,
-                system_instruction=system_instruction,
-                generation_config={
-                    "temperature": temperature,
-                    "max_output_tokens": max_tokens,
-                },
-            )
-        except Exception as e:
-            raise _handle_gemini_error(e) from e
+        resp = self.client.models.generate_content(
+            model=model,
+            contents=contents,
+            system_instruction=system_instruction,
+            generation_config={
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+            },
+        )
         usage = resp.usage_metadata
         tokens_used = usage.total_token_count if usage else 0
         return LLMResponse(
@@ -92,7 +89,20 @@ class GeminiProvider(BaseLLMProvider):
             tokens_used=tokens_used,
         )
 
-    def _chat_with_schema(
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        return self._retry_with_backoff(
+            self._do_chat, messages, model, system, temperature, max_tokens, **kwargs
+        )
+
+    def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
         response_model,
@@ -104,23 +114,35 @@ class GeminiProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         contents, system_instruction = self._build_contents(messages, system)
-        try:
-            resp = self.client.models.generate_content(
-                model=model,
-                contents=contents,
-                system_instruction=system_instruction,
-                generation_config={
-                    "temperature": temperature,
-                    "max_output_tokens": max_tokens,
-                    "response_mime_type": "application/json",
-                    "response_schema": schema,
-                },
-            )
-        except Exception as e:
-            raise _handle_gemini_error(e) from e
+        resp = self.client.models.generate_content(
+            model=model,
+            contents=contents,
+            system_instruction=system_instruction,
+            generation_config={
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+                "response_mime_type": "application/json",
+                "response_schema": schema,
+            },
+        )
         return resp.text or "{}"
 
-    def _call_api_with_tools(
+    def _chat_with_schema(
+        self,
+        messages: list[dict[str, str]],
+        response_model,
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        schema: dict,
+    ) -> str:
+        return self._retry_with_backoff(
+            self._do_chat_with_schema,
+            messages, response_model, model, system, temperature, max_tokens, schema,
+        )
+
+    def _do_call_api_with_tools(
         self,
         model: str,
         messages: list[dict],
@@ -154,13 +176,24 @@ class GeminiProvider(BaseLLMProvider):
                     ]
                 }
             ]
-        try:
-            resp = self.client.models.generate_content(**call_kwargs)
-        except Exception as e:
-            raise _handle_gemini_error(e) from e
+        resp = self.client.models.generate_content(**call_kwargs)
         if not resp.candidates:
             raise RuntimeError(f"Gemini returned no candidates for model {model}")
         return resp, resp
+
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        return self._retry_with_backoff(
+            self._do_call_api_with_tools,
+            model, messages, tools, tool_choice, temperature, max_tokens,
+        )
 
     def _extract_text_and_tool_calls(
         self, response: Any

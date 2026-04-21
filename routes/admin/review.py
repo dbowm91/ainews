@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timezone
+
 from flask import render_template, request, redirect, url_for, jsonify
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -68,12 +70,19 @@ def approve_article(article_id):
     article.pipeline_status = PipelineStatus.DONE
     article.retry_count = 0
     article.last_error = None
+    article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
     try:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"error": "Failed to approve article"}), 500
+
+    if article.crawled_at:
+        sla_duration = (article.published_at - article.crawled_at).total_seconds()
+        from services.metrics import get_metrics
+
+        get_metrics().histogram_observe("pipeline_sla_seconds", sla_duration)
 
     try:
         from services.cache import get_response_cache
@@ -84,8 +93,8 @@ def approve_article(article_id):
         cache.invalidate_prefix("rss")
         if article.category:
             cache.invalidate_prefix(f"topic:{article.category}")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to invalidate article cache: %s", e)
 
     logger.info(
         "Approved article %s: %s", article_id, (article.original_title or "")[:50]

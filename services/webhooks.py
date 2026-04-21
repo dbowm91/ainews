@@ -32,7 +32,7 @@ def _send_webhook_with_retry(
     payload: dict[str, Any],
     secret: str,
     event_type: str,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, int | None, str | None]:
     """Send webhook with exponential backoff retry.
 
     Args:
@@ -42,7 +42,7 @@ def _send_webhook_with_retry(
         event_type: Event type string for the payload
 
     Returns:
-        Tuple of (success, error_message)
+        Tuple of (success, error_message, status_code, response_body)
     """
     body = json.dumps(payload, default=str)
     signature = _sign_payload(body, secret)
@@ -63,7 +63,7 @@ def _send_webhook_with_retry(
                 timeout=30,
             )
             if 200 <= response.status_code < 300:
-                return True, None
+                return True, None, response.status_code, response.text[:5000]
             logger.warning(
                 "Webhook delivery failed for %s (attempt %d): HTTP %d",
                 url,
@@ -74,7 +74,7 @@ def _send_webhook_with_retry(
                 delay = min(BASE_DELAY_SECONDS * (2**attempt), MAX_DELAY_SECONDS)
                 time.sleep(delay)
                 continue
-            return False, f"HTTP {response.status_code}: {response.text[:200]}"
+            return False, f"HTTP {response.status_code}: {response.text[:200]}", response.status_code, response.text[:5000]
         except requests.exceptions.Timeout:
             logger.warning("Webhook timeout for %s (attempt %d)", url, attempt + 1)
             delay = min(BASE_DELAY_SECONDS * (2**attempt), MAX_DELAY_SECONDS)
@@ -89,7 +89,7 @@ def _send_webhook_with_retry(
             delay = min(BASE_DELAY_SECONDS * (2**attempt), MAX_DELAY_SECONDS)
             time.sleep(delay)
 
-    return False, "Max retries exceeded"
+    return False, "Max retries exceeded", None, None
 
 
 def dispatch_webhook(
@@ -114,7 +114,7 @@ def dispatch_webhook(
         Tuple of (success, error_message)
     """
     from extensions import db
-    from models import Webhook
+    from models import Webhook, WebhookEvent
 
     try:
         from services.url import validate_url_safe
@@ -131,7 +131,9 @@ def dispatch_webhook(
         "data": event_data,
     }
 
-    success, error = _send_webhook_with_retry(url, payload, secret, event_type)
+    success, error, status_code, response_body = _send_webhook_with_retry(
+        url, payload, secret, event_type
+    )
 
     webhook = db.session.get(Webhook, webhook_id)
     if webhook:
@@ -144,10 +146,21 @@ def dispatch_webhook(
             webhook.last_failure_at = datetime.now(timezone.utc)
             webhook.failure_count = (webhook.failure_count or 0) + 1
             webhook.last_error = error
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
+
+    event = WebhookEvent(
+        webhook_id=webhook_id,
+        event_type=event_type,
+        status_code=status_code,
+        response_body=response_body[:5000] if response_body else None,
+        error_message=error,
+        attempt_number=1,
+    )
+    db.session.add(event)
+
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
 
     if success:
         logger.info("Webhook '%s' delivered successfully to %s", name, url)

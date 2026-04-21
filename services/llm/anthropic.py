@@ -47,7 +47,7 @@ class AnthropicProvider(BaseLLMProvider):
 
         return Anthropic(api_key=self._api_key, timeout=self._timeout)
 
-    def chat(
+    def _do_chat(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -65,10 +65,7 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
-        try:
-            resp = self.client.messages.create(**call_kwargs)
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        resp = self.client.messages.create(**call_kwargs)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return LLMResponse(
@@ -81,7 +78,20 @@ class AnthropicProvider(BaseLLMProvider):
             ),
         )
 
-    def _chat_with_schema(
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        return self._retry_with_backoff(
+            self._do_chat, messages, model, system, temperature, max_tokens, **kwargs
+        )
+
+    def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
         response_model,
@@ -101,15 +111,27 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
-        try:
-            resp = self.client.beta.messages.create(**call_kwargs)
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        resp = self.client.beta.messages.create(**call_kwargs)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp.content[0].text
 
-    def _call_api_with_tools(
+    def _chat_with_schema(
+        self,
+        messages: list[dict[str, str]],
+        response_model,
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        schema: dict,
+    ) -> str:
+        return self._retry_with_backoff(
+            self._do_chat_with_schema,
+            messages, response_model, model, system, temperature, max_tokens, schema,
+        )
+
+    def _do_call_api_with_tools(
         self,
         model: str,
         messages: list[dict],
@@ -133,13 +155,24 @@ class AnthropicProvider(BaseLLMProvider):
                 }
                 for t in tools
             ]
-        try:
-            resp = self.client.messages.create(**call_kwargs)
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        resp = self.client.messages.create(**call_kwargs)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp, resp
+
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        return self._retry_with_backoff(
+            self._do_call_api_with_tools,
+            model, messages, tools, tool_choice, temperature, max_tokens,
+        )
 
     def _extract_text_and_tool_calls(
         self, response: Any

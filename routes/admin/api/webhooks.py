@@ -223,3 +223,37 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if success:
         return jsonify({"message": "Test webhook delivered successfully"})
     return jsonify({"error": f"Test webhook failed: {error}"}), 500
+
+
+@admin_bp.route("/api/webhooks/<int:webhook_id>/events", methods=["GET"])
+@require_auth
+def list_webhook_events(webhook_id: int) -> Response:
+    """List delivery events for a webhook."""
+    from models import Webhook, WebhookEvent
+    from extensions import db
+
+    _ = db.get_or_404(Webhook, webhook_id)
+
+    events = (
+        WebhookEvent.query.filter_by(webhook_id=webhook_id)
+        .order_by(WebhookEvent.delivered_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    return jsonify(
+        {
+            "events": [
+                {
+                    "id": e.id,
+                    "event_type": e.event_type,
+                    "status_code": e.status_code,
+                    "response_body": e.response_body,
+                    "error_message": e.error_message,
+                    "attempt_number": e.attempt_number,
+                    "delivered_at": e.delivered_at.isoformat() if e.delivered_at else None,
+                }
+                for e in events
+            ]
+        }
+    )

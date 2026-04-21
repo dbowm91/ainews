@@ -1,12 +1,16 @@
 from __future__ import annotations
 import abc
 import logging
+import random
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, TypeVar, Type
 
 from pydantic import BaseModel
 
+from services.circuit_breaker import CircuitOpenError
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
 from services.provider_base import BaseProvider, ProviderManager
 
 logger = logging.getLogger(__name__)
@@ -55,6 +59,10 @@ class ToolCallingResponse:
 class BaseLLMProvider(BaseProvider, abc.ABC):
     default_model: str = ""
 
+    RETRY_BASE_DELAY = 1.0
+    RETRY_MAX_DELAY = 30.0
+    RETRY_MAX_ATTEMPTS = 3
+
     def __init__(self, provider_id: str, config: dict):
         super().__init__(provider_id, config)
         self._client = None
@@ -67,6 +75,54 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 if self._client is None:
                     self._client = self._create_client()
         return self._client
+
+    def _retry_with_backoff(
+        self,
+        func: Callable[..., T],
+        *args: Any,
+        **kwargs: Any,
+    ) -> T:
+        """Execute a function with exponential backoff retry on transient errors.
+
+        Args:
+            func: The function to call (e.g., self._do_chat)
+            *args: Positional arguments for func
+            **kwargs: Keyword arguments for func
+
+        Returns:
+            Result from func
+
+        Raises:
+            RateLimitError: If rate limited after all retries
+            ProviderTimeoutError: If timing out after all retries
+            ProviderServerError: If server error after all retries
+            AuthError: On first attempt (no retry)
+            CircuitOpenError: On first attempt (no retry)
+        """
+        last_exc: Optional[Exception] = None
+        for attempt in range(self.RETRY_MAX_ATTEMPTS):
+            try:
+                return func(*args, **kwargs)
+            except (AuthError, CircuitOpenError):
+                raise
+            except (RateLimitError, ProviderTimeoutError, ProviderServerError) as e:
+                last_exc = e
+                if attempt == self.RETRY_MAX_ATTEMPTS - 1:
+                    break
+                delay = min(
+                    self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),
+                    self.RETRY_MAX_DELAY,
+                )
+                logger.warning(
+                    "%s attempt %d/%d failed: %s. Retrying in %.1fs.",
+                    self.provider_id,
+                    attempt + 1,
+                    self.RETRY_MAX_ATTEMPTS,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+        raise last_exc
 
     @abc.abstractmethod
     def _create_client(self) -> Any:
@@ -270,7 +326,10 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 if isinstance(fn_args, str):
                     import json
 
-                    fn_args = json.loads(fn_args)
+                    try:
+                        fn_args = json.loads(fn_args)
+                    except json.JSONDecodeError:
+                        fn_args = {}
 
                 result_content = ""
                 if fn_name in tool_call_map:

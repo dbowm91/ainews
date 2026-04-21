@@ -52,7 +52,7 @@ class OllamaProvider(BaseLLMProvider):
                 return thinking
         return content or ""
 
-    def chat(
+    def _do_chat(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -63,21 +63,31 @@ class OllamaProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        try:
-            resp = self.client.chat(
-                model=model,
-                messages=msgs,
-                options={"temperature": temperature, "num_predict": max_tokens},
-            )
-        except Exception as e:
-            raise _handle_ollama_error(e) from e
+        resp = self.client.chat(
+            model=model,
+            messages=msgs,
+            options={"temperature": temperature, "num_predict": max_tokens},
+        )
         return LLMResponse(
             text=self._extract_text(resp),
             model=model,
             tokens_used=resp.get("prompt_eval_count", 0) + resp.get("eval_count", 0),
         )
 
-    def _chat_with_schema(
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        return self._retry_with_backoff(
+            self._do_chat, messages, model, system, temperature, max_tokens, **kwargs
+        )
+
+    def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
         response_model,
@@ -89,18 +99,30 @@ class OllamaProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        try:
-            resp = self.client.chat(
-                model=model,
-                messages=msgs,
-                format=schema,
-                options={"temperature": temperature, "num_predict": max_tokens},
-            )
-        except Exception as e:
-            raise _handle_ollama_error(e) from e
+        resp = self.client.chat(
+            model=model,
+            messages=msgs,
+            format=schema,
+            options={"temperature": temperature, "num_predict": max_tokens},
+        )
         return self._extract_text(resp)
 
-    def _call_api_with_tools(
+    def _chat_with_schema(
+        self,
+        messages: list[dict[str, str]],
+        response_model,
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        schema: dict,
+    ) -> str:
+        return self._retry_with_backoff(
+            self._do_chat_with_schema,
+            messages, response_model, model, system, temperature, max_tokens, schema,
+        )
+
+    def _do_call_api_with_tools(
         self,
         model: str,
         messages: list[dict],
@@ -126,11 +148,22 @@ class OllamaProvider(BaseLLMProvider):
                 }
                 for t in tools
             ]
-        try:
-            resp = self.client.chat(**call_kwargs)
-        except Exception as e:
-            raise _handle_ollama_error(e) from e
+        resp = self.client.chat(**call_kwargs)
         return resp, resp
+
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        return self._retry_with_backoff(
+            self._do_call_api_with_tools,
+            model, messages, tools, tool_choice, temperature, max_tokens,
+        )
 
     def _extract_text_and_tool_calls(
         self, response: Any
@@ -143,7 +176,10 @@ class OllamaProvider(BaseLLMProvider):
             fn = tc.get("function", {})
             fn_args = fn.get("arguments", {})
             if isinstance(fn_args, str):
-                fn_args = json.loads(fn_args)
+                try:
+                    fn_args = json.loads(fn_args)
+                except json.JSONDecodeError:
+                    fn_args = {}
             tool_calls.append(
                 ToolCall(
                     id=f"ollama_{uuid.uuid4().hex[:12]}",

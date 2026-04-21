@@ -20,13 +20,26 @@ def cleanup_old_pipeline_logs(self):
     from extensions import db
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    BATCH_SIZE = 10000
+    total_deleted = 0
     try:
-        deleted = PipelineLog.query.filter(PipelineLog.created_at < cutoff).delete(
-            synchronize_session=False
-        )
-        db.session.commit()
-        logger.info("Cleaned up %s pipeline logs older than 30 days", deleted)
-        return {"deleted": deleted}
+        while True:
+            ids = [
+                r.id
+                for r in PipelineLog.query.filter(PipelineLog.created_at < cutoff)
+                .with_entities(PipelineLog.id)
+                .limit(BATCH_SIZE)
+                .all()
+            ]
+            if not ids:
+                break
+            deleted = PipelineLog.query.filter(PipelineLog.id.in_(ids)).delete(
+                synchronize_session=False
+            )
+            total_deleted += deleted
+            db.session.commit()
+        logger.info("Cleaned up %s pipeline logs older than 30 days", total_deleted)
+        return {"deleted": total_deleted}
     except SoftTimeLimitExceeded:
         db.session.rollback()
         logger.error("cleanup_old_pipeline_logs exceeded soft time limit")
@@ -142,14 +155,31 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
                 "articles_affected": len(article_ids),
                 "dry_run": True,
             }
-        deleted = query.delete(synchronize_session=False)
-        db.session.commit()
+        BATCH_SIZE = 10000
+        total_deleted = 0
+        while True:
+            ids = [
+                r.id
+                for r in ArticleVersion.query.filter(
+                    ArticleVersion.created_at < cutoff
+                )
+                .with_entities(ArticleVersion.id)
+                .limit(BATCH_SIZE)
+                .all()
+            ]
+            if not ids:
+                break
+            deleted = ArticleVersion.query.filter(
+                ArticleVersion.id.in_(ids)
+            ).delete(synchronize_session=False)
+            total_deleted += deleted
+            db.session.commit()
         logger.info(
             "Cleaned up %s article versions older than %d days",
-            deleted,
+            total_deleted,
             days_to_keep,
         )
-        return {"deleted": deleted}
+        return {"deleted": total_deleted}
     except SoftTimeLimitExceeded:
         db.session.rollback()
         logger.error("cleanup_old_article_versions exceeded soft time limit")

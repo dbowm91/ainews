@@ -12,6 +12,10 @@ from routes.admin import (
 )
 from extensions import limiter
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _safe_redirect_url(next_url: str) -> str:
     """Return a safe redirect target, falling back to admin dashboard.
@@ -55,8 +59,8 @@ def login():
                 from services.audit import log_admin_action
 
                 log_admin_action("admin_login", user="admin")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("Failed to log admin login action: %s", e)
             next_url = request.args.get("next", "")
             return redirect(_safe_redirect_url(next_url))
         locked = _check_and_record_attempt(ip)
@@ -73,7 +77,7 @@ def logout():
         from services.audit import log_admin_action
 
         log_admin_action("admin_logout", user="admin")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to log admin logout action: %s", e)
     session.pop("admin", None)
     return redirect("/")

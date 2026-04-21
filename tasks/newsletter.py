@@ -200,6 +200,8 @@ def _generate_topic_newsletter_impl(
         return {"type": topic_key, "articles": count, "sent": 0, "error": email_error}
 
     newsletter.recipients = sent
+    newsletter.delivered_count = sent if sent > 0 else 0
+    newsletter.error_message = email_error
     newsletter.sent_at = datetime.now(timezone.utc) if sent > 0 else None
     try:
         db.session.commit()
@@ -211,6 +213,7 @@ def _generate_topic_newsletter_impl(
         "type": topic_key,
         "articles": count,
         "sent": sent,
+        "delivered": newsletter.delivered_count,
         **pipeline_info,
     }
     if is_dry_run:

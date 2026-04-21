@@ -43,7 +43,7 @@
       <span class="meta-separator">&middot;</span>
     {% endif %}
     {% if article.original_author %}
-      <span class="card-author">{{ article.original_author }}</span>
+      <span class="card-author">{{ article.original_author | e }}</span>
       <span class="meta-separator">&middot;</span>
     {% endif %}
     <span class="card-time-relative">{{ article.created_at.strftime('%b %d, %Y') if article.created_at }}</span>

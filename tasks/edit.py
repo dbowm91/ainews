@@ -1,4 +1,5 @@
 import threading
+from datetime import datetime, timezone
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
@@ -226,11 +227,18 @@ def edit_article(self, article_id: int, run_id=None):
             return {"article_id": article_id, "status": "review"}
 
         article.pipeline_status = PipelineStatus.DONE
+        article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
             raise
+
+        if article.crawled_at:
+            sla_duration = (article.published_at - article.crawled_at).total_seconds()
+            from services.metrics import get_metrics
+
+            get_metrics().histogram_observe("pipeline_sla_seconds", sla_duration)
 
         if run_id:
             _log_pipeline(

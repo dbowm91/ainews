@@ -11,4 +11,5 @@ from routes.admin.api import (  # noqa: E402, F401
     articles,
     webhooks,
     audit,
+    search,
 )

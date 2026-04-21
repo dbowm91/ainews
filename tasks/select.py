@@ -1,6 +1,7 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
+from datetime import datetime, timezone
 from constants import PipelineStatus, truncate_for_log
 from services.llm.errors import ProviderServerError
 
@@ -65,6 +66,7 @@ def select_article(self, article_id: int, run_id=None):
 
         if result.selected and result.score >= (rc.min_score or 6):
             article.pipeline_status = PipelineStatus.RESEARCHING
+            article.selected_at = datetime.now(timezone.utc).replace(tzinfo=None)
             if run_id:
                 run = db.session.get(PipelineRun, run_id)
                 if run:

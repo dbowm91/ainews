@@ -51,7 +51,7 @@ class OpenAIProvider(BaseLLMProvider):
 
         return OpenAI(**self._client_kwargs)
 
-    def chat(
+    def _do_chat(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -62,15 +62,12 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        try:
-            resp = self.client.chat.completions.create(
-                model=model,
-                messages=msgs,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        except Exception as e:
-            raise _handle_openai_error(e)
+        resp = self.client.chat.completions.create(
+            model=model,
+            messages=msgs,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return LLMResponse(
@@ -83,7 +80,20 @@ class OpenAIProvider(BaseLLMProvider):
             ),
         )
 
-    def _chat_with_schema(
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        return self._retry_with_backoff(
+            self._do_chat, messages, model, system, temperature, max_tokens, **kwargs
+        )
+
+    def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
         response_model,
@@ -95,28 +105,40 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        try:
-            resp = self.client.chat.completions.create(
-                model=model,
-                messages=msgs,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "response",
-                        "strict": True,
-                        "schema": schema,
-                    },
+        resp = self.client.chat.completions.create(
+            model=model,
+            messages=msgs,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "strict": True,
+                    "schema": schema,
                 },
-            )
-        except Exception as e:
-            raise _handle_openai_error(e)
+            },
+        )
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message.content or "{}"
 
-    def _call_api_with_tools(
+    def _chat_with_schema(
+        self,
+        messages: list[dict[str, str]],
+        response_model,
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        schema: dict,
+    ) -> str:
+        return self._retry_with_backoff(
+            self._do_chat_with_schema,
+            messages, response_model, model, system, temperature, max_tokens, schema,
+        )
+
+    def _do_call_api_with_tools(
         self,
         model: str,
         messages: list[dict],
@@ -149,13 +171,24 @@ class OpenAIProvider(BaseLLMProvider):
                 if tool_choice != "auto"
                 else "auto"
             )
-        try:
-            resp = self.client.chat.completions.create(**call_kwargs)
-        except Exception as e:
-            raise _handle_openai_error(e)
+        resp = self.client.chat.completions.create(**call_kwargs)
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message, resp
+
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]:
+        return self._retry_with_backoff(
+            self._do_call_api_with_tools,
+            model, messages, tools, tool_choice, temperature, max_tokens,
+        )
 
     def _extract_text_and_tool_calls(
         self, response: Any
@@ -166,7 +199,10 @@ class OpenAIProvider(BaseLLMProvider):
             for tc in msg.tool_calls:
                 fn_args = tc.function.arguments
                 if isinstance(fn_args, str):
-                    fn_args = json.loads(fn_args)
+                    try:
+                        fn_args = json.loads(fn_args)
+                    except json.JSONDecodeError:
+                        fn_args = {}
                 tool_calls.append(
                     ToolCall(
                         id=tc.id,

@@ -126,9 +126,106 @@ def sources_health() -> Response:
                     if s.last_success_at
                     else None,
                     "last_error": s.last_error,
-                    "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
+                    "disabled_at": s.last_error.isoformat() if s.last_error else None,
                 }
                 for s in sources
             ]
+        }
+    )
+
+
+@admin_bp.route("/api/pipeline/sla")
+@require_auth
+def pipeline_sla() -> Response:
+    """Return SLA metrics for article processing."""
+    from models import Article
+    from datetime import datetime, timezone, timedelta
+    from services.metrics import get_metrics
+
+    days = request.args.get("days", 7, type=int)
+    days = max(1, min(days, 30))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    articles = (
+        Article.query.filter(
+            Article.published_at.isnot(None),
+            Article.published_at >= cutoff,
+        )
+        .order_by(Article.published_at.desc())
+        .all()
+    )
+
+    total_count = len(articles)
+    if total_count == 0:
+        return jsonify(
+            {
+                "period_days": days,
+                "article_count": 0,
+                "sla": {
+                    "crawl_to_select_avg": None,
+                    "crawl_to_select_p50": None,
+                    "crawl_to_select_p95": None,
+                    "select_to_publish_avg": None,
+                    "select_to_publish_p50": None,
+                    "select_to_publish_p95": None,
+                    "crawl_to_publish_avg": None,
+                    "crawl_to_publish_p50": None,
+                    "crawl_to_publish_p95": None,
+                },
+                "histogram": get_metrics().get_metrics().get("histograms", {}).get(
+                    "pipeline_sla_seconds", {}
+                ),
+            }
+        )
+
+    crawl_to_select = []
+    select_to_publish = []
+    crawl_to_publish = []
+
+    for a in articles:
+        if a.crawled_at and a.selected_at:
+            delta = (a.selected_at - a.crawled_at).total_seconds()
+            if delta >= 0:
+                crawl_to_select.append(delta)
+        if a.selected_at and a.published_at:
+            delta = (a.published_at - a.selected_at).total_seconds()
+            if delta >= 0:
+                select_to_publish.append(delta)
+        if a.crawled_at and a.published_at:
+            delta = (a.published_at - a.crawled_at).total_seconds()
+            if delta >= 0:
+                crawl_to_publish.append(delta)
+
+    def pct(data, p):
+        if not data:
+            return None
+        sorted_data = sorted(data)
+        idx = int(len(sorted_data) * p)
+        idx = min(idx, len(sorted_data) - 1)
+        return round(sorted_data[idx], 1)
+
+    def avg(data):
+        if not data:
+            return None
+        return round(sum(data) / len(data), 1)
+
+    return jsonify(
+        {
+            "period_days": days,
+            "article_count": total_count,
+            "sla": {
+                "crawl_to_select_avg": avg(crawl_to_select),
+                "crawl_to_select_p50": pct(crawl_to_select, 0.50),
+                "crawl_to_select_p95": pct(crawl_to_select, 0.95),
+                "select_to_publish_avg": avg(select_to_publish),
+                "select_to_publish_p50": pct(select_to_publish, 0.50),
+                "select_to_publish_p95": pct(select_to_publish, 0.95),
+                "crawl_to_publish_avg": avg(crawl_to_publish),
+                "crawl_to_publish_p50": pct(crawl_to_publish, 0.50),
+                "crawl_to_publish_p95": pct(crawl_to_publish, 0.95),
+            },
+            "histogram": get_metrics().get_metrics().get("histograms", {}).get(
+                "pipeline_sla_seconds", {}
+            ),
         }
     )

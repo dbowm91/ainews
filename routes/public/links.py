@@ -32,7 +32,10 @@ def article_detail(article_id: int) -> Response:
         )
         return resp
 
-    article = Article.query.options(joinedload(Article.tags)).get_or_404(article_id)
+    article = Article.query.options(
+        joinedload(Article.tags),
+        joinedload(Article.source)
+    ).get_or_404(article_id)
     parse_article_json(article)
 
     track_metric(article_id, ArticleMetric.page_loads)

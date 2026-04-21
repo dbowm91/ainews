@@ -9,6 +9,7 @@ import json
 import logging
 import threading
 import time
+from collections import OrderedDict
 from typing import Any, Callable, Optional
 
 import redis.exceptions
@@ -36,12 +37,12 @@ class ResponseCache:
     Implements LRU eviction when the in-memory cache reaches max size.
     """
 
-    _memory: dict[str, tuple[float, float, str]]
+    _memory: OrderedDict[str, tuple[float, float, str]]
 
     def __init__(self, redis_client, prefix: str = "ainews:cache"):
         self._redis = redis_client
         self.prefix = prefix
-        self._memory = {}
+        self._memory = OrderedDict()
         self._hits = 0
         self._misses = 0
         self._memory_lock = threading.Lock()
@@ -71,6 +72,7 @@ class ResponseCache:
             if time.monotonic() < expires_at:
                 with self._memory_lock:
                     self._memory[full_key] = (expires_at, time.monotonic(), raw)
+                    self._memory.move_to_end(full_key)
                 self._hits += 1
                 return json.loads(raw)
             with self._memory_lock:
@@ -101,9 +103,7 @@ class ResponseCache:
                 len(self._memory) >= _get_l1_cache_maxsize()
                 and full_key not in self._memory
             ):
-                # Evict least recently used entry (lowest access_time)
-                lru_key = min(self._memory, key=lambda k: self._memory[k][1])
-                del self._memory[lru_key]
+                self._memory.popitem(last=False)
             self._memory[full_key] = (time.monotonic() + ttl, time.monotonic(), raw)
 
         # L2: Redis

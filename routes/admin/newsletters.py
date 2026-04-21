@@ -151,6 +151,49 @@ def newsletter_dry_run():
         return jsonify({"error": "Failed to start dry run"}), 503
 
 
+@admin_bp.route("/api/newsletters/stats", methods=["GET"])
+@require_auth
+def newsletters_stats():
+    """Return newsletter delivery statistics."""
+    from models import Newsletter
+    from sqlalchemy import case, func
+
+    stats = db.session.query(
+        func.count(Newsletter.id).label("total"),
+        func.sum(Newsletter.recipients).label("total_recipients"),
+        func.sum(Newsletter.delivered_count).label("total_delivered"),
+        func.sum(case((Newsletter.error_message.isnot(None), 1), else_=0)).label("total_errors"),
+    ).one()
+
+    recent = (
+        Newsletter.query
+        .order_by(Newsletter.generated_at.desc())
+        .limit(30)
+        .all()
+    )
+
+    return jsonify({
+        "total_newsletters": stats.total or 0,
+        "total_recipients": stats.total_recipients or 0,
+        "total_delivered": stats.total_delivered or 0,
+        "total_with_errors": stats.total_errors or 0,
+        "recent": [
+            {
+                "id": nl.id,
+                "newsletter_type": nl.newsletter_type,
+                "subject": nl.subject,
+                "article_count": nl.article_count,
+                "recipients": nl.recipients,
+                "delivered_count": nl.delivered_count,
+                "error_message": nl.error_message,
+                "generated_at": nl.generated_at.isoformat() if nl.generated_at else None,
+                "sent_at": nl.sent_at.isoformat() if nl.sent_at else None,
+            }
+            for nl in recent
+        ],
+    })
+
+
 @admin_bp.route("/api/newsletter/preview", methods=["POST"])
 @require_auth
 @validate_csrf_json

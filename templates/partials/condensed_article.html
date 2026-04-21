@@ -13,7 +13,7 @@
     <span class="meta-time">{{ article.created_at.strftime('%b %d, %Y') if article.created_at }}</span>
     {% if article.original_author %}
       <span class="meta-separator">&middot;</span>
-      <span class="meta-author">{{ article.original_author }}</span>
+      <span class="meta-author">{{ article.original_author | e }}</span>
     {% endif %}
     {{ share_button(article, share_configs, request, 'detail-' ~ article.id) }}
   </div>

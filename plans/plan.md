@@ -5,7 +5,7 @@
 This plan consolidates pending improvements from previous planning sessions. All items from Waves 1-8 (plan.md root) have been completed. This plan covers Performance (from plan2.md), Observability & Resilience (from plan3.md), and Security (from plan4.md).
 
 **Created:** April 21, 2026
-**Status:** Draft
+**Status:** COMPLETED (April 21, 2026)
 
 ---
 
@@ -489,18 +489,12 @@ LLM calls that fail with transient errors (rate limits, timeouts, 5xx errors) ar
 
 **Location:** `celery_app.py`, `services/metrics.py`
 
-**Problem:**
-Celery task events (started, succeeded, failed, retry) are not captured for monitoring. While `CELERY_TASK_SEND_SENT_EVENT=True` is set, there's no consumer processing these events into metrics.
+**Status:** DEFERRED. This requires significant infrastructure work:
+- Setting up `celery.events.ReabilityMonitor` or pubsub consumer
+- Streaming events to Redis
+- Updating `MetricsCollector` with task-specific metrics
 
-**Impact:** No visibility into task durations, failure rates, queue depth.
-
-**Fix:**
-1. Use `celery.events.ReabilityMonitor` or `celery.pubsub` to capture task events
-2. Stream events to Redis (separate channel) for processing by a dedicated monitor task
-3. Update `MetricsCollector` with task-specific counters and histograms:
-   - `celery.tasks.succeeded` (counter)
-   - `celery.tasks.failed` (counter with task name label)
-   - `celery.task.duration` (histogram with task name label)
+The implementation is complex and invasive. Given the plan's guidance about avoiding rewrites of complex code from scratch, this item should be documented as deferred in the plan status but NOT implemented as a stub.
 
 **Files affected:** `celery_app.py`, `services/metrics.py`, `tasks/monitor.py` (new)
 

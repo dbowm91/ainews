@@ -1,6 +1,6 @@
 <tr>
   <td>
-    <strong>{{ s.name }}</strong>
+    <strong>{{ s.name | e }}</strong>
     <br><small class="text-muted">{{ s.source_key }}</small>
   </td>
   <td>{{ s.source_type }}</td>
@@ -23,7 +23,7 @@
   <td>{{ s.last_success_at.strftime('%b %d %H:%M') if s.last_success_at else '—' }}</td>
   <td>
     {% if s.last_error %}
-      <small title="{{ s.last_error }}" class="text-muted">{{ s.last_error[:80] }}{% if s.last_error|length > 80 %}...{% endif %}</small>
+      <small title="{{ s.last_error | e }}" class="text-muted">{{ s.last_error[:80] | e }}{% if s.last_error|length > 80 %}...{% endif %}</small>
     {% else %}
       <span class="text-muted">—</span>
     {% endif %}

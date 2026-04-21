@@ -82,6 +82,12 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Dead Letter Queue UI**: `/admin/dead-letters` shows failed/stuck articles with bulk reprocess/delete actions.
 - **Dynamic Celery beat schedule**: `Config.get_beat_schedule()` reads from `pipeline.yaml` `schedule:` section. Call `Config.reload_beat_schedule()` to apply changes.
 - **CSRF validation for JSON**: `@validate_csrf_json` decorator in `routes/decorators.py` checks `X-CSRFToken` header for JSON endpoints. Respects `WTF_CSRF_ENABLED = False` in TestingConfig for test compatibility.
+- **LLM retry with backoff**: `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff. Does not retry on `AuthError`.
+- **Article SLA tracking**: Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns SLA metrics.
+- **Newsletter delivery tracking**: Newsletter model has `delivered_count` and `error_message` fields. Admin endpoint `GET /admin/api/newsletters/stats` returns delivery stats.
+- **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
+- **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events.
+- **DEBUG warning in production**: `app.py` logs a warning if `DEBUG=True` in production context.
 
 ### Subagent system
 
@@ -289,13 +295,15 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **In-memory cache tuple format**: When adding LRU eviction to `ResponseCache` with access time tracking, the memory cache format changed from 2-tuple `(expires_at, raw)` to 3-tuple `(expires_at, access_time, raw)`. Tests that directly manipulate `_memory` must use the new format.
 
-**`ResponseCache` L1 cache**: Currently uses plain `dict` with O(n) `min()` eviction when at capacity. Plan A.3 in `plans/plan.md` covers converting to `OrderedDict` for O(1) eviction. Do not add additional cache eviction changes — the OrderedDict change is pending.
+**`ResponseCache` L1 cache**: Uses `OrderedDict` with `popitem(last=False)` for O(1) FIFO eviction. The access time tracking is maintained but eviction is now oldest-by-insertion rather than oldest-by-access.
+
+**`services/url.py:_TTLCache`**: Uses `OrderedDict` with `popitem(last=False)` for O(1) FIFO eviction.
 
 **`ModelLimiter` slot leak**: If both release attempts fail with Redis errors, the slot leaks until TTL expires. This is acknowledged behavior with explicit logging. A metric is emitted for monitoring.
 
 **`run_all_sources` blocking**: Uses `result.get(timeout=360)` which blocks the calling Celery worker thread. Celery chord for non-blocking aggregation was implemented.
 
-**`services/url.py:_TTLCache`**: Docstring claims LRU eviction but implements oldest-first (FIFO) eviction via `min()` on timestamps. DNS cache behavior is acceptable — docstring was corrected to describe FIFO behavior.
+**`services/url.py:_TTLCache`**: Uses `OrderedDict` with `popitem(last=False)` for O(1) FIFO eviction.
 
 **Pre-compiled regex patterns**: When using `re.findall()` or `re.sub()` in frequently-called functions, pre-compile the pattern at module level as `_NAME_RE = re.compile(r"...")` and use `pattern.findall(text)` or `pattern.sub(replacement, text)`. This avoids re-compilation on every call.
 
@@ -309,7 +317,7 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Limiter acquire with timeout**: `ModelLimiter.acquire()` now polls with exponential backoff (0.05s → 0.5s) up to the timeout. Redis errors on acquire still fail closed (return False). Don't change this behavior — fail closed is intentional.
 
-**Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates.
+**Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates. Added `joinedload(Article.source)` to prevent N+1 query on source access.
 
 **Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Always grep/search to verify before starting related work.
 
@@ -321,23 +329,24 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Consolidated plan structure**: The `plans/plan.md` now consolidates all pending items from plan2.md (Performance), plan3.md (Observability & Resilience), and plan4.md (Security). Items are organized into waves (A-G) with parallelization opportunities within each phase.
 
-**Silent exception swallowing patterns**: Several locations in the codebase use `except Exception: pass` which silently swallows errors. Key locations identified:
-- `routes/admin/auth.py:58,76` — audit logging failures
-- `routes/admin/articles.py:285` — cache invalidation failures
-- `tasks/extract.py:266` — dispatch failure (breaks Celery retry)
+**Silent exception swallowing patterns**: Several locations in the codebase had `except Exception: pass` which silently swallowed errors. These have been fixed to log failures instead:
+- `routes/admin/auth.py:58,76` — audit logging failures (now logs with logger.error)
+- `routes/admin/articles.py:285` — cache invalidation failures (now logs with logger.warning)
+- `routes/admin/review.py:87` — cache invalidation failures (now logs with logger.warning)
+- `tasks/extract.py:266` — dispatch failure (now re-raises to enable Celery retry)
 
-**Template XSS patterns**: Database fields rendered in templates without escaping:
+**Template XSS patterns**: Database fields rendered in templates without escaping have been fixed with `|e` filter:
 - `templates/admin/partials/source_row.html:3,26` — `s.name`, `s.last_error`
 - `templates/partials/article_card.html:46` — `article.original_author`
 - `templates/partials/condensed_article.html:16` — `article.original_author`
 - `templates/admin/topic_notes.html:27,33` — `topic`, `source` in value attributes
 
-**LLM tool call argument parsing**: `json.loads()` is called without error handling in:
-- `services/llm/base.py:273` — `tc.arguments`
-- `services/llm/openai.py:169` — `tc.function.arguments`
-- `services/llm/ollama.py:146` — `fn.get("arguments", "{}")`
+**LLM tool call argument parsing**: `json.loads()` calls now have defensive error handling in:
+- `services/llm/base.py:273` — wrapped in try/except, returns `{}` on error
+- `services/llm/openai.py:169` — wrapped in try/except, returns `{}` on error
+- `services/llm/ollama.py:146` — wrapped in try/except, returns `{}` on error
 
-**Celery task timeout gaps**: `aggregate_crawl_results` in `tasks/crawl.py:190` lacks `soft_time_limit` and `time_limit`.
+**Celery task timeout gaps**: `aggregate_crawl_results` in `tasks/crawl.py:190` now has `soft_time_limit=120, time_limit=180`.
 
 ## Critical patterns
 

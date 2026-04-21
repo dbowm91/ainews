@@ -44,9 +44,12 @@ Each stage is a Celery task in `tasks/` with:
 SQLite (WAL mode) is intentional — workload is read-heavy (articles written once by Celery, served thousands of times by Flask). PostgreSQL adds operational overhead with no benefit at this scale.
 
 **Key models:**
-- `Article` — main article record with `pipeline_status`, `final_article` JSON field
+- `Article` — main article record with `pipeline_status`, `final_article` JSON field, and SLA timestamps (`crawled_at`, `selected_at`, `published_at`)
 - `Source` — RSS/API feed sources with health tracking (`consecutive_failures`, `disabled_at`)
 - `Subscriber` — newsletter subscribers with topic preferences
+- `Newsletter` — newsletter records with `delivered_count` and `error_message`
+- `SearchQuery` — search analytics with query, results_count, clicked_article_id
+- `WebhookEvent` — webhook delivery history (status_code, response_body, error_message)
 - `PipelineRun` / `PipelineLog` — pipeline execution audit trail
 - `TopicNote` — manual editor notes per topic
 - `TrendMemory` — LLM-judged persistent memory entries
@@ -63,6 +66,8 @@ All providers implement `BaseLLMProvider` from `services/llm/base.py`. Registere
 - `services/llm/errors.py` — error classification (rate limit, auth, server error, timeout)
 
 **Timeouts:** OpenAI uses `_client_kwargs["timeout"]=120.0`; Anthropic uses `self._timeout=120.0` passed to client constructor. All LLM calls should have explicit timeouts.
+
+**LLM Retry with Backoff:** `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff (base=1s, max=30s). Does NOT retry on `AuthError` or `CircuitOpenError`. Applied to all provider methods via `_do_*` / `_*` internal method pattern.
 
 ## Subagent System
 
@@ -85,8 +90,8 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 - `run-all-sources` — crawl all sources every 30 min
 - `retry-stuck-articles` — retry/dead-letter stuck articles every 60 min
 - `generate-newsletters` — daily at 8:00 AM
-- `cleanup-old-logs` — daily at 3:00 AM
-- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup)
+- `cleanup-old-logs` — daily at 3:00 AM (chunked deletes, 10k rows per batch)
+- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup, chunked deletes)
 - `consolidate-trend-memory` — daily at 3:30 AM
 - `cleanup-expired-verifications` — every 15 min
 - `publish-scheduled-articles` — every 5 min
@@ -136,8 +141,9 @@ def _get_something() -> int:
 | `services/logging_utils.py` | PipelineLogger, `log_pipeline_event()`, `log_article_event()` |
 | `services/article_validation.py` | `ValidationError(ValueError)`, `validate_final_article()` |
 | `routes/admin/__init__.py` | Admin blueprint, `@require_auth`, login lockout |
-| `routes/admin/api/` | Admin API endpoints (health, config, pipeline, articles, webhooks) |
-| `routes/public/feeds.py` | Public feed routes, RSS generation |
+| `routes/admin/api/` | Admin API endpoints (health, config, pipeline, articles, webhooks, search) |
+| `routes/admin/dashboard.py` | Dashboard with serialized cache (plain dicts, not model instances) |
+| `routes/public/feeds.py` | Public feed routes, RSS generation, search with analytics logging |
 | `routes/decorators.py` | `commit()` helper, `commit_or_rollback()` context manager |
 | `tasks/newsletter.py` | Newsletter generation and email delivery |
 | `tasks/extract.py` | Article extraction from crawled content |
@@ -197,6 +203,14 @@ Available in tasks via `get_task_request_id()` from `services/logging_utils.py`.
 ## Dead Letter Queue UI
 
 Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
+
+## SLA Tracking & Analytics
+
+**Article SLA:** Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns processing time metrics (avg, p50, p95) for crawl→select, select→publish, and crawl→publish durations.
+
+**Newsletter delivery:** Newsletter model has `delivered_count` and `error_message`. Admin endpoint `GET /admin/api/newsletters/stats` returns aggregate delivery stats.
+
+**Search analytics:** `SearchQuery` model tracks searches with result counts and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
 
 ## Dynamic Celery Beat Schedule
 

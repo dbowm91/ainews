@@ -303,8 +303,6 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **`run_all_sources` blocking**: Uses `result.get(timeout=360)` which blocks the calling Celery worker thread. Celery chord for non-blocking aggregation was implemented.
 
-**`services/url.py:_TTLCache`**: Uses `OrderedDict` with `popitem(last=False)` for O(1) FIFO eviction.
-
 **Pre-compiled regex patterns**: When using `re.findall()` or `re.sub()` in frequently-called functions, pre-compile the pattern at module level as `_NAME_RE = re.compile(r"...")` and use `pattern.findall(text)` or `pattern.sub(replacement, text)`. This avoids re-compilation on every call.
 
 **Eager loading for list queries**: When querying collections that will access related objects (source, tags), use `joinedload()` to avoid N+1 queries:
@@ -322,31 +320,6 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Always grep/search to verify before starting related work.
 
 **Plans directory**: The `plans/` directory contains historical implementation plans. When reviewing plans, always verify against the actual codebase — items marked as "already correct" may have regressed, and items marked as "pending" may have been fixed since the plan was written.
-
-## Consolidation session lessons learned
-
-**Verify cache implementation in code, not just documentation**: The agents.md incorrectly claimed `ResponseCache` already uses `OrderedDict` for O(1) eviction, but the actual code uses `min()` with O(n) eviction. Always verify implementation status by reading the actual code.
-
-**Consolidated plan structure**: The `plans/plan.md` now consolidates all pending items from plan2.md (Performance), plan3.md (Observability & Resilience), and plan4.md (Security). Items are organized into waves (A-G) with parallelization opportunities within each phase.
-
-**Silent exception swallowing patterns**: Several locations in the codebase had `except Exception: pass` which silently swallowed errors. These have been fixed to log failures instead:
-- `routes/admin/auth.py:58,76` — audit logging failures (now logs with logger.error)
-- `routes/admin/articles.py:285` — cache invalidation failures (now logs with logger.warning)
-- `routes/admin/review.py:87` — cache invalidation failures (now logs with logger.warning)
-- `tasks/extract.py:266` — dispatch failure (now re-raises to enable Celery retry)
-
-**Template XSS patterns**: Database fields rendered in templates without escaping have been fixed with `|e` filter:
-- `templates/admin/partials/source_row.html:3,26` — `s.name`, `s.last_error`
-- `templates/partials/article_card.html:46` — `article.original_author`
-- `templates/partials/condensed_article.html:16` — `article.original_author`
-- `templates/admin/topic_notes.html:27,33` — `topic`, `source` in value attributes
-
-**LLM tool call argument parsing**: `json.loads()` calls now have defensive error handling in:
-- `services/llm/base.py:273` — wrapped in try/except, returns `{}` on error
-- `services/llm/openai.py:169` — wrapped in try/except, returns `{}` on error
-- `services/llm/ollama.py:146` — wrapped in try/except, returns `{}` on error
-
-**Celery task timeout gaps**: `aggregate_crawl_results` in `tasks/crawl.py:190` now has `soft_time_limit=120, time_limit=180`.
 
 ## Critical patterns
 

@@ -289,9 +289,7 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **In-memory cache tuple format**: When adding LRU eviction to `ResponseCache` with access time tracking, the memory cache format changed from 2-tuple `(expires_at, raw)` to 3-tuple `(expires_at, access_time, raw)`. Tests that directly manipulate `_memory` must use the new format.
 
-**Celery task exception swallowing**: Celery tasks that catch `Exception` and return instead of re-raising will NOT trigger Celery's built-in retry mechanism. Use `raise` after logging to allow retries. See `tasks/crawl.py` exception handler pattern.
-
-**`ResponseCache` L1 cache**: Already implements LRU eviction using `OrderedDict` with `_L1_CACHE_MAXSIZE` (1000). Do not add unbounded-growth fixes — it's already correct.
+**`ResponseCache` L1 cache**: Currently uses plain `dict` with O(n) `min()` eviction when at capacity. Plan A.3 in `plans/plan.md` covers converting to `OrderedDict` for O(1) eviction. Do not add additional cache eviction changes — the OrderedDict change is pending.
 
 **`ModelLimiter` slot leak**: If both release attempts fail with Redis errors, the slot leaks until TTL expires. This is acknowledged behavior with explicit logging. A metric is emitted for monitoring.
 
@@ -316,6 +314,30 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Always grep/search to verify before starting related work.
 
 **Plans directory**: The `plans/` directory contains historical implementation plans. When reviewing plans, always verify against the actual codebase — items marked as "already correct" may have regressed, and items marked as "pending" may have been fixed since the plan was written.
+
+## Consolidation session lessons learned
+
+**Verify cache implementation in code, not just documentation**: The agents.md incorrectly claimed `ResponseCache` already uses `OrderedDict` for O(1) eviction, but the actual code uses `min()` with O(n) eviction. Always verify implementation status by reading the actual code.
+
+**Consolidated plan structure**: The `plans/plan.md` now consolidates all pending items from plan2.md (Performance), plan3.md (Observability & Resilience), and plan4.md (Security). Items are organized into waves (A-G) with parallelization opportunities within each phase.
+
+**Silent exception swallowing patterns**: Several locations in the codebase use `except Exception: pass` which silently swallows errors. Key locations identified:
+- `routes/admin/auth.py:58,76` — audit logging failures
+- `routes/admin/articles.py:285` — cache invalidation failures
+- `tasks/extract.py:266` — dispatch failure (breaks Celery retry)
+
+**Template XSS patterns**: Database fields rendered in templates without escaping:
+- `templates/admin/partials/source_row.html:3,26` — `s.name`, `s.last_error`
+- `templates/partials/article_card.html:46` — `article.original_author`
+- `templates/partials/condensed_article.html:16` — `article.original_author`
+- `templates/admin/topic_notes.html:27,33` — `topic`, `source` in value attributes
+
+**LLM tool call argument parsing**: `json.loads()` is called without error handling in:
+- `services/llm/base.py:273` — `tc.arguments`
+- `services/llm/openai.py:169` — `tc.function.arguments`
+- `services/llm/ollama.py:146` — `fn.get("arguments", "{}")`
+
+**Celery task timeout gaps**: `aggregate_crawl_results` in `tasks/crawl.py:190` lacks `soft_time_limit` and `time_limit`.
 
 ## Critical patterns
 

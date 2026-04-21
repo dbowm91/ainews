@@ -27,8 +27,8 @@ class TestCrawlSource:
     @patch("extensions.get_redis")
     def test_skipped_when_locked(self, mock_get_redis, app):
         mock_redis = MagicMock()
-        mock_redis.set.return_value = False
-        mock_redis.get.return_value = b"other-task"
+        mock_script = MagicMock(return_value=0)
+        mock_redis.register_script.return_value = mock_script
         mock_get_redis.return_value = mock_redis
 
         cfg = {
@@ -149,8 +149,8 @@ class TestCrawlSource:
     ):
         """Lock held by different task should skip."""
         mock_redis = MagicMock()
-        mock_redis.set.return_value = False
-        mock_redis.get.return_value = b"other-task-id"
+        mock_script = MagicMock(return_value=0)
+        mock_redis.register_script.return_value = mock_script
         mock_get_redis.return_value = mock_redis
 
         with app.app_context():

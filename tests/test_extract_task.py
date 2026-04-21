@@ -60,7 +60,7 @@ class TestProcessItem:
 
         assert "article_id" in result
         assert result.get("duplicate") is not True
-        mock_select.delay.assert_called_once()
+        mock_select.apply_async.assert_called_once()
 
     @patch("tasks.select.select_article")
     @patch("services.crawling.get_or_create_source")
@@ -87,7 +87,7 @@ class TestProcessItem:
             result = _call_process_item(text_content="fallback text content")
 
         assert "article_id" in result
-        mock_select.delay.assert_called_once()
+        mock_select.apply_async.assert_called_once()
 
     @patch("tasks.select.select_article")
     @patch("services.crawling.get_or_create_source")
@@ -107,7 +107,7 @@ class TestProcessItem:
 
         assert result["article_id"] == 42
         assert result["duplicate"] is True
-        mock_select.delay.assert_not_called()
+        mock_select.apply_async.assert_not_called()
 
     @patch("tasks.select.select_article")
     @patch("services.crawling.get_or_create_source")
@@ -132,4 +132,4 @@ class TestProcessItem:
             result = _call_process_item(url=None, text_content="text from feed")
 
         assert "article_id" in result
-        mock_select.delay.assert_called_once()
+        mock_select.apply_async.assert_called_once()

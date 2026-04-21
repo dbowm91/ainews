@@ -5,7 +5,7 @@
 This plan consolidates pending improvements from previous planning sessions. All items from Waves 1-8 (plan.md root) have been completed. This plan covers Performance (from plan2.md), Observability & Resilience (from plan3.md), and Security (from plan4.md).
 
 **Created:** April 21, 2026
-**Status:** COMPLETED (April 21, 2026)
+**Status:** COMPLETED (April 21, 2026) - All waves completed
 
 ---
 
@@ -504,15 +504,13 @@ The implementation is complex and invasive. Given the plan's guidance about avoi
 
 **Location:** `services/webhooks.py`
 
-**Status:** Partially implemented. `_send_webhook_with_retry()` already exists with exponential backoff. However:
-- No `webhook_events` table for delivery history
-- No admin UI for webhook delivery history
+**Status:** ✅ COMPLETED
+- `WebhookEvent` model exists for delivery history
+- Events are logged with status_code, response_body, error_message, attempt_number
+- Admin UI at `/admin/webhooks` with event history display
+- API endpoint `GET /admin/api/webhooks/<webhook_id>/events` returns events
 
-**Fix:**
-1. Add `WebhookEvent` model for delivery history
-2. Admin UI for webhook delivery status
-
-**Files affected:** `models.py` (new model), `services/webhooks.py`, `routes/admin/` (new)
+**Files affected:** `models.py`, `services/webhooks.py`, `routes/admin/webhooks.py`, `routes/admin/api/webhooks.py`, `templates/admin/webhooks.html`, `templates/admin/partials/webhook_events.html`
 
 ---
 

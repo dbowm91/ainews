@@ -204,6 +204,10 @@ Available in tasks via `get_task_request_id()` from `services/logging_utils.py`.
 
 Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
 
+## Webhook Management UI
+
+Admin UI at `/admin/webhooks` displays configured webhooks with event history. Click "events" button to view delivery history (status codes, errors, timestamps). Click "test" to send a test webhook event. API endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
+
 ## SLA Tracking & Analytics
 
 **Article SLA:** Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns processing time metrics (avg, p50, p95) for crawl→select, select→publish, and crawl→publish durations.

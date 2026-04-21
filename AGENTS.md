@@ -86,7 +86,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Article SLA tracking**: Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns SLA metrics.
 - **Newsletter delivery tracking**: Newsletter model has `delivered_count` and `error_message` fields. Admin endpoint `GET /admin/api/newsletters/stats` returns delivery stats.
 - **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
-- **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events.
+- **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin UI at `/admin/webhooks` displays webhook list and event history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
 - **DEBUG warning in production**: `app.py` logs a warning if `DEBUG=True` in production context.
 
 ### Subagent system

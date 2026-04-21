@@ -1,0 +1,105 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — webhooks{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">webhooks</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">webhooks</h1>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    {% if webhooks %}
+      <div class="table-responsive">
+      <table class="dash-table" aria-label="Webhooks list">
+        <thead>
+          <tr><th>name</th><th>url</th><th>events</th><th>status</th><th>last triggered</th><th>failures</th><th>actions</th></tr>
+        </thead>
+        <tbody>
+          {% for w in webhooks %}
+            <tr>
+              <td><strong>{{ w.name | e }}</strong></td>
+              <td><code class="text-sm">{{ w.url[:50] | e }}{% if w.url|length > 50 %}...{% endif %}</code></td>
+              <td>
+                {% if w.events %}
+                  {% for event in w.events %}
+                    <span class="tag-pill">{{ event | e }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">none</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if w.active %}
+                  <span class="pipeline-badge pipeline-done">active</span>
+                {% else %}
+                  <span class="pipeline-badge pipeline-skipped">inactive</span>
+                {% endif %}
+              </td>
+              <td>{{ w.last_triggered_at.strftime('%b %d %H:%M') if w.last_triggered_at else '—' }}</td>
+              <td>
+                {% if w.failure_count > 0 %}
+                  <span class="{% if w.failure_count >= 5 %}text-danger{% endif %}">{{ w.failure_count }}</span>
+                {% else %}
+                  <span class="text-muted">0</span>
+                {% endif %}
+              </td>
+              <td>
+                <button class="btn-sm"
+                        hx-get="/admin/api/webhooks/{{ w.id }}/events"
+                        hx-target="#webhook-events-{{ w.id }}"
+                        hx-swap="innerHTML"
+                        aria-label="View events for {{ w.name | e }}">events</button>
+                <button class="btn-sm"
+                        hx-post="/admin/api/webhooks/{{ w.id }}/test"
+                        hx-target="#webhook-test-{{ w.id }}"
+                        hx-swap="innerHTML"
+                        aria-label="Test webhook {{ w.name | e }}">test</button>
+              </td>
+            </tr>
+            <tr id="webhook-events-{{ w.id }}" class="webhook-events-row" style="display:none;">
+              <td colspan="7">
+                <div id="webhook-test-{{ w.id }}" class="mb-1"></div>
+                <div class="webhook-events-container">
+                  <h4>delivery events</h4>
+                  <div class="webhook-events-loading">loading events...</div>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M32 8L56 24V56H8V24L32 8Z" stroke="currentColor" stroke-width="2"/>
+          <circle cx="32" cy="36" r="8" stroke="currentColor" stroke-width="2"/>
+          <path d="M32 16V28" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <span>no webhooks configured</span>
+      </div>
+    {% endif %}
+  </section>
+</div>
+
+<script>
+document.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.target.id && evt.detail.target.id.startsWith('webhook-events-')) {
+    evt.detail.target.style.display = 'table-row';
+    const loading = evt.detail.target.querySelector('.webhook-events-loading');
+    if (loading) {
+      loading.remove();
+    }
+  }
+});
+</script>
+{% endblock %}

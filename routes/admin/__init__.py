@@ -257,5 +257,6 @@ from routes.admin import (  # noqa: E402, F401
     shares as shares,
     sources as sources,
     topic_notes as topic_notes,
+    webhooks as webhooks,
     api as api,
 )

@@ -231,6 +231,7 @@ def list_webhook_events(webhook_id: int) -> Response:
     """List delivery events for a webhook."""
     from models import Webhook, WebhookEvent
     from extensions import db
+    from flask import request
 
     _ = db.get_or_404(Webhook, webhook_id)
 
@@ -240,6 +241,12 @@ def list_webhook_events(webhook_id: int) -> Response:
         .limit(100)
         .all()
     )
+
+    # Return HTML for HTMX requests, JSON for API calls
+    if request.headers.get("HX-Request"):
+        from flask import render_template
+
+        return render_template("admin/partials/webhook_events.html", events=events)
 
     return jsonify(
         {

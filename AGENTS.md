@@ -183,7 +183,9 @@ The login lockout mechanism has two code paths: primary Redis-based (via Lua scr
 
 ### Session fixation prevention
 
-On successful admin login, use `session.clear()` followed by `session.regenerate_id()` before setting `session["admin"] = True`. Simply popping and setting the admin key without regenerating the session ID allows session fixation attacks. See `routes/admin/auth.py:55-58`.
+On successful admin login, use `session.clear()` before setting `session["admin"] = True`. Flask will issue a new session cookie on the next response after the session is modified. See `routes/admin/auth.py:55-57`.
+
+**Note**: `session.clear()` is sufficient for session fixation prevention in Flask 3.x. The `SecureCookieSession` class does not have a `regenerate_id()` method.
 
 ### Pipeline retry budget
 

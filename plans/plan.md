@@ -32,7 +32,7 @@ All implementation waves (1-7) have been completed:
 
 ### Wave 1: Quick Security Fixes ✅
 - DNS Cache TTL reduced to 60s
-- Session fixation prevention (session.regenerate_id())
+- Session fixation prevention (session.clear() — Flask 3.x SecureCookieSession does not have regenerate_id())
 - Subagent chain escaping (_escape_prompt_data)
 - Token validation for unsubscribe/verify
 - Tool result sanitization (esc_xml_text)

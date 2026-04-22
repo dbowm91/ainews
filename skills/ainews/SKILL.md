@@ -229,7 +229,7 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **XSS**: LLM-generated content in templates must use `|e` filter
 - **Prompt injection**: Prompt data auto-escaped via `_escape_prompt_data()`
 - **SSRF**: All URLs validated via `validate_url_safe()` before fetching
-- **Session fixation**: Admin login uses `session.clear()` before setting `session["admin"]`
+- **Session fixation**: Admin login uses `session.clear()` + `session.regenerate_id()` before setting `session["admin"]`
 - **eval() replacement**: Subagent conditions use AST-based parser
 - **Webhook secrets**: Masked in API responses via `_mask_secret()`
 - **Redis credentials**: Preserved via `urlparse`/`urlunparse` when switching DBs

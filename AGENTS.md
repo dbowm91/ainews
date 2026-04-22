@@ -317,10 +317,6 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates. Added `joinedload(Article.source)` to prevent N+1 query on source access.
 
-**Verify implementation status against codebase**: Don't assume plan documents accurately reflect implementation state. Always grep/search to verify before starting related work.
-
-**Plans directory**: The `plans/` directory contains historical implementation plans. When reviewing plans, always verify against the actual codebase — items marked as "already correct" may have regressed, and items marked as "pending" may have been fixed since the plan was written.
-
 ## Critical patterns
 
 ### Celery tasks must not use `current_app.config`

@@ -15,7 +15,7 @@
                 <br><small class="text-muted">{{ article._fa.tldr[:120]|e }}</small>
               {% endif %}
             </td>
-            <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+            <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
             <td>
               {% if article.impact_score %}
                 <span class="impact-score impact-{% if article.impact_score >= 75 %}high{% elif article.impact_score >= 50 %}mid{% elif article.impact_score >= 25 %}low{% else %}minor{% endif %}">

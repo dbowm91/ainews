@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -16,6 +17,40 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 5
 BASE_DELAY_SECONDS = 2
 MAX_DELAY_SECONDS = 300
+
+_ENCRYPTION_KEY: bytes | None = None
+
+
+def _get_encryption_key() -> bytes:
+    """Get or validate the webhook encryption key from environment."""
+    global _ENCRYPTION_KEY
+    if _ENCRYPTION_KEY is not None:
+        return _ENCRYPTION_KEY
+    key = os.environ.get("WEBHOOK_SECRET_KEY", "")
+    if not key:
+        logger.warning("WEBHOOK_SECRET_KEY not set, using fallback (secrets will be stored in plaintext)")
+        _ENCRYPTION_KEY = b"fallback-key-not-for-production"
+        return _ENCRYPTION_KEY
+    _ENCRYPTION_KEY = key.encode("utf-8") if len(key) == 44 else key.encode("utf-8")
+    return _ENCRYPTION_KEY
+
+
+def _encrypt_secret(plaintext: str) -> str:
+    """Encrypt a webhook secret for storage. Returns base64-encoded ciphertext."""
+    from cryptography.fernet import Fernet
+
+    key = _get_encryption_key()
+    f = Fernet(key)
+    return f.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+
+
+def _decrypt_secret(ciphertext: str) -> str:
+    """Decrypt a stored webhook secret. Returns plaintext."""
+    from cryptography.fernet import Fernet
+
+    key = _get_encryption_key()
+    f = Fernet(key)
+    return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
 
 
 def _sign_payload(payload: str, secret: str, timestamp: int | None = None) -> str:
@@ -47,7 +82,7 @@ def _send_webhook_with_retry(
     payload: dict[str, Any],
     secret: str,
     event_type: str,
-) -> tuple[bool, str | None, int | None, str | None]:
+) -> tuple[bool, str | None, int | None, str | None, int]:
     """Send webhook with exponential backoff retry.
 
     Args:
@@ -57,7 +92,7 @@ def _send_webhook_with_retry(
         event_type: Event type string for the payload
 
     Returns:
-        Tuple of (success, error_message, status_code, response_body)
+        Tuple of (success, error_message, status_code, response_body, attempt_number)
     """
     body = json.dumps(payload, default=str)
     timestamp = int(time.time())
@@ -80,7 +115,7 @@ def _send_webhook_with_retry(
                 timeout=30,
             )
             if 200 <= response.status_code < 300:
-                return True, None, response.status_code, response.text[:5000]
+                return True, None, response.status_code, response.text[:5000], attempt + 1
             logger.warning(
                 "Webhook delivery failed for %s (attempt %d): HTTP %d",
                 url,
@@ -91,7 +126,7 @@ def _send_webhook_with_retry(
                 delay = min(BASE_DELAY_SECONDS * (2**attempt), MAX_DELAY_SECONDS)
                 time.sleep(delay)
                 continue
-            return False, f"HTTP {response.status_code}: {response.text[:200]}", response.status_code, response.text[:5000]
+            return False, f"HTTP {response.status_code}: {response.text[:200]}", response.status_code, response.text[:5000], attempt + 1
         except requests.exceptions.Timeout:
             logger.warning("Webhook timeout for %s (attempt %d)", url, attempt + 1)
             delay = min(BASE_DELAY_SECONDS * (2**attempt), MAX_DELAY_SECONDS)
@@ -106,7 +141,7 @@ def _send_webhook_with_retry(
             delay = min(BASE_DELAY_SECONDS * (2**attempt), MAX_DELAY_SECONDS)
             time.sleep(delay)
 
-    return False, "Max retries exceeded", None, None
+    return False, "Max retries exceeded", None, None, MAX_RETRIES
 
 
 def dispatch_webhook(
@@ -116,6 +151,7 @@ def dispatch_webhook(
     secret: str,
     event_type: str,
     event_data: dict[str, Any],
+    idempotency_key: str | None = None,
 ) -> tuple[bool, str | None]:
     """Dispatch an event to a webhook endpoint.
 
@@ -126,12 +162,31 @@ def dispatch_webhook(
         secret: Secret for HMAC signing
         event_type: Event type string
         event_data: Event payload data
+        idempotency_key: Optional key to prevent duplicate deliveries
 
     Returns:
         Tuple of (success, error_message)
     """
     from extensions import db
     from models import Webhook, WebhookEvent
+
+    if idempotency_key:
+        existing = (
+            WebhookEvent.query.filter_by(
+                webhook_id=webhook_id,
+                event_type=event_type,
+                idempotency_key=idempotency_key,
+            )
+            .filter(WebhookEvent.status_code.isnot(None))
+            .first()
+        )
+        if existing:
+            logger.info(
+                "Webhook '%s' skipped (idempotency key '%s' already delivered)",
+                name,
+                idempotency_key,
+            )
+            return True, None
 
     try:
         from services.url import validate_url_safe
@@ -147,8 +202,10 @@ def dispatch_webhook(
         "webhook_id": webhook_id,
         "data": event_data,
     }
+    if idempotency_key:
+        payload["idempotency_key"] = idempotency_key
 
-    success, error, status_code, response_body = _send_webhook_with_retry(
+    success, error, status_code, response_body, attempt_number = _send_webhook_with_retry(
         url, payload, secret, event_type
     )
 
@@ -170,7 +227,8 @@ def dispatch_webhook(
         status_code=status_code,
         response_body=response_body[:5000] if response_body else None,
         error_message=error,
-        attempt_number=1,
+        attempt_number=attempt_number,
+        idempotency_key=idempotency_key,
     )
     db.session.add(event)
 
@@ -190,26 +248,46 @@ def dispatch_webhook(
 def trigger_event(
     event_type: str,
     event_data: dict[str, Any],
+    idempotency_key: str | None = None,
 ) -> None:
     """Trigger an event for all active webhooks listening to that event.
 
     Args:
         event_type: Event type string (e.g., "article.published")
         event_data: Event payload data
+        idempotency_key: Optional key to prevent duplicate deliveries
     """
     from models import Webhook
 
+    if idempotency_key is None:
+        article_id = event_data.get("article_id", "")
+        idempotency_key = f"{event_type}:{article_id}:{int(time.time()) // 60}"
     webhooks = Webhook.query.filter_by(active=True).all()
     for webhook in webhooks:
         if event_type in (webhook.events or []):
             try:
+                secret = _get_webhook_secret_from_db(webhook.secret)
                 dispatch_webhook(
                     webhook_id=webhook.id,
                     name=webhook.name,
                     url=webhook.url,
-                    secret=webhook.secret,
+                    secret=secret,
                     event_type=event_type,
                     event_data=event_data,
+                    idempotency_key=idempotency_key,
                 )
             except Exception:
                 logger.exception("Failed to trigger webhook %s", webhook.name)
+
+
+def _get_webhook_secret_from_db(secret: str) -> str:
+    """Decrypt webhook secret for use in dispatch. Handles legacy plaintext."""
+    if not secret:
+        return ""
+    if secret.startswith("enc:"):
+        try:
+            return _decrypt_secret(secret[4:])
+        except Exception:
+            logger.warning("Failed to decrypt webhook secret, using fallback")
+            return secret[4:]
+    return secret

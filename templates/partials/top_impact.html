@@ -11,7 +11,7 @@
            hx-target="#content" hx-swap="innerHTML" hx-push-url="true"
            class="top-impact-card">
           <div class="top-impact-meta">
-            <span class="category-badge cat-{{ article.category }}">{{ article.category }}</span>
+            <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
             <span class="card-time">{{ article.created_at.strftime('%b %d') if article.created_at }}</span>
           </div>
           <span class="top-impact-headline">

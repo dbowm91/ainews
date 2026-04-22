@@ -82,7 +82,7 @@
               <tr>
                 <td>{{ loop.index }}</td>
                 <td><a href="/article/{{ article.id }}" target="_blank" class="article-link" title="{{ article.original_title }}">{{ article.original_title if article.original_title }}</a></td>
-                <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+                <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                 <td><strong>{{ views }}</strong></td>
               </tr>
             {% endfor %}
@@ -108,7 +108,7 @@
               <tr>
                 <td>{{ loop.index }}</td>
                 <td><a href="/article/{{ article.id }}" target="_blank" class="article-link" title="{{ article.original_title }}">{{ article.original_title if article.original_title }}</a></td>
-                <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+                <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                 <td><strong>{{ clicks }}</strong></td>
               </tr>
             {% endfor %}
@@ -134,7 +134,7 @@
               <tr>
                 <td>{{ loop.index }}</td>
                 <td><a href="/article/{{ article.id }}" target="_blank" class="article-link" title="{{ article.original_title }}">{{ article.original_title if article.original_title }}</a></td>
-                <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+                <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                 <td><strong>{{ link_views }}</strong></td>
               </tr>
             {% endfor %}

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
     from schemas.topic import load_topics
+    from services.audit import log_admin_action
 
     new_category = data.get("category", "").strip()
     if not new_category:
@@ -27,6 +28,18 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
     except SQLAlchemyError:
         db.session.rollback()
         return jsonify({"error": "Failed to update articles"}), 500
+    try:
+        log_admin_action(
+            "article_bulk_set_category",
+            target_type="article",
+            details={
+                "count": len(articles),
+                "ids": [a.id for a in articles],
+                "category": new_category,
+            },
+        )
+    except Exception:
+        logger.warning("Audit logging failed for article_bulk_set_category")
     return jsonify(
         {"message": f"Updated {len(articles)} articles to category '{new_category}'"}
     )
@@ -34,6 +47,7 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
 
 def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     from tasks.select import select_article
+    from services.audit import log_admin_action
 
     for article in articles:
         article.pipeline_status = PipelineStatus.PENDING
@@ -66,6 +80,18 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             failed_ids.append(article.id)
 
     if failed_ids:
+        try:
+            log_admin_action(
+                "article_bulk_reprocess",
+                target_type="article",
+                details={
+                    "count": len(articles),
+                    "dispatched": dispatched,
+                    "failed_ids": failed_ids,
+                },
+            )
+        except Exception:
+            logger.warning("Audit logging failed for article_bulk_reprocess")
         return jsonify(
             {
                 "message": f"Partial success: {dispatched} dispatched, {len(failed_ids)} failed",
@@ -74,6 +100,17 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             }
         ), 207
 
+    try:
+        log_admin_action(
+            "article_bulk_reprocess",
+            target_type="article",
+            details={
+                "count": len(articles),
+                "dispatched": dispatched,
+            },
+        )
+    except Exception:
+        logger.warning("Audit logging failed for article_bulk_reprocess")
     return jsonify(
         {"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
     )
@@ -82,6 +119,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
 def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
     from tasks.pipeline import _assign_tags
     from tasks.edit import clear_tag_cache
+    from services.audit import log_admin_action
 
     tag_names = data.get("tags", [])
     if not tag_names or not isinstance(tag_names, list):
@@ -98,6 +136,18 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
         return jsonify({"error": "Failed to add tags"}), 500
 
     clear_tag_cache()
+    try:
+        log_admin_action(
+            "article_bulk_add_tags",
+            target_type="article",
+            details={
+                "count": len(articles),
+                "ids": [a.id for a in articles],
+                "tags": tag_names,
+            },
+        )
+    except Exception:
+        logger.warning("Audit logging failed for article_bulk_add_tags")
     return jsonify(
         {"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"}
     )

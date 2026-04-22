@@ -438,6 +438,7 @@ class WebhookEvent(db.Model):
     response_body = db.Column(db.Text, nullable=True)
     error_message = db.Column(db.Text, nullable=True)
     attempt_number = db.Column(db.Integer, nullable=False, default=1)
+    idempotency_key = db.Column(db.String(64), nullable=True, index=True)
     delivered_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):

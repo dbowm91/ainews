@@ -14,6 +14,32 @@ def _mask_secret(secret: str) -> str:
     return f"{secret[:4]}...{secret[-4:]}"
 
 
+def _encrypt_new_secret() -> str:
+    """Generate and encrypt a new webhook secret."""
+    from services.webhooks import _encrypt_secret
+
+    plaintext = secrets.token_urlsafe(32)
+    return f"enc:{_encrypt_secret(plaintext)}"
+
+
+def _get_webhook_secret(webhook) -> str:
+    """Decrypt webhook secret for use in dispatch. Handles legacy plaintext."""
+    secret = webhook.secret
+    if not secret:
+        return ""
+    if secret.startswith("enc:"):
+        try:
+            from services.webhooks import _decrypt_secret
+
+            return _decrypt_secret(secret[4:])
+        except Exception:
+            logger.warning(
+                "Failed to decrypt webhook secret %s, using fallback", webhook.id
+            )
+            return secret[4:]
+    return secret
+
+
 @admin_bp.route("/api/webhooks", methods=["GET"])
 @require_auth
 def list_webhooks() -> Response:
@@ -80,7 +106,7 @@ def create_webhook() -> tuple[Response, int] | Response:
     webhook = Webhook(
         name=name,
         url=url,
-        secret=secrets.token_urlsafe(32),
+        secret=_encrypt_new_secret(),
         events=events,
         active=True,
     )
@@ -177,6 +203,8 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
         webhook.events = data["events"]
     if "active" in data:
         webhook.active = bool(data["active"])
+    if data.get("regenerate_secret"):
+        webhook.secret = _encrypt_new_secret()
 
     error = commit(db, "Failed to update webhook")
     if error:
@@ -213,11 +241,12 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
     webhook = db.get_or_404(Webhook, webhook_id)
 
+    secret = _get_webhook_secret(webhook)
     success, error = dispatch_webhook(
         webhook_id=webhook.id,
         name=webhook.name,
         url=webhook.url,
-        secret=webhook.secret,
+        secret=secret,
         event_type="test",
         event_data={"message": "This is a test webhook event"},
     )

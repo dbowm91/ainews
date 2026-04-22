@@ -1,3 +1,4 @@
+import json
 import threading
 from datetime import datetime, timezone
 
@@ -257,6 +258,28 @@ def edit_article(self, article_id: int, run_id=None):
         except Exception:
             logger.warning(
                 "propose_trend_memory failed for article %s, continuing",
+                article.id,
+            )
+
+        try:
+            from services.webhooks import trigger_event
+
+            trigger_event(
+                "article.published",
+                {
+                    "article_id": article.id,
+                    "headline": (
+                        json.loads(article.final_article).get("headline", "")
+                        if article.final_article
+                        else ""
+                    ),
+                    "category": article.category,
+                    "impact_score": article.impact_score,
+                },
+            )
+        except Exception:
+            logger.warning(
+                "Webhook trigger failed for article %s, continuing",
                 article.id,
             )
 

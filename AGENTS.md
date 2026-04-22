@@ -332,6 +332,14 @@ prompt = template.format(**prompt_data_escaped)
 
 **Webhook CSRF gaps**: `PUT /api/webhooks/<id>` and `DELETE /api/webhooks/<id>` in `routes/admin/api/webhooks.py` are missing `@validate_csrf_json`. The test endpoint (line 205) has it but update/delete do not.
 
+**Webhook encryption at rest**: Webhook secrets are encrypted using Fernet (AES-128-CBC) when stored in the database. New secrets are encrypted with prefix `enc:` and legacy plaintext secrets are supported. Key is configured via `WEBHOOK_SECRET_KEY` env var. See `services/webhooks.py:_encrypt_secret()` and `_decrypt_secret()`.
+
+**Webhook idempotency keys**: `dispatch_webhook()` accepts an optional `idempotency_key` parameter. When provided, duplicate deliveries (same webhook_id + event_type + idempotency_key) are silently skipped. `trigger_event()` generates per-minute granularity idempotency keys (e.g., `article.published:123:1745330400`). See `services/webhooks.py:dispatch_webhook()`.
+
+**Webhook trigger_event integration**: `trigger_event()` is called from `tasks/edit.py` (on article finalization) and `tasks/newsletter.py` (on newsletter sent). Events are only dispatched to active webhooks subscribed to the event type. See `services/webhooks.py:trigger_event()`.
+
+**Config cache API key isolation**: `ConfigCache` now uses a separate Redis connection pool configurable via `CONFIG_CACHE_REDIS_URL` / `CONFIG_CACHE_REDIS_PASSWORD` env vars. Default Redis DB is 1 (separate from Celery broker at db 0). This isolates config cache blast radius from the main cache. See `services/config_cache.py:get_config_cache()`.
+
 **short_id path validation**: `routes/public/links.py:74,81` uses `short_id` directly in queries without regex validation. Add format validation:
 ```python
 _SHORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
@@ -339,7 +347,9 @@ if not _SHORT_ID_RE.match(short_id):
     abort(404)
 ```
 
-**ModelLimiter soft timeout**: `services/limiter.py` does not release slots when `SoftTimeLimitExceeded` is raised. Add explicit slot release in task exception handlers before re-raising.
+**Category CSS escaping**: All `category-badge` class values in templates must use the `|e` filter to prevent CSS class injection. The category value comes from the database and could contain malicious content. Found in `templates/partials/condensed_article.html:11`, `templates/admin/partials/review_table.html:18`, `templates/admin/partials/articles_table.html:50`, and 6 other templates.
+
+**ModelLimiter soft timeout**: `services/limiter.py` releases slots in the `finally` block of `run_stage()`. The `SoftTimeLimitExceeded` exception is caught, a rollback is performed, then the exception is re-raised. The `finally` block ensures the limiter slot is released regardless of which exception path is taken.
 
 **DNS cache TTL**: `_DNS_CACHE_TTL = 300` in `services/url.py:38` creates a 5-minute window for DNS rebinding attacks. Consider reducing to 60 seconds for stronger SSRF protection.
 

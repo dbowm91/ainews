@@ -209,16 +209,45 @@ class ConfigCache:
 
 
 def get_config_cache() -> ConfigCache:
-    """Get or create the singleton ConfigCache instance (thread-safe)."""
+    """Get or create the singleton ConfigCache instance (thread-safe).
+
+    Uses a separate Redis DB (configurable via CONFIG_CACHE_REDIS_DB env var,
+    defaults to db 1) to isolate API keys and config data from general cache
+    data. Requires a dedicated Redis instance - do not use with shared connection.
+
+    Note: CONFIG_CACHE_REDIS_DB must point to a dedicated Redis instance, not
+    the shared Celery broker, since this creates its own connection pool.
+    """
     global _cache_instance
     if _cache_instance is not None:
         return _cache_instance
     with _cache_lock:
         if _cache_instance is not None:
             return _cache_instance
-        from extensions import get_redis
+        import redis
+        import os as _os
 
-        _cache_instance = ConfigCache(get_redis())
+        url = _os.environ.get(
+            "CONFIG_CACHE_REDIS_URL",
+            _os.environ.get(
+                "CELERY_BROKER_URL", "redis://localhost:6379/1"
+            ).replace("/0", "/1").replace("/2", "/1"),
+        )
+        password = _os.environ.get("REDIS_PASSWORD") or _os.environ.get("CONFIG_CACHE_REDIS_PASSWORD")
+        if password:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(url)
+            netloc = f":{password}@{parsed.hostname}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            url = urlunparse(
+                (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
+            )
+
+        pool = redis.ConnectionPool.from_url(url, max_connections=20, socket_timeout=5)
+        client = redis.Redis(connection_pool=pool)
+        _cache_instance = ConfigCache(client, prefix="ainews:config")
         return _cache_instance
 
 

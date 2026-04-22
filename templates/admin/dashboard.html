@@ -167,7 +167,7 @@
                 {{ article.original_title }}
               </a>
             </td>
-            <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+            <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
             <td>{{ pipeline_badge(article.pipeline_status) }}</td>
             <td>
               {% if article.selector_result is mapping and article.selector_result.score is defined %}

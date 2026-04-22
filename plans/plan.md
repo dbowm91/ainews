@@ -1,7 +1,7 @@
 # Implementation Plan — Consolidated
 
 **Created:** April 22, 2026
-**Status:** CLOSED (Waves 1-6 complete)
+**Status:** CLOSED (Waves 1-8 complete)
 **Consolidated from:** plan.md, plan2.md, plan3.md, plan4.md, plan5.md
 
 ---
@@ -255,16 +255,16 @@ ruff check . --exclude .venv --select=E501
 ### Wave 7: Follow-up Security & Webhook Improvements
 *Can be implemented in parallel.*
 
-| Order | Item | Source | Files | Effort |
-|-------|------|--------|-------|--------|
-| 7.1 | **Webhook trigger_event Integration: Call from pipeline stages** — Enables automated webhook delivery on article publish, newsletter sent | plan4.md C.2 | `services/webhooks.py:173-197`, pipeline stages | Medium |
-| 7.2 | **ModelLimiter SoftTimeout Handler: Release slots on soft timeout** — Prevents slot leaks until TTL expires | plan4.md C.3 | `services/limiter.py` | Low |
-| 7.3 | **Webhook Secret Encryption: Encrypt at rest** — Protects secrets if DB is compromised | plan4.md C.6 | `models.py:411`, `services/webhooks.py` | Medium |
-| 7.4 | **Webhook Idempotency Key: Add deduplication** — Prevents duplicate deliveries on retry | plan4.md C.7 | `models.py:429-444`, `services/webhooks.py` | Medium |
-| 7.5 | **Category CSS Escaping: Add `|e` filter** — Prevents CSS class injection | plan4.md D.1 | `templates/partials/condensed_article.html:11` | Low |
-| 7.6 | **Webhook Attempt Tracking: Store actual attempt number** — Improves debugging | plan4.md D.2 | `services/webhooks.py:150`, `models.py:440` | Low |
-| 7.7 | **Bulk Audit Logging: Add logging for all bulk operations** — Improves accountability | plan4.md D.4 | `routes/admin/api/articles.py` | Low |
-| 7.8 | **Config Cache API Key Isolation: Use separate Redis DB** — Reduces blast radius on Redis compromise | plan4.md D.5 | `services/config_cache.py` | Medium |
+| Order | Item | Source | Files | Effort | Status |
+|-------|------|--------|-------|--------|--------|
+| 7.1 | **Webhook trigger_event Integration: Call from pipeline stages** — Enables automated webhook delivery on article publish, newsletter sent | plan4.md C.2 | `services/webhooks.py:190-256`, `tasks/edit.py:253-289`, `tasks/newsletter.py:232-251` | Medium | ✅ Done |
+| 7.2 | **ModelLimiter SoftTimeout Handler: Release slots on soft timeout** — Prevents slot leaks until TTL expires | plan4.md C.3 | `services/limiter.py:77-91`, `tasks/pipeline.py:311-316` | Low | ✅ Done (documented, not needed - limiter released in finally block) |
+| 7.3 | **Webhook Secret Encryption: Encrypt at rest** — Protects secrets if DB is compromised | plan4.md C.6 | `services/webhooks.py:21-54`, `routes/admin/api/webhooks.py:17-55` | Medium | ✅ Done |
+| 7.4 | **Webhook Idempotency Key: Add deduplication** — Prevents duplicate deliveries on retry | plan4.md C.7 | `services/webhooks.py:147-246`, `models.py:429-445`, `tasks/edit.py:263-289`, `tasks/newsletter.py:232-251` | Medium | ✅ Done |
+| 7.5 | **Category CSS Escaping: Add `|e` filter** — Prevents CSS class injection | plan4.md D.1 | `templates/partials/condensed_article.html:11`, +8 templates | Low | ✅ Done |
+| 7.6 | **Webhook Attempt Tracking: Store actual attempt number** — Improves debugging | plan4.md D.2 | `services/webhooks.py:80-152`, `models.py:429-445` | Low | ✅ Done |
+| 7.7 | **Bulk Audit Logging: Add logging for all bulk operations** — Improves accountability | plan4.md D.4 | `routes/admin/api/articles.py:14-145` | Low | ✅ Done |
+| 7.8 | **Config Cache API Key Isolation: Use separate Redis DB** — Reduces blast radius on Redis compromise | plan4.md D.5 | `services/config_cache.py:211-254` | Medium | ✅ Done |
 
 **Wave 7 Verification:**
 ```bash

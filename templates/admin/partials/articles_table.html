@@ -47,7 +47,7 @@
               {{ article.original_title if article.original_title }}
             </a>
           </td>
-          <td><span class="category-badge cat-{{ article.category }}">{{ article.category }}</span></td>
+          <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
           <td>{{ pipeline_badge(article.pipeline_status) }}</td>
           <td>{{ impact_score(article.impact_score) }}</td>
           <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>

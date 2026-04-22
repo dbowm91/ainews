@@ -228,6 +228,27 @@ def _generate_topic_newsletter_impl(
         sent,
         is_dry_run,
     )
+
+    try:
+        from services.webhooks import trigger_event
+
+        trigger_event(
+            "newsletter.sent",
+            {
+                "newsletter_id": nl.id if hasattr(nl, "id") else None,
+                "newsletter_type": topic_key,
+                "subject": subject,
+                "article_count": count,
+                "sent_count": sent,
+            },
+            idempotency_key=f"newsletter.sent:{topic_key}:{datetime.now(timezone.utc).date().isoformat()}",
+        )
+    except Exception:
+        logger.warning(
+            "Newsletter webhook trigger failed for %s, continuing",
+            topic_key,
+        )
+
     return result_dict
 
 

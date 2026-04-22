@@ -8,7 +8,7 @@
     {{ topic_icon(article.category) }}
   {% endif %}
   <div class="article-meta">
-    <span class="category-badge cat-{{ article.category }}">{{ article.category }}</span>
+    <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
     <span class="meta-separator">&middot;</span>
     <span class="meta-time">{{ article.created_at.strftime('%b %d, %Y') if article.created_at }}</span>
     {% if article.original_author %}

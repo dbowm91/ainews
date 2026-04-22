@@ -1,7 +1,7 @@
 # Implementation Plan — Performance, Observability & Security
 
 **Created:** April 21, 2026
-**Status:** CLOSED — All items completed; E.2 deferred pending infrastructure work.
+**Status:** OPEN — One item deferred pending infrastructure work.
 
 ---
 
@@ -78,3 +78,5 @@ Key test files by area:
 - LLM adapters: `tests/test_llm_adapters/`
 - Admin API: `tests/test_admin_api.py`
 - Search/FTS: `tests/test_search.py`, `tests/test_fts.py`
+
+(End of file - total 80 lines)

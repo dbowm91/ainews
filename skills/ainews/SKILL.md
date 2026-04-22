@@ -235,3 +235,5 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **Redis credentials**: Preserved via `urlparse`/`urlunparse` when switching DBs
 - **RSS XML**: Headlines/descriptions escaped with `html.escape()` before insertion
 - **Login lockout**: Redis Lua script for atomic check-and-record; in-memory fallback
+- **Task signing**: HMAC signing via `services/task_security.py` for Celery tasks
+- **Webhook replay**: Timestamps included in webhook signatures

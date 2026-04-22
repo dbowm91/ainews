@@ -279,7 +279,9 @@ class TestBulkAddTags:
         data = resp.get_json()
         assert "message" in data
         assert "dispatched" in data or "reprocessing" in data["message"].lower()
-        mock_celery_tasks["select"].delay.assert_called_once_with(aid)
+        mock_celery_tasks["select"].apply_async.assert_called_once()
+        call_kwargs = mock_celery_tasks["select"].apply_async.call_args.kwargs
+        assert call_kwargs["args"] == (aid,)
 
         with app.app_context():
             from models import Article

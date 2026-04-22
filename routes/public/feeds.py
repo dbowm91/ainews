@@ -277,6 +277,9 @@ def feed_topic(category: str) -> Response:
 @public_bp.route("/sitemap.xml")
 def sitemap() -> Response:
     from services.rss import generate_sitemap
+    from services.config_utils import get_config_with_default
+
+    limit = get_config_with_default("SITEMAP_LIMIT", 200, int)
 
     rows = (
         Article.query.filter(
@@ -284,7 +287,7 @@ def sitemap() -> Response:
         )
         .with_entities(Article.id, Article.created_at)
         .order_by(Article.created_at.desc())
-        .limit(200)
+        .limit(limit)
         .all()
     )
 

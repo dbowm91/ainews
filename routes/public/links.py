@@ -1,8 +1,9 @@
 """Short URL, article detail, and share tracking routes."""
 
 import logging
+import re
 
-from flask import request, render_template, redirect, make_response, Response
+from flask import request, render_template, redirect, make_response, Response, abort
 from sqlalchemy.orm import joinedload
 
 from models import Article, ArticleMetric
@@ -13,6 +14,8 @@ from routes.public import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SHORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
 
 
 @public_bp.route("/article/<int:article_id>")
@@ -73,6 +76,8 @@ def article_detail(article_id: int) -> Response:
 
 @public_bp.route("/s/<short_id>")
 def short_url_redirect(short_id: str) -> Response:
+    if not _SHORT_ID_RE.match(short_id):
+        abort(404)
     article = Article.query.filter_by(short_id=short_id).first_or_404()
     track_metric(article.id, ArticleMetric.share_link_views)
     return redirect(f"/article/{article.id}")
@@ -80,6 +85,8 @@ def short_url_redirect(short_id: str) -> Response:
 
 @public_bp.route("/a/<short_id>")
 def short_url_tracking_page(short_id: str) -> str:
+    if not _SHORT_ID_RE.match(short_id):
+        abort(404)
     article = Article.query.filter_by(short_id=short_id).first_or_404()
     parse_article_json(article)
     track_metric(article.id, ArticleMetric.share_link_views)

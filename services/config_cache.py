@@ -107,6 +107,8 @@ class ConfigCache:
         if mem_entry is not None:
             expires_at, value = mem_entry
             if time.monotonic() < expires_at:
+                # Time-based stale eviction on read path
+                self._evict_stale()
                 return value
 
         with self._lock:

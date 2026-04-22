@@ -3,6 +3,7 @@ from routes.admin import admin_bp, require_auth
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
 from sqlalchemy.exc import SQLAlchemyError
+from services.task_security import get_signed_kwargs
 
 
 @admin_bp.route("/pipelines")
@@ -99,7 +100,9 @@ def trigger_crawl():
 
         request_id = getattr(g, "request_id", None)
         headers = {"request_id": request_id} if request_id else None
-        result = run_all_sources.apply_async(kwargs={"run_id": run.id}, headers=headers)
+        kwargs = {"run_id": run.id}
+        signed_kwargs = get_signed_kwargs("run_all_sources", (), kwargs)
+        result = run_all_sources.apply_async(kwargs=signed_kwargs, headers=headers)
         run.task_id = result.id
         try:
             db.session.commit()

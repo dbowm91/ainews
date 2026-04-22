@@ -5,6 +5,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import redis.exceptions
 
+from services.task_security import verify_task
+
 logger = get_task_logger(__name__)
 
 # Error response convention:
@@ -238,6 +240,10 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
 )
 def run_all_sources(self, run_id=None):
     """Orchestrate crawling of all sources using parallel task execution."""
+    if not verify_task("run_all_sources", (), {"run_id": run_id}):
+        logger.error("Invalid signature for run_all_sources task")
+        raise ValueError("Invalid task signature")
+
     from schemas.source import load_sources
     from models import PipelineRun
     from extensions import db

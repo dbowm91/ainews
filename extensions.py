@@ -81,8 +81,28 @@ def get_redis():
             return _redis_client
 
         import redis
+        from urllib.parse import urlparse, urlunparse
 
         url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+
+        # Add Redis password if REDIS_PASSWORD env var is set
+        redis_password = os.environ.get("REDIS_PASSWORD")
+        if redis_password:
+            parsed = urlparse(url)
+            if not parsed.password:
+                # Reconstruct URL with password
+                netloc = f":{redis_password}@{parsed.hostname}"
+                if parsed.port:
+                    netloc += f":{parsed.port}"
+                url = urlunparse((
+                    parsed.scheme,
+                    netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                ))
+
         _redis_pool = redis.ConnectionPool.from_url(
             url,
             max_connections=100,

@@ -1,7 +1,5 @@
 import logging
 
-from sqlalchemy.orm import joinedload
-
 from constants import PipelineStatus
 
 logger = logging.getLogger(__name__)
@@ -12,22 +10,61 @@ def find_related_articles(article, limit: int = 5):
 
     Returns Article ORM objects.
     """
-    from models import Article
-
-    candidates = (
-        Article.query.options(joinedload(Article.tags), joinedload(Article.source))
-        .filter(
-            Article.id != article.id,
-            Article.pipeline_status == PipelineStatus.DONE,
-            Article.final_article.isnot(None),
-        )
-        .order_by(Article.created_at.desc())
-        .limit(50)
-        .all()
-    )
+    from models import Article, article_tags
+    from sqlalchemy import func
+    from sqlalchemy.orm import joinedload
+    from extensions import db
 
     article_tag_ids = {t.id for t in article.tags} if article.tags else set()
     article_words = _extract_keywords(article.original_title or "")
+
+    if article_tag_ids:
+        tag_count_subq = (
+            db.session.query(
+                Article.id.label("article_id"),
+                func.count(article_tags.c.tag_id).label("shared_tag_count"),
+            )
+            .join(article_tags, article_tags.c.article_id == Article.id)
+            .filter(
+                article_tags.c.tag_id.in_(article_tag_ids),
+                Article.id != article.id,
+                Article.pipeline_status == PipelineStatus.DONE,
+                Article.final_article.isnot(None),
+            )
+            .group_by(Article.id)
+            .subquery()
+        )
+
+        candidates = (
+            Article.query.options(joinedload(Article.tags), joinedload(Article.source))
+            .outerjoin(
+                tag_count_subq,
+                Article.id == tag_count_subq.c.article_id,
+            )
+            .filter(
+                Article.id != article.id,
+                Article.pipeline_status == PipelineStatus.DONE,
+                Article.final_article.isnot(None),
+            )
+            .order_by(
+                (func.coalesce(tag_count_subq.c.shared_tag_count, 0) * 2.0).desc(),
+                Article.created_at.desc(),
+            )
+            .limit(50)
+            .all()
+        )
+    else:
+        candidates = (
+            Article.query.options(joinedload(Article.tags), joinedload(Article.source))
+            .filter(
+                Article.id != article.id,
+                Article.pipeline_status == PipelineStatus.DONE,
+                Article.final_article.isnot(None),
+            )
+            .order_by(Article.created_at.desc())
+            .limit(50)
+            .all()
+        )
 
     scored = []
     for cand in candidates:
@@ -37,10 +74,11 @@ def find_related_articles(article, limit: int = 5):
         if cand.category and article.category and cand.category == article.category:
             score += 3.0
 
-        # Tag overlap
-        cand_tag_ids = {t.id for t in cand.tags} if cand.tags else set()
-        shared_tags = len(article_tag_ids & cand_tag_ids)
-        score += shared_tags * 2.0
+        # Tag overlap (already pushed to SQL, but need count for scoring)
+        if article_tag_ids:
+            cand_tag_ids = {t.id for t in cand.tags} if cand.tags else set()
+            shared_tags = len(article_tag_ids & cand_tag_ids)
+            score += shared_tags * 2.0
 
         # Keyword overlap in titles
         cand_words = _extract_keywords(cand.original_title or "")

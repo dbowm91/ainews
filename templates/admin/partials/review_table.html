@@ -30,7 +30,7 @@
                     hx-post="/admin/review/{{ article.id }}/approve"
                     hx-target="closest tr"
                     hx-swap="outerHTML"
-                    hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
                 <button type="submit" class="btn-primary btn-sm">approve</button>
               </form>
               <form method="POST" action="/admin/review/{{ article.id }}/reject" class="inline"
@@ -38,7 +38,7 @@
                     hx-confirm="Reject this article?"
                     hx-target="closest tr"
                     hx-swap="outerHTML"
-                    hx-vals='{"csrf_token": "{{ csrf_token() }}"}'>
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
                 <button type="submit" class="btn-delete">reject</button>
               </form>
             </td>

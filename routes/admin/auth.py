@@ -66,8 +66,20 @@ def login():
         locked = _check_and_record_attempt(ip)
         if locked:
             error = "Too many failed attempts. Try again later."
+            try:
+                from services.audit import log_admin_action
+
+                log_admin_action("admin_login_failed_locked", user="admin", details={"ip": ip})
+            except Exception as e:
+                logger.error("Failed to log admin login failure: %s", e)
         else:
             error = "Invalid password"
+            try:
+                from services.audit import log_admin_action
+
+                log_admin_action("admin_login_failed", user="admin", details={"ip": ip})
+            except Exception as e:
+                logger.error("Failed to log admin login failure: %s", e)
     return render_template("admin/login.html", error=error)
 
 

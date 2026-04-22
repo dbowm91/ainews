@@ -1,0 +1,114 @@
+"""HMAC signing for Celery tasks to prevent unauthorized execution."""
+
+import hashlib
+import hmac
+import os
+
+
+def _get_task_secret() -> str:
+    """Get the Celery task signing secret from environment."""
+    return os.environ.get("CELERY_TASK_SECRET", "")
+
+
+def sign_task(task_name: str, args: tuple, kwargs: dict, secret: str | None = None) -> dict:
+    """Create HMAC signature for task arguments.
+
+    Args:
+        task_name: Name of the task being signed
+        args: Positional arguments passed to the task
+        kwargs: Keyword arguments passed to the task
+        secret: Optional secret override (defaults to CELERY_TASK_SECRET env var)
+
+    Returns:
+        Dictionary with signature and task_name for inclusion in task kwargs
+    """
+    if secret is None:
+        secret = _get_task_secret()
+
+    if not secret:
+        return {"task_name": task_name}
+
+    payload = _build_signature_payload(task_name, args, kwargs)
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return {
+        "task_name": task_name,
+        "_signature": signature,
+    }
+
+
+def verify_task(task_name: str, args: tuple, kwargs: dict, secret: str | None = None) -> bool:
+    """Verify HMAC signature for task arguments.
+
+    Args:
+        task_name: Expected name of the task
+        args: Positional arguments passed to the task
+        kwargs: Keyword arguments passed to the task (must include _signature)
+        secret: Optional secret override (defaults to CELERY_TASK_SECRET env var)
+
+    Returns:
+        True if signature is valid, no secret is configured, or no signature present (internal call)
+        False if signature is invalid
+    """
+    if secret is None:
+        secret = _get_task_secret()
+
+    if not secret:
+        return True
+
+    if "_signature" not in kwargs:
+        return True
+
+    received_signature = kwargs["_signature"]
+    expected_signature = hmac.new(
+        secret.encode("utf-8"),
+        _build_signature_payload(task_name, args, kwargs).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(expected_signature, received_signature)
+
+
+def _build_signature_payload(task_name: str, args: tuple, kwargs: dict) -> str:
+    """Build the payload string used for signature creation/verification.
+
+    Excludes the _signature key itself from kwargs to prevent signature farming.
+    """
+    import json
+
+    def _sanitize_value(v):
+        if hasattr(v, "id"):
+            return v.id
+        return v
+
+    filtered_kwargs = {k: _sanitize_value(v) for k, v in kwargs.items() if k != "_signature"}
+    sanitized_args = tuple(_sanitize_value(a) for a in args)
+
+    payload_parts = [
+        task_name,
+        json.dumps(sanitized_args, sort_keys=True),
+        json.dumps(filtered_kwargs, sort_keys=True),
+    ]
+    return "|".join(payload_parts)
+
+
+def get_signed_kwargs(task_name: str, args: tuple, kwargs: dict) -> dict:
+    """Add HMAC signature to kwargs for task dispatch.
+
+    This is a convenience function that merges the signature dict
+    with the original kwargs.
+
+    Args:
+        task_name: Name of the task being signed
+        args: Positional arguments passed to the task
+        kwargs: Keyword arguments passed to the task
+
+    Returns:
+        Original kwargs dict with _signature and task_name added
+    """
+    signature_dict = sign_task(task_name, args, kwargs)
+    return {**kwargs, **signature_dict}

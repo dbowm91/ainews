@@ -149,6 +149,7 @@ def get_webhook(webhook_id: int) -> Response:
 
 @admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["PUT"])
 @require_auth
+@validate_csrf_json
 def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Update a webhook."""
     from models import Webhook
@@ -186,6 +187,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
 @admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["DELETE"])
 @require_auth
+@validate_csrf_json
 def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Delete a webhook."""
     from models import Webhook

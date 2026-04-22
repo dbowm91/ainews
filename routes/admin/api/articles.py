@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from constants import PipelineStatus, VALID_PIPELINE_STATUSES
+from services.task_security import get_signed_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,8 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     failed_ids = []
     for article in articles:
         try:
-            select_article.delay(article.id)
+            signed_kwargs = get_signed_kwargs("select_article", (article.id,), {})
+            select_article.apply_async(args=(article.id,), kwargs=signed_kwargs)
             dispatched += 1
         except Exception as e:
             logger.warning(

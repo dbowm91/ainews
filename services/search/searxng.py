@@ -21,6 +21,10 @@ class SearXNGSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         try:
             import requests
+            from services.url import validate_url_safe, UnsafeURLError
+
+            search_url = f"{self.host}/search"
+            validate_url_safe(search_url)
 
             params = {
                 "q": query,
@@ -32,7 +36,7 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 params["engines"] = self.default_engines
 
             resp = requests.get(
-                f"{self.host}/search",
+                search_url,
                 params=params,
                 timeout=15,
             )
@@ -52,6 +56,9 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 if len(results) >= max_results:
                     break
             return results
+        except UnsafeURLError as e:
+            logger.warning("SearXNG search blocked for '%s': %s", query, e)
+            return []
         except Exception as e:
             logger.warning("SearXNG search failed for '%s': %s", query, type(e).__name__)
             return []
@@ -59,13 +66,23 @@ class SearXNGSearchProvider(BaseSearchProvider):
     def health_check(self) -> dict[str, Any]:
         try:
             import requests
+            from services.url import validate_url_safe, UnsafeURLError
 
-            resp = requests.get(f"{self.host}/healthz", timeout=5)
+            healthz_url = f"{self.host}/healthz"
+            validate_url_safe(healthz_url)
+
+            resp = requests.get(healthz_url, timeout=5)
             if resp.ok:
                 return {"provider": self.provider_id, "status": "ok", "host": self.host}
             return {
                 "provider": self.provider_id,
                 "status": f"http {resp.status_code}",
+                "host": self.host,
+            }
+        except UnsafeURLError as e:
+            return {
+                "provider": self.provider_id,
+                "status": f"SSRF blocked: {e}",
                 "host": self.host,
             }
         except Exception as e:

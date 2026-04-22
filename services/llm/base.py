@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
 from services.provider_base import BaseProvider, ProviderManager
+from services.prompts import esc_xml_text
 
 logger = logging.getLogger(__name__)
 
@@ -335,11 +336,11 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 if fn_name in tool_call_map:
                     try:
                         _, fn = tool_call_map[fn_name]
-                        result_content = str(fn(**fn_args))
+                        result_content = esc_xml_text(str(fn(**fn_args)))
                     except Exception as e:
-                        result_content = f"Error: {e}"
+                        result_content = esc_xml_text(f"Error: {e}")
                 else:
-                    result_content = f"Unknown tool: {fn_name}"
+                    result_content = esc_xml_text(f"Unknown tool: {fn_name}")
 
                 all_messages.append(
                     {

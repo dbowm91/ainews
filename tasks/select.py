@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
 from constants import PipelineStatus, truncate_for_log
 from services.llm.errors import ProviderServerError
+from services.task_security import verify_task
 
 logger = get_task_logger(__name__)
 
@@ -25,6 +26,10 @@ logger = get_task_logger(__name__)
     retry_jitter=True,
 )
 def select_article(self, article_id: int, run_id=None):
+    if not verify_task("select_article", (article_id,), {"run_id": run_id}):
+        logger.error("Invalid signature for select_article task")
+        raise ValueError("Invalid task signature")
+
     from models import PipelineRun
     from extensions import db
     from schemas.pipeline import get_role_config

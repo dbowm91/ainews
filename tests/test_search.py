@@ -102,7 +102,9 @@ class TestGoogleProvider:
 
 class TestSearXNGProvider:
     @patch("requests.get")
-    def test_search_returns_results(self, mock_get):
+    @patch("services.url.validate_url_safe")
+    def test_search_returns_results(self, mock_validate, mock_get):
+        mock_validate.return_value = None
         mock_get.return_value.ok = True
         mock_get.return_value.json.return_value = {
             "results": [
@@ -123,7 +125,9 @@ class TestSearXNGProvider:
         assert results[0].source == "searxng"
 
     @patch("requests.get")
-    def test_search_graceful_failure(self, mock_get):
+    @patch("services.url.validate_url_safe")
+    def test_search_graceful_failure(self, mock_validate, mock_get):
+        mock_validate.return_value = None
         mock_get.side_effect = Exception("SearXNG down")
 
         provider = SearXNGSearchProvider("searxng", {"host": "http://localhost:8888"})

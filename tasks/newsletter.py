@@ -6,6 +6,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
 
+from services.task_security import verify_task
+
 logger = get_task_logger(__name__)
 
 # Error response convention:
@@ -312,6 +314,10 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     time_limit=360,
 )
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
+    if not verify_task("generate_daily_newsletters", (), {"dry_run_email": dry_run_email, "run_id": run_id}):
+        logger.error("Invalid signature for generate_daily_newsletters task")
+        raise ValueError("Invalid task signature")
+
     import redis.exceptions
 
     from extensions import get_redis

@@ -1,5 +1,6 @@
 """Subscription and verification routes: subscribe, unsubscribe, verify."""
 
+import re
 import secrets
 import logging
 from datetime import datetime, timezone, timedelta
@@ -17,6 +18,14 @@ from routes.public import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Token format validation: secrets.token_urlsafe(32) produces 43 base64url chars
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+
+
+def _validate_token(token: str) -> bool:
+    """Validate token format to prevent malformed token exploits."""
+    return bool(token) and bool(_TOKEN_RE.match(token))
 
 
 @public_bp.route("/subscribe", methods=["POST"])
@@ -129,6 +138,8 @@ def subscribe() -> Response:
 @public_bp.route("/unsubscribe/<token>")
 def unsubscribe(token: str) -> str:
     """Show unsubscribe confirmation page (GET)."""
+    if not _validate_token(token):
+        return render_template("unsubscribe.html", token=token, found=False)
     subscriber = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))
         .filter_by(unsubscribe_token=token, active=True)
@@ -143,6 +154,8 @@ def unsubscribe(token: str) -> str:
 @public_bp.route("/unsubscribe/<token>", methods=["POST"])
 def unsubscribe_confirm(token: str) -> str:
     """Process unsubscribe request (POST with CSRF protection)."""
+    if not _validate_token(token):
+        return render_template("unsubscribe.html", token=token, found=False)
     subscriber = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))
         .filter_by(unsubscribe_token=token, active=True)
@@ -171,6 +184,8 @@ def unsubscribe_confirm(token: str) -> str:
 @public_bp.route("/verify/<token>")
 def verify(token: str) -> str:
     """Verify a subscriber's email address via token link."""
+    if not _validate_token(token):
+        return render_template("verify.html", found=False)
     subscriber = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))
         .filter(Subscriber.confirmed_at.is_(None))

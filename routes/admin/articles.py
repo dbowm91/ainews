@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 from services.utils import get_admin_categories as _admin_categories
 from services.article import _escape_like_pattern
+from services.task_security import get_signed_kwargs
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 
 logger = logging.getLogger(__name__)
@@ -436,6 +437,8 @@ def reprocess_article(article_id):
     }
     request_id = getattr(g, "request_id", None)
     headers = {"request_id": request_id} if request_id else None
-    _TASKS[cfg["task"]].apply_async(args=[article.id], headers=headers)
+    task_name = cfg["task"]
+    signed_kwargs = get_signed_kwargs(task_name, (article.id,), {})
+    _TASKS[task_name].apply_async(args=(article.id,), kwargs=signed_kwargs, headers=headers)
 
     return redirect(url_for("admin.articles"))

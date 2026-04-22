@@ -32,7 +32,7 @@ class RSSAdapter(BaseSourceAdapter):
         validate_url_safe(cfg.feed_url)
         headers = {
             "User-Agent": cfg.user_agent,
-            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",  # noqa: E501
         }
         resp = self._session.get(
             cfg.feed_url, headers=headers, timeout=cfg.request_timeout

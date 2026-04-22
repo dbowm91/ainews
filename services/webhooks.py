@@ -18,11 +18,26 @@ BASE_DELAY_SECONDS = 2
 MAX_DELAY_SECONDS = 300
 
 
-def _sign_payload(payload: str, secret: str) -> str:
-    """Generate HMAC-SHA256 signature for webhook payload."""
+def _sign_payload(payload: str, secret: str, timestamp: int | None = None) -> str:
+    """Generate HMAC-SHA256 signature for webhook payload.
+
+    Args:
+        payload: Raw JSON string of the payload
+        secret: Webhook secret
+        timestamp: Unix timestamp for replay protection (optional, for signing)
+
+    Returns:
+        Hex-encoded HMAC signature.
+        If timestamp provided, includes it in signature for replay protection.
+    """
+    if timestamp:
+        # Include timestamp in signature for replay protection
+        data = f"{timestamp}:{payload}"
+    else:
+        data = payload
     return hmac.new(
         secret.encode("utf-8"),
-        payload.encode("utf-8"),
+        data.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
 
@@ -45,11 +60,13 @@ def _send_webhook_with_retry(
         Tuple of (success, error_message, status_code, response_body)
     """
     body = json.dumps(payload, default=str)
-    signature = _sign_payload(body, secret)
+    timestamp = int(time.time())
+    signature = _sign_payload(body, secret, timestamp)
 
     headers = {
         "Content-Type": "application/json",
         "X-Webhook-Signature": signature,
+        "X-Webhook-Timestamp": str(timestamp),
         "X-Webhook-Event": event_type,
         "User-Agent": "ainews-webhook/1.0",
     }

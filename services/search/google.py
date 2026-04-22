@@ -32,6 +32,9 @@ class GoogleSearchProvider(BaseSearchProvider):
 
         try:
             import requests
+            from services.url import validate_url_safe, UnsafeURLError
+
+            validate_url_safe(self.base_url)
 
             resp = requests.get(
                 self.base_url,
@@ -57,6 +60,9 @@ class GoogleSearchProvider(BaseSearchProvider):
                     )
                 )
             return results[:max_results]
+        except UnsafeURLError as e:
+            logger.warning("Google search blocked for '%s': %s", query, e)
+            return []
         except Exception as e:
             logger.warning("Google search failed for '%s': %s", query, type(e).__name__)
             return []
@@ -66,6 +72,9 @@ class GoogleSearchProvider(BaseSearchProvider):
             return {"provider": self.provider_id, "status": "not configured"}
         try:
             import requests
+            from services.url import validate_url_safe, UnsafeURLError
+
+            validate_url_safe(self.base_url)
 
             resp = requests.get(
                 self.base_url,
@@ -74,6 +83,11 @@ class GoogleSearchProvider(BaseSearchProvider):
             )
             resp.raise_for_status()
             return {"provider": self.provider_id, "status": "ok"}
+        except UnsafeURLError as e:
+            return {
+                "provider": self.provider_id,
+                "status": f"SSRF blocked: {e}",
+            }
         except Exception as e:
             return {
                 "provider": self.provider_id,

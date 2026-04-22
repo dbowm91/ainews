@@ -32,10 +32,9 @@ _BLOCKED_NETWORKS = [
 ]
 
 # DNS cache to prevent rebinding between validation and fetch.
-# 5-minute TTL covers typical pipeline delays (crawl → fetch can take
-# several minutes under congestion). Short enough to track DNS changes,
-# long enough to prevent rebinding between validation and fetch.
-_DNS_CACHE_TTL = 300  # seconds
+# 60-second TTL reduces DNS rebinding attack window while still
+# providing caching benefits for legitimate requests.
+_DNS_CACHE_TTL = 60  # seconds
 _DNS_CACHE_MAX = 1024
 
 

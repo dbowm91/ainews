@@ -5,6 +5,7 @@ from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from constants import PER_PAGE_NEWSLETTERS
 from extensions import db
+from services.task_security import get_signed_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,8 @@ def trigger_newsletter():
     try:
         request_id = getattr(g, "request_id", None)
         headers = {"request_id": request_id} if request_id else None
-        result = generate_daily_newsletters.apply_async(headers=headers)
+        signed_kwargs = get_signed_kwargs("generate_daily_newsletters", (), {})
+        result = generate_daily_newsletters.apply_async(kwargs=signed_kwargs, headers=headers)
         return jsonify(
             {"message": "Newsletter generation started", "task_id": result.id}
         ), 202
@@ -131,8 +133,10 @@ def newsletter_dry_run():
     try:
         request_id = getattr(g, "request_id", None)
         headers = {"request_id": request_id} if request_id else None
+        kwargs = {"dry_run_email": test_email}
+        signed_kwargs = get_signed_kwargs("generate_daily_newsletters", (), kwargs)
         result = generate_daily_newsletters.apply_async(
-            kwargs={"dry_run_email": test_email}, headers=headers
+            kwargs=signed_kwargs, headers=headers
         )
         msg = f"Dry run started — will send to {test_email}"
         if is_htmx:

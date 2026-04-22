@@ -20,6 +20,7 @@ _cache_instance: Optional["ResponseCache"] = None
 _cache_lock = threading.Lock()
 
 _L1_CACHE_MAXSIZE = 1000
+_EVICT_SAMPLE_RATE = 100
 
 
 def _get_l1_cache_maxsize() -> int:
@@ -46,6 +47,7 @@ class ResponseCache:
         self._hits = 0
         self._misses = 0
         self._memory_lock = threading.Lock()
+        self._evict_sample_counter = 0
 
     def _evict_stale(self) -> None:
         """Remove expired entries from the in-memory cache."""
@@ -87,6 +89,12 @@ class ResponseCache:
                 return json.loads(raw)
         except redis.exceptions.RedisError as e:
             logger.warning("Cache read failed for %s: %s", key, e)
+
+        # Sampled stale eviction on read path
+        self._evict_sample_counter += 1
+        if self._evict_sample_counter >= _EVICT_SAMPLE_RATE:
+            self._evict_sample_counter = 0
+            self._evict_stale()
 
         self._misses += 1
         return None

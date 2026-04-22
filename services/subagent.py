@@ -745,7 +745,8 @@ def run_subagent_chain(
             prompt_data = _resolve_template_variables(
                 template, initial_prompt_data, results
             )
-            prompt = template.format(**prompt_data)
+            prompt_data_escaped = _escape_prompt_data(prompt_data)
+            prompt = template.format(**prompt_data_escaped)
         except Exception as e:
             logger.warning(
                 "Chain %s step %d template error: %s",

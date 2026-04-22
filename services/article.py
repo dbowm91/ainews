@@ -25,15 +25,22 @@ from services.pagination import paginate_query, search_fts, _escape_like_pattern
 
 
 def _log_search_query(query: str, results_count: int) -> None:
-    """Log a search query to the SearchQuery table."""
+    """Log a search query to the SearchQuery table (async fire-and-forget)."""
+    import threading
     from models import SearchQuery
 
-    sq = SearchQuery(query=query[:256], results_count=results_count)
-    db.session.add(sq)
-    try:
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
+    def _async_log():
+        try:
+            from extensions import db
+
+            sq = SearchQuery(query=query[:256], results_count=results_count)
+            db.session.add(sq)
+            db.session.commit()
+        except Exception:
+            pass
+
+    thread = threading.Thread(target=_async_log, daemon=True)
+    thread.start()
 
 
 # Threshold for Jaccard similarity on title word sets (0–1).

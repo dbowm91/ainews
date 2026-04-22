@@ -438,8 +438,6 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 **`autoretry_for` over manual `self.retry()`**: Prefer the `autoretry_for` / `dont_autoretry_for` decorator parameters over manual `raise self.retry()` calls. This is cleaner and supports `retry_backoff` and `retry_jitter` out of the box. See `tasks/newsletter.py:send_single_email` for the reference pattern — uses `autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError)` with `dont_autoretry_for=(smtplib.SMTPResponseException,)` to distinguish transient from permanent SMTP errors.
 
-**LLM client timeouts**: All LLM provider clients should specify explicit timeouts. OpenAI uses `_client_kwargs` with `timeout` parameter; Anthropic uses instance `_timeout` variable. Ollama and Gemini already hardcode 120s. Use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from constants for consistency.
-
 ### Celery task timeout handling
 
 **`SoftTimeLimitExceeded` handling**: Tasks with `soft_time_limit` should catch `billiard.exceptions.SoftTimeLimitExceeded` explicitly for graceful cleanup (rollback, error logging) before re-raising. Without this, soft timeouts fall through to generic `except Exception` handlers and are indistinguishable from actual errors. Pipeline stages handle this in `tasks/pipeline.py:run_stage()`.

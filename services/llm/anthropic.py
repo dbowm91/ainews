@@ -65,7 +65,10 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
-        resp = self.client.messages.create(**call_kwargs)
+        try:
+            resp = self.client.messages.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_anthropic_error(e)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return LLMResponse(
@@ -111,7 +114,10 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
-        resp = self.client.beta.messages.create(**call_kwargs)
+        try:
+            resp = self.client.beta.messages.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_anthropic_error(e)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp.content[0].text
@@ -155,7 +161,10 @@ class AnthropicProvider(BaseLLMProvider):
                 }
                 for t in tools
             ]
-        resp = self.client.messages.create(**call_kwargs)
+        try:
+            resp = self.client.messages.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_anthropic_error(e)
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp, resp

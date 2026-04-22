@@ -162,7 +162,7 @@ When adding columns with `server_default` in migrations, also set `nullable=Fals
 
 ### DNS cache in SSRF validation
 
-`services/url.py` uses a bounded `_TTLCache` (1024 entries, 300s TTL) to prevent DNS rebinding between validation and fetch. The longer TTL covers typical pipeline delays between validation and fetch. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
+`services/url.py` uses a bounded `_TTLCache` (1024 entries, 300s TTL) to prevent DNS rebinding between validation and fetch. **Security concern**: 300s TTL creates a 5-minute window for DNS rebinding attacks between `validate_url_safe()` and URL fetch. Consider reducing to 60 seconds. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
 ```python
 from services.url import _dns_cache
 
@@ -183,7 +183,9 @@ The login lockout mechanism has two code paths: primary Redis-based (via Lua scr
 
 ### Session fixation prevention
 
-On successful admin login, use `session.clear()` or `session.regenerate_id()` before setting `session["admin"] = True`. Simply popping and setting the admin key without regenerating the session ID allows session fixation attacks. See `routes/admin/auth.py:52-53`.
+On successful admin login, use `session.clear()` followed by `session.regenerate_id()` before setting `session["admin"] = True`. Simply popping and setting the admin key without regenerating the session ID allows session fixation attacks. See `routes/admin/auth.py:52-53`.
+
+**Current issue**: `routes/admin/auth.py:56-57` only calls `session.clear()` but does NOT call `session.regenerate_id()`. This should be fixed.
 
 ### Pipeline retry budget
 
@@ -316,6 +318,32 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Limiter acquire with timeout**: `ModelLimiter.acquire()` now polls with exponential backoff (0.05s → 0.5s) up to the timeout. Redis errors on acquire still fail closed (return False). Don't change this behavior — fail closed is intentional.
 
 **Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates. Added `joinedload(Article.source)` to prevent N+1 query on source access.
+
+## Additional security patterns
+
+**Subagent chain prompt injection**: `run_subagent_chain()` at `services/subagent.py:748` calls `template.format(**prompt_data)` WITHOUT escaping. Use `_escape_prompt_data()` first:
+```python
+prompt_data_escaped = _escape_prompt_data(prompt_data)
+prompt = template.format(**prompt_data_escaped)
+```
+`run_subagent()` (line 364) already applies escaping correctly.
+
+**Search provider SSRF**: `services/search/searxng.py` and `services/search/google.py` make HTTP requests without calling `validate_url_safe()`. Add validation before requests.
+
+**Webhook CSRF gaps**: `PUT /api/webhooks/<id>` and `DELETE /api/webhooks/<id>` in `routes/admin/api/webhooks.py` are missing `@validate_csrf_json`. The test endpoint (line 205) has it but update/delete do not.
+
+**short_id path validation**: `routes/public/links.py:74,81` uses `short_id` directly in queries without regex validation. Add format validation:
+```python
+_SHORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
+if not _SHORT_ID_RE.match(short_id):
+    abort(404)
+```
+
+**ModelLimiter soft timeout**: `services/limiter.py` does not release slots when `SoftTimeLimitExceeded` is raised. Add explicit slot release in task exception handlers before re-raising.
+
+**DNS cache TTL**: `_DNS_CACHE_TTL = 300` in `services/url.py:38` creates a 5-minute window for DNS rebinding attacks. Consider reducing to 60 seconds for stronger SSRF protection.
+
+**HTMX CSRF pattern**: HTMX templates using `hx-vals='{"csrf_token": "{{ csrf_token() }}"}'` for JSON API endpoints do NOT work with `@validate_csrf_json` (which checks `X-CSRFToken` header). Use `hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'` instead. Found in `templates/admin/dead_letters.html`, `templates/admin/partials/share_row.html`, `templates/admin/partials/articles_table.html`, `templates/admin/article_versions.html`, `templates/admin/partials/review_table.html`.
 
 ## Critical patterns
 

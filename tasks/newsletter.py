@@ -53,35 +53,47 @@ def send_single_email(
         return {"email": email, "sent": False, "error": str(e)}
 
 
-def _send_emails_parallel(subscribers, subject, html, site_url):
+def _send_emails_parallel(subscribers_iter, subject, html, site_url):
     """Send emails to subscribers in parallel using Celery group.
 
     Emails are sent in batches of 500 to reduce Celery task overhead.
     Uses non-blocking apply_async - does not wait for results.
-    """
-    if not subscribers:
-        return 0
 
+    Args:
+        subscribers_iter: Iterator/generator of Subscriber objects (not a list)
+        subject: Email subject
+        html: Email HTML content
+        site_url: Base URL for unsubscribe links
+
+    Returns:
+        Total number of subscribers dispatched (approximate, as sending is async)
+    """
     BATCH_SIZE = 500
 
-    for i in range(0, len(subscribers), BATCH_SIZE):
-        batch = subscribers[i : i + BATCH_SIZE]
-        email_tasks = []
-        for sub in batch:
-            unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
-            email_tasks.append(
-                send_single_email.s(
-                    email=sub.email,
-                    subject=subject,
-                    html=html,
-                    unsub_url=unsub_url,
-                )
+    batch = []
+    dispatched = 0
+    for sub in subscribers_iter:
+        unsub_url = f"{site_url}/unsubscribe/{sub.unsubscribe_token}"
+        batch.append(
+            send_single_email.s(
+                email=sub.email,
+                subject=subject,
+                html=html,
+                unsub_url=unsub_url,
             )
+        )
+        if len(batch) >= BATCH_SIZE:
+            job = group(batch)
+            job.apply_async()
+            dispatched += len(batch)
+            batch = []
 
-        job = group(email_tasks)
+    if batch:
+        job = group(batch)
         job.apply_async()
+        dispatched += len(batch)
 
-    return 0
+    return dispatched
 
 
 def _fetch_articles_for_newsletter(
@@ -181,14 +193,15 @@ def _generate_topic_newsletter_impl(
             logger.error("Dry run failed for %s: %s", dry_run_email, e)
             email_error = str(e)
     else:
-        subscriber_query = (
-            Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-            .filter(Subscriber.confirmed_at.isnot(None))
-            .filter_by(newsletter_type=topic_key, active=True)
-        )
-        subscriber_list = list(subscriber_query.yield_per(500))
-        subscriber_count = len(subscriber_list)
-        sent = _send_emails_parallel(subscriber_list, subject, html, site_url)
+        base_filters = [
+            Subscriber.deleted_at.is_(None),
+            Subscriber.confirmed_at.isnot(None),
+            Subscriber.newsletter_type == topic_key,
+            Subscriber.active.is_(True),
+        ]
+        subscriber_count = Subscriber.query.filter(*base_filters).count()
+        subscriber_query = Subscriber.query.filter(*base_filters).yield_per(500)
+        sent = _send_emails_parallel(subscriber_query, subject, html, site_url)
         if sent < subscriber_count and subscriber_count > 0:
             email_error = f"Only {sent} of {subscriber_count} emails sent"
 

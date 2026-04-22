@@ -162,7 +162,7 @@ When adding columns with `server_default` in migrations, also set `nullable=Fals
 
 ### DNS cache in SSRF validation
 
-`services/url.py` uses a bounded `_TTLCache` (1024 entries, 300s TTL) to prevent DNS rebinding between validation and fetch. **Security concern**: 300s TTL creates a 5-minute window for DNS rebinding attacks between `validate_url_safe()` and URL fetch. Consider reducing to 60 seconds. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
+`services/url.py` uses a bounded `_TTLCache` (1024 entries, 60s TTL) to prevent DNS rebinding between validation and fetch. The 60-second TTL reduces the attack window. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
 ```python
 from services.url import _dns_cache
 
@@ -183,9 +183,7 @@ The login lockout mechanism has two code paths: primary Redis-based (via Lua scr
 
 ### Session fixation prevention
 
-On successful admin login, use `session.clear()` followed by `session.regenerate_id()` before setting `session["admin"] = True`. Simply popping and setting the admin key without regenerating the session ID allows session fixation attacks. See `routes/admin/auth.py:52-53`.
-
-**Current issue**: `routes/admin/auth.py:56-57` only calls `session.clear()` but does NOT call `session.regenerate_id()`. This should be fixed.
+On successful admin login, use `session.clear()` followed by `session.regenerate_id()` before setting `session["admin"] = True`. Simply popping and setting the admin key without regenerating the session ID allows session fixation attacks. See `routes/admin/auth.py:55-58`.
 
 ### Pipeline retry budget
 
@@ -234,6 +232,15 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 When working with any file that uses Redis, avoid naming local variables `redis` as it shadows the module import. This applies to `services/pipeline_monitor.py`, `tasks/crawl.py`, `tasks/newsletter.py`, and all other files. Name the local variable `redis_client` or `r`. Modules that use `import redis.exceptions` (not `from redis.exceptions import RedisError`) are already safe from shadowing the exception import.
 
 Similarly, avoid `self.redis` as an instance attribute — use `self._redis` instead (see `services/limiter.py:ModelLimiter`).
+
+### Celery Task HMAC Signing
+
+`services/task_security.py` provides `sign_task()` and `verify_task()` for HMAC signing of Celery tasks. Applied to orchestrator tasks that take external arguments:
+- `run_all_sources` (tasks/crawl.py:243)
+- `generate_daily_newsletters` (tasks/newsletter.py:338)
+- `select_article` (tasks/select.py:29)
+
+Internal tasks called via `.s()` signatures don't need additional verification. Tasks called by Celery Beat with no arguments don't require HMAC signing.
 
 ### Request size limiting
 
@@ -321,16 +328,16 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 ## Additional security patterns
 
-**Subagent chain prompt injection**: `run_subagent_chain()` at `services/subagent.py:748` calls `template.format(**prompt_data)` WITHOUT escaping. Use `_escape_prompt_data()` first:
+**Subagent chain prompt injection**: `run_subagent_chain()` at `services/subagent.py:748` now calls `_escape_prompt_data()` before `template.format()`:
 ```python
 prompt_data_escaped = _escape_prompt_data(prompt_data)
 prompt = template.format(**prompt_data_escaped)
 ```
-`run_subagent()` (line 364) already applies escaping correctly.
+`run_subagent()` (line 364) already applied escaping correctly.
 
-**Search provider SSRF**: `services/search/searxng.py` and `services/search/google.py` make HTTP requests without calling `validate_url_safe()`. Add validation before requests.
+**Search provider SSRF**: `services/search/searxng.py` and `services/search/google.py` now call `validate_url_safe()` before making HTTP requests.
 
-**Webhook CSRF gaps**: `PUT /api/webhooks/<id>` and `DELETE /api/webhooks/<id>` in `routes/admin/api/webhooks.py` are missing `@validate_csrf_json`. The test endpoint (line 205) has it but update/delete do not.
+**Webhook CSRF gaps**: `PUT /api/webhooks/<id>` and `DELETE /api/webhooks/<id>` in `routes/admin/api/webhooks.py` now have `@validate_csrf_json` decorator.
 
 **Webhook encryption at rest**: Webhook secrets are encrypted using Fernet (AES-128-CBC) when stored in the database. New secrets are encrypted with prefix `enc:` and legacy plaintext secrets are supported. Key is configured via `WEBHOOK_SECRET_KEY` env var. See `services/webhooks.py:_encrypt_secret()` and `_decrypt_secret()`.
 
@@ -340,7 +347,7 @@ prompt = template.format(**prompt_data_escaped)
 
 **Config cache API key isolation**: `ConfigCache` now uses a separate Redis connection pool configurable via `CONFIG_CACHE_REDIS_URL` / `CONFIG_CACHE_REDIS_PASSWORD` env vars. Default Redis DB is 1 (separate from Celery broker at db 0). This isolates config cache blast radius from the main cache. See `services/config_cache.py:get_config_cache()`.
 
-**short_id path validation**: `routes/public/links.py:74,81` uses `short_id` directly in queries without regex validation. Add format validation:
+**short_id path validation**: `routes/public/links.py:79,88` validates `short_id` with regex before querying:
 ```python
 _SHORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
 if not _SHORT_ID_RE.match(short_id):
@@ -351,7 +358,7 @@ if not _SHORT_ID_RE.match(short_id):
 
 **ModelLimiter soft timeout**: `services/limiter.py` releases slots in the `finally` block of `run_stage()`. The `SoftTimeLimitExceeded` exception is caught, a rollback is performed, then the exception is re-raised. The `finally` block ensures the limiter slot is released regardless of which exception path is taken.
 
-**DNS cache TTL**: `_DNS_CACHE_TTL = 300` in `services/url.py:38` creates a 5-minute window for DNS rebinding attacks. Consider reducing to 60 seconds for stronger SSRF protection.
+**DNS cache TTL**: `_DNS_CACHE_TTL = 60` in `services/url.py:37` reduces DNS rebinding attack window to 60 seconds. This is the current implementation.
 
 **HTMX CSRF pattern**: HTMX templates using `hx-vals='{"csrf_token": "{{ csrf_token() }}"}'` for JSON API endpoints do NOT work with `@validate_csrf_json` (which checks `X-CSRFToken` header). Use `hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'` instead. Found in `templates/admin/dead_letters.html`, `templates/admin/partials/share_row.html`, `templates/admin/partials/articles_table.html`, `templates/admin/article_versions.html`, `templates/admin/partials/review_table.html`.
 

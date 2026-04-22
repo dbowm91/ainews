@@ -72,15 +72,18 @@ class GeminiProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         contents, system_instruction = self._build_contents(messages, system)
-        resp = self.client.models.generate_content(
-            model=model,
-            contents=contents,
-            system_instruction=system_instruction,
-            generation_config={
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
-            },
-        )
+        try:
+            resp = self.client.models.generate_content(
+                model=model,
+                contents=contents,
+                system_instruction=system_instruction,
+                generation_config={
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                },
+            )
+        except Exception as e:
+            raise _handle_gemini_error(e)
         usage = resp.usage_metadata
         tokens_used = usage.total_token_count if usage else 0
         return LLMResponse(
@@ -114,17 +117,20 @@ class GeminiProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         contents, system_instruction = self._build_contents(messages, system)
-        resp = self.client.models.generate_content(
-            model=model,
-            contents=contents,
-            system_instruction=system_instruction,
-            generation_config={
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
-                "response_mime_type": "application/json",
-                "response_schema": schema,
-            },
-        )
+        try:
+            resp = self.client.models.generate_content(
+                model=model,
+                contents=contents,
+                system_instruction=system_instruction,
+                generation_config={
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                    "response_mime_type": "application/json",
+                    "response_schema": schema,
+                },
+            )
+        except Exception as e:
+            raise _handle_gemini_error(e)
         return resp.text or "{}"
 
     def _chat_with_schema(
@@ -176,7 +182,10 @@ class GeminiProvider(BaseLLMProvider):
                     ]
                 }
             ]
-        resp = self.client.models.generate_content(**call_kwargs)
+        try:
+            resp = self.client.models.generate_content(**call_kwargs)
+        except Exception as e:
+            raise _handle_gemini_error(e)
         if not resp.candidates:
             raise RuntimeError(f"Gemini returned no candidates for model {model}")
         return resp, resp

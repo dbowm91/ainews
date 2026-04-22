@@ -62,12 +62,15 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        resp = self.client.chat.completions.create(
-            model=model,
-            messages=msgs,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        try:
+            resp = self.client.chat.completions.create(
+                model=model,
+                messages=msgs,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except Exception as e:
+            raise _handle_openai_error(e)
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return LLMResponse(
@@ -105,20 +108,23 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        resp = self.client.chat.completions.create(
-            model=model,
-            messages=msgs,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "response",
-                    "strict": True,
-                    "schema": schema,
+        try:
+            resp = self.client.chat.completions.create(
+                model=model,
+                messages=msgs,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "response",
+                        "strict": True,
+                        "schema": schema,
+                    },
                 },
-            },
-        )
+            )
+        except Exception as e:
+            raise _handle_openai_error(e)
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message.content or "{}"
@@ -171,7 +177,10 @@ class OpenAIProvider(BaseLLMProvider):
                 if tool_choice != "auto"
                 else "auto"
             )
-        resp = self.client.chat.completions.create(**call_kwargs)
+        try:
+            resp = self.client.chat.completions.create(**call_kwargs)
+        except Exception as e:
+            raise _handle_openai_error(e)
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message, resp

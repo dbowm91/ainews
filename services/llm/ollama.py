@@ -63,11 +63,14 @@ class OllamaProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        resp = self.client.chat(
-            model=model,
-            messages=msgs,
-            options={"temperature": temperature, "num_predict": max_tokens},
-        )
+        try:
+            resp = self.client.chat(
+                model=model,
+                messages=msgs,
+                options={"temperature": temperature, "num_predict": max_tokens},
+            )
+        except Exception as e:
+            raise _handle_ollama_error(e)
         return LLMResponse(
             text=self._extract_text(resp),
             model=model,
@@ -99,12 +102,15 @@ class OllamaProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
-        resp = self.client.chat(
-            model=model,
-            messages=msgs,
-            format=schema,
-            options={"temperature": temperature, "num_predict": max_tokens},
-        )
+        try:
+            resp = self.client.chat(
+                model=model,
+                messages=msgs,
+                format=schema,
+                options={"temperature": temperature, "num_predict": max_tokens},
+            )
+        except Exception as e:
+            raise _handle_ollama_error(e)
         return self._extract_text(resp)
 
     def _chat_with_schema(
@@ -148,7 +154,10 @@ class OllamaProvider(BaseLLMProvider):
                 }
                 for t in tools
             ]
-        resp = self.client.chat(**call_kwargs)
+        try:
+            resp = self.client.chat(**call_kwargs)
+        except Exception as e:
+            raise _handle_ollama_error(e)
         return resp, resp
 
     def _call_api_with_tools(

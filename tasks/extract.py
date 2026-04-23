@@ -99,13 +99,37 @@ def process_item(
     from tasks.pipeline import _log_pipeline
     from services.config_unified import MIN_CONTENT_LENGTH
 
-    if min_content_length is None:
+    try:
+        from schemas.tasks import ProcessItemTask
+        validated = ProcessItemTask(
+            source_key=source_key,
+            source_name=source_name,
+            source_type=source_type,
+            external_id=external_id,
+            title=title,
+            url=url,
+            author=author,
+            published_at=published_at,
+            text_content=text_content,
+            raw_score=raw_score,
+            raw_metadata=raw_metadata,
+            topics=topics,
+            min_content_length=min_content_length,
+            run_id=run_id,
+        )
+    except Exception as e:
+        logger.warning("Invalid process_item input: %s", e)
+        raise TypeError(f"Invalid process_item input: {e}") from e
+
+    if validated.min_content_length is None:
         min_content_length = MIN_CONTENT_LENGTH
+    else:
+        min_content_length = validated.min_content_length
 
     extraction = None
-    extracted_text = text_content or title
+    extracted_text = validated.text_content or validated.title
 
-    if url and (not text_content or len(text_content) < min_content_length):
+    if validated.url and (not validated.text_content or len(validated.text_content) < min_content_length):
         try:
             extraction = extract_article(url)
             if (
@@ -115,41 +139,41 @@ def process_item(
             ):
                 extracted_text = extraction.text
         except Exception as exc:
-            logger.warning("Extraction failed for %s: %s", url, exc)
-            if run_id:
+            logger.warning("Extraction failed for %s: %s", validated.url, exc)
+            if validated.run_id:
                 _log_pipeline(
-                    run_id,
+                    validated.run_id,
                     "extract",
                     "warning",
                     "Extraction failed for %s: %s",
-                    title[:60],
+                    validated.title[:60],
                     exc,
                 )
 
     # Cross-source dedup check
     try:
-        duplicate = _find_duplicate_article(url, title)
+        duplicate = _find_duplicate_article(validated.url, validated.title)
     except Exception as exc:
-        logger.warning("Dedup check failed for %s: %s", truncate_for_log(title), exc)
+        logger.warning("Dedup check failed for %s: %s", truncate_for_log(validated.title), exc)
         duplicate = None
     if duplicate:
         logger.info(
             "Duplicate found for [%s]: existing article %s",
-            truncate_for_log(title),
+            truncate_for_log(validated.title),
             duplicate.id,
         )
-        if run_id:
+        if validated.run_id:
             _log_pipeline(
-                run_id,
+                validated.run_id,
                 "extract",
                 "info",
                 "Duplicate skipped: %s (existing: %s)",
-                title[:60],
+                validated.title[:60],
                 duplicate.id,
                 article_id=duplicate.id,
             )
         # Add this source as a citation to the existing article if URL differs
-        if url and url != duplicate.original_url:
+        if validated.url and validated.url != duplicate.original_url:
             try:
                 existing_cite = Citation.query.filter_by(
                     article_id=duplicate.id, url=url
@@ -185,16 +209,16 @@ def process_item(
         from services.crawling import get_or_create_source
 
         source = get_or_create_source(
-            source_key=source_key,
-            name=source_name,
-            source_type=source_type,
-            url=url or "",
+            source_key=validated.source_key,
+            name=validated.source_name,
+            source_type=validated.source_type,
+            url=validated.url or "",
         )
 
         try:
             pub_date = (
-                datetime.fromisoformat(published_at)
-                if published_at
+                datetime.fromisoformat(validated.published_at)
+                if validated.published_at
                 else datetime.now(timezone.utc)
             )
             if pub_date.tzinfo is not None:
@@ -204,22 +228,22 @@ def process_item(
 
         article = Article(
             source_id=source.id,
-            external_id=external_id,
-            original_url=url,
-            original_title=title,
-            original_author=author,
+            external_id=validated.external_id,
+            original_url=validated.url,
+            original_title=validated.title,
+            original_author=validated.author,
             original_published_at=pub_date,
             extracted_text=extracted_text,
             pipeline_status="pending",
             pipeline_started_at=datetime.now(timezone.utc),
             crawled_at=datetime.now(timezone.utc),
-            category=topics[0] if topics else "other",
-            topics=topics,
-            raw_metadata=raw_metadata or {},
+            category=validated.topics[0] if validated.topics else "other",
+            topics=validated.topics,
+            raw_metadata=validated.raw_metadata or {},
             extraction_status=(
                 extraction.status.value
                 if extraction
-                else ("no_url" if not url else "fallback")
+                else ("no_url" if not validated.url else "fallback")
             ),
         )
         db.session.add(article)
@@ -229,13 +253,13 @@ def process_item(
         article.short_id = encode_short_url(article.id)
         db.session.flush()
 
-        if url:
+        if validated.url:
             db.session.add(
                 Citation(
                     article_id=article.id,
-                    url=url,
-                    title=title,
-                    author=author,
+                    url=validated.url,
+                    title=validated.title,
+                    author=validated.author,
                     position=1,
                 )
             )
@@ -243,31 +267,31 @@ def process_item(
         db.session.commit()
     except SoftTimeLimitExceeded:
         db.session.rollback()
-        logger.error("process_item exceeded soft time limit for %s", external_id)
+        logger.error("process_item exceeded soft time limit for %s", validated.external_id)
         raise
     except Exception as exc:
         db.session.rollback()
-        logger.error("DB operation failed for %s: %s", external_id, exc)
-        if run_id:
-            _log_pipeline(run_id, "extract", "error", "%s: %s", external_id, exc)
+        logger.error("DB operation failed for %s: %s", validated.external_id, exc)
+        if validated.run_id:
+            _log_pipeline(validated.run_id, "extract", "error", "%s: %s", validated.external_id, exc)
         raise
 
-    if run_id:
+    if validated.run_id:
         _log_pipeline(
-            run_id,
+            validated.run_id,
             "extract",
             "info",
             "Extracted [%s]: %s",
-            topics[0] if topics else "?",
-            title[:60],
+            validated.topics[0] if validated.topics else "?",
+            validated.title[:60],
             article_id=article.id,
         )
-    logger.info("Extracted [%s]: %s", topics[0] if topics else "?", title[:60])
+    logger.info("Extracted [%s]: %s", validated.topics[0] if validated.topics else "?", validated.title[:60])
 
     from tasks.pipeline import _dispatch_next
 
     try:
-        _dispatch_next(article.id, run_id=run_id, next_status="pending")
+        _dispatch_next(article.id, run_id=validated.run_id, next_status="pending")
     except Exception as e:
         article.pipeline_status = "failed"
         article.last_error = "Failed to dispatch to pipeline"

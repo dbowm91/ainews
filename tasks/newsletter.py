@@ -37,20 +37,28 @@ def send_single_email(
     retried via the Celery autoretry mechanism.  Permanent 5xx SMTP errors
     are not retried.
     """
+    try:
+        from schemas.tasks import SendEmailTask
+        validated = SendEmailTask(
+            email=email, subject=subject, html=html, unsub_url=unsub_url
+        )
+    except Exception as e:
+        logger.warning("Invalid send_single_email input: %s", e)
+        raise TypeError(f"Invalid send_single_email input: {e}") from e
+
     from services.email import send_newsletter_email
 
     try:
-        send_newsletter_email(email, subject, html, unsub_url)
-        return {"email": email, "sent": True}
+        send_newsletter_email(validated.email, validated.subject, validated.html, validated.unsub_url)
+        return {"email": validated.email, "sent": True}
     except smtplib.SMTPResponseException as e:
         if e.smtp_code >= 500:
-            logger.error("Permanent SMTP error sending to %s: %s", email, e)
-            return {"email": email, "sent": False, "error": str(e)}
-        # 4xx: re-raise so autoretry_for handles it
+            logger.error("Permanent SMTP error sending to %s: %s", validated.email, e)
+            return {"email": validated.email, "sent": False, "error": str(e)}
         raise
     except Exception as e:
-        logger.error("Failed to send to %s: %s", email, e)
-        return {"email": email, "sent": False, "error": str(e)}
+        logger.error("Failed to send to %s: %s", validated.email, e)
+        return {"email": validated.email, "sent": False, "error": str(e)}
 
 
 def _send_emails_parallel(subscribers_iter, subject, html, site_url):
@@ -348,9 +356,19 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     time_limit=360,
 )
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
-    if not verify_task("generate_daily_newsletters", (), {"dry_run_email": dry_run_email, "run_id": run_id}):
+    try:
+        from schemas.tasks import GenerateNewsletterTask
+        validated = GenerateNewsletterTask(dry_run_email=dry_run_email, run_id=run_id)
+    except Exception as e:
+        logger.warning("Invalid generate_daily_newsletters input: %s", e)
+        raise TypeError(f"Invalid generate_daily_newsletters input: {e}") from e
+
+    if not verify_task("generate_daily_newsletters", (), {"dry_run_email": validated.dry_run_email, "run_id": validated.run_id}):
         logger.error("Invalid signature for generate_daily_newsletters task")
         raise ValueError("Invalid task signature")
+
+    dry_run_email = validated.dry_run_email
+    run_id = validated.run_id
 
     import redis.exceptions
 

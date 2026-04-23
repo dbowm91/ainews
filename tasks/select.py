@@ -26,9 +26,19 @@ logger = get_task_logger(__name__)
     retry_jitter=True,
 )
 def select_article(self, article_id: int, run_id=None):
-    if not verify_task("select_article", (article_id,), {"run_id": run_id}):
+    try:
+        from schemas.tasks import SelectArticleTask
+        validated = SelectArticleTask(article_id=article_id, run_id=run_id)
+    except Exception as e:
+        logger.warning("Invalid select_article input: %s", e)
+        raise TypeError(f"Invalid select_article input: {e}") from e
+
+    if not verify_task("select_article", (validated.article_id,), {"run_id": validated.run_id}):
         logger.error("Invalid signature for select_article task")
         raise ValueError("Invalid task signature")
+
+    article_id = validated.article_id
+    run_id = validated.run_id
 
     from models import PipelineRun
     from extensions import db

@@ -159,13 +159,20 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
         days_to_keep: Number of days to retain article versions.
         dry_run: If True, return what would be deleted without deleting.
     """
+    try:
+        from schemas.tasks import CleanupArticleVersionsTask
+        validated = CleanupArticleVersionsTask(days_to_keep=days_to_keep, dry_run=dry_run)
+    except Exception as e:
+        logger.warning("Invalid cleanup_old_article_versions input: %s", e)
+        raise TypeError(f"Invalid cleanup_old_article_versions input: {e}") from e
+
     from models import ArticleVersion
     from extensions import db
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=validated.days_to_keep)
     try:
         query = ArticleVersion.query.filter(ArticleVersion.created_at < cutoff)
-        if dry_run:
+        if validated.dry_run:
             versions = query.all()
             article_ids = list({v.article_id for v in versions})
             oldest = min((v.created_at for v in versions), default=None)
@@ -197,7 +204,7 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
         logger.info(
             "Cleaned up %s article versions older than %d days",
             total_deleted,
-            days_to_keep,
+            validated.days_to_keep,
         )
         return {"deleted": total_deleted}
     except SoftTimeLimitExceeded:

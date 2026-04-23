@@ -242,6 +242,32 @@ def my_task(self, ...):
     ...
 ```
 
+## Celery Task Input Validation
+
+External task arguments should be validated with Pydantic schemas in `schemas/tasks.py`:
+
+```python
+from schemas.tasks import SelectArticleTask
+
+def select_article(self, article_id: int, run_id=None):
+    try:
+        validated = SelectArticleTask(article_id=article_id, run_id=run_id)
+    except Exception as e:
+        logger.warning("Invalid select_article input: %s", e)
+        raise TypeError(f"Invalid select_article input: {e}")
+
+    article_id = validated.article_id
+    run_id = validated.run_id
+    # ... rest of task logic
+```
+
+Available schemas in `schemas/tasks.py`:
+- `SelectArticleTask` — validates article_id positive
+- `GenerateNewsletterTask` — validates optional email format
+- `SendEmailTask` — validates required email format
+- `CleanupArticleVersionsTask` — validates 1-365 day range
+- `ProcessItemTask` — validates source_type, topics list limit
+
 ## Dead Letter Queue UI
 
 Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.

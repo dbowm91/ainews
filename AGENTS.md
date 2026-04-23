@@ -343,26 +343,11 @@ prompt = template.format(**prompt_data_escaped)
 
 **Webhook encryption at rest**: Webhook secrets are encrypted using Fernet (AES-128-CBC) when stored in the database. New secrets are encrypted with prefix `enc:` and legacy plaintext secrets are supported. Key is configured via `WEBHOOK_SECRET_KEY` env var. See `services/webhooks.py:_encrypt_secret()` and `_decrypt_secret()`.
 
-**Webhook idempotency keys**: `dispatch_webhook()` accepts an optional `idempotency_key` parameter. When provided, duplicate deliveries (same webhook_id + event_type + idempotency_key) are silently skipped. `trigger_event()` generates per-minute granularity idempotency keys (e.g., `article.published:123:1745330400`). See `services/webhooks.py:dispatch_webhook()`.
+**Task HMAC signing**: Celery tasks that take external arguments (run_all_sources, generate_daily_newsletters, select_article) require `CELERY_TASK_SECRET` env var (minimum 32 characters). verify_task() returns False when secret is not configured (fail-closed). Testing requires setting this env var in test fixtures.
 
-**Webhook trigger_event integration**: `trigger_event()` is called from `tasks/edit.py` (on article finalization) and `tasks/newsletter.py` (on newsletter sent). Events are only dispatched to active webhooks subscribed to the event type. See `services/webhooks.py:trigger_event()`.
+**Redis lock fail-closed**: When Redis is unavailable for distributed lock operations, tasks now raise immediately rather than proceeding unlocked. This applies to `crawl_source`, `retry_stuck`, and `publish_scheduled_articles`. Tests verifying Redis error handling must use `pytest.raises()` for the new fail-closed behavior (not assert result equals 1).
 
-**Config cache API key isolation**: `ConfigCache` now uses a separate Redis connection pool configurable via `CONFIG_CACHE_REDIS_URL` / `CONFIG_CACHE_REDIS_PASSWORD` env vars. Default Redis DB is 1 (separate from Celery broker at db 0). This isolates config cache blast radius from the main cache. See `services/config_cache.py:get_config_cache()`.
-
-**short_id path validation**: `routes/public/links.py:79,88` validates `short_id` with regex before querying:
-```python
-_SHORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
-if not _SHORT_ID_RE.match(short_id):
-    abort(404)
-```
-
-**Category CSS escaping**: All `category-badge` class values in templates must use the `|e` filter to prevent CSS class injection. The category value comes from the database and could contain malicious content. Found in `templates/partials/condensed_article.html:11`, `templates/admin/partials/review_table.html:18`, `templates/admin/partials/articles_table.html:50`, and 6 other templates.
-
-**ModelLimiter soft timeout**: `services/limiter.py` releases slots in the `finally` block of `run_stage()`. The `SoftTimeLimitExceeded` exception is caught, a rollback is performed, then the exception is re-raised. The `finally` block ensures the limiter slot is released regardless of which exception path is taken.
-
-**DNS cache TTL**: `_DNS_CACHE_TTL = 60` in `services/url.py:37` reduces DNS rebinding attack window to 60 seconds. This is the current implementation.
-
-**HTMX CSRF pattern**: HTMX templates using `hx-vals='{"csrf_token": "{{ csrf_token() }}"}'` for JSON API endpoints do NOT work with `@validate_csrf_json` (which checks `X-CSRFToken` header). Use `hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'` instead. Found in `templates/admin/dead_letters.html`, `templates/admin/partials/share_row.html`, `templates/admin/partials/articles_table.html`, `templates/admin/article_versions.html`, `templates/admin/partials/review_table.html`.
+**Celery task signature pattern**: Internal tasks should use `.s()` (signature) with `.apply_async()` rather than `.delay()` for proper HMAC signing. Tests must mock `process_item.s.return_value.apply_async.assert_called_once()`. All task tests need `CELERY_TASK_SECRET` set in the test fixture or via `@patch.dict("os.environ", ...)`.
 
 ## Critical patterns
 

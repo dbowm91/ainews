@@ -49,19 +49,16 @@ def _format_related_articles(articles: list[dict]) -> str:
 def _get_cached_tag_names() -> list[str]:
     global _TAG_CACHE, _TAG_CACHE_TIME
     now = time.time()
-    # Fast path: check without lock
     if _TAG_CACHE is not None and (now - _TAG_CACHE_TIME) < _TAG_CACHE_TTL:
         return _TAG_CACHE
-    with _TAG_CACHE_LOCK:
-        # Double-check inside lock
-        if _TAG_CACHE is not None and (now - _TAG_CACHE_TIME) < _TAG_CACHE_TTL:
-            return _TAG_CACHE
-        from models import Tag
+    from models import Tag
 
-        tags = Tag.query.order_by(Tag.name).limit(100).all()
-        _TAG_CACHE = [t.name for t in tags]
+    tags = Tag.query.order_by(Tag.name).limit(100).all()
+    fresh_tags = [t.name for t in tags]
+    with _TAG_CACHE_LOCK:
+        _TAG_CACHE = fresh_tags
         _TAG_CACHE_TIME = now
-        return _TAG_CACHE
+    return fresh_tags
 
 
 def clear_tag_cache() -> None:

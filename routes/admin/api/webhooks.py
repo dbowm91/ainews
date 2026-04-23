@@ -7,6 +7,13 @@ from routes.decorators import commit, validate_csrf_json
 
 logger = logging.getLogger(__name__)
 
+KNOWN_WEBHOOK_EVENTS = frozenset({
+    "article.published",
+    "article.failed",
+    "newsletter.sent",
+    "newsletter.failed",
+})
+
 
 def _mask_secret(secret: str) -> str:
     if len(secret) <= 8:
@@ -102,6 +109,9 @@ def create_webhook() -> tuple[Response, int] | Response:
         return jsonify({"error": f"Invalid URL: {e}"}), 400
     if not events or not isinstance(events, list):
         return jsonify({"error": "events must be a non-empty list"}), 400
+    invalid_events = [e for e in events if e not in KNOWN_WEBHOOK_EVENTS]
+    if invalid_events:
+        return jsonify({"error": f"unknown event types: {invalid_events}"}), 400
 
     webhook = Webhook(
         name=name,
@@ -200,6 +210,9 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if "events" in data:
         if not isinstance(data["events"], list):
             return jsonify({"error": "events must be a list"}), 400
+        invalid_events = [e for e in data["events"] if e not in KNOWN_WEBHOOK_EVENTS]
+        if invalid_events:
+            return jsonify({"error": f"unknown event types: {invalid_events}"}), 400
         webhook.events = data["events"]
     if "active" in data:
         webhook.active = bool(data["active"])

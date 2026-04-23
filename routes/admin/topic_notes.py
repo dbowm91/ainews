@@ -44,6 +44,13 @@ def topic_notes_create():
         flash("Topic and note are required", "error")
         return redirect(url_for("admin.topic_notes_list"))
 
+    if len(topic) > 64:
+        flash("Topic too long (max 64 characters)", "error")
+        return redirect(url_for("admin.topic_notes_list"))
+    if len(note) > 4096:
+        flash("Note too long (max 4096 characters)", "error")
+        return redirect(url_for("admin.topic_notes_list"))
+
     existing = get_topic_note(topic, source)
     if existing:
         flash("A note for this topic/source already exists. Use edit instead.", "error")
@@ -69,6 +76,13 @@ def topic_notes_edit():
 
     if not topic or not note:
         flash("Topic and note are required", "error")
+        return redirect(url_for("admin.topic_notes_list"))
+
+    if len(topic) > 64:
+        flash("Topic too long (max 64 characters)", "error")
+        return redirect(url_for("admin.topic_notes_list"))
+    if len(note) > 4096:
+        flash("Note too long (max 4096 characters)", "error")
         return redirect(url_for("admin.topic_notes_list"))
 
     try:

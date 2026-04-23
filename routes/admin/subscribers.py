@@ -53,6 +53,9 @@ def export_subscribers():
     from models import Subscriber
     import csv
     import io
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     def generate():
         output = io.StringIO()
@@ -62,23 +65,27 @@ def export_subscribers():
         output.seek(0)
         output.truncate(0)
 
-        query = (
-            Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-            .order_by(Subscriber.subscribed_at.desc())
-            .yield_per(500)
-        )
-        for sub in query:
-            writer.writerow(
-                [
-                    sub.email,
-                    sub.newsletter_type,
-                    sub.subscribed_at.isoformat() if sub.subscribed_at else "",
-                    sub.active,
-                ]
+        try:
+            query = (
+                Subscriber.query.filter(Subscriber.deleted_at.is_(None))
+                .order_by(Subscriber.subscribed_at.desc())
+                .yield_per(500)
             )
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
+            for sub in query:
+                writer.writerow(
+                    [
+                        sub.email,
+                        sub.newsletter_type,
+                        sub.subscribed_at.isoformat() if sub.subscribed_at else "",
+                        sub.active,
+                    ]
+                )
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+        except Exception as e:
+            logger.error("CSV export failed: %s", e)
+            yield f"# ERROR: {e}\n"
 
     return Response(
         stream_with_context(generate()),

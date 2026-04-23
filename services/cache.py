@@ -111,7 +111,11 @@ class ResponseCache:
                 len(self._memory) >= _get_l1_cache_maxsize()
                 and full_key not in self._memory
             ):
-                self._memory.popitem(last=False)
+                lru_key = min(
+                    self._memory.keys(),
+                    key=lambda k: self._memory[k][1]
+                )
+                del self._memory[lru_key]
             self._memory[full_key] = (time.monotonic() + ttl, time.monotonic(), raw)
 
         # L2: Redis
@@ -148,9 +152,21 @@ class ResponseCache:
                 cached = self.get(key)
                 if cached is not None:
                     return cached
-            value = loader_fn()
-            self.set(key, value, ttl)
-            return value
+            if self._redis.set(lock_key, "1", nx=True, ex=10):
+                try:
+                    cached = self.get(key)
+                    if cached is not None:
+                        return cached
+                    value = loader_fn()
+                    self.set(key, value, ttl)
+                    return value
+                finally:
+                    try:
+                        self._redis.delete(lock_key)
+                    except redis.exceptions.RedisError:
+                        pass
+            else:
+                raise RuntimeError(f"Failed to acquire cache lock for key: {key}")
 
     def invalidate(self, key: str) -> None:
         """Remove a specific cache entry."""

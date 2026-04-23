@@ -9,6 +9,8 @@ Conventions for AI coding agents working in this codebase.
 .venv/bin/python -m pytest tests/ -x -q
 ```
 
+**Note:** Some LLM adapter tests may have pre-existing failures unrelated to code changes.
+
 ## Key conventions
 
 ### LLM prompt building

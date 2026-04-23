@@ -65,7 +65,7 @@ All providers implement `BaseLLMProvider` from `services/llm/base.py`. Registere
 - `services/llm/base.py` — `BaseLLMProvider`, `LLMResponse`, `ToolDefinition`
 - `services/llm/errors.py` — error classification (rate limit, auth, server error, timeout)
 
-**Timeouts:** OpenAI uses `_client_kwargs["timeout"]=120.0`; Anthropic uses `self._timeout=120.0` passed to client constructor. All LLM calls should have explicit timeouts.
+**Timeouts:** All LLM providers use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from `constants.py`. Provider files should import and use this constant rather than hardcoding values.
 
 **LLM Retry with Backoff:** `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff (base=1s, max=30s). Does NOT retry on `AuthError` or `CircuitOpenError`. Applied to all provider methods via `_do_*` / `_*` internal method pattern.
 
@@ -211,7 +211,15 @@ Used in pipeline tasks (`tasks/select.py`, `tasks/research.py`, `tasks/write.py`
 
 ## ThreadPoolExecutor Pattern
 
-Blocking I/O should use ThreadPoolExecutor to avoid blocking Celery workers:
+Blocking I/O (HTTP calls, content extraction) must use ThreadPoolExecutor to avoid blocking Celery workers. This pattern is already applied in:
+
+- `services/content_extractor.py` — trafilatura content extraction (4 workers, 35s timeout)
+- `services/search/searxng.py` — SearXNG search (20s timeout)
+- `services/search/google.py` — Google search (20s timeout)
+- `services/search/duckduckgo.py` — DuckDuckGo search (20s timeout)
+- `services/subagent.py` — subagent chain LLM calls (per-stage timeout)
+
+The executor should be a module-level singleton:
 
 ```python
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -231,11 +239,11 @@ def blocking_api(arg):
         raise
 ```
 
-Timeout in `future.result()` should be slightly higher than the operation timeout (e.g., +5s for content extraction).
+**Important:** In the `finally` block, use `executor.shutdown(wait=False, cancel_futures=True)` — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout.
 
 ## Celery Task Autoretry
 
-All tasks should use autoretry parameters:
+All tasks use autoretry parameters:
 
 ```python
 @shared_task(
@@ -246,6 +254,21 @@ All tasks should use autoretry parameters:
     retry_jitter=True,
 )
 def my_task(self, ...):
+    ...
+```
+
+For tasks that distinguish transient from permanent errors (e.g., SMTP), use `dont_autoretry_for` to avoid retrying permanent failures:
+
+```python
+@shared_task(
+    bind=True,
+    autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError),
+    dont_autoretry_for=(smtplib.SMTPResponseException,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def send_email(self, ...):
     ...
 ```
 
@@ -287,6 +310,8 @@ Admin UI at `/admin/webhooks` displays configured webhooks with event history. C
 
 **Article SLA:** Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns processing time metrics (avg, p50, p95) for crawl→select, select→publish, and crawl→publish durations.
 
+**SLA metrics sort optimization:** `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats (3 sorts total), not twice per metric. This matters for large result sets.
+
 **Newsletter delivery:** Newsletter model has `delivered_count` and `error_message`. Admin endpoint `GET /admin/api/newsletters/stats` returns aggregate delivery stats.
 
 **Search analytics:** `SearchQuery` model tracks searches with result counts and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
@@ -306,9 +331,11 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **SSRF**: All URLs validated via `validate_url_safe()` before fetching
 - **Session fixation**: Admin login uses `session.clear()` before setting `session["admin"]` (Flask 3.x `SecureCookieSession` does not have `regenerate_id()`)
 - **eval() replacement**: Subagent conditions use AST-based parser
-- **Webhook secrets**: Masked in API responses via `_mask_secret()`
+- **Webhook secrets**: Masked in API responses via `_mask_secret()`; encrypted at rest with Fernet (AES-128-CBC) keyed by `WEBHOOK_SECRET_KEY`
 - **Redis credentials**: Preserved via `urlparse`/`urlunparse` when switching DBs
 - **RSS XML**: Headlines/descriptions escaped with `html.escape()` before insertion
 - **Login lockout**: Redis Lua script for atomic check-and-record; in-memory fallback
-- **Task signing**: HMAC signing via `services/task_security.py` for Celery tasks
+- **Task signing**: HMAC signing via `services/task_security.py` — `verify_task()` returns `False` when `CELERY_TASK_SECRET` is unset (fail-closed)
 - **Webhook replay**: Timestamps included in webhook signatures
+- **Redis lock fail-closed**: `crawl_source`, `retry_stuck`, and `publish_scheduled` raise immediately when Redis is unavailable for distributed lock operations (rather than proceeding unlocked)
+- **Celery autoretry**: All tasks use `autoretry_for=(ConnectionError, TimeoutError)`, `retry_backoff=True`, `retry_backoff_max=300`, `retry_jitter=True`

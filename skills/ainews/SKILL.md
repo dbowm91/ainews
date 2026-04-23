@@ -200,6 +200,48 @@ Available in tasks via `get_task_request_id()` from `services/logging_utils.py`.
 - `traced_llm_call(provider, model, stage)` — context manager for LLM spans
 - `traced_stage(stage_name)` — context manager for pipeline stage spans
 
+Used in pipeline tasks (`tasks/select.py`, `tasks/research.py`, `tasks/write.py`, `tasks/edit.py`) to wrap LLM calls.
+
+## ThreadPoolExecutor Pattern
+
+Blocking I/O should use ThreadPoolExecutor to avoid blocking Celery workers:
+
+```python
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+
+_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="my_service")
+
+def _do_blocking_work(arg):
+    # blocking I/O here
+    return result
+
+def blocking_api(arg):
+    try:
+        future = _EXECUTOR.submit(_do_blocking_work, arg)
+        return future.result(timeout=30)
+    except (FuturesTimeoutError, TimeoutError):
+        future.cancel()
+        raise
+```
+
+Timeout in `future.result()` should be slightly higher than the operation timeout (e.g., +5s for content extraction).
+
+## Celery Task Autoretry
+
+All tasks should use autoretry parameters:
+
+```python
+@shared_task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def my_task(self, ...):
+    ...
+```
+
 ## Dead Letter Queue UI
 
 Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.

@@ -349,6 +349,12 @@ prompt = template.format(**prompt_data_escaped)
 
 **Celery task signature pattern**: Internal tasks should use `.s()` (signature) with `.apply_async()` rather than `.delay()` for proper HMAC signing. Tests must mock `process_item.s.return_value.apply_async.assert_called_once()`. All task tests need `CELERY_TASK_SECRET` set in the test fixture or via `@patch.dict("os.environ", ...)`.
 
+**Non-blocking I/O with ThreadPoolExecutor**: Blocking operations (HTTP calls, content extraction) should be wrapped in `ThreadPoolExecutor` to avoid blocking Celery workers. Use `_EXECUTOR.submit(fn, *args)` with `future.result(timeout=N)`, catching `TimeoutError` and calling `future.cancel()`. See `services/content_extractor.py`, `services/search/searxng.py`, `services/search/google.py`, `services/search/duckduckgo.py`, `services/subagent.py` for examples. Timeout should be slightly higher than the operation timeout (e.g., +5s for content extraction).
+
+**LLM call tracing**: `traced_llm_call(provider, model, stage)` from `services/logging_utils.py` wraps LLM calls for OpenTelemetry tracing. Wraps the `time_histogram` context manager in pipeline tasks. Uses noop span when OTel is unavailable. Applied in `tasks/select.py`, `tasks/research.py`, `tasks/write.py`, and `tasks/edit.py`.
+
+**Celery autoretry configuration**: All Celery tasks should have `autoretry_for=(ConnectionError, TimeoutError)`, `retry_backoff=True`, `retry_backoff_max=300`, and `retry_jitter=True` in their `@shared_task` decorators. This provides exponential backoff for transient failures. Applied to `tasks/crawl.py`, `tasks/extract.py`, and all tasks in `tasks/cleanup.py`.
+
 ## Critical patterns
 
 ### Celery tasks must not use `current_app.config`
@@ -420,6 +426,10 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 ### Timeout patterns
 
 **ThreadPoolExecutor shutdown**: When implementing timeouts with `ThreadPoolExecutor`, use `executor.shutdown(wait=False, cancel_futures=True)` in the `finally` block — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout. Python 3.9+ supports `cancel_futures=True` (project uses 3.12).
+
+**Non-blocking I/O with ThreadPoolExecutor**: Blocking operations (HTTP calls, content extraction) should be wrapped in `ThreadPoolExecutor` to avoid blocking Celery workers. Use `_EXECUTOR.submit(fn, *args)` with `future.result(timeout=N)`, catching `TimeoutError` and calling `future.cancel()`. Timeout should be slightly higher than the operation timeout (e.g., +5s for content extraction).
+
+**Search provider timeout**: Use `from concurrent.futures import TimeoutError as FuturesTimeoutError` to distinguish FuturesTimeoutError from the builtin.
 
 **`autoretry_for` over manual `self.retry()`**: Prefer the `autoretry_for` / `dont_autoretry_for` decorator parameters over manual `raise self.retry()` calls. This is cleaner and supports `retry_backoff` and `retry_jitter` out of the box. See `tasks/newsletter.py:send_single_email` for the reference pattern — uses `autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError)` with `dont_autoretry_for=(smtplib.SMTPResponseException,)` to distinguish transient from permanent SMTP errors.
 

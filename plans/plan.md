@@ -8,21 +8,9 @@
 
 ## Summary
 
-All plan items from Waves A-E have been verified complete in the codebase:
+All implementation items from Waves A-E have been verified complete in the codebase. See git history for commit details.
 
-- ✅ Wave A (A1-A10): All 10 security items implemented and verified
-- ✅ Wave B (B1-B3): All transaction/locking fixes implemented and verified
-- ✅ Wave C (C1-C6): All 6 performance items implemented and verified
-- ✅ Wave D (D1-D9): All 9 code quality items implemented and verified
-- ✅ Wave E (E1-E6): All 6 lower-priority items implemented and verified
-
-**Verification:**
-- `.venv/bin/ruff check . --exclude .venv` — All lint checks pass
-- Bulk article cache invalidation fix committed (April 23)
-
-**Pre-existing test failures (not related to plan changes):**
-- `tests/test_llm_adapters/test_anthropic.py::test_chat_with_schema` — KeyError on `call_args.kwargs`
-- `tests/test_llm_adapters/test_ollama.py::test_extract_text_with_thinking_fallback` — pre-existing
+**Verification:** `.venv/bin/ruff check . --exclude .venv` — All lint checks pass
 
 ---
 

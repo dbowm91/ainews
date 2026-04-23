@@ -74,6 +74,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Circuit breaker metrics**: Emits `circuit_breaker.state_change` counter with `provider`, `from`, `to` labels and `circuit_breaker.opened` on OPEN transitions.
 - **Pipeline duration histograms**: `pipeline.stage_duration_seconds` recorded for select, research, write, and edit stages.
 - **Backup verification**: `scripts/verify_backup.sh` validates SQLite integrity and required tables. Called automatically from `scripts/backup.sh`.
+- **Query analysis**: `scripts/query_analysis.sh` runs EXPLAIN ANALYZE on common query patterns. Usage: `./scripts/query_analysis.sh`, `./scripts/query_analysis.sh custom`, or `./scripts/query_analysis.sh article <id>`
 - **State machine for pipeline**: `constants.py` defines `VALID_TRANSITIONS` for atomic state changes. Use `_transition_article_status()` in `tasks/pipeline.py` instead of direct assignment.
 - **Per-stage failure tracking**: `services/pipeline_failure.py:_track_stage_failure()` tracks failures per stage per article in Redis. Early termination after 3 failures at same stage.
 - **Request ID propagation**: `g.request_id` set in Flask `before_request`. Passed via Celery task headers. Available in tasks via `get_task_request_id()` from `services/logging_utils.py`.
@@ -267,7 +268,9 @@ Available schemas:
 - `SendEmailTask` — email, subject, html, unsub_url with email format validation
 - `GenerateNewsletterTask` — dry_run_email, run_id with email validation
 - `CleanupArticleVersionsTask` — days_to_keep (1-365), dry_run
-- `ProcessItemTask` — all process_item arguments with source_type validation
+- `ProcessItemTask` — all process_item arguments with source_type validation (rss/api/web), topics list limit (max 20)
+
+All schemas implemented and used in task bodies as shown above.
 
 ### Request size limiting
 

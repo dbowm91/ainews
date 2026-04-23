@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Optional
 
+from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.llm.base import (
     BaseLLMProvider,
@@ -43,7 +44,7 @@ class OpenAIProvider(BaseLLMProvider):
         self._client_kwargs = {
             "api_key": cfg.api_key,
             "base_url": cfg.base_url,
-            "timeout": 120.0,
+            "timeout": DEFAULT_LLM_TIMEOUT_SECONDS,
         }
 
     def _create_client(self):

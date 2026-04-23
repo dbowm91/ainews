@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Optional
 
+from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.llm.base import (
     BaseLLMProvider,
@@ -40,7 +41,7 @@ class GeminiProvider(BaseLLMProvider):
 
         return genai.Client(
             api_key=self.config.get("api_key"),
-            http_options={"timeout": 120},
+            http_options={"timeout": DEFAULT_LLM_TIMEOUT_SECONDS},
         )
 
     def _build_contents(

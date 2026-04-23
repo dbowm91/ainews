@@ -196,10 +196,11 @@ def pipeline_sla() -> Response:
             if delta >= 0:
                 crawl_to_publish.append(delta)
 
-    def _sorted_stats(data):
-        if not data:
-            return {"avg": None, "p50": None, "p95": None}
-        sorted_data = sorted(data)
+    sorted_c2s = sorted(crawl_to_select) if crawl_to_select else []
+    sorted_s2p = sorted(select_to_publish) if select_to_publish else []
+    sorted_c2p = sorted(crawl_to_publish) if crawl_to_publish else []
+
+    def _stats(sorted_data):
         n = len(sorted_data)
         return {
             "avg": round(sum(sorted_data) / n, 1),
@@ -207,9 +208,9 @@ def pipeline_sla() -> Response:
             "p95": round(sorted_data[int(n * 0.95)], 1),
         }
 
-    c2s_stats = _sorted_stats(crawl_to_select)
-    s2p_stats = _sorted_stats(select_to_publish)
-    c2p_stats = _sorted_stats(crawl_to_publish)
+    c2s_stats = _stats(sorted_c2s)
+    s2p_stats = _stats(sorted_s2p)
+    c2p_stats = _stats(sorted_c2p)
 
     return jsonify(
         {

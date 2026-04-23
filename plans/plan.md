@@ -1,8 +1,25 @@
 # Implementation Plan — Consolidated
 
 **Created:** April 22, 2026
-**Last Updated:** April 23, 2026
+**Last Updated:** April 23, 2026 (additional completions)
 **Status:** COMPLETED — All waves verified complete, no reverts or incomplete items
+
+---
+
+## Session 2026-04-23 (additional completions)
+
+The following items were found incomplete during audit and completed:
+
+- ✅ D8: SLA metrics optimized — reduced from 6 sorts (3 metrics × 2 calls each) to 3 sorts (1 per metric) in `routes/admin/api/pipeline.py`
+- ✅ C4: DEFAULT_LLM_TIMEOUT_SECONDS wired into all providers — `services/llm/openai.py`, `services/llm/anthropic.py`, `services/llm/ollama.py`, `services/llm/gemini.py` now import and use the constant from `constants.py`
+
+**Verification performed:**
+- `.venv/bin/ruff check services/llm/ routes/admin/api/pipeline.py --exclude .venv` — All lint checks pass
+- Import verification confirms all providers load correctly with the constant
+
+**Pre-existing test failures (not related to these changes):**
+- `tests/test_llm_adapters/test_anthropic.py::test_chat_with_schema` — KeyError on `call_args.kwargs` (test uses wrong attribute access pattern)
+- `tests/test_llm_adapters/test_ollama.py::test_extract_text_with_thinking_fallback` — pre-existing, fails without changes too
 
 ---
 
@@ -108,7 +125,7 @@ All items reviewed and verified. See notes for implementation status.
 - ✅ C1: Content extraction non-blocking (ThreadPoolExecutor, 4 workers)
 - ✅ C2: Search providers non-blocking (SearXNG, Google, DuckDuckGo)
 - ✅ C3: Subagent chain non-blocking (executor wrapping)
-- ✅ C4: DEFAULT_LLM_TIMEOUT_SECONDS constant
+- ✅ C4: DEFAULT_LLM_TIMEOUT_SECONDS wired into all 4 LLM providers
 - ✅ C5: Cache invalidation on bulk delete
 - ✅ C6: Article detail cache invalidation in articles.py
 
@@ -120,7 +137,7 @@ All items reviewed and verified. See notes for implementation status.
 - ✅ D5: Move DB query outside lock in tag cache
 - ✅ D6: Implement LRU eviction for L1 cache
 - ✅ D7: Fix stampede protection race condition
-- ✅ D8: SLA metrics optimized (sort once per metric)
+- ✅ D8: SLA metrics optimized — sort once per metric (reduced from 6 sorts to 3)
 - ✅ D9: Enable LLM call tracing
 
 ### Wave E: Lower Priority Items

@@ -3,6 +3,7 @@ import logging
 import uuid
 from typing import Any, Optional
 
+from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.llm.base import (
     BaseLLMProvider,
@@ -41,7 +42,7 @@ class OllamaProvider(BaseLLMProvider):
     def _create_client(self):
         import ollama
 
-        return ollama.Client(host=self.host, timeout=120)
+        return ollama.Client(host=self.host, timeout=DEFAULT_LLM_TIMEOUT_SECONDS)
 
     def _extract_text(self, resp, return_thinking: bool = False) -> str:
         message = resp.get("message", {})

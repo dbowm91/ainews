@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from schemas.common import resolve_env_var
@@ -10,9 +11,45 @@ from services.search.base import (
 
 logger = logging.getLogger(__name__)
 
+_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="google_search")
+
 
 def _is_configured(val: str) -> bool:
     return bool(val) and not val.startswith("${")
+
+
+def _search_impl(
+    provider: "GoogleSearchProvider", query: str, max_results: int
+) -> list[SearchResult]:
+    import requests
+    from services.url import validate_url_safe
+
+    validate_url_safe(provider.base_url)
+
+    resp = requests.get(
+        provider.base_url,
+        params={
+            "key": provider.api_key,
+            "cx": provider.cse_id,
+            "q": query,
+            "num": min(max_results, 10),
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    results = []
+    for item in data.get("items", []):
+        results.append(
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("link", ""),
+                snippet=item.get("snippet", ""),
+                source=provider.provider_id,
+            )
+        )
+    return results[:max_results]
 
 
 @register_search_provider("google")
@@ -31,37 +68,11 @@ class GoogleSearchProvider(BaseSearchProvider):
             return []
 
         try:
-            import requests
-            from services.url import validate_url_safe, UnsafeURLError
-
-            validate_url_safe(self.base_url)
-
-            resp = requests.get(
-                self.base_url,
-                params={
-                    "key": self.api_key,
-                    "cx": self.cse_id,
-                    "q": query,
-                    "num": min(max_results, 10),
-                },
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            results = []
-            for item in data.get("items", []):
-                results.append(
-                    SearchResult(
-                        title=item.get("title", ""),
-                        url=item.get("link", ""),
-                        snippet=item.get("snippet", ""),
-                        source=self.provider_id,
-                    )
-                )
-            return results[:max_results]
-        except UnsafeURLError as e:
-            logger.warning("Google search blocked for '%s': %s", query, e)
+            future = _EXECUTOR.submit(_search_impl, self, query, max_results)
+            return future.result(timeout=20)
+        except (FuturesTimeoutError, TimeoutError):
+            future.cancel()
+            logger.warning("Google search timed out for '%s'", query)
             return []
         except Exception as e:
             logger.warning("Google search failed for '%s': %s", query, type(e).__name__)

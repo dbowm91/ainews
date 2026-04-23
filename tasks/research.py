@@ -116,18 +116,20 @@ def research_article(self, article_id: int, run_id=None):
         )
 
         from services.metrics import time_histogram
+        from services.logging_utils import traced_llm_call
 
-        with time_histogram(
-            "pipeline.stage_duration_seconds", labels={"stage": "research"}
-        ):
-            brief = provider.chat_structured(
-                messages=[{"role": "user", "content": prompt}],
-                response_model=ResearchBrief,
-                model=model,
-                system=get_researcher_system_prompt(),
-                temperature=rc.temperature,
-                max_tokens=max_tokens,
-            )
+        with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="research"):
+            with time_histogram(
+                "pipeline.stage_duration_seconds", labels={"stage": "research"}
+            ):
+                brief = provider.chat_structured(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_model=ResearchBrief,
+                    model=model,
+                    system=get_researcher_system_prompt(),
+                    temperature=rc.temperature,
+                    max_tokens=max_tokens,
+                )
 
         article.research_brief = brief.model_dump_json()
         article.impact_score = brief.impact_score

@@ -6,6 +6,31 @@
 
 ---
 
+## Session 2026-04-23: Remaining Items Implemented
+
+The following items were implemented in this session, completing all deferred items from Waves A-E:
+
+### Wave A: Additional Security Fixes
+- ✅ A5: Fix XSS in dead_letters.html category badge — removed `or '—'` fallback, category properly escaped
+- ✅ A8: Email enumeration fix — subscribe.py already returned consistent message (no change needed)
+- ✅ A9: Add CSRF to trigger_newsletter and newsletter_dry_run routes
+
+### Wave C: Performance Improvements
+- ✅ C1: Content extraction non-blocking — ThreadPoolExecutor with 4 workers, 35s timeout
+- ✅ C2: Search providers non-blocking — ThreadPoolExecutor for SearXNG, Google, DuckDuckGo (20s timeout)
+- ✅ C3: Subagent chain non-blocking — executor wrapping for run_subagent_chain LLM calls
+- ✅ C6: Cache invalidation fix — article_detail:{id} key now invalidated in articles.py:287
+
+### Wave D: Code Quality
+- ✅ D1: autoretry_for added to crawl_source, process_item, and all cleanup tasks
+- ✅ D8: SLA metrics optimized — sort once per metric (3 sorts instead of 6)
+- ✅ D9: LLM call tracing enabled — traced_llm_call wrapping in select, research, write, edit tasks
+
+### Wave E: Lower Priority
+- ✅ E4: Metrics histogram sorting — already optimized (single sort for all percentiles)
+
+---
+
 ## Executive Summary
 
 This plan consolidates all deferred and new implementation items from plan.md, plan2.md, plan3.md, and plan4.md into a single actionable roadmap. Items are organized into waves based on parallelization potential and priority.
@@ -29,6 +54,7 @@ This plan consolidates all deferred and new implementation items from plan.md, p
 | 2.6: Dashboard Event-Based Invalidation | plan5.md | Requires identifying all article state transitions |
 | 1.1: CI/CD Pipeline | plan5.md | Requires project to be hosted on platform with GitHub Actions or equivalent |
 | 6.2: EXPLAIN ANALYZE Script | plan5.md | Low priority, informational |
+| B.3: Add Missing Database Indexes | plan.md | Requires migration, skipped to avoid production risk |
 
 ---
 
@@ -52,26 +78,31 @@ This plan consolidates all deferred and new implementation items from plan.md, p
 - ✅ B3: Add database indexes (skipped - requires migration)
 
 ### Wave C: Performance Improvements
-- ✅ C4: Add DEFAULT_LLM_TIMEOUT_SECONDS constant
-- ✅ C5: Add cache invalidation to bulk delete
-- ⚠️ C1-C3, C6: Deferred (complex refactors)
+- ✅ C1: Content extraction non-blocking (ThreadPoolExecutor, 4 workers)
+- ✅ C2: Search providers non-blocking (SearXNG, Google, DuckDuckGo)
+- ✅ C3: Subagent chain non-blocking (executor wrapping)
+- ✅ C4: DEFAULT_LLM_TIMEOUT_SECONDS constant
+- ✅ C5: Cache invalidation on bulk delete
+- ✅ C6: Article detail cache invalidation in articles.py
 
 ### Wave D: Code Quality & Medium Priority Items
+- ✅ D1: Add autoretry_for to task definitions
 - ✅ D2: Add input validation to topic notes
 - ✅ D3: Add error handling to CSV streaming
 - ✅ D4: Validate webhook events against known types
 - ✅ D5: Move DB query outside lock in tag cache
 - ✅ D6: Implement LRU eviction for L1 cache
 - ✅ D7: Fix stampede protection race condition
-- ⚠️ D1, D8, D9: Deferred
+- ✅ D8: SLA metrics optimized (sort once per metric)
+- ✅ D9: Enable LLM call tracing
 
 ### Wave E: Lower Priority Items
 - ✅ E1: Add eager loading to find_related_articles_dicts
 - ✅ E2: Make stop words a module-level frozenset
 - ✅ E3: Fix import shadowing in health.py
+- ✅ E4: Metrics histogram sorting (already optimized)
 - ✅ E5: Update werkzeug requirement to >=3.1.8
 - ✅ E6: Update redis requirement to >=7.0.0,<8.0.0
-- ⚠️ E4: Deferred
 
 ---
 

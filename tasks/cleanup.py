@@ -9,7 +9,11 @@ from billiard.exceptions import SoftTimeLimitExceeded
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
 def cleanup_old_pipeline_logs(self):
     """Delete pipeline logs older than 30 days.
 
@@ -50,7 +54,11 @@ def cleanup_old_pipeline_logs(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
 def cleanup_expired_verifications(self):
     """Delete unverified subscribers whose verification has expired.
 
@@ -83,7 +91,11 @@ def cleanup_expired_verifications(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=60, time_limit=120)
+@shared_task(bind=True, soft_time_limit=60, time_limit=120,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
 def cleanup_stale_limiter_slots(self):
     """Clean up stale model limiter slots in Redis.
 
@@ -99,7 +111,11 @@ def cleanup_stale_limiter_slots(self):
     return {"cleaned": cleaned}
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
 def consolidate_trend_memory(self):
     """Consolidate low-importance trend memory entries when high-importance entries arrive.
 
@@ -128,7 +144,11 @@ def consolidate_trend_memory(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
 def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = False):
     """Delete article versions older than specified days.
 

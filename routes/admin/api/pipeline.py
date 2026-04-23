@@ -196,33 +196,35 @@ def pipeline_sla() -> Response:
             if delta >= 0:
                 crawl_to_publish.append(delta)
 
-    def pct(data, p):
+    def _sorted_stats(data):
         if not data:
-            return None
+            return {"avg": None, "p50": None, "p95": None}
         sorted_data = sorted(data)
-        idx = int(len(sorted_data) * p)
-        idx = min(idx, len(sorted_data) - 1)
-        return round(sorted_data[idx], 1)
+        n = len(sorted_data)
+        return {
+            "avg": round(sum(sorted_data) / n, 1),
+            "p50": round(sorted_data[n // 2], 1),
+            "p95": round(sorted_data[int(n * 0.95)], 1),
+        }
 
-    def avg(data):
-        if not data:
-            return None
-        return round(sum(data) / len(data), 1)
+    c2s_stats = _sorted_stats(crawl_to_select)
+    s2p_stats = _sorted_stats(select_to_publish)
+    c2p_stats = _sorted_stats(crawl_to_publish)
 
     return jsonify(
         {
             "period_days": days,
             "article_count": total_count,
             "sla": {
-                "crawl_to_select_avg": avg(crawl_to_select),
-                "crawl_to_select_p50": pct(crawl_to_select, 0.50),
-                "crawl_to_select_p95": pct(crawl_to_select, 0.95),
-                "select_to_publish_avg": avg(select_to_publish),
-                "select_to_publish_p50": pct(select_to_publish, 0.50),
-                "select_to_publish_p95": pct(select_to_publish, 0.95),
-                "crawl_to_publish_avg": avg(crawl_to_publish),
-                "crawl_to_publish_p50": pct(crawl_to_publish, 0.50),
-                "crawl_to_publish_p95": pct(crawl_to_publish, 0.95),
+                "crawl_to_select_avg": c2s_stats["avg"],
+                "crawl_to_select_p50": c2s_stats["p50"],
+                "crawl_to_select_p95": c2s_stats["p95"],
+                "select_to_publish_avg": s2p_stats["avg"],
+                "select_to_publish_p50": s2p_stats["p50"],
+                "select_to_publish_p95": s2p_stats["p95"],
+                "crawl_to_publish_avg": c2p_stats["avg"],
+                "crawl_to_publish_p50": c2p_stats["p50"],
+                "crawl_to_publish_p95": c2p_stats["p95"],
             },
             "histogram": get_metrics().get_metrics().get("histograms", {}).get(
                 "pipeline_sla_seconds", {}

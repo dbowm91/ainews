@@ -54,18 +54,20 @@ def select_article(self, article_id: int, run_id=None):
         )
 
         from services.metrics import time_histogram
+        from services.logging_utils import traced_llm_call
 
-        with time_histogram(
-            "pipeline.stage_duration_seconds", labels={"stage": "select"}
-        ):
-            result = provider.chat_structured(
-                messages=[{"role": "user", "content": prompt}],
-                response_model=SelectionResult,
-                model=model,
-                system=get_system_prompt("selector", rc.system_prompt),
-                temperature=rc.temperature,
-                max_tokens=max_tokens,
-            )
+        with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="select"):
+            with time_histogram(
+                "pipeline.stage_duration_seconds", labels={"stage": "select"}
+            ):
+                result = provider.chat_structured(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_model=SelectionResult,
+                    model=model,
+                    system=get_system_prompt("selector", rc.system_prompt),
+                    temperature=rc.temperature,
+                    max_tokens=max_tokens,
+                )
 
         article.selector_result = result.model_dump()
 

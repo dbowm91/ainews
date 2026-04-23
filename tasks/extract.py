@@ -71,6 +71,10 @@ def _find_duplicate_article(url: str, title: str):
     default_retry_delay=30,
     soft_time_limit=300,
     time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def process_item(
     self,

@@ -67,7 +67,7 @@
                 </a>
               </td>
               <td>{{ article.source.name if article.source else '—' }}</td>
-<td><span class="category-badge cat-{{ article.category | e }}">{{ article.category or '—' | e }}</span></td>
+<td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
               <td>{{ article.updated_at.strftime('%b %d %H:%M') if article.updated_at }}</td>
               <td class="actions-cell">
                 <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
@@ -107,7 +107,7 @@
                 </a>
               </td>
               <td>{{ article.source.name if article.source else '—' }}</td>
-<td><span class="category-badge cat-{{ article.category | e }}">{{ article.category or '—' | e }}</span></td>
+<td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                <td>{{ pipeline_badge(article.pipeline_status) }}</td>
               <td>{{ impact_score(article.impact_score) }}</td>
               <td>

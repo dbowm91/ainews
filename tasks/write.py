@@ -43,18 +43,20 @@ def write_article(self, article_id: int, run_id=None):
         )
 
         from services.metrics import time_histogram
+        from services.logging_utils import traced_llm_call
 
-        with time_histogram(
-            "pipeline.stage_duration_seconds", labels={"stage": "write"}
-        ):
-            result = provider.chat_structured(
-                messages=[{"role": "user", "content": prompt}],
-                response_model=CondensedArticle,
-                model=model,
-                system=get_writer_system_prompt(),
-                temperature=rc.temperature,
-                max_tokens=max_tokens,
-            )
+        with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="write"):
+            with time_histogram(
+                "pipeline.stage_duration_seconds", labels={"stage": "write"}
+            ):
+                result = provider.chat_structured(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_model=CondensedArticle,
+                    model=model,
+                    system=get_writer_system_prompt(),
+                    temperature=rc.temperature,
+                    max_tokens=max_tokens,
+                )
 
         article.draft_article = result.model_dump_json()
         article.writer_model = model

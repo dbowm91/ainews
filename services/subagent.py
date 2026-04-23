@@ -762,14 +762,30 @@ def run_subagent_chain(
             stage_config, default_role="editor"
         )
 
-        try:
-            resp = provider.chat(
+        def _chain_call():
+            return provider.chat(
                 messages=[{"role": "user", "content": prompt}],
                 model=model,
                 system=system_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+
+        try:
+            future = _subagent_executor.submit(_chain_call)
+            try:
+                resp = future.result(timeout=stage_config.timeout_seconds)
+            except TimeoutError:
+                future.cancel()
+                logger.warning(
+                    "Chain %s step %d timed out after %ss",
+                    chain_name,
+                    i,
+                    stage_config.timeout_seconds,
+                )
+                raise ProviderTimeoutError(
+                    f"Chain step timed out after {stage_config.timeout_seconds}s"
+                )
             results[step_name] = {"synthesis": resp.text, "used_fallback": False}
         except Exception as e:
             logger.warning(

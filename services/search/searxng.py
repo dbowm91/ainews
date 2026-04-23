@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from services.search.base import (
@@ -8,6 +9,47 @@ from services.search.base import (
 )
 
 logger = logging.getLogger(__name__)
+
+_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="searxng_search")
+
+
+def _search_impl(provider: "SearXNGSearchProvider", query: str, max_results: int) -> list[SearchResult]:
+    import requests
+    from services.url import validate_url_safe
+
+    search_url = f"{provider.host}/search"
+    validate_url_safe(search_url)
+
+    params = {
+        "q": query,
+        "format": "json",
+        "categories": provider.categories,
+        "pageno": 1,
+    }
+    if provider.default_engines:
+        params["engines"] = provider.default_engines
+
+    resp = requests.get(
+        search_url,
+        params=params,
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    results = []
+    for item in data.get("results", []):
+        results.append(
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("content", ""),
+                source=provider.provider_id,
+            )
+        )
+        if len(results) >= max_results:
+            break
+    return results
 
 
 @register_search_provider("searxng")
@@ -20,44 +62,11 @@ class SearXNGSearchProvider(BaseSearchProvider):
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         try:
-            import requests
-            from services.url import validate_url_safe, UnsafeURLError
-
-            search_url = f"{self.host}/search"
-            validate_url_safe(search_url)
-
-            params = {
-                "q": query,
-                "format": "json",
-                "categories": self.categories,
-                "pageno": 1,
-            }
-            if self.default_engines:
-                params["engines"] = self.default_engines
-
-            resp = requests.get(
-                search_url,
-                params=params,
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-            results = []
-            for item in data.get("results", []):
-                results.append(
-                    SearchResult(
-                        title=item.get("title", ""),
-                        url=item.get("url", ""),
-                        snippet=item.get("content", ""),
-                        source=self.provider_id,
-                    )
-                )
-                if len(results) >= max_results:
-                    break
-            return results
-        except UnsafeURLError as e:
-            logger.warning("SearXNG search blocked for '%s': %s", query, e)
+            future = _EXECUTOR.submit(_search_impl, self, query, max_results)
+            return future.result(timeout=20)
+        except (FuturesTimeoutError, TimeoutError):
+            future.cancel()
+            logger.warning("SearXNG search timed out for '%s'", query)
             return []
         except Exception as e:
             logger.warning("SearXNG search failed for '%s': %s", query, type(e).__name__)

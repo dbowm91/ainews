@@ -96,6 +96,7 @@ def view_newsletter(newsletter_id):
 
 @admin_bp.route("/newsletters/generate", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def trigger_newsletter():
     from tasks.newsletter import generate_daily_newsletters
 
@@ -114,6 +115,7 @@ def trigger_newsletter():
 
 @admin_bp.route("/newsletters/dry-run", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def newsletter_dry_run():
     from tasks.newsletter import generate_daily_newsletters
 

@@ -1,4 +1,6 @@
+import concurrent.futures
 import trafilatura
+from concurrent.futures import ThreadPoolExecutor
 from readability import Document
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
@@ -8,6 +10,8 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
+
+_CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="content_extract")
 
 
 class ExtractionStatus(Enum):
@@ -42,6 +46,15 @@ def _detect_paywall(html: str) -> bool:
     return any(ind in lower for ind in PAYWALL_INDICATORS)
 
 
+def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
+    cfg = trafilatura.settings.use_config()
+    cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", str(timeout))
+    try:
+        return trafilatura.fetch_url(url, config=cfg)
+    except Exception:
+        return None
+
+
 def extract_article(url: str) -> ExtractionResult:
     from services.config_unified import MIN_CONTENT_LENGTH
     from services.url import validate_url_safe, UnsafeURLError
@@ -52,11 +65,14 @@ def extract_article(url: str) -> ExtractionResult:
         logger.warning("Blocked unsafe URL %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
+    timeout = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
     try:
-        cfg = trafilatura.settings.use_config()
-        timeout = os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30")
-        cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", timeout)
-        downloaded = trafilatura.fetch_url(url, config=cfg)
+        future = _CONTENT_EXTRACTOR.submit(_fetch_with_timeout, url, timeout)
+        downloaded = future.result(timeout=timeout + 5)
+    except (concurrent.futures.TimeoutError, TimeoutError):
+        future.cancel()
+        logger.warning("Content extraction timeout for %s", url)
+        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
     except Exception as e:
         logger.warning("Fetch failed for %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
@@ -66,7 +82,6 @@ def extract_article(url: str) -> ExtractionResult:
 
     paywall = _detect_paywall(downloaded)
 
-    # Primary: trafilatura
     result = trafilatura.bare_extraction(downloaded, url=url, with_metadata=True)
     if result and result.get("text") and len(result["text"]) >= MIN_CONTENT_LENGTH:
         return ExtractionResult(
@@ -78,7 +93,6 @@ def extract_article(url: str) -> ExtractionResult:
             content_length=len(result["text"]),
         )
 
-    # Fallback: readability
     try:
         doc = Document(downloaded)
         soup = BeautifulSoup(doc.summary(), "html.parser")

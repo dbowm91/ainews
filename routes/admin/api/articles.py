@@ -22,8 +22,12 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
     if new_category not in topics:
         return jsonify({"error": f"Unknown category: {new_category}"}), 400
     try:
+        from services.cache import get_response_cache
+        cache = get_response_cache()
         for article in articles:
             article.category = new_category
+            cache.invalidate(f"article_detail:{article.id}")
+        cache.invalidate_prefix("articles:list")
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
@@ -47,7 +51,13 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
 
 def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     from tasks.select import select_article
+    from services.cache import get_response_cache
     from services.audit import log_admin_action
+
+    cache = get_response_cache()
+    for article in articles:
+        cache.invalidate(f"article_detail:{article.id}")
+    cache.invalidate_prefix("articles:list")
 
     for article in articles:
         article.pipeline_status = PipelineStatus.PENDING
@@ -128,6 +138,11 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
         return jsonify({"error": "Maximum 10 tags per bulk operation"}), 400
 
     try:
+        from services.cache import get_response_cache
+        cache = get_response_cache()
+        for article in articles:
+            cache.invalidate(f"article_detail:{article.id}")
+        cache.invalidate_prefix("articles:list")
         _assign_tags(articles, tag_names, db)
         db.session.commit()
     except Exception as e:
@@ -218,8 +233,13 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             db.session.rollback()
             return jsonify({"error": "Failed to update articles"}), 500
         try:
+            from services.cache import get_response_cache
             from services.audit import log_admin_action
 
+            cache = get_response_cache()
+            for article in articles:
+                cache.invalidate(f"article_detail:{article.id}")
+            cache.invalidate_prefix("articles:list")
             log_admin_action(
                 "article_bulk_set_status",
                 target_type="article",
@@ -230,7 +250,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
                 },
             )
         except Exception:
-            logger.warning("Audit logging failed for article_bulk_set_status")
+            logger.warning("Cache invalidation or audit logging failed")
         return jsonify(
             {"message": f"Updated {len(articles)} articles to '{new_status}'"}
         )

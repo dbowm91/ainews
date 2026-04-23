@@ -278,7 +278,7 @@ All schemas implemented and used in task bodies as shown above.
 
 ### Bulk article operations
 
-`POST /admin/api/articles/bulk` accepts JSON with `article_ids` (list, max 500) and `action`. Supported actions: `delete`, `set_status`, `set_category`, `reprocess`, `add_tags`. See `routes/admin/api.py:bulk_article_operations()`.
+`POST /admin/api/articles/bulk` accepts JSON with `article_ids` (list, max 500) and `action`. Supported actions: `delete`, `set_status`, `set_category`, `reprocess`, `add_tags`. All actions invalidate `article_detail:{id}` and `articles:list` caches after mutation. See `routes/admin/api/articles.py:bulk_article_operations()`.
 
 - **reprocess**: Resets pipeline status to `pending`, clears all retry counters and stage results, then dispatches `select_article` tasks for each article.
 - **add_tags**: Accepts `tags` (list of name strings, max 10). Finds or creates Tag records and links them to articles (deduplicates existing links).
@@ -334,7 +334,7 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **In-memory cache tuple format**: When adding LRU eviction to `ResponseCache` with access time tracking, the memory cache format changed from 2-tuple `(expires_at, raw)` to 3-tuple `(expires_at, access_time, raw)`. Tests that directly manipulate `_memory` must use the new format.
 
-**`ResponseCache` L1 cache**: Uses `OrderedDict` with `popitem(last=False)` for O(1) FIFO eviction. The access time tracking is maintained but eviction is now oldest-by-insertion rather than oldest-by-access.
+**`ResponseCache` L1 cache**: Uses `OrderedDict` with LRU eviction via access time tracking (`self._memory[k][1]`). Memory tuple format is `(expires_at, access_time, raw)` — 3-tuple.
 
 **`services/url.py:_TTLCache`**: Uses `OrderedDict` with `popitem(last=False)` for O(1) FIFO eviction.
 

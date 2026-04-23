@@ -3,130 +3,116 @@
 **Created:** April 22, 2026
 **Last Updated:** April 23, 2026
 **Status:** PLANNED — Not started
-**Total Items:** ~75 across 8 waves
+**Total Items:** ~65 across 5 waves
 
 ---
 
 ## Overview
 
-This plan consolidates all improvement items from plans 2-10. Items are organized into waves based on:
-1. **Priority** — Critical items first
-2. **Parallelization potential** — Items affecting different files can run concurrently
-3. **Dependencies** — Some items must complete before others
+This plan consolidates all improvement items from plans 2-10 into a single actionable file. Items are organized into waves based on priority and parallelization potential. Each wave contains sub-tasks that can be assigned to independent sub-agents.
 
-**Wave Structure:**
-- Wave 1: Critical Security (Templates/XSS) — 6 items, can parallelize by file
-- Wave 2: High-Priority Security & Config — 5 items, mostly independent
-- Wave 3: Performance (Critical) — 4 items, can parallelize with other waves
-- Wave 4: Error Handling & Reliability — 4 items, can parallelize
-- Wave 5: Database Indexes & Migrations — 6 items, sequential (migration order)
-- Wave 6: Test Infrastructure — 5 items, can parallelize
-- Wave 7: Code Quality & Configuration — 10 items, can parallelize
-- Wave 8: Frontend (CSS/Build) — 7 items, some dependencies
+**Sub-agent assignment:** Within each wave, items labeled `A1`, `A2`, etc. can run in **parallel** as separate sub-agents. Items within a single sub-agent label (e.g. `A1a`, `A1b`) are sequential.
+
+**Wave dependency model:**
+- Wave 1 and Wave 2 touch completely different files and can run in parallel
+- Wave 3 can start as soon as its file-level dependencies are clear
+- Waves 4 and 5 are lower priority and can be picked up independently
 
 ---
 
-## Deferred Items (from previous plan.md)
+## Deferred Items
 
-These items were intentionally deferred and remain deferred:
+These items were evaluated and intentionally excluded:
 
 | Item | Source | Reason |
 |------|--------|--------|
-| E.2: Celery Task Event Streaming | plan.md | Requires celery.events.RealityMonitor or pubsub consumer, Redis streaming, MetricsCollector updates — not practical |
-| E.3: Structured Tool Result Format | plan4.md | Already implemented via `esc_xml_text` in `services/prompts.py` — 65+ uses across codebase |
+| E.2: Celery Task Event Streaming | plan.md | Requires celery.events.RealityMonitor, Redis streaming, MetricsCollector updates |
+| E.3: Structured Tool Result Format | plan4.md | Already implemented via `esc_xml_text` in `services/prompts.py` — 65+ uses |
 | E.4: Celery Worker Network Isolation | plan4.md | Requires hosting platform + CI/CD that don't exist |
 | 2.6: Dashboard Event-Based Invalidation | plan5.md | 60-second TTL covers the need — event-based adds 150+ LOC for marginal benefit |
-| 1.1: CI/CD Pipeline | plan5.md | Requires project to be hosted on platform with GitHub Actions or equivalent |
+| 1.1: CI/CD Pipeline | plan5.md | Requires hosting platform with GitHub Actions |
+| Rate limiting on subscribe endpoints | plan5.md | AGENTS.md explicitly says: "Do not add `@limiter.limit()` decorators to routes" — WAF handles this |
+| Font variable renaming | plan10.md | Cosmetic, high effort (25+ files), low value — `--text-lg` documented in AGENTS.md |
+| Theme transition `!important` removal | plan10.md | Cosmetic, high risk for low reward |
+| Unique constraints on SQLite | plan8.md | SQLite can't ALTER TABLE to add constraints per AGENTS.md |
+| Circuit breaker Redis persistence | plan8.md | Too large scope; in-memory is acceptable for current scale |
+| Duplicate detection query batching | plan7.md | Minor improvement; the `.limit(1000)` fix in Wave 3 addresses the main concern |
+| Admin articles count removal | plan7.md | Minor UX improvement, not worth template changes |
+| Search analytics SQL cleanup | plan4.md | Confusing but functional — low priority |
+| ENV_VAR resolution warning | plan8.md | `resolve_env_var()` already returns empty string with deduplicated warnings |
+| Beat schedule reload fix | plan8.md | Verification item only, not actionable |
+| LRU Cache O(1) eviction | plan4.md | 1000-item max makes this negligible; already in Wave 5 as optional |
 
 ---
 
 ## WAVE 1: Critical Security — XSS & Input Validation
 
-**Target:** Template files, routes validation
-**Parallelization:** Items can run in parallel by agent — each handles different files
-**Estimated Time:** ~90 minutes total (parallel)
+**Estimated Time:** ~30 minutes
+**Sub-agents:** 2 (can run in parallel)
 
-### 1.1 CRITICAL — Admin Article Edit Form XSS
+**Sub-agent context:** Jinja2 autoescape is enabled but `|e` filter is still needed in certain contexts (attribute values, textarea content). Adding `|e` is always safe and never breaks functionality.
 
-**Files:** `templates/admin/article_edit.html`
-**Risk:** Stored XSS allows execution of malicious scripts when admin views the edit page.
+### A1: Template XSS Fixes
 
-**Required Changes:**
+**Files:** `templates/admin/article_edit.html`, `templates/admin/dead_letters.html`, `templates/article.html`, `templates/partials/condensed_article.html`
+
+#### A1a: `templates/admin/article_edit.html` — CRITICAL stored XSS
+
+LLM-generated `final_article` JSON is rendered in form fields without escaping. An admin viewing the edit page could execute malicious scripts.
 
 | Line | Field | Current | Fix |
 |------|-------|---------|-----|
-| 48 | headline | `value="{{ fa.get('headline', '')... }}"` | Add `\|e` |
-| 53 | tldr | `<textarea>{{ fa.get('tldr', '')... }}</textarea>` | Add `\|e` |
-| 58 | why_it_matters | `<textarea>{{ fa.get('why_it_matters', '')... }}</textarea>` | Add `\|e` |
-| 63 | body | `<textarea>{{ fa.get('body', '')... }}</textarea>` | Add `\|e` |
-| 68 | what_to_watch | `<textarea>{{ fa.get('what_to_watch', '')... }}</textarea>` | Add `\|e` |
-| 73 | key_points | `<textarea>{{ '\n'.join(...) }}</textarea>` | Add `\|e` |
-| 79 | tags | `value="{{ ', '.join(...) }}"` | Add `\|e` |
-| 28-31 | error | `{{ error }}` | Add `\|e` |
+| 11 | breadcrumb title | `{{ article.original_title[:50] }}` | Add `\|e` |
+| 24 | page title | `{{ article.original_title[:100] if article.original_title }}` | Add `\|e` |
+| 48 | headline input value | `{{ fa.get('headline', '')... }}` | Add `\|e` |
+| 53 | tldr textarea | `{{ fa.get('tldr', '')... }}` | Add `\|e` |
+| 58 | why_it_matters textarea | `{{ fa.get('why_it_matters', '')... }}` | Add `\|e` |
+| 63 | body textarea | `{{ fa.get('body', '')... }}` | Add `\|e` |
+| 68 | what_to_watch textarea | `{{ fa.get('what_to_watch', '')... }}` | Add `\|e` |
+| 73 | key_points textarea | `{{ '\n'.join(...) }}` | Add `\|e` |
+| 79 | tags input value | `{{ ', '.join(...) }}` | Add `\|e` |
+| 30 | error message | `{{ error }}` | Add `\|e` |
 
-**Example:**
+**Example fix:**
 ```html
-<!-- Line 48: Add |e to headline value -->
+<!-- Line 48 -->
 value="{{ (fa.get('headline', '') if fa else article.original_title or '') | e }}"
+
+<!-- Line 53 -->
+{{ (fa.get('tldr', '') if fa else '') | e }}
+
+<!-- Line 30 -->
+{{ error | e }}
 ```
 
-**Action Items:**
-- [ ] Fix line 48 — add `|e` to headline value
-- [ ] Fix line 53 — add `|e` to tldr textarea
-- [ ] Fix line 58 — add `|e` to why_it_matters textarea
-- [ ] Fix line 63 — add `|e` to body textarea
-- [ ] Fix line 68 — add `|e` to what_to_watch textarea
-- [ ] Fix line 73 — add `|e` to key_points textarea
-- [ ] Fix line 79 — add `|e` to tags input
-- [ ] Fix lines 28-31 — add `|e` to error message
-
----
-
-### 1.2 CRITICAL — Admin Dead Letters Page XSS
-
-**Files:** `templates/admin/dead_letters.html`
-
-**Required Changes:**
+#### A1b: `templates/admin/dead_letters.html` — CRITICAL
 
 | Line | Current | Fix |
 |------|---------|-----|
-| 66 | `{{ article.original_title if article.original_title else '(no title)' }}` | Add `\|e` |
-| 106 | `{{ article.original_title if article.original_title else '(no title)' }}` | Add `\|e` |
+| 66 | `{{ article.original_title if article.original_title else '(no title)' }}` | Wrap in parens, add `\|e` |
+| 106 | Same as line 66 | Same fix |
 
-**Note:** Lines 65 and 105 correctly use `{{ article.original_title|e }}` in title attributes.
+Note: Lines 65 and 105 correctly use `|e` in `title=` attributes.
 
-**Action Items:**
-- [ ] Fix line 66 — add `|e` to article title
-- [ ] Fix line 106 — add `|e` to article title
+#### A1c: Public templates — HIGH
 
----
-
-### 1.3 HIGH — Public Template XSS
-
-**Files:** `templates/article.html`, `templates/partials/condensed_article.html`
-
-**Required Changes:**
-
-| File | Line | Field | Fix |
-|------|------|-------|-----|
-| `templates/article.html` | 3 | `{{ article.original_title }}` in `<title>` | `{{ article.original_title|e }}` |
-| `templates/partials/condensed_article.html` | 88 | `{{ article.writer_model }}` | `{{ article.writer_model|e }}` |
-
-**Action Items:**
-- [ ] Fix `templates/article.html:3` — add `|e` filter to `article.original_title` in `<title>`
-- [ ] Fix `templates/partials/condensed_article.html:88` — add `|e` filter to `article.writer_model`
+| File | Line | Current | Fix |
+|------|------|---------|-----|
+| `templates/article.html` | 3 | `{{ article.original_title }}` in `<title>` | `{{ article.original_title\|e }}` |
+| `templates/partials/condensed_article.html` | 88 | `{{ article.writer_model or 'ai agent' }}` | `{{ (article.writer_model or 'ai agent')\|e }}` |
 
 ---
 
-### 1.4 HIGH — Bulk Article IDs Validation
+### A2: Validation & Documentation
 
-**Files:** `routes/admin/api/articles.py`
+#### A2a: Bulk Article IDs Validation — HIGH
 
-**Current:** `bulk_article_operations()` doesn't validate that `article_ids` elements are integers.
+**File:** `routes/admin/api/articles.py`
 
-**Required Changes:**
+`bulk_article_operations()` at line 174 validates list type and length but does NOT validate that individual IDs are positive integers. `validate_bulk_ids()` exists in `services/validation.py:90` but is not called here.
+
 ```python
-# Add after length check (line ~188)
+# Add after line 189 (after the len check):
 from services.validation import validate_bulk_ids
 
 try:
@@ -135,20 +121,11 @@ except ValueError as e:
     return jsonify({"error": str(e)}), 400
 ```
 
-**Note:** `validate_bulk_ids()` exists in `services/validation.py:90` but is NOT used by this endpoint.
-
-**Action Items:**
-- [ ] Import `validate_bulk_ids` from `services.validation`
-- [ ] Call `validate_bulk_ids(article_ids)` before the query
-- [ ] Handle `ValueError` with proper error response
-
----
-
-### 1.5 HIGH — WEBHOOK_SECRET_KEY Documentation
+#### A2b: WEBHOOK_SECRET_KEY Documentation — HIGH
 
 **Files:** `.env.example`, `docs/configuration.md`
 
-**Required Changes:**
+`.env.example` (94 lines) does not mention `WEBHOOK_SECRET_KEY`. `docs/configuration.md` (334 lines) also does not mention it.
 
 Add to `.env.example`:
 ```bash
@@ -162,27 +139,36 @@ Add to `docs/configuration.md` in Optional variables section:
 | WEBHOOK_SECRET_KEY | Yes | Fernet key for webhook secret encryption |
 ```
 
-**Action Items:**
-- [ ] Add `WEBHOOK_SECRET_KEY` to `.env.example` with generation instructions
-- [ ] Add `WEBHOOK_SECRET_KEY` to `docs/configuration.md`
+#### A2c: Token Logging Verbosity — LOW
+
+**File:** `routes/public/subscribe.py`
+
+Lines 171 and 212 log full subscriber tokens. Truncate to first 8 characters for debugging without exposing full token.
+
+```python
+# Line 171: Change from
+logger.exception("Failed to unsubscribe token %s", token)
+# To
+logger.exception("Failed to unsubscribe token %s...", token[:8])
+
+# Line 212: Same pattern
+logger.exception("Failed to verify subscriber token %s...", token[:8])
+```
 
 ---
 
-## WAVE 2: High-Priority Security & Configuration
+## WAVE 2: Security Infrastructure & Configuration
 
-**Target:** Security infrastructure, config files
-**Parallelization:** Items are independent
-**Estimated Time:** ~4 hours total (parallel)
+**Estimated Time:** ~5 hours
+**Sub-agents:** 4 (can run in parallel)
 
-### 2.1 CRITICAL — Redis TLS/SSL Connection Security
+### A1: Redis TLS/SSL Connection Security — CRITICAL
 
-**Files:** `extensions.py`, `services/config_cache.py`, `config.py`, `docs/security.md`
+**Files:** `extensions.py`, `services/config_cache.py`, `docs/security.md`, `.env.example`
 
-**Risk:** All Redis traffic transmitted in plaintext. Man-in-the-middle attacks possible.
+All Redis connections use plaintext. No `ssl=` parameter on any `ConnectionPool.from_url()` call.
 
-**Required Changes:**
-
-1. **Add SSL support to connection pools** (`extensions.py:106-113`):
+**`extensions.py` (lines 106-112):**
 ```python
 redis_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 ssl_enabled = redis_url.startswith("rediss://") or os.environ.get("REDIS_SSL") == "true"
@@ -197,82 +183,53 @@ pool = redis.ConnectionPool.from_url(
 )
 ```
 
-2. **Update config cache** (`services/config_cache.py:248`):
+**`services/config_cache.py` (line 248):**
 ```python
 ssl_enabled = url.startswith("rediss://") or os.environ.get("REDIS_SSL") == "true"
 pool = redis.ConnectionPool.from_url(url, max_connections=20, socket_timeout=5, ssl=ssl_enabled)
 ```
 
-3. **Update documentation** (`docs/security.md`):
-   - Add "Redis TLS/SSL required for all Redis connections" requirement
-   - Document `REDIS_SSL=true` env var
-   - Document `rediss://` protocol support
-
-4. **Environment variable support:**
-   - `REDIS_SSL=true` — Force TLS regardless of protocol
-   - `REDIS_SSL=false` — Disable TLS regardless of protocol
-
-**Action Items:**
-- [ ] Add TLS support to `extensions.py` Redis pool
-- [ ] Add TLS support to `config_cache.py` Redis pool
-- [ ] Update Celery broker URL handling for TLS
-- [ ] Document in `docs/security.md`
-- [ ] Add tests for TLS connections
-- [ ] Update `.env.example` with Redis TLS variables
+**Documentation updates:**
+- `docs/security.md`: Add Redis TLS requirement, document `REDIS_SSL=true` env var and `rediss://` protocol
+- `.env.example`: Add `REDIS_SSL=false` and `CELERY_BROKER_URL` examples with `rediss://`
 
 ---
 
-### 2.2 HIGH — DEBUG Mode Enforcement in Production
+### A2: DEBUG Mode Enforcement — HIGH
 
-**Files:** `config.py`, `app.py`
+**File:** `config.py`
 
-**Risk:** Accidental DEBUG mode enables may expose sensitive stack traces.
+`ProductionConfig.validate()` (lines 240-258) validates SECRET_KEY, ADMIN_PASSWORD, and CELERY_TASK_SECRET but does NOT check that `DEBUG` is `False`.
 
-**Required Changes:**
-
-Add to `ProductionConfig.validate()` (`config.py`):
 ```python
+# Add to ProductionConfig.validate() after existing checks:
 if cls.DEBUG:
-    errors.append("DEBUG must be False in production")
+    raise RuntimeError("DEBUG must be False in production")
 ```
-
-Optional: Add `FLASK_DEBUG` env var check (`app.py`):
-```python
-flask_debug = os.environ.get("FLASK_DEBUG", "").lower()
-if flask_debug == "true" and config_name == "production":
-    raise RuntimeError("FLASK_DEBUG cannot be used with production config")
-```
-
-**Action Items:**
-- [ ] Add DEBUG check to `ProductionConfig.validate()`
-- [ ] Add test for DEBUG enforcement
-- [ ] (Optional) Check `FLASK_DEBUG` env var
 
 ---
 
-### 2.3 MEDIUM — Celery Task Signature Verification for Beat Tasks
+### A3: Task Signing & Health Endpoint — MEDIUM
+
+#### A3a: Celery Task Signature for `cleanup_old_article_versions`
 
 **Files:** `tasks/cleanup.py`, `config.py`
 
-**Risk:** `cleanup_old_article_versions` accepts args from Beat without HMAC signing.
+`cleanup_old_article_versions` (line 152 in `tasks/cleanup.py`) accepts `days_to_keep` and `dry_run` from Celery Beat but has no HMAC verification. Uses Pydantic validation but not `verify_task()`.
 
-**Required Changes:**
-
-1. **Add signature verification to `cleanup_old_article_versions`** (`tasks/cleanup.py`):
 ```python
+# Add at start of cleanup_old_article_versions task body:
 from services.task_security import verify_task
 
-@shared_task(...)
-def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = False):
-    if not verify_task("cleanup_old_article_versions", (), {"days_to_keep": days_to_keep, "dry_run": dry_run}):
-        raise ValueError("Invalid task signature")
+if not verify_task("cleanup_old_article_versions", (), {"days_to_keep": days_to_keep, "dry_run": dry_run}):
+    raise ValueError("Invalid task signature")
 ```
 
-2. **Update beat schedule in `config.py`** to sign kwargs:
+Also update beat schedule in `config.py` `get_beat_schedule()` to sign kwargs:
 ```python
 from services.task_security import sign_task
 
-# In get_beat_schedule():
+# In the beat schedule entry for cleanup_old_article_versions:
 "kwargs": sign_task(
     "cleanup_old_article_versions",
     (),
@@ -280,73 +237,69 @@ from services.task_security import sign_task
 ),
 ```
 
-**Note:** `sign_task()` returns unsigned dict if `CELERY_TASK_SECRET` not configured (fail-closed behavior).
+#### A3b: Health Endpoint Auth for Detailed Mode
 
-**Action Items:**
-- [ ] Add `verify_task()` to `cleanup_old_article_versions`
-- [ ] Update beat schedule in `config.py` to include signed kwargs
+**File:** `routes/public/__init__.py` (lines 108-115)
 
----
+`/health?detailed=true` exposes git commit hash and DB pool stats without authentication.
 
-### 2.4 MEDIUM — Health Endpoint Information Disclosure
-
-**Files:** `routes/public/__init__.py`, `services/health.py`
-
-**Risk:** Unauthenticated `/health?detailed=true` exposes git commit hash and pool stats.
-
-**Required Changes:**
-
-Option A — Require auth for detailed mode (preferred):
 ```python
 @public_bp.route("/health")
 def health() -> tuple[Response, int]:
+    from services.health import run_health_checks
     detailed = request.args.get("detailed", "false").lower() == "true"
     if detailed and not session.get("admin"):
-        detailed = False  # Downgrade if not authenticated
+        detailed = False
     result = run_health_checks(include_celery=True, detailed=detailed)
+    code = 200 if result.is_healthy else 503
+    return jsonify(result.to_dict()), code
 ```
 
-**Action Items:**
-- [ ] Implement auth check for detailed health endpoint
-- [ ] Add test for detailed mode with/without auth
+#### A3c: verify_task() Docstring Fix
+
+**File:** `services/task_security.py` (lines 47-77)
+
+The docstring at line 57 says "True if ... no secret is configured" but the actual code returns `False` (fail-closed) when no secret is configured. Fix the docstring:
+
+```python
+Returns:
+    True if signature is valid or no signature is present (internal .s() call)
+    False if signature is invalid or CELERY_TASK_SECRET is not configured
+```
 
 ---
 
-### 2.5 MEDIUM — Missing Environment Variables Documentation
+### A4: Missing Environment Variables Documentation — HIGH
 
-**Files:** `.env.example`, `docs/configuration.md`
+**File:** `.env.example`
 
-**Risk:** 15+ environment variables used in code are not documented.
+15+ environment variables used in code are not documented. Add the following sections:
 
-**Required Changes:**
-
-Add to `.env.example`:
 ```bash
 # === REQUIRED FOR PRODUCTION ===
 
 # HMAC signing secret for Celery tasks (min 32 characters)
 CELERY_TASK_SECRET=
 
-# Fernet encryption key for webhook secrets (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-WEBHOOK_SECRET_KEY=
-
 # Public site URL for newsletter links (no trailing slash)
 SITE_URL=https://ainews.example.com
 
 # === REDIS ===
+
+# Redis TLS (set to "true" for rediss:// or TLS connections)
+REDIS_SSL=false
 
 # Redis password (if authentication enabled)
 REDIS_PASSWORD=
 
 # === SEARCH PROVIDERS ===
 
-# Google Custom Search API (for web search)
+# Google Custom Search API
 GOOGLE_API_KEY=
 GOOGLE_CSE_ID=
 
 # === LLM PROVIDERS (Optional) ===
 
-# Uncomment and fill in as needed
 GEMINI_API_KEY=
 DEEPSEEK_API_KEY=
 GROQ_API_KEY=
@@ -361,72 +314,55 @@ OPENCODE_API_KEY=
 
 # === OPERATIONAL (Optional) ===
 
+# Dead letter alert threshold (default: 10)
+DEAD_LETTER_ALERT_THRESHOLD=10
+
 # Content extraction timeout in seconds (default: 30)
 CONTENT_EXTRACTOR_TIMEOUT=30
 
 # Logging format: json or text (default: json)
 LOG_FORMAT=json
 
-# Rate limit default (default: 60 per minute)
-RATELIMIT_DEFAULT=60 per minute
-
 # Duplicate detection window in days (default: 7)
 DUPLICATE_DETECTION_DAYS=7
 
-# Ollama configuration (if using local models)
+# Ollama configuration
 OLLAMA_MODEL=llama3.1
 OLLAMA_HOST=http://localhost:11434
 ```
 
-**Action Items:**
-- [ ] Add critical production variables to `.env.example`
-- [ ] Add search provider variables
-- [ ] Add LLM provider variables
-- [ ] Add operational configuration variables
-
 ---
 
-## WAVE 3: Critical Performance Improvements
+## WAVE 3: Performance
 
-**Target:** Query optimization, caching
-**Parallelization:** Items are independent
-**Estimated Time:** ~6 hours total (parallel)
+**Estimated Time:** ~5 hours
+**Sub-agents:** 3 (can run in parallel, no file conflicts)
 
-### 3.1 CRITICAL — SLA Metrics Query SQL Aggregation
+### A1: SLA Metrics SQL Aggregation — CRITICAL
 
-**Files:** `routes/admin/api/pipeline.py`
+**File:** `routes/admin/api/pipeline.py` (lines 139-234)
 
-**Risk:** OOM for large date ranges; 30-day query could consume ~750MB+
+Current code loads ALL articles with `.all()` (line 155) and computes avg/p50/p95 in Python. For 30-day ranges, this can consume ~750MB+.
 
-**Current:** Loads ALL articles into memory, then computes stats in Python.
+**Implementation:** Add `_compute_duration_stats()` helper using SQLite `ROW_NUMBER() OVER()` for percentile computation:
 
-**Solution:** Use SQLite window functions (`ROW_NUMBER() OVER()`) to compute percentiles in SQL.
-
-**Implementation:**
-
-Add helper function after imports:
 ```python
 def _compute_duration_stats(session, Article, cutoff, start_col, end_col, base_filters=None):
-    """Compute avg/p50/p95 for a duration in SQL."""
     if base_filters is None:
         base_filters = []
 
     duration_expr = (func.julianday(end_col) - func.julianday(start_col)) * 86400
     base_filters = base_filters + [start_col.isnot(None), end_col.isnot(None)]
 
-    # Count
     total = session.query(func.count()).filter(*base_filters).scalar()
     if total == 0:
         return {"avg": None, "p50": None, "p95": None}
 
-    # AVG
     avg = session.query(func.avg(duration_expr)).filter(*base_filters).scalar()
 
-    # P50 and P95 using ROW_NUMBER() window function
     p50_subq = session.query(
         duration_expr.label('duration'),
         func.row_number().over(order_by=duration_expr).label('rn'),
-        total.label('total')
     ).filter(*base_filters).subquery()
 
     p50_offset = (total // 2) + 1
@@ -442,7 +378,7 @@ def _compute_duration_stats(session, Article, cutoff, start_col, end_col, base_f
     }
 ```
 
-Replace the `articles = ... .all()` block with:
+Replace lines 149-213 with:
 ```python
 base_filters = [Article.published_at.isnot(None), Article.published_at >= cutoff]
 
@@ -451,31 +387,23 @@ s2p = _compute_duration_stats(db.session, Article, cutoff, Article.selected_at, 
 c2p = _compute_duration_stats(db.session, Article, cutoff, Article.crawled_at, Article.published_at, base_filters)
 ```
 
-**Action Items:**
-- [ ] Add `_compute_duration_stats()` helper function
-- [ ] Replace `articles = ... .all()` block with SQL-side computation
-- [ ] Remove Python loops that build duration lists
-- [ ] Update import to include `func` from sqlalchemy if not present
+**Sub-agent note:** The response JSON format MUST remain identical. Verify with: `curl -s "http://localhost:5000/admin/api/pipeline/sla?days=7" | python -m json.tool`
 
 ---
 
-### 3.2 CRITICAL — N+1 Query Fix in Public Feeds
+### A2: N+1 Query Fix + Cache Scoping — CRITICAL
 
-**Files:** `routes/public/feeds.py`
+#### A2a: N+1 Fix in Public Feeds
 
-**Risk:** N+1 queries on homepage load.
+**File:** `routes/public/feeds.py` (line 37)
 
-**Current:** `article.source` triggers separate query per article.
-
-**Required Changes:**
 ```python
-# Add to imports:
-from sqlalchemy.orm import joinedload
-
-# Before (line ~37):
+# Current:
 articles = Article.query.filter(Article.id.in_(cached_ids)).all()
 
-# After:
+# Fix:
+from sqlalchemy.orm import joinedload
+
 articles = (
     Article.query
     .options(joinedload(Article.source), joinedload(Article.tags))
@@ -484,87 +412,56 @@ articles = (
 )
 ```
 
-**Action Items:**
-- [ ] Add `joinedload(Article.source)` to `_get_top_impact()` query at line 37
-- [ ] Add `joinedload(Article.tags)` for defensive consistency
+#### A2b: Cache Key Namespacing
 
----
+**Problem:** Admin operations invalidate public cache keys using bare prefixes like `invalidate_prefix("index")` which has no namespace separation.
 
-### 3.3 CRITICAL — Cache Invalidation Scoping
+**Files to change:**
 
-**Files:** `routes/public/feeds.py`, `routes/public/links.py`, `routes/admin/articles.py`, `routes/admin/review.py`
-
-**Risk:** Admin operations blast public cache, causing cache churn.
-
-**Solution:** Namespace public cache keys with `pub:` prefix.
-
-**Changes:**
-
-`routes/public/feeds.py`:
+`routes/public/feeds.py` — prefix all cache keys with `pub:`:
 ```python
-# Line 31: top_impact cache key
-cache_key = f"pub:top_impact:{limit}"
-
-# Line 69: index page cache key
-cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}"
-
-# Line 113: topic cache key
-cache_key = f"pub:topic:{category}:page:{page}"
-
-# Line 199: rss_feed all cache key
-cache_key = f"pub:rss_feed:all:{site_url}"
-
-# Line 242: rss_feed category cache key
-cache_key = f"pub:rss_feed:{category}:{site_url}"
+# Line 31: cache_key = f"pub:top_impact:{limit}"
+# Line 69: cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}"
+# Line 113: cache_key = f"pub:topic:{category}:page:{page}"
+# Line 199: cache_key = f"pub:rss_feed:all:{site_url}"
+# Line 242: cache_key = f"pub:rss_feed:{category}:{site_url}"
 ```
 
-`routes/public/links.py`:
+`routes/public/links.py` (line 30):
 ```python
-# Line 30: article detail cache key
 cache_key = f"pub:article_detail:{article_id}"
 ```
 
-`routes/admin/articles.py:284-286`:
+`routes/admin/articles.py` (lines 283-289):
 ```python
-# Change from:
-cache.invalidate_prefix("index")
-cache.invalidate_prefix("topic")
-cache.invalidate_prefix("rss")
+# Change:
+cache.invalidate_prefix("index")    →  cache.invalidate_prefix("pub:index")
+cache.invalidate_prefix("topic")    →  cache.invalidate_prefix("pub:topic")
+cache.invalidate_prefix("rss")      →  cache.invalidate_prefix("pub:rss")
+cache.invalidate(f"article_detail:{article_id}")  →  cache.invalidate(f"pub:article_detail:{article_id}")
+```
 
-# To:
+`routes/admin/review.py` (lines 87-97):
+```python
 cache.invalidate_prefix("pub:index")
 cache.invalidate_prefix("pub:topic")
 cache.invalidate_prefix("pub:rss")
-```
-
-`routes/admin/review.py:91-95`:
-```python
-# Same prefix changes
-cache.invalidate_prefix("pub:index")
-cache.invalidate_prefix("pub:topic")
 if article.category:
     cache.invalidate_prefix(f"pub:topic:{article.category}")
 ```
 
-**Action Items:**
-- [ ] Update all public cache keys in `routes/public/feeds.py` with `pub:` prefix
-- [ ] Update `routes/public/links.py` cache key with `pub:` prefix
-- [ ] Update admin invalidation calls in `routes/admin/articles.py`
-- [ ] Update admin invalidation calls in `routes/admin/review.py`
+**Sub-agent note:** After this change, there will be a brief cold-cache period. Verify with `redis-cli keys "pub:*"` to confirm new key format.
 
 ---
 
-### 3.4 HIGH — Provider Info Caching
+### A3: Caching Improvements — HIGH/MEDIUM
 
-**Files:** `services/llm/__init__.py`
+#### A3a: Provider Info Caching — HIGH
 
-**Risk:** Uncached API call on every dashboard load; latency + rate limit risk.
+**File:** `services/llm/__init__.py` (lines 107-109)
 
-**Current:** `get_provider_info()` → `provider.health_check()` → `client.models.list()` (HTTP API call)
+`get_provider_info()` makes a live API call to the LLM provider on every dashboard load. Wrap in ResponseCache.
 
-**Solution:** Wrap in `ResponseCache.get_or_set()` with 5-minute TTL.
-
-**Implementation:**
 ```python
 def get_provider_info() -> dict:
     from services.cache import get_response_cache
@@ -577,119 +474,128 @@ def get_provider_info() -> dict:
     try:
         return cache.get_or_set("llm:provider:info", _fetch, ttl=300)
     except Exception:
-        # Fallback to uncached if Redis unavailable
         return _fetch()
 ```
 
-**Action Items:**
-- [ ] Wrap `get_provider_info()` with ResponseCache in `services/llm/__init__.py`
-- [ ] Set TTL to 300 seconds (5 minutes)
-- [ ] Add fallback for Redis unavailability
+#### A3b: Dashboard Stampede Protection — MEDIUM
 
----
+**File:** `routes/admin/dashboard.py` (lines 77-86)
 
-## WAVE 4: Error Handling & Reliability
+Dashboard uses raw `redis_client.setex()` without stampede protection. Replace with `ResponseCache.get_or_set()`:
 
-**Target:** Pipeline error handling, retry configuration
-**Parallelization:** Items are independent
-**Estimated Time:** ~2 hours total (parallel)
+1. Extract all stat computation into a `_compute_dashboard_stats()` function
+2. Replace manual get/set with `get_or_set("dashboard:stats:v2", _compute_dashboard_stats, ttl=300)`
+3. Add Redis error fallback
 
-### 4.1 CRITICAL — JSON Parse Without Error Handling in Edit Stage
+#### A3c: Related Articles Caching — MEDIUM
 
-**Files:** `tasks/edit.py`
+**File:** `services/related.py` or call site in `routes/public/links.py`
 
-**Risk:** Malformed `final_article` causes pipeline crash. Article stuck in EDITING.
+`find_related_articles()` runs an expensive 50-article SQL query + Python scoring on every article view. Cache result with TTL 600s.
 
-**Current:** `json.loads()` without try/except at line 270-274.
-
-**Required Changes:**
 ```python
-if isinstance(final_article, str):
-    try:
-        fa = json.loads(final_article)
-    except json.JSONDecodeError as e:
-        logger.warning("Malformed final_article JSON for article %d: %s", article.id, e)
-        # Use draft_article as fallback
-        if isinstance(article.draft_article, str):
-            try:
-                fa = json.loads(article.draft_article)
-            except json.JSONDecodeError:
-                fa = {"headline": article.original_title, "body": "", "tldr": ""}
-        else:
-            fa = {"headline": article.original_title, "body": "", "tldr": ""}
-else:
-    fa = final_article
+def find_related_articles_cached(article_id: int, limit: int = 5):
+    from services.cache import get_response_cache
+    cache = get_response_cache()
+    cache_key = f"pub:related:{article_id}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = find_related_articles(article_id, limit)
+    cache.set(cache_key, result, ttl=600)
+    return result
 ```
 
-**Action Items:**
-- [ ] Add try/except around `json.loads(final_article)` at line 270
-- [ ] Implement fallback to `draft_article` on parse failure
-- [ ] Add final fallback with original_title if both fail
+#### A3d: Sitemap Caching — MEDIUM
+
+**File:** `routes/public/feeds.py` (sitemap route ~line 277)
+
+Cache sitemap XML with 5-minute TTL using key `pub:sitemap:xml`.
+
+#### A3e: Dashboard Source Count — LOW
+
+**File:** `routes/admin/dashboard.py` (line 127)
+
+```python
+# Current:
+sources = Source.query.all()
+source_count = len(sources)
+
+# Fix:
+source_count = Source.query.count()
+```
 
 ---
 
-### 4.2 CRITICAL — Silent Duplicate Check Failure in Extract
+## WAVE 4: Error Handling, Reliability & Database
 
-**Files:** `tasks/extract.py`
+**Estimated Time:** ~3 hours
+**Sub-agents:** 3 (can run in parallel, minimal file conflicts)
 
-**Risk:** Duplicate detection fails silently, creating duplicate articles.
+### A1: Error Handling — MEDIUM/HIGH
 
-**Current:** Exception in `_find_duplicate_article()` is swallowed.
+#### A1a: Webhook json.loads — LOW (downgraded from CRITICAL)
 
-**Required Changes:**
+**File:** `tasks/edit.py` (line 271)
+
+**Verified:** The `json.loads(article.final_article)` at line 271 is inside a `try/except Exception` block (lines 263-283) for webhook triggering. The main article processing uses Pydantic model validation (`CondensedArticle`) and `validate_and_raise()` which handles `JSONDecodeError`. The risk is that a JSON parse failure in the webhook trigger is logged as a generic "Webhook trigger failed" warning rather than specifically identifying the JSON issue.
+
+Fix: Add more specific logging inside the webhook try block:
 ```python
 try:
-    duplicate = _find_duplicate_article(source_id, url, title, text_content)
-except Exception as e:
-    logger.warning("Dedup check failed for %s: %s", url, e)
-    duplicate = None
-    # Emit metric for monitoring
-    metrics.increment("pipeline.dedup_check_failed", tags={"source": source_key})
+    headline = (
+        json.loads(article.final_article).get("headline", "")
+        if article.final_article
+        else ""
+    )
+except json.JSONDecodeError as e:
+    logger.warning("Malformed final_article JSON in webhook for article %d: %s", article.id, e)
+    headline = article.original_title or ""
 ```
 
-**Action Items:**
-- [ ] Add metric emission on dedup check failure
-- [ ] Consider failing the stage if dedup is critical (configurable)
+#### A1b: Silent Duplicate Check Failure — MEDIUM
 
----
+**File:** `tasks/extract.py` (lines 154-158)
 
-### 4.3 MEDIUM — Redis Error Handling in get_or_set()
+Dedup check failure is caught broadly and logged, but no metric is emitted for monitoring.
 
-**Files:** `services/cache.py`
+```python
+except Exception as exc:
+    logger.warning("Dedup check failed for %s: %s", truncate_for_log(validated.title), exc)
+    duplicate = None
+    try:
+        from services.metrics import get_metrics
+        get_metrics().increment("pipeline.dedup_check_failed", tags={"source": source_key})
+    except Exception:
+        pass
+```
 
-**Risk:** When Redis is unavailable, `get_or_set()` raises unhandled `RedisError`.
+#### A1c: Cache get_or_set Redis Error Handling — MEDIUM
 
-**Current:** Lines 136, 150, 155 make raw Redis calls without exception handling.
+**File:** `services/cache.py` (lines 136, 150, 155)
 
-**Required Changes:**
+Three Redis calls in `get_or_set()` lack `redis.exceptions.RedisError` handling. If Redis is down, these propagate as unhandled errors instead of falling through gracefully.
+
+Wrap lines 136, 150, 155 in try/except for `redis.exceptions.RedisError`:
 ```python
 try:
     if self._redis.set(lock_key, "1", nx=True, ex=10):
-        # ...
+        # ... existing logic ...
 except redis.exceptions.RedisError as e:
     logger.warning("Failed to acquire cache lock for %s: %s", lock_key, e)
-    # Fall through to compute value directly without stampede protection
     value = loader_fn()
     self.set(key, value, ttl)
     return value
 ```
 
-**Action Items:**
-- [ ] Wrap lines 136, 150, 155 in try/except for `redis.exceptions.RedisError`
-- [ ] Add proper fallback logging instead of bare `except Exception`
-- [ ] Verify `get()` and `set()` error handling still works correctly
+#### A1d: Newsletter Retry Configuration — MEDIUM
 
----
+**File:** `tasks/newsletter.py` (lines 351-357)
 
-### 4.4 MEDIUM — Missing Retry Configuration in generate_daily_newsletters
+`generate_daily_newsletters` is missing `autoretry_for`, `retry_backoff`, `retry_jitter`. All other orchestrator tasks have these.
 
-**Files:** `tasks/newsletter.py`
-
-**Risk:** Without `retry_jitter`, concurrent failures create thundering herd.
-
-**Current:** Missing `autoretry_for`, `retry_backoff`, `retry_jitter` in decorator.
-
-**Required Changes:**
 ```python
 @shared_task(
     bind=True,
@@ -704,530 +610,270 @@ except redis.exceptions.RedisError as e:
 )
 ```
 
-**Action Items:**
-- [ ] Add `autoretry_for=(ConnectionError, TimeoutError)`
-- [ ] Add `retry_backoff=True`
-- [ ] Add `retry_backoff_max=300`
-- [ ] Add `retry_jitter=True`
-
 ---
 
-## WAVE 5: Database Indexes & Migrations
+### A2: Database Indexes — MEDIUM
 
-**Target:** Database schema
-**Parallelization:** Sequential (migration order matters)
-**Estimated Time:** ~2 hours total
+**File:** `migrations/versions/` (new files)
 
-### 5.1 Create Migration for Missing Indexes
+Latest migration is `024_missing_query_indexes.py`. Create 5 new migrations:
 
-**Files:** `migrations/versions/` (new files)
-
-**Required Migrations:**
-
-1. **025_article_pipeline_status_partial_indexes.py** — For dead-letter queries
+**025_article_pipeline_status_partial_indexes.py:**
 ```python
-# Index for FAILED articles
-op.create_index("ix_articles_pipeline_status_failed", "articles", ["updated_at"],
-    unique=False, where="pipeline_status = 'failed'")
-# Index for REVIEW articles
-op.create_index("ix_articles_pipeline_status_review", "articles", ["impact_score"],
-    unique=False, where="pipeline_status = 'review'")
-# Index for active/stuck articles
-op.create_index("ix_articles_pipeline_status_active", "articles", ["updated_at"],
-    unique=False, where="pipeline_status IN ('pending', 'researching', 'writing', 'editing')")
+def upgrade() -> None:
+    op.create_index("ix_articles_pipeline_status_failed", "articles", ["updated_at"],
+        unique=False, where="pipeline_status = 'failed'")
+    op.create_index("ix_articles_pipeline_status_review", "articles", ["impact_score"],
+        unique=False, where="pipeline_status = 'review'")
+    op.create_index("ix_articles_pipeline_status_active", "articles", ["updated_at"],
+        unique=False, where="pipeline_status IN ('pending', 'researching', 'writing', 'editing')")
 ```
 
-2. **026_subscriber_active_index.py** — For newsletter delivery
+**026_subscriber_active_index.py:**
 ```python
 op.create_index("ix_subscribers_active_deleted", "subscribers", ["active", "deleted_at"], unique=False)
 ```
 
-3. **027_webhook_event_index.py** — For event history queries
+**027_webhook_event_index.py:**
 ```python
 op.create_index("ix_webhook_events_webhook_delivered", "webhook_events", ["webhook_id", "delivered_at"], unique=False)
 ```
 
-4. **028_pipeline_run_type_status_index.py** — For admin dashboard
+**028_pipeline_run_type_status_index.py:**
 ```python
 op.create_index("ix_pipeline_runs_type_status", "pipeline_runs", ["run_type", "status"], unique=False)
 ```
 
-5. **029_audit_log_action_index.py** — For audit log analysis
+**029_audit_log_action_index.py:**
 ```python
 op.create_index("ix_audit_logs_action_created", "audit_logs", ["action", "created_at"], unique=False)
 ```
 
-**Action Items:**
-- [ ] Create migration `025_article_pipeline_status_partial_indexes.py`
-- [ ] Create migration `026_subscriber_active_index.py`
-- [ ] Create migration `027_webhook_event_index.py`
-- [ ] Create migration `028_pipeline_run_type_status_index.py`
-- [ ] Create migration `029_audit_log_action_index.py`
-- [ ] Apply migrations: `flask db upgrade`
+**Sub-agent note:** SQLite doesn't support `op.create_unique_constraint` via ALTER TABLE. Use partial indexes only. Run `flask db upgrade` after creating all migrations.
 
 ---
 
-### 5.2 Bulk Operations Transaction Ordering
+### A3: Transaction & Memory Fixes — HIGH/MEDIUM
 
-**Files:** `routes/admin/api/articles.py`
+#### A3a: Bulk Operations Transaction Ordering — MEDIUM
 
-**Risk:** Cache invalidation happens BEFORE DB commit. If commit fails, stale cache.
+**File:** `routes/admin/api/articles.py`
 
-**Required Changes:**
+In `_bulk_set_category` (line 14), `_bulk_reprocess` (line 52), and `_bulk_add_tags` (line 129), cache invalidation happens BEFORE `db.session.commit()`. If commit fails, cache is already invalidated (stale).
+
+Fix pattern for all three:
 ```python
-# For _bulk_set_category, _bulk_reprocess, _bulk_add_tags:
-
-# Step 1: DB changes
-for article in articles:
-    article.category = new_category
-
-# Step 2: Commit FIRST
-try:
-    db.session.commit()
-except SQLAlchemyError:
-    db.session.rollback()
-    return jsonify({"error": "Failed to update articles"}), 500
-
-# Step 3: Cache invalidation AFTER successful commit
-try:
-    from services.cache import get_response_cache
-    cache = get_response_cache()
-    for article in articles:
-        cache.invalidate(f"article_detail:{article.id}")
-    cache.invalidate_prefix("articles:list")
-except redis.exceptions.RedisError as e:
-    logger.error("Cache invalidation failed after DB commit: %s", e)
+# 1. Make DB changes
+# 2. Commit FIRST (try/except SQLAlchemyError with rollback)
+# 3. Invalidate cache AFTER successful commit (try/except redis.exceptions.RedisError)
 ```
 
-**Action Items:**
-- [ ] Fix `_bulk_set_category` transaction ordering
-- [ ] Fix `_bulk_reprocess` transaction ordering
-- [ ] Fix `_bulk_add_tags` transaction ordering
+#### A3b: Unbounded Memory in Duplicate Detection — HIGH
 
----
+**File:** `services/article.py` (lines 290-304)
 
-### 5.3 Unbounded Memory in Duplicate Detection
-
-**Files:** `services/article.py`
-
-**Risk:** `find_duplicate_titles()` loads ALL matching articles into memory.
-
-**Required Changes:**
+`find_duplicate_titles()` has no `.limit()` or `.order_by()`. Add:
 ```python
-rows = (
-    Article.query.filter(
-        Article.source_id != source_id,
-        Article.created_at >= cutoff,
-        Article.original_title.isnot(None),
-    )
-    .filter(
-        db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
-        >= min_words,
-        db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
-        <= max_words,
-    )
-    .order_by(Article.created_at.desc())  # Prefer recent articles
-    .with_entities(Article.id, Article.original_title)
-    .limit(1000)  # Bound memory: max ~1000 articles at once
-    .all()
-)
+.order_by(Article.created_at.desc())
+.with_entities(Article.id, Article.original_title)
+.limit(1000)
 ```
 
-**Action Items:**
-- [ ] Add `ORDER BY created_at.desc()` before `.all()`
-- [ ] Add `.limit(1000)` before `.all()`
-
 ---
 
-## WAVE 6: Test Infrastructure
+## WAVE 5: Test Infrastructure, Code Quality & Frontend
 
-**Target:** Test fixtures and helpers
-**Parallelization:** Items can parallelize
-**Estimated Time:** ~4 hours total
+**Estimated Time:** ~8 hours
+**Sub-agents:** 3 (can run in parallel)
 
-### 6.1 Create Shared MockRedis Fixture
+### A1: Test Infrastructure — MEDIUM
 
-**Files:** `tests/conftest.py`
+#### A1a: Shared MockRedis Fixture
 
-**Required Changes:**
+**File:** `tests/conftest.py`
+
+Add a `mock_redis_client` fixture using `tests.mock_redis.MockRedis` for stateful Redis testing. Current `mock_redis` fixture (line 50) is a plain `MagicMock`.
+
 ```python
 @pytest.fixture
 def mock_redis_client():
-    """In-memory Redis mock with real side effects."""
     from tests.mock_redis import MockRedis
     return MockRedis()
 ```
 
-**Action Items:**
-- [ ] Create `mock_redis_client` fixture in conftest.py
-- [ ] Update tests needing stateful Redis to use new fixture
+#### A1b: Autouse DNS Cache Clear Fixture
 
----
+**File:** `tests/conftest.py`
 
-### 6.2 Add Autouse DNS Cache Clear Fixture
+Currently `_clear_dns_cache` is defined locally in `tests/test_url_ssrf.py` and `tests/test_url_validate.py`. Move to conftest.py as autouse:
 
-**Files:** `tests/conftest.py`
-
-**Required Changes:**
 ```python
 from services.url import _dns_cache
 
 @pytest.fixture(autouse=True)
 def _clear_dns_cache():
-    """Clear DNS cache before and after each test to prevent cross-test contamination."""
     _dns_cache.clear()
     yield
     _dns_cache.clear()
 ```
 
-**Action Items:**
-- [ ] Add `_clear_dns_cache` autouse fixture to conftest.py
-- [ ] Remove duplicate fixtures from individual test files
+Remove the local fixtures from individual test files.
 
----
+#### A1c: ResponseCache Test Fixture
 
-### 6.3 Create Celery Task Test Helper
+**File:** `tests/conftest.py`
 
-**Files:** `tests/helpers/celery.py` (new file)
-
-**Required Implementation:**
-```python
-import os
-from contextlib import contextmanager
-from unittest.mock import MagicMock
-import uuid
-
-@contextmanager
-def celery_task_context(app, task_fn, secret="test-secret-key-at-least-32-chars-long"):
-    """Context manager for Celery task testing."""
-    with patch.dict("os.environ", {"CELERY_TASK_SECRET": secret}):
-        with app.app_context():
-            task_self = MagicMock()
-            task_self.request.id = f"task-{uuid.uuid4().hex[:8]}"
-            yield task_self
-
-def call_task(task_fn, *args, app=None, **kwargs):
-    """Call a Celery task's __wrapped__ method with proper setup."""
-    # Implementation...
-```
-
-**Action Items:**
-- [ ] Create `tests/helpers/celery.py` with helper functions
-- [ ] Update key test files to use the helper
-
----
-
-### 6.4 Add ResponseCache Test Fixture
-
-**Files:** `tests/conftest.py`
-
-**Required Changes:**
 ```python
 @pytest.fixture
 def response_cache_setup(mock_redis_client):
-    """Provide ResponseCache with mocked Redis for testing."""
     from services.cache import ResponseCache
     cache = ResponseCache()
     cache._redis = mock_redis_client
     return cache
 ```
 
-**Action Items:**
-- [ ] Create `response_cache_setup` fixture in conftest.py
-- [ ] Update tests to use shared fixture
+#### A1d: Missing Test Coverage
+
+Create new test files:
+
+**`tests/test_task_security.py`** (5 tests):
+- `test_sign_task_creates_valid_signature`
+- `test_verify_task_accepts_valid_signature`
+- `test_verify_task_rejects_tampered_signature`
+- `test_verify_task_fails_closed_on_missing_secret`
+- `test_verify_task_allows_internal_call`
+
+**`tests/test_webhooks.py`** (4 tests):
+- `test_dispatch_creates_event_record`
+- `test_trigger_event_only_calls_subscribed_webhooks`
+- `test_webhook_idempotency_prevents_duplicate_events`
+- `test_webhook_retry_on_failure`
+
+**`tests/test_trend_memory.py`** (4 tests):
+- Test propose_trend_memory creates entries
+- Test get_memory_for_topics returns matching entries
+- Test memory expiry filtering
+- Test consolidation promotes low→medium
+
+Add to `tests/test_admin_api.py`:
+- `test_export_subscribers_streams_csv`
+- `test_export_subscribers_correct_format`
+
+**Sub-agent note:** All test files need `CELERY_TASK_SECRET` set via `@patch.dict("os.environ", {"CELERY_TASK_SECRET": "test-secret-key-at-least-32-characters"})`. Use the `app` fixture for tests that need database access.
 
 ---
 
-### 6.5 Missing Test Coverage
+### A2: Code Quality — LOW/MEDIUM
 
-**Files:** `tests/` (new test files)
+#### A2a: Exception Handling Improvements
 
-**Required Tests:**
+| File | Line | Current | Fix |
+|------|------|---------|-----|
+| `models.py` | 29 | `except Exception:` in `decode_short_url` | `except (ValueError, TypeError):` |
+| `adapters/web.py` | 117 | `except Exception: pass` in trafilatura fallback | Add `logger.debug("Trafilatura extraction failed: %s", e)` before `pass` |
+| `routes/admin/api/articles.py` | ~148 | `except Exception` near db commit | `except SQLAlchemyError` |
 
-1. **Task HMAC Signing Tests** (`tests/test_task_security.py`):
-   - `test_sign_task_creates_valid_signature`
-   - `test_verify_task_accepts_valid_signature`
-   - `test_verify_task_rejects_tampered_signature`
-   - `test_verify_task_fails_closed_on_missing_secret`
-   - `test_verify_task_allows_internal_call`
+#### A2b: Redis Version Alignment
 
-2. **Webhook Delivery Tracking Tests** (`tests/test_webhooks.py`):
-   - `test_dispatch_creates_event_record`
-   - `test_trigger_event_only_calls_subscribed_webhooks`
-   - `test_webhook_idempotency_prevents_duplicate_events`
-   - `test_webhook_retry_on_failure`
+**File:** `requirements.txt` (line 10)
 
-3. **Subscriber Export Streaming Tests** (add to `tests/test_admin_api.py`):
-   - `test_export_subscribers_streams_csv`
-   - `test_export_subscribers_correct_format`
-
-4. **Trend Memory Tests** (`tests/test_trend_memory.py`):
-   - 4 tests for the trend memory system
-
-**Action Items:**
-- [ ] Create `tests/test_task_security.py` with 5 HMAC tests
-- [ ] Create `tests/test_webhooks.py` with 4 webhook tests
-- [ ] Add 2 export tests to `tests/test_admin_api.py`
-- [ ] Create `tests/test_trend_memory.py` with 4 trend memory tests
-
----
-
-## WAVE 7: Code Quality & Configuration
-
-**Target:** Code quality improvements
-**Parallelization:** Items are independent
-**Estimated Time:** ~5 hours total
-
-### 7.1 Exception Handling Improvements
-
-**Files:** `models.py`, `adapters/web.py`, `routes/admin/api/articles.py`
-
-**Required Changes:**
-
-1. **`models.py:29`** — `decode_short_url`:
-```python
-except (ValueError, TypeError):
-    return None
-```
-
-2. **`adapters/web.py:117`** — Add logging:
-```python
-except Exception as e:
-    logger.debug("Trafilatura extraction failed: %s", e)
-    pass
-```
-
-3. **`routes/admin/api/articles.py:148`** — Change `except Exception` to `except SQLAlchemyError`
-
-**Action Items:**
-- [ ] Fix `decode_short_url` exception handling
-- [ ] Add logging to trafilatura fallback
-- [ ] Change `except Exception` to `except SQLAlchemyError` in articles.py
-
----
-
-### 7.2 Redis Version Conflict
-
-**Files:** `requirements.txt`
-
-**Current:** `requirements.txt` says `>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`.
-
-**Required Change:**
 ```diff
-# requirements.txt line 10
 - redis>=7.0.0,<8.0.0
 + redis==6.4.0
 ```
 
-**Action Items:**
-- [ ] Align `requirements.txt` Redis version to `pyproject.toml`
+`pyproject.toml` correctly pins `redis==6.4.0`. No Redis 7.x features are used.
 
----
+#### A2c: Beat Schedule Deprecation Comment
 
-### 7.3 Beat Schedule Cleanup
+**File:** `config.py`
 
-**Files:** `config.py`
+The `CELERY_BEAT_SCHEDULE` class attribute on `Config` (lines 85-123) is dead code — `get_beat_schedule()` (line 126) reads from `pipeline.yaml`. Add deprecation comment:
 
-**Risk:** `CeleryBeatConfig.CELERY_BEAT_SCHEDULE` is dead code.
-
-**Required Changes:**
 ```python
-class CeleryBeatConfig:
-    """DEPRECATED: Use get_beat_schedule() instead.
-
-    This class attribute is kept for reference only.
-    Actual beat schedule is loaded from pipeline.yaml.
-    """
-    CELERY_BEAT_SCHEDULE = {}  # Empty - replaced by get_beat_schedule()
+CELERY_BEAT_SCHEDULE = {}  # DEPRECATED: Use get_beat_schedule() instead. Actual schedule is loaded from pipeline.yaml.
 ```
 
-**Action Items:**
-- [ ] Add deprecation comment to CeleryBeatConfig class attribute
-- [ ] Verify get_beat_schedule() is used everywhere
+#### A2d: Dead Fixture Removal
 
----
+**File:** `tests/conftest.py` (lines 39-46)
 
-### 7.4 Code Quality: Low Priority
+`_reset_factory_counter` fixture is dead code — the counter generates unique strings that remain unique across tests without reset.
 
-**Files:** Various
+#### A2e: Citation Lazy Loading
 
-**Required Changes:**
+**File:** `models.py` (~line 139)
 
-1. **Citation lazy loading** (`models.py`):
 ```python
+# Current:
+citations = db.relationship("Citation", backref="article", lazy="select", cascade="all, delete-orphan")
+# Change to:
 citations = db.relationship("Citation", backref="article", lazy="selectin", cascade="all, delete-orphan")
 ```
 
-2. **Dead fixture removal** (`tests/conftest.py`):
-   - Remove `_reset_factory_counter` fixture (dead code)
+#### A2f: SoftTimeLimitExceeded Work Loss
 
-3. **SoftTimeLimitExceeded work loss** (`tasks/pipeline.py`):
-   - Persist failure state (last_error, retry_count) before raising
+**File:** `tasks/pipeline.py` (lines 275-286)
 
-4. **Tag.articles backref** (`models.py`):
+When soft timeout occurs, `last_error` update is never persisted (session rolled back before commit), and `retry_count` is not incremented. Fix: persist failure state before re-raising.
+
 ```python
-articles = db.relationship("Article", secondary=article_tags, backref=db.backref("tags", lazy="selectin"), lazy="dynamic")
+except SoftTimeLimitExceeded:
+    db.session.rollback()
+
+    exc_article = db.session.get(Article, article_id)
+    if exc_article:
+        exc_article.last_error = f"{stage}: soft time limit exceeded"
+        exc_article.retry_count = (exc_article.retry_count or 0) + 1
+        exc_article.total_retries = (exc_article.total_retries or 0) + 1
+        exc_article.pipeline_status = _get_stuck_status_for_stage(stage)
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+
+    record_stage_result(stage, success=False, run_id=run_id)
+    raise
 ```
 
-5. **Trend memory deduplication** (`services/trend_memory.py`):
-   - Add `_is_duplicate_signal()` function
+#### A2g: Additional Code Quality Items (Optional)
 
-6. **Subagent chain escaping fix** (`services/subagent.py`):
-   - Add re-escape for step results in chain processing
-
-7. **ModelLimiter initial poll interval** (`services/limiter.py`):
-   - Adjust initial poll_interval from 0.05s to 0.1s
-
-8. **ResponseCache second SET NX fix** (`services/cache.py`):
-   - Add double-check before second SET NX
-
-9. **Stage failure TTL refresh** (`services/pipeline_failure.py`):
-   - Add TTL refresh on each stage failure
-
-10. **Trend memory batch consolidation** (`services/trend_memory.py`):
-    - Batch query for consolidate_all_topics()
-
-11. **L1 cache sampled eviction** (`services/cache.py`):
-    - Add periodic cleanup task for L1 cache
-
-12. **Batch commit for trend memory** (`services/trend_memory.py`):
-    - Commit all entries in single transaction
-
-**Action Items:**
-- [ ] Change `lazy="select"` to `lazy="selectin"` for citations
-- [ ] Remove dead `_reset_factory_counter` fixture
-- [ ] Implement SoftTimeLimitExceeded handler fix
-- [ ] Add Tag.articles backref
-- [ ] Add `_is_duplicate_signal()` for trend memory
-- [ ] Fix subagent chain re-escaping
-- [ ] Adjust ModelLimiter poll interval
-- [ ] Fix ResponseCache second SET NX
-- [ ] Add stage failure TTL refresh
-- [ ] Batch consolidate trend memory
-- [ ] Add L1 cache cleanup task
-- [ ] Batch commit trend memory entries
+These are low-priority polish items that can be deferred:
+- Tag.articles backref (`models.py`)
+- Trend memory deduplication (`services/trend_memory.py`)
+- Subagent chain re-escaping (`services/subagent.py`)
+- ModelLimiter initial poll interval adjustment (`services/limiter.py`)
+- ResponseCache second SET NX fix (`services/cache.py`)
+- Stage failure TTL refresh (`services/pipeline_failure.py`)
+- Trend memory batch consolidation (`services/trend_memory.py`)
+- Trend memory batch commit (`services/trend_memory.py`)
+- L1 cache cleanup task (`services/cache.py`)
 
 ---
 
-## WAVE 8: Frontend (CSS/Build)
+### A3: Frontend (CSS/Build) — MEDIUM/LOW
 
-**Target:** CSS architecture and build pipeline
-**Parallelization:** Items have some dependencies
-**Estimated Time:** ~5 hours total
-
-### 8.1 HIGH — Critical CSS and Layout CSS Duplication
+#### A3a: CSS Duplication Cleanup — HIGH
 
 **Files:** `static/css/layout.css`, `static/css/critical.css`
 
-**Risk:** 12 classes duplicated across files, maintenance hazard.
+12 classes duplicated across both files (`.nav`, `.logo`, `.logo-slash`, `.nav-links`, `.nav-meta`, `.nav-tag`, `.container`, `.site-header`, `.site-footer`, `.htmx-indicator`, `.htmx-request #content`, `.nav-toggle-label`). Also `.nav-tag` is duplicated WITHIN `layout.css` (lines 59-66 AND 108-115).
 
-**Required Changes:**
+Refactor `layout.css` to only add responsive overrides, not re-declare base rules from `critical.css`. Keep `critical.css` as the source of truth for base definitions.
 
-Refactor `layout.css` to only add **responsive overrides and additional states**, not re-declare base rules:
+**Sub-agent note:** This is intentional duplication per AGENTS.md — `critical.css` is inlined and must work standalone. Do NOT remove the duplication entirely — only remove rules in `layout.css` that are exact copies without any additions. Keep responsive `@media` overrides in `layout.css`. The `.htmx-indicator` duplication MUST stay in both files.
 
-1. **Audit all 12 duplicated classes** (`.nav`, `.logo`, `.logo-slash`, `.nav-links`, `.nav-meta`, `.nav-tag`, `.container`, `.site-header`, `.site-footer`, `.htmx-indicator`, `.htmx-request #content`, `.nav-toggle-label`)
+#### A3b: Theme Toggle Dedup — HIGH
 
-2. **Remove duplicate definitions from `layout.css`**
+**File:** `static/css/components.css` (lines 238-273)
 
-3. **Move responsive overrides to `layout.css` only**
+`.theme-toggle` and `.theme-icon-light` are byte-for-byte identical to `critical.css` (lines 256-291). Remove from `components.css` — `critical.css` (inlined) provides these rules.
 
-4. **Remove internal `.nav-tag` duplicate in `layout.css`** (lines 108-115)
+#### A3c: CSS Token Duplication Comment — LOW
 
-**Example refactor for `.nav`:**
-```css
-/* critical.css — keep base definition */
-.nav {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0.75rem 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
+**File:** `static/css/critical.css`
 
-/* layout.css — ONLY add responsive overrides */
-@media (max-width: 640px) {
-  .nav {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-}
-```
-
-**Action Items:**
-- [ ] Audit all 12 duplicated classes
-- [ ] Remove duplicate definitions from `layout.css`
-- [ ] Move responsive overrides to `layout.css` only
-- [ ] Remove internal `.nav-tag` duplicate in `layout.css`
-- [ ] Verify no visual regression after refactor
-
----
-
-### 8.2 HIGH — Theme Toggle and Icon Duplication
-
-**Files:** `static/css/components.css`
-
-**Required Changes:**
-Remove `.theme-toggle` and `.theme-icon-light` from `components.css` — keep only in `critical.css`.
-
-**Action Items:**
-- [ ] Remove `.theme-toggle` rules from `components.css`
-- [ ] Remove `.theme-icon-light` rules from `components.css`
-
----
-
-### 8.3 MEDIUM — Add CSS/JS Minification and Bundling
-
-**Files:** Build pipeline, `templates/base.html`, `templates/base_admin.html`
-
-**Required Changes:**
-
-1. **Install esbuild**:
-```bash
-npm install -g esbuild
-```
-
-2. **Create Makefile target**:
-```makefile
-build-assets: ## Minify and bundle CSS/JS for production
-	esbuild static/css/style.css --bundle --minify --outfile=static/css/style.min.css
-	esbuild static/js/app.js static/js/theme.js static/js/share-a11y.js --bundle --minify --outfile=static/js/app.min.js
-
-.PHONY: build-assets
-```
-
-3. **Update templates** (`base.html`, `base_admin.html`):
-```html
-<!-- Replace individual CSS files -->
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.min.css') }}">
-
-<!-- Replace individual JS files -->
-<script src="{{ url_for('static', filename='js/app.min.js') }}" defer></script>
-<!-- htmx.min.js stays separate — vendor file -->
-```
-
-4. **Add to `.gitignore`**:
-```
-*.min.css
-*.min.js
-```
-
-**Action Items:**
-- [ ] Add `esbuild` to project
-- [ ] Create Makefile target `build-assets`
-- [ ] Update `base.html` and `base_admin.html` to use minified assets
-- [ ] Add `build-assets` to deployment/CI process
-- [ ] Add `*.min.css` and `*.min.js` to `.gitignore`
-
----
-
-### 8.4 LOW — CSS Token Duplication Comment
-
-**Files:** `static/css/critical.css`
-
-**Required Changes:**
-
-Add comment to `critical.css`:
+Add comment at top of custom properties section:
 ```css
 /*
  * IMPORTANT: Tokens are duplicated in this file AND variables.css.
@@ -1236,110 +882,61 @@ Add comment to `critical.css`:
  */
 ```
 
-**Action Items:**
-- [ ] Add comment to critical.css about token duplication
+#### A3d: Build Pipeline — MEDIUM
+
+**Files:** `Makefile`, `templates/base.html`, `templates/base_admin.html`, `.gitignore`
+
+Add CSS/JS minification using esbuild:
+
+```makefile
+build-assets: ## Minify and bundle CSS/JS for production
+	esbuild static/css/style.css --bundle --minify --outfile=static/css/style.min.css
+	esbuild static/js/app.js static/js/theme.js static/js/share-a11y.js --bundle --minify --outfile=static/js/app.min.js
+
+.PHONY: build-assets
+```
+
+Update templates to reference `.min` versions. Add `*.min.css` and `*.min.js` to `.gitignore`. Keep `htmx.min.js` as a separate vendor file.
 
 ---
 
-### 8.5 LOW — Accessibility Improvements
-
-**Files:** `static/js/app.js`, `static/css/components.css`
-
-**Optional Items:**
-
-1. **Sync aria-expanded on page load** (`app.js`):
-```javascript
-document.querySelectorAll(".share-details[open]").forEach(function(details) {
-  var summary = details.querySelector("summary");
-  if (summary) {
-    summary.setAttribute("aria-expanded", "true");
-  }
-});
-```
-
-2. **Explicit toast reduced-motion** (`components.css`):
-```css
-@media (prefers-reduced-motion: reduce) {
-  .toast {
-    animation: none;
-    opacity: 1;
-  }
-}
-```
-
-**Action Items:**
-- [ ] Add sync logic for pre-opened details elements (optional)
-- [ ] Evaluate if explicit toast reduced-motion is needed (optional)
-
----
-
-## Implementation Order
+## Implementation Parallelization
 
 ```
-WAVE 1: Critical Security (XSS)        ~90 min    — 6 items, parallelize by file
-WAVE 2: High-Priority Security/Config   ~4 hrs     — 5 items, parallelize
-WAVE 3: Critical Performance            ~6 hrs     — 4 items, parallelize
-WAVE 4: Error Handling/Reliability      ~2 hrs     — 4 items, parallelize
-WAVE 5: Database Indexes                 ~2 hrs     — Sequential (migrations)
-WAVE 6: Test Infrastructure             ~4 hrs     — 5 items, parallelize
-WAVE 7: Code Quality                    ~5 hrs     — 15 items, parallelize
-WAVE 8: Frontend                        ~5 hrs     — Some dependencies
+WAVE 1 ─┬── A1: Template XSS (templates/)
+         └── A2: Validation & Docs (routes, .env.example)
+              (~30 min, 2 parallel agents)
 
-Total estimated: ~28 hours across all waves
+WAVE 2 ─┬── A1: Redis TLS (extensions.py, config_cache.py)
+         ├── A2: DEBUG enforcement (config.py)
+         ├── A3: Task signing + Health + Docstring (tasks/, routes/, services/)
+         └── A4: Env vars docs (.env.example)
+              (~5 hrs, 4 parallel agents)
+
+WAVE 3 ─┬── A1: SLA SQL aggregation (routes/admin/api/pipeline.py)
+         ├── A2: N+1 fix + Cache scoping (feeds.py, links.py, admin/)
+         └── A3: Caching improvements (llm/, dashboard.py, related.py)
+              (~5 hrs, 3 parallel agents)
+
+WAVE 4 ─┬── A1: Error handling (edit.py, extract.py, cache.py, newsletter.py)
+         ├── A2: Database indexes (migrations/)
+         └── A3: Transaction + memory fixes (articles.py, article.py)
+              (~3 hrs, 3 parallel agents)
+
+WAVE 5 ─┬── A1: Test infrastructure (conftest.py, test files)
+         ├── A2: Code quality (models.py, requirements.txt, config.py, etc.)
+         └── A3: Frontend CSS (layout.css, critical.css, components.css)
+              (~8 hrs, 3 parallel agents)
 ```
 
----
+**File conflict analysis (no two agents touch same file in same wave):**
+- Wave 1: A1 touches templates, A2 touches routes + .env
+- Wave 2: A1 touches extensions.py + config_cache.py, A2 touches config.py, A3 touches tasks/cleanup.py + routes/public/__init__.py + services/task_security.py, A4 touches .env.example
+- Wave 3: A1 touches pipeline.py, A2 touches feeds.py + links.py + admin files, A3 touches llm/ + dashboard.py
+- Wave 4: A1 touches edit.py + extract.py + cache.py + newsletter.py, A2 creates new migration files, A3 touches articles.py (admin api) + article.py (services)
+- Wave 5: A1 touches test files, A2 touches production code, A3 touches CSS files
 
-## Wave Dependencies
-
-```
-Wave 1 ─┬─► Wave 2 ─┬─► Wave 3 ─┬─► Wave 4 ─┬─► Wave 5 ─┬─► Wave 6 ─┬─► Wave 7 ─┬─► Wave 8
-        │           │           │           │           │           │
-        └───────────┴───────────┴───────────┴───────────┴───────────┴───────────┘
-                        (All waves can start after Wave 1 completes)
-```
-
-**Note:** Waves can overlap — while Wave 5 (migrations) runs sequentially, Wave 6-8 can start after earlier waves complete.
-
----
-
-## Sub-Agent Recommendations
-
-### Agent Pool Structure
-
-**For maximum parallelization, use 4 agents:**
-
-1. **Agent-Security (Waves 1-2)**: Handles all security-related items (XSS, Redis TLS, DEBUG enforcement, task signing, health endpoint)
-
-2. **Agent-Performance (Wave 3)**: Handles SLA aggregation, N+1 fixes, cache scoping, provider caching
-
-3. **Agent-Reliability (Waves 4-5)**: Handles error handling, duplicate detection, migrations, bulk operations
-
-4. **Agent-Quality (Waves 6-8)**: Handles test infrastructure, code quality, CSS/build pipeline
-
-### Key Context for Sub-Agents
-
-**Shared Context (needed by all agents):**
-- Run `.venv/bin/ruff check . --exclude .venv` before committing
-- Run `.venv/bin/python -m pytest tests/ -x -q` after changes
-- Use `commit_or_rollback()` context manager for db operations
-- Catch `redis.exceptions.RedisError` for Redis operations
-
-**Wave 1 (Security) agents need:**
-- Jinja2 template escaping: use `|e` filter for all user/LLM content
-- `validate_bulk_ids()` exists in `services/validation.py:90`
-
-**Wave 3 (Performance) agents need:**
-- SQLAlchemy `func` and `func.julianday()` for datetime arithmetic
-- `joinedload()` import from `sqlalchemy.orm`
-
-**Wave 5 (Migrations) agents need:**
-- Run `flask db upgrade` after creating migrations
-- SQLite doesn't support `op.create_unique_constraint` — use application-level enforcement
-
-**Wave 8 (Frontend) agents need:**
-- CSS module architecture: `critical.css` (inlined), `style.css` (imports modules)
-- Do NOT import `critical.css` in `style.css`
+**Total estimated:** ~21 hours across all waves
 
 ---
 
@@ -1347,7 +944,7 @@ Wave 1 ─┬─► Wave 2 ─┬─► Wave 3 ─┬─► Wave 4 ─┬─► 
 
 | Change | Rollback Method |
 |--------|----------------|
-| XSS fixes | Remove `|e` filters |
+| XSS fixes (`\|e` filters) | Remove `\|e` filters |
 | Redis TLS | Remove `ssl=` parameter |
 | DEBUG enforcement | Remove check from `ProductionConfig.validate()` |
 | SLA SQL aggregation | Revert to `.all()` + Python loops |
@@ -1355,51 +952,7 @@ Wave 1 ─┬─► Wave 2 ─┬─► Wave 3 ─┬─► Wave 4 ─┬─► 
 | Cache scoping | Remove `pub:` prefix from keys |
 | Database indexes | `flask db downgrade <migration>` |
 | Test fixtures | Revert conftest.py changes |
-
----
-
-## Appendix A: Complete Issue Summary
-
-| ID | Wave | Priority | Category | Severity | File(s) | Description |
-|----|------|----------|----------|----------|---------|-------------|
-| XSS-001 | 1 | CRITICAL | XSS | CRITICAL | templates/admin/article_edit.html | Form values without escaping |
-| XSS-002 | 1 | CRITICAL | XSS | CRITICAL | templates/admin/dead_letters.html | Title text without escaping |
-| XSS-003 | 1 | HIGH | XSS | HIGH | templates/article.html | Missing `|e` on original_title |
-| XSS-004 | 1 | HIGH | XSS | HIGH | templates/partials/condensed_article.html | Missing `|e` on writer_model |
-| VAL-001 | 1 | HIGH | Validation | HIGH | routes/admin/api/articles.py | Missing integer validation |
-| DOC-001 | 1 | HIGH | Documentation | HIGH | .env.example, docs/configuration.md | Missing WEBHOOK_SECRET_KEY |
-| SEC-001 | 2 | CRITICAL | TLS | CRITICAL | extensions.py, config_cache.py | No TLS for Redis |
-| SEC-002 | 2 | HIGH | Config | HIGH | config.py | DEBUG warning-only enforcement |
-| SEC-003 | 2 | MEDIUM | Task | MEDIUM | tasks/cleanup.py | cleanup_old_article_versions lacks signing |
-| SEC-004 | 2 | MEDIUM | Info | MEDIUM | services/health.py | Detailed health leaks system info |
-| SEC-005 | 2 | MEDIUM | Config | MEDIUM | .env.example | Missing env vars |
-| PERF-001 | 3 | CRITICAL | Memory | CRITICAL | routes/admin/api/pipeline.py | SLA loads all articles |
-| PERF-002 | 3 | CRITICAL | N+1 | CRITICAL | routes/public/feeds.py | Missing joinedload on source |
-| PERF-003 | 3 | CRITICAL | Cache | CRITICAL | routes/admin/articles.py | Overbroad invalidation |
-| PERF-004 | 3 | HIGH | API | HIGH | services/llm/__init__.py | Uncached provider info |
-| ERR-001 | 4 | CRITICAL | Error | CRITICAL | tasks/edit.py:270 | json.loads without error handling |
-| ERR-002 | 4 | CRITICAL | Error | CRITICAL | tasks/extract.py:154 | Silent dedup check failure |
-| ERR-003 | 4 | MEDIUM | Error | MEDIUM | services/cache.py:136,150,155 | Missing Redis error handling |
-| ERR-004 | 4 | MEDIUM | Celery | MEDIUM | tasks/newsletter.py:351 | Missing retry_jitter |
-| DB-001 | 5 | MEDIUM | Index | MEDIUM | migrations/versions/* | Missing partial indexes |
-| DB-002 | 5 | MEDIUM | Transaction | MEDIUM | routes/admin/api/articles.py | Bulk ops cache-before-commit |
-| DB-003 | 5 | HIGH | Memory | HIGH | services/article.py:289 | Unbounded duplicate detection |
-| TEST-001 | 6 | MEDIUM | Test | MEDIUM | conftest.py | No shared MockRedis fixture |
-| TEST-002 | 6 | MEDIUM | Test | MEDIUM | conftest.py | No autouse DNS cache clear |
-| TEST-003 | 6 | MEDIUM | Test | MEDIUM | tests/helpers/ | No Celery task test helper |
-| TEST-004 | 6 | MEDIUM | Test | MEDIUM | conftest.py | No ResponseCache fixture |
-| TEST-005 | 6 | MEDIUM | Test | MEDIUM | tests/ | Missing critical tests |
-| CQ-001 | 7 | HIGH | Dependency | HIGH | requirements.txt | Redis version conflict |
-| CQ-002 | 7 | MEDIUM | Error | MEDIUM | models.py:29 | Broad exception in decode_short_url |
-| CQ-003 | 7 | MEDIUM | Config | MEDIUM | config.py | Duplicate beat schedule definition |
-| CQ-004 | 7 | LOW | Code | LOW | models.py:139 | Citation lazy loading |
-| CQ-005 | 7 | LOW | Code | LOW | tests/conftest.py:39 | Dead fixture |
-| CQ-006 | 7 | LOW | Reliability | LOW | tasks/pipeline.py:275 | SoftTimeLimitExceeded work loss |
-| FE-001 | 8 | HIGH | CSS | HIGH | critical.css, layout.css | 12 classes duplicated |
-| FE-002 | 8 | HIGH | CSS | HIGH | components.css | .theme-toggle duplicated |
-| FE-003 | 8 | MEDIUM | Build | MEDIUM | Makefile, templates | No minification/bundling |
-| FE-004 | 8 | LOW | CSS | LOW | critical.css | Add token duplication comment |
-| FE-005 | 8 | LOW | A11y | LOW | app.js | Sync aria-expanded on load |
+| CSS dedup | Revert changes in layout.css |
 
 ---
 
@@ -1419,26 +972,68 @@ Wave 1 ─┬─► Wave 2 ─┬─► Wave 3 ─┬─► Wave 4 ─┬─► 
 
 ### Wave-specific verification:
 
-**Wave 1 (XSS):**
-```bash
-# Manual: Navigate to /admin/articles/<id>/edit with crafted final_article
-# Verify <script>alert('xss')</script> in any field does NOT execute
-```
+**Wave 1 (XSS):** Navigate to `/admin/articles/<id>/edit` with crafted `final_article` containing `<script>alert('xss')</script>`. Verify it does NOT execute.
 
 **Wave 3 (Performance):**
 ```bash
-# Verify SLA endpoint returns same JSON structure
 curl -s "http://localhost:5000/admin/api/pipeline/sla?days=7" | python -m json.tool
-
-# Verify cache keys use pub: prefix
 redis-cli keys "pub:*"
 ```
 
-**Wave 5 (Migrations):**
+**Wave 4 (Migrations):**
 ```bash
-# Verify EXPLAIN QUERY PLAN shows index usage
+flask db upgrade
 ./scripts/query_analysis.sh
 ```
+
+---
+
+## Issue Summary
+
+| ID | Wave | Priority | Category | File(s) | Description |
+|----|------|----------|----------|---------|-------------|
+| XSS-001 | 1 | CRITICAL | XSS | templates/admin/article_edit.html | Form values without escaping (10 locations) |
+| XSS-002 | 1 | CRITICAL | XSS | templates/admin/dead_letters.html | Title text without escaping (2 locations) |
+| XSS-003 | 1 | HIGH | XSS | templates/article.html | Missing `\|e` on original_title in `<title>` |
+| XSS-004 | 1 | HIGH | XSS | templates/partials/condensed_article.html | Missing `\|e` on writer_model |
+| VAL-001 | 1 | HIGH | Validation | routes/admin/api/articles.py | Missing integer validation on bulk IDs |
+| DOC-001 | 1 | HIGH | Documentation | .env.example, docs/configuration.md | Missing WEBHOOK_SECRET_KEY |
+| LOG-001 | 1 | LOW | Logging | routes/public/subscribe.py | Full tokens logged (lines 171, 212) |
+| SEC-001 | 2 | CRITICAL | TLS | extensions.py, config_cache.py | No TLS for Redis connections |
+| SEC-002 | 2 | HIGH | Config | config.py | DEBUG not checked in ProductionConfig.validate() |
+| SEC-003 | 2 | MEDIUM | Task | tasks/cleanup.py | cleanup_old_article_versions lacks HMAC signing |
+| SEC-004 | 2 | MEDIUM | Info | routes/public/__init__.py | Detailed health leaks system info |
+| SEC-005 | 2 | LOW | Docs | services/task_security.py | Inaccurate docstring |
+| SEC-006 | 2 | HIGH | Documentation | .env.example | Missing 15+ env vars |
+| PERF-001 | 3 | CRITICAL | Memory | routes/admin/api/pipeline.py | SLA loads all articles |
+| PERF-002 | 3 | CRITICAL | N+1 | routes/public/feeds.py | Missing joinedload on source |
+| PERF-003 | 3 | CRITICAL | Cache | routes/admin/articles.py | Overbroad invalidation |
+| PERF-004 | 3 | HIGH | API | services/llm/__init__.py | Uncached provider info |
+| PERF-005 | 3 | MEDIUM | Stampede | routes/admin/dashboard.py | No lock on setex |
+| PERF-006 | 3 | MEDIUM | Cache | services/related.py | Uncached find_related_articles |
+| PERF-007 | 3 | MEDIUM | Cache | routes/public/feeds.py | Sitemap not cached |
+| PERF-008 | 3 | LOW | Query | routes/admin/dashboard.py | Loads all sources for count |
+| ERR-001 | 4 | LOW | Error | tasks/edit.py:271 | json.loads in webhook trigger without specific error |
+| ERR-002 | 4 | MEDIUM | Error | tasks/extract.py:154 | Silent dedup check failure |
+| ERR-003 | 4 | MEDIUM | Error | services/cache.py:136,150,155 | Missing Redis error handling |
+| ERR-004 | 4 | MEDIUM | Celery | tasks/newsletter.py:351 | Missing retry_jitter |
+| DB-001 | 4 | MEDIUM | Index | migrations/versions/* | Missing partial indexes |
+| DB-002 | 4 | MEDIUM | Transaction | routes/admin/api/articles.py | Bulk ops cache-before-commit |
+| DB-003 | 4 | HIGH | Memory | services/article.py:290 | Unbounded duplicate detection |
+| TEST-001 | 5 | MEDIUM | Test | conftest.py | No shared MockRedis fixture |
+| TEST-002 | 5 | MEDIUM | Test | conftest.py | No autouse DNS cache clear |
+| TEST-003 | 5 | MEDIUM | Test | conftest.py | No ResponseCache fixture |
+| TEST-004 | 5 | MEDIUM | Test | tests/ | Missing critical tests |
+| CQ-001 | 5 | HIGH | Dependency | requirements.txt | Redis version conflict |
+| CQ-002 | 5 | MEDIUM | Error | models.py:29 | Broad exception in decode_short_url |
+| CQ-003 | 5 | MEDIUM | Config | config.py | Dead beat schedule attribute |
+| CQ-004 | 5 | LOW | Code | models.py:139 | Citation lazy loading |
+| CQ-005 | 5 | LOW | Code | tests/conftest.py:39 | Dead fixture |
+| CQ-006 | 5 | LOW | Reliability | tasks/pipeline.py:275 | SoftTimeLimitExceeded work loss |
+| FE-001 | 5 | HIGH | CSS | critical.css, layout.css | 12 classes duplicated |
+| FE-002 | 5 | HIGH | CSS | components.css | .theme-toggle duplicated |
+| FE-003 | 5 | MEDIUM | Build | Makefile, templates | No minification/bundling |
+| FE-004 | 5 | LOW | CSS | critical.css | Add token duplication comment |
 
 ---
 

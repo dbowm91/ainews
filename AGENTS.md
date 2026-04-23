@@ -370,6 +370,20 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Redis version conflict**: `requirements.txt` says `redis>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`. Use `pyproject.toml` as source of truth — the codebase runs with 6.4.0.
 
+**`verify_task()` docstring inaccuracy**: The docstring in `services/task_security.py:57` says "True if ... no secret is configured" but the actual implementation returns `False` (fail-closed) when `CELERY_TASK_SECRET` is not set. The code is correct; the docstring is misleading.
+
+**Beat schedule location**: The Celery beat schedule is defined as `CELERY_BEAT_SCHEDULE` on the base `Config` class in `config.py` (lines 85-123), with `get_beat_schedule()` at line 126 reading from `pipeline.yaml`. There is no separate `CeleryBeatConfig` class.
+
+**Health endpoint information disclosure**: `GET /health?detailed=true` on `public_bp` (`routes/public/__init__.py:108`) exposes git commit hash and DB pool stats without authentication. No `@require_auth` decorator is applied.
+
+**Dashboard source count**: `routes/admin/dashboard.py:127` uses `Source.query.all()` then `len(sources)` to get a count. Should use `Source.query.count()` instead.
+
+**Template XSS in article_edit.html**: In addition to the form fields at lines 48-79, lines 11 (breadcrumb) and 24 (page title) render `article.original_title` without `|e` in `templates/admin/article_edit.html`.
+
+**DNS cache clear fixture location**: The `_clear_dns_cache` autouse fixture is defined locally in `tests/test_url_ssrf.py` and `tests/test_url_validate.py`, not in `tests/conftest.py`. When adding tests that interact with `services/url.py`, include this fixture or move it to conftest.py.
+
+**Edit task webhook json.loads**: `tasks/edit.py:271` contains `json.loads(article.final_article)` inside a webhook trigger block wrapped in broad `except Exception`. The main article processing uses Pydantic model validation (`CondensedArticle`) and `validate_and_raise()`, so malformed JSON is handled before reaching the webhook trigger. The webhook trigger's broad catch may mask specific JSON parse errors.
+
 **Generator-based pagination for large queries**: When returning large result sets from route handlers, use `yield_per()` with generators instead of `.all()` loading to prevent OOM. Example in `routes/admin/subscribers.py` for CSV export.
 
 ## Additional security patterns

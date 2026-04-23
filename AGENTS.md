@@ -127,6 +127,10 @@ MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`
 
 **CSS consolidation note**: `critical.css`, `base.css`, and `layout.css` have intentional overlap. `critical.css` (inlined) contains reset and base styles needed for first paint. `base.css` expands critical styles plus adds theme-specific rules. `layout.css` contains navigation, container, and responsive rules. When modifying CSS, ensure changes go to the correct file — do not duplicate rules across these files.
 
+**CSS duplication rationale**: Some duplication exists intentionally — `critical.css` is inlined for first-paint performance and must work standalone (without `layout.css` being loaded). `layout.css` extends and may override for normal page load. The `.htmx-indicator` rules are duplicated in both for this reason. When modifying base rules in `critical.css`, ensure `layout.css` doesn't inadvertently change behavior.
+
+**Font scale naming**: `--text-lg` (16px) is semantically labeled "large" but renders as the standard/default body size. `--text-base` (14px) is actually smaller than the browser default. Avoid relying on variable names for semantic meaning — the actual pixel values are what matter.
+
 Add new rules to the appropriate module, not to `style.css` directly.
 
 ### API response format
@@ -359,6 +363,14 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates. Added `joinedload(Article.source)` to prevent N+1 query on source access.
 
 **SLA metrics sort optimization**: `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats, reducing from 6 sorts (3 metrics × 2 `_sorted_stats` calls each) to 3 sorts. This matters for large result sets.
+
+**Duplicate detection memory bound**: `find_duplicate_titles()` loads potentially thousands of rows. Consider adding `.limit(1000).order_by(db.desc(Article.created_at))` to bound memory usage.
+
+**Bulk operations validation gap**: `routes/admin/api/articles.py:bulk_article_operations()` does NOT call `validate_bulk_ids()` despite the function existing in `services/validation.py:90`. Always use the existing validation functions.
+
+**Redis version conflict**: `requirements.txt` says `redis>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`. Use `pyproject.toml` as source of truth — the codebase runs with 6.4.0.
+
+**Generator-based pagination for large queries**: When returning large result sets from route handlers, use `yield_per()` with generators instead of `.all()` loading to prevent OOM. Example in `routes/admin/subscribers.py` for CSV export.
 
 ## Additional security patterns
 

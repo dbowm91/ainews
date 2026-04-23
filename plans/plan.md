@@ -19,7 +19,8 @@ The following items were implemented in this session:
 - ✅ E.1f: Validate `process_item` with `ProcessItemTask`
 
 ### Wave B.3: Database Indexes
-- ✅ B.3: Add query performance indexes via migration 023
+- ✅ B.3: Add query performance indexes via migration 023 (3 indexes: started_at, subscribed_at, created_at)
+- ✅ B.3 continued: Add missing indexes via migration 024 (5 indexes: sent_at, newsletter_type, finished_at, confirmed_at, clicked_article_id)
 
 ### Wave 6.2: Query Analysis
 - ✅ 6.2: Add `scripts/query_analysis.sh` for EXPLAIN ANALYZE
@@ -72,7 +73,7 @@ This plan consolidates all deferred and new implementation items from plan.md, p
 | E.4: Celery Worker Network Isolation | plan4.md | Requires hosting platform + CI/CD that don't exist |
 | 2.6: Dashboard Event-Based Invalidation | plan5.md | 60-second TTL covers the need — event-based adds 150+ LOC for marginal benefit |
 | 1.1: CI/CD Pipeline | plan5.md | Requires project to be hosted on platform with GitHub Actions or equivalent |
-| B.3: Add Missing Database Indexes | plan.md | ✅ IMPLEMENTED — migration 023 adds query indexes |
+| B.3: Add Missing Database Indexes | plan.md | ✅ IMPLEMENTED — migration 023 + 024 adds query indexes |
 
 ---
 

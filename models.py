@@ -177,7 +177,7 @@ class Newsletter(db.Model):
     __tablename__ = "newsletters"
 
     id = db.Column(db.Integer, primary_key=True)
-    newsletter_type = db.Column(db.String(32), nullable=False)  # "main" or topic key
+    newsletter_type = db.Column(db.String(32), nullable=False, index=True)  # "main" or topic key
     subject = db.Column(db.String(256))
     html_content = db.Column(db.Text)
     article_count = db.Column(db.Integer, default=0)
@@ -185,7 +185,7 @@ class Newsletter(db.Model):
     delivered_count = db.Column(db.Integer, default=0)
     error_message = db.Column(db.Text, nullable=True)
     generated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    sent_at = db.Column(db.DateTime)
+    sent_at = db.Column(db.DateTime, index=True)
 
     def __repr__(self):
         return f"<Newsletter {self.newsletter_type} {self.generated_at}>"
@@ -211,7 +211,7 @@ class Subscriber(db.Model):
         index=True,
     )
     subscribed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    confirmed_at = db.Column(db.DateTime, nullable=True)
+    confirmed_at = db.Column(db.DateTime, nullable=True, index=True)
     active = db.Column(db.Boolean, default=True)
     deleted_at = db.Column(db.DateTime, nullable=True)
     preferences = db.Column(db.JSON, nullable=True, default=dict)
@@ -281,7 +281,7 @@ class PipelineRun(db.Model):
     articles_selected = db.Column(db.Integer, default=0)
     error_message = db.Column(db.Text)
     started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    finished_at = db.Column(db.DateTime)
+    finished_at = db.Column(db.DateTime, index=True)
 
     logs = db.relationship(
         "PipelineLog", backref="run", lazy="dynamic", cascade="all, delete-orphan"
@@ -470,7 +470,7 @@ class SearchQuery(db.Model):
     query = db.Column(db.String(256), nullable=False, index=True)
     results_count = db.Column(db.Integer, nullable=False, default=0)
     clicked_article_id = db.Column(
-        db.Integer, db.ForeignKey("articles.id", ondelete="SET NULL"), nullable=True
+        db.Integer, db.ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 

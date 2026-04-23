@@ -244,6 +244,31 @@ Similarly, avoid `self.redis` as an instance attribute — use `self._redis` ins
 
 Internal tasks called via `.s()` signatures don't need additional verification. Tasks called by Celery Beat with no arguments don't require HMAC signing.
 
+### Pydantic Task Input Validation
+
+`schemas/tasks.py` provides Pydantic schemas for validating Celery task inputs. This catches type errors and invalid ranges early before task logic runs. Usage:
+
+```python
+from schemas.tasks import SelectArticleTask
+
+def select_article(self, article_id: int, run_id=None):
+    try:
+        validated = SelectArticleTask(article_id=article_id, run_id=run_id)
+    except Exception as e:
+        logger.warning("Invalid task input: %s", e)
+        raise TypeError(f"Invalid select_article input: {e}") from e
+
+    article_id = validated.article_id
+    run_id = validated.run_id
+```
+
+Available schemas:
+- `SelectArticleTask` — article_id (gt=0), run_id (ge=0)
+- `SendEmailTask` — email, subject, html, unsub_url with email format validation
+- `GenerateNewsletterTask` — dry_run_email, run_id with email validation
+- `CleanupArticleVersionsTask` — days_to_keep (1-365), dry_run
+- `ProcessItemTask` — all process_item arguments with source_type validation
+
 ### Request size limiting
 
 `limit_content_length(max_bytes)` decorator in `routes/public.py` checks `request.content_length` before processing. Applied to subscribe (1KB) and admin login (1KB). Global `MAX_CONTENT_LENGTH=64KB` remains as fallback in Flask config.

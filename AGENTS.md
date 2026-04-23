@@ -108,7 +108,7 @@ The editor subagent template (`edit_contextualization` in `services/subagent.py`
 
 ### LLM provider support
 
-MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`). Enable by setting `enabled: true` in `providers.yaml` and providing `MINIMAX_API_KEY`. DeepSeek and Zai (BigModel.cn) are also pre-configured as OpenAI-compatible providers.
+MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`). Enable by setting `enabled: true` in `providers.yaml` and providing `MINIMAX_API_KEY`. DeepSeek and Zai (BigModel.cn) are also pre-configured as OpenAI-compatible providers. All providers use `DEFAULT_LLM_TIMEOUT_SECONDS` (120.0s) from `constants.py` — do not hardcode timeout values in provider files.
 
 ### CSS module architecture
 
@@ -355,6 +355,8 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Limiter acquire with timeout**: `ModelLimiter.acquire()` now polls with exponential backoff (0.05s → 0.5s) up to the timeout. Redis errors on acquire still fail closed (return False). Don't change this behavior — fail closed is intentional.
 
 **Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates. Added `joinedload(Article.source)` to prevent N+1 query on source access.
+
+**SLA metrics sort optimization**: `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats, reducing from 6 sorts (3 metrics × 2 `_sorted_stats` calls each) to 3 sorts. This matters for large result sets.
 
 ## Additional security patterns
 

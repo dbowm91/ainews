@@ -96,6 +96,12 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 - `cleanup-expired-verifications` — every 15 min
 - `publish-scheduled-articles` — every 5 min
 - `cleanup-stale-limiter-slots` — every 5 min
+- `cleanup-old-article-versions` — daily at 3:45 AM
+
+**Scripts in `scripts/`:**
+- `backup.sh` — SQLite backup with verification
+- `query_analysis.sh` — EXPLAIN ANALYZE for query debugging
+- `dev.sh` — Development server
 
 **Lock pattern:** Distributed locks use task's `self.request.id` as lock value so retries can re-acquire.
 
@@ -128,7 +134,8 @@ def _get_something() -> int:
 | `config.py` | Flask config classes, Celery beat schedule |
 | `extensions.py` | Flask extensions (db, redis, limiter) |
 | `models.py` | SQLAlchemy models |
-| `constants.py` | Constants including `PipelineStatus` enum |
+| `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
+| `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
 | `services/url.py` | URL validation (SSRF prevention), DNS cache |
 | `services/cache.py` | ResponseCache (L1 in-memory + L2 Redis) |

@@ -33,8 +33,8 @@ def publish_scheduled_articles(self):
             logger.info("publish_scheduled already running, skipping")
             return {"skipped": True, "reason": "already_running"}
     except redis.exceptions.RedisError:
-        logger.warning("Could not acquire publish_scheduled lock, proceeding")
-        acquired = True
+        logger.error("Redis unavailable for publish_scheduled lock, refusing to proceed")
+        raise
 
     try:
         now = datetime.now(timezone.utc)

@@ -28,6 +28,9 @@ class Config:
     SESSION_COOKIE_PATH = "/"
     PERMANENT_SESSION_LIFETIME = timedelta(hours=2)
 
+    # Celery task security
+    CELERY_TASK_SECRET = os.environ.get("CELERY_TASK_SECRET", "")
+
     # Request size limits
     MAX_CONTENT_LENGTH = 64 * 1024  # 64KB
 
@@ -247,6 +250,10 @@ class ProductionConfig(Config):
                 "ADMIN_PASSWORD must be a hashed password. "
                 "Run: python scripts/hash_password.py"
             )
+        if not cls.CELERY_TASK_SECRET:
+            raise RuntimeError("CELERY_TASK_SECRET must be set in production")
+        if len(cls.CELERY_TASK_SECRET) < 32:
+            raise RuntimeError("CELERY_TASK_SECRET must be at least 32 characters")
         _validate_llm_providers()
 
 

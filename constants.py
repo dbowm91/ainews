@@ -7,6 +7,9 @@ MAX_TOTAL_RETRIES = 10
 # Pipeline hard timeout (article can be in pipeline for at most this many seconds)
 PIPELINE_TIMEOUT_SECONDS = 3600
 
+# LLM request timeout
+DEFAULT_LLM_TIMEOUT_SECONDS = 120.0
+
 # Pagination constants
 PER_PAGE_PUBLIC = 20
 PER_PAGE_ADMIN_ARTICLES = 25

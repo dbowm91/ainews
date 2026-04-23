@@ -64,7 +64,8 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     try:
         lock_status = _crawl_lock(keys=[lock_key], args=[task_id, 30])
     except redis.exceptions.RedisError:
-        lock_status = 2
+        logger.error("Redis unavailable for crawl lock, refusing to proceed")
+        raise
 
     if lock_status == 0:
         logger.info("Source %s already being crawled, skipping", source_id)
@@ -129,7 +130,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
         from tasks.extract import process_item
 
         for item in deduplicated_items:
-            process_item.delay(
+            process_item.s(
                 source_key=source_id,
                 source_name=cfg.name,
                 source_type=cfg.type,
@@ -146,7 +147,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
                 topics=item.topics,
                 min_content_length=min_content,
                 run_id=run_id,
-            )
+            ).apply_async()
 
         update_source_crawl_time(source, cfg)
 

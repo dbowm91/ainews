@@ -76,6 +76,7 @@ def app(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret-key")
     monkeypatch.setenv("FLASK_CONFIG", "testing")
     monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/15")
+    monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
 
     from app import create_app
 

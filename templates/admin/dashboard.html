@@ -163,7 +163,7 @@
         {% for article in recent %}
           <tr>
             <td>
-              <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title }}">
+              <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
                 {{ article.original_title }}
               </a>
             </td>

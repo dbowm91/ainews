@@ -12,6 +12,7 @@ from routes.public import (
     public_bp,
     _get_share_configs,
 )
+from routes.decorators import validate_csrf_json
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ def short_url_tracking_page(short_id: str) -> str:
 
 
 @public_bp.route("/api/track/share-click/<int:article_id>", methods=["POST"])
+@validate_csrf_json
 def track_share_click(article_id: int) -> tuple[str, int]:
     track_metric(article_id, ArticleMetric.share_button_clicks)
     return "", 204

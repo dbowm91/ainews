@@ -46,7 +46,8 @@ def retry_stuck(self):
             logger.info("retry_stuck already running, skipping")
             return {"skipped": True, "reason": "already_running"}
     except redis.exceptions.RedisError:
-        logger.warning("Could not acquire retry_stuck lock, proceeding without")
+        logger.error("Redis unavailable for retry_stuck lock, refusing to proceed")
+        raise
 
     BATCH_SIZE = 50
 
@@ -194,3 +195,4 @@ def _dead_letter(article):
     except SQLAlchemyError:
         db.session.rollback()
         logger.error("Failed to commit dead-letter for article %s", article.id)
+        raise

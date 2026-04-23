@@ -186,15 +186,20 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             db.session.rollback()
             return jsonify({"error": "Failed to delete articles"}), 500
         try:
+            from services.cache import get_response_cache
             from services.audit import log_admin_action
 
+            cache = get_response_cache()
+            for article in articles:
+                cache.invalidate(f"article_detail:{article.id}")
+            cache.invalidate_prefix("articles:list")
             log_admin_action(
                 "article_bulk_delete",
                 target_type="article",
                 details={"count": len(articles), "ids": article_ids},
             )
         except Exception:
-            logger.warning("Audit logging failed for article_bulk_delete")
+            logger.warning("Cache invalidation or audit logging failed")
         return jsonify({"message": f"Deleted {len(articles)} articles"})
 
     elif action == "set_status":

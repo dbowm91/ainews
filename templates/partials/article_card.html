@@ -6,7 +6,7 @@
     {% if topic_icons and article.category in topic_icons %}
       {{ topic_icon(article.category) }}
     {% endif %}
-    <span class="category-badge cat-{{ article.category }}">{{ article.category }}</span>
+    <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
     <span class="card-time">{{ article.created_at.strftime('%b %d') if article.created_at }}</span>
     {% if article.pipeline_status and article.pipeline_status != 'pending' %}
       {{ pipeline_badge(article.pipeline_status) }}

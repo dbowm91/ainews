@@ -61,12 +61,11 @@ def subscribe() -> Response:
         .first()
     )
 
-    # Already subscribed and verified
     if existing and existing.active and existing.confirmed_at is not None:
         if request.headers.get("HX-Request"):
             return render_template(
                 "partials/subscribe_box.html",
-                subscribe_success="Already subscribed!",
+                subscribe_success="Check your email to confirm your subscription.",
                 newsletter_type=newsletter_type,
             )
         return redirect("/")

@@ -28,10 +28,15 @@ def _get_encryption_key() -> bytes:
         return _ENCRYPTION_KEY
     key = os.environ.get("WEBHOOK_SECRET_KEY", "")
     if not key:
-        logger.warning("WEBHOOK_SECRET_KEY not set, using fallback (secrets will be stored in plaintext)")
-        _ENCRYPTION_KEY = b"fallback-key-not-for-production"
-        return _ENCRYPTION_KEY
-    _ENCRYPTION_KEY = key.encode("utf-8") if len(key) == 44 else key.encode("utf-8")
+        raise RuntimeError("WEBHOOK_SECRET_KEY environment variable must be set")
+    from cryptography.fernet import Fernet
+    try:
+        Fernet(key.encode("utf-8"))
+    except Exception:
+        raise ValueError(
+            f"WEBHOOK_SECRET_KEY must be a valid Fernet key (44 base64 chars), got length {len(key)}"
+        )
+    _ENCRYPTION_KEY = key.encode("utf-8")
     return _ENCRYPTION_KEY
 
 
@@ -280,7 +285,7 @@ def trigger_event(
                 logger.exception("Failed to trigger webhook %s", webhook.name)
 
 
-def _get_webhook_secret_from_db(secret: str) -> str:
+def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> str:
     """Decrypt webhook secret for use in dispatch. Handles legacy plaintext."""
     if not secret:
         return ""
@@ -288,6 +293,6 @@ def _get_webhook_secret_from_db(secret: str) -> str:
         try:
             return _decrypt_secret(secret[4:])
         except Exception:
-            logger.warning("Failed to decrypt webhook secret, using fallback")
-            return secret[4:]
+            logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
+            return ""
     return secret

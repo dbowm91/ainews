@@ -2,7 +2,10 @@
 
 import hashlib
 import hmac
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 def _get_task_secret() -> str:
@@ -58,7 +61,8 @@ def verify_task(task_name: str, args: tuple, kwargs: dict, secret: str | None = 
         secret = _get_task_secret()
 
     if not secret:
-        return True
+        logger.error("CELERY_TASK_SECRET not configured — rejecting unsigned task")
+        return False
 
     if "_signature" not in kwargs:
         return True

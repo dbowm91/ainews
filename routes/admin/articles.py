@@ -6,6 +6,7 @@ from flask import flash, render_template, request, redirect, url_for, jsonify, g
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 from services.utils import get_admin_categories as _admin_categories
 from services.article import _escape_like_pattern
 from services.task_security import get_signed_kwargs
@@ -378,6 +379,7 @@ def rollback_article(article_id, version_id):
 
 @admin_bp.route("/articles/<int:article_id>/delete", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def delete_article(article_id):
     from models import Article
     from extensions import db

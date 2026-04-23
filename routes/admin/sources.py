@@ -1,9 +1,12 @@
 import re
 import time
+import logging
 from flask import render_template, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit
+
+logger = logging.getLogger(__name__)
 
 
 def _generate_source_key(name: str) -> str:
@@ -47,8 +50,9 @@ def add_source():
 
             validate_url_safe(source_url)
         except Exception as e:
+            logger.warning("Source URL validation failed: %s", e)
             return (
-                f'<div class="form-error" role="alert">Invalid source URL: {e}</div>',
+                '<div class="form-error" role="alert">Invalid source URL</div>',
                 400,
             )
 

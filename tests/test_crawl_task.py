@@ -106,7 +106,7 @@ class TestCrawlSource:
         assert result["source_id"] == "src_happy"
         assert result["fetched"] == 1
         assert result["new"] == 1
-        mock_process_item.delay.assert_called_once()
+        mock_process_item.s.return_value.apply_async.assert_called_once()
 
     @patch("extensions.get_redis")
     def test_exception_handling(self, mock_get_redis, app):
@@ -179,6 +179,7 @@ class TestCrawlSource:
 class TestRunAllSources:
     """Tests for run_all_sources task."""
 
+    @patch.dict("os.environ", {"CELERY_TASK_SECRET": "test-secret-key-at-least-32-chars-long"})
     @patch("services.crawling.create_pipeline_run")
     @patch("schemas.source.load_sources")
     def test_no_sources_configured(self, mock_load, mock_create_run, app):

@@ -3,6 +3,8 @@
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestPublishScheduledArticles:
     """Tests for publish_scheduled_articles task."""
@@ -115,9 +117,8 @@ class TestPublishScheduledArticles:
         assert result["published"] == 0
 
     @patch("extensions.get_redis")
-    @patch("services.redis_utils.release_lock")
     def test_handles_redis_error_gracefully(
-        self, mock_release_lock, mock_get_redis, app, create_article
+        self, mock_get_redis, app, create_article
     ):
         import redis.exceptions
         from extensions import db
@@ -136,9 +137,8 @@ class TestPublishScheduledArticles:
         from tasks.scheduler import publish_scheduled_articles
 
         with app.app_context():
-            result = publish_scheduled_articles.__wrapped__()
-
-        assert result["published"] == 1
+            with pytest.raises(redis.exceptions.RedisError, match="connection failed"):
+                publish_scheduled_articles.__wrapped__()
 
     @patch("extensions.get_redis")
     @patch("services.redis_utils.release_lock")

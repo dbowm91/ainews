@@ -91,8 +91,8 @@ def check_celery() -> tuple[str, Any]:
     try:
         from celery_app import celery_app
 
-        inspect = celery_app.control.inspect()
-        ping_response = inspect.ping()
+        celery_inspector = celery_app.control.inspect()
+        ping_response = celery_inspector.ping()
         if ping_response and any(ping_response.values()):
             return "celery", "ok"
         return "celery", "no_workers"

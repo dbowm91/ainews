@@ -188,6 +188,12 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     if len(article_ids) > 500:
         return jsonify({"error": "Maximum 500 articles per bulk operation"}), 400
 
+    try:
+        from services.validation import validate_bulk_ids
+        article_ids = validate_bulk_ids(article_ids)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     articles = Article.query.filter(Article.id.in_(article_ids)).all()
     if not articles:
         return jsonify({"error": "No articles found"}), 404

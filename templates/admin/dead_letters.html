@@ -63,7 +63,7 @@
             <tr>
               <td>
                 <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
-                  {{ article.original_title if article.original_title else '(no title)' }}
+                  {{ (article.original_title if article.original_title else '(no title)')|e }}
                 </a>
               </td>
               <td>{{ article.source.name if article.source else '—' }}</td>
@@ -103,7 +103,7 @@
             <tr>
               <td>
                 <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
-                  {{ article.original_title if article.original_title else '(no title)' }}
+                  {{ (article.original_title if article.original_title else '(no title)')|e }}
                 </a>
               </td>
               <td>{{ article.source.name if article.source else '—' }}</td>

@@ -85,7 +85,7 @@
       <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" fill="none" stroke="currentColor" stroke-width="1.5"/>
     </svg>
   </div>
-  <span class="agent-name">this summary brought to you by <em>{{ article.writer_model or 'ai agent' }}</em></span>
+  <span class="agent-name">this summary brought to you by <em>{{ (article.writer_model or 'ai agent')|e }}</em></span>
 </div>
 
 {# References #}

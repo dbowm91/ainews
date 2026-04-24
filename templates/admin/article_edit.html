@@ -8,7 +8,7 @@
   <span class="breadcrumb-separator">›</span>
   <a href="/admin/articles">articles</a>
   <span class="breadcrumb-separator">›</span>
-  <span class="breadcrumb-current">{{ article.original_title[:50] }}{% if article.original_title|length > 50 %}...{% endif %}</span>
+  <span class="breadcrumb-current">{{ (article.original_title[:50] if article.original_title else '')|e }}{% if article.original_title and article.original_title|length > 50 %}...{% endif %}</span>
 </nav>
 {% endblock %}
 
@@ -21,13 +21,13 @@
 
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">
-      {{ article.original_title[:100] if article.original_title }}
+      {{ (article.original_title[:100] if article.original_title else '')|e }}
       <span class="pipeline-badge pipeline-{% if article.pipeline_status == 'done' %}done{% elif article.pipeline_status == 'skipped' %}skipped{% else %}active{% endif %} ml-05">{{ article.pipeline_status }}</span>
     </h2>
 
     {% if error %}
     <div class="form-error" role="alert">
-      {{ error }}
+      {{ error|e }}
     </div>
     {% endif %}
 
@@ -45,38 +45,39 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label for="headline">headline</label>
-        <input type="text" id="headline" name="headline" value="{{ fa.get('headline', '') if fa else article.original_title or '' }}" class="form-input">
+        <input type="text" id="headline" name="headline" value="{{ (fa.get('headline', '') if fa else article.original_title or '')|e }}" class="form-input">
       </div>
 
       <div class="form-group">
         <label for="tldr">tldr</label>
-        <textarea id="tldr" name="tldr" class="form-textarea" rows="2">{{ fa.get('tldr', '') if fa else '' }}</textarea>
+        <textarea id="tldr" name="tldr" class="form-textarea" rows="2">{{ (fa.get('tldr', '') if fa else '')|e }}</textarea>
       </div>
 
       <div class="form-group">
         <label for="why_it_matters">why it matters</label>
-        <textarea id="why_it_matters" name="why_it_matters" class="form-textarea" rows="2">{{ fa.get('why_it_matters', '') if fa else '' }}</textarea>
+        <textarea id="why_it_matters" name="why_it_matters" class="form-textarea" rows="2">{{ (fa.get('why_it_matters', '') if fa else '')|e }}</textarea>
       </div>
 
       <div class="form-group">
         <label for="body">body (markdown)</label>
-        <textarea id="body" name="body" class="form-textarea" rows="12">{{ fa.get('body', '') if fa else '' }}</textarea>
+        <textarea id="body" name="body" class="form-textarea" rows="12">{{ (fa.get('body', '') if fa else '')|e }}</textarea>
       </div>
 
       <div class="form-group">
         <label for="what_to_watch">what to watch</label>
-        <textarea id="what_to_watch" name="what_to_watch" class="form-textarea" rows="2">{{ fa.get('what_to_watch', '') if fa else '' }}</textarea>
+        <textarea id="what_to_watch" name="what_to_watch" class="form-textarea" rows="2">{{ (fa.get('what_to_watch', '') if fa else '')|e }}</textarea>
       </div>
 
       <div class="form-group">
         <label for="key_points">key points (one per line)</label>
-        <textarea id="key_points" name="key_points" class="form-textarea" rows="5">{{ '\n'.join(fa.get('key_points', []) if fa else []) }}</textarea>
+        <textarea id="key_points" name="key_points" class="form-textarea" rows="5">{% for point in (fa.get('key_points', []) if fa else []) %}{{ point|e }}{% if not loop.last %}
+{% endif %}{% endfor %}</textarea>
       </div>
 
       <div class="form-row">
         <div class="form-group form-group-half">
           <label for="tags">tags (comma-separated)</label>
-          <input type="text" id="tags" name="tags" value="{{ ', '.join(fa.get('tags', []) if fa else []) }}" class="form-input">
+          <input type="text" id="tags" name="tags" value="{{ (', '.join(fa.get('tags', []) if fa else []))|e }}" class="form-input">
         </div>
         <div class="form-group form-group-half">
           <label for="category">category</label>

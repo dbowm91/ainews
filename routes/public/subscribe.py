@@ -168,7 +168,7 @@ def unsubscribe_confirm(token: str) -> str:
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
-            logger.exception("Failed to unsubscribe token %s", token)
+            logger.exception("Failed to unsubscribe token %s...", token[:8] if token else "")
             commit_failed = True
 
     return render_template(
@@ -209,7 +209,7 @@ def verify(token: str) -> str:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        logger.exception("Failed to verify subscriber token %s", token)
+        logger.exception("Failed to verify subscriber token %s...", token[:8] if token else "")
         return render_template("verify.html", found=False)
 
     # Send welcome email

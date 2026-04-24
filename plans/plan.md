@@ -1079,9 +1079,9 @@ flask db upgrade
 | CQ-001 | 5 | HIGH | Dependency | DONE | requirements.txt: Redis version conflict resolved |
 | CQ-002 | 5 | MEDIUM | Error | DONE | models.py:29: Broad exception in decode_short_url |
 | CQ-003 | 5 | MEDIUM | Config | DONE | config.py: Dead beat schedule attribute (deprecated, documented) |
-| CQ-004 | 5 | LOW | Code | DEFERRED | models.py:139: Citation lazy loading |
+| CQ-004 | 5 | LOW | Code | DONE | models.py:139: Citation lazy loading (selectin) |
 | CQ-005 | 5 | LOW | Code | DONE | tests/conftest.py:39: Dead fixture (_reset_factory_counter) removed |
-| CQ-006 | 5 | LOW | Reliability | DONE | tasks/pipeline.py:275: SoftTimeLimitExceeded work loss |
+| CQ-006 | 5 | LOW | Reliability | DONE | tasks/pipeline.py:275: SoftTimeLimit - keep status for in-place retry |
 | FE-001 | 5 | HIGH | CSS | DEFERRED | critical.css, layout.css: 12 classes duplicated (intentional per AGENTS.md) |
 | FE-002 | 5 | HIGH | CSS | DEFERRED | components.css: .theme-toggle duplicated (intentional) |
 | FE-003 | 5 | MEDIUM | Build | DEFERRED | Makefile, templates: No minification/bundling |

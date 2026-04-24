@@ -48,10 +48,10 @@
     {% if articles %}
       <span id="result-count" class="result-count">{{ articles|length }} articles</span>
     {% elif query or category %}
-      <p class="empty-title">no articles match your filters</p>
+      <h2 class="empty-title">no articles match your filters</h2>
       <p class="empty-description">try adjusting your search terms or <a href="/">clearing all filters</a></p>
     {% else %}
-      <p class="empty-title">no articles yet</p>
+      <h2 class="empty-title">no articles yet</h2>
       <p class="empty-description">first crawl is in progress &mdash; check back soon</p>
       <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <rect x="8" y="12" width="48" height="40" rx="4" stroke="currentColor" stroke-width="2"/>

@@ -749,3 +749,8 @@
 .password-visible .eye-closed {
   display: block;
 }
+
+.admin-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

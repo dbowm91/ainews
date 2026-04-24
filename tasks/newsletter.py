@@ -354,6 +354,10 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     default_retry_delay=120,
     soft_time_limit=300,
     time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     try:

@@ -299,7 +299,9 @@ def find_duplicate_titles(
             db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
             <= max_words,
         )
+        .order_by(Article.created_at.desc())
         .with_entities(Article.id, Article.original_title)
+        .limit(1000)
         .all()
     )
     for article_id, other_title in rows:

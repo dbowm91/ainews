@@ -156,6 +156,11 @@ def process_item(
     except Exception as exc:
         logger.warning("Dedup check failed for %s: %s", truncate_for_log(validated.title), exc)
         duplicate = None
+        try:
+            from services.metrics import get_metrics
+            get_metrics().increment("pipeline.dedup_check_failed", tags={"source": source_key})
+        except Exception:
+            pass
     if duplicate:
         logger.info(
             "Duplicate found for [%s]: existing article %s",

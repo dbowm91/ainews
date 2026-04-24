@@ -133,25 +133,7 @@ class ResponseCache:
         full_key = self._make_key(key)
         lock_key = f"lock:{full_key}"
 
-        if self._redis.set(lock_key, "1", nx=True, ex=10):
-            try:
-                cached = self.get(key)
-                if cached is not None:
-                    return cached
-                value = loader_fn()
-                self.set(key, value, ttl)
-                return value
-            finally:
-                try:
-                    self._redis.delete(lock_key)
-                except redis.exceptions.RedisError:
-                    pass
-        else:
-            result = self._redis.blpop(lock_key, timeout=5)
-            if result is not None:
-                cached = self.get(key)
-                if cached is not None:
-                    return cached
+        try:
             if self._redis.set(lock_key, "1", nx=True, ex=10):
                 try:
                     cached = self.get(key)
@@ -166,7 +148,31 @@ class ResponseCache:
                     except redis.exceptions.RedisError:
                         pass
             else:
-                raise RuntimeError(f"Failed to acquire cache lock for key: {key}")
+                result = self._redis.blpop(lock_key, timeout=5)
+                if result is not None:
+                    cached = self.get(key)
+                    if cached is not None:
+                        return cached
+                if self._redis.set(lock_key, "1", nx=True, ex=10):
+                    try:
+                        cached = self.get(key)
+                        if cached is not None:
+                            return cached
+                        value = loader_fn()
+                        self.set(key, value, ttl)
+                        return value
+                    finally:
+                        try:
+                            self._redis.delete(lock_key)
+                        except redis.exceptions.RedisError:
+                            pass
+                else:
+                    raise RuntimeError(f"Failed to acquire cache lock for key: {key}")
+        except redis.exceptions.RedisError as e:
+            logger.warning("Failed to acquire cache lock for %s: %s", lock_key, e)
+            value = loader_fn()
+            self.set(key, value, ttl)
+            return value
 
     def invalidate(self, key: str) -> None:
         """Remove a specific cache entry."""

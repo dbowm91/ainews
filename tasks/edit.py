@@ -276,6 +276,8 @@ def edit_article(self, article_id: int, run_id=None):
                     "impact_score": article.impact_score,
                 },
             )
+        except json.JSONDecodeError as e:
+            logger.warning("Malformed final_article JSON in webhook for article %s: %s", article.id, e)
         except Exception:
             logger.warning(
                 "Webhook trigger failed for article %s, continuing",

@@ -358,6 +358,8 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **ResponseCache stampede protection**: `get_or_set()` uses per-key Redis locking with `SET NX EX` + polling fallback. When adding new caching, follow this pattern to prevent thundering herd.
 
+**Related articles caching**: `find_related_articles_cached(article, limit=5)` in `services/related.py` provides a cached wrapper around `find_related_articles()` with 600s TTL using key `pub:related:{article_id}`. Use the cached version from article detail routes.
+
 **Limiter acquire with timeout**: `ModelLimiter.acquire()` now polls with exponential backoff (0.05s → 0.5s) up to the timeout. Redis errors on acquire still fail closed (return False). Don't change this behavior — fail closed is intentional.
 
 **Article detail caching**: `routes/public/links.py:article_detail()` uses `ResponseCache` to store rendered HTML. The cache key format is `article_detail:{article_id}`. Cache is invalidated by normal article updates. Added `joinedload(Article.source)` to prevent N+1 query on source access.

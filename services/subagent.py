@@ -415,7 +415,12 @@ def run_subagent(
                 labels={"stage": stage, "task_type": task_type},
             ):
                 if attempt > 0:
-                    time.sleep(stage_config.retry_delay)
+                    import random
+                    delay = min(
+                        1.0 * (2 ** (attempt - 1)) + random.uniform(0, 0.5),
+                        stage_config.retry_delay,
+                    )
+                    time.sleep(delay)
                 future = _subagent_executor.submit(_call_with_timeout)
                 try:
                     result = future.result(timeout=stage_config.timeout_seconds)
@@ -584,7 +589,12 @@ def run_subagent_with_tools(
                 labels={"stage": stage, "task_type": task_type},
             ):
                 if attempt > 0:
-                    time.sleep(stage_config.retry_delay)
+                    import random
+                    delay = min(
+                        1.0 * (2 ** (attempt - 1)) + random.uniform(0, 0.5),
+                        stage_config.retry_delay,
+                    )
+                    time.sleep(delay)
                 future = _subagent_executor.submit(_call_with_timeout)
                 try:
                     tc_resp = future.result(timeout=stage_config.timeout_seconds)
@@ -606,12 +616,17 @@ def run_subagent_with_tools(
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
             last_exc = e
             if attempt < stage_config.max_retries:
+                import random
+                delay = min(
+                    1.0 * (2 ** attempt) + random.uniform(0, 0.5),
+                    stage_config.retry_delay,
+                )
                 logger.info(
                     "Subagent %s/%s attempt %d failed, retrying in %ss: %s",
                     stage,
                     task_type,
                     attempt + 1,
-                    stage_config.retry_delay,
+                    delay,
                     e,
                 )
             continue
@@ -771,33 +786,62 @@ def run_subagent_chain(
                 max_tokens=max_tokens,
             )
 
-        try:
-            future = _subagent_executor.submit(_chain_call)
+        step_succeeded = False
+        for attempt in range(stage_config.max_retries + 1):
             try:
-                resp = future.result(timeout=stage_config.timeout_seconds)
-            except TimeoutError:
-                future.cancel()
+                future = _subagent_executor.submit(_chain_call)
+                try:
+                    resp = future.result(timeout=stage_config.timeout_seconds)
+                    step_succeeded = True
+                    break
+                except TimeoutError:
+                    future.cancel()
+                    logger.warning(
+                        "Chain %s step %d timed out after %ss (attempt %d)",
+                        chain_name,
+                        i,
+                        stage_config.timeout_seconds,
+                        attempt + 1,
+                    )
+                    raise ProviderTimeoutError(
+                        f"Chain step timed out after {stage_config.timeout_seconds}s"
+                    )
+            except (ProviderTimeoutError, TimeoutError) as e:
+                if attempt < stage_config.max_retries:
+                    import random
+                    delay = min(
+                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),
+                        stage_config.retry_delay,
+                    )
+                    time.sleep(delay)
+                    continue
                 logger.warning(
-                    "Chain %s step %d timed out after %ss",
+                    "Chain %s step %d failed after %d attempts: %s",
                     chain_name,
                     i,
-                    stage_config.timeout_seconds,
+                    attempt + 1,
+                    e,
                 )
-                raise ProviderTimeoutError(
-                    f"Chain step timed out after {stage_config.timeout_seconds}s"
+                results[step_name] = {
+                    "synthesis": f"[Fallback: {e}]",
+                    "used_fallback": True,
+                }
+                break
+            except Exception as e:
+                logger.warning(
+                    "Chain %s step %d failed: %s",
+                    chain_name,
+                    i,
+                    e,
                 )
+                results[step_name] = {
+                    "synthesis": f"[Fallback: {e}]",
+                    "used_fallback": True,
+                }
+                break
+
+        if step_succeeded:
             results[step_name] = {"synthesis": resp.text, "used_fallback": False}
-        except Exception as e:
-            logger.warning(
-                "Chain %s step %d failed: %s",
-                chain_name,
-                i,
-                e,
-            )
-            results[step_name] = {
-                "synthesis": f"[Fallback: {e}]",
-                "used_fallback": True,
-            }
 
     all_fallback = all(r.get("used_fallback", False) for r in results.values())
 

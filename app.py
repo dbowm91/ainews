@@ -255,4 +255,7 @@ def create_app(config_name=None):
     if app.config.get("DEBUG") and config_name == "production":
         logger.warning("DEBUG mode is enabled - do not use in production")
 
+    from services.subagent import initialize_tool_registry
+    initialize_tool_registry()
+
     return app

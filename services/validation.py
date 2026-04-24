@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Common regex patterns
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _CATEGORY_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_PASSWORD_HASH_RE = re.compile(r"^(scrypt|pbkdf2|argon2):")
 _TOKEN_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -121,4 +122,4 @@ def validate_bulk_ids(article_ids: list, max_count: int = 500) -> list[int]:
 
 def _is_password_hash(value: str) -> bool:
     """Check if a value is a Werkzeug password hash (scrypt:, pbkdf2:, or argon2:)."""
-    return bool(re.match(r"^(scrypt|pbkdf2|argon2):", value))
+    return bool(_PASSWORD_HASH_RE.match(value))

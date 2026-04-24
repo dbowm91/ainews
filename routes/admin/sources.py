@@ -8,11 +8,14 @@ from routes.decorators import commit
 
 logger = logging.getLogger(__name__)
 
+_SOURCE_KEY_STRIP_RE = re.compile(r"[^a-z0-9\s-]")
+_SOURCE_KEY_DASH_RE = re.compile(r"[\s]+")
+
 
 def _generate_source_key(name: str) -> str:
     key = name.lower().strip()
-    key = re.sub(r"[^a-z0-9\s-]", "", key)
-    key = re.sub(r"[\s]+", "-", key)
+    key = _SOURCE_KEY_STRIP_RE.sub("", key)
+    key = _SOURCE_KEY_DASH_RE.sub("-", key)
     return key[:64] or "source"
 
 

@@ -36,8 +36,8 @@ def _log_search_query(query: str, results_count: int) -> None:
             sq = SearchQuery(query=query[:256], results_count=results_count)
             db.session.add(sq)
             db.session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to log search query '%s': %s", query[:50], e)
 
     thread = threading.Thread(target=_async_log, daemon=True)
     thread.start()

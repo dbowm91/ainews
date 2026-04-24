@@ -2,10 +2,11 @@ from __future__ import annotations
 import abc
 import logging
 import random
+import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, TypeVar, Type
+from typing import Any, Callable, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -17,6 +18,40 @@ from services.prompts import esc_xml_text
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def _extract_json(raw: str) -> str:
+    """Extract JSON from response that may contain markdown."""
+    import json as json_mod
+    raw = raw.strip()
+    if not raw:
+        raise ValueError("LLM returned empty response")
+
+    try:
+        json_mod.loads(raw)
+        return raw
+    except json_mod.JSONDecodeError:
+        pass
+
+    match = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw, re.MULTILINE)
+    if match:
+        candidate = match.group(1).strip()
+        try:
+            json_mod.loads(candidate)
+            return candidate
+        except json_mod.JSONDecodeError:
+            pass
+
+    match = re.search(r'\{[\s\S]*\}', raw)
+    if match:
+        candidate = match.group(0).strip()
+        try:
+            json_mod.loads(candidate)
+            return candidate
+        except json_mod.JSONDecodeError:
+            pass
+
+    return raw
 
 
 @dataclass
@@ -151,7 +186,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         system: Optional[str] = None,
         temperature: float = 0.0,
         max_tokens: int = 4096,
-        max_validation_retries: int = 1,
+        max_validation_retries: int = 2,
     ) -> T:
         """Chat with structured output, returns validated Pydantic model."""
         from services.metrics import get_metrics
@@ -161,6 +196,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             messages, response_model, model, system, temperature, max_tokens, schema
         )
         try:
+            resp = _extract_json(resp)
             return response_model.model_validate_json(resp)
         except Exception as e:
             logger.warning(
@@ -178,11 +214,17 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     "llm.validation_retries",
                     labels={"model": model or self.default_model, "provider": self.provider_id},
                 )
+                import json as json_mod
+                schema_json = json_mod.dumps(schema, indent=2)
                 retry_messages = list(messages)
                 retry_messages.append(
                     {
                         "role": "user",
-                        "content": f"Your previous response failed validation: {e}. Please correct and try again.",
+                        "content": (
+                            f"Your previous response failed validation: {e}.\n\n"
+                            f"Expected JSON format (Pydantic schema):\n{schema_json}\n\n"
+                            f"Please respond with valid JSON matching this schema exactly."
+                        ),
                     }
                 )
                 resp = self._chat_with_schema(
@@ -194,6 +236,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     max_tokens,
                     schema,
                 )
+                resp = _extract_json(resp)
                 return response_model.model_validate_json(resp)
             raise
 

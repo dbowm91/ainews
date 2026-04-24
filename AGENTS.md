@@ -368,19 +368,19 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Duplicate detection memory bound**: `find_duplicate_titles()` loads potentially thousands of rows. Consider adding `.limit(1000).order_by(db.desc(Article.created_at))` to bound memory usage.
 
-**Bulk operations validation gap**: `routes/admin/api/articles.py:bulk_article_operations()` does NOT call `validate_bulk_ids()` despite the function existing in `services/validation.py:90`. Always use the existing validation functions.
+**Bulk operations validation**: `routes/admin/api/articles.py:bulk_article_operations()` uses `validate_bulk_ids()` from `services/validation.py` for integer validation on bulk IDs.
 
 **Redis version conflict**: `requirements.txt` says `redis>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`. Use `pyproject.toml` as source of truth — the codebase runs with 6.4.0.
 
-**`verify_task()` docstring inaccuracy**: The docstring in `services/task_security.py:57` says "True if ... no secret is configured" but the actual implementation returns `False` (fail-closed) when `CELERY_TASK_SECRET` is not set. The code is correct; the docstring is misleading.
+**verify_task fail-closed behavior**: `services/task_security.py:verify_task()` returns `False` when `CELERY_TASK_SECRET` is not configured (fail-closed), rejecting all unsigned task calls. This is intentional behavior for production security.
 
 **Beat schedule location**: The Celery beat schedule is defined as `CELERY_BEAT_SCHEDULE` on the base `Config` class in `config.py` (lines 85-123), with `get_beat_schedule()` at line 126 reading from `pipeline.yaml`. There is no separate `CeleryBeatConfig` class.
 
-**Health endpoint information disclosure**: `GET /health?detailed=true` on `public_bp` (`routes/public/__init__.py:108`) exposes git commit hash and DB pool stats without authentication. No `@require_auth` decorator is applied.
+**Health endpoint access control**: `GET /health?detailed=true` on `public_bp` (`routes/public/__init__.py:108`) exposes git commit hash and DB pool stats. Session-based auth blocks detailed info for non-admin users — anonymous users receive basic health status only.
 
 **Source count optimization**: `routes/admin/dashboard.py:127` uses `Source.query.count()` instead of loading all sources into memory for a count.
 
-**Template XSS in article_edit.html**: In addition to the form fields at lines 48-79, lines 11 (breadcrumb) and 24 (page title) render `article.original_title` without `|e` in `templates/admin/article_edit.html`.
+**Template XSS in article_edit.html**: Lines 35 (original_url text) and 36 (source.name) in `templates/admin/article_edit.html` render user-controlled content without `|e` escaping. Lines 11 (breadcrumb) and 24 (page title) already have proper escaping.
 
 **DNS cache clear fixture location**: The `_clear_dns_cache` autouse fixture is defined locally in `tests/test_url_ssrf.py` and `tests/test_url_validate.py`, not in `tests/conftest.py`. When adding tests that interact with `services/url.py`, include this fixture or move it to conftest.py.
 

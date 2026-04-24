@@ -86,7 +86,7 @@ All providers implement `BaseLLMProvider` from `services/llm/base.py`. Registere
 
 Celery tasks run outside Flask app context — do NOT use `current_app.config.get()`. Use `get_config_with_default()` from `services/config_utils.py` instead.
 
-**Scheduled tasks** (in `config.py:CELERY_BEAT_SCHEDULE`):
+**Scheduled tasks** (in `config.py:get_beat_schedule()`, loaded from `pipeline.yaml`):
 - `run-all-sources` — crawl all sources every 30 min
 - `retry-stuck-articles` — retry/dead-letter stuck articles every 60 min
 - `generate-newsletters` — daily at 8:00 AM
@@ -308,7 +308,7 @@ Admin UI at `/admin/webhooks` displays configured webhooks with event history. C
 
 ## SLA Tracking & Analytics
 
-**Article SLA:** Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns processing time metrics (avg, p50, p95) for crawl→select, select→publish, and crawl→publish durations.
+**Article SLA:** Article model has `crawled_at`, `selected_at`, `published_at` timestamps. Admin endpoint `GET /admin/api/pipeline/sla` returns processing time metrics (avg, p50, p95) for crawl→select, select→publish, and crawl→publish durations using SQL aggregation (`ROW_NUMBER() OVER()`) to avoid loading all articles into memory.
 
 **SLA metrics sort optimization:** `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats (3 sorts total), not twice per metric. This matters for large result sets.
 
@@ -339,3 +339,8 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **Webhook replay**: Timestamps included in webhook signatures
 - **Redis lock fail-closed**: `crawl_source`, `retry_stuck`, and `publish_scheduled` raise immediately when Redis is unavailable for distributed lock operations (rather than proceeding unlocked)
 - **Celery autoretry**: All tasks use `autoretry_for=(ConnectionError, TimeoutError)`, `retry_backoff=True`, `retry_backoff_max=300`, `retry_jitter=True`
+- **Redis TLS**: `extensions.py` and `services/config_cache.py` check for `REDIS_SSL=true` or `rediss://` scheme; `ssl=True` is only passed to ConnectionPool when needed (redis 6.4.0 compatibility)
+- **Cache key namespacing**: Public cache keys use `pub:` prefix (e.g., `pub:top_impact:10`, `pub:article_detail:123`). Admin invalidation uses `pub:` prefix. See `routes/public/feeds.py` and `routes/public/links.py`.
+- **SLA SQL aggregation**: `GET /admin/api/pipeline/sla` uses SQL `ROW_NUMBER() OVER()` for percentile computation instead of loading all articles into Python memory
+- **Health endpoint detailed auth**: `GET /health?detailed=true` requires admin session — otherwise returns basic health only. Prevents information disclosure (git hash, DB pool stats)
+- **ResponseCache stampede protection**: `services/cache.py:get_or_set()` wraps the entire lock acquisition + value computation in `redis.exceptions.RedisError` try/except, falling back to uncached computation if Redis is unavailable

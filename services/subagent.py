@@ -903,6 +903,9 @@ def _resolve_template_variables(
         if isinstance(value, str) and "{{" in value:
             try:
                 resolved[key] = value.format(**results)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    "Template resolution failed for key '%s': %s",
+                    key, e
+                )
     return resolved

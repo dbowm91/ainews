@@ -28,6 +28,9 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+_EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+
+
 class SelectArticleTask(BaseModel):
     article_id: int = Field(..., gt=0, description="Article database ID")
     run_id: Optional[int] = Field(default=None, ge=0, description="Pipeline run ID")
@@ -49,7 +52,7 @@ class GenerateNewsletterTask(BaseModel):
     def validate_email(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        if not re.match(r"^[^@]+@[^@]+\.[^@]+$", v):
+        if not _EMAIL_RE.match(v):
             raise ValueError(f"Invalid email format: {v}")
         return v
 
@@ -63,7 +66,7 @@ class SendEmailTask(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        if not re.match(r"^[^@]+@[^@]+\.[^@]+$", v):
+        if not _EMAIL_RE.match(v):
             raise ValueError(f"Invalid email format: {v}")
         return v
 

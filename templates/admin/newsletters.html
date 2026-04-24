@@ -52,7 +52,7 @@
           {% for nl in newsletters %}
             <tr>
               <td><span class="newsletter-type">{{ nl.newsletter_type }}</span></td>
-              <td>{{ nl.subject }}</td>
+              <td>{{ nl.subject | e }}</td>
               <td>{{ nl.article_count }}</td>
               <td>{{ nl.recipients or 0 }}</td>
               <td>{{ nl.generated_at.strftime('%b %d %H:%M') if nl.generated_at }}</td>

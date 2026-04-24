@@ -8,7 +8,7 @@
   <span class="breadcrumb-separator">›</span>
   <a href="/admin/articles">articles</a>
   <span class="breadcrumb-separator">›</span>
-  <a href="/admin/articles/{{ article.id }}/edit">{{ article.original_title[:50] }}{% if article.original_title|length > 50 %}...{% endif %}</a>
+  <a href="/admin/articles/{{ article.id }}/edit">{{ (article.original_title[:50] if article.original_title else '')|e }}{% if article.original_title and article.original_title|length > 50 %}...{% endif %}</a>
   <span class="breadcrumb-separator">›</span>
   <span class="breadcrumb-current">versions</span>
 </nav>
@@ -23,7 +23,7 @@
 
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">
-      {{ article.original_title[:100] if article.original_title }}
+      {{ (article.original_title[:100] if article.original_title else '')|e }}
     </h2>
 
     {% if versions %}

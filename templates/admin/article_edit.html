@@ -32,8 +32,8 @@
     {% endif %}
 
     <div class="article-edit-meta">
-      <span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ article.original_url[:60] if article.original_url }}</a></span>
-      <span>source: {{ article.source.name if article.source else 'unknown' }}</span>
+      <span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ (article.original_url[:60] if article.original_url else '')|e }}</a></span>
+      <span>source: {{ (article.source.name if article.source else 'unknown') | e }}</span>
       <span>created: {{ article.created_at.strftime('%b %d %Y %H:%M') if article.created_at }}</span>
       {% if article.original_ai_article %}
       <span><a href="/admin/articles/{{ article.id }}/original" target="_blank" class="btn-secondary btn-sm">view original AI version</a></span>

@@ -44,8 +44,11 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         return sorted(articles, key=lambda a: cached_ids.index(a.id)) if articles else []
 
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+    from sqlalchemy.orm import joinedload
     articles = (
-        Article.query.filter(
+        Article.query
+        .options(joinedload(Article.source))
+        .filter(
             Article.pipeline_status == PipelineStatus.DONE,
             Article.impact_score > 0,
             or_(

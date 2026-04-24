@@ -498,6 +498,26 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 **ThreadPoolExecutor shutdown**: When implementing timeouts with `ThreadPoolExecutor`, use `executor.shutdown(wait=False, cancel_futures=True)` in the `finally` block — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout. Python 3.9+ supports `cancel_futures=True` (project uses 3.12).
 
+### Refactored Functions (April 2026)
+
+**tasks/extract.py phase functions**:
+| Function | Description |
+|----------|-------------|
+| `_extract_content_if_needed()` | Content extraction from URL with error handling |
+| `_create_article_record()` | Article + citations DB creation |
+| `_dispatch_after_extraction()` | Logging + pipeline dispatch |
+| `_handle_duplicate()` | Citation logic for duplicate articles |
+
+**tasks/edit.py phase functions**:
+| Function | Description |
+|----------|-------------|
+| `_gather_editor_context()` | Context + subagent call for editor |
+| `_handle_validation_and_routing()` | Quality check + routing to review/DONE |
+| `_post_finalize_article()` | Trend memory + webhooks + SLA metrics |
+| `_execute_editor_work()` | Main editor work function |
+
+When refactoring large functions, prefer importing at module level (not inside the function) to avoid re-parsing on every call.
+
 **Non-blocking I/O with ThreadPoolExecutor**: Blocking operations (HTTP calls, content extraction) should be wrapped in `ThreadPoolExecutor` to avoid blocking Celery workers. Use `_EXECUTOR.submit(fn, *args)` with `future.result(timeout=N)`, catching `TimeoutError` and calling `future.cancel()`. Timeout should be slightly higher than the operation timeout (e.g., +5s for content extraction).
 
 **Search provider timeout**: Use `from concurrent.futures import TimeoutError as FuturesTimeoutError` to distinguish FuturesTimeoutError from the builtin.

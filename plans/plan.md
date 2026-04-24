@@ -3,6 +3,7 @@
 **Created:** April 22, 2026
 **Last Updated:** April 24, 2026
 **Status:** NOT STARTED — Consolidated from plans 2-12
+**Reviewed:** April 24, 2026 (verified against codebase)
 
 **Plan structure:**
 - Organized into 6 waves by category and priority
@@ -28,6 +29,7 @@ Future agents should assume:
 - Some large items (Wave 4 refactoring) can themselves be parallelized across the 4 functions
 - Agents may need to read AGENTS.md and relevant source files before implementing
 - All template changes should be verified with `|e` filter applied correctly
+- Run `ruff check` and `pytest` after each wave to verify changes
 
 ---
 
@@ -41,6 +43,7 @@ Future agents should assume:
 All XSS fixes involve adding `|e` filter to user-controlled content rendered in templates. An attacker would need stored XSS via crawled article titles or admin account compromise.
 
 #### 1A.1: `templates/admin/metrics.html` — Lines 84, 110, 136
+
 **Issue:** `article.original_title` in `title` attribute AND link text - both unescaped
 
 **Actual file content (line 84):**
@@ -58,16 +61,26 @@ All XSS fixes involve adding `|e` filter to user-controlled content rendered in 
 ---
 
 #### 1A.2: `templates/admin/article_versions.html` — Lines 11, 26
+
 **Issue:** Breadcrumb link text and h2 heading both unescaped
 
-**Actual file content:**
-- Line 11: `{{ article.original_title[:50] }}{% if article.original_title|length > 50 %}...{% endif %}`
-- Line 26: Not visible in read (may need verification)
+**Actual file content (line 11):**
+```html
+<a href="/admin/articles/{{ article.id }}/edit">{{ article.original_title[:50] }}{% if article.original_title|length > 50 %}...{% endif %}</a>
+```
+
+**Actual file content (line 26):**
+```html
+{{ article.original_title[:100] if article.original_title }}
+```
 
 **Fix:**
 ```html
 <!-- Line 11 (breadcrumb): -->
-{{ (article.original_title[:50] if article.original_title else '')|e }}{% if article.original_title and article.original_title|length > 50 %}...{% endif %}
+<a href="/admin/articles/{{ article.id }}/edit">{{ (article.original_title[:50] if article.original_title else '')|e }}{% if article.original_title and article.original_title|length > 50 %}...{% endif %}</a>
+
+<!-- Line 26 (h2): -->
+{{ (article.original_title[:100] if article.original_title else '')|e }}
 ```
 
 **Files to modify:** `templates/admin/article_versions.html` (lines 11, 26)
@@ -75,6 +88,7 @@ All XSS fixes involve adding `|e` filter to user-controlled content rendered in 
 ---
 
 #### 1A.3: `templates/admin/dashboard.html` — Line 167
+
 **Issue:** `title` attribute has `|e` but link text is raw
 
 **Actual file content (line 166-168):**
@@ -94,6 +108,7 @@ All XSS fixes involve adding `|e` filter to user-controlled content rendered in 
 ---
 
 #### 1A.4: `templates/admin/partials/articles_table.html` — Line 47
+
 **Issue:** Same pattern - title escaped, link text raw
 
 **Actual file content (lines 46-48):**
@@ -113,6 +128,7 @@ All XSS fixes involve adding `|e` filter to user-controlled content rendered in 
 ---
 
 #### 1A.5: `templates/admin/newsletters.html` — Line 55
+
 **Issue:** `nl.subject` is LLM-generated (untrusted), rendered without escaping
 
 **Actual file content (line 55):**
@@ -130,6 +146,7 @@ All XSS fixes involve adding `|e` filter to user-controlled content rendered in 
 ---
 
 #### 1A.6: `templates/admin/partials/source_row.html` — Line 4
+
 **Issue:** `s.source_key` admin-supplied but not escaped (low severity)
 
 **Actual file content (lines 3-4):**
@@ -148,19 +165,26 @@ All XSS fixes involve adding `|e` filter to user-controlled content rendered in 
 ---
 
 #### 1A.7: `templates/admin/article_edit.html` — Lines 35-36
+
 **Note:** Lines 11 and 24 already have `|e`. Actual vulnerabilities are at lines 35-36.
 
-**Actual file content:**
-- Line 35: `{{ article.original_url[:60] if article.original_url }}` (text content inside anchor, href protected by safe_href)
-- Line 36: `{{ article.source.name if article.source else 'unknown' }}`
+**Actual file content (line 35):**
+```html
+<span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ article.original_url[:60] if article.original_url }}</a></span>
+```
+
+**Actual file content (line 36):**
+```html
+<span>source: {{ article.source.name if article.source else 'unknown' }}</span>
+```
 
 **Fix:**
 ```html
 <!-- Line 35: original_url text content (NOT the href, that's safe_href): -->
-<span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ article.original_url[:60]|e if article.original_url else '' }}</a></span>
+<span>original: <a href="{{ article.original_url|safe_href }}" target="_blank">{{ (article.original_url[:60] if article.original_url else '')|e }}</a></span>
 
 <!-- Line 36: source.name: -->
-<span>source: {{ article.source.name|e if article.source else 'unknown' }}</span>
+<span>source: {{ (article.source.name if article.source else 'unknown') | e }}</span>
 ```
 
 **Files to modify:** `templates/admin/article_edit.html` (lines 35, 36)
@@ -225,8 +249,8 @@ For each form input with validation errors:
 
 ## WAVE 2: Config Hardening & Code Quality
 
-**Estimated Time:** ~3 hours
-**Sub-agents:** 4 parallel groups
+**Estimated Time:** ~4 hours
+**Sub-agents:** 5 parallel groups
 
 ### 2A: Production Config Validation
 
@@ -234,8 +258,14 @@ For each form input with validation errors:
 
 **Issue:** Only checks presence, not strength. Weak keys can be brute-forced.
 
+**Actual file content (lines 205-206):**
 ```python
-# Add after existing presence check (around line 292-293):
+if not cls.SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be set in production")
+```
+
+**Fix:** Add after existing presence check:
+```python
 if len(cls.SECRET_KEY) < 32:
     raise RuntimeError("SECRET_KEY must be at least 32 characters")
 ```
@@ -248,8 +278,8 @@ if len(cls.SECRET_KEY) < 32:
 
 **Issue:** Set to True in ProductionConfig but not validated
 
+**Fix:** Add in ProductionConfig.validate():
 ```python
-# Add in ProductionConfig.validate():
 if not cls.SESSION_COOKIE_SECURE:
     raise RuntimeError("SESSION_COOKIE_SECURE must be True in production")
 ```
@@ -260,17 +290,81 @@ if not cls.SESSION_COOKIE_SECURE:
 
 ### 2B: Code Quality Fixes
 
-#### 2B.1: Adapter Shebangs — `adapters/*.py`
+#### 2B.1: Silent Exception Logging — 3 locations
 
-**Issue:** 5 adapter files are executable (mode 755) but lack shebang
+**Issue:** Silent failures hide errors from debugging and monitoring.
 
-Add to each file:
+##### 2B.1a: `services/article.py:39` — Search query logging fails silently
+
+**Actual file content (lines 27-43):**
 ```python
-#!/usr/bin/env python3
-"""Adapter for [RSS/API/Web] source fetching."""
+def _log_search_query(query: str, results_count: int) -> None:
+    """Log a search query to the SearchQuery table (async fire-and-forget)."""
+    import threading
+    from models import SearchQuery
+
+    def _async_log():
+        try:
+            from extensions import db
+            sq = SearchQuery(query=query[:256], results_count=results_count)
+            db.session.add(sq)
+            db.session.commit()
+        except Exception:
+            pass  # Silent failure
 ```
 
-**Files to modify:** `adapters/__init__.py`, `adapters/base.py`, `adapters/api.py`, `adapters/web.py`, `adapters/rss.py`
+**Fix:** Add logging:
+```python
+def _async_log():
+    try:
+        from extensions import db
+        sq = SearchQuery(query=query[:256], results_count=results_count)
+        db.session.add(sq)
+        db.session.commit()
+    except Exception as e:
+        logger.warning("Failed to log search query '%s': %s", query[:50], e)
+```
+
+##### 2B.1b: `adapters/web.py:117` — Trafilatura extraction fails silently
+
+**Actual file content (lines 117-118):**
+```python
+except Exception:
+    pass  # Silent failure
+```
+
+**Fix:** Add logging:
+```python
+except Exception as e:
+    logger.warning("Content extraction failed for %s: %s", url, e)
+```
+
+##### 2B.1c: `services/subagent.py:906` — Template variable missing silently
+
+**Actual file content (lines 900-908):**
+```python
+def _resolve_template_variables(results: dict[str, Any], initial_data: dict[str, Any]) -> dict[str, Any]:
+    """Resolve template variables, including references to previous step results."""
+    resolved = dict(initial_data)
+    for key, value in resolved.items():
+        if isinstance(value, str) and "{{" in value:
+            try:
+                resolved[key] = value.format(**results)
+            except Exception:
+                pass  # Silent failure
+    return resolved
+```
+
+**Fix:** Add logging:
+```python
+            except Exception as e:
+                logger.warning(
+                    "Template resolution failed for key '%s': %s",
+                    key, e
+                )
+```
+
+**Files to modify:** `services/article.py` (lines 27-43), `adapters/web.py` (lines 117-118), `services/subagent.py` (lines 900-908)
 
 ---
 
@@ -280,59 +374,117 @@ Add to each file:
 
 ##### 2B.2a: `services/validation.py` — `_is_password_hash()`
 
+**Actual file content (lines 122-124):**
 ```python
-# Add at module level:
+def _is_password_hash(value: str) -> bool:
+    """Check if a value is a Werkzeug password hash (scrypt:, pbkdf2:, or argon2:)."""
+    return bool(re.match(r"^(scrypt|pbkdf2|argon2):", value))
+```
+
+**Fix:** Precompile at module level:
+```python
 _PASSWORD_HASH_RE = re.compile(r"^(scrypt|pbkdf2|argon2):")
 
-# Change function to:
 def _is_password_hash(value: str) -> bool:
+    """Check if a value is a Werkzeug password hash (scrypt:, pbkdf2:, or argon2:)."""
     return bool(_PASSWORD_HASH_RE.match(value))
 ```
 
 ##### 2B.2b: `schemas/tasks.py` — email validators (lines 52, 66)
 
+**Actual file content (both validators use):**
 ```python
-# Add at module level:
-_EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
-
-# Change validators to use _EMAIL_RE.match(v) instead of re.match(...)
+if not re.match(r"^[^@]+@[^@]+\.[^@]+$", v):
 ```
 
-##### 2B.2c: `routes/admin/sources.py` — `_generate_source_key()` (lines 14-15)
-
+**Fix:** Precompile at module level:
 ```python
-# Add at module level:
+_EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+
+# Change both validators to use _EMAIL_RE.match(v)
+```
+
+##### 2B.2c: `routes/admin/sources.py` — `_generate_source_key()` (lines 12-15)
+
+**Actual file content (lines 12-16):**
+```python
+def _generate_source_key(name: str) -> str:
+    key = name.lower().strip()
+    key = re.sub(r"[^a-z0-9\s-]", "", key)
+    key = re.sub(r"[\s]+", "-", key)
+    return key[:64] or "source"
+```
+
+**Fix:** Precompile at module level:
+```python
 _SOURCE_KEY_STRIP_RE = re.compile(r"[^a-z0-9\s-]")
 _SOURCE_KEY_DASH_RE = re.compile(r"[\s]+")
 
-# Change function to use compiled patterns
+def _generate_source_key(name: str) -> str:
+    key = name.lower().strip()
+    key = _SOURCE_KEY_STRIP_RE.sub("", key)
+    key = _SOURCE_KEY_DASH_RE.sub("-", key)
+    return key[:64] or "source"
 ```
+
+**Files to modify:** `services/validation.py`, `schemas/tasks.py`, `routes/admin/sources.py`
 
 ---
 
 ### 2C: Chain Tool Improvements
 
-#### 2C.1: Chain Step Retry Logic — `services/subagent.py:765-789`
+#### 2C.1: Chain Step Retry Logic — `services/subagent.py:774-800`
 
 **Issue:** Chain steps have no retry; single failure marks step as fallback
 
+**Actual file content (lines 774-800):**
 ```python
-# Replace single attempt with retry loop:
+try:
+    future = _subagent_executor.submit(_chain_call)
+    try:
+        resp = future.result(timeout=stage_config.timeout_seconds)
+    except TimeoutError:
+        future.cancel()
+        logger.warning(
+            "Chain %s step %d timed out after %ss",
+            chain_name, i, stage_config.timeout_seconds,
+        )
+        raise ProviderTimeoutError(...)
+    results[step_name] = {"synthesis": resp.text, "used_fallback": False}
+except Exception as e:
+    logger.warning("Chain %s step %d failed: %s", chain_name, i, e)
+    results[step_name] = {"synthesis": f"[Fallback: {e}]", "used_fallback": True}
+```
+
+**Fix:** Add retry loop with transient error handling:
+```python
 last_exc = None
 for attempt in range(stage_config.max_retries + 1):
     try:
         future = _subagent_executor.submit(_chain_call)
-        resp = future.result(timeout=stage_config.timeout_seconds)
-        break  # Success
+        try:
+            resp = future.result(timeout=stage_config.timeout_seconds)
+            break  # Success
+        except TimeoutError:
+            future.cancel()
+            raise ProviderTimeoutError(f"Chain step timed out after {stage_config.timeout_seconds}s")
     except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
         last_exc = e
         if attempt < stage_config.max_retries:
+            import time
             time.sleep(stage_config.retry_delay)
             continue
-        # Log and fallback
+        # Log and fallback after all retries exhausted
+        logger.warning("Chain %s step %d failed after %d attempts: %s", chain_name, i, attempt + 1, e)
+        results[step_name] = {"synthesis": f"[Fallback: {e}]", "used_fallback": True}
+        break
+    except Exception as e:
+        logger.warning("Chain %s step %d failed: %s", chain_name, i, e)
+        results[step_name] = {"synthesis": f"[Fallback: {e}]", "used_fallback": True}
+        break
 ```
 
-**Files to modify:** `services/subagent.py` (lines 774-789 in `run_subagent_chain()`)
+**Files to modify:** `services/subagent.py` (run_subagent_chain function, ~lines 774-800)
 
 ---
 
@@ -340,19 +492,19 @@ for attempt in range(stage_config.max_retries + 1):
 
 **Issue:** `run_subagent_chain()` uses logger directly, no metrics emitted
 
+**Fix:** Add to run_subagent_chain():
 ```python
-# Add to run_subagent_chain():
 from services.metrics import time_histogram, get_metrics
 
 for i, step_config in enumerate(chain_config.steps[:max_length]):
     step_name = f"{chain_name}_step_{i}"
-    
+
     with time_histogram(
         "subagent.chain_step_duration_seconds",
         labels={"chain": chain_name, "step": i}
     ):
         # ... step execution ...
-    
+
     if result.get("used_fallback"):
         get_metrics().counter_inc(
             "subagent.chain_step_failure",
@@ -368,20 +520,49 @@ for i, step_config in enumerate(chain_config.steps[:max_length]):
 
 **Issue:** Fixed delay retry doesn't adapt to failure severity
 
+**Actual file content (line 418):**
 ```python
-# Change line 418 from:
-time.sleep(stage_config.retry_delay)
-
-# To:
-import random
-delay = min(
-    1.0 * (2 ** (attempt - 1)) + random.uniform(0, 0.5),
-    stage_config.retry_delay,
-)
-time.sleep(delay)
+if attempt > 0:
+    time.sleep(stage_config.retry_delay)
 ```
 
-**Files to modify:** `services/subagent.py` (lines 411-467, 563-590)
+**Fix:** Change to exponential backoff:
+```python
+if attempt > 0:
+    import random
+    delay = min(
+        1.0 * (2 ** (attempt - 1)) + random.uniform(0, 0.5),
+        stage_config.retry_delay,
+    )
+    time.sleep(delay)
+```
+
+**Files to modify:** `services/subagent.py` (lines ~411-467 in `run_subagent()`, lines ~563-590 in `run_subagent_with_tools()`)
+
+---
+
+#### 2C.4: Tool Registry Auto-Initialization — `app.py`
+
+**Issue:** `initialize_tool_registry()` exists but is never called at startup
+
+**Actual file content (services/subagent.py lines 236-241):**
+```python
+def initialize_tool_registry() -> None:
+    """Initialize the tool registry with built-in tools."""
+    for tool in _build_context_tools():
+        register_tool(tool)
+    for tool in _build_search_tools():
+        register_tool(tool)
+```
+
+**Fix:** Call after app context is ready in `app.py:create_app()`:
+```python
+# Add near end of create_app(), after blueprint registration:
+from services.subagent import initialize_tool_registry
+initialize_tool_registry()
+```
+
+**Files to modify:** `app.py` (add initialization call near end of create_app)
 
 ---
 
@@ -396,8 +577,17 @@ time.sleep(delay)
 
 **Issue:** `min()` iterates all keys (up to 1000) on every write
 
+**Actual file content (lines 114-118):**
 ```python
-# Replace lines 114-118 with:
+lru_key = min(
+    self._memory.keys(),
+    key=lambda k: self._memory[k][1]
+)
+del self._memory[lru_key]
+```
+
+**Fix:** Use `popitem(last=False)` for O(1) FIFO eviction:
+```python
 if full_key not in self._memory:
     self._memory.popitem(last=False)  # O(1) - evict oldest
 ```
@@ -410,8 +600,13 @@ if full_key not in self._memory:
 
 **Issue:** `load_providers_config()` called every fallback, re-parses YAML
 
+**Actual file content (line 52):**
 ```python
-# Add module-level cache:
+config = load_providers_config()
+```
+
+**Fix:** Add module-level cache:
+```python
 _providers_config_cache = None
 
 def load_providers_config_cached():
@@ -432,11 +627,13 @@ config = load_providers_config_cached()
 
 **Issue:** `delete` and `set_status` use `article_detail:{id}` without `pub:` prefix
 
+**Actual file content (lines 225, 257):**
 ```python
-# Change from:
 cache.invalidate(f"article_detail:{article.id}")
+```
 
-# To:
+**Fix:** Add `pub:` prefix:
+```python
 cache.invalidate(f"pub:article_detail:{article.id}")
 ```
 
@@ -448,8 +645,17 @@ cache.invalidate(f"pub:article_detail:{article.id}")
 
 #### 3B.1: Article.updated_at Index
 
+**Issue:** Missing index for stuck article detection queries
+
+**Files to create:** `migrations/versions/026_article_updated_at_index.py`
+
 ```python
-# migrations/versions/026_article_updated_at_index.py
+"""Add index on articles.updated_at for stuck article queries."""
+from alembic import op
+
+revision = '026'
+down_revision = '025'
+
 def upgrade() -> None:
     op.create_index(
         "ix_articles_updated_at",
@@ -457,12 +663,26 @@ def upgrade() -> None:
         ["updated_at"],
         unique=False
     )
+
+def downgrade() -> None:
+    op.drop_index("ix_articles_updated_at", table_name="articles")
 ```
+
+---
 
 #### 3B.2: Composite Index (source_id, pipeline_status)
 
+**Issue:** No composite index for filtered queries by source and status
+
+**Files to create:** `migrations/versions/027_article_source_status_index.py`
+
 ```python
-# migrations/versions/027_article_source_status_index.py
+"""Add composite index on articles.source_id and pipeline_status."""
+from alembic import op
+
+revision = '027'
+down_revision = '026'
+
 def upgrade() -> None:
     op.create_index(
         "ix_articles_source_pipeline",
@@ -470,9 +690,10 @@ def upgrade() -> None:
         ["source_id", "pipeline_status"],
         unique=False
     )
-```
 
-**Files to modify:** Create `migrations/versions/026_*.py` and `027_*.py`
+def downgrade() -> None:
+    op.drop_index("ix_articles_source_pipeline", table_name="articles")
+```
 
 ---
 
@@ -482,6 +703,25 @@ def upgrade() -> None:
 
 **Issue:** Non-cached path missing joinedload
 
+**Actual file content (lines 47-60):**
+```python
+articles = (
+    Article.query.filter(
+        Article.pipeline_status == PipelineStatus.DONE,
+        Article.impact_score > 0,
+        or_(
+            Article.original_published_at >= cutoff,
+            Article.original_published_at.is_(None),
+        ),
+        Article.created_at >= cutoff,
+    )
+    .order_by(Article.impact_score.desc())
+    .limit(limit)
+    .all()
+)
+```
+
+**Fix:** Add joinedload for source:
 ```python
 # Add import at line 37:
 from sqlalchemy.orm import joinedload
@@ -490,7 +730,15 @@ from sqlalchemy.orm import joinedload
 articles = (
     Article.query
     .options(joinedload(Article.source))
-    .filter(...)
+    .filter(
+        Article.pipeline_status == PipelineStatus.DONE,
+        Article.impact_score > 0,
+        or_(
+            Article.original_published_at >= cutoff,
+            Article.original_published_at.is_(None),
+        ),
+        Article.created_at >= cutoff,
+    )
     .order_by(Article.impact_score.desc())
     .limit(limit)
     .all()
@@ -507,8 +755,25 @@ articles = (
 
 **Issue:** New thread spawned per query, unbounded threads
 
+**Actual file content (lines 27-43):**
 ```python
-# Replace with bounded pool:
+def _log_search_query(query: str, results_count: int) -> None:
+    """Log a search query to the SearchQuery table (async fire-and-forget)."""
+    import threading
+    def _async_log():
+        try:
+            from extensions import db
+            sq = SearchQuery(query=query[:256], results_count=results_count)
+            db.session.add(sq)
+            db.session.commit()
+        except Exception:
+            pass
+    thread = threading.Thread(target=_async_log, daemon=True)
+    thread.start()
+```
+
+**Fix:** Replace with bounded pool:
+```python
 from concurrent.futures import ThreadPoolExecutor
 
 _search_logger = ThreadPoolExecutor(
@@ -516,8 +781,18 @@ _search_logger = ThreadPoolExecutor(
     thread_name_prefix="search_log"
 )
 
-def _log_search_query(query: str, results_count: int):
-    _search_logger.submit(_async_log, query, results_count)
+def _log_search_query(query: str, results_count: int) -> None:
+    """Log a search query to the SearchQuery table (async fire-and-forget)."""
+    def _async_log():
+        try:
+            from extensions import db
+            sq = SearchQuery(query=query[:256], results_count=results_count)
+            db.session.add(sq)
+            db.session.commit()
+        except Exception as e:
+            logger.warning("Failed to log search query '%s': %s", query[:50], e)
+
+    _search_logger.submit(_async_log)
 ```
 
 **Files to modify:** `services/article.py` (lines 27-43)
@@ -528,9 +803,19 @@ def _log_search_query(query: str, results_count: int):
 
 **Issue:** Eviction on read path adds overhead; Redis handles TTL
 
+**Actual file content (lines 93-97):**
 ```python
-# Remove lines 93-97 entirely (sample-based eviction from get())
-# Keep eviction only in set() line 108
+# Sampled stale eviction on read path
+self._evict_sample_counter += 1
+if self._evict_sample_counter >= _EVICT_SAMPLE_RATE:
+    self._evict_sample_counter = 0
+    self._evict_stale()
+```
+
+**Fix:** Remove sample-based eviction from read path (keep in set() only):
+```python
+# Remove lines 93-97 entirely
+# Eviction is handled in set() at line 108
 ```
 
 **Files to modify:** `services/cache.py` (lines 93-97)
@@ -541,8 +826,13 @@ def _log_search_query(query: str, results_count: int):
 
 **Issue:** Hardcoded 4 workers; cannot tune
 
+**Actual file content (line 14):**
 ```python
-# Add env var support:
+_CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="content_extract")
+```
+
+**Fix:** Add env var support:
+```python
 import os
 
 CONTENT_EXTRACTOR_WORKERS = int(
@@ -558,6 +848,42 @@ _CONTENT_EXTRACTOR = ThreadPoolExecutor(
 
 ---
 
+### 3E: CSS Layout Fixes
+
+#### 3E.1: layout.css Duplicate `.nav-tag` — `static/css/layout.css:59-66, 108-115`
+
+**Issue:** `.nav-tag` defined twice (lines 59-66 and 108-115), second overrides first with different font-size
+
+**Actual file content (lines 59-66):**
+```css
+.nav-tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+}
+```
+
+**Actual file content (lines 108-115):**
+```css
+.nav-tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+}
+```
+
+**Fix:** Remove the first definition (lines 59-66) and keep the second (lines 108-115) with `var(--text-xs)`.
+
+**Files to modify:** `static/css/layout.css` (remove lines 59-66)
+
+---
+
 ## WAVE 4: Large Function Refactoring
 
 **Estimated Time:** ~15 hours (4 functions, can run in parallel)
@@ -565,7 +891,7 @@ _CONTENT_EXTRACTOR = ThreadPoolExecutor(
 
 ### 4A: Extract Phase Functions
 
-#### 4A.1: `tasks/extract.py:process_item` (229 lines → ~12 logical phases)
+#### 4A.1: `tasks/extract.py:process_item` (240 lines → ~12 logical phases)
 
 **Current phases:** Input Validation (102-122), Content Extraction (129-151), Cross-source Dedup (154-163), Duplicate Handling (164-211), Source Resolution (213-221), Date Parsing (224-232), Article Creation (234-258), Citation Creation (261-270), DB Commit (272), Pipeline Logging (284-294), Pipeline Dispatch (296-305)
 
@@ -639,13 +965,15 @@ Simplify `app.py` to orchestration only.
 
 **Issue:** `auto-fit` causes orphaned card to stretch full width
 
+**Actual file content (lines 162-167):**
 ```css
-/* Change from: */
 .dashboard-grid {
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
+```
 
-/* To: */
+**Fix:** Change to `auto-fill` and add `grid-auto-rows`:
+```css
 .dashboard-grid {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   grid-auto-rows: minmax(150px, auto);
@@ -660,7 +988,7 @@ Simplify `app.py` to orchestration only.
 
 **Issue:** Must update both files or risk color flash on first paint
 
-Add at top of custom properties section:
+**Fix:** Add at top of custom properties section:
 ```css
 /*
  * IMPORTANT: Tokens are duplicated in this file AND variables.css.
@@ -679,7 +1007,7 @@ Add at top of custom properties section:
 
 **Issue:** "loading..." text feels incomplete; public site has skeleton cards
 
-Add CSS to `pages.css`:
+**Fix:** Add CSS to `pages.css`:
 ```css
 .skeleton-table-rows { padding: 0.5rem; }
 .skeleton-row {
@@ -699,8 +1027,6 @@ Add CSS to `pages.css`:
 .skeleton-actions { width: 60px; height: 1rem; }
 ```
 
-Update indicator in `admin/articles.html` to use skeleton rows (see plan10.md P3.1 for full HTML)
-
 **Files to modify:** `pages.css`, `templates/admin/articles.html`
 
 ---
@@ -711,8 +1037,7 @@ Update indicator in `admin/articles.html` to use skeleton rows (see plan10.md P3
 
 **Issue:** Tables cut off on mobile
 
-Add horizontal scroll wrapper or card transformation below 640px
-
+**Fix:** Add horizontal scroll wrapper:
 ```css
 .admin-table-wrapper {
   overflow-x: auto;
@@ -728,11 +1053,13 @@ Add horizontal scroll wrapper or card transformation below 640px
 
 **Issue:** `<p class="empty-title">` should be proper heading
 
+**Actual file content (lines 51-56):**
 ```html
-<!-- Change from: -->
 <p class="empty-title">No articles found</p>
+```
 
-<!-- To: -->
+**Fix:** Change to heading:
+```html
 <h2 class="empty-title">No articles found</h2>
 ```
 
@@ -751,7 +1078,7 @@ Add horizontal scroll wrapper or card transformation below 640px
 
 **Issue:** `run_subagent_with_tools()` not tested
 
-Add test class:
+**Fix:** Add test class:
 ```python
 class TestRunSubagentWithTools:
     def test_tool_calling_flow(self, app): ...
@@ -768,7 +1095,7 @@ class TestRunSubagentWithTools:
 
 **Issue:** `run_subagent_chain()` and AST condition evaluation untested
 
-Add test class:
+**Fix:** Add test class:
 ```python
 class TestSubagentChain:
     def test_chain_execution_returns_results(self, app): ...
@@ -788,7 +1115,7 @@ class TestSubagentChain:
 
 **Issue:** Ollama returns markdown-wrapped JSON causing validation failures
 
-Add `_extract_json()` helper before `model_validate_json()`:
+**Fix:** Add `_extract_json()` helper before `model_validate_json()`:
 
 ```python
 import re
@@ -798,14 +1125,14 @@ def _extract_json(raw: str) -> str:
     raw = raw.strip()
     if not raw:
         raise ValueError("LLM returned empty response")
-    
+
     # Try direct parse first
     try:
         json.loads(raw)
         return raw
     except json.JSONDecodeError:
         pass
-    
+
     # Try markdown code blocks
     match = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw, re.MULTILINE)
     if match:
@@ -815,7 +1142,7 @@ def _extract_json(raw: str) -> str:
             return candidate
         except json.JSONDecodeError:
             pass
-    
+
     # Try bare JSON object
     match = re.search(r'\{[\s\S]*\}', raw)
     if match:
@@ -825,7 +1152,7 @@ def _extract_json(raw: str) -> str:
             return candidate
         except json.JSONDecodeError:
             pass
-    
+
     return raw
 ```
 
@@ -839,11 +1166,8 @@ Apply before line 164 in `chat_structured()`.
 
 **Issue:** `max_validation_retries=1` is conservative
 
+**Fix:** Change from 1 to 2:
 ```python
-# Change from:
-max_validation_retries: int = 1
-
-# To:
 max_validation_retries: int = 2
 ```
 
@@ -853,8 +1177,8 @@ max_validation_retries: int = 2
 
 **Issue:** Generic retry message doesn't tell model what format to produce
 
+**Fix:** Change retry message to include schema:
 ```python
-# Change retry message to include schema:
 schema_json = json.dumps(schema, indent=2)
 retry_messages.append({
     "role": "user",
@@ -919,22 +1243,58 @@ def _get_source_health() -> str:
 
 ---
 
+#### 6C.3: Chain Structured Output Support — `services/subagent.py`
+
+**Issue:** Chain steps use `provider.chat()` returning raw text instead of structured output
+
+**Fix:** Add optional `response_model` support to `run_subagent_chain()`:
+
+```python
+def run_subagent_chain(
+    chain_name: str,
+    steps: list[dict],
+    initial_prompt_data: dict,
+    article_id: int | None = None,
+    response_model: Type[BaseModel] | None = None,
+) -> dict[str, Any]:
+
+    # In step execution:
+    if response_model:
+        result = provider.chat_structured(
+            messages=[{"role": "user", "content": prompt}],
+            response_model=response_model,
+            model=model,
+            system=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        resp = type('Response', (), {'text': result.model_dump_json()})()
+    else:
+        resp = provider.chat(...)
+```
+
+**Files to modify:** `services/subagent.py` (update `run_subagent_chain()` signature)
+
+---
+
 ## Implementation Parallelization
 
 ```
 WAVE 1 ─┬── 1A: Template XSS (templates/*)
-        └── 1B: Accessibility (templates/admin/login.html)
+        └── 1B: Accessibility (login.html, forms)
              (~2 hrs, 2-3 parallel agents)
 
 WAVE 2 ─┬── 2A: Config validation (config.py)
-        ├── 2B: Code quality fixes (adapters, validation, schemas, sources)
-        └── 2C: Chain improvements (subagent.py)
-             (~3 hrs, 3-4 parallel agents)
+        ├── 2B: Silent logging fixes (article.py, web.py, subagent.py)
+        ├── 2B: Regex precompilation (validation.py, tasks.py, sources.py)
+        └── 2C: Chain improvements (subagent.py, app.py)
+             (~4 hrs, 5 parallel agents)
 
 WAVE 3 ─┬── 3A: Algorithmic fixes (cache.py, llm/__init__.py)
         ├── 3B: Database indexes (migrations/)
         ├── 3C: N+1 fixes (feeds.py)
-        └── 3D: Threading improvements (article.py, content_extractor.py)
+        ├── 3D: Threading improvements (article.py, content_extractor.py)
+        └── 3E: CSS layout fix (layout.css)
              (~4 hrs, 4 parallel agents)
 
 WAVE 4 ─┬── 4A.1: extract.py refactor
@@ -956,13 +1316,13 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 
 **File conflict analysis (no two agents touch same file in same wave):**
 - Wave 1: Different template files
-- Wave 2: config.py, adapters/*.py, services/validation.py, schemas/tasks.py, routes/admin/sources.py, services/subagent.py - all separate
-- Wave 3: cache.py, llm/__init__.py, articles.py, migrations (new files), feeds.py, content_extractor.py - all separate
+- Wave 2: config.py, article.py, web.py, subagent.py, validation.py, tasks.py, sources.py, app.py - all separate
+- Wave 3: cache.py, llm/__init__.py, migrations (new files), feeds.py, article.py, content_extractor.py, layout.css - all separate
 - Wave 4: Each refactor touches separate files
 - Wave 5: pages.css, critical.css, templates - all separate
 - Wave 6: test_subagent.py, llm/base.py, subagent.py - all separate
 
-**Total estimated:** ~33 hours across all waves
+**Total estimated:** ~34 hours across all waves
 
 ---
 
@@ -983,9 +1343,10 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 | P2.3: Redis pool segregation | plan8.md | Hasn't hit limits |
 | P3.1: CSS minification | plan8.md | CDN handles gzip |
 | P4.1: Announcement banner | plan10.md | Only if needed |
-| P3.1/P3.2: Tool expansion/validation | plan11.md | Deferred |
+| P3.1/P3.2: Tool expansion/validation | plan11.md | Low ROI |
 | Admin route fragmentation (webhooks) | plan5.md | Current split acceptable |
 | docs/api.md missing endpoints | plan5.md | Lower priority documentation |
+| P1.1: Tool registry auto-init | plan11.md | Optional - tools work without it |
 
 ### Verified No-Action Needed:
 - Tag names in templates (plan2.md) - already escaped
@@ -997,6 +1358,11 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 - Admin header nav (plan10.md) - works correctly
 - Search input mobile (plan10.md) - works correctly
 - Base.css global focus (plan5.md) - intentional separation
+- Adapter shebang lines (plan2.md) - modules not scripts, shebang not needed
+- Timeout/future handling (plan9.md) - already correct
+- Trend memory integration (plan9.md) - properly integrated
+- run_subagent_chain unused (plan9.md) - not used in production
+- Circuit breaker reset (plan9.md) - Option B accepted
 
 ---
 
@@ -1039,6 +1405,7 @@ sqlite3 ainews.db ".indexes articles"
 |--------|-----------------|
 | XSS fixes (`|e` filters) | Remove `|e` filters |
 | Config validation | Remove checks from `ProductionConfig.validate()` |
+| Silent logging | Revert to `pass` in except blocks |
 | Regex precompilation | Revert to inline `re.match()` |
 | LRU eviction O(1) | Revert to `min()` iteration |
 | Cache key namespacing | Remove `pub:` prefix |

@@ -368,6 +368,19 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Duplicate detection memory bound**: `find_duplicate_titles()` loads potentially thousands of rows. Consider adding `.limit(1000).order_by(db.desc(Article.created_at))` to bound memory usage.
 
+**Layout.css duplicate `.nav-tag`**: The `.nav-tag` class is defined twice in `static/css/layout.css` — at lines 59-66 and again at lines 108-115. The second definition overrides the first with a different `font-size`. When modifying `.nav-tag`, update both definitions or consolidate to one.
+
+**Silent exception logging in 3 locations**: Three places silently swallow exceptions without logging:
+- `services/article.py:39` — Search query logging fails silently
+- `adapters/web.py:117` — Trafilatura content extraction fails silently
+- `services/subagent.py:906` — Template variable resolution fails silently
+
+When fixing these, add `logger.warning()` calls before the silent `pass`.
+
+**LRU eviction uses O(n) min()**: `services/cache.py:114-118` uses `min(self._memory.keys(), key=lambda k: self._memory[k][1])` which iterates all keys to find the LRU candidate. This is O(n) and should be replaced with O(1) `popitem(last=False)` for FIFO eviction.
+
+**load_providers_config() not cached at function level**: `services/llm/__init__.py:52` calls `load_providers_config()` directly in the fallback path when the primary circuit is open. This re-parses YAML on each fallback. Consider caching at module level.
+
 **Bulk operations validation**: `routes/admin/api/articles.py:bulk_article_operations()` uses `validate_bulk_ids()` from `services/validation.py` for integer validation on bulk IDs.
 
 **Redis version conflict**: `requirements.txt` says `redis>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`. Use `pyproject.toml` as source of truth — the codebase runs with 6.4.0.
@@ -379,8 +392,6 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Health endpoint access control**: `GET /health?detailed=true` on `public_bp` (`routes/public/__init__.py:108`) exposes git commit hash and DB pool stats. Session-based auth blocks detailed info for non-admin users — anonymous users receive basic health status only.
 
 **Source count optimization**: `routes/admin/dashboard.py:127` uses `Source.query.count()` instead of loading all sources into memory for a count.
-
-**Template XSS in article_edit.html**: Lines 35 (original_url text) and 36 (source.name) in `templates/admin/article_edit.html` render user-controlled content without `|e` escaping. Lines 11 (breadcrumb) and 24 (page title) already have proper escaping.
 
 **DNS cache clear fixture location**: The `_clear_dns_cache` autouse fixture is defined locally in `tests/test_url_ssrf.py` and `tests/test_url_validate.py`, not in `tests/conftest.py`. When adding tests that interact with `services/url.py`, include this fixture or move it to conftest.py.
 

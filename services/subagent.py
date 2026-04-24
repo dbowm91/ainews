@@ -985,7 +985,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
             if node.id not in _ALLOWED_NAMES:
                 raise ValueError(f"Unknown identifier: {node.id}")
             if node.id == "results":
-                return context
+                return context["results"]
             result = context.get(node.id)
             if result is None:
                 raise ValueError(f"Context has no key '{node.id}'")
@@ -994,11 +994,8 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
             return node.value
         elif isinstance(node, ast.Attribute):
             obj = _eval_node(node.value)
-            if isinstance(obj, dict):
-                key = node.attr
-                if key not in obj:
-                    raise ValueError(f"Dict has no key '{key}'")
-                return obj[key]
+            if isinstance(obj, dict) and node.attr in obj:
+                return obj[node.attr]
             if node.attr.startswith("__") or node.attr.startswith("_"):
                 raise ValueError(
                     f"Access to protected attribute '{node.attr}' is not allowed"
@@ -1014,6 +1011,11 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
                     return obj[idx]
                 raise ValueError("List index must be an integer")
             raise ValueError("Subscript target must be dict or list")
+        elif isinstance(node, ast.Call):
+            func = _eval_node(node.func)
+            args = [_eval_node(arg) for arg in node.args]
+            kwargs = {k.arg: _eval_node(k.value) for k in node.keywords if k.arg}
+            return func(*args, **kwargs)
         else:
             raise ValueError(f"Unsupported node type: {type(node).__name__}")
 

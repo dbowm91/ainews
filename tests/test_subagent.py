@@ -763,16 +763,16 @@ class TestSubagentChain:
                 with patch("services.llm.get_provider_by_id") as mock_get_provider:
                     from schemas.pipeline import (
                         SubagentChainConfig,
-                        SubagentChainStepConfig,
+                        SubagentChainStep,
                         SubagentStageConfig,
                     )
 
                     chain_config = SubagentChainConfig(
                         enabled=True,
                         steps=[
-                            SubagentChainStepConfig(
+                            SubagentChainStep(
                                 task_type="research_synthesis",
-                                prompt_data_template={"title": "t"},
+                                prompt_data_template="{title}",
                                 response_model=None,
                             ),
                         ],
@@ -809,16 +809,16 @@ class TestSubagentChain:
                 with patch("services.llm.get_provider_by_id") as mock_get_provider:
                     from schemas.pipeline import (
                         SubagentChainConfig,
-                        SubagentChainStepConfig,
+                        SubagentChainStep,
                         SubagentStageConfig,
                     )
 
                     chain_config = SubagentChainConfig(
                         enabled=True,
                         steps=[
-                            SubagentChainStepConfig(
+                            SubagentChainStep(
                                 task_type="research_synthesis",
-                                prompt_data_template={"title": "t"},
+                                prompt_data_template="{title}",
                                 response_model=None,
                                 condition="results.get('skipped') == True",
                             ),
@@ -861,21 +861,21 @@ class TestSubagentChain:
                 with patch("services.llm.get_provider_by_id") as mock_get_provider:
                     from schemas.pipeline import (
                         SubagentChainConfig,
-                        SubagentChainStepConfig,
+                        SubagentChainStep,
                         SubagentStageConfig,
                     )
 
                     chain_config = SubagentChainConfig(
                         enabled=True,
                         steps=[
-                            SubagentChainStepConfig(
+                            SubagentChainStep(
                                 task_type="research_synthesis",
-                                prompt_data_template={"title": "t"},
+                                prompt_data_template="{title}",
                                 response_model=None,
                             ),
-                            SubagentChainStepConfig(
+                            SubagentChainStep(
                                 task_type="edit_review",
-                                prompt_data_template={"content": "s"},
+                                prompt_data_template="{content}",
                                 response_model=None,
                             ),
                         ],

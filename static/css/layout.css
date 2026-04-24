@@ -56,15 +56,6 @@
   flex-shrink: 0;
 }
 
-.nav-tag {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
-}
-
 .container {
   max-width: var(--max-width);
   margin: 0 auto;

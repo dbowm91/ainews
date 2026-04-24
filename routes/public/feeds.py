@@ -28,13 +28,19 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
     from services.cache import get_response_cache
 
     cache = get_response_cache()
-    cache_key = f"top_impact:{limit}"
+    cache_key = f"pub:top_impact:{limit}"
 
     cached_ids = cache.get(cache_key)
     if cached_ids is not None:
         if not cached_ids:
             return []
-        articles = Article.query.filter(Article.id.in_(cached_ids)).all()
+        from sqlalchemy.orm import joinedload
+        articles = (
+            Article.query
+            .options(joinedload(Article.source), joinedload(Article.tags))
+            .filter(Article.id.in_(cached_ids))
+            .all()
+        )
         return sorted(articles, key=lambda a: cached_ids.index(a.id)) if articles else []
 
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
@@ -66,7 +72,7 @@ def index() -> str:
     query = request.args.get("q", "", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"index:page:{page}:cat:{category}:q:{query}"
+    cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -110,7 +116,7 @@ def topic_feed(category: str) -> str:
     page = max(1, request.args.get("page", 1, type=int))
 
     cache = get_response_cache()
-    cache_key = f"topic:{category}:page:{page}"
+    cache_key = f"pub:topic:{category}:page:{page}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -196,7 +202,7 @@ def feed_all() -> Response:
 
     cache = get_response_cache()
     site_url = request.host_url.rstrip("/")
-    cache_key = f"rss_feed:all:{site_url}"
+    cache_key = f"pub:rss_feed:all:{site_url}"
 
     xml = cache.get(cache_key)
     if xml is None:
@@ -239,7 +245,7 @@ def feed_topic(category: str) -> Response:
 
     cache = get_response_cache()
     site_url = request.host_url.rstrip("/")
-    cache_key = f"rss_feed:{category}:{site_url}"
+    cache_key = f"pub:rss_feed:{category}:{site_url}"
 
     xml = cache.get(cache_key)
     if xml is None:

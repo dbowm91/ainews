@@ -88,11 +88,11 @@ def approve_article(article_id):
         from services.cache import get_response_cache
 
         cache = get_response_cache()
-        cache.invalidate_prefix("index")
-        cache.invalidate_prefix("topic")
-        cache.invalidate_prefix("rss")
+        cache.invalidate_prefix("pub:index")
+        cache.invalidate_prefix("pub:topic")
+        cache.invalidate_prefix("pub:rss")
         if article.category:
-            cache.invalidate_prefix(f"topic:{article.category}")
+            cache.invalidate_prefix(f"pub:topic:{article.category}")
     except Exception as e:
         logger.warning("Failed to invalidate article cache: %s", e)
 

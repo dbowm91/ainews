@@ -27,7 +27,7 @@ def article_detail(article_id: int) -> Response:
     from services.cache import get_response_cache
 
     cache = get_response_cache()
-    cache_key = f"article_detail:{article_id}"
+    cache_key = f"pub:article_detail:{article_id}"
     cached = cache.get(cache_key)
     if cached is not None:
         resp = make_response(cached)

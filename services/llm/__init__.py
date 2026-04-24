@@ -105,5 +105,14 @@ def get_provider() -> BaseLLMProvider:
 
 
 def get_provider_info() -> dict:
-    provider = get_provider()
-    return provider.health_check()
+    from services.cache import get_response_cache
+    cache = get_response_cache()
+
+    def _fetch():
+        provider = get_provider()
+        return provider.health_check()
+
+    try:
+        return cache.get_or_set("llm:provider:info", _fetch, ttl=300)
+    except Exception:
+        return _fetch()

@@ -3,6 +3,7 @@ import logging
 from flask import jsonify, request, Response
 from routes.admin import admin_bp, require_auth
 from constants import PipelineStatus
+from extensions import db
 
 logger = logging.getLogger(__name__)
 
@@ -141,91 +142,64 @@ def pipeline_sla() -> Response:
     from models import Article
     from datetime import datetime, timezone, timedelta
     from services.metrics import get_metrics
+    from sqlalchemy import func
 
     days = request.args.get("days", 7, type=int)
     days = max(1, min(days, 30))
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    articles = (
-        Article.query.filter(
-            Article.published_at.isnot(None),
-            Article.published_at >= cutoff,
-        )
-        .order_by(Article.published_at.desc())
-        .all()
-    )
+    def _compute_duration_stats(session, Article, cutoff, start_col, end_col, base_filters=None):
+        if base_filters is None:
+            base_filters = []
 
-    total_count = len(articles)
-    if total_count == 0:
-        return jsonify(
-            {
-                "period_days": days,
-                "article_count": 0,
-                "sla": {
-                    "crawl_to_select_avg": None,
-                    "crawl_to_select_p50": None,
-                    "crawl_to_select_p95": None,
-                    "select_to_publish_avg": None,
-                    "select_to_publish_p50": None,
-                    "select_to_publish_p95": None,
-                    "crawl_to_publish_avg": None,
-                    "crawl_to_publish_p50": None,
-                    "crawl_to_publish_p95": None,
-                },
-                "histogram": get_metrics().get_metrics().get("histograms", {}).get(
-                    "pipeline_sla_seconds", {}
-                ),
-            }
-        )
+        duration_expr = (func.julianday(end_col) - func.julianday(start_col)) * 86400
+        base_filters = base_filters + [start_col.isnot(None), end_col.isnot(None)]
 
-    crawl_to_select = []
-    select_to_publish = []
-    crawl_to_publish = []
+        total = session.query(func.count()).filter(*base_filters).scalar()
+        if total == 0:
+            return {"avg": None, "p50": None, "p95": None}
 
-    for a in articles:
-        if a.crawled_at and a.selected_at:
-            delta = (a.selected_at - a.crawled_at).total_seconds()
-            if delta >= 0:
-                crawl_to_select.append(delta)
-        if a.selected_at and a.published_at:
-            delta = (a.published_at - a.selected_at).total_seconds()
-            if delta >= 0:
-                select_to_publish.append(delta)
-        if a.crawled_at and a.published_at:
-            delta = (a.published_at - a.crawled_at).total_seconds()
-            if delta >= 0:
-                crawl_to_publish.append(delta)
+        avg = session.query(func.avg(duration_expr)).filter(*base_filters).scalar()
 
-    sorted_c2s = sorted(crawl_to_select) if crawl_to_select else []
-    sorted_s2p = sorted(select_to_publish) if select_to_publish else []
-    sorted_c2p = sorted(crawl_to_publish) if crawl_to_publish else []
+        p50_subq = session.query(
+            duration_expr.label('duration'),
+            func.row_number().over(order_by=duration_expr).label('rn'),
+        ).filter(*base_filters).subquery()
 
-    def _stats(sorted_data):
-        n = len(sorted_data)
+        p50_offset = (total // 2) + 1
+        p95_offset = max(1, int(total * 0.95))
+
+        p50 = session.query(p50_subq.c.duration).filter(p50_subq.c.rn == p50_offset).scalar()
+        p95 = session.query(p50_subq.c.duration).filter(p50_subq.c.rn == p95_offset).scalar()
+
         return {
-            "avg": round(sum(sorted_data) / n, 1),
-            "p50": round(sorted_data[n // 2], 1),
-            "p95": round(sorted_data[int(n * 0.95)], 1),
+            "avg": round(avg, 1) if avg else None,
+            "p50": round(p50, 1) if p50 else None,
+            "p95": round(p95, 1) if p95 else None,
         }
 
-    c2s_stats = _stats(sorted_c2s)
-    s2p_stats = _stats(sorted_s2p)
-    c2p_stats = _stats(sorted_c2p)
+    base_filters = [Article.published_at.isnot(None), Article.published_at >= cutoff]
+
+    c2s = _compute_duration_stats(db.session, Article, cutoff, Article.crawled_at, Article.selected_at, base_filters)
+    s2p = _compute_duration_stats(db.session, Article, cutoff, Article.selected_at, Article.published_at, base_filters)
+    c2p = _compute_duration_stats(db.session, Article, cutoff, Article.crawled_at, Article.published_at, base_filters)
+
+    total_count = db.session.query(func.count(Article.id)).filter(*base_filters).scalar() or 0
 
     return jsonify(
         {
             "period_days": days,
             "article_count": total_count,
             "sla": {
-                "crawl_to_select_avg": c2s_stats["avg"],
-                "crawl_to_select_p50": c2s_stats["p50"],
-                "crawl_to_select_p95": c2s_stats["p95"],
-                "select_to_publish_avg": s2p_stats["avg"],
-                "select_to_publish_p50": s2p_stats["p50"],
-                "select_to_publish_p95": s2p_stats["p95"],
-                "crawl_to_publish_avg": c2p_stats["avg"],
-                "crawl_to_publish_p50": c2p_stats["p50"],
-                "crawl_to_publish_p95": c2p_stats["p95"],
+                "crawl_to_select_avg": c2s["avg"],
+                "crawl_to_select_p50": c2s["p50"],
+                "crawl_to_select_p95": c2s["p95"],
+                "select_to_publish_avg": s2p["avg"],
+                "select_to_publish_p50": s2p["p50"],
+                "select_to_publish_p95": s2p["p95"],
+                "crawl_to_publish_avg": c2p["avg"],
+                "crawl_to_publish_p50": c2p["p50"],
+                "crawl_to_publish_p95": c2p["p95"],
             },
             "histogram": get_metrics().get_metrics().get("histograms", {}).get(
                 "pipeline_sla_seconds", {}

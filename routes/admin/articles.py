@@ -281,10 +281,10 @@ def edit_article(article_id):
             from services.cache import get_response_cache
 
             cache = get_response_cache()
-            cache.invalidate_prefix("index")
-            cache.invalidate_prefix("topic")
-            cache.invalidate_prefix("rss")
-            cache.invalidate(f"article_detail:{article_id}")
+            cache.invalidate_prefix("pub:index")
+            cache.invalidate_prefix("pub:topic")
+            cache.invalidate_prefix("pub:rss")
+            cache.invalidate(f"pub:article_detail:{article_id}")
         except Exception as e:
             logger.warning("Failed to invalidate article cache: %s", e)
 

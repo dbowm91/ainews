@@ -26,7 +26,7 @@ def encode_short_url(article_id: int) -> str:
 def decode_short_url(code: str) -> int | None:
     try:
         return _short_encoder.decode_url(code)
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 

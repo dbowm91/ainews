@@ -2,7 +2,7 @@
 
 **Created:** April 22, 2026
 **Last Updated:** April 24, 2026
-**Status:** COMPLETED — All 5 waves implemented
+**Status:** COMPLETED — All waves fully implemented
 **Total Items:** ~65 across 5 waves
 
 ---
@@ -15,6 +15,17 @@ All waves have been implemented as of April 24, 2026. Verification:
 - Wave 3 (Performance): SLA SQL aggregation, N+1 fix, cache namespacing
 - Wave 4 (Error handling): JSON logging, Redis fallback, retry config, memory bounds
 - Wave 5 (Test/CQ): Test fixtures, requirements pinning, beat schedule deprecation
+
+**April 24, 2026 additions completed:**
+- `models.py`: decode_short_url exception handling (ValueError, TypeError)
+- `routes/admin/dashboard.py`: Source count query optimization
+- `routes/admin/dashboard.html`: Add source_count display
+- `tasks/pipeline.py`: SoftTimeLimitExceeded work persistence
+- `routes/admin/api/articles.py`: Transaction ordering fix for bulk operations
+- `migrations/versions/025_*.py`: Partial indexes migration
+- `tests/test_task_security.py`: New test file
+- `tests/test_webhooks.py`: New test file
+- `tests/test_trend_memory.py`: New test file
 
 **Wave dependency model:**
 - Wave 1 and Wave 2 touch completely different files and can run in parallel

@@ -26,12 +26,16 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
         cache = get_response_cache()
         for article in articles:
             article.category = new_category
-            cache.invalidate(f"article_detail:{article.id}")
-        cache.invalidate_prefix("articles:list")
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         return jsonify({"error": "Failed to update articles"}), 500
+
+    for article in articles:
+        cache.invalidate(f"pub:article_detail:{article.id}")
+    cache.invalidate_prefix("pub:index")
+    cache.invalidate_prefix("pub:topic")
+    cache.invalidate_prefix("articles:list")
     try:
         log_admin_action(
             "article_bulk_set_category",
@@ -55,9 +59,6 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     from services.audit import log_admin_action
 
     cache = get_response_cache()
-    for article in articles:
-        cache.invalidate(f"article_detail:{article.id}")
-    cache.invalidate_prefix("articles:list")
 
     for article in articles:
         article.pipeline_status = PipelineStatus.PENDING
@@ -75,6 +76,12 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     except SQLAlchemyError:
         db.session.rollback()
         return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
+
+    for article in articles:
+        cache.invalidate(f"pub:article_detail:{article.id}")
+    cache.invalidate_prefix("pub:index")
+    cache.invalidate_prefix("pub:topic")
+    cache.invalidate_prefix("articles:list")
 
     dispatched = 0
     failed_ids = []
@@ -140,15 +147,18 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
     try:
         from services.cache import get_response_cache
         cache = get_response_cache()
-        for article in articles:
-            cache.invalidate(f"article_detail:{article.id}")
-        cache.invalidate_prefix("articles:list")
         _assign_tags(articles, tag_names, db)
         db.session.commit()
     except Exception as e:
         logger.warning("Bulk add tags failed: %s", e)
         db.session.rollback()
         return jsonify({"error": "Failed to add tags"}), 500
+
+    for article in articles:
+        cache.invalidate(f"pub:article_detail:{article.id}")
+    cache.invalidate_prefix("pub:index")
+    cache.invalidate_prefix("pub:topic")
+    cache.invalidate_prefix("articles:list")
 
     clear_tag_cache()
     try:

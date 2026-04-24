@@ -125,6 +125,8 @@ def dashboard():
     )
 
     sources = Source.query.all()
+    source_count = Source.query.count()
+
     article_counts = dict(
         db.session.query(Article.source_id, func.count(Article.id))
         .group_by(Article.source_id)
@@ -199,6 +201,7 @@ def dashboard():
         "admin/dashboard.html",
         pipeline_stats=pipeline_stats,
         sources=sources,
+        source_count=source_count,
         article_counts=article_counts,
         recent=recent,
         llm_info=llm_info,

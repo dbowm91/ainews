@@ -376,7 +376,7 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Health endpoint information disclosure**: `GET /health?detailed=true` on `public_bp` (`routes/public/__init__.py:108`) exposes git commit hash and DB pool stats without authentication. No `@require_auth` decorator is applied.
 
-**Dashboard source count**: `routes/admin/dashboard.py:127` uses `Source.query.all()` then `len(sources)` to get a count. Should use `Source.query.count()` instead.
+**Source count optimization**: `routes/admin/dashboard.py:127` uses `Source.query.count()` instead of loading all sources into memory for a count.
 
 **Template XSS in article_edit.html**: In addition to the form fields at lines 48-79, lines 11 (breadcrumb) and 24 (page title) render `article.original_title` without `|e` in `templates/admin/article_edit.html`.
 

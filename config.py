@@ -204,6 +204,10 @@ class ProductionConfig(Config):
             raise RuntimeError("DEBUG must be False in production")
         if not cls.SECRET_KEY:
             raise RuntimeError("SECRET_KEY must be set in production")
+        if len(cls.SECRET_KEY) < 32:
+            raise RuntimeError("SECRET_KEY must be at least 32 characters")
+        if not cls.SESSION_COOKIE_SECURE:
+            raise RuntimeError("SESSION_COOKIE_SECURE must be True in production")
         if not cls.ADMIN_PASSWORD:
             raise RuntimeError("ADMIN_PASSWORD must be set in production")
         from services.validation import _is_password_hash

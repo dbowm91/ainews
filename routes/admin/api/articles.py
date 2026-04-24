@@ -222,7 +222,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
 
             cache = get_response_cache()
             for article in articles:
-                cache.invalidate(f"article_detail:{article.id}")
+                cache.invalidate(f"pub:article_detail:{article.id}")
             cache.invalidate_prefix("articles:list")
             log_admin_action(
                 "article_bulk_delete",
@@ -254,7 +254,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
 
             cache = get_response_cache()
             for article in articles:
-                cache.invalidate(f"article_detail:{article.id}")
+                cache.invalidate(f"pub:article_detail:{article.id}")
             cache.invalidate_prefix("articles:list")
             log_admin_action(
                 "article_bulk_set_status",

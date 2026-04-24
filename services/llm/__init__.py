@@ -17,16 +17,26 @@ logger = logging.getLogger(__name__)
 _LLM_FAILURE_THRESHOLD = 5
 _LLM_RECOVERY_TIMEOUT = 60.0
 
+_providers_config_cache = None
+
+
+def _get_providers_config_cached():
+    global _providers_config_cache
+    if _providers_config_cache is None:
+        _providers_config_cache = load_providers_config()
+    return _providers_config_cache
+
 
 def clear_provider_cache() -> None:
     """Drop all cached LLM provider instances."""
     _manager.clear_cache()
     from services.config_cache import get_config_cache
+
     get_config_cache().invalidate_all()
 
 
 def get_provider_by_id(provider_id: str) -> BaseLLMProvider:
-    return _manager.get_cached(provider_id, load_providers_config)
+    return _manager.get_cached(provider_id, _get_providers_config_cached)
 
 
 def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
@@ -49,7 +59,7 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
     logger.warning(
         "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model
     )
-    config = load_providers_config()
+    config = _get_providers_config_cached()
     for pdef in config.providers:
         if pdef.id == rc.provider or not pdef.enabled:
             continue

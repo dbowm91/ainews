@@ -90,12 +90,6 @@ class ResponseCache:
         except redis.exceptions.RedisError as e:
             logger.warning("Cache read failed for %s: %s", key, e)
 
-        # Sampled stale eviction on read path
-        self._evict_sample_counter += 1
-        if self._evict_sample_counter >= _EVICT_SAMPLE_RATE:
-            self._evict_sample_counter = 0
-            self._evict_stale()
-
         self._misses += 1
         return None
 
@@ -111,11 +105,7 @@ class ResponseCache:
                 len(self._memory) >= _get_l1_cache_maxsize()
                 and full_key not in self._memory
             ):
-                lru_key = min(
-                    self._memory.keys(),
-                    key=lambda k: self._memory[k][1]
-                )
-                del self._memory[lru_key]
+                self._memory.popitem(last=False)
             self._memory[full_key] = (time.monotonic() + ttl, time.monotonic(), raw)
 
         # L2: Redis

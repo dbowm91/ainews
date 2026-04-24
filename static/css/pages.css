@@ -751,6 +751,7 @@
   display: block;
 }
 
+<<<<<<< HEAD
 .skeleton-table-rows { padding: 0.5rem; }
 .skeleton-row {
   display: flex; align-items: center; gap: 0.5rem;
@@ -771,4 +772,9 @@
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+.admin-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

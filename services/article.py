@@ -6,6 +6,7 @@ For pagination and FTS search, see services/pagination.py.
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
 from sqlalchemy import Column
@@ -23,15 +24,18 @@ _TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
 from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402
 from services.pagination import paginate_query, search_fts, _escape_like_pattern  # noqa: F401, E402
 
+_search_logger = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="search_log"
+)
+
 
 def _log_search_query(query: str, results_count: int) -> None:
     """Log a search query to the SearchQuery table (async fire-and-forget)."""
-    import threading
-    from models import SearchQuery
-
     def _async_log():
         try:
             from extensions import db
+            from models import SearchQuery
 
             sq = SearchQuery(query=query[:256], results_count=results_count)
             db.session.add(sq)
@@ -39,8 +43,7 @@ def _log_search_query(query: str, results_count: int) -> None:
         except Exception as e:
             logger.warning("Failed to log search query '%s': %s", query[:50], e)
 
-    thread = threading.Thread(target=_async_log, daemon=True)
-    thread.start()
+    _search_logger.submit(_async_log)
 
 
 # Threshold for Jaccard similarity on title word sets (0–1).

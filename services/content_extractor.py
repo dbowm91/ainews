@@ -11,7 +11,13 @@ import os
 
 logger = logging.getLogger(__name__)
 
-_CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="content_extract")
+CONTENT_EXTRACTOR_WORKERS = int(
+    os.environ.get("CONTENT_EXTRACTOR_WORKERS", "8")
+)
+_CONTENT_EXTRACTOR = ThreadPoolExecutor(
+    max_workers=CONTENT_EXTRACTOR_WORKERS,
+    thread_name_prefix="content_extract"
+)
 
 
 class ExtractionStatus(Enum):

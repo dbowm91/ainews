@@ -368,18 +368,18 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Duplicate detection memory bound**: `find_duplicate_titles()` loads potentially thousands of rows. Consider adding `.limit(1000).order_by(db.desc(Article.created_at))` to bound memory usage.
 
-**Layout.css duplicate `.nav-tag`**: The `.nav-tag` class is defined twice in `static/css/layout.css` — at lines 59-66 and again at lines 108-115. The second definition overrides the first with a different `font-size`. When modifying `.nav-tag`, update both definitions or consolidate to one.
+**Layout.css duplicate `.nav-tag`**: REMOVED - first definition (lines 59-66) was removed, keeping the second definition with `var(--text-xs)` at lines 108-115.
 
-**Silent exception logging in 3 locations**: Three places silently swallow exceptions without logging:
-- `services/article.py:39` — Search query logging fails silently
-- `adapters/web.py:117` — Trafilatura content extraction fails silently
-- `services/subagent.py:906` — Template variable resolution fails silently
+**Silent exception logging**: FIXED - all 3 locations now log warnings:
+- `services/article.py:39` — Search query logging now logs `logger.warning("Failed to log search query '%s': %s", query[:50], e)`
+- `adapters/web.py:117` — Trafilatura content extraction now logs `logger.warning("Content extraction failed for %s: %s", url, e)`
+- `services/subagent.py:906` — Template variable resolution now logs `logger.warning("Template resolution failed for key '%s': %s", key, e)`
 
-When fixing these, add `logger.warning()` calls before the silent `pass`.
+**LRU eviction**: FIXED - `services/cache.py` now uses O(1) `popitem(last=False)` instead of O(n) `min()` iteration.
 
-**LRU eviction uses O(n) min()**: `services/cache.py:114-118` uses `min(self._memory.keys(), key=lambda k: self._memory[k][1])` which iterates all keys to find the LRU candidate. This is O(n) and should be replaced with O(1) `popitem(last=False)` for FIFO eviction.
+**load_providers_config() caching**: FIXED - `services/llm/__init__.py` now uses module-level `_providers_config_cache` to avoid re-parsing YAML on each fallback.
 
-**load_providers_config() not cached at function level**: `services/llm/__init__.py:52` calls `load_providers_config()` directly in the fallback path when the primary circuit is open. This re-parses YAML on each fallback. Consider caching at module level.
+**Article detail cache key namespacing**: `routes/admin/api/articles.py` now uses `pub:article_detail:{id}` prefix for consistency with public cache keys.
 
 **Bulk operations validation**: `routes/admin/api/articles.py:bulk_article_operations()` uses `validate_bulk_ids()` from `services/validation.py` for integer validation on bulk IDs.
 
@@ -572,3 +572,66 @@ p50_subq = session.query(
     func.row_number().over(order_by=duration_expr).label('rn'),
 ).filter(*base_filters).subquery()
 ```
+
+**Bounded thread pools for fire-and-forget work**: Instead of spawning unbounded threads for fire-and-forget logging work, use a shared `ThreadPoolExecutor`:
+
+```python
+_search_logger = ThreadPoolExecutor(max_workers=2, thread_name_prefix="search_log")
+
+def _log_async():
+    # do work here
+    pass
+
+_search_logger.submit(_log_async)
+```
+
+Applied in `services/article.py` for search query logging.
+
+**Configurable thread pools**: ThreadPoolExecutor workers should be configurable via env var:
+
+```python
+CONTENT_EXTRACTOR_WORKERS = int(os.environ.get("CONTENT_EXTRACTOR_WORKERS", "8"))
+_CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=CONTENT_EXTRACTOR_WORKERS, ...)
+```
+
+Applied in `services/content_extractor.py`.
+
+**Precompiled regex patterns**: Hot-path regex patterns should be precompiled at module level:
+
+```python
+_PASSWORD_HASH_RE = re.compile(r"^(scrypt|pbkdf2|argon2):")
+_EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+_SOURCE_KEY_STRIP_RE = re.compile(r"[^a-z0-9\s-]")
+```
+
+Applied in `services/validation.py`, `schemas/tasks.py`, and `routes/admin/sources.py`.
+
+**Exponential backoff for retries**: Use exponential backoff with jitter instead of fixed delays:
+
+```python
+import random
+delay = min(1.0 * (2 ** attempt) + random.uniform(0, 0.5), max_delay)
+time.sleep(delay)
+```
+
+Applied in `services/subagent.py` for all retry loops.
+
+**LLM JSON extraction helper**: LLM responses may contain markdown-wrapped JSON (especially from Ollama). Use `_extract_json()` to extract before validation:
+
+```python
+from services.llm.base import _extract_json
+resp = _extract_json(raw_response)
+model = response_model.model_validate_json(resp)
+```
+
+**Structured output retry guidance**: When retrying LLM structured output validation, include the schema in the retry message for better guidance:
+
+```python
+retry_messages.append({
+    "role": "user",
+    "content": (
+        f"Your previous response failed validation: {e}.\n\n"
+        f"Expected JSON format (Pydantic schema):\n{schema_json}\n\n"
+        f"Please respond with valid JSON matching this schema exactly."
+    ),
+})

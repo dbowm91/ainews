@@ -2,7 +2,7 @@
 
 **Created:** April 22, 2026
 **Last Updated:** April 24, 2026
-**Status:** NOT STARTED — Consolidated from plans 2-12
+**Status:** IN PROGRESS — Implementation started April 24, 2026
 **Reviewed:** April 24, 2026 (verified against codebase)
 
 **Plan structure:**
@@ -1347,6 +1347,31 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 | Admin route fragmentation (webhooks) | plan5.md | Current split acceptable |
 | docs/api.md missing endpoints | plan5.md | Lower priority documentation |
 | P1.1: Tool registry auto-init | plan11.md | Optional - tools work without it |
+| Wave 4: Large Function Refactoring | plan.md | Deferred - complex, high risk |
+| Wave 6A: Test Coverage | plan.md | Deferred - complex, requires careful mocking |
+
+### Completed in this session (April 24, 2026):
+| Item | Wave | Details |
+|------|------|---------|
+| Template XSS fixes | 1A | metrics.html, article_versions.html, dashboard.html, articles_table.html, newsletters.html, source_row.html, article_edit.html |
+| Login autocomplete | 1B | Added autocomplete="current-password" to login.html |
+| Config validation | 2A | Added SECRET_KEY length and SESSION_COOKIE_SECURE validation |
+| Silent exception logging | 2B | article.py, web.py, subagent.py |
+| Regex precompilation | 2B | validation.py, tasks.py, sources.py |
+| Chain retry logic | 2C | Added retry loop with exponential backoff to run_subagent_chain |
+| Exponential backoff | 2C | run_subagent and run_subagent_with_tools |
+| Tool registry init | 2C | initialize_tool_registry() called in app.py |
+| LRU eviction O(1) | 3A | popitem(last=False) instead of min() iteration |
+| LLM config cache | 3A | Module-level _providers_config_cache |
+| Cache key namespacing | 3A | pub: prefix in routes/admin/api/articles.py |
+| Database indexes | 3B | updated_at index, source_id+pipeline_status composite |
+| N+1 fix | 3C | joinedload in _get_top_impact non-cached path |
+| Threading improvements | 3D | ThreadPoolExecutor for search logging, configurable content extractor workers |
+| CSS fixes | 5A | Removed duplicate .nav-tag, auto-fill in dashboard-grid |
+| Skeleton loading CSS | 5B | Added skeleton-* classes to pages.css |
+| Responsive/accessibility | 5C | admin-table-wrapper, empty-state h2 headings |
+| LLM JSON extraction | 6B | _extract_json() for markdown-wrapped JSON |
+| LLM validation retries | 6B | Increased to 2, include schema in retry message |
 
 ### Verified No-Action Needed:
 - Tag names in templates (plan2.md) - already escaped

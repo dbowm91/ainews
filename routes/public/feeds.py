@@ -283,25 +283,33 @@ def feed_topic(category: str) -> Response:
 @public_bp.route("/sitemap.xml")
 def sitemap() -> Response:
     from services.rss import generate_sitemap
+    from services.cache import get_response_cache
     from services.config_utils import get_config_with_default
 
-    limit = get_config_with_default("SITEMAP_LIMIT", 200, int)
+    cache = get_response_cache()
+    cache_key = "pub:sitemap:xml"
 
-    rows = (
-        Article.query.filter(
-            Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED])
+    xml = cache.get(cache_key)
+    if xml is None:
+        limit = get_config_with_default("SITEMAP_LIMIT", 200, int)
+
+        rows = (
+            Article.query.filter(
+                Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED])
+            )
+            .with_entities(Article.id, Article.created_at)
+            .order_by(Article.created_at.desc())
+            .limit(limit)
+            .all()
         )
-        .with_entities(Article.id, Article.created_at)
-        .order_by(Article.created_at.desc())
-        .limit(limit)
-        .all()
-    )
 
-    _SitemapEntry = namedtuple("SitemapEntry", ["id", "created_at"])
-    articles = [_SitemapEntry(id=r.id, created_at=r.created_at) for r in rows]
+        _SitemapEntry = namedtuple("SitemapEntry", ["id", "created_at"])
+        articles = [_SitemapEntry(id=r.id, created_at=r.created_at) for r in rows]
 
-    site_url = request.host_url.rstrip("/")
-    xml = generate_sitemap(articles, site_url=site_url)
+        site_url = request.host_url.rstrip("/")
+        xml = generate_sitemap(articles, site_url=site_url)
+        cache.set(cache_key, xml, ttl=300)
+
     return Response(
         xml,
         mimetype="application/xml",

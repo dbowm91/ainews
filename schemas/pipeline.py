@@ -138,6 +138,7 @@ class PipelineRootConfig(BaseModel):
     )
     subagent: SubagentConfig = Field(default_factory=SubagentConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    schedule: dict = Field(default_factory=dict)
 
 
 def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:

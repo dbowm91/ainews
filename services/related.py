@@ -1,8 +1,45 @@
 import logging
 
 from constants import PipelineStatus
+from services.cache import get_response_cache
 
 logger = logging.getLogger(__name__)
+
+_RELATED_CACHE_TTL = 600
+
+
+def find_related_articles_cached(article, limit: int = 5):
+    """Cached wrapper for find_related_articles with 600s TTL.
+
+    Uses cache key pub:related:{article_id}.
+    Returns Article ORM objects.
+    """
+    from models import Article
+    from sqlalchemy.orm import joinedload
+
+    cache = get_response_cache()
+    cache_key = f"pub:related:{article.id}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        article_ids = cached
+        if not article_ids:
+            return []
+
+        articles = (
+            Article.query.options(
+                joinedload(Article.tags), joinedload(Article.source)
+            )
+            .filter(Article.id.in_(article_ids))
+            .all()
+        )
+        id_to_article = {a.id: a for a in articles}
+        return [id_to_article[i] for i in article_ids if i in id_to_article]
+
+    result = find_related_articles(article, limit)
+    article_ids = [a.id for a in result]
+    cache.set(cache_key, article_ids, _RELATED_CACHE_TTL)
+    return result
 
 
 def find_related_articles(article, limit: int = 5):

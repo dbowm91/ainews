@@ -1,42 +1,43 @@
 """Tests for Celery beat schedule configuration."""
 
+import os
 from datetime import timedelta
 from celery.schedules import crontab
 
+os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["FLASK_CONFIG"] = "development"
+os.environ["SITE_URL"] = "http://localhost"
+
+from config import Config
+
 
 class TestCeleryBeatSchedule:
-    def test_celery_beat_schedule_exists(self):
-        from config import Config
-
+    def test_celery_beat_schedule_deprecated(self):
         assert hasattr(Config, "CELERY_BEAT_SCHEDULE")
         assert isinstance(Config.CELERY_BEAT_SCHEDULE, dict)
 
-    def test_all_seven_tasks_present(self):
-        from config import Config
+    def test_get_beat_schedule_returns_dict(self):
+        schedule = Config.get_beat_schedule()
+        assert isinstance(schedule, dict)
 
-        schedule = Config.CELERY_BEAT_SCHEDULE
+    def test_all_nine_tasks_present(self):
+        schedule = Config.get_beat_schedule()
         assert len(schedule) == 9
 
     def test_run_all_sources_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "run-all-sources" in schedule
         assert schedule["run-all-sources"]["task"] == "tasks.crawl.run_all_sources"
         assert schedule["run-all-sources"]["schedule"] == timedelta(minutes=30)
 
     def test_retry_stuck_articles_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "retry-stuck-articles" in schedule
         assert schedule["retry-stuck-articles"]["task"] == "tasks.retry.retry_stuck"
         assert schedule["retry-stuck-articles"]["schedule"] == timedelta(minutes=60)
 
     def test_generate_newsletters_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "generate-newsletters" in schedule
         assert (
             schedule["generate-newsletters"]["task"]
@@ -45,9 +46,7 @@ class TestCeleryBeatSchedule:
         assert schedule["generate-newsletters"]["schedule"] == crontab(hour=8, minute=0)
 
     def test_cleanup_old_logs_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "cleanup-old-logs" in schedule
         assert (
             schedule["cleanup-old-logs"]["task"]
@@ -56,9 +55,7 @@ class TestCeleryBeatSchedule:
         assert schedule["cleanup-old-logs"]["schedule"] == crontab(hour=3, minute=0)
 
     def test_cleanup_expired_verifications_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "cleanup-expired-verifications" in schedule
         assert (
             schedule["cleanup-expired-verifications"]["task"]
@@ -69,9 +66,7 @@ class TestCeleryBeatSchedule:
         )
 
     def test_publish_scheduled_articles_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "publish-scheduled-articles" in schedule
         assert (
             schedule["publish-scheduled-articles"]["task"]
@@ -82,9 +77,7 @@ class TestCeleryBeatSchedule:
         )
 
     def test_consolidate_trend_memory_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "consolidate-trend-memory" in schedule
         assert (
             schedule["consolidate-trend-memory"]["task"]
@@ -95,9 +88,7 @@ class TestCeleryBeatSchedule:
         )
 
     def test_cleanup_old_article_versions_task(self):
-        from config import Config
-
-        schedule = Config.CELERY_BEAT_SCHEDULE
+        schedule = Config.get_beat_schedule()
         assert "cleanup-old-versions" in schedule
         assert (
             schedule["cleanup-old-versions"]["task"]

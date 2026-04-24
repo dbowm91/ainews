@@ -99,9 +99,9 @@ class Config:
         if pipeline_cfg is None:
             from schemas.pipeline import load_pipeline_config
 
-            pipeline_cfg = load_pipeline_config().get("pipeline", {})
+            pipeline_cfg = load_pipeline_config()
 
-        sched = pipeline_cfg.get("schedule", {})
+        sched = pipeline_cfg.schedule
         crawl_interval = int(sched.get("crawl_interval_minutes", 30))
         retry_interval = int(sched.get("retry_stuck_interval_minutes", 60))
         cleanup_logs_hour = int(sched.get("cleanup_old_logs_hour", 3))
@@ -164,7 +164,7 @@ class Config:
         from schemas.pipeline import load_pipeline_config
 
         pipeline_cfg = load_pipeline_config()
-        new_schedule = cls.get_beat_schedule(pipeline_cfg.get("pipeline", {}))
+        new_schedule = cls.get_beat_schedule(pipeline_cfg)
         celery_app.conf.beat_schedule = new_schedule
         return new_schedule
 

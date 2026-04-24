@@ -36,16 +36,6 @@ def _reset_redis():
     _reset_singletons()
 
 
-@pytest.fixture(autouse=True)
-def _reset_factory_counter():
-    """Reset factory ID counter between tests to prevent ID collisions."""
-    import tests.factories as factories
-
-    factories._counter = 0
-    yield
-    factories._counter = 0
-
-
 @pytest.fixture
 def mock_redis():
     """Return a plain MagicMock for tests that need full control over return values."""

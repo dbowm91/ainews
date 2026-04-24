@@ -1,6 +1,4 @@
-import json
 import logging
-import threading
 import redis.exceptions
 from flask import render_template
 from sqlalchemy import func
@@ -9,9 +7,7 @@ from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
-_dashboard_cache = {}
-_dashboard_cache_lock = threading.Lock()
-_DASHBOARD_CACHE_TTL = 60
+_DASHBOARD_CACHE_TTL = 300
 
 
 def _get_dashboard_cache_key() -> str:
@@ -64,59 +60,12 @@ def dead_letters():
     )
 
 
-def _get_cached_stats(redis_client):
-    try:
-        cached = redis_client.get(_get_dashboard_cache_key())
-        if cached:
-            return json.loads(cached)
-    except (redis.exceptions.RedisError, json.JSONDecodeError):
-        pass
-    return None
-
-
-def _set_cached_stats(redis_client, data):
-    try:
-        redis_client.setex(
-            _get_dashboard_cache_key(),
-            _DASHBOARD_CACHE_TTL,
-            json.dumps(data),
-        )
-    except redis.exceptions.RedisError:
-        pass
-
-
-@admin_bp.route("/")
-@require_auth
-def dashboard():
+def _compute_dashboard_stats():
     from models import Article, Source, PipelineRun
-    from extensions import db, get_redis
+    from extensions import db
     from services.llm import get_provider_info
     from services.pipeline_monitor import get_all_stages_stats
-
-    redis_client = None
-    try:
-        redis_client = get_redis()
-        redis_client.ping()
-    except redis.exceptions.RedisError:
-        redis_client = None
-
-    if redis_client:
-        cached = _get_cached_stats(redis_client)
-        if cached:
-            return render_template(
-                "admin/dashboard.html",
-                pipeline_stats=cached["pipeline_stats"],
-                sources=cached["sources"],
-                article_counts=cached["article_counts"],
-                recent=cached["recent"],
-                llm_info=cached["llm_info"],
-                redis_ok=True,
-                total_subs=cached["total_subs"],
-                subs_by_type=cached["subs_by_type"],
-                recent_runs=cached["recent_runs"],
-                running_count=cached["running_count"],
-                pipeline_health=cached.get("pipeline_health"),
-            )
+    from services.subscribers import get_subscriber_stats
 
     pipeline_stats = dict(
         db.session.query(Article.pipeline_status, func.count(Article.id))
@@ -146,10 +95,6 @@ def dashboard():
         logger.warning("Provider info failed: %s", e)
         llm_info = {"status": "error", "error": str(e)}
 
-    redis_ok = redis_client is not None
-
-    from services.subscribers import get_subscriber_stats
-
     total_subs, subs_by_type, _ = get_subscriber_stats(db)
 
     recent_runs = (
@@ -159,56 +104,101 @@ def dashboard():
     running_count = PipelineRun.query.filter_by(status="running").count()
 
     pipeline_health = None
-    if redis_client:
-        try:
-            pipeline_health = get_all_stages_stats(minutes=15)
-        except Exception as e:
-            logger.warning("Failed to get pipeline health stats: %s", e)
+    try:
+        from extensions import get_redis
+        redis_client = get_redis()
+        redis_client.ping()
+        pipeline_health = get_all_stages_stats(minutes=15)
+    except Exception as e:
+        logger.warning("Failed to get pipeline health stats: %s", e)
 
-    if redis_client:
-        cache_data = {
-            "pipeline_stats": pipeline_stats,
-            "sources": [{"id": s.id, "name": s.name, "active": s.active} for s in sources],
-            "article_counts": article_counts,
-            "recent": [
-                {
-                    "id": a.id,
-                    "title": a.original_title,
-                    "pipeline_status": a.pipeline_status,
-                    "source_name": a.source.name if a.source else None,
-                }
-                for a in recent
-            ],
-            "llm_info": llm_info,
-            "total_subs": total_subs,
-            "subs_by_type": subs_by_type,
-            "recent_runs": [
-                {
-                    "id": r.id,
-                    "status": r.status,
-                    "started_at": r.started_at.isoformat() if r.started_at else None,
-                    "finished_at": r.finished_at.isoformat() if r.finished_at else None,
-                    "error_message": r.error_message,
-                }
-                for r in recent_runs
-            ],
-            "running_count": running_count,
-            "pipeline_health": pipeline_health,
-        }
-        _set_cached_stats(redis_client, cache_data)
+    return {
+        "pipeline_stats": pipeline_stats,
+        "sources": [{"id": s.id, "name": s.name, "active": s.active} for s in sources],
+        "article_counts": article_counts,
+        "recent": [
+            {
+                "id": a.id,
+                "title": a.original_title,
+                "pipeline_status": a.pipeline_status,
+                "source_name": a.source.name if a.source else None,
+            }
+            for a in recent
+        ],
+        "llm_info": llm_info,
+        "total_subs": total_subs,
+        "subs_by_type": subs_by_type,
+        "recent_runs": [
+            {
+                "id": r.id,
+                "status": r.status,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "error_message": r.error_message,
+            }
+            for r in recent_runs
+        ],
+        "running_count": running_count,
+        "pipeline_health": pipeline_health,
+        "source_count": source_count,
+    }
+
+
+@admin_bp.route("/")
+@require_auth
+def dashboard():
+    from extensions import get_redis
+    from services.cache import get_response_cache
+
+    redis_ok = False
+    try:
+        redis_client = get_redis()
+        redis_client.ping()
+        redis_ok = True
+
+        cache = get_response_cache()
+        cached = cache.get_or_set(
+            _get_dashboard_cache_key(),
+            _compute_dashboard_stats,
+            _DASHBOARD_CACHE_TTL,
+        )
+    except redis.exceptions.RedisError:
+        cached = None
+    except Exception as e:
+        logger.warning("Dashboard cache failed: %s", e)
+        cached = None
+
+    if cached:
+        return render_template(
+            "admin/dashboard.html",
+            pipeline_stats=cached["pipeline_stats"],
+            sources=cached["sources"],
+            article_counts=cached["article_counts"],
+            recent=cached["recent"],
+            llm_info=cached["llm_info"],
+            redis_ok=redis_ok,
+            total_subs=cached["total_subs"],
+            subs_by_type=cached["subs_by_type"],
+            recent_runs=cached["recent_runs"],
+            running_count=cached["running_count"],
+            pipeline_health=cached.get("pipeline_health"),
+            source_count=cached.get("source_count"),
+        )
+
+    cached = _compute_dashboard_stats()
 
     return render_template(
         "admin/dashboard.html",
-        pipeline_stats=pipeline_stats,
-        sources=sources,
-        source_count=source_count,
-        article_counts=article_counts,
-        recent=recent,
-        llm_info=llm_info,
+        pipeline_stats=cached["pipeline_stats"],
+        sources=cached["sources"],
+        article_counts=cached["article_counts"],
+        recent=cached["recent"],
+        llm_info=cached["llm_info"],
         redis_ok=redis_ok,
-        total_subs=total_subs,
-        subs_by_type=subs_by_type,
-        recent_runs=recent_runs,
-        running_count=running_count,
-        pipeline_health=pipeline_health,
+        total_subs=cached["total_subs"],
+        subs_by_type=cached["subs_by_type"],
+        recent_runs=cached["recent_runs"],
+        running_count=cached["running_count"],
+        pipeline_health=cached.get("pipeline_health"),
+        source_count=cached.get("source_count"),
     )

@@ -285,7 +285,6 @@ def run_stage(
             exc_article.last_error = f"{stage}: soft time limit exceeded"
             exc_article.retry_count = (exc_article.retry_count or 0) + 1
             exc_article.total_retries = (exc_article.total_retries or 0) + 1
-            exc_article.pipeline_status = "pending"
             try:
                 db.session.commit()
             except SQLAlchemyError:

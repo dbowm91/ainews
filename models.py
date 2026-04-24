@@ -137,7 +137,7 @@ class Article(db.Model):
     published_at = db.Column(db.DateTime, nullable=True, index=True)
 
     citations = db.relationship(
-        "Citation", backref="article", lazy="select", cascade="all, delete-orphan"
+        "Citation", backref="article", lazy="selectin", cascade="all, delete-orphan"
     )
     tags = db.relationship("Tag", secondary=article_tags, lazy="selectin")
     metrics = db.relationship(

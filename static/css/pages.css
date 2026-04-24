@@ -750,3 +750,25 @@
 .password-visible .eye-closed {
   display: block;
 }
+
+.skeleton-table-rows { padding: 0.5rem; }
+.skeleton-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+}
+.skeleton-cell {
+  background: var(--skeleton-base);
+  border-radius: var(--radius-sm);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-checkbox { width: 20px; height: 20px; }
+.skeleton-title { flex: 1; height: 1rem; }
+.skeleton-badge { width: 60px; height: 1rem; }
+.skeleton-score { width: 40px; height: 1rem; }
+.skeleton-date { width: 80px; height: 1rem; }
+.skeleton-actions { width: 60px; height: 1rem; }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

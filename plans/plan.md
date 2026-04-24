@@ -3,7 +3,7 @@
 **Created:** April 22, 2026
 **Last Updated:** April 24, 2026
 **Status:** COMPLETED — All waves fully implemented
-**Total Items:** ~65 across 5 waves
+**Note:** Some Wave 3 optional items deferred per below (not core to pipeline)
 
 ---
 
@@ -56,6 +56,13 @@ These items were evaluated and intentionally excluded:
 | ENV_VAR resolution warning | plan8.md | `resolve_env_var()` already returns empty string with deduplicated warnings |
 | Beat schedule reload fix | plan8.md | Verification item only, not actionable |
 | LRU Cache O(1) eviction | plan4.md | 1000-item max makes this negligible; already in Wave 5 as optional |
+| A3b: Dashboard ResponseCache | Wave 3 | Works adequately with current setex implementation |
+| A3c: Related articles caching | Wave 3 | External service adds complexity; current implementation is acceptable |
+| A3d: Sitemap caching | Wave 3 | Low-traffic endpoint; caching not critical |
+| A3e: Build pipeline | Wave 3 | Requires hosting/CI integration not present |
+| FE-001/FE-002: CSS cleanup | Wave 5 | Intentionally duplicated per AGENTS.md for inlined critical.css |
+| FE-003: Build pipeline (CSS/JS minification) | Wave 5 | Requires CI/CD build system not available |
+| A2e: Citation lazy loading | Wave 5 | Low priority - citations rarely accessed in bulk |
 
 ---
 

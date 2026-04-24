@@ -13,6 +13,7 @@ from flask import (
     Response,
     render_template,
     request,
+    session,
     jsonify,
 )
 import logging
@@ -110,6 +111,8 @@ def health() -> tuple[Response, int]:
     from services.health import run_health_checks
 
     detailed = request.args.get("detailed", "false").lower() == "true"
+    if detailed and not session.get("admin"):
+        detailed = False
     result = run_health_checks(include_celery=True, detailed=detailed)
     code = 200 if result.is_healthy else 503
     return jsonify(result.to_dict()), code

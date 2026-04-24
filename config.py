@@ -106,7 +106,6 @@ class Config:
         "cleanup-old-versions": {
             "task": "tasks.cleanup.cleanup_old_article_versions",
             "schedule": crontab(hour=3, minute=45),
-            "kwargs": {"days_to_keep": 90},
         },
         "cleanup-expired-verifications": {
             "task": "tasks.cleanup.cleanup_expired_verifications",
@@ -148,7 +147,6 @@ class Config:
         cleanup_limiter_interval = int(sched.get("cleanup_stale_limiter_interval_minutes", 5))
         newsletters_hour = int(sched.get("generate_newsletters_hour", 8))
         trend_memory_hour = int(sched.get("consolidate_trend_memory_hour", 3))
-        versions_days = int(sched.get("cleanup_old_versions_days_to_keep", 90))
 
         return {
             "run-all-sources": {
@@ -174,7 +172,6 @@ class Config:
             "cleanup-old-versions": {
                 "task": "tasks.cleanup.cleanup_old_article_versions",
                 "schedule": crontab(hour=cleanup_versions_hour, minute=45),
-                "kwargs": {"days_to_keep": versions_days},
             },
             "cleanup-expired-verifications": {
                 "task": "tasks.cleanup.cleanup_expired_verifications",
@@ -239,6 +236,8 @@ class ProductionConfig(Config):
 
     @classmethod
     def validate(cls):
+        if cls.DEBUG:
+            raise RuntimeError("DEBUG must be False in production")
         if not cls.SECRET_KEY:
             raise RuntimeError("SECRET_KEY must be set in production")
         if not cls.ADMIN_PASSWORD:

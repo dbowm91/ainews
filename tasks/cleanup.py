@@ -159,15 +159,20 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
         days_to_keep: Number of days to retain article versions.
         dry_run: If True, return what would be deleted without deleting.
     """
+    from schemas.tasks import CleanupArticleVersionsTask
+
     try:
-        from schemas.tasks import CleanupArticleVersionsTask
         validated = CleanupArticleVersionsTask(days_to_keep=days_to_keep, dry_run=dry_run)
     except Exception as e:
         logger.warning("Invalid cleanup_old_article_versions input: %s", e)
         raise TypeError(f"Invalid cleanup_old_article_versions input: {e}") from e
 
+    from services.task_security import verify_task
     from models import ArticleVersion
     from extensions import db
+
+    if not verify_task("cleanup_old_article_versions", (), {"days_to_keep": days_to_keep, "dry_run": dry_run}):
+        raise ValueError("Invalid task signature")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=validated.days_to_keep)
     try:

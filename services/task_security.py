@@ -54,8 +54,8 @@ def verify_task(task_name: str, args: tuple, kwargs: dict, secret: str | None = 
         secret: Optional secret override (defaults to CELERY_TASK_SECRET env var)
 
     Returns:
-        True if signature is valid, no secret is configured, or no signature present (internal call)
-        False if signature is invalid
+        True if signature is valid or no signature is present (internal .s() call)
+        False if signature is invalid or CELERY_TASK_SECRET is not configured
     """
     if secret is None:
         secret = _get_task_secret()

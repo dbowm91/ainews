@@ -1347,7 +1347,10 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 | Admin route fragmentation (webhooks) | plan5.md | Current split acceptable |
 | docs/api.md missing endpoints | plan5.md | Lower priority documentation |
 | P1.1: Tool registry auto-init | plan11.md | Optional - tools work without it |
-| Wave 4: Large Function Refactoring | plan.md | Deferred - complex, high risk |
+| Wave 4A.1: extract.py refactor | plan.md | Completed - extract phase functions |
+| Wave 4A.2: edit.py refactor | plan.md | Completed - extract phase functions |
+| Wave 4A.3: app.py refactor | plan.md | Deferred - high risk |
+| Wave 4A.4: subagent.py refactor | plan.md | Deferred - no clear targets |
 | Wave 6A: Test Coverage | plan.md | Deferred - complex, requires careful mocking |
 
 ### Completed in this session (April 24, 2026):
@@ -1373,6 +1376,15 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 | LLM JSON extraction | 6B | _extract_json() for markdown-wrapped JSON |
 | LLM validation retries | 6B | Increased to 2, include schema in retry message |
 | Tool registry database tools | 6C | Added get_article_by_id, search_articles, get_source_health to subagent |
+| Wave 4A.1: Extract phase functions | 4A | tasks/extract.py: _extract_content_if_needed, _create_article_record, _dispatch_after_extraction, _handle_duplicate |
+| Wave 4A.2: Extract phase functions | 4A | tasks/edit.py: _gather_editor_context, _handle_validation_and_routing, _post_finalize_article, _execute_editor_work |
+
+### Deferred (April 24, 2026):
+| Item | Source | Reason |
+|------|--------|--------|
+| Wave 4A.3: app.py service modules | plan.md | High risk - core initialization |
+| Wave 4A.4: subagent.py extract | plan.md | No clear extraction targets - logic already inline |
+| Wave 6A: Test Coverage | plan.md | Complex, requires careful mocking |
 
 ### Verified No-Action Needed:
 - Tag names in templates (plan2.md) - already escaped

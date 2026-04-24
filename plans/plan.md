@@ -2,7 +2,7 @@
 
 **Created:** April 22, 2026
 **Last Updated:** April 24, 2026
-**Status:** IN PROGRESS — Implementation started April 24, 2026
+**Status:** COMPLETED — Full plan implemented April 24, 2026
 **Reviewed:** April 24, 2026 (verified against codebase)
 
 **Plan structure:**
@@ -1372,6 +1372,7 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 | Responsive/accessibility | 5C | admin-table-wrapper, empty-state h2 headings |
 | LLM JSON extraction | 6B | _extract_json() for markdown-wrapped JSON |
 | LLM validation retries | 6B | Increased to 2, include schema in retry message |
+| Tool registry database tools | 6C | Added get_article_by_id, search_articles, get_source_health to subagent |
 
 ### Verified No-Action Needed:
 - Tag names in templates (plan2.md) - already escaped

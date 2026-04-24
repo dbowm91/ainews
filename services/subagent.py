@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
@@ -170,6 +171,95 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["topics"],
             },
             fn=_get_trend_memory,
+        )
+    )
+
+    def _get_article_by_id(article_id: int) -> str:
+        """Get article details by ID."""
+        from extensions import db
+        from models import Article
+
+        article = db.session.get(Article, article_id)
+        if not article:
+            return f'{{"error": "Article {article_id} not found"}}'
+        return json.dumps({
+            "id": article.id,
+            "title": article.title,
+            "pipeline_status": article.pipeline_status,
+            "impact_score": article.impact_score,
+            "created_at": article.created_at.isoformat() if article.created_at else None,
+        })
+
+    def _search_articles(query: str, limit: int = 5) -> str:
+        """Search articles by keyword."""
+        from models import Article
+
+        articles = Article.query.filter(
+            Article.original_title.ilike(f"%{query}%")
+        ).limit(limit).all()
+        return json.dumps([
+            {"id": a.id, "title": a.original_title} for a in articles
+        ])
+
+    def _get_source_health() -> str:
+        """Get source health summary."""
+        from models import Source
+        from extensions import db
+
+        sources = db.session.query(Source).all()
+        return json.dumps([{
+            "id": s.id,
+            "name": s.name,
+            "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
+            "consecutive_failures": s.consecutive_failures,
+        } for s in sources])
+
+    tools.append(
+        ToolDefinition(
+            name="get_article_by_id",
+            description="Get article details by ID. Returns article metadata.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "article_id": {
+                        "type": "integer",
+                        "description": "The article ID",
+                    },
+                },
+                "required": ["article_id"],
+            },
+            fn=_get_article_by_id,
+        )
+    )
+
+    tools.append(
+        ToolDefinition(
+            name="search_articles",
+            description="Search articles by keyword in title.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search keyword"},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results to return",
+                    },
+                },
+                "required": ["query"],
+            },
+            fn=_search_articles,
+        )
+    )
+
+    tools.append(
+        ToolDefinition(
+            name="get_source_health",
+            description="Get a summary of all source health status including disabled state and consecutive failures.",
+            parameters={
+                "type": "object",
+                "properties": {},
+            },
+            fn=_get_source_health,
         )
     )
 

@@ -89,7 +89,7 @@ def _build_signature_payload(task_name: str, args: tuple, kwargs: dict) -> str:
             return v.id
         return v
 
-    filtered_kwargs = {k: _sanitize_value(v) for k, v in kwargs.items() if k != "_signature"}
+    filtered_kwargs = {k: _sanitize_value(v) for k, v in kwargs.items() if k not in ("_signature", "task_name")}
     sanitized_args = tuple(_sanitize_value(a) for a in args)
 
     payload_parts = [

@@ -1075,7 +1075,7 @@ flask db upgrade
 | TEST-001 | 5 | MEDIUM | Test | DONE | conftest.py: mock_redis_client fixture added |
 | TEST-002 | 5 | MEDIUM | Test | DONE | conftest.py: _clear_dns_cache moved (autouse) |
 | TEST-003 | 5 | MEDIUM | Test | DONE | conftest.py: response_cache_setup fixture added |
-| TEST-004 | 5 | MEDIUM | Test | DONE | tests/: task_security, webhooks, trend_memory files created (stubs) |
+| TEST-004 | 5 | MEDIUM | Test | DONE | tests/: task_security (12 tests), webhooks (9 tests), trend_memory (11 tests) comprehensive implementation |
 | CQ-001 | 5 | HIGH | Dependency | DONE | requirements.txt: Redis version conflict resolved |
 | CQ-002 | 5 | MEDIUM | Error | DONE | models.py:29: Broad exception in decode_short_url |
 | CQ-003 | 5 | MEDIUM | Config | DONE | config.py: Dead beat schedule attribute (deprecated, documented) |

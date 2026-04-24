@@ -130,10 +130,11 @@ def _format_memory_for_prompt(memory_entries: list[TrendMemory]) -> str:
         sections.append("</medium_importance_trends>")
 
     if by_importance[1]:
+        now = datetime.now(timezone.utc)
         recent = [
             e
             for e in by_importance[1]
-            if e.expires_at is None or e.expires_at > datetime.now(timezone.utc)
+            if e.expires_at is None or (e.expires_at.tzinfo and e.expires_at > now) or (not e.expires_at.tzinfo and e.expires_at > now.replace(tzinfo=None))
         ]
         if recent:
             sections.append("<recent_trends>")
@@ -195,7 +196,7 @@ def propose_trend_memory(article: Article) -> SubagentResponse:
     """Ask the LLM to extract trend memory from a completed article."""
     draft = article.draft_article or ""
     topics = article.topics or []
-    summary = article.summary_snippet or ""
+    summary = article.summary or ""
 
     if not topics:
         return SubagentResponse(synthesis="", used_fallback=False, fallback_stages=[])

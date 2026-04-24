@@ -1384,7 +1384,13 @@ WAVE 6 ─┬── 6A: Test coverage (test_subagent.py)
 |------|--------|--------|
 | Wave 4A.3: app.py service modules | plan.md | High risk - core initialization |
 | Wave 4A.4: subagent.py extract | plan.md | No clear extraction targets - logic already inline |
-| Wave 6A: Test Coverage | plan.md | Complex, requires careful mocking |
+
+### Completed in this session (April 24, 2026) - ADDITIONAL:
+| Item | Wave | Details |
+|------|------|---------|
+| Wave 6A: Subagent With Tools Tests | 6A | Added TestRunSubagentWithTools with 4 tests |
+| Wave 6A: Chain Execution Tests | 6A | Added TestSubagentChain with 4 tests |
+| Wave 6A: AST Condition Evaluation | 6A | Added TestEvaluateCondition with 6 tests |
 
 ### Verified No-Action Needed:
 - Tag names in templates (plan2.md) - already escaped

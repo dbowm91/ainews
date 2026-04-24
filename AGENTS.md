@@ -205,6 +205,7 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 - **Mock Redis**: Use the `mock_redis` fixture from conftest.py for unit tests that need Redis without a running instance.
 - **Mock Celery tasks**: Use `mock_celery_tasks` fixture to prevent actual pipeline task execution in tests.
 - **App fixture**: Uses `create_app("testing")` with `monkeypatch.setenv()` for env vars. Rate limiting is disabled via `limiter.enabled = False`. Teardown (`db.session.remove()` + `db.drop_all()`) runs inside `with app.app_context():`. Tests needing the full app (with Talisman, blueprints, template filters) should use the `app` fixture. `CELERY_BROKER_URL` must be a valid Redis URL in tests — `memory://` causes `get_redis()` to fail since it uses `redis.ConnectionPool.from_url()`.
+- **Subagent tests**: `tests/test_subagent.py` includes `TestRunSubagentWithTools`, `TestSubagentChain`, and `TestEvaluateCondition` classes for testing subagent tool calling, chain execution, and AST-based condition evaluation.
 
 ## Key infrastructure patterns
 

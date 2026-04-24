@@ -531,3 +531,29 @@ When tackling multi-file changes:
 - Run `.venv/bin/ruff check . --exclude .venv` after each file change, not just at the end
 - If a change touches both tests and production code, update tests first to avoid false positives
 - For test fixture changes (`conftest.py`), run the full suite immediately — fixture changes can cause cascading failures that are hard to trace
+
+---
+
+## New patterns (April 2026 implementation)
+
+**Cache key namespacing**: All cache keys should use a namespace prefix (`pub:` for public, `llm:` for LLM, etc.) to prevent collisions with admin operations. See `routes/public/feeds.py` for key naming conventions like `pub:top_impact:{limit}`.
+
+**Redis TLS configuration**: Use conditional SSL based on URL scheme or environment. For redis 6.4.0 compatibility, only pass `ssl=True` when TLS is required:
+
+```python
+ssl_env = os.environ.get("REDIS_SSL", "").lower()
+use_ssl = ssl_env == "true" or url.startswith("rediss://")
+if use_ssl:
+    pool = redis.ConnectionPool.from_url(url, max_connections=100, ssl=True)
+else:
+    pool = redis.ConnectionPool.from_url(url, max_connections=100)
+```
+
+**SQL aggregation for SLA metrics**: Instead of loading all rows into Python, compute avg/p50/p95 using SQL window functions with `ROW_NUMBER() OVER()`:
+
+```python
+p50_subq = session.query(
+    duration_expr.label('duration'),
+    func.row_number().over(order_by=duration_expr).label('rn'),
+).filter(*base_filters).subquery()
+```

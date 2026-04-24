@@ -497,6 +497,8 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 **`SoftTimeLimitExceeded` handling**: Tasks with `soft_time_limit` should catch `billiard.exceptions.SoftTimeLimitExceeded` explicitly for graceful cleanup (rollback, error logging) before re-raising. Without this, soft timeouts fall through to generic `except Exception` handlers and are indistinguishable from actual errors. Pipeline stages handle this in `tasks/pipeline.py:run_stage()`.
 
+**Important**: When handling `SoftTimeLimitExceeded`, do NOT reset the article's `pipeline_status` to "pending" — this breaks the state machine because PENDING can only transition to RESEARCHING per `VALID_TRANSITIONS`. Instead, keep the article in its current status so it retries in-place from the stage where it timed out. Only increment retry counters and log the error before re-raising.
+
 ### Celery app cache invalidation
 
 `celery_app.py` caches Flask app instances in `_app_cache` keyed by config name. The `clear_app_cache()` function is defined in `celery_support.py` (extracted to avoid test contamination — see "Celery app cache extraction pattern" above) and must be called from the config reload endpoint (`routes/admin/api.py:reload_config`) to ensure Celery workers pick up config changes without requiring a restart.

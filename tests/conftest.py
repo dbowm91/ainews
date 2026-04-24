@@ -53,6 +53,35 @@ def mock_redis():
 
 
 @pytest.fixture
+def mock_redis_client():
+    """Return a MockRedis instance for stateful Redis testing."""
+    from tests.mock_redis import MockRedis
+    return MockRedis()
+
+
+@pytest.fixture
+def response_cache_setup(mock_redis_client):
+    """Return a ResponseCache with a MockRedis backend."""
+    from services.cache import ResponseCache
+    cache = ResponseCache()
+    cache._redis = mock_redis_client
+    return cache
+
+
+@pytest.fixture(autouse=True)
+def _clear_dns_cache():
+    """Clear DNS cache between tests to prevent cross-test contamination."""
+    try:
+        from services.url import clear_dns_cache
+    except ImportError:
+        yield
+        return
+    clear_dns_cache()
+    yield
+    clear_dns_cache()
+
+
+@pytest.fixture
 def mock_celery_tasks():
     """Mock all Celery tasks to prevent actual task execution."""
     with (

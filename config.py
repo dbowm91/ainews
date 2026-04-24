@@ -82,44 +82,8 @@ class Config:
     CELERY_BROKER_CONNECTION_RETRY = True
     CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
 
-    CELERY_BEAT_SCHEDULE = {
-        "run-all-sources": {
-            "task": "tasks.crawl.run_all_sources",
-            "schedule": timedelta(minutes=30),
-        },
-        "retry-stuck-articles": {
-            "task": "tasks.retry.retry_stuck",
-            "schedule": timedelta(minutes=60),
-        },
-        "generate-newsletters": {
-            "task": "tasks.newsletter.generate_daily_newsletters",
-            "schedule": crontab(hour=8, minute=0),
-        },
-        "cleanup-old-logs": {
-            "task": "tasks.cleanup.cleanup_old_pipeline_logs",
-            "schedule": crontab(hour=3, minute=0),
-        },
-        "consolidate-trend-memory": {
-            "task": "tasks.cleanup.consolidate_trend_memory",
-            "schedule": crontab(hour=3, minute=30),
-        },
-        "cleanup-old-versions": {
-            "task": "tasks.cleanup.cleanup_old_article_versions",
-            "schedule": crontab(hour=3, minute=45),
-        },
-        "cleanup-expired-verifications": {
-            "task": "tasks.cleanup.cleanup_expired_verifications",
-            "schedule": timedelta(minutes=15),
-        },
-        "publish-scheduled-articles": {
-            "task": "tasks.scheduler.publish_scheduled_articles",
-            "schedule": timedelta(minutes=5),
-        },
-        "cleanup-stale-limiter-slots": {
-            "task": "tasks.cleanup.cleanup_stale_limiter_slots",
-            "schedule": timedelta(minutes=5),
-        },
-    }
+    # DEPRECATED: Use get_beat_schedule() instead. Actual schedule is loaded from pipeline.yaml.
+    CELERY_BEAT_SCHEDULE = {}
 
     @classmethod
     def get_beat_schedule(cls, pipeline_cfg: dict | None = None) -> dict:

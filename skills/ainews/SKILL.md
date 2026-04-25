@@ -91,12 +91,14 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 - `retry-stuck-articles` — retry/dead-letter stuck articles every 60 min
 - `generate-newsletters` — daily at 8:00 AM
 - `cleanup-old-logs` — daily at 3:00 AM (chunked deletes, 10k rows per batch)
-- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup, chunked deletes)
 - `consolidate-trend-memory` — daily at 3:30 AM
+- `purge-trend-memory` — daily at 3:45 AM
+- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup, chunked deletes)
 - `cleanup-expired-verifications` — every 15 min
 - `publish-scheduled-articles` — every 5 min
 - `cleanup-stale-limiter-slots` — every 5 min
-- `cleanup-old-article-versions` — daily at 3:45 AM
+- `retry-failed-newsletter-deliveries` — every 2 hours
+- `recalculate-impact-scores` — daily at 4:00 AM
 
 **Scripts in `scripts/`:**
 - `backup.sh` — SQLite backup with verification

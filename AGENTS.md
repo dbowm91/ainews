@@ -166,7 +166,9 @@ Twelve scheduled tasks are configured in `config.py`:
 - `purge-trend-memory` — daily at 3:45 AM (cron)
 - `cleanup-old-article-versions` — daily at 3:45 AM (cron)
 - `publish-scheduled-articles` — every 5 minutes
+- `cleanup-stale-limiter-slots` — every 5 minutes
 - `retry-failed-newsletter-deliveries` — every 2 hours
+- `recalculate-impact-scores` — daily at 4:00 AM (cron)
 
 All schedule values are configurable via `pipeline.yaml` `schedule:` section.
 

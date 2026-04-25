@@ -1,7 +1,7 @@
 import re
 import time
 import logging
-from flask import render_template, jsonify, request
+from flask import render_template, jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit
@@ -21,7 +21,7 @@ def _generate_source_key(name: str) -> str:
 
 @admin_bp.route("/sources")
 @require_auth
-def sources():
+def sources() -> str:
     from models import Source
 
     sources = Source.query.order_by(Source.name).all()
@@ -34,7 +34,7 @@ def sources():
 
 @admin_bp.route("/sources/add", methods=["POST"])
 @require_auth
-def add_source():
+def add_source() -> str:
     from models import Source
     from extensions import db
 
@@ -88,7 +88,7 @@ def add_source():
 
 @admin_bp.route("/sources/<int:source_id>/enable", methods=["POST"])
 @require_auth
-def enable_source(source_id):
+def enable_source(source_id: int) -> tuple[Response, int]:
     from models import Source
     from extensions import db
 
@@ -105,7 +105,7 @@ def enable_source(source_id):
 
 @admin_bp.route("/sources/<int:source_id>/disable", methods=["POST"])
 @require_auth
-def disable_source(source_id):
+def disable_source(source_id: int) -> tuple[Response, int]:
     from models import Source
     from extensions import db
     from datetime import datetime, timezone

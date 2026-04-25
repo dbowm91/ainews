@@ -17,6 +17,10 @@ BASE_DIR = Path(__file__).parent
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
+    SECRET_KEY_FALLBACKS = [
+        os.environ.get("SECRET_KEY_PREVIOUS_1", ""),
+        os.environ.get("SECRET_KEY_PREVIOUS_2", ""),
+    ]
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SEND_FILE_MAX_AGE_DEFAULT = 31536000  # 1 year for static assets
@@ -133,6 +137,10 @@ class Config:
                 "task": "tasks.cleanup.consolidate_trend_memory",
                 "schedule": crontab(hour=trend_memory_hour, minute=30),
             },
+            "purge-trend-memory": {
+                "task": "tasks.cleanup.purge_trend_memory",
+                "schedule": crontab(hour=trend_memory_hour, minute=45),
+            },
             "cleanup-old-versions": {
                 "task": "tasks.cleanup.cleanup_old_article_versions",
                 "schedule": crontab(hour=cleanup_versions_hour, minute=45),
@@ -148,6 +156,14 @@ class Config:
             "cleanup-stale-limiter-slots": {
                 "task": "tasks.cleanup.cleanup_stale_limiter_slots",
                 "schedule": timedelta(minutes=cleanup_limiter_interval),
+            },
+            "retry-failed-newsletter-deliveries": {
+                "task": "tasks.newsletter.retry_failed_newsletter_deliveries",
+                "schedule": timedelta(hours=2),
+            },
+            "recalculate-impact-scores": {
+                "task": "tasks.cleanup.recalculate_impact_scores",
+                "schedule": crontab(hour=4, minute=0),
             },
         }
 

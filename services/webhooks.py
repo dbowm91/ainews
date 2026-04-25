@@ -19,10 +19,11 @@ BASE_DELAY_SECONDS = 2
 MAX_DELAY_SECONDS = 300
 
 _ENCRYPTION_KEY: bytes | None = None
+_FALLBACK_KEYS: list[bytes] = []
 
 
 def _get_encryption_key() -> bytes:
-    """Get or validate the webhook encryption key from environment."""
+    """Get or validate the primary webhook encryption key from environment."""
     global _ENCRYPTION_KEY
     if _ENCRYPTION_KEY is not None:
         return _ENCRYPTION_KEY
@@ -37,24 +38,57 @@ def _get_encryption_key() -> bytes:
             f"WEBHOOK_SECRET_KEY must be a valid Fernet key (44 base64 chars), got length {len(key)}"
         )
     _ENCRYPTION_KEY = key.encode("utf-8")
+    _load_fallback_keys()
     return _ENCRYPTION_KEY
 
 
+def _load_fallback_keys() -> None:
+    """Load fallback encryption keys for key rotation support."""
+    global _FALLBACK_KEYS
+    _FALLBACK_KEYS = []
+    fallback_vars = [
+        os.environ.get("WEBHOOK_SECRET_KEY_PREVIOUS_1", ""),
+        os.environ.get("WEBHOOK_SECRET_KEY_PREVIOUS_2", ""),
+    ]
+    from cryptography.fernet import Fernet
+
+    for key in fallback_vars:
+        if key:
+            try:
+                _FALLBACK_KEYS.append(Fernet(key.encode("utf-8")))
+            except Exception:
+                pass
+
+
 def _encrypt_secret(plaintext: str) -> str:
-    """Encrypt a webhook secret for storage. Returns base64-encoded ciphertext."""
+    """Encrypt a webhook secret for storage. Returns versioned base64-encoded ciphertext."""
     from cryptography.fernet import Fernet
 
     key = _get_encryption_key()
     f = Fernet(key)
-    return f.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+    ciphertext = f.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+    return f"v2:enc:{ciphertext}"
 
 
 def _decrypt_secret(ciphertext: str) -> str:
-    """Decrypt a stored webhook secret. Returns plaintext."""
+    """Decrypt a stored webhook secret. Handles versioned and legacy formats."""
     from cryptography.fernet import Fernet
 
     key = _get_encryption_key()
     f = Fernet(key)
+
+    if ciphertext.startswith("v2:enc:"):
+        actual_cipher = ciphertext[7:]
+        return f.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+    elif ciphertext.startswith("v1:enc:"):
+        actual_cipher = ciphertext[6:]
+        for fallback in _FALLBACK_KEYS:
+            try:
+                return fallback.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+            except Exception:
+                continue
+        raise ValueError("Failed to decrypt v1 ciphertext with fallback keys")
+
     return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
 
 
@@ -286,12 +320,18 @@ def trigger_event(
 
 
 def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> str:
-    """Decrypt webhook secret for use in dispatch. Handles legacy plaintext."""
+    """Decrypt webhook secret for use in dispatch. Handles versioned and legacy plaintext."""
     if not secret:
         return ""
-    if secret.startswith("enc:"):
+    if secret.startswith("v2:enc:"):
         try:
-            return _decrypt_secret(secret[4:])
+            return _decrypt_secret(secret)
+        except Exception:
+            logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
+            return ""
+    if secret.startswith("enc:") or secret.startswith("v1:enc:"):
+        try:
+            return _decrypt_secret(secret)
         except Exception:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
             return ""

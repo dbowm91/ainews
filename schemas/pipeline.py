@@ -200,5 +200,7 @@ def resolve_subagent_config(
             kwargs["retry_delay"] = stage_config.retry_delay
         if stage_config.task_template is not None:
             kwargs["task_template"] = stage_config.task_template
+        if stage_config.tools:
+            kwargs["tools"] = stage_config.tools
         return SubagentStageConfig(**kwargs)
     return SubagentStageConfig(enabled=False)

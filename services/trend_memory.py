@@ -175,6 +175,7 @@ def _call_llm_for_memory(
     draft: str,
     topics: list[str],
     summary: str,
+    engagement_info: str = "",
 ) -> TrendMemoryEntries:
     provider, model, max_tokens, _ = get_provider_for_role("editor")
     prompt = TREND_MEMORY_PROMPT.format(
@@ -182,6 +183,8 @@ def _call_llm_for_memory(
         topics=", ".join(topics),
         summary=esc_xml_text(summary),
     )
+    if engagement_info:
+        prompt = prompt + engagement_info
     result = provider.chat_structured(
         messages=[{"role": "user", "content": prompt}],
         response_model=TrendMemoryEntries,
@@ -192,8 +195,13 @@ def _call_llm_for_memory(
     return result
 
 
-def propose_trend_memory(article: Article) -> SubagentResponse:
-    """Ask the LLM to extract trend memory from a completed article."""
+def propose_trend_memory(article: Article, engagement_data: dict | None = None) -> SubagentResponse:
+    """Ask the LLM to extract trend memory from a completed article.
+
+    Args:
+        article: The completed article to extract memory from.
+        engagement_data: Optional dict with engagement metrics (e.g., newsletter_clicks, page_loads).
+    """
     draft = article.draft_article or ""
     topics = article.topics or []
     summary = article.summary or ""
@@ -201,8 +209,15 @@ def propose_trend_memory(article: Article) -> SubagentResponse:
     if not topics:
         return SubagentResponse(synthesis="", used_fallback=False, fallback_stages=[])
 
+    engagement_info = ""
+    if engagement_data:
+        clicks = engagement_data.get("newsletter_clicks", 0)
+        loads = engagement_data.get("page_loads", 0)
+        if clicks or loads:
+            engagement_info = f"\n\n<engagement_metrics>\nNewsletter clicks: {clicks}\nPage loads: {loads}\n</engagement_metrics>"
+
     try:
-        result = _call_llm_for_memory(draft, topics, summary)
+        result = _call_llm_for_memory(draft, topics, summary, engagement_info)
         entries = result.entries
     except Exception as e:
         get_metrics().counter_inc(
@@ -275,62 +290,52 @@ def _find_overlapping_low_entries(
 def consolidate_topic(topic: str) -> int:
     """Consolidate low-importance entries for a topic when a high-importance entry arrives.
 
-    Optimized to batch low-entry lookups: fetches all candidate low entries
-    in one query instead of N queries (one per high entry).
+    Uses a single SQL UPDATE statement instead of Python iteration for efficiency.
     """
     config = _get_config()
     if not _should_consolidate_topic(topic):
         return 0
 
-    high_entries = (
-        TrendMemory.query.filter(
+    from sqlalchemy import update
+
+    most_recent_high = (
+        db.session.query(db.func.max(TrendMemory.created_at))
+        .filter(
             TrendMemory.topic == topic,
             TrendMemory.importance == MemoryImportance.HIGH,
         )
-        .order_by(TrendMemory.created_at.desc())
-        .all()
+        .scalar()
     )
-    if not high_entries:
+    if not most_recent_high:
         return 0
 
-    most_recent_high = min(h.created_at for h in high_entries)
     window_start = most_recent_high - timedelta(
         hours=config.consolidation_merge_window_hours
     )
+    now = datetime.now(timezone.utc)
+    new_expires_at = _ttl_for_importance(MemoryImportance.MEDIUM)
 
-    candidate_lows = (
-        TrendMemory.query.filter(
+    stmt = (
+        update(TrendMemory)
+        .where(
             TrendMemory.topic == topic,
             TrendMemory.importance == MemoryImportance.LOW,
             TrendMemory.created_at >= window_start,
         )
-        .order_by(TrendMemory.created_at.desc())
-        .all()
-    )
-
-    merged = 0
-    for high in high_entries:
-        high_window_start = high.created_at - timedelta(
-            hours=config.consolidation_merge_window_hours
+        .values(
+            importance=MemoryImportance.MEDIUM.value,
+            expires_at=new_expires_at,
+            last_consolidated_at=now,
         )
-        for low in candidate_lows:
-            if low.id == high.id:
-                continue
-            if low.created_at < high_window_start:
-                break
-            low.importance = MemoryImportance.MEDIUM
-            low.expires_at = _ttl_for_importance(MemoryImportance.MEDIUM)
-            low.last_consolidated_at = datetime.now(timezone.utc)
-            merged += 1
+    )
+    result = db.session.execute(stmt)
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
 
-    if merged > 0:
-        try:
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            raise
-
-    return merged
+    return result.rowcount
 
 
 def consolidate_all_topics() -> dict[str, int]:

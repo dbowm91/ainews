@@ -3,8 +3,27 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log
 from services.llm.errors import ProviderServerError
+from services.writer import CondensedArticle
 
 logger = get_task_logger(__name__)
+
+
+def _is_degenerate_write(article_obj: CondensedArticle) -> bool:
+    """Check if condensed article is degenerate (fails quality gate).
+
+    Returns True if:
+    - Body is too short (< 500 chars)
+    - No key points (empty list)
+    - No citations (empty list)
+    """
+    body = article_obj.body or ""
+    if len(body.strip()) < 500:
+        return True
+    if not article_obj.key_points:
+        return True
+    if not article_obj.citations:
+        return True
+    return False
 
 # Error response convention:
 # - Leaf tasks: re-raise for Celery retry
@@ -31,15 +50,35 @@ def write_article(self, article_id: int, run_id=None):
         get_writer_system_prompt,
         build_writer_prompt,
     )
-    from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next
+    from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next, _transition_article_status
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("writer")
+        _transition_article_status(article, PipelineStatus.EDITING)
+
+        # Fetch trend memory if topics available
+        trend_memory = ""
+        if article.topics:
+            from services.trend_memory import (
+                get_memory_for_topics,
+                _format_memory_for_prompt,
+            )
+            trend_memory = _format_memory_for_prompt(
+                get_memory_for_topics(article.topics, min_importance=1)
+            )
+
+        # Truncate research_brief to prevent token overflow
+        from services.prompts import sliding_window_truncate
+        research_brief = sliding_window_truncate(
+            article.research_brief or "", max_chars=8000
+        )
+
         prompt = build_writer_prompt(
             title=article.original_title or "",
             topics=article.topics or [],
-            research_brief=article.research_brief or "",
+            research_brief=research_brief,
             max_key_points=rc.max_key_points or 5,
+            trend_memory=trend_memory,
         )
 
         from services.metrics import time_histogram
@@ -60,6 +99,36 @@ def write_article(self, article_id: int, run_id=None):
 
         article.draft_article = result.model_dump_json()
         article.writer_model = model
+
+        # Quality gate: validate condensed article before advancing
+        if _is_degenerate_write(result):
+            logger.warning(
+                "Condensed article failed quality gate, routing to review",
+                extra={
+                    "article_id": article.id,
+                    "body_length": len(result.body or ""),
+                    "key_points_count": len(result.key_points or []),
+                    "citations_count": len(result.citations or []),
+                },
+            )
+            _transition_article_status(article, PipelineStatus.REVIEW)
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+            if run_id:
+                _log_pipeline(
+                    run_id,
+                    "write",
+                    "warning",
+                    "Write failed quality gate, routed to review: %s",
+                    truncate_for_log(article.original_title),
+                    article_id=article.id,
+                )
+            _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+            return {"article_id": article_id, "quality_gate": "review"}
+
         article.pipeline_status = PipelineStatus.EDITING
         try:
             db.session.commit()

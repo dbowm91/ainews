@@ -8,8 +8,22 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def _get_task_secrets() -> list[str]:
+    """Get the Celery task signing secrets from environment (primary + fallbacks).
+
+    Returns:
+        List of [primary, fallback1, fallback2] secrets. Empty strings are filtered out.
+    """
+    secrets = [
+        os.environ.get("CELERY_TASK_SECRET", ""),
+        os.environ.get("CELERY_TASK_SECRET_PREVIOUS_1", ""),
+        os.environ.get("CELERY_TASK_SECRET_PREVIOUS_2", ""),
+    ]
+    return [s for s in secrets if s]
+
+
 def _get_task_secret() -> str:
-    """Get the Celery task signing secret from environment."""
+    """Get the primary Celery task signing secret from environment."""
     return os.environ.get("CELERY_TASK_SECRET", "")
 
 
@@ -55,12 +69,14 @@ def verify_task(task_name: str, args: tuple, kwargs: dict, secret: str | None = 
 
     Returns:
         True if signature is valid or no signature is present (internal .s() call)
-        False if signature is invalid or CELERY_TASK_SECRET is not configured
+        False if signature is invalid or no secrets are configured
     """
-    if secret is None:
-        secret = _get_task_secret()
+    if secret is not None:
+        secrets = [secret] if secret else []
+    else:
+        secrets = _get_task_secrets()
 
-    if not secret:
+    if not secrets:
         logger.error("CELERY_TASK_SECRET not configured — rejecting unsigned task")
         return False
 
@@ -68,13 +84,19 @@ def verify_task(task_name: str, args: tuple, kwargs: dict, secret: str | None = 
         return True
 
     received_signature = kwargs["_signature"]
-    expected_signature = hmac.new(
-        secret.encode("utf-8"),
-        _build_signature_payload(task_name, args, kwargs).encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    payload = _build_signature_payload(task_name, args, kwargs)
+    payload_bytes = payload.encode("utf-8")
 
-    return hmac.compare_digest(expected_signature, received_signature)
+    for sec in secrets:
+        expected_signature = hmac.new(
+            sec.encode("utf-8"),
+            payload_bytes,
+            hashlib.sha256,
+        ).hexdigest()
+        if hmac.compare_digest(expected_signature, received_signature):
+            return True
+
+    return False
 
 
 def _build_signature_payload(task_name: str, args: tuple, kwargs: dict) -> str:

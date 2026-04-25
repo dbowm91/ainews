@@ -10,6 +10,7 @@ from services.llm.base import BaseLLMProvider, _manager
 from schemas.llm import load_providers_config
 from schemas.pipeline import get_role_config
 from services.circuit_breaker import get_breaker, CircuitOpenError
+from services.llm.errors import RateLimitError, ProviderServerError, ProviderTimeoutError  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,20 @@ def get_provider_by_id(provider_id: str) -> BaseLLMProvider:
 def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
     """Returns (provider, model, max_tokens, provider_id) for a pipeline role.
 
-    Falls back to other enabled providers when the primary circuit is open.
-    Raises CircuitOpenError only if ALL enabled providers have open circuits.
+    Falls back to other enabled providers when the primary circuit is open OR
+    on transient errors (RateLimitError, ProviderTimeoutError, ProviderServerError, ConnectionError).
+    Raises CircuitOpenError only if ALL enabled providers have open circuits or fail.
+    """
+    for provider, model, max_tokens, provider_id in get_provider_chain(role):
+        return provider, model, max_tokens, provider_id
+    raise CircuitOpenError(f"All LLM providers failed for role: {role}")
+
+
+def get_provider_chain(role: str):
+    """Generator yielding (provider, model, max_tokens, provider_id) tuples.
+
+    Yields primary provider first, then enabled fallback providers in order.
+    Filters out providers with open circuits.
     """
     rc = get_role_config(role)
     breaker = get_breaker(
@@ -53,9 +66,9 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
     )
     if breaker.can_execute():
         provider = get_provider_by_id(rc.provider)
-        return provider, rc.model, rc.max_tokens, rc.provider
+        yield provider, rc.model, rc.max_tokens, rc.provider
 
-    # Primary circuit is open — try other enabled providers
+    # Primary circuit is open or failed — try other enabled providers
     logger.warning(
         "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model
     )
@@ -74,16 +87,12 @@ def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
         if fallback_breaker.can_execute():
             logger.info("Falling back to LLM provider %s", pdef.id)
             provider = get_provider_by_id(pdef.id)
-            return (
+            yield (
                 provider,
                 fallback_model,
                 pdef.config.get("max_tokens", rc.max_tokens),
                 pdef.id,
             )
-
-    raise CircuitOpenError(
-        f"All LLM providers have open circuits (primary: {rc.provider}/{rc.model})"
-    )
 
 
 def record_provider_success(provider_id: str, model: str, tokens_used: int = 0) -> None:

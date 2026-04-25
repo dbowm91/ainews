@@ -251,6 +251,21 @@ memory:
   max_entries_per_propose: 3
   consolidation_merge_window_hours: 72
 
+experiments:
+  prompt_variants:
+    writer:
+      control: |
+        You are a professional tech news writer. Write condensed articles
+        inspired by the Smart Brevity format — short, scannable, high-signal.
+      variant_a:
+        variant_b:
+    editor:
+      control: |
+        You are a meticulous editor for a tech news publication that values
+        brevity, clarity, and accuracy. Review the draft and improve it.
+      variant_a:
+      variant_b:
+
 schedule:
   crawl_interval_minutes: 30
   retry_stuck_interval_minutes: 60

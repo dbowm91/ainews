@@ -16,7 +16,7 @@ def _get_dashboard_cache_key() -> str:
 
 @admin_bp.route("/dead-letters")
 @require_auth
-def dead_letters():
+def dead_letters() -> str:
     from models import Article
     from constants import PipelineStatus
 
@@ -146,7 +146,7 @@ def _compute_dashboard_stats():
 
 @admin_bp.route("/")
 @require_auth
-def dashboard():
+def dashboard() -> str:
     from extensions import get_redis
     from services.cache import get_response_cache
 

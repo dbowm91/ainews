@@ -66,7 +66,10 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
     from services.pipeline_degradation import degrade_stage
 
     article.retry_count = (article.retry_count or 0) + 1
-    article.total_retries = (article.total_retries or 0) + 1
+    current_retries = article.total_retries
+    if not isinstance(current_retries, int):
+        current_retries = 0
+    article.total_retries = current_retries + 1
     article.last_error = f"{stage}: {str(exc)[:500]}"
 
     stage_failures = _track_stage_failure(article.id, stage)
@@ -76,25 +79,6 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
 
     if article.total_retries >= max_total:
         article.pipeline_status = PipelineStatus.FAILED
-        try:
-            db.session.commit()
-        except SQLAlchemyError as commit_exc:
-            db.session.rollback()
-            logger.error(
-                "Failed to commit failed status for article %s: %s",
-                article.id,
-                commit_exc,
-            )
-        if run_id:
-            logger.error(
-                "Article %s exceeded global retry budget (%s), marked as failed (run_id=%s)",
-                article.id,
-                max_total,
-                run_id,
-            )
-        logger.error(
-            "Article %s exceeded global retry budget (%s)", article.id, max_total
-        )
         return True
 
     if stage_failures >= _MAX_STAGE_FAILURES:

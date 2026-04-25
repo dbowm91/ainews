@@ -109,3 +109,9 @@ def short_url_tracking_page(short_id: str) -> str:
 def track_share_click(article_id: int) -> tuple[str, int]:
     track_metric(article_id, ArticleMetric.share_button_clicks)
     return "", 204
+
+
+@public_bp.route("/track/newsletter-click/<int:article_id>")
+def track_newsletter_click(article_id: int) -> Response:
+    track_metric(article_id, ArticleMetric.newsletter_clicks)
+    return redirect(f"/article/{article_id}", code=302)

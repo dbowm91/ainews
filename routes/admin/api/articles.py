@@ -5,6 +5,7 @@ from flask import jsonify, request, Response
 from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from routes import limit_content_length
 from constants import PipelineStatus, VALID_PIPELINE_STATUSES
 from services.task_security import get_signed_kwargs
 
@@ -40,6 +41,7 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
         log_admin_action(
             "article_bulk_set_category",
             target_type="article",
+            category="article",
             details={
                 "count": len(articles),
                 "ids": [a.id for a in articles],
@@ -101,6 +103,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             log_admin_action(
                 "article_bulk_reprocess",
                 target_type="article",
+                category="pipeline",
                 details={
                     "count": len(articles),
                     "dispatched": dispatched,
@@ -121,6 +124,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         log_admin_action(
             "article_bulk_reprocess",
             target_type="article",
+            category="pipeline",
             details={
                 "count": len(articles),
                 "dispatched": dispatched,
@@ -165,6 +169,7 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
         log_admin_action(
             "article_bulk_add_tags",
             target_type="article",
+            category="article",
             details={
                 "count": len(articles),
                 "ids": [a.id for a in articles],
@@ -181,6 +186,7 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
 @admin_bp.route("/api/articles/bulk", methods=["POST"])
 @require_auth
 @validate_csrf_json
+@limit_content_length(32768)
 def bulk_article_operations() -> tuple[Response, int] | Response:
     """Bulk operations on articles: delete, change status, change category, reprocess, add tags."""
     from models import Article
@@ -227,6 +233,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             log_admin_action(
                 "article_bulk_delete",
                 target_type="article",
+                category="article",
                 details={"count": len(articles), "ids": article_ids},
             )
         except Exception:
@@ -259,6 +266,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             log_admin_action(
                 "article_bulk_set_status",
                 target_type="article",
+                category="article",
                 details={
                     "count": len(articles),
                     "ids": article_ids,

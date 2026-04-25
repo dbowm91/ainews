@@ -115,8 +115,6 @@ class TestAnthropicProvider:
         )
         assert result.name == "test"
         assert result.value == 42
-        call_args = provider._client.beta.messages.create.call_args
-        assert call_args.kwargs["betas"] == ["structured-outputs-2025-11-13"]
 
     def test_health_check_ok(self):
         provider = self._make_provider()

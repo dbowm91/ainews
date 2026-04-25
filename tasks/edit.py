@@ -77,8 +77,10 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     )
     from services.subagent import (
         run_subagent,
+        run_subagent_with_tools,
         EditContextualizationResponse,
     )
+    from schemas.pipeline import resolve_subagent_config
 
     if not article.topics:
         return ""
@@ -98,19 +100,40 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     if not topic_notes and not related_articles and not trend_memory:
         return ""
 
-    context_result = run_subagent(
-        task_type="edit_contextualization",
-        stage="edit",
-        prompt_data={
-            "draft": article.draft_article or "",
-            "brief": article.research_brief or "",
-            "topic_notes": _format_topic_notes(topic_notes),
-            "related_articles": _format_related_articles(related_articles),
-            "trend_memory": trend_memory,
-        },
-        response_model=EditContextualizationResponse,
-        article_id=article.id,
-    )
+    # Check for tool-calling config
+    stage_config = resolve_subagent_config("edit", default_role="editor")
+    if stage_config.tools:
+        from services.subagent import initialize_tool_registry
+
+        tools = initialize_tool_registry(stage_config.tools)
+        context_result = run_subagent_with_tools(
+            task_type="edit_contextualization",
+            stage="edit",
+            prompt_data={
+                "draft": article.draft_article or "",
+                "brief": article.research_brief or "",
+                "topic_notes": _format_topic_notes(topic_notes),
+                "related_articles": _format_related_articles(related_articles),
+                "trend_memory": trend_memory,
+            },
+            response_model=EditContextualizationResponse,
+            tools=tools,
+            article_id=article.id,
+        )
+    else:
+        context_result = run_subagent(
+            task_type="edit_contextualization",
+            stage="edit",
+            prompt_data={
+                "draft": article.draft_article or "",
+                "brief": article.research_brief or "",
+                "topic_notes": _format_topic_notes(topic_notes),
+                "related_articles": _format_related_articles(related_articles),
+                "trend_memory": trend_memory,
+            },
+            response_model=EditContextualizationResponse,
+            article_id=article.id,
+        )
     if context_result.used_fallback:
         logger.warning(
             "Edit contextualization subagent failed, proceeding without context",
@@ -129,7 +152,7 @@ def _handle_validation_and_routing(
     from services.article_validation import validate_and_raise, ValidationError
     from sqlalchemy.exc import SQLAlchemyError
     from constants import PipelineStatus, truncate_for_log
-    from tasks.pipeline import _log_pipeline
+    from tasks.pipeline import _log_pipeline, _transition_article_status
 
     try:
         validate_and_raise(article.final_article)
@@ -139,7 +162,7 @@ def _handle_validation_and_routing(
             e,
             extra={"article_id": article.id},
         )
-        article.pipeline_status = PipelineStatus.REVIEW
+        _transition_article_status(article, PipelineStatus.REVIEW)
         article.last_error = f"Content validation failed: {e}"
         try:
             db.session.commit()
@@ -157,10 +180,10 @@ def _handle_validation_and_routing(
             )
         return {"article_id": article.id, "status": "review"}
 
-    from tasks.pipeline import _should_route_to_review
+    from tasks.pipeline import _should_route_to_review, _transition_article_status
 
     if _should_route_to_review(article):
-        article.pipeline_status = PipelineStatus.REVIEW
+        _transition_article_status(article, PipelineStatus.REVIEW)
         try:
             db.session.commit()
         except SQLAlchemyError:
@@ -184,10 +207,10 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
     """Post-finalize article: trend memory, webhooks, SLA metrics."""
     from datetime import datetime, timezone
     from services.metrics import get_metrics
-    from tasks.pipeline import _log_pipeline
+    from tasks.pipeline import _log_pipeline, _transition_article_status
     from constants import truncate_for_log
 
-    article.pipeline_status = PipelineStatus.DONE
+    _transition_article_status(article, PipelineStatus.DONE)
     article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     if article.crawled_at:
@@ -205,8 +228,18 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
         )
 
     try:
+        from models import ArticleMetric
+        from extensions import db
+
+        metric = db.session.get(ArticleMetric, article.id)
+        engagement_data = {}
+        if metric:
+            engagement_data = {
+                "newsletter_clicks": metric.newsletter_clicks or 0,
+                "page_loads": metric.page_loads or 0,
+            }
         from services.trend_memory import propose_trend_memory
-        propose_trend_memory(article)
+        propose_trend_memory(article, engagement_data=engagement_data)
     except Exception:
         logger.warning(
             "propose_trend_memory failed for article %s, continuing",
@@ -257,9 +290,15 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     existing_tags = _get_cached_tag_names()
     contextualization = _gather_editor_context(article, existing_tags)
 
+    # Truncate draft to prevent token overflow
+    from services.prompts import sliding_window_truncate
+    draft_truncated = sliding_window_truncate(
+        article.draft_article or "", max_chars=8000
+    )
+
     rc = get_role_config("editor")
     prompt = build_editor_prompt_with_context(
-        draft_json=article.draft_article or "",
+        draft_json=draft_truncated,
         research_brief=article.research_brief or "",
         existing_tags=existing_tags,
         max_tags=rc.max_tags or 3,

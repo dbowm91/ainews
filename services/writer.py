@@ -25,14 +25,24 @@ def build_writer_prompt(
     topics: list[str],
     research_brief: str,
     max_key_points: int = 5,
+    trend_memory: str = "",
 ) -> str:
     # User-controlled content wrapped in XML tags to separate from instructions
-    return (
-        "<input_data>\n"
-        f"  <topics>{esc_xml_text(', '.join(topics))}</topics>\n"
-        f"  <original_title>{esc_xml_text(title)}</original_title>\n"
-        f"  <research_brief>\n{esc_xml_text(research_brief)}\n  </research_brief>\n"
-        "</input_data>\n\n"
+    parts = [
+        "<input_data>\n",
+        f"  <topics>{esc_xml_text(', '.join(topics))}</topics>\n",
+        f"  <original_title>{esc_xml_text(title)}</original_title>\n",
+        f"  <research_brief>\n{esc_xml_text(research_brief)}\n  </research_brief>\n",
+    ]
+
+    if trend_memory:
+        parts.append("  <editor_memory>\n")
+        parts.append(esc_xml_text(trend_memory))
+        parts.append("\n  </editor_memory>\n")
+
+    parts.append("</input_data>\n\n")
+
+    parts.append(
         f"Write a condensed news article based on this research brief. "
         f"Include all key facts, quotes with attribution, and external context. "
         f"Include 'why_it_matters' (why this is significant) and "
@@ -41,3 +51,5 @@ def build_writer_prompt(
         f"Reference external sources and related articles from the brief in the body text. "
         f"List all citations used."
     )
+
+    return "".join(parts)

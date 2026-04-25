@@ -119,28 +119,102 @@ def cleanup_stale_limiter_slots(self):
 def consolidate_trend_memory(self):
     """Consolidate low-importance trend memory entries when high-importance entries arrive.
 
-    Runs nightly via Celery Beat. When a high-importance entry exists for a topic,
-    any overlapping low-importance entries are promoted to medium importance and TTL'd.
-    Also purges all expired entries.
+    Runs nightly via Celery Beat (3:30 AM). When a high-importance entry exists
+    for a topic, any overlapping low-importance entries are promoted to medium
+    importance and TTL'd.
     """
-    from services.trend_memory import consolidate_all_topics, purge_expired
+    from services.trend_memory import consolidate_all_topics
 
     try:
         results = consolidate_all_topics()
         total_merged = sum(results.values())
-        purged = purge_expired()
         logger.info(
-            "Trend memory consolidation: merged=%s across topics=%s, purged expired=%d",
+            "Trend memory consolidation: merged=%s across topics=%s",
             total_merged,
             results,
-            purged,
         )
-        return {"merged": total_merged, "topics": results, "purged": purged}
+        return {"merged": total_merged, "topics": results}
     except SoftTimeLimitExceeded:
         logger.error("consolidate_trend_memory exceeded soft time limit")
         raise
     except Exception as e:
         logger.error("Trend memory consolidation failed: %s", e)
+        raise
+
+
+@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
+def recalculate_impact_scores(self):
+    """Recalculate impact scores for published articles based on engagement metrics.
+
+    Runs nightly via Celery Beat (4:00 AM). Updates impact scores for articles
+    in the DONE status by incorporating newsletter clicks and page loads.
+    """
+    from models import Article, ArticleMetric
+    from extensions import db
+
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        articles = (
+            Article.query.filter(Article.pipeline_status == "done")
+            .filter(Article.published_at >= cutoff)
+            .join(ArticleMetric, Article.id == ArticleMetric.article_id)
+            .all()
+        )
+
+        updated = 0
+        for article in articles:
+            metric = article.metrics
+            if metric:
+                clicks = metric.newsletter_clicks or 0
+                loads = metric.page_loads or 0
+                engagement_score = min((clicks * 10 + loads * 2) / 10, 50)
+                if article.impact_score < engagement_score:
+                    article.impact_score = int(engagement_score)
+                    updated += 1
+
+        if updated > 0:
+            db.session.commit()
+            logger.info("Recalculated impact scores: updated %d articles", updated)
+        else:
+            logger.info("Recalculate impact scores: no articles needed updating")
+
+        return {"updated": updated}
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        logger.error("recalculate_impact_scores exceeded soft time limit")
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error("Recalculate impact scores failed: %s", e)
+        raise
+
+
+@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
+def purge_trend_memory(self):
+    """Purge expired trend memory entries from the database.
+
+    Runs nightly via Celery Beat (3:45 AM). Removes all entries whose
+    expires_at timestamp has passed.
+    """
+    from services.trend_memory import purge_expired
+
+    try:
+        purged = purge_expired()
+        logger.info("Trend memory purge: removed %d expired entries", purged)
+        return {"purged": purged}
+    except SoftTimeLimitExceeded:
+        logger.error("purge_trend_memory exceeded soft time limit")
+        raise
+    except Exception as e:
+        logger.error("Trend memory purge failed: %s", e)
         raise
 
 

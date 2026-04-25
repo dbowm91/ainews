@@ -4,7 +4,7 @@ This guide covers enabling fallback providers, configuring fallback chains per p
 
 ## Overview
 
-The application supports multiple LLM providers defined in `providers.yaml`. By default, only the primary provider is enabled. Fallback providers allow the pipeline to continue operating when the primary provider is unavailable.
+The application supports multiple LLM providers defined in `providers.yaml`. By default, only the primary provider is enabled. Fallback providers allow the pipeline to continue when the primary provider is unavailable.
 
 ## Provider Configuration
 
@@ -18,75 +18,76 @@ providers:
     name: Ollama (Local)
     type: ollama
     enabled: true
-    models:
-      - name: qwen3:8b
-        max_tokens: 4096
-    roles:
-      - researcher
-      - writer
-      - editor
+    config:
+      host: "http://localhost:11434"
+      model: "qwen3:8b"
+      max_tokens: 4096
 
   - id: openai-backup
     name: OpenAI (Backup)
     type: openai
     enabled: false
-    api_key_env: OPENAI_API_KEY
-    models:
-      - name: gpt-4o-mini
-        max_tokens: 4096
-    roles:
-      - researcher
-      - writer
-      - editor
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      base_url: "https://api.openai.com/v1"
+      model: "gpt-4o-mini"
+      max_tokens: 4096
 ```
 
 ### Enabling a Fallback Provider
 
 1. Set `enabled: true` for the provider in `providers.yaml`
 2. Ensure required environment variables are set (e.g., `OPENAI_API_KEY`)
-3. Assign the provider to one or more `roles` (researcher, writer, editor)
+3. Assign the provider to one or more `roles` if using multi-provider fallback
 4. Reload config via `POST /admin/api/config/reload` or restart workers
 
-## Fallback Chains Per Stage
+## Supported Provider Types
 
-The circuit breaker in `services/llm/base.py` automatically falls back to the next available provider for a given role when the primary provider fails.
+| Type | Adapter | Providers |
+|------|---------|-----------|
+| `ollama` | `services/llm/ollama.py` | Ollama (local models) |
+| `openai` | `services/llm/openai.py` | OpenAI, DeepSeek, MiniMax, Groq, TogetherAI, Fireworks, Cerebras, xAI, Zai, OpenRouter, OpenCode |
+| `anthropic` | `services/llm/anthropic.py` | Anthropic Claude |
+| `gemini` | `services/llm/gemini.py` | Google Gemini |
 
-### How Fallback Selection Works
+All `openai`-type providers use the OpenAI-compatible adapter and work with any API that follows the OpenAI chat completions format.
 
-1. `get_provider_for_role(stage)` returns the first enabled provider for the stage's role
-2. If that provider's circuit breaker is OPEN, the next enabled provider is tried
-3. If all providers for a role are unavailable, the stage degrades per `services/pipeline_degradation.py`
+## Provider List
 
-### Configuring Stage-Specific Fallbacks
+### Local Providers
 
-To create a fallback chain for a specific stage:
+| ID | Model | Cost | Notes |
+|----|------|------|-------|
+| `ollama-local` | `qwen3:8b` | Free | Local Ollama instance |
 
-```yaml
-# providers.yaml - multiple providers for the same role
-providers:
-  - id: ollama-local
-    type: ollama
-    enabled: true
-    roles: [researcher]
+### OpenAI-Compatible Providers
 
-  - id: openai-backup
-    type: openai
-    enabled: true
-    roles: [researcher]
+| ID | Base URL | Models | Cost |
+|----|---------|--------|-------|
+| `openai` | api.openai.com | gpt-4o, gpt-4o-mini, gpt-4-turbo | $2.50/$10.00 per 1M tokens |
+| `deepseek` | api.deepseek.com | deepseek-chat | $0.27/$1.10 per 1M tokens |
+| `minimax` | api.minimax.io | MiniMax-M2.5 | $0.20/$1.10 per 1M tokens |
+| `gemini` | Google API | gemini-2.0-flash | $0.10/$0.40 per 1M tokens |
+| `groq` | api.groq.com | llama-3.3-70b-versatile | $0.59/$0.79 per 1M tokens |
+| `openrouter` | openrouter.ai | claude-3.5-sonnet | $3.00/$15.00 per 1M tokens |
+| `xai` | api.x.ai | grok-2-1212 | $2.00/$10.00 per 1M tokens |
+| `togetherai` | api.togetherai.com | llama-3-70b-chat-hf | $0.80/$0.80 per 1M tokens |
+| `fireworks` | api.fireworks.ai | llama-v3-70b-instruct | $0.80/$0.80 per 1M tokens |
+| `cerebras` | api.cerebras.ai | llama-3.3-70b | $0.85/$1.20 per 1M tokens |
+| `zai` | open.bigmodel.cn | glm-4 | $1.40/$1.40 per 1M tokens |
+| `opencode` | api.opencode.ai | opencode | varies |
 
-  - id: anthropic-backup
-    type: anthropic
-    enabled: true
-    roles: [researcher]
-```
+### Anthropic Provider
 
-Priority is determined by order in `providers.yaml` — earlier entries are tried first.
+| ID | Models | Cost |
+|----|--------|-------|
+| `anthropic` | claude-sonnet-4-5-20250929 | Pricing from anthropic.com |
 
 ## Circuit Breaker
 
 ### Configuration
 
-The circuit breaker is configured per provider in `providers.yaml`:
+The circuit breaker is configured per provider:
 
 ```yaml
   - id: openai-backup
@@ -94,7 +95,7 @@ The circuit breaker is configured per provider in `providers.yaml`:
     enabled: true
     circuit_breaker:
       failure_threshold: 5      # failures before opening
-      recovery_timeout: 60      # seconds before attempting recovery
+      recovery_timeout: 60        # seconds before attempting recovery
       half_open_max_calls: 1    # test calls in half-open state
 ```
 
@@ -116,35 +117,14 @@ Circuit breaker state changes are emitted as:
 
 1. Start the application with multiple providers enabled
 2. Make the primary provider unavailable (e.g., stop Ollama)
-3. Trigger a pipeline run via `POST /admin/api/pipeline/run`
-4. Check logs for circuit breaker state changes:
-   ```
-   Circuit breaker for ollama-local: CLOSED -> OPEN
-   Falling back to openai-backup for researcher role
-   ```
-
-### Automated Testing
-
-```python
-# tests/test_circuit_breaker.py
-def test_circuit_breaker_failover():
-    """Verify fallback provider is used when primary fails."""
-    # Configure primary with circuit breaker that opens after 1 failure
-    # Trigger a request that fails
-    # Verify secondary provider was used
-    pass
-```
+3. Trigger a pipeline run
+4. Check logs for circuit breaker state changes
 
 ### Verifying Failover in Production
 
 1. Check circuit breaker metrics at the admin stats endpoint
-2. Monitor `circuit_breaker.state_change` counter in your metrics dashboard
-3. Set up alerts for OPEN transitions:
-   ```
-   alert: CircuitBreakerOpen
-   expr: rate(circuit_breaker.opened[5m]) > 0
-   for: 1m
-   ```
+2. Monitor `circuit_breaker.state_change` counter
+3. Set up alerts for OPEN transitions
 
 ## Troubleshooting
 
@@ -159,8 +139,6 @@ Check degradation metrics via `pipeline.degradation` counter.
 
 ### Provider Health Checks
 
-Each provider exposes a `health_check()` method. Check provider status:
-
 ```python
 from services.llm import get_provider_for_role
 
@@ -170,11 +148,9 @@ health = provider.health_check()
 
 ### Reloading Configuration
 
-After modifying `providers.yaml`, reload without restarting:
-
 ```bash
 curl -X POST http://localhost:5000/admin/api/config/reload \
-  -H "Authorization: Bearer <token>"
+  -H "X-CSRFToken: ..."
 ```
 
 This clears the provider cache and reinitializes all providers.

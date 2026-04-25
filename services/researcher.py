@@ -32,6 +32,8 @@ def build_research_prompt(
     related_articles: list[dict],
     max_text_length: int = 6000,
     web_synthesis: str = "",
+    topic_notes: str = "",
+    trend_memory: str = "",
 ) -> str:
     # User-controlled content is wrapped in XML tags to separate from instructions
     parts = [
@@ -46,6 +48,18 @@ def build_research_prompt(
         "</source_article>",
         "",
     ]
+
+    if topic_notes:
+        parts.append("<topic_notes>")
+        parts.append(esc_xml_text(topic_notes))
+        parts.append("</topic_notes>")
+        parts.append("")
+
+    if trend_memory:
+        parts.append("<editor_memory>")
+        parts.append(esc_xml_text(trend_memory))
+        parts.append("</editor_memory>")
+        parts.append("")
 
     if web_synthesis:
         parts.append("<external_sources_synthesis>")

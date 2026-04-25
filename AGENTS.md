@@ -64,7 +64,7 @@ Only the admin login lockout remains (`routes/admin/auth.py` and `routes/admin/_
 
 SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — articles are written once by Celery workers, then served thousands of times by Flask. PostgreSQL adds operational overhead (connection pooling, separate process, vacuuming) with no benefit at this scale. Do not suggest or add PostgreSQL support.
 
-### Existing capabilities to be aware of
+## Existing capabilities to be aware of
 
 - **Config cache reload**: `POST /admin/api/config/reload` (`routes/admin/api.py`) clears all cached configs and LLM provider instances. Validates config before reload — returns 400 if invalid. Call this after config changes rather than building new invalidation.
 - **Subscriber validation**: Newsletter type is validated against known topic keys (`routes/public.py`). Invalid types default to "main".
@@ -91,10 +91,13 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
 - **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin UI at `/admin/webhooks` displays webhook list and event history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
 - **DEBUG warning in production**: `app.py` logs a warning if `DEBUG=True` in production context.
+- **Cost tracking**: `services/cost_tracker.py` tracks LLM costs with admin endpoint `GET /admin/api/costs`. Pricing for some newer providers (DeepSeek, MiniMax, Gemini 2.0 Flash, Groq) may need to be added to `_DEFAULT_RATES`.
 
-### Subagent system
+## Subagent system
 
 `services/subagent.py` provides `run_subagent()` for running lightweight subagent tasks synchronously within parent Celery tasks. Uses `services/context_service.py` for topic note CRUD and related article lookup. Configuration in `pipeline.yaml` under `subagent:` section. Failures degrade gracefully — subagent errors never crash the parent pipeline.
+
+**Tool-calling infrastructure exists but is not used in production:** `run_subagent_with_tools()` exists in `services/subagent.py:608-787` and all providers support `chat_with_tools()`, but `resolve_subagent_config()` does not pass the `tools` field through to the returned config. This is a planned enhancement.
 
 ### Trend memory system
 
@@ -108,11 +111,11 @@ Key components:
 
 The editor subagent template (`edit_contextualization` in `services/subagent.py`) includes `{trend_memory}` which is resolved at call time in `tasks/edit.py`.
 
-### LLM provider support
+## LLM provider support
 
 MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`). Enable by setting `enabled: true` in `providers.yaml` and providing `MINIMAX_API_KEY`. DeepSeek and Zai (BigModel.cn) are also pre-configured as OpenAI-compatible providers. All providers use `DEFAULT_LLM_TIMEOUT_SECONDS` (120.0s) from `constants.py` — do not hardcode timeout values in provider files.
 
-### CSS module architecture
+## CSS module architecture
 
 `static/css/style.css` imports from focused modules in `static/css/`:
 - `variables.css` — Theme variables with semantic aliases
@@ -133,11 +136,11 @@ MiniMax is supported via the OpenAI-compatible adapter (`services/llm/openai.py`
 
 Add new rules to the appropriate module, not to `style.css` directly.
 
-### API response format
+## API response format
 
 All error responses (4xx/5xx) use `{"error": "..."}`. Success responses (2xx) use `{"message": "..."}`. Do not mix conventions.
 
-### Redis error handling
+## Redis error handling
 
 Always catch `redis.exceptions.RedisError` (not bare `Exception`) for Redis operations in `services/`, `routes/`, and `tasks/`. This includes `ModelLimiter`, `ConfigCache`, and lock operations. Import as `import redis.exceptions` at module level.
 
@@ -146,13 +149,13 @@ In tests, import `ConnectionError as RedisConnectionError` directly to avoid sha
 from redis.exceptions import ConnectionError as RedisConnectionError
 ```
 
-### Celery task locking
+## Celery task locking
 
 Distributed locks in Celery tasks must be retry-aware. Use the task's `self.request.id` as the lock value so that retries from the same task can re-acquire, while different concurrent tasks are still blocked. See `tasks/newsletter.py:generate_daily_newsletters` for the pattern. Always use `try/finally` for lock cleanup.
 
-### Celery beat schedule
+## Celery beat schedule
 
-Six scheduled tasks are configured in `config.py`:
+Nine scheduled tasks are configured in `config.py`:
 - `run-all-sources` — crawl all sources every 30 minutes
 - `retry-stuck-articles` — retry stuck articles every 60 minutes
 - `generate-newsletters` — daily at 8:00 AM (cron)
@@ -163,11 +166,13 @@ Six scheduled tasks are configured in `config.py`:
 - `cleanup-old-article-versions` — daily at 3:45 AM (cron)
 - `publish-scheduled-articles` — every 5 minutes
 
-### Model column defaults
+All schedule values are configurable via `pipeline.yaml` `schedule:` section.
+
+## Model column defaults
 
 When adding columns with `server_default` in migrations, also set `nullable=False` in the Python model definition. SQLAlchemy won't enforce NOT NULL without it — a code path that creates a row without the field will insert NULL, potentially breaking downstream comparisons.
 
-### DNS cache in SSRF validation
+## DNS cache in SSRF validation
 
 `services/url.py` uses a bounded `_TTLCache` (1024 entries, 60s TTL) to prevent DNS rebinding between validation and fetch. The 60-second TTL reduces the attack window. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
 ```python
@@ -180,25 +185,25 @@ def _clear_dns_cache():
     _dns_cache.clear()
 ```
 
-### Content extraction timeout
+## Content extraction timeout
 
 `services/content_extractor.py` sets `DOWNLOAD_TIMEOUT=30` via trafilatura config. Do not remove this — without it, slow sites block the pipeline indefinitely.
 
-### Login lockout
+## Login lockout
 
 The login lockout mechanism has two code paths: primary Redis-based (via Lua script) and in-memory fallback for when Redis is unavailable. Both are intentional — do not remove the fallback path.
 
-### Session fixation prevention
+## Session fixation prevention
 
 On successful admin login, use `session.clear()` before setting `session["admin"] = True`. Flask will issue a new session cookie on the next response after the session is modified. See `routes/admin/auth.py:55-57`.
 
 **Note**: `session.clear()` is sufficient for session fixation prevention in Flask 3.x. The `SecureCookieSession` class does not have a `regenerate_id()` method.
 
-### Pipeline retry budget
+## Pipeline retry budget
 
 Articles have a `total_retries` column (incremented on every stage failure). When `total_retries >= MAX_TOTAL_RETRIES` (10), the article is marked `pipeline_status="failed"` and skipped. The admin route `reprocess_article` resets this on manual reprocessing.
 
-### Test conventions
+## Test conventions
 
 - **Factories**: Use `tests/factories.py` (`create_source`, `create_article`, `create_tag`, `create_subscriber`, `seed_articles`). These are available as fixtures via `tests/conftest.py`.
 - **Autouse fixtures**: `_reset_redis` (conftest.py) resets the Redis singleton between tests. `_clear_dns_cache` (url.py) clears DNS cache. Do not create additional autouse fixtures without careful consideration.
@@ -206,6 +211,7 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 - **Mock Celery tasks**: Use `mock_celery_tasks` fixture to prevent actual pipeline task execution in tests.
 - **App fixture**: Uses `create_app("testing")` with `monkeypatch.setenv()` for env vars. Rate limiting is disabled via `limiter.enabled = False`. Teardown (`db.session.remove()` + `db.drop_all()`) runs inside `with app.app_context():`. Tests needing the full app (with Talisman, blueprints, template filters) should use the `app` fixture. `CELERY_BROKER_URL` must be a valid Redis URL in tests — `memory://` causes `get_redis()` to fail since it uses `redis.ConnectionPool.from_url()`.
 - **Subagent tests**: `tests/test_subagent.py` includes `TestRunSubagentWithTools`, `TestSubagentChain`, and `TestEvaluateCondition` classes for testing subagent tool calling, chain execution, and AST-based condition evaluation.
+- **Test mock return values**: When updating mocks for LLM provider responses, ensure the mock returns an object with `.tokens_used` attribute, not just a dict. Pipeline code expects this attribute on response objects.
 
 ## Key infrastructure patterns
 
@@ -499,7 +505,7 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 **ThreadPoolExecutor shutdown**: When implementing timeouts with `ThreadPoolExecutor`, use `executor.shutdown(wait=False, cancel_futures=True)` in the `finally` block — not a `with` context manager. The context manager calls `shutdown(wait=True)` which blocks indefinitely, negating the timeout. Python 3.9+ supports `cancel_futures=True` (project uses 3.12).
 
-### Refactored Functions (April 2026)
+### Refactored Functions
 
 **tasks/extract.py phase functions**:
 | Function | Description |
@@ -570,7 +576,7 @@ When tackling multi-file changes:
 
 ---
 
-## New patterns (April 2026 implementation)
+## New patterns
 
 **Cache key namespacing**: All cache keys should use a namespace prefix (`pub:` for public, `llm:` for LLM, etc.) to prevent collisions with admin operations. See `routes/public/feeds.py` for key naming conventions like `pub:top_impact:{limit}`.
 
@@ -656,3 +662,4 @@ retry_messages.append({
         f"Please respond with valid JSON matching this schema exactly."
     ),
 })
+```

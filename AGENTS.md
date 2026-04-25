@@ -373,22 +373,13 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **SLA metrics sort optimization**: `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats, reducing from 6 sorts (3 metrics × 2 `_sorted_stats` calls each) to 3 sorts. This matters for large result sets.
 
-**Duplicate detection memory bound**: `find_duplicate_titles()` loads potentially thousands of rows. Consider adding `.limit(1000).order_by(db.desc(Article.created_at))` to bound memory usage.
+**Duplicate detection memory bound**: `find_duplicate_titles()` uses `.limit(1000).order_by(Article.created_at.desc())` to bound memory usage. The function breaks on first match so the full limit rarely loads. `TITLE_SIMILARITY_THRESHOLD` (0.5) is defined at `services/article.py:51`, NOT in `constants.py`.
 
-**Layout.css duplicate `.nav-tag`**: REMOVED - first definition (lines 59-66) was removed, keeping the second definition with `var(--text-xs)` at lines 108-115.
+**Article detail cache key namespacing**: Admin article routes use `pub:article_detail:{id}` prefix for consistency with public cache keys.
 
-**Silent exception logging**: FIXED - all 3 locations now log warnings:
-- `services/article.py:39` — Search query logging now logs `logger.warning("Failed to log search query '%s': %s", query[:50], e)`
-- `adapters/web.py:117` — Trafilatura content extraction now logs `logger.warning("Content extraction failed for %s: %s", url, e)`
-- `services/subagent.py:906` — Template variable resolution now logs `logger.warning("Template resolution failed for key '%s': %s", key, e)`
+**Bulk operations validation**: `bulk_article_operations()` uses `validate_bulk_ids()` from `services/validation.py` for integer validation on bulk IDs.
 
-**LRU eviction**: FIXED - `services/cache.py` now uses O(1) `popitem(last=False)` instead of O(n) `min()` iteration.
-
-**load_providers_config() caching**: FIXED - `services/llm/__init__.py` now uses module-level `_providers_config_cache` to avoid re-parsing YAML on each fallback.
-
-**Article detail cache key namespacing**: `routes/admin/api/articles.py` now uses `pub:article_detail:{id}` prefix for consistency with public cache keys.
-
-**Bulk operations validation**: `routes/admin/api/articles.py:bulk_article_operations()` uses `validate_bulk_ids()` from `services/validation.py` for integer validation on bulk IDs.
+**Silent exception handlers**: When encountering `except Exception: pass` or `except Exception: return fallback`, add `logger.debug()` or `logger.warning()` to aid debugging. Exceptions should not be silently swallowed unless the catch is for a deliberate fallback (e.g., cache miss -> direct fetch). Use %-formatting in log calls.
 
 **Redis version conflict**: `requirements.txt` says `redis>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`. Use `pyproject.toml` as source of truth — the codebase runs with 6.4.0.
 
@@ -663,3 +654,25 @@ retry_messages.append({
     ),
 })
 ```
+
+## Codebase verification notes
+
+**`TITLE_SIMILARITY_THRESHOLD` location**: Defined at `services/article.py:51`, NOT in `constants.py`. Used as default parameter at line 262. Do not look for it in constants.
+
+**`Article.updated_at` index**: Exists at the database level via migration `026_article_updated_at_index.py`, but the SQLAlchemy model definition (`models.py:128-131`) does NOT have `index=True`. This means `db.create_all()` in tests won't create the index.
+
+**`traced_stage()` unused**: Defined at `services/logging_utils.py:262-281` but never called anywhere. Meanwhile `traced_llm_call()` IS used in all four pipeline stage tasks. Do not assume `traced_stage()` is wired into anything.
+
+**Config reload endpoint gap**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` clears config/provider/app caches but does NOT call `Config.reload_beat_schedule()`. The reload endpoint file is `routes/admin/api/config.py`, not `routes/admin/api.py`.
+
+**Metric naming uses dots**: Metrics use dot-separated names (e.g., `circuit_breaker.state_change`, `pipeline.stage_duration_seconds`), NOT underscores. This is consistent with the `MetricsCollector._make_key()` behavior at `services/metrics.py:60-65`.
+
+**Research stage context**: Research stage (`tasks/research.py`) has related articles via `find_related_articles_dicts()` at lines 100-103, but does NOT have topic notes or trend memory. Edit stage has all three (topic notes, related articles, trend memory). Write stage has no additional context beyond research brief.
+
+**`resolve_subagent_config()` drops `tools`**: The function at `schemas/pipeline.py:175-204` builds kwargs from `SubagentStageConfig` but omits the `tools` field (defined at line 101). Tool-calling infrastructure (`run_subagent_with_tools()`, tool definitions, `initialize_tool_registry()`) exists but is not wired through the config resolution path.
+
+**Test work function return types**: Test work functions in `tests/test_pipeline_e2e.py` return plain dicts, but `run_stage()` at `tasks/pipeline.py:257-259` accesses `.tokens_used` on the result. Test work functions should return `LLMResponse` instances or `SimpleNamespace` objects with `.tokens_used`, not plain dicts.
+
+**Pipeline state machine enforcement**: `_transition_article_status()` is defined at `tasks/pipeline.py:127-145` but only called once (line 241). All pipeline task files (`tasks/select.py`, `tasks/research.py`, `tasks/write.py`, `tasks/edit.py`, `services/pipeline_failure.py`) use direct `article.pipeline_status = PipelineStatus.X` assignment instead.
+
+**Config reload file location**: The config reload endpoint is in `routes/admin/api/config.py`, not `routes/admin/api.py`. The `routes/admin/api/` directory contains multiple files (`__init__.py`, `articles.py`, `config.py`, `pipeline.py`, `webhooks.py`).

@@ -2,547 +2,792 @@
 
 **Created:** April 25, 2026
 **Last Updated:** April 25, 2026
-**Status:** PLANNED — Not yet implemented
-**Source:** Consolidated from plan.md, plan2.md, plan3.md, plan4.md, plan5.md, plan6.md, plan7.md, plan9.md
+**Status:** PLANNED -- Not yet implemented
 
 ---
 
 ## Overview
 
-This plan consolidates all pending implementation items from 8 plan files into a single coherent roadmap with wave-based parallelization. Items are grouped into waves that can be implemented in parallel by sub-agents.
+This plan consolidates all pending implementation items into a single roadmap organized by execution batch. Within each batch, items can be implemented in parallel by sub-agents. Batches are ordered by dependency -- earlier batches should complete before later ones start.
 
-**Wave Structure:**
-- Wave 1: Quick wins (standalone, low risk)
-- Wave 2: Testing infrastructure
-- Wave 3: Core performance & reliability
-- Wave 4: Agent harness improvements
-- Wave 5: Security hardening
-- Wave 6: UI/UX improvements
-- Wave 7: Architecture & infra
-- Wave 8: Advanced agent features
-- Wave 9: Documentation
+**Execution Structure:**
+
+| Batch | Contents | Sub-agents | Prerequisites |
+|-------|----------|------------|---------------|
+| A | Quick wins, UI/UX, small infra fixes | 8-10 | None |
+| B | Testing, performance, security, architecture | 8-10 | None |
+| C | Agent harness improvements | 5 | Batch A.3 (session pooling) recommended |
+| D | Advanced agent features, documentation | 5-6 | Batch C recommended |
+
+Batches A and B can run **in parallel** with each other. Batch C can start once Batch A is mostly done. Batch D follows Batch C.
 
 ---
 
-## Wave 1: Quick Wins
+## Batch A: Quick Wins & UI/UX
 
-*Independent, low-effort items that provide immediate value. Can be implemented in parallel.*
+*Independent items that provide immediate value. All can be implemented in parallel by different sub-agents.*
 
-### 1.1 Precompile Regex in `services/llm/base.py`
+---
 
-**Source:** plan2.md Priority 1
+### A.1 Precompile Regex in `services/llm/base.py`
+
 **Files:** `services/llm/base.py`
-**Status:** NOT YET DONE — regex still compiled inline at lines 36 and 45
+**Effort:** Small (5 min)
 
-**Current code (lines 36, 45):**
+**Current code (lines 36, 45) inside `_extract_json()`:**
 ```python
 match = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw, re.MULTILINE)
 match = re.search(r'\{[\s\S]*\}', raw)
 ```
 
-**Fix:** Add module-level precompiled patterns:
+These patterns are recompiled on every call to `_extract_json()`, which is called from two hot-path locations (lines 199 and 239) in the same file.
+
+**Fix:** Add module-level precompiled patterns near the top of the file:
 ```python
-_JSON_BLOCK_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
-_JSON_BRACES_RE = re.compile(r'\{[\s\S]*\}')
+_MARKDOWN_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
+_BRACE_JSON_RE = re.compile(r'\{[\s\S]*\}')
 ```
 
-**Verification:** Run LLM adapter tests after change.
+Then update `_extract_json()` to use `_MARKDOWN_JSON_RE.search(raw)` and `_BRACE_JSON_RE.search(raw)`.
+
+**Follows convention in:** `services/validation.py`, `schemas/tasks.py`, `routes/admin/sources.py` (all use module-level precompiled regex, documented in AGENTS.md).
+
+**Verification:** `pytest tests/test_llm_adapters/ -x -q`
 
 ---
 
-### 1.2 Add Logging to Bare Excepts (6 locations)
+### A.2 Add Logging to Silent Exception Handlers (4 locations)
 
-**Source:** plan2.md Priority 4
-**Files:** `tasks/extract.py`, `services/content_extractor.py`, `services/llm/__init__.py`, `services/trend_detector.py`, `services/health.py`
+**Files:** `services/content_extractor.py`, `services/llm/__init__.py`, `services/trend_detector.py`, `services/health.py`
+**Effort:** Small (10 min)
 
-| Line | File | Fix |
-|------|------|-----|
-| 343 | `tasks/extract.py` | `logger.warning("Metrics increment failed: %s", e)` |
-| 60 | `services/content_extractor.py` | `logger.warning("Content extraction failed: %s", e)` |
-| 127 | `services/llm/__init__.py` | `logger.warning("Cache fallback triggered: %s", e)` |
-| 83 | `services/trend_detector.py` | `logger.warning("Config load failed: %s", e)` |
-| 97 | `services/trend_detector.py` | `logger.warning("Redis error, using file fallback: %s", e)` |
-| 183 | `services/health.py` | `logger.debug("Version info read failed: %s", e)` |
+Four locations silently swallow exceptions with no logging. Each should add `logger.debug()` or `logger.warning()` as appropriate.
+
+| # | File | Line | Current Code | Fix |
+|---|------|------|-------------|-----|
+| 1 | `services/content_extractor.py` | 60 | `except Exception: return None` | `except Exception as e: logger.warning("Content fetch failed for %s: %s", url, e); return None` |
+| 2 | `services/llm/__init__.py` | 127 | `except Exception: return _fetch()` | `except Exception as e: logger.debug("Cache fallback for provider info: %s", e); return _fetch()` |
+| 3 | `services/trend_detector.py` | 83 | `except Exception: pass` | `except Exception as e: logger.debug("Failed to load patterns from file: %s", e)` |
+| 4 | `services/trend_detector.py` | 97 | `except Exception: return _load_patterns_from_file()` | `except Exception as e: logger.debug("Config cache failed for trend patterns: %s", e); return _load_patterns_from_file()` |
+
+**Convention:** Use %-formatting in log calls (`logger.warning("msg: %s", e)`), not f-strings. See AGENTS.md "Logging conventions" section.
+
+**Note:** `tasks/extract.py:343` was originally listed but already has logging on the outer except block -- the inner `except Exception: pass` is for metrics fallback and is intentionally silent.
+
+**Note:** `services/health.py:183` (reading `.git/HEAD` for commit hash) was originally listed. This is borderline -- in production containers `.git/HEAD` doesn't exist so logging would be noisy. Add `logger.debug()` only if desired.
+
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-### 1.3 Subagent Thread Pool Configurability
+### A.3 Subagent Thread Pool Configurability
 
-**Source:** plan4.md Priority 3
 **Files:** `services/subagent.py`
-**Status:** NOT YET DONE — hardcoded `max_workers=8` at line 28
+**Effort:** Small (5 min)
 
-**Current code:**
+**Current code (line 28):**
 ```python
 _subagent_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="subagent")
 ```
 
+Hardcoded `max_workers=8`. `os` is not imported in this file.
+
 **Fix:**
 ```python
+import os
+
 SUBAGENT_WORKERS = int(os.environ.get("SUBAGENT_WORKERS", "8"))
 _subagent_executor = ThreadPoolExecutor(max_workers=SUBAGENT_WORKERS, thread_name_prefix="subagent")
 ```
 
+**Follows convention in:** `services/content_extractor.py` (lines 14-19) which uses `CONTENT_EXTRACTOR_WORKERS` env var. See AGENTS.md "Configurable thread pools".
+
+**Verification:** `pytest tests/test_subagent.py -x -q`
+
 ---
 
-### 1.4 Add Cost Pricing for Additional Providers
+### A.4 Add Cost Pricing for Additional Providers
 
-**Source:** plan6.md Item 7
 **Files:** `services/cost_tracker.py`
-**Status:** PARTIALLY DONE — base pricing exists, missing newer providers
+**Effort:** Small (10 min)
 
-**Add to `_DEFAULT_RATES`:**
-```python
-"deepseek/deepseek-chat": {"input": 0.14, "output": 0.28},
-"deepseek/deepseek-coder": {"input": 0.14, "output": 0.28},
-"minimax/MiniMax-M2.5": {"input": 0.10, "output": 0.30},
-"gemini/gemini-2.0-flash": {"input": 0.10, "output": 0.40},
-"groq/llama-3.3-70b": {"input": 0.20, "output": 0.20},
-```
+**Current `_DEFAULT_RATES` (lines 17-24) only covers:** openai/gpt-4o, openai/gpt-4o-mini, openai/gpt-4-turbo, anthropic/claude-sonnet-4, anthropic/claude-haiku, anthropic/claude-opus-4.
 
----
+**Missing providers** (configured in `providers.yaml` but have no pricing -- cost silently reports as $0.00):
 
-## Wave 2: Testing Infrastructure
+| Key | Input ($/1M tokens) | Output ($/1M tokens) |
+|-----|--------------------|--------------------|
+| `"deepseek/deepseek-chat"` | 0.27 | 1.10 |
+| `"minimax/MiniMax-M2.5"` | 0.20 | 1.10 |
+| `"gemini/gemini-2.0-flash"` | 0.10 | 0.40 |
+| `"groq/llama-3.3-70b-versatile"` | 0.59 | 0.79 |
+| `"openrouter/anthropic/claude-3.5-sonnet"` | 3.00 | 15.00 |
+| `"xai/grok-2-1212"` | 2.00 | 10.00 |
+| `"togetherai/meta-llama/Llama-3-70b-chat-hf"` | 0.80 | 0.80 |
+| `"fireworks/accounts/fireworks/models/llama-v3-70b-instruct"` | 0.80 | 0.80 |
+| `"cerebras/llama-3.3-70b"` | 0.85 | 1.20 |
+| `"zai/glm-4"` | 1.40 | 1.40 |
 
-*Items that improve test reliability and developer experience.*
+Also consider adding a `logger.debug()` when `rate = rates.get(model_key)` returns `None` so unknown providers are discoverable.
 
-### 2.1 Fix Test Mock Return Values
+**Note:** `ollama-local` runs local models (free) -- no pricing needed. Verify `opencode` provider if it exists.
 
-**Source:** plan5.md Item 1
-**Priority:** HIGH — ~10-12 pre-existing test failures
-**Files:** `tests/helpers/pipeline_mocks.py`, `tests/test_pipeline_*.py`, `tests/test_llm_adapters/test_anthropic.py`
-
-**Problem:** Mock returns dict but pipeline code expects `.tokens_used` attribute.
-
-**Affected tests:**
-| Test File | Failure | Fix |
-|-----------|---------|-----|
-| `test_pipeline_e2e.py` | Multiple | Mock needs `.tokens_used` |
-| `test_pipeline_edit.py` (x3) | Multiple edit tests | Missing `final_article` field |
-| `test_pipeline_write.py` | `test_write_populates_draft` | Mock setup incomplete |
-| `test_llm_adapters/test_anthropic.py` | `test_chat_with_schema` | Missing `betas` kwarg |
-
-**Fix in `tests/helpers/pipeline_mocks.py`:**
-- Convert mock return from dict to object with `tokens_used` attribute
-- Add `used_fallback` as attribute (not just key)
-- Ensure mock matches `BaseLLMProvider.call()` return signature
+**Verification:** `pytest tests/test_cost_tracker.py -x -q` (if exists) or `pytest tests/ -x -q`
 
 ---
 
-### 2.2 Test Helper Refactoring
+### A.5 Search Clear Button
 
-**Source:** plan5.md Item 7
-**Files:** `tests/test_pipeline_edit.py`, `tests/test_pipeline_write.py`, `tests/mock_redis.py`, `tests/test_subagent.py`
+**Files:** `templates/partials/feed.html`, `static/css/articles.css`, `static/js/app.js`
+**Effort:** Small (15 min)
 
-**Items:**
-1. Refactor test files to use `setup_pipeline_mocks` helper
-2. Split `test_subagent.py` (994 lines) by test class
-3. Extend `mock_redis.py` with missing methods (`LREM`, `SMEMBERS`)
+**Current state:** `templates/partials/feed.html` lines 10-25 have a `<input type="search" name="q">` with HTMX attributes but no explicit clear/reset button. Browser-native clear X is inconsistent across browsers.
+
+**Implementation:**
+1. In `feed.html` after the search input (around line 15), add:
+   ```html
+   <button type="button" class="search-clear" aria-label="Clear search">&times;</button>
+   ```
+2. In `static/css/articles.css` (alongside `.search-container` and `.search-input` per AGENTS.md "CSS module architecture"), add CSS for positioning the button inside the search container and toggling visibility based on input value.
+3. In `static/js/app.js`, add JS to clear the input value and trigger HTMX refresh on click.
+
+**Verification:** Manual browser test + `pytest tests/ -x -q`
 
 ---
 
-## Wave 3: Core Performance & Reliability
+### A.6 Base Font Size Increase (14px -> 15px)
 
-### 3.1 HTTP Session Pooling for Search Providers
+**Files:** `static/css/variables.css`
+**Effort:** Small (5 min)
 
-**Source:** plan4.md Priority 1
-**Files:** Create `services/search/session.py`, modify `services/search/searxng.py`, `services/search/google.py`
+**Current value** (`variables.css` line 65): `--text-base: 0.875rem; /* 14px */`
+
+**Fix:** Change to `--text-base: 0.9375rem; /* 15px */`
+
+**Caveat:** As noted in AGENTS.md, `--text-lg` (16px) is semantically "large" but renders as the default body size, while `--text-base` (14px) is smaller than browser default. Changing `--text-base` has cascading effects on all components using `var(--text-base)`. Audit consumers before changing.
+
+**Verification:** Visual check + `pytest tests/ -x -q`
+
+---
+
+### A.7 Date Format Clarity
+
+**Files:** Create `services/date_utils.py`, modify `templates/partials/article_card.html`
+**Effort:** Small (20 min)
+
+**Current state:** Dates use raw `strftime` calls directly in templates:
+- `article_card.html` line 10: `{{ article.created_at.strftime('%b %d') }}` (e.g., "Jan 15")
+- `article_card.html` line 49: `{{ article.created_at.strftime('%b %d, %Y') }}` (e.g., "Jan 15, 2025")
+
+`services/date_utils.py` does NOT exist yet.
 
 **Implementation:**
 
-Create `services/search/session.py`:
-```python
-"""Shared HTTP session for search providers with connection pooling."""
+1. Create `services/date_utils.py` with a `format_date(dt)` function:
+   - < 24 hours: "X hours ago" / "yesterday"
+   - < 7 days: "X days ago"
+   - < 1 year: "MMM d"
+   - Previous year: "MMM d, YYYY"
 
-import os
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+2. Register as Jinja2 filter in `app.py` (where other template filters are registered):
+   ```python
+   @app.template_filter("format_date")
+   def _format_date(dt):
+       from services.date_utils import format_date
+       return format_date(dt)
+   ```
 
-_SEARCH_POOL_MAXSIZE = int(os.environ.get("SEARCH_POOL_MAXSIZE", "10"))
-_SEARCH_POOL_CONNECTIONS = int(os.environ.get("SEARCH_POOL_CONNECTIONS", "5"))
+3. Update `article_card.html` to use `{{ article.created_at|format_date }}` instead of `strftime`.
 
-_search_session = None
+**Note on naive vs aware datetimes:** AGENTS.md warns that `datetime.fromisoformat()` produces naive datetimes and that `Article.created_at` may be naive. The `format_date()` function should handle both naive and aware datetimes gracefully.
 
-def get_session() -> requests.Session:
-    """Get the shared search session (singleton pattern)."""
-    global _search_session
-    if _search_session is None:
-        session = requests.Session()
-        retry_strategy = Retry(total=2, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
-        adapter = HTTPAdapter(pool_connections=_SEARCH_POOL_CONNECTIONS, pool_maxsize=_SEARCH_POOL_MAXSIZE, max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        _search_session = session
-    return _search_session
-```
-
-Update `searxng.py` and `google.py` to use `get_session()` instead of `requests.get()`.
-
-**Note:** DuckDuckGo uses context manager pattern from `duckduckgo_search` library — leave as-is.
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-### 3.2 Duplicate Detection Memory Optimization
+### A.8 Beat Schedule Reload Endpoint
 
-**Source:** plan4.md Priority 2
+**Files:** `routes/admin/api/config.py` (note: file is `routes/admin/api/config.py`, not `routes/admin/api.py` as originally stated)
+**Effort:** Small (10 min)
+
+**Current state:** `POST /admin/api/config/reload` in `routes/admin/api/config.py` (lines 10-31) clears config cache, provider cache, app cache, config singleton, task fn cache, and tag cache. It does **NOT** call `Config.reload_beat_schedule()`.
+
+`Config.reload_beat_schedule()` exists at `config.py:155-169` and takes a `celery_app` argument to update `celery_app.conf.beat_schedule`.
+
+**Fix:** After the existing cache clears (line 30), add:
+```python
+from celery import current_app as celery_current
+Config.reload_beat_schedule(celery_current)
+```
+
+**Note:** `celery_current` may not be available in Flask request context. Check how other code accesses the Celery app -- likely via `celery_app.py` module import. If `reload_beat_schedule` needs a celery app instance, import it from `celery_app` module.
+
+**Verification:** `pytest tests/test_admin_api.py -x -q`
+
+---
+
+### A.9 `traced_stage()` Integration
+
+**Files:** `services/logging_utils.py`, `tasks/pipeline.py`
+**Effort:** Small (15 min)
+
+**Current state:** `traced_stage()` is defined at `services/logging_utils.py:262-281` but **never called** anywhere. Meanwhile `traced_llm_call()` (line 234) IS used in `tasks/select.py:69`, `tasks/research.py:121`, `tasks/write.py:48`, and `tasks/edit.py:269`.
+
+**Fix:** Wire `traced_stage()` into `run_stage()` at `tasks/pipeline.py:158` to wrap non-LLM work within each pipeline stage. This provides distributed tracing for the full stage execution span (not just the LLM call).
+
+**Alternative:** If `traced_stage()` is not useful in its current form, mark it as deprecated with a docstring note.
+
+**Verification:** `pytest tests/ -x -q`
+
+---
+
+### A.10 Make `TITLE_SIMILARITY_THRESHOLD` Configurable
+
+**Files:** `services/article.py` (NOT `constants.py` as originally stated)
+**Effort:** Small (10 min)
+
+**Current state:** `TITLE_SIMILARITY_THRESHOLD = 0.5` is defined at `services/article.py:51`. Used at line 262 as default parameter: `threshold: float = TITLE_SIMILARITY_THRESHOLD`. It is **NOT** in `constants.py`.
+
+**Fix:** Make it configurable via env var or `pipeline.yaml`:
+```python
+TITLE_SIMILARITY_THRESHOLD = float(os.environ.get("TITLE_SIMILARITY_THRESHOLD", "0.5"))
+```
+
+Or use the `get_config_with_default()` pattern from `services/config_utils.py` for Celery compatibility (see AGENTS.md "Celery tasks must not use `current_app.config`").
+
+**Verification:** `pytest tests/test_article.py -x -q` (if exists) or `pytest tests/ -x -q`
+
+---
+
+## Batch B: Testing, Performance, Security & Architecture
+
+*These items are independent of Batch A and can run in parallel with it. Within Batch B, items can also run in parallel.*
+
+---
+
+### B.1 Fix Test Mock Return Values
+
+**Priority:** HIGH -- causes ~10-12 pre-existing test failures
+**Files:** `tests/test_pipeline_e2e.py`, `tests/test_pipeline_edit.py`, `tests/test_pipeline_write.py`, `tests/test_llm_adapters/test_anthropic.py`
+**Effort:** Medium (30 min)
+
+**Problem:** Test work functions return **plain dicts** like `{"article_id": article.id, "result": article.selector_result}`, but `run_stage()` in `tasks/pipeline.py:257-259` accesses `.tokens_used` on the return:
+```python
+result = work_fn(article, provider, model, max_tokens)
+record_provider_success(provider_id, model, tokens_used=result.tokens_used)
+```
+
+A plain dict has no `.tokens_used` attribute, causing `AttributeError`.
+
+**Affected test files (spot-checked):**
+| Test File | Issue |
+|-----------|-------|
+| `tests/test_pipeline_e2e.py` | Work functions (lines 96, 114, 133, 150) return dicts |
+| `tests/test_pipeline_edit.py` | Multiple edit tests missing `final_article` field |
+| `tests/test_pipeline_write.py` | `test_write_populates_draft` mock setup incomplete |
+| `tests/test_llm_adapters/test_anthropic.py` | `test_chat_with_schema` missing `betas` kwarg |
+
+**Fix approach:** Test work functions should return objects with a `.tokens_used` attribute. Options:
+1. Return `LLMResponse` instances from `services/llm/base.py:57-61` (preferred)
+2. Use `SimpleNamespace(tokens_used=100, ...)`
+3. Or make `run_stage()` use `getattr(result, 'tokens_used', 0)` for robustness
+
+**Note:** The issue is NOT in `tests/helpers/pipeline_mocks.py` (which correctly returns a 4-tuple for `get_provider_for_role`). The issue is in the individual test work functions.
+
+**Verification:** `pytest tests/test_pipeline_e2e.py tests/test_pipeline_edit.py tests/test_pipeline_write.py tests/test_llm_adapters/test_anthropic.py -x -q`
+
+---
+
+### B.2 Test Helper Refactoring
+
+**Files:** `tests/test_subagent.py`, `tests/test_pipeline_edit.py`, `tests/test_pipeline_write.py`
+**Effort:** Medium (30 min)
+
+**Items:**
+1. Refactor `tests/test_pipeline_edit.py` and `tests/test_pipeline_write.py` to use `setup_pipeline_mocks` helper from `tests/helpers/pipeline_mocks.py`
+2. Consider splitting `tests/test_subagent.py` (994 lines) by test class into separate files for maintainability
+
+**Note:** Originally listed adding `LREM` and `SMEMBERS` to `tests/mock_redis.py`, but these Redis commands are not used anywhere in the codebase. Removed as unnecessary.
+
+**Verification:** `pytest tests/ -x -q`
+
+---
+
+### B.3 HTTP Session Pooling for Search Providers
+
+**Files:** Create `services/search/session.py`, modify `services/search/searxng.py`, `services/search/google.py`
+**Effort:** Medium (30 min)
+
+**Current state:** Both `searxng.py:32-36` and `google.py:29-37` use `requests.get()` directly, creating a new TCP connection per call. `duckduckgo.py` uses the `duckduckgo_search` library's context manager -- leave as-is.
+
+**Implementation:**
+
+1. Create `services/search/session.py`:
+   ```python
+   import os
+   import requests
+   from requests.adapters import HTTPAdapter
+   from urllib3.util.retry import Retry
+
+   _SEARCH_POOL_MAXSIZE = int(os.environ.get("SEARCH_POOL_MAXSIZE", "10"))
+   _SEARCH_POOL_CONNECTIONS = int(os.environ.get("SEARCH_POOL_CONNECTIONS", "5"))
+
+   _search_session = None
+
+   def get_session() -> requests.Session:
+       global _search_session
+       if _search_session is None:
+           session = requests.Session()
+           retry = Retry(total=2, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
+           adapter = HTTPAdapter(pool_connections=_SEARCH_POOL_CONNECTIONS, pool_maxsize=_SEARCH_POOL_MAXSIZE, max_retries=retry)
+           session.mount("http://", adapter)
+           session.mount("https://", adapter)
+           _search_session = session
+       return _search_session
+   ```
+
+2. Update `searxng.py`: Replace `requests.get(...)` with `get_session().get(...)` at lines 32 and 83.
+3. Update `google.py`: Replace `requests.get(...)` with `get_session().get(...)` at lines 29 and 90.
+
+**Note:** DuckDuckGo uses context manager from `duckduckgo_search` library -- leave unchanged.
+
+**Verification:** `pytest tests/ -x -q`
+
+---
+
+### B.4 Duplicate Detection Memory Optimization
+
 **Files:** `services/article.py`
-**Status:** NOT YET DONE — hardcoded limit(1000) at line 307
+**Effort:** Small (10 min)
 
-**Current code:**
+**Current code (`services/article.py:307`):**
 ```python
 .limit(1000)
 ```
 
+Hardcoded in `find_duplicate_titles()`. The function already breaks on first match (line 314), so the full 1000 rarely loads.
+
 **Fix:**
 ```python
-DUPLICATE_DETECTION_LIMIT = int(os.environ.get("DUPLICATE_DETECTION_LIMIT", "100"))
+DUPLICATE_DETECTION_LIMIT = int(os.environ.get("DUPLICATE_DETECTION_LIMIT", "200"))
 # ...
 .limit(DUPLICATE_DETECTION_LIMIT)
 ```
 
-The function already breaks on first match (line 314), so reducing from 1000 to 100 is safe.
+Use 200 as default (reduced from 1000) since the function breaks on first match anyway.
+
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-### 3.3 Add Index on `Article.updated_at`
+### B.5 Add `index=True` to `Article.updated_at` in Model
 
-**Source:** plan2.md Priority 3
-**Files:** `models.py`, new migration
-**Status:** NOT YET DONE
+**Files:** `models.py`
+**Effort:** Small (5 min)
 
-**Fix:** Add `index=True` to `updated_at` column in `models.py:128-131`, create migration.
+**Current state:** `models.py:128-131` has `updated_at` without `index=True`:
+```python
+updated_at = db.Column(
+    db.DateTime,
+    default=lambda: datetime.now(timezone.utc),
+)
+```
+
+**Note:** The index already exists at the database level via migration `026_article_updated_at_index.py`. The fix is to add `index=True` to the model definition for consistency (so `db.create_all()` in tests also creates it).
+
+**Fix:** Add `index=True`:
+```python
+updated_at = db.Column(
+    db.DateTime,
+    default=lambda: datetime.now(timezone.utc),
+    index=True,
+)
+```
+
+No new migration needed -- the index already exists in production.
+
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-### 3.4 Newsletter Dead Letter Retry Task
+### B.6 Newsletter Dead Letter Retry Task
 
-**Source:** plan5.md Item 3
-**Files:** `tasks/newsletter.py`
+**Files:** `tasks/newsletter.py`, `config.py`
+**Effort:** Medium (30 min)
+
+**Current gap:** Permanently failed newsletter emails (SMTP 5xx) are returned as error dicts from `send_single_email` but never aggregated or retried. `_send_emails_parallel` fires emails via Celery groups (fire-and-forget).
+
+**Newsletter model fields** (`models.py:185-186`): `delivered_count` (Integer, default=0), `error_message` (Text, nullable).
 
 **Implementation:**
-1. Create `retry_failed_newsletter_deliveries` Celery task
-2. Runs every 2 hours via Celery Beat
-3. Queries `Newsletter` where `delivered_count < recipients AND error_message IS NOT NULL`
-4. Uses same retry logic as `send_single_email` (autoretry_for/dont_autoretry_for)
+1. Create `retry_failed_newsletter_deliveries` Celery task in `tasks/newsletter.py`
+2. Query `Newsletter` where `error_message IS NOT NULL`
+3. Re-attempt delivery using same `autoretry_for`/`dont_autoretry_for` pattern as `send_single_email` (see AGENTS.md "autoretry_for over manual self.retry()" convention)
+4. Add to Celery beat schedule in `config.py` `get_beat_schedule()` -- every 2 hours
 
-**Pattern to follow:** `send_single_email` task at `tasks/newsletter.py`
+**Pattern to follow:** `send_single_email` task in `tasks/newsletter.py`
 
----
-
-### 3.5 Split Trend Memory Consolidation
-
-**Source:** plan5.md Item 4
-**Files:** `services/trend_memory.py`, `config.py`
-
-**Implementation:**
-1. Split `consolidate_trend_memory` into two tasks:
-   - `consolidate_trend_memory` — promotes LOW to MEDIUM
-   - `purge_trend_memory` — deletes expired entries
-2. Stagger execution by 30 minutes in Celery Beat
+**Verification:** `pytest tests/test_newsletter.py -x -q`
 
 ---
 
-## Wave 4: Agent Harness Improvements
+### B.7 Split Trend Memory Consolidation into Two Tasks
 
-### 4.1 Enable Tool-Calling in Research/Edit Stages
+**Files:** `tasks/cleanup.py`, `config.py`
+**Effort:** Small (15 min)
 
-**Source:** plan6.md Item 1
-**Files:** `services/subagent.py`, `schemas/pipeline.py`, `tasks/research.py`, `tasks/edit.py`
+**Current state:** The Celery task `consolidate_trend_memory` in `tasks/cleanup.py:119-144` calls two independent functions sequentially:
+- `consolidate_all_topics()` -- promotes LOW to MEDIUM importance
+- `purge_expired()` -- deletes expired memory entries
 
-**What's needed:**
-1. `resolve_subagent_config()` doesn't pass `tools` field through (see `schemas/pipeline.py:184-203`)
-2. Add helper functions in `subagent.py`:
-   - `get_tool_definition(name: str) -> ToolDefinition | None`
-   - `get_tools_by_names(names: list[str]) -> list[ToolDefinition]`
-   - `provider_supports_tools(provider) -> bool`
-3. Update `run_subagent_with_tools()` to fallback gracefully when provider doesn't support tools
+These are **already separate functions** in `services/trend_memory.py` (lines 336-347 and 350-362). The task just calls both.
 
-**Current issue:** `resolve_subagent_config()` builds kwargs but omits `tools` field entirely.
+**Fix:**
+1. Split into two Celery tasks in `tasks/cleanup.py`:
+   - `consolidate_trend_memory` -- calls `consolidate_all_topics()` only
+   - `purge_trend_memory` -- calls `purge_expired()` only
+2. Stagger in beat schedule: consolidation at 3:30 AM, purge at 3:45 AM
+3. Update `config.py` `get_beat_schedule()` with both entries
 
----
-
-### 4.2 Multi-Provider Fallback Chain
-
-**Source:** plan6.md Item 2
-**Files:** `services/llm/__init__.py`, `tasks/pipeline.py`
-
-**Current behavior:** Only triggers on circuit breaker OPEN state.
-
-**Errors that should trigger fallback (but don't):**
-| Error | Rationale |
-|-------|----------|
-| `RateLimitError` | Another provider may have capacity |
-| `ProviderTimeoutError` | Transient, try again |
-| `ProviderServerError` | Another provider may work |
-| `ConnectionError` | Network issue |
-
-**Fatal errors (don't catch):**
-| Error | Rationale |
-|-------|----------|
-| `AuthError` | Invalid API key - all providers fail |
-| `CircuitOpenError` | All circuits open - wait for recovery |
-
-**Implementation:** Add `get_provider_chain()` function that returns ordered list of (provider, model, max_tokens, provider_id), filter out open circuits, iterate through chain on recoverable errors.
+**Verification:** `pytest tests/test_trend_memory.py -x -q` (if exists) or `pytest tests/ -x -q`
 
 ---
 
-### 4.3 Context Injection in Research/Write Stages
+### B.8 Secret Rotation Support
 
-**Source:** plan6.md Item 3
-**Files:** `services/researcher.py`, `services/writer.py`, `tasks/research.py`, `tasks/write.py`
-
-**Current state:**
-- Research: NO topic notes
-- Write: NO related articles or trend memory
-- Edit: HAS topic notes and trend memory
-
-**What's needed:**
-1. In `tasks/research.py` — fetch and pass topic notes to prompt
-2. In `services/researcher.py` — add `topic_notes` parameter to prompt builder
-3. In `tasks/write.py` — fetch related articles and trend memory
-4. In `services/writer.py` — add `related_articles`, `trend_memory` parameters
-
----
-
-### 4.4 Quality Gates Per Stage
-
-**Source:** plan6.md Item 4
-**Files:** `tasks/select.py`, `tasks/research.py`, `tasks/write.py`
-
-**Implementation:**
-1. **Select stage:** Check text preview length < 100 chars → skip
-2. **Research stage:** Web search returns no results → route to REVIEW
-3. **Write stage:** Impact score < 30 → route to REVIEW
-
----
-
-### 4.5 Add Type Hints to Admin Routes
-
-**Source:** plan2.md Priority 2
-**Files:** ~35 route handlers in `routes/admin/*.py`
-
-**Affected routes:** Add `-> Response` return type to all admin route handlers.
-
----
-
-## Wave 5: Security Hardening
-
-### 5.1 Secret Rotation Support
-
-**Source:** plan3.md Section 1
 **Files:** `config.py`, `services/task_security.py`, `services/webhooks.py`
+**Effort:** Medium (45 min)
 
 **Components:**
-1. **Flask `SECRET_KEY_FALLBACKS`** — add `SECRET_KEY_PREVIOUS_1`, `SECRET_KEY_PREVIOUS_2` env vars
-2. **Celery task secret rotation** — support multiple secrets via `_get_task_secrets()` in `task_security.py`
-3. **Webhook key versioning** — support `v1:` / `v2:` prefix in `services/webhooks.py`
-4. **Documentation** — update `docs/security.md` with rotation procedures
+
+1. **Flask `SECRET_KEY_FALLBACKS`** -- In `config.py`, add:
+   ```python
+   SECRET_KEY_FALLBACKS = [
+       v for v in [
+           os.environ.get("SECRET_KEY_PREVIOUS_1", ""),
+           os.environ.get("SECRET_KEY_PREVIOUS_2", ""),
+       ] if v
+   ]
+   ```
+   Flask 2.3+ natively supports `SECRET_KEY_FALLBACKS` for session cookie rotation.
+
+2. **Celery task secret rotation** -- In `services/task_security.py`, update `_get_task_secret()` to support multiple secrets:
+   ```python
+   def _get_task_secrets() -> list[str]:
+       primary = os.environ.get("CELERY_TASK_SECRET", "")
+       fallback = os.environ.get("CELERY_TASK_SECRET_PREVIOUS", "")
+       return [s for s in [primary, fallback] if s]
+   ```
+   Update `verify_task()` to try each secret in order (primary first, fallbacks after).
+
+3. **Webhook key versioning** -- In `services/webhooks.py`, embed key version in encrypted ciphertext (prefix like `v1:enc:...` or `v2:enc:...`). `_decrypt_secret()` checks version and uses the corresponding key. Store `WEBHOOK_SECRET_KEY_PREVIOUS` for old-key decryption.
+
+**Verification:** `pytest tests/test_task_security.py tests/test_webhooks.py -x -q`
 
 ---
 
-### 5.2 Audit Logging Expansion
+### B.9 Audit Logging Expansion
 
-**Source:** plan3.md Section 2
-**Files:** `models.py`, migrations, `routes/admin/subscribers.py`, `routes/admin/api/articles.py`
+**Files:** `models.py`, new migration, `routes/admin/subscribers.py`, `routes/admin/api/articles.py`
+**Effort:** Medium (30 min)
 
-**Components:**
-1. Add `category` column to `AuditLog` model
-2. Audit subscriber CSV export
-3. Audit bulk operations
-4. GDPR considerations (log IDs not emails)
-
----
-
-### 5.3 Request Size Limits Enhancement
-
-**Source:** plan3.md Section 3
-**Files:** `routes/admin/api/articles.py`
-
-**Add `@limit_content_length(65536)` to bulk article endpoint.**
-
----
-
-## Wave 6: UI/UX Improvements
-
-### 6.1 Search Clear Button
-
-**Source:** plan7.md Item 1
-**Files:** `templates/partials/feed.html`, `static/css/articles.css`, `static/js/app.js`
+**Current `AuditLog` model** (`models.py:448-463`): Has `action`, `target_type`, `target_id`, `user`, `details`, `ip_address`, `created_at`. No `category` column.
 
 **Implementation:**
-1. Add `<button type="button" class="search-clear" aria-label="Clear search">&times;</button>` after search input
-2. Add CSS for positioning and display logic (show when input has value)
-3. Add JavaScript to clear input and trigger HTMX refresh
+1. Add `category` column (String(32), indexed, nullable=True) to `AuditLog` model
+2. Create migration for the new column
+3. Add audit calls for:
+   - Subscriber CSV export (in `routes/admin/subscribers.py`)
+   - Bulk article operations (in `routes/admin/api/articles.py`)
+4. Use categories: "auth", "article", "pipeline", "webhook", "config", "subscriber"
+5. Log IDs not emails per GDPR considerations
+
+**Verification:** `pytest tests/test_admin_api.py -x -q`
 
 ---
 
-### 6.2 Base Font Size Increase (14px → 15px)
+### B.10 Request Size Limits Enhancement
 
-**Source:** plan7.md Item 2
-**Files:** `static/css/variables.css`
+**Files:** `routes/admin/api/articles.py`
+**Effort:** Small (5 min)
 
-**Change `--text-base` from `0.875rem` to `0.9375rem` (15px).**
+**Current state:** `bulk_article_operations()` at line 184 has `@require_auth` and `@validate_csrf_json` but no `@limit_content_length()`. Global fallback is `MAX_CONTENT_LENGTH = 64KB` in `config.py:35`.
 
----
+**Fix:** Add explicit per-route limit. Since the bulk endpoint accepts max 500 article IDs (~10 digits each) + action + tags, expected payload is well under 10KB:
+```python
+from routes.public import limit_content_length
 
-### 6.3 Date Format Clarity
+@limit_content_length(32768)  # 32KB -- generous upper bound for bulk ops
+```
 
-**Source:** plan7.md Item 3
-**Files:** `services/date_utils.py` (create), `templates/partials/article_card.html`
-
-**Implementation:** Create Jinja2 filter for hybrid date display:
-- < 24 hours: "X hours ago" / "yesterday"
-- < 7 days: "X days ago"
-- < 1 year: "MMM d"
-- Previous year: "MMM d, YYYY"
+**Verification:** `pytest tests/test_admin_api.py -x -q`
 
 ---
 
-### 6.4 Remaining UX Items
+### B.11 Enforce Pipeline State Machine Validation
 
-**Source:** plan7.md Items 4-7
-**Files:** `templates/partials/feed.html`, `static/css/articles.css`, `static/js/app.js`, `templates/admin/dashboard.html`
-
-| Item | Fix |
-|------|-----|
-| Filter tab ARIA | Add `aria-controls="feed"` to filter tabs |
-| Pagination improvements | Add `aria-controls="feed"` and `aria-live="polite"` to scroll sentinel |
-| Keyboard shortcut visibility | Ensure `<kbd>/</kbd>` is visible |
-| Loading state feedback | Add toast after trigger crawl |
-
----
-
-## Wave 7: Architecture & Infrastructure
-
-### 7.1 Enforce Pipeline State Machine Validation
-
-**Source:** plan5.md Item 5
 **Files:** `tasks/select.py`, `tasks/research.py`, `tasks/write.py`, `tasks/edit.py`, `services/pipeline_failure.py`, `services/pipeline_degradation.py`
+**Effort:** Medium (30 min)
 
-**Problem:** Direct `pipeline_status = X` assignment bypasses `_transition_article_status()` validation.
+**Problem:** All pipeline task files use direct `article.pipeline_status = PipelineStatus.X` assignment, bypassing `_transition_article_status()` which validates transitions against `VALID_TRANSITIONS` in `constants.py:40-49`.
 
-**Fix:** Replace direct assignments with `_transition_article_status(article, PipelineStatus.X)` in:
-- `tasks/select.py` (lines 85, 110)
-- `tasks/research.py` (lines 53, 136)
-- `tasks/write.py` (line 63)
-- `tasks/edit.py` (lines 142, 163, 190)
-- `services/pipeline_failure.py` (lines 78, 101, 134)
-- `services/pipeline_degradation.py` (multiple locations)
+**`_transition_article_status()` is defined at** `tasks/pipeline.py:127-145` but only called once (line 241, in the timeout dead-letter handler).
 
-**Note:** Test files are intentionally excluded (they mock state).
+**Direct assignments to replace (verified locations):**
+| File | Line | Current | Target Status |
+|------|------|---------|--------------|
+| `tasks/select.py` | 85 | `= PipelineStatus.RESEARCHING` | RESEARCHING |
+| `tasks/select.py` | 110 | `= PipelineStatus.SKIPPED` | SKIPPED |
+| `tasks/research.py` | 53 | `= PipelineStatus.RESEARCHING` | RESEARCHING |
+| `tasks/research.py` | 136 | `= PipelineStatus.WRITING` | WRITING |
+| `tasks/write.py` | 63 | `= PipelineStatus.EDITING` | EDITING |
+| `tasks/edit.py` | 142 | `= PipelineStatus.REVIEW` | REVIEW |
+| `tasks/edit.py` | 163 | `= PipelineStatus.REVIEW` | REVIEW |
+| `tasks/edit.py` | 190 | `= PipelineStatus.DONE` | DONE |
+| `services/pipeline_failure.py` | 78 | `= PipelineStatus.FAILED` | FAILED |
+| `services/pipeline_failure.py` | 101 | `= PipelineStatus.FAILED` | FAILED |
+| `services/pipeline_failure.py` | 134 | `= PipelineStatus.FAILED` | FAILED |
+
+Also check `services/pipeline_degradation.py` for additional direct assignments.
+
+**Caveats:**
+- `PipelineStatus.SELECTING` exists in the enum but is NOT in `VALID_TRANSITIONS`. Check if it should be added.
+- The FAILED -> PENDING reprocess path (in admin bulk reprocess) may need `VALID_TRANSITIONS` updates.
+- Test files are intentionally excluded (they mock state).
+
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-### 7.2 Docker Compose for Development
+### B.12 Docker Compose for Development
 
-**Source:** plan5.md Item 2
 **Files:** `docker-compose.yml`, `.env.docker` (template)
+**Effort:** Medium (30 min)
 
 **Services:** redis, web, worker, beat, (optional) flower
-**Key configs:** Health checks, `worker_prefetch_multiplier=1`, persistent volumes.
+**Key configs:**
+- Health checks for all services
+- `worker_prefetch_multiplier=1` for Celery worker
+- Persistent volumes for Redis data
+- `.env.docker` template with all required env vars documented
+
+**Verification:** `docker compose config` (validate file)
 
 ---
 
-### 7.3 CI/CD Pipeline Setup
+### B.13 CI/CD Pipeline Setup
 
-**Source:** plan5.md Item 6
 **Files:** `.github/workflows/ci.yml`, `.github/workflows/cd.yml`
+**Effort:** Medium (45 min)
 
 **ci.yml:** Ruff lint, pytest, type check on PR
 **cd.yml:** Build Docker, push to registry, deploy on push to main
 
----
-
-### 7.4 Beat Schedule Reload Endpoint
-
-**Source:** plan9.md Code Issue #2
-**Files:** `routes/admin/api.py`
-
-**Problem:** `POST /admin/api/config/reload` doesn't call `Config.reload_beat_schedule()`.
-
-**Fix:** Either add dedicated `POST /admin/api/config/beat/reload` endpoint, or integrate into existing reload endpoint.
+**Verification:** Push to a PR branch and verify CI runs.
 
 ---
 
-### 7.5 `traced_stage()` Integration
+## Batch C: Agent Harness Improvements
 
-**Source:** plan9.md Code Issue #3
-**Files:** `services/logging_utils.py`, `tasks/pipeline.py`
-
-**Problem:** `traced_stage()` is defined but never called.
-
-**Fix:** Wire into `run_stage()` in `tasks/pipeline.py`, or mark as deprecated.
+*Recommended to start after Batch A completes. Items within this batch have some dependencies.*
 
 ---
 
-### 7.6 Make `TITLE_SIMILARITY_THRESHOLD` Configurable
+### C.1 Enable Tool-Calling in Research/Edit Stages
 
-**Source:** plan9.md Code Issue #4
-**Files:** `constants.py`, `services/config_utils.py`
+**Files:** `services/subagent.py`, `schemas/pipeline.py`, `tasks/research.py`, `tasks/edit.py`
+**Effort:** Large (60 min)
 
-**Problem:** Hardcoded in `constants.py`, should use `get_config_with_default()` pattern.
-
----
-
-## Wave 8: Advanced Agent Features
-
-### 8.1 Feedback Loop from Published Articles
-
-**Source:** plan6.md Item 5
-**Files:** `models.py`, `services/newsletter.py`, `routes/public/links.py`, `services/trend_memory.py`
-
-**Phase 1 — Tracking:**
-1. Add `newsletter_clicks` column to `ArticleMetric`
-2. Create tracking endpoint `/track/newsletter-click/<int:article_id>`
-3. Use trackable URLs in newsletter
-
-**Phase 2 — Feedback Integration:**
-1. Enhance `propose_trend_memory()` to include engagement
-2. Create `recalculate_impact_scores` nightly task
-
----
-
-### 8.2 Confidence Scoring in Responses
-
-**Source:** plan6.md Item 6
-**Files:** `schemas/llm_responses.py`, `tasks/select.py`, `tasks/research.py`, `tasks/write.py`
+**Current state (verified):**
+- `resolve_subagent_config()` in `schemas/pipeline.py:175-204` builds kwargs and passes through: `enabled`, `provider`, `model`, `max_tokens`, `temperature`, `timeout_seconds`, `system_prompt`, `max_retries`, `retry_delay`, `task_template`. It does **NOT** pass `tools` (defined at line 101: `tools: list[str] = Field(default_factory=list)`). The field is silently dropped.
+- `run_subagent_with_tools()` exists at `services/subagent.py:608-787` and is fully implemented with retry/fallback logic. But it is **never called** from any pipeline task.
+- Tool definitions exist: `_build_context_tools()` (lines 41-266) defines `get_topic_note`, `get_topic_notes_for_topics`, `get_related_articles`, `get_trend_memory`, `get_article_by_id`, `search_articles`, `get_source_health`. `_build_search_tools()` (lines 269-323) defines `search_web`, `get_search_provider`.
+- Pipeline tasks call `run_subagent()` (which uses `chat_structured`) instead of `run_subagent_with_tools()`.
 
 **Implementation:**
-1. Add `confidence: str = Field(default="medium", pattern="^(low|medium|high)$"` to `SelectionResult`
-2. Update prompts to request confidence field
+1. In `schemas/pipeline.py:resolve_subagent_config()`, add `tools` field to kwargs dict (~line 202):
+   ```python
+   if stage_config.tools:
+       kwargs["tools"] = stage_config.tools
+   ```
+2. In `tasks/research.py` and `tasks/edit.py`, check if config has `tools` and call `run_subagent_with_tools()` instead of `run_subagent()` when present.
+3. Ensure graceful fallback when provider doesn't support tools (`run_subagent_with_tools()` should detect and fall back to `run_subagent()`).
+
+**Verification:** `pytest tests/test_subagent.py -x -q`
+
+---
+
+### C.2 Multi-Provider Fallback Chain
+
+**Files:** `services/llm/__init__.py`
+**Effort:** Large (60 min)
+
+**Current behavior (verified):** `get_provider_for_role()` only tries a fallback provider when the primary's circuit breaker is OPEN (after 5 failures in 120s window). There is **no per-request error-to-fallback** wiring.
+
+**Errors that should trigger immediate fallback (but don't):**
+| Error | Rationale |
+|-------|----------|
+| `RateLimitError` | Another provider may have capacity |
+| `ProviderTimeoutError` | Transient, try another provider |
+| `ProviderServerError` | 5xx from one provider, another may work |
+| `ConnectionError` | Network issue to one endpoint |
+
+**Fatal errors (don't catch/fallback):**
+| Error | Rationale |
+|-------|----------|
+| `AuthError` | Invalid API key -- all providers would fail |
+| `CircuitOpenError` | All circuits open -- wait for recovery |
+
+**Implementation:** Add `get_provider_chain()` function in `services/llm/__init__.py` that returns an ordered list of `(provider, model, max_tokens, provider_id)`, filtering out open circuits. Pipeline stages iterate through the chain on recoverable errors.
+
+**Verification:** `pytest tests/test_llm_fallback.py -x -q` (may need new test file)
+
+---
+
+### C.3 Context Injection in Research/Write Stages
+
+**Files:** `services/researcher.py`, `services/writer.py`, `tasks/research.py`, `tasks/write.py`
+**Effort:** Medium (45 min)
+
+**Current state (verified):**
+- **Research** (`tasks/research.py`): HAS related articles (via `find_related_articles_dicts()` at lines 100-103, passed to `build_research_prompt()`). Does NOT have topic notes or trend memory.
+- **Write** (`tasks/write.py`): NO additional context beyond `title`, `topics`, `research_brief`, `max_key_points` (see `services/writer.py:23-43`).
+- **Edit** (`tasks/edit.py`): HAS topic notes, related articles, AND trend memory (via `_gather_editor_context()` at lines 69-119).
+
+**What's needed:**
+1. **Research stage** -- Add topic notes via `get_topic_notes_for_topics()` from `services/context_service.py`. Pass to `build_research_prompt()` as new parameter.
+2. **Write stage** -- Add trend memory via `get_memory_for_topics()` from `services/trend_memory.py`. Pass to `build_writer_prompt()` as new parameter.
+3. **Writer** -- Add `trend_memory` parameter to `build_writer_prompt()` in `services/writer.py`.
+
+**Caveat:** Adding too much context risks token bloat. Research already has related articles. Be selective about what additional context truly improves output.
+
+**Verification:** `pytest tests/test_pipeline_research.py tests/test_pipeline_write.py -x -q`
+
+---
+
+### C.4 Quality Gates Per Stage
+
+**Files:** `tasks/select.py`, `tasks/research.py`, `tasks/write.py`
+**Effort:** Medium (30 min)
+
+**Current state (verified):**
+- **Select stage** ALREADY has a quality gate: `if result.selected and result.score >= (rc.min_score or 6)` at line 84. Articles below threshold are set to `PipelineStatus.SKIPPED`. Threshold is configurable via `RoleConfig.min_score` in `schemas/pipeline.py:23`.
+- **Research stage** has NO validation of `ResearchBrief` output. Brief is produced and immediately advances to WRITING.
+- **Write stage** has NO validation of `CondensedArticle` output. Draft is saved and immediately advances to EDITING.
+
+**What's needed:**
+1. **Research stage:** Validate that brief has non-empty key claims and a reasonable impact score. Route degenerate outputs to REVIEW instead of auto-advancing.
+2. **Write stage:** Validate minimum article length, presence of key points, and citation count. Route degenerate outputs to REVIEW.
+
+**Note:** Select stage is already done -- no changes needed there.
+
+**Verification:** `pytest tests/ -x -q`
+
+---
+
+### C.5 Add Type Hints to Admin Routes
+
+**Files:** `routes/admin/auth.py`, `routes/admin/dashboard.py`, `routes/admin/sources.py`, `routes/admin/webhooks.py`, `routes/admin/subscribers.py`, `routes/admin/shares.py` and any others
+**Effort:** Small (20 min)
+
+**Current state (verified):** API routes in `routes/admin/api/articles.py` have some type hints. Page-rendering routes (`auth.py`, `dashboard.py`, `sources.py`, `webhooks.py`) uniformly lack return type annotations.
+
+**Fix:** Add `-> str | Response` (for page-rendering routes) or `-> tuple[Response, int] | Response` (for API routes) return type annotations to all admin route handlers.
+
+**Note:** This is a code quality improvement, not a bug fix. Low priority.
+
+**Verification:** `ruff check . --exclude .venv` + `pytest tests/ -x -q`
+
+---
+
+## Batch D: Advanced Agent Features & Documentation
+
+*Batch D depends on Batch C completing. Items within Batch D can run in parallel.*
+
+---
+
+### D.1 Feedback Loop from Published Articles
+
+**Files:** `models.py`, `services/newsletter.py`, `routes/public/links.py`, `services/trend_memory.py`
+**Effort:** Large (60 min)
+
+**Phase 1 -- Tracking:**
+1. Add `newsletter_clicks` column to `ArticleMetric` model
+2. Create tracking endpoint `/track/newsletter-click/<int:article_id>` (add to public routes)
+3. Use trackable URLs in newsletter templates
+
+**Phase 2 -- Feedback Integration:**
+1. Enhance `propose_trend_memory()` to include engagement data
+2. Create `recalculate_impact_scores` nightly Celery task
+
+**Verification:** `pytest tests/ -x -q`
+
+---
+
+### D.2 Confidence Scoring in Responses
+
+**Files:** `schemas/llm_responses.py`, `tasks/select.py`, `tasks/research.py`
+**Effort:** Medium (30 min)
+
+**Implementation:**
+1. Add `confidence: str = Field(default="medium", pattern="^(low|medium|high)$")` to `SelectionResult` in `schemas/llm_responses.py`
+2. Update selection prompt (in `pipeline.yaml`) to request confidence field
 3. Route low-confidence selections to REVIEW instead of automatically advancing
 
+**Verification:** `pytest tests/test_select.py -x -q`
+
 ---
 
-### 8.3 Trend Memory SQL Consolidation
+### D.3 Trend Memory SQL Consolidation
 
-**Source:** plan6.md Item 8
 **Files:** `services/trend_memory.py`
+**Effort:** Small (15 min)
 
-**Replace Python loop with SQL UPDATE in `consolidate_topic()`.**
+**Current:** `consolidate_topic()` iterates in Python to promote LOW to MEDIUM importance.
+
+**Fix:** Replace Python loop with a single SQL UPDATE statement:
+```python
+db.session.execute(
+    update(TrendMemory)
+    .where(
+        TrendMemory.topic == topic,
+        TrendMemory.importance == MemoryImportance.LOW.value,
+        TrendMemory.id.in_(
+            select(TrendMemory.id).where(
+                TrendMemory.topic == topic,
+                TrendMemory.importance == MemoryImportance.HIGH.value
+            )
+        )
+    )
+    .values(importance=MemoryImportance.MEDIUM.value)
+)
+```
+
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-### 8.4 A/B Testing for Prompts
+### D.4 A/B Testing for Prompts
 
-**Source:** plan6.md Item 9
 **Files:** `pipeline.yaml`, `models.py`, `tasks/select.py`, `routes/admin/api.py`
+**Effort:** Large (60 min)
 
 **Implementation:**
-1. Add `experiments` config in `pipeline.yaml`
-2. Add `experiment_group` column to `Article` model
+1. Add `experiments` config section in `pipeline.yaml`
+2. Add `experiment_group` column to `Article` model + migration
 3. Assign variant in select stage
 4. Track results for comparison
 
+**Verification:** `pytest tests/ -x -q`
+
 ---
 
-### 8.5 Context Window Optimization
+### D.5 Context Window Optimization
 
-**Source:** plan6.md Item 10
 **Files:** `services/prompts.py`, `services/writer.py`, `services/editor.py`
+**Effort:** Small (15 min)
 
-**Implementation:** Add sliding window truncate helper:
+**Implementation:** Add sliding window truncate helper to `services/prompts.py`:
 ```python
 def sliding_window_truncate(text: str, max_chars: int = 8000, ellipsis: str = "\n\n[... truncated ...]\n\n") -> str:
     if not text or len(text) <= max_chars:
@@ -551,30 +796,35 @@ def sliding_window_truncate(text: str, max_chars: int = 8000, ellipsis: str = "\
     return text[:half] + ellipsis + text[-half:]
 ```
 
-Apply to `research_brief` in write stage and draft in edit stage.
+Apply to `research_brief` in write stage and draft in edit stage to prevent token overflow.
+
+**Verification:** `pytest tests/ -x -q`
 
 ---
 
-## Wave 9: Documentation
+### D.6 Critical Metric Naming Fixes in Documentation
 
-### 9.1 Critical Metric Naming Fixes
-
-**Source:** plan9.md Section: Metric Naming Discrepancies
 **Files:** `docs/monitoring.md`
+**Effort:** Small (10 min)
 
-**Fix these critical errors that cause monitoring to silently fail:**
-| Docs Show | Code Emits |
-|----------|------------|
-| `circuit_breaker_state_change` | `circuit_breaker.state_change` |
-| `pipeline_stage_duration_seconds` | `pipeline.stage_duration_seconds` |
+**Docs show vs. code emits (verified):**
+| Docs Show | Code Emits | Code Location |
+|----------|------------|---------------|
+| `circuit_breaker_state_change` | `circuit_breaker.state_change` | `services/circuit_breaker.py:80` |
+| `pipeline_stage_duration_seconds` | `pipeline.stage_duration_seconds` | pipeline tasks |
 
-Also add documentation for `pipeline_sla_seconds` histogram.
+`MetricsCollector._make_key()` at `services/metrics.py:60-65` preserves the name as-is (with dots). Tests also use dot notation.
+
+**Fix:** Update `docs/monitoring.md` to use the actual dot-separated metric names. Also add documentation for `pipeline_sla_seconds` histogram.
+
+**Verification:** Manual review of docs.
 
 ---
 
-### 9.2 New Documentation Files
+### D.7 New Documentation Files
 
-**Source:** plan9.md
+**Files:** `docs/pipeline.md`, `docs/operations.md`, `docs/webhooks.md`, `docs/analytics.md`
+**Effort:** Large (60 min)
 
 | File | Contents |
 |------|----------|
@@ -583,11 +833,14 @@ Also add documentation for `pipeline_sla_seconds` histogram.
 | `docs/webhooks.md` | All 7 API endpoints, event types, encryption at rest, trigger integration, idempotency |
 | `docs/analytics.md` | Search analytics endpoint, topic notes CRUD, subscriber export, pipeline SLA endpoint |
 
+**Verification:** Manual review for accuracy.
+
 ---
 
-### 9.3 Documentation Fixes
+### D.8 Documentation Fixes
 
-**Source:** plan9.md
+**Files:** `docs/api.md`, `docs/fallback-providers.md`, `docs/development.md`, `docs/runbook.md`, `docs/configuration.md`, `docs/components/badge.md`
+**Effort:** Medium (30 min)
 
 | File | Fix |
 |------|-----|
@@ -598,69 +851,52 @@ Also add documentation for `pipeline_sla_seconds` histogram.
 | `docs/configuration.md` | Add Celery Beat schedule section |
 | `docs/components/badge.md` | Remove `.confidence-label` (not in CSS) |
 
----
-
-### 9.4 Shares Toggle Logic Review
-
-**Source:** plan9.md Code Issue #7
-**Files:** `routes/admin/shares.py`
-
-**Problem:** POST handler exists but actual toggle logic (read current state, flip it) may not be implemented.
-
-**Action:** Verify toggle works correctly or implement missing logic.
+**Verification:** Manual review.
 
 ---
 
-### 9.5 AGENTS.md Task Count Correction
+## Items Verified as Already Done (No Action Needed)
 
-**Source:** plan9.md Code Issue #5
-**Files:** `AGENTS.md`
-
-**Fix:** Count is 8 but should be 9 — `consolidate-trend-memory` is missing from the count.
-
----
-
-## Items Verified as Correct (No Action Needed)
-
-These items were investigated and require no changes:
-
-| Item | Source | Finding |
-|------|--------|---------|
-| `tasks/edit.py:300` commit | plan2.md | Already has try/except with rollback |
-| `services/subagent.py:1029` silent except | plan2.md | Intentional — returns False appropriately |
-| `retry_stuck` / `publish_scheduled` autoretry | plan2.md | Fail-closed is correct design |
-| Lock release pattern | plan2.md | Uses atomic `release_lock` from redis_utils |
-| `services/trend_memory.py` unbounded loading | plan2.md | Self-bounded by TTLs |
-| ResponseCache L1/L2 | plan4.md | Excellent 2-tier caching with stampede protection |
-| Eager loading | plan4.md | Consistent joinedload usage |
-| ThreadPoolExecutor usage | plan4.md | Proper non-blocking I/O |
-| Streaming CSV export | plan4.md | Uses yield_per(500) |
-| Database indexes | plan4.md | All critical indexes in place |
+| Item | Finding |
+|------|---------|
+| `tasks/edit.py:300` commit | Already has try/except with rollback |
+| `services/subagent.py:1029` silent except | Intentional -- returns False appropriately |
+| `retry_stuck` / `publish_scheduled` autoretry | Fail-closed is correct design |
+| Lock release pattern | Uses atomic `release_lock` from redis_utils |
+| `services/trend_memory.py` unbounded loading | Self-bounded by TTLs |
+| ResponseCache L1/L2 | 2-tier caching with stampede protection |
+| Eager loading | Consistent joinedload usage |
+| ThreadPoolExecutor usage | Proper non-blocking I/O |
+| Streaming CSV export | Uses `yield_per(500)` |
+| Database indexes | All critical indexes in place (including `updated_at` via migration 026) |
+| ARIA attributes on filter tabs | Already present in `templates/partials/feed.html` |
+| Shares toggle logic | Properly implemented in `routes/admin/shares.py:15-28` |
+| AGENTS.md task count | Already correctly says "Nine" and lists all 9 tasks |
+| `tasks/extract.py:343` bare except | Outer except already has logging; inner metrics catch is intentionally silent |
 
 ---
 
 ## Deferred Items (Do Not Implement Without Explicit Direction)
 
-| Item | Source | Reason |
-|------|--------|--------|
-| Newsletter subagent chain | plan5.md | Lower priority |
-| Trend memory admin UI | plan5.md | Nice-to-have |
-| Public API rate limiting | plan5.md | AGENTS.md says don't add |
-| Pagination cursor-based | plan4.md | Works for current scale |
-| Global LLM circuit breaker | plan4.md | Per-provider sufficient |
-| Batch duplicate detection | plan4.md | Option A sufficient |
-| Redis pool segregation | plan4.md | Hasn't hit limits |
-| CSS minification | plan4.md | CDN handles gzip |
-| Announcement banner | plan4.md | Only if needed |
-| Tool expansion/validation | plan6.md | Low ROI |
-| Admin route fragmentation | plan5.md | Current split acceptable |
-| docs/api.md missing endpoints | plan5.md | Lower priority |
-| Tool registry auto-init | plan6.md | Optional |
-| Input/output token separation | plan6.md | Requires provider changes |
-| Provider logprobs confidence | plan6.md | Complex, not universal |
-| Ollama tool-calling | plan6.md | Not all models support |
-| Full editor with tools | plan6.md | Higher effort |
-| Persistent DuckDuckGo instance | plan4.md | Rate limits make pooling less impactful |
+| Item | Reason |
+|------|--------|
+| Newsletter subagent chain | Lower priority |
+| Trend memory admin UI | Nice-to-have |
+| Public API rate limiting | AGENTS.md says don't add `@limiter.limit()` |
+| Pagination cursor-based | Works for current scale |
+| Global LLM circuit breaker | Per-provider sufficient |
+| Batch duplicate detection | Current approach sufficient |
+| Redis pool segregation | Hasn't hit limits |
+| CSS minification | CDN handles gzip |
+| Announcement banner | Only if needed |
+| Tool expansion/validation | Low ROI |
+| Admin route fragmentation | Current split acceptable |
+| Tool registry auto-init | Optional |
+| Input/output token separation | Requires provider changes |
+| Provider logprobs confidence | Complex, not universal |
+| Ollama tool-calling | Not all models support |
+| Full editor with tools | Higher effort |
+| Persistent DuckDuckGo instance | Rate limits make pooling less impactful |
 
 ---
 
@@ -672,11 +908,13 @@ These items were investigated and require no changes:
 .venv/bin/python -m pytest tests/ -x -q --tb=short
 ```
 
-### After each wave:
+### After each batch:
 ```bash
 .venv/bin/ruff check . --exclude .venv
 .venv/bin/python -m pytest tests/ -x -q
 ```
+
+### Some LLM adapter tests may have pre-existing failures unrelated to code changes (per AGENTS.md).
 
 ---
 
@@ -686,56 +924,35 @@ These items were investigated and require no changes:
 |--------|----------------|
 | Precompiled regex | Remove constants, revert to inline `re.search()` |
 | Type hints | Remove `-> Response` annotations |
-| Database index | `flask db downgrade` |
+| Database index (model only) | Remove `index=True` from model |
 | Logging additions | Revert logger calls |
 | Session pooling | Remove session import, revert to `requests.get()` |
-| Duplicate limit | Revert to `limit(1000)` |
+| Duplicate limit | Revert to hardcoded `limit(1000)` |
 | Subagent workers | Remove env var, revert to `max_workers=8` |
 | Cost pricing | Remove pricing entries |
 | State machine | Revert to direct assignment |
-| Docker Compose | Remove docker-compose.yml |
-| CI/CD pipeline | Remove .github/workflows/ |
+| Docker Compose | Remove `docker-compose.yml` |
+| CI/CD pipeline | Remove `.github/workflows/` |
+| Secret rotation | Remove fallback env vars |
+| Audit category | Drop column via migration |
 
 ---
 
-## Dependencies Summary
+## Sub-agent Assignment Recommendations
 
-| Wave | Items | Key Dependencies |
-|------|-------|-----------------|
-| 1 | 1.1-1.4 | Independent |
-| 2 | 2.1-2.2 | Wave 1 recommended first |
-| 3 | 3.1-3.5 | Independent |
-| 4 | 4.1-4.5 | Wave 3 for provider chain |
-| 5 | 5.1-5.3 | Wave 4 for context injection |
-| 6 | 6.1-6.4 | Independent |
-| 7 | 7.1-7.6 | Independent |
-| 8 | 8.1-8.5 | Wave 4 base features |
-| 9 | 9.1-9.5 | Can run in parallel with any wave |
-
----
-
-## Parallelization Strategy for Sub-Agents
-
-**Sub-agents can implement items in parallel within each wave:**
-
-- **Wave 1:** 4 independent items → 4 sub-agents
-- **Wave 2:** 2 items → 2 sub-agents
-- **Wave 3:** 5 items → 3-5 sub-agents (session pooling needs its own, rest can parallelize)
-- **Wave 4:** 4 items with dependencies → suggest sequential or 2 parallel (4.1→4.2 chain)
-- **Wave 5:** 3 items → 3 sub-agents
-- **Wave 6:** 4 UX items → 4 sub-agents
-- **Wave 7:** 6 items → 4-6 sub-agents
-- **Wave 8:** 5 items with dependencies → suggest sequential or 2 parallel
-- **Wave 9:** Documentation only → 1-2 sub-agents
-
-**Recommended sub-agent assignments:**
-1. **Performance sub-agent:** Wave 1 (1.1, 1.2, 1.3, 1.4), Wave 3 (3.1, 3.2, 3.3)
-2. **Testing sub-agent:** Wave 2 (2.1, 2.2)
-3. **Agent sub-agent:** Wave 4 (4.1-4.5), Wave 8 (8.1-8.5)
-4. **Security sub-agent:** Wave 5 (5.1-5.3)
-5. **UX sub-agent:** Wave 6 (6.1-6.4)
-6. **Infra sub-agent:** Wave 7 (7.1-7.6)
-7. **Docs sub-agent:** Wave 9 (9.1-9.5)
+| Sub-agent | Items | Estimated Time |
+|-----------|-------|---------------|
+| **Performance** | A.1 (regex), A.2 (logging), A.3 (thread pool), A.4 (cost pricing) | 30 min |
+| **UX** | A.5 (search clear), A.6 (font size), A.7 (date format) | 40 min |
+| **Infra-small** | A.8 (beat reload), A.9 (traced_stage), A.10 (threshold config) | 35 min |
+| **Testing** | B.1 (mock fixes), B.2 (test helpers) | 60 min |
+| **Performance-2** | B.3 (session pooling), B.4 (dup limit), B.5 (index) | 45 min |
+| **Newsletter** | B.6 (dead letter retry), B.7 (trend memory split) | 45 min |
+| **Security** | B.8 (secret rotation), B.9 (audit logging), B.10 (size limits) | 80 min |
+| **Architecture** | B.11 (state machine), B.12 (docker), B.13 (CI/CD) | 105 min |
+| **Agent-harness** | C.1 (tools), C.2 (fallback), C.3 (context), C.4 (quality gates), C.5 (type hints) | 195 min |
+| **Advanced** | D.1-D.5 (advanced features) | 180 min |
+| **Docs** | D.6-D.8 (documentation) | 100 min |
 
 ---
 

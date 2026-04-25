@@ -188,7 +188,7 @@ def run_stage(
     )
     from services.pipeline_monitor import record_stage_result
     from services.metrics import get_metrics
-    from services.logging_utils import set_task_request_id
+    from services.logging_utils import set_task_request_id, traced_stage
 
     if task_self and hasattr(task_self, "request"):
         headers = getattr(task_self.request, "headers", None) or {}
@@ -254,7 +254,8 @@ def run_stage(
 
         provider, model, max_tokens, provider_id = get_provider_for_role(stage)
 
-        result = work_fn(article, provider, model, max_tokens)
+        with traced_stage(stage, "work"):
+            result = work_fn(article, provider, model, max_tokens)
 
         record_provider_success(provider_id, model, tokens_used=result.tokens_used)
         article.retry_count = 0

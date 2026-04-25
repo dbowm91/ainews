@@ -21,6 +21,16 @@ _DEFAULT_RATES = {
     "anthropic/claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
     "anthropic/claude-haiku-20241022": {"input": 0.25, "output": 1.25},
     "anthropic/claude-opus-4-20250514": {"input": 15.00, "output": 75.00},
+    "deepseek/deepseek-chat": {"input": 0.27, "output": 1.10},
+    "minimax/MiniMax-M2.5": {"input": 0.20, "output": 1.10},
+    "gemini/gemini-2.0-flash": {"input": 0.10, "output": 0.40},
+    "groq/llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
+    "openrouter/anthropic/claude-3.5-sonnet": {"input": 3.00, "output": 15.00},
+    "xai/grok-2-1212": {"input": 2.00, "output": 10.00},
+    "togetherai/meta-llama/Llama-3-70b-chat-hf": {"input": 0.80, "output": 0.80},
+    "fireworks/accounts/fireworks/models/llama-v3-70b-instruct": {"input": 0.80, "output": 0.80},
+    "cerebras/llama-3.3-70b": {"input": 0.85, "output": 1.20},
+    "zai/glm-4": {"input": 1.40, "output": 1.40},
 }
 
 
@@ -121,6 +131,8 @@ def get_cost_summary() -> CostSummary:
         if rate and mc.total_tokens > 0:
             blended = rate["input"] * input_ratio + rate["output"] * output_ratio
             mc.estimated_cost_usd = round(mc.total_tokens / 1_000_000 * blended, 4)
+        else:
+            logger.debug("No pricing found for model: %s", model_key)
         summary.total_tokens += mc.total_tokens
         summary.total_cost_usd += mc.estimated_cost_usd
         summary.total_calls += mc.call_count

@@ -17,6 +17,9 @@ from services.prompts import esc_xml_text
 
 logger = logging.getLogger(__name__)
 
+_MARKDOWN_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
+_BRACE_JSON_RE = re.compile(r'\{[\s\S]*\}')
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -33,7 +36,7 @@ def _extract_json(raw: str) -> str:
     except json_mod.JSONDecodeError:
         pass
 
-    match = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw, re.MULTILINE)
+    match = _MARKDOWN_JSON_RE.search(raw)
     if match:
         candidate = match.group(1).strip()
         try:
@@ -42,7 +45,7 @@ def _extract_json(raw: str) -> str:
         except json_mod.JSONDecodeError:
             pass
 
-    match = re.search(r'\{[\s\S]*\}', raw)
+    match = _BRACE_JSON_RE.search(raw)
     if match:
         candidate = match.group(0).strip()
         try:

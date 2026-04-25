@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import logging
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Type
@@ -25,7 +26,8 @@ from schemas.llm_responses import (  # noqa: F401
 
 _TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
-_subagent_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="subagent")
+SUBAGENT_WORKERS = int(os.environ.get("SUBAGENT_WORKERS", "8"))
+_subagent_executor = ThreadPoolExecutor(max_workers=SUBAGENT_WORKERS, thread_name_prefix="subagent")
 
 
 def register_tool(definition: ToolDefinition) -> None:

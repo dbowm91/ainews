@@ -56,8 +56,8 @@ def _load_fallback_keys() -> None:
         if key:
             try:
                 _FALLBACK_KEYS.append(Fernet(key.encode("utf-8")))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Skipping invalid fallback key: %s", e)
 
 
 def _encrypt_secret(plaintext: str) -> str:

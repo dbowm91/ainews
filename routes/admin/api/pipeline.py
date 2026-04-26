@@ -127,7 +127,7 @@ def sources_health() -> Response:
                     if s.last_success_at
                     else None,
                     "last_error": s.last_error,
-                    "disabled_at": s.last_error.isoformat() if s.last_error else None,
+                    "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
                 }
                 for s in sources
             ]

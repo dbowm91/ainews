@@ -675,3 +675,29 @@ retry_messages.append({
 **`traced_stage()` integrated**: Defined at `services/logging_utils.py:262-281` and now wired into `run_stage()` at `tasks/pipeline.py:308` via `with traced_stage(stage, "work"):`.
 
 **Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.
+
+## New learnings (April 26, 2026 session)
+
+**`initialize_tool_registry()` signature mismatch**: The function in `services/subagent.py:328` accepts no arguments, but `tasks/edit.py:108` and `tasks/research.py:106` call it with `stage_config.tools` argument. This causes `TypeError`. Fix by updating the function to accept `tool_names: list[str] | None = None`.
+
+**Subagent retry backoff off by one**: `services/subagent.py:512` uses `2 ** (attempt - 1)` for retry delay. The chain loop at line 905 correctly uses `2 ** attempt`. Align by changing line 512 to `2 ** attempt`.
+
+**PENDING→REVIEW transition**: After `constants.py:41` fix, `PipelineStatus.PENDING` can transition to `PipelineStatus.REVIEW`. This makes `tasks/select.py:89` low-confidence routing valid.
+
+**DuckDuckGo SSRF validation missing**: `services/search/duckduckgo.py:16-29` does not call `validate_url_safe()` on result URLs. Other search providers (searxng, google) do validate. DuckDuckGo results should be validated before returning.
+
+**Chain condition `previous` not in `_ALLOWED_NAMES`**: `services/subagent.py:966` — `previous` is not in the allowed names set for condition evaluation. Chain conditions using `previous.steps[0].success` would fail with `ValueError: Unknown identifier: previous`.
+
+**Single-brace template variables not resolved**: `services/subagent.py:1050` checks `if isinstance(value, str) and "{{" in value:` — only double braces trigger resolution. Single-brace `{var}` in chain step templates are never resolved. Change condition to `"{" in value`.
+
+**Subagent chain template resolution result is USED**: Earlier concern that `_resolve_template_variables` result was overwritten is INACCURATE. The result flows through via `prompt_data_escaped = _escape_prompt_data(prompt_data)` and is used in `template.format(**prompt_data_escaped)`.
+
+**Webhooks article.failed and newsletter.failed events never triggered**: `services/webhooks.py` defines these in `KNOWN_WEBHOOK_EVENTS` but no code calls `trigger_event("article.failed", ...)` or `trigger_event("newsletter.failed", ...)`.
+
+**Newsletter webhook nl parameter type mismatch**: `tasks/newsletter.py:259` uses `NewsletterConfig` object (not `Newsletter` model) for `nl` parameter. The `newsletter_id` is always NULL since `NewsletterConfig` has no `id` attribute.
+
+**ResponseCache blpop race condition**: `services/cache.py:141-158` — after `blpop` returns indicating lock released, code immediately calls `cache.get(key)`. The lock holder may still be writing to cache. Replace blpop polling with direct cache key existence polling.
+
+**trend_memory `_find_overlapping_low_entries` is dead code**: The function `services/trend_memory.py:270-281` is defined but never called anywhere. Safe to ignore or remove.
+
+**Admin UI time inconsistency in trend memory**: Admin UI at `/admin/trend-memory` uses `db.func.now()` for count but `datetime.now(timezone.utc)` for delete — this is a known display inconsistency, not a data corruption issue.

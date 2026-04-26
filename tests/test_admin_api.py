@@ -154,16 +154,21 @@ class TestSourcesHealth:
     def test_requires_auth(self, client):
         assert client.get("/admin/api/sources/health").status_code in (302, 401)
 
-    def test_authenticated(self, auth_client, create_source, app):
+    def test_authenticated_with_last_error(self, auth_client, create_source, app):
         from extensions import db
+        from datetime import datetime, timezone
 
         with app.app_context():
-            create_source(source_key="src-1", name="Src 1")
+            source = create_source(source_key="src-1", name="Src 1")
+            source.last_error = "Connection timeout"
+            source.disabled_at = datetime(2026, 4, 1, tzinfo=timezone.utc)
             db.session.commit()
         resp = auth_client.get("/admin/api/sources/health")
         assert resp.status_code == 200
         data = resp.get_json()
         assert len(data["sources"]) == 1
+        assert data["sources"][0]["last_error"] == "Connection timeout"
+        assert data["sources"][0]["disabled_at"].startswith("2026-04-01")
 
 
 class TestArticleEdit:

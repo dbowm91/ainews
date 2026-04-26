@@ -4,6 +4,7 @@ from typing import Any
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_task_logger(__name__)
 
@@ -147,7 +148,11 @@ def _create_article_record(
             )
         )
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
     return article
 
 

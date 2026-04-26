@@ -180,9 +180,8 @@ def _dispatch_after_extraction(article_id: int, run_id: int | None = None) -> No
     try:
         _dispatch_next(article_id, run_id=run_id, next_status="pending")
     except Exception as e:
-        article.pipeline_status = "failed"
         article.last_error = "Failed to dispatch to pipeline"
-        db.session.commit()
+        db.session.rollback()
         logger.error("Failed to dispatch select_article for article %s: %s", article_id, e)
         raise
 

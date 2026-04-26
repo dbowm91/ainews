@@ -384,7 +384,7 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **SLA metrics sort optimization**: `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats, reducing from 6 sorts (3 metrics × 2 `_sorted_stats` calls each) to 3 sorts. This matters for large result sets.
 
-**Duplicate detection memory bound**: `find_duplicate_titles()` uses `.limit(1000).order_by(Article.created_at.desc())` to bound memory usage. The function breaks on first match so the full limit rarely loads. `TITLE_SIMILARITY_THRESHOLD` (0.5) is defined at `services/article.py:51`, NOT in `constants.py`.
+**Duplicate detection memory bound**: `find_duplicate_titles()` uses `.limit(DUPLICATE_DETECTION_LIMIT).order_by(Article.created_at.desc())` to bound memory usage. `DUPLICATE_DETECTION_LIMIT` defaults to 200, configurable via env var. The function breaks on first match so the full limit rarely loads. `TITLE_SIMILARITY_THRESHOLD` (0.5) is defined at `services/article.py:52`, NOT in `constants.py`.
 
 **Article detail cache key namespacing**: Admin article routes use `pub:article_detail:{id}` prefix for consistency with public cache keys.
 

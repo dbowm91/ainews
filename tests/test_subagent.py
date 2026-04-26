@@ -1,5 +1,6 @@
 """Tests for the subagent service."""
 
+import pytest
 from unittest.mock import MagicMock, patch
 
 
@@ -943,10 +944,10 @@ class TestEvaluateCondition:
 
         context = {"results": {"key": "value", "count": 5}}
 
-        assert _evaluate_condition("results.get('key') == 'value'", context) is True
-        assert _evaluate_condition("results.get('key') == 'wrong'", context) is False
-        assert _evaluate_condition("results.get('count') > 3", context) is True
-        assert _evaluate_condition("results.get('count') < 3", context) is False
+        assert _evaluate_condition("results['key'] == 'value'", context) is True
+        assert _evaluate_condition("results['key'] == 'wrong'", context) is False
+        assert _evaluate_condition("results['count'] > 3", context) is True
+        assert _evaluate_condition("results['count'] < 3", context) is False
 
     def test_evaluate_condition_with_and_or(self):
         """Condition evaluation supports AND/OR operators."""
@@ -954,10 +955,10 @@ class TestEvaluateCondition:
 
         context = {"results": {"a": True, "b": False}}
 
-        assert _evaluate_condition("results.get('a') and True", context) is True
-        assert _evaluate_condition("results.get('a') and results.get('b')", context) is False
-        assert _evaluate_condition("results.get('a') or results.get('b')", context) is True
-        assert _evaluate_condition("results.get('b') or False", context) is False
+        assert _evaluate_condition("results['a'] and True", context) is True
+        assert _evaluate_condition("results['a'] and results['b']", context) is False
+        assert _evaluate_condition("results['a'] or results['b']", context) is True
+        assert _evaluate_condition("results['b'] or False", context) is False
 
     def test_evaluate_condition_with_not(self):
         """Condition evaluation supports NOT operator."""
@@ -965,7 +966,7 @@ class TestEvaluateCondition:
 
         context = {"results": {"flag": False}}
 
-        assert _evaluate_condition("not results.get('flag')", context) is True
+        assert _evaluate_condition("not results['flag']", context) is True
         assert _evaluate_condition("not True", {"results": {}}) is False
 
     def test_evaluate_condition_invalid_syntax(self):
@@ -990,5 +991,31 @@ class TestEvaluateCondition:
 
         context = {"results": {"items": [1, 2, 3]}}
 
-        assert _evaluate_condition("1 in results.get('items')", context) is True
-        assert _evaluate_condition("5 in results.get('items')", context) is False
+        assert _evaluate_condition("1 in results['items']", context) is True
+        assert _evaluate_condition("5 in results['items']", context) is False
+
+    def test_condition_evaluator_blocks_function_calls(self):
+        """Function calls in conditions raise ValueError for security."""
+        from services.subagent import _evaluate_condition
+
+        context = {"results": {"items": [1, 2, 3]}}
+
+        with pytest.raises(ValueError):
+            _evaluate_condition("len(results['items']) > 1", context)
+
+        with pytest.raises(ValueError):
+            _evaluate_condition("int(results['items'][0])", context)
+
+        with pytest.raises(ValueError):
+            _evaluate_condition("max(results['items'])", context)
+
+    def test_condition_evaluator_dict_access_works(self):
+        """Dict access + boolean comparisons still work."""
+        from services.subagent import _evaluate_condition
+
+        context = {"results": {"key": "value", "count": 5, "active": True}}
+
+        assert _evaluate_condition("results['key'] == 'value'", context) is True
+        assert _evaluate_condition("results['count'] >= 5", context) is True
+        assert _evaluate_condition("results['active']", context) is True
+        assert _evaluate_condition("results['key'] != 'wrong'", context) is True

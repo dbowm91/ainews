@@ -1022,11 +1022,6 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
                     return obj[idx]
                 raise ValueError("List index must be an integer")
             raise ValueError("Subscript target must be dict or list")
-        elif isinstance(node, ast.Call):
-            func = _eval_node(node.func)
-            args = [_eval_node(arg) for arg in node.args]
-            kwargs = {k.arg: _eval_node(k.value) for k in node.keywords if k.arg}
-            return func(*args, **kwargs)
         else:
             raise ValueError(f"Unsupported node type: {type(node).__name__}")
 
@@ -1037,6 +1032,10 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
 
     try:
         return bool(_eval_node(tree))
+    except ValueError as e:
+        if "Unsupported node type" in str(e):
+            raise
+        return False
     except Exception:
         return False
 

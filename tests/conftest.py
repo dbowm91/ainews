@@ -101,6 +101,11 @@ def app(monkeypatch):
 
     app = create_app("testing")
 
+    from celery_support import _app_cache, _app_cache_lock
+
+    with _app_cache_lock:
+        _app_cache["testing"] = app
+
     from extensions import limiter
 
     limiter.enabled = False

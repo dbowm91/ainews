@@ -5,6 +5,7 @@ For pagination and FTS search, see services/pagination.py.
 """
 
 import logging
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
@@ -48,7 +49,9 @@ def _log_search_query(query: str, results_count: int) -> None:
 
 # Threshold for Jaccard similarity on title word sets (0–1).
 # Pairs with similarity >= this value are considered duplicates.
-TITLE_SIMILARITY_THRESHOLD = 0.5
+TITLE_SIMILARITY_THRESHOLD = float(os.environ.get("TITLE_SIMILARITY_THRESHOLD", "0.5"))
+
+DUPLICATE_DETECTION_LIMIT = int(os.environ.get("DUPLICATE_DETECTION_LIMIT", "200"))
 
 # Default number of days to look back for duplicate titles.
 _DEFAULT_DUPLICATE_DETECTION_DAYS = 7
@@ -304,7 +307,7 @@ def find_duplicate_titles(
         )
         .order_by(Article.created_at.desc())
         .with_entities(Article.id, Article.original_title)
-        .limit(1000)
+        .limit(DUPLICATE_DETECTION_LIMIT)
         .all()
     )
     for article_id, other_title in rows:

@@ -40,14 +40,13 @@ def select_article(self, article_id: int, run_id=None):
     article_id = validated.article_id
     run_id = validated.run_id
 
-    from models import PipelineRun
-    from extensions import db
-    from schemas.pipeline import get_role_config
-    from schemas.llm_responses import SelectionResult
-    from services.prompts import get_system_prompt
-    from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next
-
     def work(article, provider, model, max_tokens):
+        from models import PipelineRun
+        from extensions import db
+        from schemas.pipeline import get_role_config
+        from schemas.llm_responses import SelectionResult
+        from services.prompts import get_system_prompt
+        from tasks.pipeline import _log_pipeline, _dispatch_next, _transition_article_status
         from services.prompts import esc_xml_text
 
         rc = get_role_config("selector")
@@ -60,7 +59,8 @@ def select_article(self, article_id: int, run_id=None):
             f"</article>\n\n"
             "Should we write a condensed news article about this? "
             "Score 1-10 for newsworthiness to a tech audience. "
-            "Return JSON with selected (bool), score (1-10), reason (string)."
+            "Also rate your confidence in this selection as low, medium, or high. "
+            "Return JSON with selected (bool), score (1-10), reason (string), confidence (low|medium|high)."
         )
 
         from services.metrics import time_histogram
@@ -81,33 +81,62 @@ def select_article(self, article_id: int, run_id=None):
 
         article.selector_result = result.model_dump()
 
+        # A/B experiment assignment (if experiments configured)
+        from schemas.pipeline import get_config_with_default
+        _cfg = get_config_with_default()
+        if hasattr(_cfg, "experiments") and _cfg.experiments and _cfg.experiments.get("prompt_variants"):
+            import secrets
+            variants = list(_cfg.experiments["prompt_variants"].keys())
+            article.experiment_group = secrets.choice(variants)
+
         if result.selected and result.score >= (rc.min_score or 6):
-            article.pipeline_status = PipelineStatus.RESEARCHING
-            article.selected_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            if run_id:
-                run = db.session.get(PipelineRun, run_id)
-                if run:
-                    run.articles_selected = (run.articles_selected or 0) + 1
-            try:
-                db.session.commit()
-            except SQLAlchemyError:
-                db.session.rollback()
-                raise
-            if run_id and run:
-                _log_pipeline(
-                    run_id,
-                    "select",
-                    "info",
-                    "Selected [%s/10]: %s",
-                    result.score,
-                    truncate_for_log(article.original_title),
-                    article_id=article.id,
+            if result.confidence == "low":
+                _transition_article_status(article, PipelineStatus.REVIEW)
+                try:
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+                    raise
+                if run_id:
+                    _log_pipeline(
+                        run_id,
+                        "select",
+                        "info",
+                        "Low-confidence selected [%s/10]: %s",
+                        result.score,
+                        truncate_for_log(article.original_title),
+                        article_id=article.id,
+                    )
+                _dispatch_next(
+                    article_id, run_id=run_id, next_status=PipelineStatus.REVIEW
                 )
-            _dispatch_next(
-                article_id, run_id=run_id, next_status=PipelineStatus.RESEARCHING
-            )
+            else:
+                _transition_article_status(article, PipelineStatus.RESEARCHING)
+                article.selected_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                if run_id:
+                    run = db.session.get(PipelineRun, run_id)
+                    if run:
+                        run.articles_selected = (run.articles_selected or 0) + 1
+                try:
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+                    raise
+                if run_id:
+                    _log_pipeline(
+                        run_id,
+                        "select",
+                        "info",
+                        "Selected [%s/10]: %s",
+                        result.score,
+                        truncate_for_log(article.original_title),
+                        article_id=article.id,
+                    )
+                _dispatch_next(
+                    article_id, run_id=run_id, next_status=PipelineStatus.RESEARCHING
+                )
         else:
-            article.pipeline_status = PipelineStatus.SKIPPED
+            _transition_article_status(article, PipelineStatus.SKIPPED)
             try:
                 db.session.commit()
             except SQLAlchemyError:
@@ -127,6 +156,7 @@ def select_article(self, article_id: int, run_id=None):
 
             return {"article_id": article_id, "result": article.selector_result}
 
+    from tasks.pipeline import run_stage
     return run_stage(
         "selector",
         article_id,

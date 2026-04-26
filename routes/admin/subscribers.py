@@ -5,7 +5,7 @@ from constants import PER_PAGE_ADMIN_SUBSCRIBERS
 
 @admin_bp.route("/subscribers")
 @require_auth
-def subscribers():
+def subscribers() -> str:
     from models import Subscriber
     from services.utils import paginate_query
 
@@ -49,8 +49,9 @@ def subscribers():
 
 @admin_bp.route("/subscribers/export")
 @require_auth
-def export_subscribers():
+def export_subscribers() -> Response:
     from models import Subscriber
+    from services.audit import log_admin_action
     import csv
     import io
     import logging
@@ -65,6 +66,7 @@ def export_subscribers():
         output.seek(0)
         output.truncate(0)
 
+        count = 0
         try:
             query = (
                 Subscriber.query.filter(Subscriber.deleted_at.is_(None))
@@ -80,9 +82,19 @@ def export_subscribers():
                         sub.active,
                     ]
                 )
+                count += 1
                 yield output.getvalue()
                 output.seek(0)
                 output.truncate(0)
+
+            try:
+                log_admin_action(
+                    "subscriber_export",
+                    category="subscriber",
+                    details={"count": count},
+                )
+            except Exception:
+                logger.warning("Audit logging failed for subscriber_export")
         except Exception as e:
             logger.error("CSV export failed: %s", e)
             yield f"# ERROR: {e}\n"

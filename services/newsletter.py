@@ -46,8 +46,7 @@ def generate_newsletter_html(
     items_parts = []
     for i, article in enumerate(articles, 1):
         headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
-        link = f"{site_url}/article/{article.id}"
-        safe_link = quote(link, safe=":/.?=&#")
+        trackable_link = f"{site_url}/track/newsletter-click/{article.id}"
         category = article.category or ""
         safe_headline = escape(headline)
         safe_category = escape(category)
@@ -60,7 +59,7 @@ def generate_newsletter_html(
               <tr>
                 <td width="40" style="font-family:monospace;font-size:18px;color:#888;font-weight:700;vertical-align:top;padding-right:12px;">{i}.</td>
                 <td>
-                  <a href="{safe_link}" style="color:#111;font-size:16px;font-weight:600;text-decoration:none;line-height:1.3;">{safe_headline}</a>
+                  <a href="{quote(trackable_link, safe=":/.?=&#")}" style="color:#111;font-size:16px;font-weight:600;text-decoration:none;line-height:1.3;">{safe_headline}</a>
                   {'<br><span style="font-family:monospace;font-size:11px;color:#888;text-transform:uppercase;">' + safe_category + "</span>" if category else ""}
                   <p style="color:#555;font-size:14px;line-height:1.5;margin:6px 0 0 0;">{safe_tldr}</p>
                 </td>

@@ -97,7 +97,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 
 `services/subagent.py` provides `run_subagent()` for running lightweight subagent tasks synchronously within parent Celery tasks. Uses `services/context_service.py` for topic note CRUD and related article lookup. Configuration in `pipeline.yaml` under `subagent:` section. Failures degrade gracefully — subagent errors never crash the parent pipeline.
 
-**Tool-calling infrastructure exists but is not used in production:** `run_subagent_with_tools()` exists in `services/subagent.py:608-787` and all providers support `chat_with_tools()`, but `resolve_subagent_config()` does not pass the `tools` field through to the returned config. This is a planned enhancement.
+**Tool-calling infrastructure is now in production:** `run_subagent_with_tools()` at `services/subagent.py:608` is wired into pipeline tasks. Research stage uses it for web synthesis, Edit stage uses it for contextualization. Configured via `tools:` in `pipeline.yaml` subagent config.
 
 ### Trend memory system
 
@@ -108,8 +108,7 @@ Key components:
 - `MemoryImportance` enum in `services/trend_memory.py` — LOW/MEDIUM/HIGH tiers
 - `consolidate_trend_memory` Celery task — nightly at 3:30 AM; promotes low-importance entries to medium when a high-importance entry exists for the same topic
 - Configuration in `pipeline.yaml` under `memory:` section (all values configurable)
-
-The editor subagent template (`edit_contextualization` in `services/subagent.py`) includes `{trend_memory}` which is resolved at call time in `tasks/edit.py`.
+- **Admin UI**: `/admin/trend-memory` provides list view with filtering by topic/importance, delete individual entries, and purge expired entries
 
 ## LLM provider support
 
@@ -155,7 +154,7 @@ Distributed locks in Celery tasks must be retry-aware. Use the task's `self.requ
 
 ## Celery beat schedule
 
-Nine scheduled tasks are configured in `config.py`:
+Twelve scheduled tasks are configured in `config.py`:
 - `run-all-sources` — crawl all sources every 30 minutes
 - `retry-stuck-articles` — retry stuck articles every 60 minutes
 - `generate-newsletters` — daily at 8:00 AM (cron)
@@ -163,8 +162,12 @@ Nine scheduled tasks are configured in `config.py`:
 - `cleanup-expired-verifications` — every 15 minutes
 - `cleanup-stale-limiter-slots` — every 5 minutes
 - `consolidate-trend-memory` — daily at 3:30 AM (cron)
+- `purge-trend-memory` — daily at 3:45 AM (cron)
 - `cleanup-old-article-versions` — daily at 3:45 AM (cron)
 - `publish-scheduled-articles` — every 5 minutes
+- `cleanup-stale-limiter-slots` — every 5 minutes
+- `retry-failed-newsletter-deliveries` — every 2 hours
+- `recalculate-impact-scores` — daily at 4:00 AM (cron)
 
 All schedule values are configurable via `pipeline.yaml` `schedule:` section.
 
@@ -337,6 +340,14 @@ During crawling, articles from different sources with near-duplicate titles are 
 
 **Celery app cache extraction pattern**: When a module has side effects at import time (like `celery_app.py`'s `_init_celery()` which changes SQLAlchemy's connection state), and you need to reference its functionality from tests, extract the shared state into a separate module. The `celery_support.py` pattern — where `_app_cache`, `_app_cache_lock`, and `clear_app_cache()` live separately from `celery_app.py` — allows tests to clear the cache without triggering import-time side effects.
 
+**Celery task app cache in tests**: The `app` fixture in `conftest.py` must populate `_app_cache["testing"]` with the test app to ensure Celery tasks called directly (not via `.delay()`) use the test's app context. Without this, `FlaskTask.__call__` creates a new app from `create_app()` which uses a separate `sqlite:///:memory:` database, causing test data to be invisible to tasks. The fix:
+
+```python
+from celery_support import _app_cache, _app_cache_lock
+with _app_cache_lock:
+    _app_cache["testing"] = app
+```
+
 **Changing function return signatures**: When modifying `get_provider_for_role()` to return 4 values instead of 3, ALL test mocks (`tests/helpers/pipeline_mocks.py`, `tests/test_pipeline.py`, `tests/test_pipeline_e2e.py`, `tests/test_subagent.py`) must be updated simultaneously. A single outdated mock causes `ValueError: not enough values to unpack`.
 
 **Test mock completeness**: When patching functions, ensure ALL functions in the call chain are patched. For example, `subagent.py` calls `get_provider_by_id()` (not just `get_provider_for_role()`), so tests must patch both when testing subagent behavior.
@@ -373,7 +384,7 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **SLA metrics sort optimization**: `routes/admin/api/pipeline.py:pipeline_sla()` sorts once per metric before computing stats, reducing from 6 sorts (3 metrics × 2 `_sorted_stats` calls each) to 3 sorts. This matters for large result sets.
 
-**Duplicate detection memory bound**: `find_duplicate_titles()` uses `.limit(1000).order_by(Article.created_at.desc())` to bound memory usage. The function breaks on first match so the full limit rarely loads. `TITLE_SIMILARITY_THRESHOLD` (0.5) is defined at `services/article.py:51`, NOT in `constants.py`.
+**Duplicate detection memory bound**: `find_duplicate_titles()` uses `.limit(DUPLICATE_DETECTION_LIMIT).order_by(Article.created_at.desc())` to bound memory usage. `DUPLICATE_DETECTION_LIMIT` defaults to 200, configurable via env var. The function breaks on first match so the full limit rarely loads. `TITLE_SIMILARITY_THRESHOLD` (0.5) is defined at `services/article.py:52`, NOT in `constants.py`.
 
 **Article detail cache key namespacing**: Admin article routes use `pub:article_detail:{id}` prefix for consistency with public cache keys.
 
@@ -614,15 +625,16 @@ _CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=CONTENT_EXTRACTOR_WORKERS, .
 
 Applied in `services/content_extractor.py`.
 
+**Subagent thread pool configurability**: `SUBAGENT_WORKERS` env var controls `_subagent_executor` pool size in `services/subagent.py`.
+
 **Precompiled regex patterns**: Hot-path regex patterns should be precompiled at module level:
 
 ```python
-_PASSWORD_HASH_RE = re.compile(r"^(scrypt|pbkdf2|argon2):")
-_EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
-_SOURCE_KEY_STRIP_RE = re.compile(r"[^a-z0-9\s-]")
+_MARKDOWN_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
+_BRACE_JSON_RE = re.compile(r'\{[\s\S]*\}')
 ```
 
-Applied in `services/validation.py`, `schemas/tasks.py`, and `routes/admin/sources.py`.
+Applied in `services/llm/base.py` for JSON extraction.
 
 **Exponential backoff for retries**: Use exponential backoff with jitter instead of fixed delays:
 
@@ -657,22 +669,10 @@ retry_messages.append({
 
 ## Codebase verification notes
 
-**`TITLE_SIMILARITY_THRESHOLD` location**: Defined at `services/article.py:51`, NOT in `constants.py`. Used as default parameter at line 262. Do not look for it in constants.
+**`TITLE_SIMILARITY_THRESHOLD` location**: Defined at `services/article.py:52`, configurable via env var. Used as default parameter at line 263. Do not look for it in constants.
 
-**`Article.updated_at` index**: Exists at the database level via migration `026_article_updated_at_index.py`, but the SQLAlchemy model definition (`models.py:128-131`) does NOT have `index=True`. This means `db.create_all()` in tests won't create the index.
+**`Article.updated_at` index**: SQLAlchemy model definition (`models.py:128-132`) now has `index=True`. Database-level index exists via migration `026_article_updated_at_index.py`.
 
-**`traced_stage()` unused**: Defined at `services/logging_utils.py:262-281` but never called anywhere. Meanwhile `traced_llm_call()` IS used in all four pipeline stage tasks. Do not assume `traced_stage()` is wired into anything.
+**`traced_stage()` integrated**: Defined at `services/logging_utils.py:262-281` and now wired into `run_stage()` at `tasks/pipeline.py:308` via `with traced_stage(stage, "work"):`.
 
-**Config reload endpoint gap**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` clears config/provider/app caches but does NOT call `Config.reload_beat_schedule()`. The reload endpoint file is `routes/admin/api/config.py`, not `routes/admin/api.py`.
-
-**Metric naming uses dots**: Metrics use dot-separated names (e.g., `circuit_breaker.state_change`, `pipeline.stage_duration_seconds`), NOT underscores. This is consistent with the `MetricsCollector._make_key()` behavior at `services/metrics.py:60-65`.
-
-**Research stage context**: Research stage (`tasks/research.py`) has related articles via `find_related_articles_dicts()` at lines 100-103, but does NOT have topic notes or trend memory. Edit stage has all three (topic notes, related articles, trend memory). Write stage has no additional context beyond research brief.
-
-**`resolve_subagent_config()` drops `tools`**: The function at `schemas/pipeline.py:175-204` builds kwargs from `SubagentStageConfig` but omits the `tools` field (defined at line 101). Tool-calling infrastructure (`run_subagent_with_tools()`, tool definitions, `initialize_tool_registry()`) exists but is not wired through the config resolution path.
-
-**Test work function return types**: Test work functions in `tests/test_pipeline_e2e.py` return plain dicts, but `run_stage()` at `tasks/pipeline.py:257-259` accesses `.tokens_used` on the result. Test work functions should return `LLMResponse` instances or `SimpleNamespace` objects with `.tokens_used`, not plain dicts.
-
-**Pipeline state machine enforcement**: `_transition_article_status()` is defined at `tasks/pipeline.py:127-145` but only called once (line 241). All pipeline task files (`tasks/select.py`, `tasks/research.py`, `tasks/write.py`, `tasks/edit.py`, `services/pipeline_failure.py`) use direct `article.pipeline_status = PipelineStatus.X` assignment instead.
-
-**Config reload file location**: The config reload endpoint is in `routes/admin/api/config.py`, not `routes/admin/api.py`. The `routes/admin/api/` directory contains multiple files (`__init__.py`, `articles.py`, `config.py`, `pipeline.py`, `webhooks.py`).
+**Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.

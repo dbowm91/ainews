@@ -332,3 +332,65 @@ crawl → extract → select → research → write → edit → done
 | `edit` | LLM reviews and polishes draft, assigns tags | Yes |
 
 If a stage is skipped, the article advances to the next stage with default content. If a stage fails after retries, it degrades gracefully and continues.
+
+## Celery Beat Schedule
+
+Nine scheduled tasks run via Celery Beat:
+
+```python
+Config.get_beat_schedule()  # reads from pipeline.yaml schedule: section
+```
+
+| Task | Default Schedule | Purpose |
+|------|-----------------|---------|
+| `run-all-sources` | Every 30 min | Crawl all active RSS/API sources |
+| `retry-stuck-articles` | Every 60 min | Retry articles stuck in pipeline |
+| `generate-newsletters` | Daily 8:00 AM | Generate and send newsletters |
+| `cleanup-old-logs` | Daily 3:00 AM | Purge old pipeline logs |
+| `cleanup-expired-verifications` | Every 15 min | Clean expired subscriber tokens |
+| `cleanup-stale-limiter-slots` | Every 5 min | Release stale rate limiter slots |
+| `consolidate-trend-memory` | Daily 3:30 AM | Promote low-importance memory |
+| `cleanup-old-article-versions` | Daily 3:45 AM | Purge old article versions |
+| `publish-scheduled-articles` | Every 5 min | Publish time-scheduled articles |
+
+Additional tasks (if enabled via feature flags):
+
+| Task | Schedule | Purpose |
+|------|---------|---------|
+| `retry-failed-newsletter-deliveries` | Every 2 hours | Retry permanently failed newsletter emails |
+| `recalculate-impact-scores` | Daily 4:00 AM | Recalculate article impact scores |
+
+### Reloading Schedule
+
+After modifying `pipeline.yaml`, call:
+
+```python
+from config import Config
+from celery_app import celery_app
+Config.reload_beat_schedule(celery_app)
+```
+
+Or via the admin API:
+
+```bash
+curl -X POST http://localhost:5000/admin/api/config/reload \
+  -H "X-CSRFToken: ..."
+```
+
+All schedules are configurable via the `schedule:` section in `pipeline.yaml`.
+
+### Schedule Configuration
+
+```yaml
+schedule:
+  crawl_interval_minutes: 30
+  retry_stuck_interval_minutes: 60
+  generate_newsletters_hour: 8
+  cleanup_old_logs_hour: 3
+  cleanup_old_versions_hour: 3
+  cleanup_expired_verifications_interval_minutes: 15
+  publish_scheduled_interval_minutes: 5
+  cleanup_stale_limiter_interval_minutes: 5
+  consolidate_trend_memory_hour: 3
+  cleanup_old_versions_days_to_keep: 90
+```

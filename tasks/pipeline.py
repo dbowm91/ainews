@@ -13,6 +13,13 @@ from constants import (
 )
 
 from services.config_utils import get_config_with_default
+from services.llm import get_provider_chain
+from services.llm.errors import RateLimitError, ProviderServerError, ProviderTimeoutError
+from services.circuit_breaker import CircuitOpenError
+from services.llm import (
+    record_provider_success,
+    record_provider_failure,
+)
 from services.pipeline_degradation import (  # noqa: F401
     degrade_stage as _degrade_and_advance,
     finalize_article as _finalize,
@@ -155,6 +162,44 @@ def _check_stage_limiter(rc, task_self, retry_countdown, retry_max):
     return limiter
 
 
+def _get_provider_for_stage(stage: str):
+    """Get provider with chain fallback."""
+    providers = list(get_provider_chain(stage))
+    if not providers:
+        raise CircuitOpenError(f"All providers failed for stage: {stage}")
+    return providers[0]
+
+
+def _try_stage_work(stage: str, work_fn, article):
+    """Try work function with provider chain fallback.
+
+    Iterates through all providers in the chain, trying each one
+    until success or exhausts all providers.
+    Returns tuple of (result, provider_id_used).
+    """
+    providers = list(get_provider_chain(stage))
+    if not providers:
+        raise CircuitOpenError(f"All providers failed for stage: {stage}")
+
+    last_error = None
+    for provider, model, max_tokens, provider_id in providers:
+        try:
+            return work_fn(article, provider, model, max_tokens), provider_id
+        except (RateLimitError, ProviderServerError, ProviderTimeoutError) as transient_err:
+            logger.warning(
+                "Provider %s transient error (%s), trying fallback",
+                provider_id,
+                transient_err,
+            )
+            record_provider_failure(provider_id, model)
+            last_error = transient_err
+            continue
+
+    if last_error:
+        raise last_error
+    raise CircuitOpenError(f"All providers failed for stage: {stage}")
+
+
 def run_stage(
     stage: str,
     article_id: int,
@@ -181,14 +226,9 @@ def run_stage(
     from models import Article
     from extensions import db, get_redis
     from schemas.pipeline import get_role_config
-    from services.llm import (
-        get_provider_for_role,
-        record_provider_success,
-        record_provider_failure,
-    )
     from services.pipeline_monitor import record_stage_result
     from services.metrics import get_metrics
-    from services.logging_utils import set_task_request_id
+    from services.logging_utils import set_task_request_id, traced_stage
 
     if task_self and hasattr(task_self, "request"):
         headers = getattr(task_self.request, "headers", None) or {}
@@ -252,11 +292,13 @@ def run_stage(
                 )
                 return {"article_id": article_id, "error": "pipeline_timeout"}
 
-        provider, model, max_tokens, provider_id = get_provider_for_role(stage)
+        provider, model, max_tokens, provider_id = _get_provider_for_stage(stage)
 
-        result = work_fn(article, provider, model, max_tokens)
+        with traced_stage(stage, "work"):
+            result, provider_id = _try_stage_work(stage, work_fn, article)
 
-        record_provider_success(provider_id, model, tokens_used=result.tokens_used)
+        tokens_used = getattr(result, "tokens_used", 0) if hasattr(result, "tokens_used") else 0
+        record_provider_success(provider_id, model, tokens_used=tokens_used)
         article.retry_count = 0
         article.last_error = None
         try:
@@ -290,9 +332,23 @@ def run_stage(
             except SQLAlchemyError:
                 db.session.rollback()
         raise
+    except CircuitOpenError as ce:
+        db.session.rollback()
+        record_stage_result(stage, success=False, run_id=run_id)
+        get_metrics().histogram_observe(
+            "pipeline.stage_duration_seconds",
+            time.monotonic() - t0,
+            labels={"stage": stage, "success": "false"},
+        )
+        exc_article = db.session.get(Article, article_id)
+        if exc_article and _handle_stage_failure(exc_article, stage, ce, run_id=run_id):
+            return {"article_id": article_id, "result": "degraded"}
+        logger.error("%s failed for article %s: no providers available", stage.title(), article_id)
+        raise
     except Exception as e:
         db.session.rollback()
-        record_provider_failure(provider_id or rc.provider, model)
+        if 'provider_id' in dir() and provider_id:
+            record_provider_failure(provider_id, model)
         record_stage_result(stage, success=False, run_id=run_id)
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",

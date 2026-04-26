@@ -15,6 +15,31 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
+  /* Search clear button */
+  document.addEventListener("click", function (e) {
+    var clearBtn = e.target.closest(".search-clear");
+    if (!clearBtn) return;
+    var searchInput = document.querySelector('input[name="q"], input[type="search"]');
+    if (!searchInput) return;
+    searchInput.value = "";
+    clearBtn.classList.remove("visible");
+    htmx.trigger(searchInput, "search");
+  });
+
+  /* Show/hide clear button based on input value */
+  document.addEventListener("input", function (e) {
+    if (e.target.matches('input[name="q"], input[type="search"]')) {
+      var clearBtn = e.target.closest(".search-container").querySelector(".search-clear");
+      if (clearBtn) {
+        if (e.target.value.length > 0) {
+          clearBtn.classList.add("visible");
+        } else {
+          clearBtn.classList.remove("visible");
+        }
+      }
+    }
+  });
+
   /* Share button: track click + open dropdown via <details> */
   document.addEventListener("click", function (e) {
     var btn = e.target.closest(".share-btn");

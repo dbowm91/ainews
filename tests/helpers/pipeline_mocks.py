@@ -1,5 +1,6 @@
 """Shared mock setup for pipeline stage tests."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 
@@ -20,6 +21,7 @@ def setup_pipeline_mocks():
         "record_failure": patch("services.llm.record_provider_failure"),
         "get_limiter": patch("services.limiter.get_limiter"),
         "get_redis": patch("extensions.get_redis"),
+        "get_config_with_default": patch("services.config_utils.get_config_with_default"),
     }
     mocks = {}
     for name, p in patches.items():
@@ -34,10 +36,11 @@ def setup_pipeline_mocks():
 
     article = MagicMock()
     article.retry_count = 0
+    article.pipeline_started_at = None
     mocks["db"].session.get.return_value = article
 
     mocks["get_provider_for_role"].return_value = (
-        MagicMock(),
+        SimpleNamespace(tokens_used=100),
         "qwen3:8b",
         2048,
         "ollama",
@@ -50,7 +53,16 @@ def setup_pipeline_mocks():
     redis_mock = MagicMock()
     redis_mock.set.return_value = True
     redis_mock.get.return_value = b"task-test"
+    redis_mock.hincrby.return_value = 1
     redis_mock.register_script.return_value = MagicMock()
     mocks["get_redis"].return_value = redis_mock
+
+    config_mock = MagicMock()
+    config_mock.PIPELINE_TIMEOUT_MINUTES = 60
+    config_mock.MAX_STAGE_RETRIES = 3
+    config_mock.MAX_TOTAL_RETRIES = 10
+    config_mock.CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
+    config_mock.CIRCUIT_BREAKER_RECOVERY_SECONDS = 300
+    mocks["get_config_with_default"].return_value = config_mock
 
     return patches, mocks

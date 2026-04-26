@@ -251,6 +251,11 @@ def create_app(config_name=None):
             logger.warning("safe_href validation failed for %s: %s", value, e)
             return "#"
 
+    @app.template_filter("format_date")
+    def format_date_filter(dt):
+        from services.date_utils import format_date
+        return format_date(dt)
+
     # Warn if DEBUG is enabled in production context
     if app.config.get("DEBUG") and config_name == "production":
         logger.warning("DEBUG mode is enabled - do not use in production")

@@ -386,6 +386,197 @@ Generate newsletter HTML without sending.
 }
 ```
 
+### Webhooks
+
+#### List Webhooks
+
+**GET** `/admin/api/webhooks`
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{
+  "webhooks": [
+    {
+      "id": 1,
+      "name": "My Webhook",
+      "url": "https://example.com/webhook",
+      "events": ["article.published"],
+      "active": true,
+      "failure_count": 0
+    }
+  ]
+}
+```
+
+#### Create Webhook
+
+**POST** `/admin/api/webhooks`
+
+**Authentication:** Basic Auth
+
+**Request Body:**
+```json
+{
+  "name": "New Webhook",
+  "url": "https://example.com/hook",
+  "events": ["article.published", "article.selected"],
+  "secret": "optional-secret"
+}
+```
+
+**Response (201 Created):**
+```json
+{"message": "Webhook created", "id": 2}
+```
+
+#### Update Webhook
+
+**PUT** `/admin/api/webhooks/<id>`
+
+**Authentication:** Basic Auth
+
+**Request Body:**
+```json
+{
+  "name": "Updated Name",
+  "url": "https://new-url.com/hook",
+  "events": ["article.published"],
+  "active": true
+}
+```
+
+**Response (200 OK):**
+```json
+{"message": "Webhook updated"}
+```
+
+#### Delete Webhook
+
+**DELETE** `/admin/api/webhooks/<id>`
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{"message": "Webhook deleted"}
+```
+
+#### Test Webhook
+
+**POST** `/admin/api/webhooks/<id>/test`
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{"message": "Webhook test sent", "status_code": 200}
+```
+
+#### Webhook Events
+
+**GET** `/admin/api/webhooks/<id>/events`
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{
+  "events": [
+    {
+      "event_type": "article.published",
+      "status_code": 200,
+      "delivered_at": "2024-01-01T12:00:00Z"
+    }
+  ]
+}
+```
+
+### Search Analytics
+
+**GET** `/admin/api/search/analytics`
+
+Get search query statistics and zero-result queries.
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{
+  "total_queries": 500,
+  "top_queries": [
+    {"query": "openai", "count": 150}
+  ],
+  "zero_result_queries": [
+    {"query": "unknown term", "count": 10}
+  ]
+}
+```
+
+### Audit Logs
+
+**GET** `/admin/api/audit-logs`
+
+Get audit log entries.
+
+**Authentication:** Basic Auth
+
+**Query Parameters:**
+- `action` (optional): Filter by action type
+- `category` (optional): Filter by category
+- `page` (optional): Page number
+
+**Response (200 OK):**
+```json
+{
+  "logs": [
+    {
+      "id": 1,
+      "action": "article.publish",
+      "category": "article",
+      "target_type": "article",
+      "target_id": 123,
+      "created_at": "2024-01-01T12:00:00Z"
+    }
+  ]
+}
+```
+
+### Worker Health
+
+**GET** `/admin/api/workers/health`
+
+Get detailed Celery worker status.
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "workers": {"worker@host": "alive"},
+  "active_tasks": {"worker@host": 2}
+}
+```
+
+### Task Status
+
+**GET** `/admin/api/task/<task_id>`
+
+Get status of a Celery task.
+
+**Authentication:** Basic Auth
+
+**Response (200 OK):**
+```json
+{
+  "task_id": "abc123",
+  "status": "SUCCESS",
+  "result": {"article_id": 1}
+}
+```
+
 ### Reprocess Article
 
 **POST** `/admin/api/articles/<article_id>/reprocess`

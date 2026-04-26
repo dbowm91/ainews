@@ -54,3 +54,17 @@ def get_system_prompt(role: str, yaml_prompt: str | None) -> str:
     raise ValueError(
         f"No system prompt found for role '{role}' (checked YAML and prompts/{role}.txt)"
     )
+
+
+def sliding_window_truncate(
+    text: str, max_chars: int = 8000, ellipsis: str = "\n\n[... truncated ...]\n\n"
+) -> str:
+    """Truncate text using sliding window to preserve start and end.
+
+    When text exceeds max_chars, keeps the first half and last half with ellipsis
+    in between to maintain context from both ends of the content.
+    """
+    if not text or len(text) <= max_chars:
+        return text
+    half = (max_chars - len(ellipsis)) // 2
+    return text[:half] + ellipsis + text[-half:]

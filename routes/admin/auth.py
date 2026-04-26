@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from flask import render_template, request, redirect, url_for, session, current_app
+from flask import render_template, request, redirect, url_for, session, current_app, Response
 
 from routes import limit_content_length
 from routes.admin import (
@@ -38,7 +38,7 @@ def _safe_redirect_url(next_url: str) -> str:
 @admin_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
 @limit_content_length(1024)
-def login():
+def login() -> str | Response:
     if session.get("admin"):
         return redirect(url_for("admin.dashboard"))
 
@@ -84,7 +84,7 @@ def login():
 
 
 @admin_bp.route("/logout", methods=["POST"])
-def logout():
+def logout() -> Response:
     try:
         from services.audit import log_admin_action
 

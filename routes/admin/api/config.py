@@ -28,6 +28,11 @@ def reload_config() -> tuple[Response, int] | Response:
     reset_config()
     clear_task_fn_cache()
     clear_tag_cache()
+
+    from celery_app import celery_app
+    from config import Config
+    Config.reload_beat_schedule(celery_app)
+
     return jsonify({"message": "Config cache cleared"}), 200
 
 

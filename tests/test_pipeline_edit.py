@@ -101,7 +101,7 @@ class TestEditStage:
             article = create_article(pipeline_status="editing", impact_score=10)
             article.draft_article = '{"headline": "Test"}'
 
-            with patch("tasks.pipeline._should_route_to_review", return_value=True):
+            with patch("services.pipeline_degradation._should_route_to_review", return_value=True):
                 from tasks.pipeline import _degrade_and_advance
 
                 with patch("extensions.db"):

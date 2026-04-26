@@ -11,6 +11,8 @@ from flask import request
 
 logger = logging.getLogger(__name__)
 
+VALID_CATEGORIES = frozenset(["auth", "article", "pipeline", "webhook", "config", "subscriber"])
+
 
 def log_admin_action(
     action: str,
@@ -18,6 +20,7 @@ def log_admin_action(
     target_id: Optional[int] = None,
     details: Optional[dict[str, Any]] = None,
     user: str = "admin",
+    category: Optional[str] = None,
 ) -> None:
     """Record an admin action via structured logging and database.
 
@@ -31,7 +34,11 @@ def log_admin_action(
         target_id: ID of the entity acted upon
         details: Additional context about the action
         user: User performing the action
+        category: Category for grouping (auth, article, pipeline, webhook, config, subscriber)
     """
+    if category and category not in VALID_CATEGORIES:
+        category = None
+
     msg = "Audit: [%s] %s" % (user, action)
     if target_type:
         msg += f" on {target_type}"
@@ -49,6 +56,8 @@ def log_admin_action(
         ctx["target_id"] = target_id
     if details:
         ctx["details"] = details
+    if category:
+        ctx["category"] = category
 
     logger.info(msg, extra=ctx)
 
@@ -65,6 +74,7 @@ def log_admin_action(
 
         log_entry = AuditLog(
             action=action,
+            category=category,
             target_type=target_type,
             target_id=target_id,
             user=user,

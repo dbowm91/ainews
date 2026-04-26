@@ -20,9 +20,9 @@ class TestCeleryBeatSchedule:
         schedule = Config.get_beat_schedule()
         assert isinstance(schedule, dict)
 
-    def test_all_nine_tasks_present(self):
+    def test_all_tasks_present(self):
         schedule = Config.get_beat_schedule()
-        assert len(schedule) == 9
+        assert len(schedule) == 12
 
     def test_run_all_sources_task(self):
         schedule = Config.get_beat_schedule()

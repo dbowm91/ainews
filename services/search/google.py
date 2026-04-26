@@ -21,12 +21,12 @@ def _is_configured(val: str) -> bool:
 def _search_impl(
     provider: "GoogleSearchProvider", query: str, max_results: int
 ) -> list[SearchResult]:
-    import requests
     from services.url import validate_url_safe
+    from services.search.session import get_session
 
     validate_url_safe(provider.base_url)
 
-    resp = requests.get(
+    resp = get_session().get(
         provider.base_url,
         params={
             "key": provider.api_key,
@@ -78,16 +78,14 @@ class GoogleSearchProvider(BaseSearchProvider):
             logger.warning("Google search failed for '%s': %s", query, type(e).__name__)
             return []
 
-    def health_check(self) -> dict[str, Any]:
-        if not _is_configured(self.api_key) or not _is_configured(self.cse_id):
-            return {"provider": self.provider_id, "status": "not configured"}
+def health_check(self) -> dict[str, Any]:
         try:
-            import requests
             from services.url import validate_url_safe, UnsafeURLError
+            from services.search.session import get_session
 
             validate_url_safe(self.base_url)
 
-            resp = requests.get(
+            resp = get_session().get(
                 self.base_url,
                 params={"key": self.api_key, "cx": self.cse_id, "q": "test", "num": 1},
                 timeout=10,

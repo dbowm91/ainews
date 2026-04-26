@@ -43,8 +43,27 @@ docker-compose up -d
 ### Monitoring
 
 - **Health check**: `GET /admin/api/health`
+- **Worker health**: `GET /admin/api/workers/health`
 - **Pipeline stats**: `GET /admin/api/pipeline/stats`
 - **Dead letter stats**: `GET /admin/api/pipeline/dead-letter/stats`
+- **Search analytics**: `GET /admin/api/search/analytics`
+- **Cost summary**: `GET /admin/api/costs`
+- **SLA metrics**: `GET /admin/api/pipeline/sla`
+
+### Webhook Management
+
+- **List webhooks**: `GET /admin/api/webhooks`
+- **Create webhook**: `POST /admin/api/webhooks`
+- **Test webhook**: `POST /admin/api/webhooks/<id>/test`
+- **View events**: `GET /admin/api/webhooks/<id>/events`
+
+### Audit Logs
+
+- **View logs**: `GET /admin/api/audit-logs`
+
+### Task Inspection
+
+- **Task status**: `GET /admin/api/task/<task_id>`
 
 ### Logs
 

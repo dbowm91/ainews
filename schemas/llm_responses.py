@@ -18,6 +18,7 @@ class SelectionResult(BaseModel):
     selected: bool
     score: int = Field(ge=1, le=10)
     reason: str
+    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
 
 
 # ── Researcher stage ────────────────────────────────────────────────────────

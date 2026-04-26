@@ -29,7 +29,7 @@ class TestGenerateNewsletterHTML:
             assert "<!DOCTYPE html>" in html
             assert "Test Newsletter" in html
             assert "Mar 24, 2026" in html
-            assert "https://example.com/article/1" in html
+            assert "https://example.com/track/newsletter-click/1" in html
 
     def test_includes_executive_summary(self, app):
         """Test that executive summary is included when provided."""

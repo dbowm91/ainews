@@ -1,11 +1,11 @@
-from flask import render_template, request, redirect, url_for
+from flask import render_template, request, redirect, url_for, Response
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit
 
 
 @admin_bp.route("/shares")
 @require_auth
-def shares():
+def shares() -> str:
     from models import ShareConfig
 
     configs = ShareConfig.query.order_by(ShareConfig.sort_order).all()
@@ -14,7 +14,7 @@ def shares():
 
 @admin_bp.route("/shares/<int:config_id>/toggle", methods=["POST"])
 @require_auth
-def toggle_share(config_id):
+def toggle_share(config_id: int) -> str | Response:
     from models import ShareConfig
     from extensions import db
 

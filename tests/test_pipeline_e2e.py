@@ -64,6 +64,7 @@ class TestPipelineEndToEnd:
         redis_mock = MagicMock()
         redis_mock.set.return_value = True
         redis_mock.get.return_value = b"task-e2e"
+        redis_mock.hincrby.return_value = 1
         mocks["get_redis"].return_value = redis_mock
         return redis_mock
 

@@ -91,12 +91,15 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 - `retry-stuck-articles` — retry/dead-letter stuck articles every 60 min
 - `generate-newsletters` — daily at 8:00 AM
 - `cleanup-old-logs` — daily at 3:00 AM (chunked deletes, 10k rows per batch)
-- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup, chunked deletes)
 - `consolidate-trend-memory` — daily at 3:30 AM
+- `purge-trend-memory` — daily at 3:45 AM
+- `cleanup-old-versions` — daily at 3:45 AM (article version cleanup, chunked deletes)
 - `cleanup-expired-verifications` — every 15 min
 - `publish-scheduled-articles` — every 5 min
 - `cleanup-stale-limiter-slots` — every 5 min
-- `cleanup-old-article-versions` — daily at 3:45 AM
+- `retry-failed-newsletter-deliveries` — every 2 hours
+- `recalculate-impact-scores` — daily at 4:00 AM
+- `recalculate-impact-scores` — daily at 4:00 AM
 
 **Scripts in `scripts/`:**
 - `backup.sh` — SQLite backup with verification
@@ -301,6 +304,14 @@ Available schemas in `schemas/tasks.py`:
 ## Dead Letter Queue UI
 
 Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
+
+## Trend Memory Admin UI
+
+Admin UI at `/admin/trend-memory` displays LLM-judged editorial memory entries. Features:
+- List view with filtering by topic and importance level
+- Stats: total, high/medium/low counts, expired count
+- Delete individual entries or bulk purge expired entries
+- Links to source articles
 
 ## Webhook Management UI
 

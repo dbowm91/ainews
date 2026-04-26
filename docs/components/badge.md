@@ -53,9 +53,9 @@ Shows relative importance of articles on the dashboard.
 Indicates LLM confidence in article analysis.
 
 ```html
-<span class="confidence-label confidence-high">High</span>
-<span class="confidence-label confidence-medium">Medium</span>
-<span class="confidence-label confidence-low">Low</span>
+<span class="impact-score impact-high">High</span>
+<span class="impact-score impact-mid">Medium</span>
+<span class="impact-score impact-low">Low</span>
 ```
 
 ## CSS Structure

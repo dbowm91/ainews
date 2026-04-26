@@ -7,7 +7,7 @@ from routes.admin import admin_bp, require_auth
 
 @admin_bp.route("/webhooks")
 @require_auth
-def webhooks():
+def webhooks() -> str:
     """Webhooks management page."""
     from models import Webhook
 

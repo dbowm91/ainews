@@ -363,7 +363,7 @@ def test_my_feature(app):
 | `ADMIN_PASSWORD` | - | Hashed admin password |
 | `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Celery message broker |
 | `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Celery results store |
-| `DATABASE_URL` | `sqlite:///instance/dev.db` | Database connection |
+| `DATABASE_URL` | `sqlite:///instance/ainews.db` | Database connection |
 | `REDIS_URL` | `redis://localhost:6379/2` | Redis connection |
 | `LOG_FORMAT` | `json` | `json` or `text` |
 | `DB_QUERY_LOG_LEVEL` | `WARNING` | SQL query logging level |
@@ -373,6 +373,67 @@ def test_my_feature(app):
 | `STUCK_THRESHOLD_MINUTES` | `60` | Dead letter threshold |
 | `MIN_CONTENT_LENGTH` | `200` | Minimum article content |
 | `VERIFICATION_EXPIRY_SECONDS` | `3600` | Email verification TTL |
+| `CELERY_TASK_SECRET` | - | HMAC signing key (min 32 chars) |
+| `WEBHOOK_SECRET_KEY` | - | Webhook encryption key |
+| `SUBAGENT_WORKERS` | `8` | Subagent thread pool size |
+| `CONTENT_EXTRACTOR_WORKERS` | `8` | Content extractor pool size |
+| `SEARCH_POOL_MAXSIZE` | `10` | Search HTTP pool size |
+| `SEARCH_POOL_CONNECTIONS` | `5` | Search HTTP connections |
+
+## Adding a New LLM Provider
+
+Providers are defined in `providers.yaml`. For OpenAI-compatible providers, add a new entry:
+
+```yaml
+  - id: myprovider
+    type: openai
+    enabled: false
+    config:
+      api_key: "${MYPROVIDER_API_KEY}"
+      base_url: "https://api.myprovider.com/v1"
+      model: "my-model"
+      max_tokens: 4096
+```
+
+For non-standard providers, create an adapter in `services/llm/`:
+
+```python
+# services/llm/myprovider.py
+from services.llm.base import BaseLLMProvider, LLMResponse
+
+class MyProviderAdapter(BaseLLMProvider):
+    def chat_structured(self, messages, response_model, **kwargs) -> LLMResponse:
+        # Implementation
+        pass
+```
+
+## Pipeline Architecture
+
+Articles flow through stages:
+
+```
+crawl → extract → select → research → write → edit → newsletter
+  ↓        ↓        ↓         ↓        ↓       ↓
+skipped  failed  skipped   failed   failed  failed
+```
+
+Each stage is a Celery task with independent retry budget.
+
+### Stage Responsibilities
+
+| Stage | Description | Quality Gate |
+|-------|-------------|------------|
+| `select` | LLM scores newsworthiness (1-10), assigns confidence | Min score >= 6 |
+| `research` | LLM compiles research brief with external sources | Non-empty claims |
+| `write` | LLM drafts condensed article in Smart Brevity style | Min 500 char body |
+| `edit` | LLM reviews, polishes, assigns tags | Schema validation |
+
+### Degradation on Failure
+
+If a stage fails after retries:
+- **Research**: Uses source text only, sets impact_score to 30
+- **Write**: Generates minimal draft from extracted text
+- **Edit**: Routes to REVIEW status for manual handling
 
 ---
 

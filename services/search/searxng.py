@@ -14,8 +14,8 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="searxng_search
 
 
 def _search_impl(provider: "SearXNGSearchProvider", query: str, max_results: int) -> list[SearchResult]:
-    import requests
     from services.url import validate_url_safe
+    from services.search.session import get_session
 
     search_url = f"{provider.host}/search"
     validate_url_safe(search_url)
@@ -29,7 +29,7 @@ def _search_impl(provider: "SearXNGSearchProvider", query: str, max_results: int
     if provider.default_engines:
         params["engines"] = provider.default_engines
 
-    resp = requests.get(
+    resp = get_session().get(
         search_url,
         params=params,
         timeout=15,
@@ -74,13 +74,13 @@ class SearXNGSearchProvider(BaseSearchProvider):
 
     def health_check(self) -> dict[str, Any]:
         try:
-            import requests
             from services.url import validate_url_safe, UnsafeURLError
+            from services.search.session import get_session
 
             healthz_url = f"{self.host}/healthz"
             validate_url_safe(healthz_url)
 
-            resp = requests.get(healthz_url, timeout=5)
+            resp = get_session().get(healthz_url, timeout=5)
             if resp.ok:
                 return {"provider": self.provider_id, "status": "ok", "host": self.host}
             return {

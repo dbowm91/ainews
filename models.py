@@ -128,6 +128,7 @@ class Article(db.Model):
     updated_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),
+        index=True,
     )
     scheduled_publish_at = db.Column(db.DateTime, nullable=True, index=True)
 
@@ -139,6 +140,7 @@ class Article(db.Model):
     citations = db.relationship(
         "Citation", backref="article", lazy="selectin", cascade="all, delete-orphan"
     )
+    experiment_group = db.Column(db.String(32), nullable=True, index=True)
     tags = db.relationship("Tag", secondary=article_tags, lazy="selectin")
     metrics = db.relationship(
         "ArticleMetric", backref="article", uselist=False, cascade="all, delete-orphan"
@@ -245,6 +247,7 @@ class ArticleMetric(db.Model):
         index=True,
     )
     page_loads = db.Column(db.Integer, default=0)
+    newsletter_clicks = db.Column(db.Integer, default=0)
     share_button_clicks = db.Column(db.Integer, default=0)
     share_link_views = db.Column(db.Integer, default=0)
     updated_at = db.Column(
@@ -450,6 +453,7 @@ class AuditLog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(64), nullable=False, index=True)
+    category = db.Column(db.String(32), nullable=True, index=True)
     target_type = db.Column(db.String(32))
     target_id = db.Column(db.Integer)
     user = db.Column(db.String(64), default="admin")

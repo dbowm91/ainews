@@ -732,6 +732,12 @@
 
 .search-container .search-input {
   padding-right: 2rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.search-container {
+  position: relative;
 }
 
 .search-input {
@@ -753,6 +759,28 @@
 
 .search-input::placeholder {
   color: var(--text-dim);
+}
+
+.search-clear {
+  position: absolute;
+  right: 2.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  display: none;
+}
+
+.search-clear.visible {
+  display: block;
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
 }
 
 .active-filters {

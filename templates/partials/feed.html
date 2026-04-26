@@ -23,6 +23,7 @@
       hx-indicator="#search-spinner"
       hx-include="[name='category']"
     >
+    <button type="button" class="search-clear" aria-label="Clear search">&times;</button>
     <kbd class="search-kbd">/</kbd>
     <span id="search-spinner" class="htmx-indicator spinner" aria-hidden="true">...</span>
     <input type="hidden" name="category" value="{{ category }}">

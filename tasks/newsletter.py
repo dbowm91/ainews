@@ -457,3 +457,92 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
             release_lock(redis_client, lock_key, task_id)
         except redis.exceptions.RedisError:
             logger.warning("Failed to release newsletter lock")
+
+
+@shared_task(
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+    autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError),
+    dont_autoretry_for=(smtplib.SMTPResponseException,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def retry_failed_newsletter_deliveries(self):
+    """Re-attempt delivery for newsletters that previously failed.
+
+    Queries Newsletter records with non-null error_message and re-sends
+    emails to subscribers using the same delivery logic as send_single_email.
+
+    Runs every 2 hours via Celery Beat.
+    """
+    from models import Newsletter, Subscriber
+    from extensions import db
+    from services.email import send_newsletter_email
+    from schemas.pipeline import load_pipeline_config
+
+    config = load_pipeline_config()
+    site_url = config.newsletter.site_url
+    failed = (
+        Newsletter.query.filter(Newsletter.error_message.isnot(None))
+        .order_by(Newsletter.id.desc())
+        .limit(100)
+        .all()
+    )
+    if not failed:
+        logger.debug("No failed newsletters to retry")
+        return {"retried": 0, "sent": 0, "failed": 0}
+
+    sent = 0
+    failed_count = 0
+    for nl in failed:
+        unsub_url = f"{site_url}/unsubscribe/test"
+        base_filters = [
+            Subscriber.deleted_at.is_(None),
+            Subscriber.confirmed_at.isnot(None),
+            Subscriber.newsletter_type == nl.newsletter_type,
+            Subscriber.active.is_(True),
+        ]
+        subscribers = Subscriber.query.filter(*base_filters).all()
+        if not subscribers:
+            nl.error_message = None
+            db.session.commit()
+            continue
+        try:
+            for sub in subscribers:
+                send_newsletter_email(
+                    sub.email,
+                    nl.subject or "AI News Newsletter",
+                    nl.html_content or "",
+                    unsub_url,
+                )
+                sent += 1
+            nl.error_message = None
+            nl.delivered_count = sent
+            db.session.commit()
+        except smtplib.SMTPResponseException as e:
+            if e.smtp_code >= 500:
+                failed_count += 1
+                logger.error(
+                    "Permanent SMTP error retrying newsletter %s: %s", nl.id, e
+                )
+            else:
+                raise
+        except SoftTimeLimitExceeded:
+            db.session.rollback()
+            logger.error(
+                "retry_failed_newsletter_deliveries exceeded soft time limit"
+            )
+            raise
+        except Exception as e:
+            failed_count += 1
+            logger.error("Failed to retry newsletter %s: %s", nl.id, e)
+
+    logger.info(
+        "Newsletter retry complete: retried=%d, sent=%d, failed=%d",
+        len(failed),
+        sent,
+        failed_count,
+    )
+    return {"retried": len(failed), "sent": sent, "failed": failed_count}

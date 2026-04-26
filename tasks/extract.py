@@ -4,6 +4,7 @@ from typing import Any
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_task_logger(__name__)
 
@@ -147,7 +148,11 @@ def _create_article_record(
             )
         )
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
     return article
 
 
@@ -180,9 +185,8 @@ def _dispatch_after_extraction(article_id: int, run_id: int | None = None) -> No
     try:
         _dispatch_next(article_id, run_id=run_id, next_status="pending")
     except Exception as e:
-        article.pipeline_status = "failed"
         article.last_error = "Failed to dispatch to pipeline"
-        db.session.commit()
+        db.session.rollback()
         logger.error("Failed to dispatch select_article for article %s: %s", article_id, e)
         raise
 

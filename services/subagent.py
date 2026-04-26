@@ -1039,6 +1039,11 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
     except Exception:
         return False
 
+    try:
+        return bool(_eval_node(tree))
+    except Exception:
+        return False
+
 
 def _resolve_template_variables(
     template: str, initial_data: dict, results: dict[str, Any]

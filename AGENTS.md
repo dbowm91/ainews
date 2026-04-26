@@ -97,7 +97,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 
 `services/subagent.py` provides `run_subagent()` for running lightweight subagent tasks synchronously within parent Celery tasks. Uses `services/context_service.py` for topic note CRUD and related article lookup. Configuration in `pipeline.yaml` under `subagent:` section. Failures degrade gracefully — subagent errors never crash the parent pipeline.
 
-**Tool-calling infrastructure exists but is not used in production:** `run_subagent_with_tools()` exists in `services/subagent.py:608-787` and all providers support `chat_with_tools()`, but `resolve_subagent_config()` does not pass the `tools` field through to the returned config. This is a planned enhancement.
+**Tool-calling infrastructure is now in production:** `run_subagent_with_tools()` at `services/subagent.py:608` is wired into pipeline tasks. Research stage uses it for web synthesis, Edit stage uses it for contextualization. Configured via `tools:` in `pipeline.yaml` subagent config.
 
 ### Trend memory system
 

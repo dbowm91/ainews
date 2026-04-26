@@ -37,6 +37,7 @@
         <a href="/admin/metrics" {% if request.path.startswith('/admin/metrics') %}class="active"{% endif %}>metrics</a>
         <a href="/admin/subscribers" {% if request.path.startswith('/admin/subscribers') %}class="active"{% endif %}>subscribers</a>
         <a href="/admin/shares" {% if request.path.startswith('/admin/shares') %}class="active"{% endif %}>shares</a>
+        <a href="/admin/trend-memory" {% if request.path.startswith('/admin/trend-memory') %}class="active"{% endif %}>trend memory</a>
         {% include "partials/theme_toggle.html" %}
       </div>
       <div class="nav-meta">

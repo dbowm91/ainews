@@ -1,0 +1,143 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — trend memory{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">trend memory</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">trend memory</h1>
+
+  <section class="dash-card dash-card-full">
+    <div class="form-hint">
+      Trend memory captures high-signal editorial insights extracted by the editor agent.
+      These memories are used to provide context for future article editing.
+    </div>
+
+    <div class="stats-grid mt-1 mb-1">
+      <div class="stat-box">
+        <span class="stat-value">{{ stats.total }}</span>
+        <span class="stat-label">total</span>
+      </div>
+      <div class="stat-box stat-high">
+        <span class="stat-value">{{ stats.high }}</span>
+        <span class="stat-label">high importance</span>
+      </div>
+      <div class="stat-box stat-medium">
+        <span class="stat-value">{{ stats.medium }}</span>
+        <span class="stat-label">medium</span>
+      </div>
+      <div class="stat-box stat-low">
+        <span class="stat-value">{{ stats.low }}</span>
+        <span class="stat-label">low</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-value">{{ stats.expired }}</span>
+        <span class="stat-label">expired</span>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.trend_memory_delete_expired') }}" class="mb-1">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-secondary btn-sm"
+              onclick="return confirm('Delete all expired memory entries?')">
+        purge expired
+      </button>
+    </form>
+
+    <div class="form-row mb-1">
+      <div class="form-group-half">
+        <form method="get" action="{{ url_for('admin.trend_memory_list') }}">
+          <input type="text" name="topic" class="form-input" placeholder="Filter by topic..."
+                 value="{{ topic | e }}">
+      </div>
+      <div class="form-group-half">
+        <select name="importance" class="form-input">
+          <option value="">all importance</option>
+          <option value="3" {% if importance_filter == '3' %}selected{% endif %}>high</option>
+          <option value="2" {% if importance_filter == '2' %}selected{% endif %}>medium</option>
+          <option value="1" {% if importance_filter == '1' %}selected{% endif %}>low</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">filter</button>
+      </div>
+      </form>
+    </div>
+
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>topic</th>
+          <th>importance</th>
+          <th>signal</th>
+          <th>source article</th>
+          <th>expires</th>
+          <th>created</th>
+          <th>actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for memory in memories %}
+        <tr>
+          <td class="topic-cell">{{ memory.topic | e }}</td>
+          <td>
+            {% if memory.importance == 3 %}
+            <span class="badge badge-high">high</span>
+            {% elif memory.importance == 2 %}
+            <span class="badge badge-medium">medium</span>
+            {% else %}
+            <span class="badge badge-low">low</span>
+            {% endif %}
+          </td>
+          <td class="signal-cell">{{ memory.signal | e }}</td>
+          <td>
+            {% if memory.source_article_id %}
+            <a href="{{ url_for('admin.article_detail', article_id=memory.source_article_id) }}">
+              #{{ memory.source_article_id }}
+            </a>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if memory.expires_at %}
+            <span class="text-muted">{{ memory.expires_at.strftime('%Y-%m-%d') }}</span>
+            {% else %}
+            <span class="text-muted">never</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="text-muted">{{ memory.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('admin.trend_memory_delete', memory_id=memory.id) }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-link text-danger"
+                      onclick="return confirm('Delete this memory entry?')">
+                delete
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted">No trend memory entries found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="form-hint mt-1">
+      <p>High importance memories never expire. Medium importance expire after 30 days.
+         Low importance expire after 7 days.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}

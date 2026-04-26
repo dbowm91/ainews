@@ -108,8 +108,7 @@ Key components:
 - `MemoryImportance` enum in `services/trend_memory.py` — LOW/MEDIUM/HIGH tiers
 - `consolidate_trend_memory` Celery task — nightly at 3:30 AM; promotes low-importance entries to medium when a high-importance entry exists for the same topic
 - Configuration in `pipeline.yaml` under `memory:` section (all values configurable)
-
-The editor subagent template (`edit_contextualization` in `services/subagent.py`) includes `{trend_memory}` which is resolved at call time in `tasks/edit.py`.
+- **Admin UI**: `/admin/trend-memory` provides list view with filtering by topic/importance, delete individual entries, and purge expired entries
 
 ## LLM provider support
 

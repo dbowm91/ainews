@@ -304,6 +304,14 @@ Available schemas in `schemas/tasks.py`:
 
 Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
 
+## Trend Memory Admin UI
+
+Admin UI at `/admin/trend-memory` displays LLM-judged editorial memory entries. Features:
+- List view with filtering by topic and importance level
+- Stats: total, high/medium/low counts, expired count
+- Delete individual entries or bulk purge expired entries
+- Links to source articles
+
 ## Webhook Management UI
 
 Admin UI at `/admin/webhooks` displays configured webhooks with event history. Click "events" button to view delivery history (status codes, errors, timestamps). Click "test" to send a test webhook event. API endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).

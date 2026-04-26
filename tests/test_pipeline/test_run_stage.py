@@ -208,8 +208,9 @@ class TestRunStage:
         task_self.request.id = "task-123"
         task_self.retry.side_effect = Exception("Celery Retry")
 
-        with pytest.raises(Exception, match="Celery Retry"):
-            run_stage("selector", 1, work_fn, task_self)
+        with patch("services.pipeline_failure._track_stage_failure", return_value=0):
+            with pytest.raises(Exception, match="Celery Retry"):
+                run_stage("selector", 1, work_fn, task_self)
 
         work_fn.assert_not_called()
 

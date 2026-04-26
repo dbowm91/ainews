@@ -82,12 +82,7 @@ def select_article(self, article_id: int, run_id=None):
         article.selector_result = result.model_dump()
 
         # A/B experiment assignment (if experiments configured)
-        from schemas.pipeline import get_config_with_default
-        _cfg = get_config_with_default()
-        if hasattr(_cfg, "experiments") and _cfg.experiments and _cfg.experiments.get("prompt_variants"):
-            import secrets
-            variants = list(_cfg.experiments["prompt_variants"].keys())
-            article.experiment_group = secrets.choice(variants)
+        # TODO: implement when experiment config is properly defined in pipeline.yaml
 
         if result.selected and result.score >= (rc.min_score or 6):
             if result.confidence == "low":

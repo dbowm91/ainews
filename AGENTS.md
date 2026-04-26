@@ -676,28 +676,52 @@ retry_messages.append({
 
 **Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.
 
-## New learnings (April 26, 2026 session)
+## Known bugs tracked in plans/plan.md
 
-**`initialize_tool_registry()` signature mismatch**: The function in `services/subagent.py:328` accepts no arguments, but `tasks/edit.py:108` and `tasks/research.py:106` call it with `stage_config.tools` argument. This causes `TypeError`. Fix by updating the function to accept `tool_names: list[str] | None = None`.
+The following bugs are documented and prioritized in `plans/plan.md` for implementation. Do not re-discover or re-report these — refer to the plan for details and fix instructions.
 
-**Subagent retry backoff off by one**: `services/subagent.py:512` uses `2 ** (attempt - 1)` for retry delay. The chain loop at line 905 correctly uses `2 ** attempt`. Align by changing line 512 to `2 ** attempt`.
+- `initialize_tool_registry()` signature mismatch (`services/subagent.py:328`)
+- Subagent retry backoff off by one (`services/subagent.py:512`)
+- PENDING→REVIEW transition missing from `VALID_TRANSITIONS` (`constants.py:41`)
+- DuckDuckGo SSRF validation missing (`services/search/duckduckgo.py`)
+- Chain condition `previous` not in `_ALLOWED_NAMES` (`services/subagent.py:966`)
+- Single-brace template variables not resolved (`services/subagent.py:1050`)
+- `disabled_at` field bug in pipeline stats API (`routes/admin/api/pipeline.py:130`)
+- Direct `pipeline_status = "failed"` in extract task (`tasks/extract.py:183`)
+- Google `health_check` defined outside class (`services/search/google.py:82`)
+- `ast.Call` handler in condition evaluator (`services/subagent.py:1025-1029`)
+- `safe_href` catches all exceptions (`app.py:245`)
+- Dead letters table missing status/error columns (`templates/admin/dead_letters.html`)
+- `set_status` admin route bypasses state machine (`routes/admin/api/articles.py:253`)
+- Missing `db.session.rollback()` in cleanup SoftTimeLimitExceeded handlers (`tasks/cleanup.py`)
+- Webhook returns prior success after rollback (`services/webhooks.py:274`)
+- Subscriber `.all()` OOM risk (`tasks/newsletter.py:507`)
+- AuthError bypasses provider fallback (`tasks/pipeline.py:188`)
+- Stage failure Redis keys not cleared on reprocess (`routes/admin/api/articles.py`)
+- ResponseCache blpop race condition (`services/cache.py:141`)
+- `_evict_stale()` only called in `set()`, not `get()` (`services/cache.py`)
+- `retry_stuck` task has no `autoretry_for` (`tasks/retry.py:20`)
+- `retry_backoff=30` in four pipeline tasks (should be `True`)
+- `aggregate_crawl_results` already has `autoretry_for` — do not re-add
 
-**PENDING→REVIEW transition**: After `constants.py:41` fix, `PipelineStatus.PENDING` can transition to `PipelineStatus.REVIEW`. This makes `tasks/select.py:89` low-confidence routing valid.
+## Codebase verification notes (April 26, 2026 session)
 
-**DuckDuckGo SSRF validation missing**: `services/search/duckduckgo.py:16-29` does not call `validate_url_safe()` on result URLs. Other search providers (searxng, google) do validate. DuckDuckGo results should be validated before returning.
-
-**Chain condition `previous` not in `_ALLOWED_NAMES`**: `services/subagent.py:966` — `previous` is not in the allowed names set for condition evaluation. Chain conditions using `previous.steps[0].success` would fail with `ValueError: Unknown identifier: previous`.
-
-**Single-brace template variables not resolved**: `services/subagent.py:1050` checks `if isinstance(value, str) and "{{" in value:` — only double braces trigger resolution. Single-brace `{var}` in chain step templates are never resolved. Change condition to `"{" in value`.
-
-**Subagent chain template resolution result is USED**: Earlier concern that `_resolve_template_variables` result was overwritten is INACCURATE. The result flows through via `prompt_data_escaped = _escape_prompt_data(prompt_data)` and is used in `template.format(**prompt_data_escaped)`.
+**Subagent chain template resolution result is USED**: The concern that `_resolve_template_variables` result was overwritten is INACCURATE. The result flows through via `prompt_data_escaped = _escape_prompt_data(prompt_data)` and is used in `template.format(**prompt_data_escaped)`.
 
 **Webhooks article.failed and newsletter.failed events never triggered**: `services/webhooks.py` defines these in `KNOWN_WEBHOOK_EVENTS` but no code calls `trigger_event("article.failed", ...)` or `trigger_event("newsletter.failed", ...)`.
 
 **Newsletter webhook nl parameter type mismatch**: `tasks/newsletter.py:259` uses `NewsletterConfig` object (not `Newsletter` model) for `nl` parameter. The `newsletter_id` is always NULL since `NewsletterConfig` has no `id` attribute.
 
-**ResponseCache blpop race condition**: `services/cache.py:141-158` — after `blpop` returns indicating lock released, code immediately calls `cache.get(key)`. The lock holder may still be writing to cache. Replace blpop polling with direct cache key existence polling.
-
 **trend_memory `_find_overlapping_low_entries` is dead code**: The function `services/trend_memory.py:270-281` is defined but never called anywhere. Safe to ignore or remove.
 
 **Admin UI time inconsistency in trend memory**: Admin UI at `/admin/trend-memory` uses `db.func.now()` for count but `datetime.now(timezone.utc)` for delete — this is a known display inconsistency, not a data corruption issue.
+
+**`aggregate_crawl_results` already has `autoretry_for`**: `tasks/crawl.py:198` already has `autoretry_for=(ConnectionError, TimeoutError)`. Do not re-add this.
+
+**RSS adapter has per-request timeout**: `adapters/rss.py:38` passes `timeout=cfg.request_timeout` to `.get()`. The "no socket-level timeout" claim was inaccurate — the per-request timeout covers this. Adding `connect`/`read` params to the `Retry` object only controls retry-on-socket-error, not timeout itself.
+
+**API/Web adapter gap is retry logic, not connection pooling**: `requests.Session()` uses urllib3's default `HTTPAdapter` which already provides connection pooling. The actual gap is the absence of automatic retries on transient HTTP failures, unlike the RSS adapter which mounts an `HTTPAdapter` with `Retry`.
+
+**Metrics route joinedload is preventive**: `routes/admin/metrics.py` queries don't use `joinedload(Article.source)`, but the current template doesn't access `article.source`, so there's no N+1 in practice. Adding joinedload is preventive for future template changes.
+
+**`cleanup_stale_limiter_slots` uses default `max_retries=3`**: Celery defaults to `max_retries=3` when not specified, so the task already has reasonable retry behavior. Adding an explicit `max_retries=3` is cosmetic.

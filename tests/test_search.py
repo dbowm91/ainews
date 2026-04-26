@@ -59,10 +59,12 @@ class TestGoogleProvider:
         results = provider.search("test")
         assert results == []
 
-    @patch("requests.get")
-    def test_search_returns_results(self, mock_get):
-        mock_get.return_value.ok = True
-        mock_get.return_value.json.return_value = {
+    @patch("services.search.session.get_session")
+    def test_search_returns_results(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.json.return_value = {
             "items": [
                 {
                     "title": "Google Result",
@@ -71,7 +73,9 @@ class TestGoogleProvider:
                 },
             ]
         }
-        mock_get.return_value.raise_for_status = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_session.get.return_value = mock_response
+        mock_get_session.return_value = mock_session
 
         provider = GoogleSearchProvider(
             "google",
@@ -101,12 +105,14 @@ class TestGoogleProvider:
 
 
 class TestSearXNGProvider:
-    @patch("requests.get")
+    @patch("services.search.session.get_session")
     @patch("services.url.validate_url_safe")
-    def test_search_returns_results(self, mock_validate, mock_get):
+    def test_search_returns_results(self, mock_validate, mock_get_session):
         mock_validate.return_value = None
-        mock_get.return_value.ok = True
-        mock_get.return_value.json.return_value = {
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.json.return_value = {
             "results": [
                 {
                     "title": "SearXNG Result",
@@ -115,7 +121,9 @@ class TestSearXNGProvider:
                 },
             ]
         }
-        mock_get.return_value.raise_for_status = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_session.get.return_value = mock_response
+        mock_get_session.return_value = mock_session
 
         provider = SearXNGSearchProvider("searxng", {"host": "http://localhost:8888"})
         results = provider.search("test", max_results=1)
@@ -124,11 +132,11 @@ class TestSearXNGProvider:
         assert results[0].title == "SearXNG Result"
         assert results[0].source == "searxng"
 
-    @patch("requests.get")
+    @patch("services.search.session.get_session")
     @patch("services.url.validate_url_safe")
-    def test_search_graceful_failure(self, mock_validate, mock_get):
+    def test_search_graceful_failure(self, mock_validate, mock_get_session):
         mock_validate.return_value = None
-        mock_get.side_effect = Exception("SearXNG down")
+        mock_get_session.side_effect = Exception("SearXNG down")
 
         provider = SearXNGSearchProvider("searxng", {"host": "http://localhost:8888"})
         results = provider.search("test")

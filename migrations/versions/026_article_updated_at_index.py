@@ -2,7 +2,7 @@
 from alembic import op
 
 revision = '026'
-down_revision = '025'
+down_revision = '025_article_pipeline_status_partial_indexes'
 
 
 def upgrade() -> None:

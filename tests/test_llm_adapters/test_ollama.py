@@ -122,7 +122,7 @@ class TestOllamaProvider:
     def test_extract_text_with_thinking_fallback(self):
         provider = self._make_provider()
         resp = {"message": {"content": "", "thinking": "reasoning here"}}
-        assert provider._extract_text(resp) == "reasoning here"
+        assert provider._extract_text(resp, return_thinking=True) == "reasoning here"
 
     def test_extract_text_normal(self):
         provider = self._make_provider()

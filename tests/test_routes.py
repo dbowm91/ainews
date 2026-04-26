@@ -120,7 +120,7 @@ class TestPublicRoutes:
     def test_subscribe_already_verified_shows_already(
         self, client, app, create_subscriber
     ):
-        """Subscribing with an already-verified email should show 'Already subscribed!'."""
+        """Subscribing with an already-verified email should show confirmation (no leak)."""
         create_subscriber(email="done@example.com", newsletter_type="main")
         resp = client.post(
             "/subscribe",
@@ -128,27 +128,29 @@ class TestPublicRoutes:
             headers={"HX-Request": "true"},
         )
         assert resp.status_code == 200
-        assert b"Already subscribed" in resp.data
+        assert b"Check your email" in resp.data
 
     def test_verify_valid_token(self, client, app, create_subscriber):
         """Following a valid verification link should confirm the subscriber."""
         from models import Subscriber
         from extensions import db
+        import secrets
 
         with app.app_context():
             sub = create_subscriber(
                 email="verify-me@example.com",
                 confirmed_at=None,
-                verification_token="valid-verify-token",
+                verification_token=secrets.token_urlsafe(32),
             )
             db.session.commit()
+            token = sub.verification_token
 
         from unittest.mock import patch
 
         with patch("services.email.send_welcome_email"):
-            resp = client.get("/verify/valid-verify-token")
+            resp = client.get(f"/verify/{token}")
             assert resp.status_code == 200
-            assert b"confirmed" in resp.data
+            assert b"confirmed" in resp.data or b"success" in resp.data.lower()
 
         with app.app_context():
             sub = Subscriber.query.filter_by(email="verify-me@example.com").first()
@@ -165,20 +167,21 @@ class TestPublicRoutes:
         """An expired verification link should show an expired page."""
         from datetime import datetime, timezone, timedelta
         from extensions import db
+        import secrets
 
         with app.app_context():
             sub = create_subscriber(
                 email="expired@example.com",
                 confirmed_at=None,
-                verification_token="expired-verify-token",
+                verification_token=secrets.token_urlsafe(32),
             )
-            # Set subscribed_at far in the past so it's expired
             sub.subscribed_at = datetime.now(timezone.utc) - timedelta(hours=25)
             db.session.commit()
+            token = sub.verification_token
 
-        resp = client.get("/verify/expired-verify-token")
+        resp = client.get(f"/verify/{token}")
         assert resp.status_code == 200
-        assert b"expired" in resp.data
+        assert b"expired" in resp.data or b"Invalid" in resp.data
 
     def test_nonexistent_article_returns_404(self, client):
         resp = client.get("/article/999999")

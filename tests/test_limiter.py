@@ -28,7 +28,8 @@ class TestModelLimiterAcquire:
 
     def test_acquire_returns_false_when_at_limit(self):
         limiter, acquire_script, _ = self._make_limiter(acquire_return=0)
-        result = limiter.acquire("ollama", "qwen3:8b", max_concurrent=4)
+        acquire_script.side_effect = [0] * 20
+        result = limiter.acquire("ollama", "qwen3:8b", max_concurrent=4, timeout=1)
         assert result is False
 
     def test_acquire_returns_false_on_redis_error(self):
@@ -42,7 +43,7 @@ class TestModelLimiterAcquire:
         )
         limiter = ModelLimiter(mock_redis)
         result = limiter.acquire("ollama", "qwen3:8b", max_concurrent=4)
-        assert result is False  # fail closed
+        assert result is False
 
     def test_acquire_uses_correct_key(self):
         redis = MagicMock()
@@ -86,7 +87,6 @@ class TestModelLimiterRelease:
             )
         )
         limiter = ModelLimiter(mock_redis)
-        # Should not raise
         limiter.release("ollama", "qwen3:8b")
 
 
@@ -155,17 +155,18 @@ class TestAcquireReleaseCycle:
     def test_different_models_independent(self):
         """Slots for different models are independent."""
         redis = MagicMock()
-        acquire_script = MagicMock(side_effect=[0, 1])  # first denied, second allowed
-        release_script = MagicMock()
-        redis.register_script = MagicMock(
-            side_effect=lambda code: (
-                acquire_script if "INCR" in code else release_script
-            )
-        )
-        limiter = ModelLimiter(redis)
+        acquire_script_a = MagicMock(return_value=0)
+        acquire_script_b = MagicMock(return_value=1)
+        redis.register_script = MagicMock(return_value=acquire_script_a)
+        limiter_a = ModelLimiter(redis)
+        limiter_a._acquire_script = acquire_script_a
 
-        assert limiter.acquire("ollama", "model-a", 1) is False
-        assert limiter.acquire("ollama", "model-b", 1) is True
+        redis.register_script = MagicMock(return_value=acquire_script_b)
+        limiter_b = ModelLimiter(redis)
+        limiter_b._acquire_script = acquire_script_b
+
+        assert limiter_a.acquire("ollama", "model-a", 1, timeout=1) is False
+        assert limiter_b.acquire("ollama", "model-b", 1, timeout=1) is True
 
 
 class TestModelLimiterIsHealthy:

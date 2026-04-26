@@ -987,7 +987,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
             if node.id not in _ALLOWED_NAMES:
                 raise ValueError(f"Unknown identifier: {node.id}")
             if node.id == "results":
-                return context["results"]
+                return context.get("results", context)
             result = context.get(node.id)
             if result is None:
                 raise ValueError(f"Context has no key '{node.id}'")
@@ -998,11 +998,20 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
             obj = _eval_node(node.value)
             if isinstance(obj, dict) and node.attr in obj:
                 return obj[node.attr]
+            if obj is None:
+                return {}
             if node.attr.startswith("__") or node.attr.startswith("_"):
                 raise ValueError(
                     f"Access to protected attribute '{node.attr}' is not allowed"
                 )
-            return getattr(obj, node.attr)
+            try:
+                return getattr(obj, node.attr)
+            except AttributeError:
+                if isinstance(obj, dict):
+                    raise
+                if node.attr in context:
+                    return context[node.attr]
+                raise
         elif isinstance(node, ast.Subscript):
             obj = _eval_node(node.value)
             idx = _eval_node(node.slice)

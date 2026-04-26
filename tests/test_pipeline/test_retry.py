@@ -5,6 +5,11 @@ import pytest
 class TestHandleStageFailure:
     """Test the _handle_stage_failure function."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_redis(self):
+        with patch("services.pipeline_failure._track_stage_failure", return_value=0):
+            yield
+
     def test_increments_retry_count(self, app):
         from tasks.pipeline import _handle_stage_failure
         from models import Article
@@ -21,9 +26,7 @@ class TestHandleStageFailure:
         assert article.total_retries == 1
         assert result is False
 
-    @patch("tasks.write.write_article")
-    @patch("tasks.edit.edit_article")
-    def test_degrades_after_max_retries(self, mock_edit, mock_write, app):
+    def test_degrades_after_max_retries(self, app):
         from tasks.pipeline import _handle_stage_failure, _get_max_stage_retries
         from models import Article
 
@@ -39,10 +42,12 @@ class TestHandleStageFailure:
         article.extracted_text = "Content"
 
         with app.app_context():
-            result = _handle_stage_failure(article, "write", Exception("test"))
+            with patch("services.pipeline_failure._track_stage_failure", return_value=0):
+                with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+                    result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert result is True
-        mock_edit.delay.assert_called_once_with(1, run_id=None)
+        mock_dispatch.assert_called_once_with(1, run_id=None, next_status="editing")
 
     def test_sets_last_error(self, app):
         from tasks.pipeline import _handle_stage_failure
@@ -132,9 +137,10 @@ class TestRetryStuck:
         with patch("extensions.db"):
             with patch("tasks.pipeline._degrade_and_advance") as mock_degrade:
                 with patch("tasks.retry._dead_letter") as mock_dead:
-                    result = retry_stuck()
+                    with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+                        result = retry_stuck()
 
-        mock_celery_tasks["write"].delay.assert_called_once_with(1, run_id=None)
+        mock_dispatch.assert_called_once_with(article.id, article=article)
         mock_degrade.assert_not_called()
         mock_dead.assert_not_called()
         assert result["retried"] == 1
@@ -156,7 +162,8 @@ class TestRetryBudget:
         article.id = 1
 
         with app.app_context():
-            result = _handle_stage_failure(article, "write", Exception("test"))
+            with patch("services.pipeline_failure._track_stage_failure", return_value=0):
+                result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert article.total_retries == 1
         assert result is False
@@ -211,9 +218,11 @@ class TestRetryBudget:
         article.extracted_text = "Content"
 
         with app.app_context():
-            with patch("tasks.edit.edit_article"):
-                result = _handle_stage_failure(article, "write", Exception("test"))
+            with patch("services.pipeline_failure._track_stage_failure", return_value=0):
+                with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+                    result = _handle_stage_failure(article, "write", Exception("test"))
 
         assert result is True
         assert article.total_retries == 3
         assert article.pipeline_status == "editing"
+        mock_dispatch.assert_called_once_with(1, run_id=None, next_status="editing")

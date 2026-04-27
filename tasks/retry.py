@@ -17,7 +17,15 @@ from tasks.pipeline import _get_max_stage_retries
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360)
+@shared_task(
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def retry_stuck(self):
     """Retry or dead-letter articles stuck in the pipeline.
 

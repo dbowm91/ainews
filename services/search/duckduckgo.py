@@ -15,18 +15,27 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ddg_search")
 
 def _search_impl(provider: "DuckDuckGoSearchProvider", query: str, max_results: int) -> list[SearchResult]:
     from duckduckgo_search import DDGS
+    from services.url import validate_url_safe, UnsafeURLError
 
     with DDGS(timeout=15) as ddgs:
         results = ddgs.text(query, max_results=max_results)
-        return [
-            SearchResult(
-                title=r.get("title", ""),
-                url=r.get("href", ""),
-                snippet=r.get("body", ""),
-                source=provider.provider_id,
-            )
-            for r in results
-        ]
+        validated_results = []
+        for r in results:
+            url = r.get("href", "")
+            try:
+                validate_url_safe(url)
+                validated_results.append(
+                    SearchResult(
+                        title=r.get("title", ""),
+                        url=url,
+                        snippet=r.get("body", ""),
+                        source=provider.provider_id,
+                    )
+                )
+            except UnsafeURLError:
+                logger.warning("DuckDuckGo returned blocked URL: %s", url)
+                continue
+        return validated_results
 
 
 @register_search_provider("duckduckgo")

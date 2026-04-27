@@ -51,7 +51,7 @@ def _format_web_results(web_results: list[dict]) -> str:
     soft_time_limit=300,
     time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError, ProviderServerError),
-    retry_backoff=30,
+    retry_backoff=True,
     retry_backoff_max=300,
     retry_jitter=True,
 )

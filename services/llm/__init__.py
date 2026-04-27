@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Tuple
 
 import services.llm.ollama  # noqa: F401
@@ -15,7 +16,7 @@ from services.llm.errors import RateLimitError, ProviderServerError, ProviderTim
 logger = logging.getLogger(__name__)
 
 # Circuit breaker defaults for LLM providers
-_LLM_FAILURE_THRESHOLD = 5
+_LLM_FAILURE_THRESHOLD = int(os.environ.get("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5"))
 _LLM_RECOVERY_TIMEOUT = 60.0
 
 _providers_config_cache = None

@@ -27,6 +27,7 @@ services:
       - DATABASE_URL=${DATABASE_URL:-sqlite:///app/instance/prod.db}
     volumes:
       - app-data:/app/instance
+      - ./static:/app/static:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -51,6 +52,12 @@ services:
       db-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -h redis ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   celery-beat:
     build: .
@@ -67,6 +74,12 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -h redis ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   redis:
     image: redis:7-alpine

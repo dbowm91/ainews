@@ -86,9 +86,10 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    # Static files — serve directly
+    # Static files — serve directly via volume mount
+    # Adjust the alias path to match your deployment directory
     location /static/ {
-        proxy_pass http://127.0.0.1:5000/static/;
+        alias /opt/ainews/static/;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }

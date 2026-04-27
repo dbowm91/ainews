@@ -90,8 +90,8 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Newsletter delivery tracking**: Newsletter model has `delivered_count` and `error_message` fields. Admin endpoint `GET /admin/api/newsletters/stats` returns delivery stats.
 - **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
 - **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin UI at `/admin/webhooks` displays webhook list and event history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
-- **DEBUG warning in production**: `app.py` logs a warning if `DEBUG=True` in production context.
-- **Cost tracking**: `services/cost_tracker.py` tracks LLM costs with admin endpoint `GET /admin/api/costs`. `_DEFAULT_RATES` dict maps provider/model to input/output per-1M-token pricing. See `plans/plan.md` for pending pricing corrections.
+- **CSP directives**: `app.py` now includes `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` directives. These prevent unauthorized connections, plugin embedding, base tag injection, and form submission to external targets.
+- **Session security**: `SESSION_USE_SIGNER = True` in `config.py` cryptographically signs session cookies to prevent client-side tampering. Flask's default is False (plaintext).
 
 ## Subagent system
 
@@ -654,7 +654,15 @@ Applied in `services/llm/base.py` for JSON extraction.
 
 **Collapsible what-to-watch**: `templates/partials/condensed_article.html` uses `<details>/<summary>` for the what-to-watch section with CSS arrow rotation.
 
-**LLM JSON extraction helper**: LLM responses may contain markdown-wrapped JSON (especially from Ollama). Use `_extract_json()` to extract before validation:
+**LLM stage tracking**: `services/llm/__init__.py:record_provider_success()` now accepts optional `stage` parameter. When provided, the `llm.calls` and `llm.tokens` metrics include a `stage` label (select, research, write, edit). Updated `chat_structured()` in `services/llm/base.py` and all pipeline tasks to pass `stage=` parameter.
+
+**Pipeline failure webhooks**: `article.failed` webhook is now triggered from `services/pipeline_failure.py` when articles fail from per-stage limits or total retry exhaustion. Payload includes `article_id`, `stage`, and `reason`. `newsletter.failed` webhook is triggered from `tasks/newsletter.py` when email delivery fails.
+
+**Failure reason tracking**: `services/pipeline_monitor.py:record_stage_result()` now accepts optional `reason` parameter. Failed pipeline stages record reason codes (rate_limit, timeout, server_error, etc.) in Redis with key pattern `ainews:pipeline:counters:{stage}:{minute}:failure:{reason}`.
+
+**Related articles caching**: `routes/public/links.py:article_detail()` now uses `find_related_articles_cached()` instead of uncached version. Cache key: `pub:related:{article_id}` with 600s TTL. Also added 30-day date prefilter (`Article.created_at >= now - 30d`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50).
+
+**Cache eviction optimization**: `services/cache.py` replaced O(n) full-scan `_evict_stale()` with incremental `_evict_batch()` that checks only 5 oldest entries per `get()`/`set()` call. Also removed unused `_EVICT_SAMPLE_RATE` and `_evict_sample_counter`.
 
 ```python
 from services.llm.base import _extract_json
@@ -687,15 +695,15 @@ retry_messages.append({
 
 **ShareConfig has no admin CRUD**: `routes/admin/shares.py` only has list and toggle routes. ShareConfig records are created via seed data in `app.py`. There is no create/edit/delete route. The `url_template` column has no validation (no scheme check).
 
-**Webhook events defined but not all triggered**: `KNOWN_WEBHOOK_EVENTS` at `routes/admin/api/webhooks.py:12-17` defines `article.published`, `article.failed`, `newsletter.sent`, `newsletter.failed`. Only `article.published` (tasks/edit.py) and `newsletter.sent` (tasks/newsletter.py) are actually triggered. `article.failed` and `newsletter.failed` have no trigger calls.
+**Webhook events**: `KNOWN_WEBHOOK_EVENTS` at `routes/admin/api/webhooks.py:12-17` defines `article.published`, `article.failed`, `newsletter.sent`, `newsletter.failed`. All four events are now triggered: `article.published` (tasks/edit.py), `article.failed` (services/pipeline_failure.py), `newsletter.sent` (tasks/newsletter.py), `newsletter.failed` (tasks/newsletter.py).
 
-**newsletter_id in webhook payload**: `tasks/newsletter.py:259` passes `nl.id` where `nl` is a `NewsletterConfig` (Pydantic schema from pipeline.yaml), not a `Newsletter` model. `nl.id` is always `None`. The actual Newsletter model is the local variable `newsletter` created earlier in the function.
+**newsletter_id in webhook payload**: Fixed. `tasks/newsletter.py:259` now uses `newsletter.id` (the actual Newsletter model) instead of `nl.id` (NewsletterConfig Pydantic schema).
 
-**share-a11y.js duplicates app.js**: Both `static/js/share-a11y.js` and `static/js/app.js` have toggle event listeners on `.share-details`. The app.js version handles dropdown positioning but sets `aria-expanded` to a boolean (line 61). The share-a11y.js version correctly uses `.toString()` and adds focus management. These should be merged into app.js.
+**share-a11y.js merged into app.js**: `static/js/share-a11y.js` has been deleted. Focus management and `aria-expanded` fixes (`.toString()`) are now in `static/js/app.js`. Script tags removed from `templates/base.html` and `templates/base_admin.html`.
 
-**`safe_href` filter usage**: The `safe_href` Jinja2 filter exists at `app.py:238-253` and validates URL scheme + SSRF. It is used in `article_card.html`, `condensed_article.html`, and `article_edit.html`. The share templates (`share_macro.html`, `share_redirect.html`) do NOT use it.
+**`safe_href` filter usage**: The `safe_href` Jinja2 filter exists at `app.py:238-253` and validates URL scheme + SSRF. It is used in `article_card.html`, `condensed_article.html`, `article_edit.html`, `share_macro.html`, and `share_redirect.html`.
 
-**`find_related_articles_cached()`**: Exists at `services/related.py` with 600s TTL using key `pub:related:{article_id}`. The article detail route at `routes/public/links.py:50` calls the uncached `find_related_articles()` directly instead.
+**`find_related_articles_cached()`**: Exists at `services/related.py` with 600s TTL using key `pub:related:{article_id}`. The article detail route at `routes/public/links.py:50` now calls the cached version. Added 30-day date prefilter (`Article.created_at >= now - 30d`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50).
 
 **`_find_overlapping_low_entries` dead code**: Function at `services/trend_memory.py:274-287` is never called. `consolidate_topic` at line 290 uses direct SQL UPDATE instead. Safe to remove.
 

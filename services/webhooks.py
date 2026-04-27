@@ -268,6 +268,7 @@ def dispatch_webhook(
         error_message=error,
         attempt_number=attempt_number,
         idempotency_key=idempotency_key,
+        payload=json.dumps(payload),
     )
     db.session.add(event)
 

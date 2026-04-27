@@ -1,5 +1,7 @@
+import json
 import logging
 import secrets
+from datetime import datetime, timezone
 
 from flask import jsonify, request, Response
 from routes.admin import admin_bp, require_auth
@@ -308,3 +310,43 @@ def list_webhook_events(webhook_id: int) -> Response:
             ]
         }
     )
+
+
+@admin_bp.route("/api/webhooks/events/<int:event_id>/resend", methods=["POST"])
+@require_auth
+@validate_csrf_json
+def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
+    """Resend a webhook event using the stored payload."""
+    from models import Webhook, WebhookEvent
+    from extensions import db
+    from services.webhooks import dispatch_webhook
+
+    event = db.get_or_404(WebhookEvent, event_id)
+    webhook = db.get_or_404(Webhook, event.webhook_id)
+
+    if not webhook.active:
+        return jsonify({"error": "Webhook is inactive"}), 400
+
+    secret = _get_webhook_secret(webhook)
+
+    event_data = {}
+    if event.payload:
+        try:
+            stored = json.loads(event.payload)
+            event_data = stored.get("data", {})
+        except Exception:
+            pass
+
+    success, error = dispatch_webhook(
+        webhook_id=webhook.id,
+        name=webhook.name,
+        url=webhook.url,
+        secret=secret,
+        event_type=event.event_type,
+        event_data=event_data,
+        idempotency_key=f"resend-{event.id}-{datetime.now(timezone.utc).isoformat()}",
+    )
+
+    if success:
+        return jsonify({"message": "Webhook resent successfully"})
+    return jsonify({"error": f"Resend failed: {error}"}), 500

@@ -164,10 +164,7 @@ class TestPipelineEndToEnd:
                 return {"article_id": article.id}
 
             with app.app_context():
-                with patch(
-                    "tasks.pipeline._should_route_to_review", return_value=False
-                ):
-                    with patch("tasks.pipeline._assign_tags"):
+                with patch("tasks.pipeline._assign_tags"):
                         result = run_stage("editor", article_id, edit_work, task_self)
                         article = db.session.get(Article, article_id)
                         assert article.pipeline_status == "done"

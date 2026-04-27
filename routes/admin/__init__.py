@@ -247,45 +247,46 @@ def _clear_attempts(ip: str) -> None:
 
 
 # Import all sub-modules to register routes with the blueprint
-from routes.admin import (
+# These must come after Blueprint creation to avoid circular imports
+from routes.admin import (  # noqa: E402, F401
     api as api,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     articles as articles,
 )
 from routes.admin import (  # noqa: E402, F401
     auth as auth,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     dashboard as dashboard,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     metrics as metrics,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     newsletters as newsletters,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     pipelines as pipelines,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     review as review,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     shares as shares,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     sources as sources,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     subscribers as subscribers,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     topic_notes as topic_notes,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     trend_memory as trend_memory,
 )
-from routes.admin import (
+from routes.admin import (  # noqa: E402, F401
     webhooks as webhooks,
 )

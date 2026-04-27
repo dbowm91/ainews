@@ -18,7 +18,7 @@
     <div class="share-social-links">
       {% for config in share_configs %}
         {% set share_href = config.url_template.replace('{url}', short_url).replace('{title}', (article.original_title or '') | urlencode) %}
-        <a href="{{ share_href }}" target="_blank" rel="noopener" class="share-social-link">
+        <a href="{{ share_href|safe_href }}" target="_blank" rel="noopener" class="share-social-link">
           <span class="share-icon share-icon-{{ config.platform_key }}">{{ config.platform_key[0]|upper }}</span>
           <span>{{ config.label }}</span>
         </a>

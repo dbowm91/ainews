@@ -20,7 +20,6 @@ _cache_instance: Optional["ResponseCache"] = None
 _cache_lock = threading.Lock()
 
 _L1_CACHE_MAXSIZE = 1000
-_EVICT_SAMPLE_RATE = 100
 
 
 def _get_l1_cache_maxsize() -> int:
@@ -47,15 +46,19 @@ class ResponseCache:
         self._hits = 0
         self._misses = 0
         self._memory_lock = threading.Lock()
-        self._evict_sample_counter = 0
 
-    def _evict_stale(self) -> None:
-        """Remove expired entries from the in-memory cache."""
+    def _evict_batch(self, batch: int = 5) -> None:
+        """Remove expired entries from the head of the OrderedDict."""
         now = time.monotonic()
         with self._memory_lock:
-            expired = [k for k, (exp, _, _) in self._memory.items() if now >= exp]
-            for k in expired:
-                del self._memory[k]
+            for _ in range(batch):
+                if not self._memory:
+                    break
+                key, (exp, _, _) = next(iter(self._memory.items()))
+                if now >= exp:
+                    del self._memory[key]
+                else:
+                    break
 
     def _make_key(self, key: str) -> str:
         """Create a namespaced cache key. Hash long keys to avoid Redis key limits."""
@@ -65,7 +68,7 @@ class ResponseCache:
 
     def get(self, key: str) -> Any | None:
         """Get a cached value. Returns None on miss or error."""
-        self._evict_stale()
+        self._evict_batch()
         full_key = self._make_key(key)
 
         # L1: in-memory
@@ -100,7 +103,7 @@ class ResponseCache:
         raw = json.dumps(value)
 
         # L1: in-memory with LRU eviction
-        self._evict_stale()
+        self._evict_batch()
         with self._memory_lock:
             if (
                 len(self._memory) >= _get_l1_cache_maxsize()

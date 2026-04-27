@@ -336,8 +336,8 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
         try:
             stored = json.loads(event.payload)
             event_data = stored.get("data", {})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to parse webhook event payload: %s", e)
 
     success, error = dispatch_webhook(
         webhook_id=webhook.id,

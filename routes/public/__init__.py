@@ -8,15 +8,16 @@ Submodules:
 - links: article detail, short URLs, share tracking
 """
 
+import logging
+
 from flask import (
     Blueprint,
     Response,
+    jsonify,
     render_template,
     request,
     session,
-    jsonify,
 )
-import logging
 
 from services.config_cache import get_config_cache
 
@@ -59,6 +60,7 @@ def _get_topic_icons() -> dict[str, str]:
 def _get_tag_cloud() -> list[dict]:
     def _load() -> list[dict]:
         from sqlalchemy import func
+
         from extensions import db
         from models import Tag, article_tags
 
@@ -120,5 +122,5 @@ def health() -> tuple[Response, int]:
 
 # Import submodules to register routes
 from routes.public import feeds as feeds  # noqa: E402, F401
-from routes.public import subscribe as subscribe  # noqa: E402, F401
 from routes.public import links as links  # noqa: E402, F401
+from routes.public import subscribe as subscribe  # noqa: E402, F401

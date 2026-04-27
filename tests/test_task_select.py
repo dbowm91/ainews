@@ -30,8 +30,8 @@ class TestSelectArticle:
         app,
         create_article,
     ):
-        from tasks.select import select_article
         from tasks import pipeline as pipeline_module
+        from tasks.select import select_article
 
         mock_breaker = MagicMock()
         mock_breaker.can_execute.return_value = True
@@ -108,8 +108,8 @@ class TestSelectArticle:
         app,
         create_article,
     ):
-        from tasks.select import select_article
         from tasks import pipeline as pipeline_module
+        from tasks.select import select_article
 
         mock_breaker = MagicMock()
         mock_breaker.can_execute.return_value = True
@@ -217,8 +217,8 @@ class TestSelectArticle:
         app,
         create_article,
     ):
-        from tasks.select import select_article
         from tasks import pipeline as pipeline_module
+        from tasks.select import select_article
 
         mock_breaker = MagicMock()
         mock_breaker.can_execute.return_value = True
@@ -281,8 +281,8 @@ class TestSelectArticle:
         create_article,
     ):
         """Score equal to min_score should select (>= comparison)."""
-        from tasks.select import select_article
         from tasks import pipeline as pipeline_module
+        from tasks.select import select_article
 
         mock_breaker = MagicMock()
         mock_breaker.can_execute.return_value = True

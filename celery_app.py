@@ -1,6 +1,7 @@
+import os
+
 from celery import Celery, Task
 from celery.signals import before_task_publish
-import os
 
 from celery_support import _app_cache, _app_cache_lock
 
@@ -8,7 +9,6 @@ from celery_support import _app_cache, _app_cache_lock
 # module-level celery_app. We initialize at import time for that reason.
 # Each task execution uses its own app_context() via FlaskTask.__call__,
 # which is safe since Flask apps are thread-safe for read operations.
-
 from logging_config import request_id_var
 
 _celery = Celery("ainews")
@@ -63,15 +63,15 @@ def _init_celery():
     _celery.config_from_object(app.config, namespace="CELERY")
     _celery.Task = FlaskTask
 
-    import tasks.pipeline  # noqa: F401
     import tasks.crawl  # noqa: F401
-    import tasks.extract  # noqa: F401
-    import tasks.select  # noqa: F401
-    import tasks.research  # noqa: F401
-    import tasks.write  # noqa: F401
     import tasks.edit  # noqa: F401
-    import tasks.retry  # noqa: F401
+    import tasks.extract  # noqa: F401
     import tasks.newsletter  # noqa: F401
+    import tasks.pipeline  # noqa: F401
+    import tasks.research  # noqa: F401
+    import tasks.retry  # noqa: F401
+    import tasks.select  # noqa: F401
+    import tasks.write  # noqa: F401
 
     app.extensions["celery"] = _celery
 

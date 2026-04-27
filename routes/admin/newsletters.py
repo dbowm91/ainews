@@ -1,10 +1,12 @@
 import logging
-from flask import render_template, request, jsonify, current_app, g
+
+from flask import current_app, g, jsonify, render_template, request
 from sqlalchemy.orm import joinedload
-from routes.admin import admin_bp, require_auth
-from routes.decorators import validate_csrf_json
+
 from constants import PER_PAGE_NEWSLETTERS
 from extensions import db
+from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 from services.task_security import get_signed_kwargs
 
 logger = logging.getLogger(__name__)
@@ -161,8 +163,9 @@ def newsletter_dry_run():
 @require_auth
 def newsletters_stats():
     """Return newsletter delivery statistics."""
-    from models import Newsletter
     from sqlalchemy import case, func
+
+    from models import Newsletter
 
     stats = db.session.query(
         func.count(Newsletter.id).label("total"),
@@ -205,11 +208,12 @@ def newsletters_stats():
 @validate_csrf_json
 def newsletter_preview():
     """Generate newsletter HTML preview without sending emails."""
-    from models import Article
+    from datetime import datetime, timedelta, timezone
+
     from constants import PipelineStatus
-    from datetime import datetime, timezone, timedelta
-    from services.newsletter_pipeline import generate_executive_summary
+    from models import Article
     from services.newsletter import generate_main_newsletter
+    from services.newsletter_pipeline import generate_executive_summary
 
     site_url = request.form.get("site_url", "").strip()
     if not site_url:

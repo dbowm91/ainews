@@ -8,8 +8,8 @@ class TestShares:
         assert resp.status_code in (302, 401)
 
     def test_shares_renders(self, auth_client, app):
-        from models import ShareConfig
         from extensions import db
+        from models import ShareConfig
 
         with app.app_context():
             config = ShareConfig(
@@ -27,8 +27,8 @@ class TestShares:
         assert resp.status_code == 200
 
     def test_toggle_share_requires_auth(self, client, app):
-        from models import ShareConfig
         from extensions import db
+        from models import ShareConfig
 
         with app.app_context():
             config = ShareConfig(
@@ -47,8 +47,8 @@ class TestShares:
         assert resp.status_code in (302, 401)
 
     def test_toggle_share_active_to_inactive(self, auth_client, app):
-        from models import ShareConfig
         from extensions import db
+        from models import ShareConfig
 
         with app.app_context():
             config = ShareConfig(
@@ -72,8 +72,8 @@ class TestShares:
             assert config.active is False
 
     def test_toggle_share_inactive_to_active(self, auth_client, app):
-        from models import ShareConfig
         from extensions import db
+        from models import ShareConfig
 
         with app.app_context():
             config = ShareConfig(

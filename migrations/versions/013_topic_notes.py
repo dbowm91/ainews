@@ -8,9 +8,8 @@ Create Date: 2026-04-01
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = "013_topic_notes"
 down_revision: Union[str, Sequence[str], None] = "012_article_version_source_fields"

@@ -40,8 +40,9 @@ def check_database() -> tuple[str, Any]:
     Returns (check_name, status) tuple.
     """
     try:
-        from extensions import db
         from sqlalchemy import text
+
+        from extensions import db
 
         db.session.execute(text("SELECT 1"))
 

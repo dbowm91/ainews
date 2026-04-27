@@ -92,6 +92,7 @@ class TestOpenAIProvider:
 
     def test_chat_error_converted(self):
         from openai import APITimeoutError
+
         from services.llm.errors import ProviderTimeoutError
 
         provider = self._make_provider()

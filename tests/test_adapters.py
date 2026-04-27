@@ -1,8 +1,9 @@
 """Tests for source adapters."""
 
-import pytest
-from unittest.mock import MagicMock
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
 
 
 class TestBaseAdapter:
@@ -228,8 +229,8 @@ class TestRSSAdapter:
         assert len(item.external_id) == 16
 
     def test_get_match_text_includes_content(self):
-        from adapters.rss import RSSAdapter
         from adapters.base import RawItem
+        from adapters.rss import RSSAdapter
 
         source_config = MagicMock()
         source_config.id = "test-rss"

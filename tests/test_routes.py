@@ -27,6 +27,7 @@ class TestPasswordVerification:
 
     def test_verify_password_hashed_correct(self):
         from werkzeug.security import generate_password_hash
+
         from routes.admin import _verify_password
 
         hashed = generate_password_hash("correctpassword")
@@ -34,6 +35,7 @@ class TestPasswordVerification:
 
     def test_verify_password_hashed_wrong(self):
         from werkzeug.security import generate_password_hash
+
         from routes.admin import _verify_password
 
         hashed = generate_password_hash("correctpassword")
@@ -53,6 +55,7 @@ class TestPasswordVerification:
 
     def test_verify_password_hashed_empty_provided(self):
         from werkzeug.security import generate_password_hash
+
         from routes.admin import _verify_password
 
         hashed = generate_password_hash("correctpassword")
@@ -132,9 +135,10 @@ class TestPublicRoutes:
 
     def test_verify_valid_token(self, client, app, create_subscriber):
         """Following a valid verification link should confirm the subscriber."""
-        from models import Subscriber
-        from extensions import db
         import secrets
+
+        from extensions import db
+        from models import Subscriber
 
         with app.app_context():
             sub = create_subscriber(
@@ -165,9 +169,10 @@ class TestPublicRoutes:
 
     def test_verify_expired_token(self, client, app, create_subscriber):
         """An expired verification link should show an expired page."""
-        from datetime import datetime, timezone, timedelta
-        from extensions import db
         import secrets
+        from datetime import datetime, timedelta, timezone
+
+        from extensions import db
 
         with app.app_context():
             sub = create_subscriber(

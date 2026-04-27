@@ -1,10 +1,10 @@
-from datetime import datetime, timezone, timedelta
 import smtplib
+from datetime import datetime, timedelta, timezone
 
-from celery import shared_task, group
-from sqlalchemy.exc import SQLAlchemyError
-from celery.utils.log import get_task_logger
 from billiard.exceptions import SoftTimeLimitExceeded
+from celery import group, shared_task
+from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 from services.task_security import verify_task
 
@@ -109,8 +109,8 @@ def _fetch_articles_for_newsletter(
     cutoff: datetime,
     max_articles: int,
 ) -> list:
-    from models import Article
     from constants import PipelineStatus
+    from models import Article
 
     q = Article.query.filter(
         Article.pipeline_status == PipelineStatus.DONE,
@@ -131,11 +131,11 @@ def _generate_topic_newsletter_impl(
     dry_run_email: str | None,
     nl,
 ) -> dict:
+    from extensions import db
+    from models import Newsletter, Subscriber
+    from services.email import send_newsletter_email
     from services.newsletter import generate_main_newsletter, generate_topic_newsletter
     from services.newsletter_pipeline import generate_executive_summary
-    from services.email import send_newsletter_email
-    from models import Newsletter, Subscriber
-    from extensions import db
 
     if not articles:
         return {"type": topic_key, "articles": 0, "sent": 0, "skipped": True}
@@ -282,10 +282,10 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     """
     from celery import group
 
+    from extensions import db
+    from models import PipelineRun
     from schemas.pipeline import load_pipeline_config
     from schemas.topic import load_topics
-    from models import PipelineRun
-    from extensions import db
 
     config = load_pipeline_config()
     nl = config.newsletter
@@ -477,10 +477,10 @@ def retry_failed_newsletter_deliveries(self):
 
     Runs every 2 hours via Celery Beat.
     """
-    from models import Newsletter, Subscriber
     from extensions import db
-    from services.email import send_newsletter_email
+    from models import Newsletter, Subscriber
     from schemas.pipeline import load_pipeline_config
+    from services.email import send_newsletter_email
 
     config = load_pipeline_config()
     site_url = config.newsletter.site_url

@@ -6,8 +6,8 @@ class TestDegradeAndAdvance:
     """Test the _degrade_and_advance function behavior."""
 
     def test_select_degrades_to_research(self, app):
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -25,8 +25,8 @@ class TestDegradeAndAdvance:
         mock_dispatch.assert_called_once_with(1, run_id=None, next_status="researching")
 
     def test_research_degrades_to_write(self, app):
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -44,8 +44,8 @@ class TestDegradeAndAdvance:
         mock_dispatch.assert_called_once_with(1, run_id=None, next_status="writing")
 
     def test_write_degrades_to_edit(self, app):
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -66,8 +66,8 @@ class TestDegradeAndAdvance:
         mock_dispatch.assert_called_once_with(1, run_id=None, next_status="editing")
 
     def test_edit_degrades_to_done(self, app):
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -83,8 +83,8 @@ class TestDegradeAndAdvance:
 
     def test_normalizes_status_name_researching(self, app):
         """retry_stuck passes 'researching' but _degrade_and_advance checks 'research'."""
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -102,8 +102,8 @@ class TestDegradeAndAdvance:
 
     def test_normalizes_status_name_writing(self, app):
         """retry_stuck passes 'writing' but _degrade_and_advance checks 'write'."""
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -123,8 +123,8 @@ class TestDegradeAndAdvance:
 
     def test_normalizes_status_name_editing(self, app):
         """retry_stuck passes 'editing' but _degrade_and_advance checks 'edit'."""
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -138,8 +138,8 @@ class TestDegradeAndAdvance:
         assert article.pipeline_status == "done"
 
     def test_resets_retry_state_on_degrade(self, app):
-        from tasks.pipeline import _degrade_and_advance
         from models import Article
+        from tasks.pipeline import _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1

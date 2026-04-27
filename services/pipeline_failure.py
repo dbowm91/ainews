@@ -2,6 +2,7 @@
 
 import redis.exceptions
 from celery.utils.log import get_task_logger
+
 from constants import MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
 from services.config_utils import get_config_with_default
 
@@ -60,9 +61,10 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
         should not retry).  ``False`` if the article is still eligible for
         retry.
     """
+    from sqlalchemy.exc import SQLAlchemyError
+
     from constants import PipelineStatus
     from extensions import db
-    from sqlalchemy.exc import SQLAlchemyError
     from services.pipeline_degradation import degrade_stage
 
     article.retry_count = (article.retry_count or 0) + 1

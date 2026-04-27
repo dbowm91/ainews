@@ -1,14 +1,15 @@
 """Tests for cross-source article deduplication."""
 
 import json
+
 import pytest
 
 
 @pytest.fixture
 def seeded_articles(app):
     """Create test articles for dedup testing."""
-    from models import Article, Source
     from extensions import db
+    from models import Article, Source
 
     source1 = Source(source_key="src1", name="Source 1", source_type="rss", feed_url="")
     source2 = Source(source_key="src2", name="Source 2", source_type="rss", feed_url="")
@@ -97,6 +98,7 @@ class TestAdapterUrlNormalization:
         """RSS adapter should produce the same external_id for URLs
         that differ only in tracking params."""
         import hashlib
+
         from services.url import normalize_url
 
         url_a = "https://www.example.com/article?utm_source=twitter"
@@ -111,6 +113,7 @@ class TestAdapterUrlNormalization:
         """Web adapter should produce the same external_id for URLs
         that differ only in trailing slash."""
         import hashlib
+
         from services.url import normalize_url
 
         url_a = "https://example.com/article/"

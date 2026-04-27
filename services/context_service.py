@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from typing import Optional
 
@@ -6,7 +7,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from models import TopicNote
-
 
 logger = logging.getLogger(__name__)
 

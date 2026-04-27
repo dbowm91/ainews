@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 from alembic import op
 
-
 revision: str = "021_article_sla_timestamps"
 down_revision: Union[str, Sequence[str], None] = "020_article_source_index"
 branch_labels: Union[str, Sequence[str], None] = None

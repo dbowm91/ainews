@@ -197,8 +197,8 @@ class TestPipelineEndToEnd:
                 db.session.commit()
                 article_id = article.id
 
-            from tasks.pipeline import _handle_stage_failure
             from constants import MAX_STAGE_RETRIES
+            from tasks.pipeline import _handle_stage_failure
 
             with app.app_context():
                 article = db.session.get(Article, article_id)
@@ -231,8 +231,8 @@ class TestPipelineEndToEnd:
                 db.session.commit()
                 article_id = article.id
 
-            from tasks.pipeline import _handle_stage_failure
             from constants import MAX_TOTAL_RETRIES
+            from tasks.pipeline import _handle_stage_failure
 
             with app.app_context():
                 article = db.session.get(Article, article_id)

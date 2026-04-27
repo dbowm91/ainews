@@ -1,12 +1,13 @@
 """Tests for services/article_validation.py."""
 
 import json
+
 import pytest
 
 from services.article_validation import (
-    validate_final_article,
-    validate_and_raise,
     ValidationError,
+    validate_and_raise,
+    validate_final_article,
 )
 
 

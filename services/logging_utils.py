@@ -14,11 +14,11 @@ from typing import Any, Optional
 
 try:
     from opentelemetry import trace
+    from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.resources import Resource
     from opentelemetry.semconv.resource import ResourceAttributes
-    from opentelemetry.trace import Tracer, SpanKind
+    from opentelemetry.trace import SpanKind, Tracer
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
     _OTEL_AVAILABLE = True

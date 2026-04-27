@@ -1,4 +1,5 @@
-from flask import render_template, request, redirect, url_for, Response
+from flask import Response, redirect, render_template, request, url_for
+
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit
 
@@ -15,8 +16,8 @@ def shares() -> str:
 @admin_bp.route("/shares/<int:config_id>/toggle", methods=["POST"])
 @require_auth
 def toggle_share(config_id: int) -> str | Response:
-    from models import ShareConfig
     from extensions import db
+    from models import ShareConfig
 
     config = db.get_or_404(ShareConfig, config_id)
     config.active = not config.active

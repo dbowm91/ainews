@@ -1,11 +1,12 @@
 import logging
 from datetime import datetime, timezone
 
-from flask import render_template, request, redirect, url_for, jsonify
+from flask import jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
-from routes.admin import admin_bp, require_auth
+
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
+from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,8 @@ def review_queue():
 @admin_bp.route("/review/<int:article_id>/approve", methods=["POST"])
 @require_auth
 def approve_article(article_id):
-    from models import Article
     from extensions import db
+    from models import Article
 
     article = db.get_or_404(Article, article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:
@@ -108,8 +109,8 @@ def approve_article(article_id):
 @admin_bp.route("/review/<int:article_id>/reject", methods=["POST"])
 @require_auth
 def reject_article(article_id):
-    from models import Article
     from extensions import db
+    from models import Article
 
     article = db.get_or_404(Article, article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:

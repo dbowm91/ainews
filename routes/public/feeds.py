@@ -1,23 +1,24 @@
 """Feed and content routes: index, topics, tags, RSS, sitemap."""
 
-from flask import request, Response
-from datetime import datetime, timezone, timedelta
 from collections import namedtuple
+from datetime import datetime, timedelta, timezone
+
+from flask import Response, request
 from sqlalchemy.orm import joinedload
 
-from models import Article, Tag
 from constants import PER_PAGE_PUBLIC, PipelineStatus
-from services.article import (
-    parse_articles,
-    get_articles_paginated,
-)
+from models import Article, Tag
 from routes.public import (
-    public_bp,
-    _render_feed_or_page,
     _get_categories,
-    _get_topic_icons,
-    _get_tag_cloud,
     _get_share_configs,
+    _get_tag_cloud,
+    _get_topic_icons,
+    _render_feed_or_page,
+    public_bp,
+)
+from services.article import (
+    get_articles_paginated,
+    parse_articles,
 )
 
 PER_PAGE = PER_PAGE_PUBLIC
@@ -25,6 +26,7 @@ PER_PAGE = PER_PAGE_PUBLIC
 
 def _get_top_impact(limit: int = 3) -> list[Article]:
     from sqlalchemy import or_
+
     from services.cache import get_response_cache
 
     cache = get_response_cache()
@@ -206,8 +208,8 @@ def tag_feed(slug: str) -> str:
 
 @public_bp.route("/feed")
 def feed_all() -> Response:
-    from services.rss import generate_rss_feed
     from services.cache import get_response_cache
+    from services.rss import generate_rss_feed
 
     cache = get_response_cache()
     site_url = request.host_url.rstrip("/")
@@ -243,10 +245,11 @@ def feed_all() -> Response:
 
 @public_bp.route("/feed/<category>")
 def feed_topic(category: str) -> Response:
-    from services.rss import generate_rss_feed
+    from flask import abort
+
     from schemas.topic import load_topics
     from services.cache import get_response_cache
-    from flask import abort
+    from services.rss import generate_rss_feed
 
     topics = load_topics().topics
     if category not in topics:
@@ -291,9 +294,9 @@ def feed_topic(category: str) -> Response:
 
 @public_bp.route("/sitemap.xml")
 def sitemap() -> Response:
-    from services.rss import generate_sitemap
     from services.cache import get_response_cache
     from services.config_utils import get_config_with_default
+    from services.rss import generate_sitemap
 
     cache = get_response_cache()
     cache_key = "pub:sitemap:xml"

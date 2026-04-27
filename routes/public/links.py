@@ -3,16 +3,16 @@
 import logging
 import re
 
-from flask import request, render_template, redirect, make_response, Response, abort
+from flask import Response, abort, make_response, redirect, render_template, request
 from sqlalchemy.orm import joinedload
 
 from models import Article, ArticleMetric
-from services.article import parse_article_json, track_metric
-from routes.public import (
-    public_bp,
-    _get_share_configs,
-)
 from routes.decorators import validate_csrf_json
+from routes.public import (
+    _get_share_configs,
+    public_bp,
+)
+from services.article import parse_article_json, track_metric
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,9 @@ _SHORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,20}$")
 @public_bp.route("/article/<int:article_id>")
 def article_detail(article_id: int) -> Response:
     from schemas.topic import load_topics
-    from services.related import find_related_articles
     from services.article import parse_articles
     from services.cache import get_response_cache
+    from services.related import find_related_articles
 
     cache = get_response_cache()
     cache_key = f"pub:article_detail:{article_id}"

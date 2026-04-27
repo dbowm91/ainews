@@ -3,7 +3,8 @@ import logging
 import secrets
 from datetime import datetime, timezone
 
-from flask import jsonify, request, Response
+from flask import Response, jsonify, request
+
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit, validate_csrf_json
 
@@ -88,8 +89,8 @@ def list_webhooks() -> Response:
 @validate_csrf_json
 def create_webhook() -> tuple[Response, int] | Response:
     """Create a new webhook."""
-    from models import Webhook
     from extensions import db
+    from models import Webhook
 
     data = request.get_json(silent=True)
     if not data:
@@ -145,8 +146,8 @@ def create_webhook() -> tuple[Response, int] | Response:
 @require_auth
 def get_webhook(webhook_id: int) -> Response:
     """Get a specific webhook."""
-    from models import Webhook
     from extensions import db
+    from models import Webhook
 
     webhook = db.get_or_404(Webhook, webhook_id)
     return jsonify(
@@ -190,8 +191,8 @@ def get_webhook(webhook_id: int) -> Response:
 @validate_csrf_json
 def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Update a webhook."""
-    from models import Webhook
     from extensions import db
+    from models import Webhook
 
     webhook = db.get_or_404(Webhook, webhook_id)
     data = request.get_json(silent=True)
@@ -233,8 +234,8 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 @validate_csrf_json
 def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Delete a webhook."""
-    from models import Webhook
     from extensions import db
+    from models import Webhook
 
     webhook = db.get_or_404(Webhook, webhook_id)
     db.session.delete(webhook)
@@ -250,8 +251,8 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 @validate_csrf_json
 def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Send a test event to a webhook."""
-    from models import Webhook
     from extensions import db
+    from models import Webhook
     from services.webhooks import dispatch_webhook
 
     webhook = db.get_or_404(Webhook, webhook_id)
@@ -275,9 +276,10 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 @require_auth
 def list_webhook_events(webhook_id: int) -> Response:
     """List delivery events for a webhook."""
-    from models import Webhook, WebhookEvent
-    from extensions import db
     from flask import request
+
+    from extensions import db
+    from models import Webhook, WebhookEvent
 
     _ = db.get_or_404(Webhook, webhook_id)
 
@@ -317,8 +319,8 @@ def list_webhook_events(webhook_id: int) -> Response:
 @validate_csrf_json
 def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
     """Resend a webhook event using the stored payload."""
-    from models import Webhook, WebhookEvent
     from extensions import db
+    from models import Webhook, WebhookEvent
     from services.webhooks import dispatch_webhook
 
     event = db.get_or_404(WebhookEvent, event_id)

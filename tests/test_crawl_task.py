@@ -1,7 +1,7 @@
 """Tests for tasks/crawl.py Celery tasks."""
 
-from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -49,7 +49,7 @@ class TestCrawlSource:
         mock_redis.set.return_value = True
         mock_get_redis.return_value = mock_redis
 
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         with app.app_context():
             source = create_source(source_key="src_skip")
@@ -116,6 +116,7 @@ class TestCrawlSource:
 
         with app.app_context():
             from datetime import datetime, timezone
+
             from extensions import db
             from models import PipelineRun
 
@@ -241,9 +242,9 @@ class TestRunAllSources:
         source_cfg.model_dump.return_value = {"id": "s1", "name": "S1"}
         mock_load.return_value = [source_cfg]
 
-        from tasks.crawl import run_all_sources
         from extensions import db
         from models import PipelineRun
+        from tasks.crawl import run_all_sources
 
         with app.app_context():
             from datetime import datetime, timezone

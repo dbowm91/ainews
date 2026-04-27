@@ -1,9 +1,8 @@
-from celery import shared_task, group, chord
-from celery.utils.log import get_task_logger
-from billiard.exceptions import SoftTimeLimitExceeded
-from sqlalchemy.exc import SQLAlchemyError
-
 import redis.exceptions
+from billiard.exceptions import SoftTimeLimitExceeded
+from celery import chord, group, shared_task
+from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 from services.task_security import verify_task
 
@@ -30,17 +29,17 @@ logger = get_task_logger(__name__)
 def crawl_source(self, source_config: dict, run_id: int) -> dict:
     """Crawl a single source. Called by run_all_sources for parallel execution."""
     from adapters.base import get_adapter_class
-    from models import Source
     from extensions import db, get_redis
+    from models import Source
+    from schemas.source import SourceConfig
     from services.crawling import (
-        should_skip_source,
-        get_existing_external_ids,
         filter_new_items,
         filter_non_other_topics,
+        get_existing_external_ids,
+        should_skip_source,
         update_source_crawl_time,
     )
     from tasks.pipeline import _log_pipeline
-    from schemas.source import SourceConfig
 
     cfg = SourceConfig(**source_config)
     source_id = cfg.id
@@ -204,8 +203,8 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
 
     Called as a Celery chord callback after all crawl_source tasks complete.
     """
-    from models import PipelineRun
     from extensions import db
+    from models import PipelineRun
     from services.crawling import update_pipeline_run_stats
 
     total_fetched = 0
@@ -257,9 +256,9 @@ def run_all_sources(self, run_id=None):
         logger.error("Invalid signature for run_all_sources task")
         raise ValueError("Invalid task signature")
 
-    from schemas.source import load_sources
-    from models import PipelineRun
     from extensions import db
+    from models import PipelineRun
+    from schemas.source import load_sources
     from services.crawling import (
         create_pipeline_run,
         update_pipeline_run_stats,

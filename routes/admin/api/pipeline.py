@@ -1,9 +1,10 @@
 import logging
 
-from flask import jsonify, request, Response
-from routes.admin import admin_bp, require_auth
+from flask import Response, jsonify, request
+
 from constants import PipelineStatus
 from extensions import db
+from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 @require_auth
 def pipeline_stats() -> Response:
     """Get pipeline stage success/failure statistics."""
-    from services.pipeline_monitor import get_all_stages_stats
     from services.metrics import get_metrics
+    from services.pipeline_monitor import get_all_stages_stats
 
     minutes = request.args.get("minutes", 15, type=int)
     minutes = max(1, min(minutes, 120))
@@ -47,9 +48,10 @@ def pipeline_stats() -> Response:
 @require_auth
 def dead_letter_stats() -> Response:
     """Get dead letter queue statistics."""
-    from models import Article
+    from datetime import datetime, timedelta, timezone
+
     from constants import _get_stuck_threshold_minutes
-    from datetime import datetime, timezone, timedelta
+    from models import Article
 
     threshold = _get_stuck_threshold_minutes()
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold)
@@ -139,10 +141,12 @@ def sources_health() -> Response:
 @require_auth
 def pipeline_sla() -> Response:
     """Return SLA metrics for article processing."""
-    from models import Article
-    from datetime import datetime, timezone, timedelta
-    from services.metrics import get_metrics
+    from datetime import datetime, timedelta, timezone
+
     from sqlalchemy import func
+
+    from models import Article
+    from services.metrics import get_metrics
 
     days = request.args.get("days", 7, type=int)
     days = max(1, min(days, 30))

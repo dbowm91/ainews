@@ -1,6 +1,7 @@
 import logging
 
-from flask import jsonify, Response
+from flask import Response, jsonify
+
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 
@@ -11,12 +12,12 @@ logger = logging.getLogger(__name__)
 @require_auth
 @validate_csrf_json
 def reload_config() -> tuple[Response, int] | Response:
-    from services.config_cache import get_config_cache
-    from services.config_unified import validate_config, reset_config
-    from services.llm import clear_provider_cache
     from celery_support import clear_app_cache
-    from tasks.pipeline import clear_task_fn_cache
+    from services.config_cache import get_config_cache
+    from services.config_unified import reset_config, validate_config
+    from services.llm import clear_provider_cache
     from tasks.edit import clear_tag_cache
+    from tasks.pipeline import clear_task_fn_cache
 
     is_valid, errors = validate_config()
     if not is_valid:
@@ -48,6 +49,7 @@ def app_metrics() -> Response:
 @require_auth
 def prometheus_metrics() -> Response:
     from flask import Response
+
     from services.metrics import get_metrics
 
     return Response(get_metrics().get_prometheus(), mimetype="text/plain")

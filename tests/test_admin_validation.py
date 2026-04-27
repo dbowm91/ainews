@@ -1,9 +1,11 @@
 """Tests for admin article edit input validation."""
 
 import json
+
 import pytest
-from models import Article, Source
+
 from extensions import db
+from models import Article, Source
 
 
 @pytest.fixture

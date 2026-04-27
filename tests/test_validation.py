@@ -5,7 +5,7 @@ import pytest
 
 class TestValidation:
     def test_validate_slug(self):
-        from services.validation import validate_slug, ValidationError
+        from services.validation import ValidationError, validate_slug
 
         assert validate_slug("my-slug") == "my-slug"
         assert validate_slug("abc123") == "abc123"
@@ -17,7 +17,7 @@ class TestValidation:
             validate_slug("")
 
     def test_validate_category(self):
-        from services.validation import validate_category, ValidationError
+        from services.validation import ValidationError, validate_category
 
         assert validate_category("ai") == "ai"
         assert validate_category("my-category") == "my-category"
@@ -26,7 +26,7 @@ class TestValidation:
             validate_category("a" * 100)
 
     def test_validate_token(self):
-        from services.validation import validate_token, ValidationError
+        from services.validation import ValidationError, validate_token
 
         assert validate_token("abc123DEF_-") == "abc123DEF_-"
 
@@ -55,7 +55,7 @@ class TestValidation:
         assert sanitize_search_query("a" * 300) == "a" * 200
 
     def test_validate_bulk_ids(self):
-        from services.validation import validate_bulk_ids, ValidationError
+        from services.validation import ValidationError, validate_bulk_ids
 
         assert validate_bulk_ids([1, 2, 3]) == [1, 2, 3]
 

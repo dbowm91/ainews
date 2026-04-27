@@ -1,15 +1,17 @@
+from datetime import datetime, timedelta, timezone
+
 from flask import render_template, request
-from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
+
 from routes.admin import admin_bp, require_auth
 
 
 @admin_bp.route("/metrics")
 @require_auth
 def metrics():
-    from models import Article, ArticleMetric
     from extensions import db
+    from models import Article, ArticleMetric
 
     # Date range
     days = request.args.get("days", 30, type=int)

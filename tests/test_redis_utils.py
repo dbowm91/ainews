@@ -1,6 +1,7 @@
 """Tests for Redis utility functions."""
 
 from unittest.mock import MagicMock
+
 from services.redis_utils import release_lock
 
 

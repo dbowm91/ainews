@@ -2,9 +2,11 @@ import logging
 import os
 import threading
 import time
-import redis.exceptions
 from functools import wraps
-from flask import Blueprint, redirect, url_for, session, request
+
+import redis.exceptions
+from flask import Blueprint, redirect, request, session, url_for
+
 from logging_config import get_request_id
 from services.validation import _is_password_hash
 
@@ -245,19 +247,45 @@ def _clear_attempts(ip: str) -> None:
 
 
 # Import all sub-modules to register routes with the blueprint
+from routes.admin import (
+    api as api,
+)
+from routes.admin import (
+    articles as articles,
+)
 from routes.admin import (  # noqa: E402, F401
     auth as auth,
+)
+from routes.admin import (
     dashboard as dashboard,
-    pipelines as pipelines,
-    articles as articles,
-    review as review,
-    newsletters as newsletters,
-    subscribers as subscribers,
+)
+from routes.admin import (
     metrics as metrics,
+)
+from routes.admin import (
+    newsletters as newsletters,
+)
+from routes.admin import (
+    pipelines as pipelines,
+)
+from routes.admin import (
+    review as review,
+)
+from routes.admin import (
     shares as shares,
+)
+from routes.admin import (
     sources as sources,
+)
+from routes.admin import (
+    subscribers as subscribers,
+)
+from routes.admin import (
     topic_notes as topic_notes,
+)
+from routes.admin import (
     trend_memory as trend_memory,
+)
+from routes.admin import (
     webhooks as webhooks,
-    api as api,
 )

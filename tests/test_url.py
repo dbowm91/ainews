@@ -1,6 +1,6 @@
 """Tests for URL normalization and title normalization."""
 
-from services.url import normalize_url, normalize_title
+from services.url import normalize_title, normalize_url
 
 
 class TestNormalizeUrl:

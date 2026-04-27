@@ -1,6 +1,7 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
+
 from constants import PipelineStatus, truncate_for_log
 from services.llm.errors import ProviderServerError
 from services.writer import CondensedArticle
@@ -47,10 +48,10 @@ def write_article(self, article_id: int, run_id=None):
     from schemas.pipeline import get_role_config
     from services.writer import (
         CondensedArticle,
-        get_writer_system_prompt,
         build_writer_prompt,
+        get_writer_system_prompt,
     )
-    from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next, _transition_article_status
+    from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status, run_stage
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("writer")
@@ -60,8 +61,8 @@ def write_article(self, article_id: int, run_id=None):
         trend_memory = ""
         if article.topics:
             from services.trend_memory import (
-                get_memory_for_topics,
                 _format_memory_for_prompt,
+                get_memory_for_topics,
             )
             trend_memory = _format_memory_for_prompt(
                 get_memory_for_topics(article.topics, min_importance=1)
@@ -81,8 +82,8 @@ def write_article(self, article_id: int, run_id=None):
             trend_memory=trend_memory,
         )
 
-        from services.metrics import time_histogram
         from services.logging_utils import traced_llm_call
+        from services.metrics import time_histogram
 
         with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="write"):
             with time_histogram(

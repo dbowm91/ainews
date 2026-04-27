@@ -1,8 +1,9 @@
-from flask import render_template, request, jsonify, current_app, g
-from routes.admin import admin_bp, require_auth
+from flask import current_app, g, jsonify, render_template, request
+from sqlalchemy.exc import SQLAlchemyError
+
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
-from sqlalchemy.exc import SQLAlchemyError
+from routes.admin import admin_bp, require_auth
 from services.task_security import get_signed_kwargs
 
 
@@ -37,7 +38,7 @@ def pipelines():
 @admin_bp.route("/pipelines/<int:run_id>/logs")
 @require_auth
 def pipeline_logs(run_id):
-    from models import PipelineRun, PipelineLog
+    from models import PipelineLog, PipelineRun
     from services.utils import paginate_query
 
     run = db.get_or_404(PipelineRun, run_id)
@@ -81,9 +82,9 @@ def pipeline_logs(run_id):
 @admin_bp.route("/trigger-crawl", methods=["POST"])
 @require_auth
 def trigger_crawl():
-    from tasks import run_all_sources
-    from models import PipelineRun
     from extensions import db
+    from models import PipelineRun
+    from tasks import run_all_sources
 
     try:
         run = PipelineRun(

@@ -7,27 +7,33 @@ import redis.exceptions
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
+
 from constants import (
     PIPELINE_TIMEOUT_SECONDS,
     PipelineStatus,
 )
-
-from services.config_utils import get_config_with_default
-from services.llm import get_provider_chain
-from services.llm.errors import RateLimitError, ProviderServerError, ProviderTimeoutError, AuthError
 from services.circuit_breaker import CircuitOpenError
+from services.config_utils import get_config_with_default
 from services.llm import (
+    get_provider_chain,
     record_provider_failure,
+)
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
+from services.pipeline_degradation import (
+    apply_fallback as _apply_fallback,
 )
 from services.pipeline_degradation import (  # noqa: F401
     degrade_stage as _degrade_and_advance,
+)
+from services.pipeline_degradation import (
     finalize_article as _finalize,
-    apply_fallback as _apply_fallback,
+)
+from services.pipeline_degradation import (
     should_route_to_review as _should_route_to_review,
 )
+from services.pipeline_failure import _get_max_stage_retries, _get_max_total_retries  # noqa: F401
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure  # noqa: F401
-from services.pipeline_failure import _get_max_total_retries, _get_max_stage_retries  # noqa: F401
-from services.pipeline_utils import _dispatch_next, _log_pipeline, clear_task_fn_cache, _dispatch_for_status, _STAGE_TASKS, _task_fn_cache  # noqa: F401
+from services.pipeline_utils import _STAGE_TASKS, _dispatch_for_status, _dispatch_next, _log_pipeline, _task_fn_cache, clear_task_fn_cache  # noqa: F401
 
 logger = get_task_logger(__name__)
 
@@ -49,7 +55,7 @@ def _assign_tags(articles, tag_names: list[str], db):
         tag_names: List of tag name strings (max 10 used, max 64 chars each).
         db: SQLAlchemy database session instance.
     """
-    from models import Tag, slugify, article_tags
+    from models import Tag, article_tags, slugify
 
     if not tag_names:
         return
@@ -222,12 +228,12 @@ def run_stage(
         retry_countdown: Seconds between limiter retries
         retry_max: Max limiter retries
     """
-    from models import Article
     from extensions import db, get_redis
+    from models import Article
     from schemas.pipeline import get_role_config
-    from services.pipeline_monitor import record_stage_result
-    from services.metrics import get_metrics
     from services.logging_utils import set_task_request_id, traced_stage
+    from services.metrics import get_metrics
+    from services.pipeline_monitor import record_stage_result
 
     if task_self and hasattr(task_self, "request"):
         headers = getattr(task_self.request, "headers", None) or {}

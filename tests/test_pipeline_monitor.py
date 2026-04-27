@@ -2,8 +2,9 @@
 
 import time
 from unittest.mock import MagicMock, patch
-import redis.exceptions
+
 import pytest
+import redis.exceptions
 
 
 @pytest.fixture
@@ -67,7 +68,7 @@ class TestGetStageStats:
         assert stats["failure_count"] == 0
 
     def test_aggregates_counts(self, redis_client):
-        from services.pipeline_monitor import get_stage_stats, _PIPELINE_COUNTER_PREFIX
+        from services.pipeline_monitor import _PIPELINE_COUNTER_PREFIX, get_stage_stats
 
         current_minute = int(time.time() // 60)
         redis_client._store[
@@ -94,8 +95,8 @@ class TestGetAllStagesStats:
 class TestClearStageStats:
     def test_clear_specific_stage(self, redis_client):
         from services.pipeline_monitor import (
-            clear_stage_stats,
             _PIPELINE_COUNTER_PREFIX,
+            clear_stage_stats,
         )
 
         redis_client._store[f"{_PIPELINE_COUNTER_PREFIX}crawl:123:success"] = 5
@@ -107,8 +108,8 @@ class TestClearStageStats:
 
     def test_clear_all(self, redis_client):
         from services.pipeline_monitor import (
-            clear_stage_stats,
             _PIPELINE_COUNTER_PREFIX,
+            clear_stage_stats,
         )
 
         redis_client._store[f"{_PIPELINE_COUNTER_PREFIX}crawl:123:success"] = 5

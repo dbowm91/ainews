@@ -1,9 +1,10 @@
 """Tests for SSRF prevention in services/url.py."""
 
-import pytest
 from unittest.mock import patch
 
-from services.url import validate_url_safe, UnsafeURLError
+import pytest
+
+from services.url import UnsafeURLError, validate_url_safe
 
 
 class TestValidateUrlSafe:

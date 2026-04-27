@@ -12,10 +12,10 @@ from typing import Any, Optional
 
 from sqlalchemy import Column
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import Article, ArticleMetric
-from sqlalchemy.orm import joinedload
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ _TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
 
 # Re-export from extracted modules for backward compatibility
 from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402
-from services.pagination import paginate_query, search_fts, _escape_like_pattern  # noqa: F401, E402
+from services.pagination import _escape_like_pattern, paginate_query, search_fts  # noqa: F401, E402
 
 _search_logger = ThreadPoolExecutor(
     max_workers=2,
@@ -195,8 +195,9 @@ def create_article_version(
         changed_by: Who made the change (e.g., "admin", "pipeline:writer")
         source_fields: Optional dict of source-specific fields to capture
     """
-    from models import ArticleVersion
     from sqlalchemy.exc import IntegrityError
+
+    from models import ArticleVersion
 
     max_retries = 2
     for attempt in range(max_retries):
@@ -297,7 +298,7 @@ def find_duplicate_titles(
     if not candidate_words:
         return []
 
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
 
     days = _get_duplicate_detection_days()
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)

@@ -66,8 +66,8 @@ class TestReviewQueue:
         assert resp.status_code == 302
 
         with app.app_context():
-            from models import Article
             from extensions import db
+            from models import Article
 
             article = db.session.get(Article, article_id)
             assert article.pipeline_status == "done"
@@ -95,8 +95,8 @@ class TestReviewQueue:
         assert resp.status_code == 302
 
         with app.app_context():
-            from models import Article
             from extensions import db
+            from models import Article
 
             article = db.session.get(Article, article_id)
             assert article.pipeline_status == "skipped"
@@ -271,7 +271,7 @@ class TestPipelineEndToEnd:
                 pipeline_status="done",
                 impact_score=50,
             )
-            from constants import IMPACT_SCORE_MIN, IMPACT_SCORE_MAX
+            from constants import IMPACT_SCORE_MAX, IMPACT_SCORE_MIN
             from extensions import db
 
             db.session.commit()
@@ -308,8 +308,9 @@ class TestPipelineEndToEnd:
     def test_newsletter_creation(self, app, create_newsletter):
         """Test that newsletters are created and tracked."""
         with app.app_context():
-            from extensions import db
             from datetime import datetime, timezone
+
+            from extensions import db
 
             newsletter = create_newsletter(
                 newsletter_type="main",
@@ -333,8 +334,9 @@ class TestPipelineEndToEnd:
     def test_subscriber_lifecycle(self, app):
         """Test subscriber creation, verify, unsubscribe, and resubscribe."""
         from datetime import datetime, timezone
-        from models import Subscriber
+
         from extensions import db
+        from models import Subscriber
 
         with app.app_context():
             # Subscribe (unverified)
@@ -379,9 +381,10 @@ class TestPipelineEndToEnd:
 
     def test_cleanup_expired_verifications(self, app, create_subscriber):
         """Expired unverified subscribers should be deleted by the cleanup task."""
-        from datetime import datetime, timezone, timedelta
-        from models import Subscriber
+        from datetime import datetime, timedelta, timezone
+
         from extensions import db
+        from models import Subscriber
 
         with app.app_context():
             # Verified subscriber — should be kept

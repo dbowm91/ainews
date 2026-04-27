@@ -1,7 +1,7 @@
 """Retry logic for stuck articles and dead-letter handling."""
 
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
@@ -9,8 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from constants import PipelineStatus
 from services.config_unified import (
-    get_stuck_threshold_minutes,
     get_retry_soft_cutoff_minutes,
+    get_stuck_threshold_minutes,
 )
 from tasks.pipeline import _get_max_stage_retries
 
@@ -40,8 +40,8 @@ def retry_stuck(self):
     """
     import redis.exceptions
 
-    from models import Article
     from extensions import db, get_redis
+    from models import Article
     from tasks.pipeline import _degrade_and_advance
 
     redis_client = get_redis()

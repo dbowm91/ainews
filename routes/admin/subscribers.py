@@ -1,6 +1,7 @@
-from flask import render_template, request, Response, stream_with_context
-from routes.admin import admin_bp, require_auth
+from flask import Response, render_template, request, stream_with_context
+
 from constants import PER_PAGE_ADMIN_SUBSCRIBERS
+from routes.admin import admin_bp, require_auth
 
 
 @admin_bp.route("/subscribers")
@@ -50,11 +51,12 @@ def subscribers() -> str:
 @admin_bp.route("/subscribers/export")
 @require_auth
 def export_subscribers() -> Response:
-    from models import Subscriber
-    from services.audit import log_admin_action
     import csv
     import io
     import logging
+
+    from models import Subscriber
+    from services.audit import log_admin_action
 
     logger = logging.getLogger(__name__)
 

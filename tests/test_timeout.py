@@ -1,8 +1,10 @@
 """Tests for the timeout enforcement utilities."""
 
 import time
+
 import pytest
-from services.timeout import timeout, OperationTimeoutError, TimeoutBudget
+
+from services.timeout import OperationTimeoutError, TimeoutBudget, timeout
 
 
 class TestTimeoutDecorator:

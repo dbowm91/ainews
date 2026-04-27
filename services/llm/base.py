@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import abc
 import logging
 import random
@@ -12,8 +13,8 @@ from pydantic import BaseModel
 
 from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
-from services.provider_base import BaseProvider, ProviderManager
 from services.prompts import esc_xml_text
+from services.provider_base import BaseProvider, ProviderManager
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+
 from services.search.base import get_search_provider_class
 from services.search.duckduckgo import DuckDuckGoSearchProvider
 from services.search.google import GoogleSearchProvider

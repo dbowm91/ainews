@@ -1,7 +1,7 @@
 """Tests for the newsletter service."""
 
-from unittest.mock import MagicMock
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 
 class TestGenerateNewsletterHTML:
@@ -116,8 +116,8 @@ class TestGenerateMainNewsletter:
     def test_returns_tuple(self, app):
         """Test that function returns (html, subject, count) tuple."""
         with app.app_context():
-            from models import Article, Source
             from extensions import db
+            from models import Article, Source
             from services.newsletter import generate_main_newsletter
 
             # Create a source and article
@@ -150,8 +150,8 @@ class TestGenerateMainNewsletter:
     def test_respects_max_articles(self, app):
         """Test that max_articles limit is respected."""
         with app.app_context():
-            from models import Article, Source
             from extensions import db
+            from models import Article, Source
             from services.newsletter import generate_main_newsletter
 
             source = Source(source_key="test2", name="Test", source_type="rss")
@@ -181,8 +181,8 @@ class TestGenerateTopicNewsletter:
     def test_filters_by_topic(self, app):
         """Test that only articles from the specified topic are included."""
         with app.app_context():
-            from models import Article, Source
             from extensions import db
+            from models import Article, Source
             from services.newsletter import generate_topic_newsletter
 
             source = Source(source_key="test3", name="Test", source_type="rss")
@@ -325,6 +325,7 @@ class TestNewsletterHtmlWellFormed:
     def test_generated_html_is_well_formed(self, app):
         """Test that generated HTML is well-formed (no unclosed tags, proper nesting)."""
         from html.parser import HTMLParser
+
         from services.newsletter import generate_newsletter_html
 
         class WellFormednessChecker(HTMLParser):
@@ -375,6 +376,7 @@ class TestNewsletterHtmlWellFormed:
     def test_newsletter_with_all_article_fields_is_well_formed(self, app):
         """Test well-formedness with a fully populated article."""
         from html.parser import HTMLParser
+
         from services.newsletter import generate_newsletter_html
 
         class WellFormednessChecker(HTMLParser):

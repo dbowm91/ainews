@@ -56,9 +56,9 @@ class TestGetArticlesPaginated:
     """Test get_articles_paginated with FTS5 fallback."""
 
     def test_returns_articles_without_query(self, app):
-        from services.article import get_articles_paginated
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.article import get_articles_paginated
 
         source = Source(source_key="test", name="Test", source_type="rss", feed_url="")
         db.session.add(source)
@@ -85,9 +85,9 @@ class TestGetArticlesPaginated:
 
     def test_query_falls_back_when_no_fts(self, app):
         """Search should fall back to ILIKE when FTS5 table doesn't exist."""
-        from services.article import get_articles_paginated
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.article import get_articles_paginated
 
         source = Source(
             source_key="test2", name="Test2", source_type="rss", feed_url=""
@@ -114,9 +114,9 @@ class TestGetArticlesPaginated:
         assert articles[0].original_title == "Python AI Framework Released"
 
     def test_category_filter(self, app):
-        from services.article import get_articles_paginated
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.article import get_articles_paginated
 
         source = Source(
             source_key="test3", name="Test3", source_type="rss", feed_url=""

@@ -15,13 +15,14 @@ def publish_scheduled_articles(self):
     Articles in 'review' status with a past scheduled_publish_at are
     marked as 'done' and made publicly visible.
     """
-    import redis.exceptions
     from datetime import datetime, timezone
+
+    import redis.exceptions
     from sqlalchemy.exc import SQLAlchemyError
 
     from constants import PipelineStatus
-    from models import Article
     from extensions import db, get_redis
+    from models import Article
 
     redis_client = get_redis()
     lock_key = "ainews:lock:publish_scheduled"

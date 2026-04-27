@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 def _handle_anthropic_error(e: Exception) -> Exception:
     """Convert Anthropic SDK exceptions to our custom exceptions."""
     from anthropic import (
-        RateLimitError,
-        AuthenticationError,
-        APITimeoutError,
         APIConnectionError,
+        APITimeoutError,
+        AuthenticationError,
+        RateLimitError,
     )
 
     return make_error_handler(

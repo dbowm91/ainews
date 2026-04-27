@@ -32,8 +32,8 @@ def dead_letter_article(
     Returns:
         True if successfully dead-lettered, False on commit failure.
     """
-    from extensions import db
     from constants import PipelineStatus
+    from extensions import db
 
     article.pipeline_status = PipelineStatus.FAILED
     article.retry_count = 0
@@ -119,8 +119,8 @@ def retry_dead_letter(article) -> bool:
     Returns:
         True if successfully reset, False on failure.
     """
-    from extensions import db
     from constants import PipelineStatus
+    from extensions import db
 
     article.pipeline_status = PipelineStatus.PENDING
     article.retry_count = 0

@@ -1,7 +1,7 @@
-import logging
 import json
+import logging
 
-from services.prompts import esc_xml_text, esc_xml_attr
+from services.prompts import esc_xml_attr, esc_xml_text
 
 logger = logging.getLogger(__name__)
 

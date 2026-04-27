@@ -4,8 +4,9 @@ import time
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from services.llm.errors import ProviderServerError
+
 from constants import PipelineStatus
+from services.llm.errors import ProviderServerError
 
 logger = get_task_logger(__name__)
 
@@ -71,16 +72,16 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
 
     Returns contextualization string or empty string if not available.
     """
+    from schemas.pipeline import resolve_subagent_config
     from services.context_service import (
-        get_topic_notes_for_topics,
         get_related_articles_for_edit,
+        get_topic_notes_for_topics,
     )
     from services.subagent import (
+        EditContextualizationResponse,
         run_subagent,
         run_subagent_with_tools,
-        EditContextualizationResponse,
     )
-    from schemas.pipeline import resolve_subagent_config
 
     if not article.topics:
         return ""
@@ -90,8 +91,8 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
         article.topics, article.id, limit=5
     )
     from services.trend_memory import (
-        get_memory_for_topics,
         _format_memory_for_prompt,
+        get_memory_for_topics,
     )
 
     trend_memory = _format_memory_for_prompt(
@@ -149,9 +150,10 @@ def _handle_validation_and_routing(
 
     Returns dict with status if routing changed, None if continuing to DONE.
     """
-    from services.article_validation import validate_and_raise, ValidationError
     from sqlalchemy.exc import SQLAlchemyError
+
     from constants import PipelineStatus, truncate_for_log
+    from services.article_validation import ValidationError, validate_and_raise
     from tasks.pipeline import _log_pipeline, _transition_article_status
 
     try:
@@ -206,9 +208,10 @@ def _handle_validation_and_routing(
 def _post_finalize_article(article, run_id: int | None = None) -> None:
     """Post-finalize article: trend memory, webhooks, SLA metrics."""
     from datetime import datetime, timezone
+
+    from constants import truncate_for_log
     from services.metrics import get_metrics
     from tasks.pipeline import _log_pipeline, _transition_article_status
-    from constants import truncate_for_log
 
     _transition_article_status(article, PipelineStatus.DONE)
     article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -228,8 +231,8 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
         )
 
     try:
-        from models import ArticleMetric
         from extensions import db
+        from models import ArticleMetric
 
         metric = db.session.get(ArticleMetric, article.id)
         engagement_data = {}
@@ -275,16 +278,17 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 
     Returns dict with article_id and status.
     """
-    from extensions import db
     from sqlalchemy.exc import SQLAlchemyError
-    from schemas.pipeline import get_role_config
+
+    from extensions import db
     from schemas.llm_responses import CondensedArticle
+    from schemas.pipeline import get_role_config
     from services.editor import (
-        get_editor_system_prompt,
         build_editor_prompt_with_context,
+        get_editor_system_prompt,
     )
-    from services.metrics import time_histogram
     from services.logging_utils import traced_llm_call
+    from services.metrics import time_histogram
     from tasks.pipeline import _assign_tags
 
     existing_tags = _get_cached_tag_names()

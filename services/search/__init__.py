@@ -3,13 +3,12 @@ import logging
 import services.search.duckduckgo  # noqa: E402, F401
 import services.search.google  # noqa: E402, F401
 import services.search.searxng  # noqa: E402, F401
-
+from services.circuit_breaker import get_breaker
 from services.search.base import (
     BaseSearchProvider,
     SearchResult,
     _manager,
 )
-from services.circuit_breaker import get_breaker
 
 logger = logging.getLogger(__name__)
 

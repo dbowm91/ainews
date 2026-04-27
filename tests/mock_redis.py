@@ -1,7 +1,7 @@
 """Shared in-memory Redis mock for tests."""
 
-from unittest.mock import MagicMock
 import fnmatch
+from unittest.mock import MagicMock
 
 
 class _PipelineMock(MagicMock):

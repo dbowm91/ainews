@@ -2,11 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
-from models import Article, Source, PipelineRun
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from models import Article, PipelineRun, Source
 
 if TYPE_CHECKING:
     from adapters.base import RawItem
@@ -78,7 +79,7 @@ def get_existing_external_ids(source: Source) -> set[str]:
     Returns:
         Set of existing external IDs
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     existing = (

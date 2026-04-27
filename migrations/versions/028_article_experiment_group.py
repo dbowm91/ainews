@@ -1,6 +1,6 @@
 """Add experiment_group column to articles for A/B testing."""
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = '028'
 down_revision = '027'

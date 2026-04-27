@@ -1,7 +1,7 @@
 """Tests for XML escaping functions in services.prompts."""
 
 
-from services.prompts import esc_xml_text, esc_xml_attr
+from services.prompts import esc_xml_attr, esc_xml_text
 
 
 class TestEscXmlText:

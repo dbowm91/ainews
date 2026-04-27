@@ -174,7 +174,7 @@ class TestOllamaErrorHandling:
         Ollama is self-hosted and doesn't distinguish auth errors, so
         auth_exc=() ensures all ResponseErrors go through rate_limit_exc.
         """
-        from services.llm.errors import handle_provider_error, RateLimitError, AuthError
+        from services.llm.errors import AuthError, RateLimitError, handle_provider_error
 
         class ResponseError(Exception):
             status_code = 500
@@ -192,7 +192,7 @@ class TestOllamaErrorHandling:
 
     def test_response_error_429_maps_to_rate_limit(self):
         """Ollama ResponseError with 429 status should be RateLimitError."""
-        from services.llm.errors import handle_provider_error, RateLimitError
+        from services.llm.errors import RateLimitError, handle_provider_error
 
         class ResponseError(Exception):
             status_code = 429

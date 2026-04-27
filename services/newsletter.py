@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from html import escape
 
 from sqlalchemy.orm import joinedload
@@ -139,8 +139,8 @@ def _generate_newsletter(
     Returns:
         Tuple of (html, subject, article_count)
     """
-    from models import Article
     from constants import PipelineStatus
+    from models import Article
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     base_query = Article.query.filter(

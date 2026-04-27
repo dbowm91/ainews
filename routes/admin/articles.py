@@ -1,17 +1,19 @@
 import json
 import logging
-import redis.exceptions
 from datetime import datetime, timezone
 from urllib.parse import urlparse
-from flask import flash, render_template, request, redirect, url_for, jsonify, g
+
+import redis.exceptions
+from flask import flash, g, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
+
+from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
-from services.utils import get_admin_categories as _admin_categories
 from services.article import _escape_like_pattern
 from services.task_security import get_signed_kwargs
-from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
+from services.utils import get_admin_categories as _admin_categories
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +60,10 @@ def _query_looks_like_url(query: str) -> bool:
 @admin_bp.route("/articles")
 @require_auth
 def articles():
+    from datetime import datetime, timezone
+
     from models import Article, Source, Tag
     from services.utils import paginate_query
-    from datetime import datetime, timezone
 
     page = max(1, request.args.get("page", 1, type=int))
     query = request.args.get("q", "", type=str).strip()
@@ -189,16 +192,16 @@ def articles():
 @admin_bp.route("/articles/<int:article_id>/edit", methods=["GET", "POST"])
 @require_auth
 def edit_article(article_id):
-    from models import Article
     from extensions import db
+    from models import Article
 
     article = db.get_or_404(Article, article_id)
 
     if request.method == "POST":
         from constants import (
-            VALID_PIPELINE_STATUSES,
-            IMPACT_SCORE_MIN,
             IMPACT_SCORE_MAX,
+            IMPACT_SCORE_MIN,
+            VALID_PIPELINE_STATUSES,
         )
 
         # Parse final_article JSON and update fields
@@ -310,8 +313,8 @@ def edit_article(article_id):
 @admin_bp.route("/articles/<int:article_id>/original")
 @require_auth
 def view_original_article(article_id):
-    from models import Article
     from extensions import db
+    from models import Article
 
     article = db.get_or_404(Article, article_id)
 
@@ -324,8 +327,8 @@ def view_original_article(article_id):
 @admin_bp.route("/articles/<int:article_id>/versions")
 @require_auth
 def article_versions(article_id):
-    from models import Article
     from extensions import db
+    from models import Article
     from services.article import get_article_versions, parse_article_json
 
     article = db.get_or_404(Article, article_id)
@@ -344,8 +347,8 @@ def article_versions(article_id):
 )
 @require_auth
 def rollback_article(article_id, version_id):
-    from models import Article, ArticleVersion
     from extensions import db
+    from models import Article, ArticleVersion
     from services.article import create_article_version
 
     article = db.get_or_404(Article, article_id)
@@ -383,8 +386,8 @@ def rollback_article(article_id, version_id):
 @require_auth
 @validate_csrf_json
 def delete_article(article_id):
-    from models import Article
     from extensions import db
+    from models import Article
 
     article = db.get_or_404(Article, article_id)
 
@@ -404,9 +407,9 @@ def delete_article(article_id):
 @admin_bp.route("/articles/<int:article_id>/reprocess", methods=["POST"])
 @require_auth
 def reprocess_article(article_id):
-    from models import Article
     from extensions import db
-    from tasks import select_article, research_article, write_article
+    from models import Article
+    from tasks import research_article, select_article, write_article
 
     stage = request.form.get("from_stage", "select")
     if stage not in _REPROCESS_STAGES:

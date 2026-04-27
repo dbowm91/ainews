@@ -1,7 +1,7 @@
 """Shared helpers for route handlers."""
 
-from functools import wraps
 from contextlib import contextmanager
+from functools import wraps
 
 from flask import jsonify, request
 from sqlalchemy.exc import SQLAlchemyError

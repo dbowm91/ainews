@@ -1,5 +1,7 @@
 import logging
+
 from flask import jsonify
+
 from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
@@ -9,8 +11,9 @@ logger = logging.getLogger(__name__)
 @require_auth
 def search_analytics():
     """Return top queries and zero-result queries."""
-    from models import SearchQuery
     from sqlalchemy import func
+
+    from models import SearchQuery
 
     top_queries = (
         SearchQuery.query.with_entities(

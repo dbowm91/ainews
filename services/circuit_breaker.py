@@ -6,12 +6,12 @@ States:
 - HALF_OPEN: a limited number of requests are allowed through to test recovery
 """
 
-import time
 import logging
+import time
 from enum import Enum
+from functools import wraps
 from threading import Lock
 from typing import Callable, Optional
-from functools import wraps
 
 from services.metrics import get_metrics
 

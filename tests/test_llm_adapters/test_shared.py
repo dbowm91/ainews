@@ -7,7 +7,7 @@ class TestHandleProviderError:
     """Tests for services/llm/errors.py:handle_provider_error()."""
 
     def test_connection_error_maps_to_timeout(self):
-        from services.llm.errors import handle_provider_error, ProviderTimeoutError
+        from services.llm.errors import ProviderTimeoutError, handle_provider_error
 
         err = ConnectionError("refused")
         result = handle_provider_error(
@@ -20,7 +20,7 @@ class TestHandleProviderError:
         assert isinstance(result, ProviderTimeoutError)
 
     def test_timeout_error_maps_to_timeout(self):
-        from services.llm.errors import handle_provider_error, ProviderTimeoutError
+        from services.llm.errors import ProviderTimeoutError, handle_provider_error
 
         err = TimeoutError("timed out")
         result = handle_provider_error(
@@ -33,7 +33,7 @@ class TestHandleProviderError:
         assert isinstance(result, ProviderTimeoutError)
 
     def test_auth_error_status_code(self):
-        from services.llm.errors import handle_provider_error, AuthError
+        from services.llm.errors import AuthError, handle_provider_error
 
         err = RuntimeError("forbidden")
         err.status_code = 403
@@ -47,7 +47,7 @@ class TestHandleProviderError:
         assert isinstance(result, AuthError)
 
     def test_rate_limit_error_status_code(self):
-        from services.llm.errors import handle_provider_error, RateLimitError
+        from services.llm.errors import RateLimitError, handle_provider_error
 
         err = RuntimeError("too many")
         err.status_code = 429
@@ -61,7 +61,7 @@ class TestHandleProviderError:
         assert isinstance(result, RateLimitError)
 
     def test_server_error_passes_through(self):
-        from services.llm.errors import handle_provider_error, ProviderServerError
+        from services.llm.errors import ProviderServerError, handle_provider_error
 
         err = RuntimeError("server down")
         err.status_code = 500

@@ -87,6 +87,7 @@ class TestAnthropicProvider:
 
     def test_chat_error_converted(self):
         from anthropic import APITimeoutError
+
         from services.llm.errors import ProviderTimeoutError
 
         provider = self._make_provider()
@@ -152,8 +153,8 @@ class TestAnthropicRegistry:
     """Tests for Anthropic provider registry."""
 
     def test_anthropic_registered(self):
-        from services.llm.base import get_provider_class
         from services.llm.anthropic import AnthropicProvider
+        from services.llm.base import get_provider_class
 
         cls = get_provider_class("anthropic")
         assert cls is AnthropicProvider

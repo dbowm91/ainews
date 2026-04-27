@@ -3,9 +3,10 @@
 import json
 
 from celery.utils.log import get_task_logger
-from constants import PipelineStatus, STAGE_STATUS_MAP
+
+from constants import STAGE_STATUS_MAP, PipelineStatus
 from services.article_fallback import build_fallback_article_json
-from services.pipeline_utils import _log_pipeline, _dispatch_next
+from services.pipeline_utils import _dispatch_next, _log_pipeline
 
 logger = get_task_logger(__name__)
 
@@ -75,9 +76,10 @@ def _apply_fallback(article):
 
 
 def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
+    from sqlalchemy.exc import SQLAlchemyError
+
     from extensions import db
     from services.metrics import get_metrics
-    from sqlalchemy.exc import SQLAlchemyError
 
     config["set_fields"](article)
     article.degradation_count = (article.degradation_count or 0) + 1
@@ -123,9 +125,10 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
 
 
 def _degrade_edit_stage(article, run_id):
+    from sqlalchemy.exc import SQLAlchemyError
+
     from extensions import db
     from services.metrics import get_metrics
-    from sqlalchemy.exc import SQLAlchemyError
 
     _apply_fallback(article)
     article.degradation_count = (article.degradation_count or 0) + 1
@@ -201,8 +204,8 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
 
 
 def _finalize(article_id: int):
-    from models import Article
     from extensions import db
+    from models import Article
     from services.article import create_article_version
 
     try:

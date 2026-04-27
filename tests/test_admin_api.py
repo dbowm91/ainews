@@ -67,8 +67,8 @@ class TestBulkArticles:
         assert client.post("/admin/api/articles/bulk").status_code in (302, 401)
 
     def test_delete(self, auth_client, create_article, app):
-        from models import Article
         from extensions import db
+        from models import Article
 
         with app.app_context():
             aid = create_article().id
@@ -168,8 +168,9 @@ class TestSourcesHealth:
         assert client.get("/admin/api/sources/health").status_code in (302, 401)
 
     def test_authenticated_with_last_error(self, auth_client, create_source, app):
-        from extensions import db
         from datetime import datetime, timezone
+
+        from extensions import db
 
         with app.app_context():
             source = create_source(source_key="src-1", name="Src 1")

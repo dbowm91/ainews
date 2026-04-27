@@ -1,7 +1,7 @@
 """Tests for services/trend_memory.py."""
 
-from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 
 class TestTrendMemory:
@@ -30,8 +30,8 @@ class TestTrendMemory:
 
     def test_propose_trend_memory_creates_entries(self, app, create_article):
         """propose_trend_memory should create TrendMemory entries in the database."""
-        from services.trend_memory import propose_trend_memory
         from models import TrendMemory
+        from services.trend_memory import propose_trend_memory
 
         with app.app_context():
             article = create_article(
@@ -60,8 +60,8 @@ class TestTrendMemory:
 
     def test_get_memory_for_topics_returns_matching_entries(self, app, create_article):
         """get_memory_for_topics should return entries matching the given topics."""
-        from services.trend_memory import get_memory_for_topics, MemoryImportance
         from models import TrendMemory
+        from services.trend_memory import MemoryImportance, get_memory_for_topics
 
         with app.app_context():
             entry = TrendMemory(
@@ -81,9 +81,9 @@ class TestTrendMemory:
 
     def test_get_memory_for_topics_respects_min_importance(self, app, create_article):
         """get_memory_for_topics should filter by minimum importance level."""
-        from services.trend_memory import get_memory_for_topics, MemoryImportance
-        from models import TrendMemory
         from extensions import db
+        from models import TrendMemory
+        from services.trend_memory import MemoryImportance, get_memory_for_topics
 
         with app.app_context():
             low_entry = TrendMemory(
@@ -108,9 +108,9 @@ class TestTrendMemory:
 
     def test_get_memory_for_topics_filters_expired(self, app, create_article):
         """get_memory_for_topics should not return expired entries."""
-        from services.trend_memory import get_memory_for_topics, MemoryImportance
-        from models import TrendMemory
         from extensions import db
+        from models import TrendMemory
+        from services.trend_memory import MemoryImportance, get_memory_for_topics
 
         with app.app_context():
             expired_entry = TrendMemory(
@@ -135,9 +135,9 @@ class TestTrendMemory:
 
     def test_consolidate_topic_promotes_low_to_medium(self, app, create_article):
         """consolidate_topic should promote low-importance entries to medium when high exists."""
-        from services.trend_memory import consolidate_topic, MemoryImportance
-        from models import TrendMemory
         from extensions import db
+        from models import TrendMemory
+        from services.trend_memory import MemoryImportance, consolidate_topic
 
         with app.app_context():
             high_entry = TrendMemory(
@@ -167,9 +167,9 @@ class TestTrendMemory:
 
     def test_purge_expired_removes_old_entries(self, app, create_article):
         """purge_expired should remove all expired TrendMemory entries."""
-        from services.trend_memory import purge_expired, MemoryImportance
-        from models import TrendMemory
         from extensions import db
+        from models import TrendMemory
+        from services.trend_memory import MemoryImportance, purge_expired
 
         with app.app_context():
             expired_entry = TrendMemory(
@@ -207,9 +207,9 @@ class TestTrendMemory:
 
     def test_format_memory_for_prompt_groups_by_importance(self, app, create_article):
         """_format_memory_for_prompt should group entries by importance tier."""
-        from services.trend_memory import _format_memory_for_prompt, MemoryImportance
-        from models import TrendMemory
         from extensions import db
+        from models import TrendMemory
+        from services.trend_memory import MemoryImportance, _format_memory_for_prompt
 
         with app.app_context():
             now = datetime.now(timezone.utc)

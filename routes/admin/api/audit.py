@@ -1,6 +1,7 @@
 import logging
 
-from flask import jsonify, request, Response
+from flask import Response, jsonify, request
+
 from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
@@ -10,9 +11,10 @@ logger = logging.getLogger(__name__)
 @require_auth
 def list_audit_logs() -> Response:
     """List audit log entries with optional filtering."""
-    from models import AuditLog
+    from datetime import datetime, timedelta, timezone
+
     from extensions import db
-    from datetime import datetime, timezone, timedelta
+    from models import AuditLog
 
     page = max(1, request.args.get("page", 1, type=int))
     per_page = request.args.get("per_page", 50, type=int)

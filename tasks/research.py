@@ -1,10 +1,11 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
+
 from constants import PipelineStatus, truncate_for_log
+from schemas.llm_responses import ResearchBrief
 from services.llm.errors import ProviderServerError
 from services.prompts import esc_xml_text
-from schemas.llm_responses import ResearchBrief
 
 logger = get_task_logger(__name__)
 
@@ -57,15 +58,15 @@ def _format_web_results(web_results: list[dict]) -> str:
 )
 def research_article(self, article_id: int, run_id=None):
     from extensions import db
-    from schemas.pipeline import get_role_config
     from schemas.llm_responses import ResearchBrief
-    from services.researcher import (
-        get_researcher_system_prompt,
-        build_research_prompt,
-    )
+    from schemas.pipeline import get_role_config
     from services.related import find_related_articles_dicts
-    from services.search import search_web, get_search_provider
-    from tasks.pipeline import run_stage, _log_pipeline, _dispatch_next, _transition_article_status
+    from services.researcher import (
+        build_research_prompt,
+        get_researcher_system_prompt,
+    )
+    from services.search import get_search_provider, search_web
+    from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status, run_stage
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("researcher")
@@ -95,9 +96,9 @@ def research_article(self, article_id: int, run_id=None):
             ]
 
             if web_results:
-                from services.subagent import run_subagent, run_subagent_with_tools
                 from schemas.llm_responses import ResearchSynthesisResponse
                 from schemas.pipeline import resolve_subagent_config
+                from services.subagent import run_subagent, run_subagent_with_tools
 
                 stage_config = resolve_subagent_config("research", default_role="researcher")
                 if stage_config.tools:
@@ -146,8 +147,8 @@ def research_article(self, article_id: int, run_id=None):
         if article.topics:
             from services.context_service import get_topic_notes_for_topics
             from services.trend_memory import (
-                get_memory_for_topics,
                 _format_memory_for_prompt,
+                get_memory_for_topics,
             )
             topic_notes_dict = get_topic_notes_for_topics(article.topics)
             if topic_notes_dict:
@@ -173,8 +174,8 @@ def research_article(self, article_id: int, run_id=None):
             trend_memory=trend_memory,
         )
 
-        from services.metrics import time_histogram
         from services.logging_utils import traced_llm_call
+        from services.metrics import time_histogram
 
         with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="research"):
             with time_histogram(

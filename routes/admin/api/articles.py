@@ -1,12 +1,13 @@
 import logging
 from datetime import datetime, timezone
 
-from flask import jsonify, request, Response
+from flask import Response, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
+
+from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
+from routes import limit_content_length
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
-from routes import limit_content_length
-from constants import PipelineStatus, VALID_PIPELINE_STATUSES, VALID_TRANSITIONS
 from services.task_security import get_signed_kwargs
 
 logger = logging.getLogger(__name__)
@@ -20,10 +21,12 @@ def get_article_ids():
     Query params: q, status, category, source_id, date_from, date_to, impact_min, impact_max, tag
     Returns: {"ids": [1, 2, 3], "count": 3}
     """
-    from models import Article, Tag
-    from sqlalchemy.orm import joinedload
-    from services.article import _escape_like_pattern
     from urllib.parse import urlparse
+
+    from sqlalchemy.orm import joinedload
+
+    from models import Article, Tag
+    from services.article import _escape_like_pattern
 
     query = request.args.get("q", "", type=str).strip()
     status = request.args.get("status", "", type=str).strip()
@@ -141,9 +144,9 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
 
 
 def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
-    from tasks.select import select_article
-    from services.cache import get_response_cache
     from services.audit import log_admin_action
+    from services.cache import get_response_cache
+    from tasks.select import select_article
 
     cache = get_response_cache()
 
@@ -165,8 +168,9 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
 
     try:
-        from extensions import get_redis
         import redis.exceptions
+
+        from extensions import get_redis
         redis_client = get_redis()
         for article in articles:
             pattern = f"ainews:article:stage_failures:{article.id}:*"
@@ -235,9 +239,9 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
 
 
 def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
-    from tasks.pipeline import _assign_tags
-    from tasks.edit import clear_tag_cache
     from services.audit import log_admin_action
+    from tasks.edit import clear_tag_cache
+    from tasks.pipeline import _assign_tags
 
     tag_names = data.get("tags", [])
     if not tag_names or not isinstance(tag_names, list):
@@ -287,8 +291,8 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
 @limit_content_length(32768)
 def bulk_article_operations() -> tuple[Response, int] | Response:
     """Bulk operations on articles: delete, change status, change category, reprocess, add tags."""
-    from models import Article
     from extensions import db
+    from models import Article
 
     data = request.get_json(silent=True)
     if not data:
@@ -321,8 +325,8 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             db.session.rollback()
             return jsonify({"error": "Failed to delete articles"}), 500
         try:
-            from services.cache import get_response_cache
             from services.audit import log_admin_action
+            from services.cache import get_response_cache
 
             cache = get_response_cache()
             for article in articles:
@@ -365,8 +369,8 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             db.session.rollback()
             return jsonify({"error": "Failed to update articles"}), 500
         try:
-            from services.cache import get_response_cache
             from services.audit import log_admin_action
+            from services.cache import get_response_cache
 
             cache = get_response_cache()
             for article in articles:

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.url import validate_url_safe, UnsafeURLError
+from services.url import UnsafeURLError, validate_url_safe
 
 
 class TestValidateUrlSafe:

@@ -16,7 +16,6 @@ from typing import Sequence, Union
 
 from alembic import op
 
-
 revision: str = "024_missing_query_indexes"
 down_revision: Union[str, Sequence[str], None] = "023_query_performance_indexes"
 branch_labels: Union[str, Sequence[str], None] = None

@@ -1,9 +1,10 @@
 import re
 import secrets
 from datetime import datetime, timezone
-from extensions import db
 
 import short_url
+
+from extensions import db
 
 _SHORT_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 _short_encoder = short_url.UrlEncoder(alphabet=_SHORT_ALPHABET)

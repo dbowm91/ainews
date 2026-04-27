@@ -1,9 +1,10 @@
 """Admin routes for Trend Memory management."""
 
-from flask import render_template, request, redirect, url_for, flash
-from routes.admin import admin_bp, require_auth
+from flask import flash, redirect, render_template, request, url_for
+
 from extensions import db
 from models import TrendMemory
+from routes.admin import admin_bp, require_auth
 
 
 @admin_bp.route("/trend-memory")

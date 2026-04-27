@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 def _handle_openai_error(e: Exception) -> Exception:
     """Convert OpenAI SDK exceptions to our custom exceptions."""
     from openai import (
-        RateLimitError,
-        AuthenticationError,
-        APITimeoutError,
         APIConnectionError,
+        APITimeoutError,
+        AuthenticationError,
+        RateLimitError,
     )
 
     return make_error_handler(

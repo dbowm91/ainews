@@ -69,8 +69,8 @@ def log_admin_action(
         pass
 
     try:
-        from models import AuditLog
         from extensions import db
+        from models import AuditLog
 
         log_entry = AuditLog(
             action=action,

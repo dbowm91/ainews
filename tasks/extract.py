@@ -1,9 +1,9 @@
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
+from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from billiard.exceptions import SoftTimeLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_task_logger(__name__)
@@ -36,8 +36,8 @@ def _find_duplicate_article(url: str, title: str):
     Returns the existing Article or None.
     """
     from models import Article
-    from services.url import normalize_url, normalize_title
     from services.article import _escape_like_pattern
+    from services.url import normalize_title, normalize_url
 
     # URL-based dedup: query by domain to narrow candidates, then normalize in Python
     if url:
@@ -97,8 +97,9 @@ def _create_article_record(
     Returns the created Article.
     """
     from datetime import datetime, timezone
-    from models import Article, Citation, encode_short_url
+
     from extensions import db
+    from models import Article, Citation, encode_short_url
 
     try:
         pub_date = (
@@ -158,9 +159,9 @@ def _create_article_record(
 
 def _dispatch_after_extraction(article_id: int, run_id: int | None = None) -> None:
     """Log extraction and dispatch to next pipeline stage."""
-    from tasks.pipeline import _log_pipeline, _dispatch_next
-    from models import Article
     from extensions import db
+    from models import Article
+    from tasks.pipeline import _dispatch_next, _log_pipeline
 
     article = db.session.get(Article, article_id)
     if not article:
@@ -204,10 +205,10 @@ def _handle_duplicate(
 
     Returns dict if handled (returns duplicate info), None if not a duplicate.
     """
-    from models import Citation
-    from extensions import db
-    from tasks.pipeline import _log_pipeline
     from constants import truncate_for_log
+    from extensions import db
+    from models import Citation
+    from tasks.pipeline import _log_pipeline
 
     if not duplicate:
         return None
@@ -288,11 +289,11 @@ def process_item(
     min_content_length=None,
     run_id=None,
 ):
-    from extensions import db
-    from tasks.pipeline import _log_pipeline
-    from services.crawling import get_or_create_source
-    from services.config_unified import MIN_CONTENT_LENGTH
     from constants import truncate_for_log
+    from extensions import db
+    from services.config_unified import MIN_CONTENT_LENGTH
+    from services.crawling import get_or_create_source
+    from tasks.pipeline import _log_pipeline
 
     try:
         from schemas.tasks import ProcessItemTask

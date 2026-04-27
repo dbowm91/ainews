@@ -46,8 +46,8 @@ class TestProcessItem:
         mock_extract.return_value = extraction
 
         with app.app_context():
-            from models import Source
             from extensions import db
+            from models import Source
 
             source = Source(
                 source_key="src-1", name="Test Source", source_type="rss", feed_url=""
@@ -74,8 +74,8 @@ class TestProcessItem:
         mock_extract.side_effect = Exception("extraction failed")
 
         with app.app_context():
-            from models import Source
             from extensions import db
+            from models import Source
 
             source = Source(
                 source_key="src-1", name="Test Source", source_type="rss", feed_url=""
@@ -119,8 +119,8 @@ class TestProcessItem:
         mock_dedup.return_value = None
 
         with app.app_context():
-            from models import Source
             from extensions import db
+            from models import Source
 
             source = Source(
                 source_key="src-1", name="Test Source", source_type="rss", feed_url=""

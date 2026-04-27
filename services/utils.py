@@ -1,7 +1,6 @@
 import json
 import re
-from typing import Optional, Any
-
+from typing import Any, Optional
 
 # Simple but effective email pattern - catches common mistakes
 _EMAIL_RE = re.compile(

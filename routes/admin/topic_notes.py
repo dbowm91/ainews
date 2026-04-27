@@ -1,14 +1,15 @@
 """Admin routes for topic notes CRUD."""
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import flash, redirect, render_template, request, url_for
+
+from extensions import db
 from routes.admin import admin_bp, require_auth
 from services.context_service import (
-    get_topic_note,
-    get_all_topic_notes,
     create_topic_note,
     delete_topic_note,
+    get_all_topic_notes,
+    get_topic_note,
 )
-from extensions import db
 
 
 @admin_bp.route("/topic-notes")

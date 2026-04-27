@@ -1,8 +1,9 @@
 """Tests for track_metric concurrency safety."""
 
 import pytest
-from models import Article, ArticleMetric
+
 from extensions import db
+from models import Article, ArticleMetric
 from services.article import track_metric
 
 

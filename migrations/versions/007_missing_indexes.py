@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "007_missing_indexes"
 down_revision: Union[str, Sequence[str], None] = "006_total_retries"

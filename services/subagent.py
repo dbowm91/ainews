@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import logging
 import os
@@ -8,21 +9,19 @@ from typing import Any, Type
 
 from pydantic import BaseModel
 
-from schemas.pipeline import resolve_subagent_config, SubagentStageConfig, BASE_DIR
-from schemas.llm_responses import SubagentResponse
-from services.llm import get_provider_for_role
-from services.llm.base import ToolDefinition
-from services.metrics import time_histogram, get_metrics
-from services.logging_utils import log_pipeline_event
-from services.llm.errors import ProviderTimeoutError, AuthError, ProviderServerError
-from services.prompts import esc_xml_text
-
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
 from schemas.llm_responses import (  # noqa: F401
-    ResearchSynthesisResponse,
     EditContextualizationResponse,
+    ResearchSynthesisResponse,
+    SubagentResponse,
 )
-
+from schemas.pipeline import BASE_DIR, SubagentStageConfig, resolve_subagent_config
+from services.llm import get_provider_for_role
+from services.llm.base import ToolDefinition
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
+from services.logging_utils import log_pipeline_event
+from services.metrics import get_metrics, time_histogram
+from services.prompts import esc_xml_text
 
 _TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
@@ -134,8 +133,8 @@ def _build_context_tools() -> list[ToolDefinition]:
             return f'{{"error": "{type(e).__name__}"}}'
 
     def _get_source_health() -> str:
-        from models import Source
         from extensions import db
+        from models import Source
 
         try:
             sources = db.session.query(Source).all()

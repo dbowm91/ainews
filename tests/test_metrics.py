@@ -5,7 +5,7 @@ import time
 
 class TestMetricsExpansion:
     def test_time_histogram(self):
-        from services.metrics import time_histogram, get_metrics, reset_metrics
+        from services.metrics import get_metrics, reset_metrics, time_histogram
 
         reset_metrics()
         with time_histogram("test.duration"):
@@ -16,7 +16,7 @@ class TestMetricsExpansion:
         assert metrics["histograms"]["test.duration"]["count"] == 1
 
     def test_record_request(self):
-        from services.metrics import record_request, get_metrics, reset_metrics
+        from services.metrics import get_metrics, record_request, reset_metrics
 
         reset_metrics()
         record_request("GET", "/api/test", 200, 42.5)

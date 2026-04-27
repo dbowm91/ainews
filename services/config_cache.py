@@ -225,8 +225,9 @@ def get_config_cache() -> ConfigCache:
     with _cache_lock:
         if _cache_instance is not None:
             return _cache_instance
-        import redis
         import os as _os
+
+        import redis
 
         url = _os.environ.get(
             "CONFIG_CACHE_REDIS_URL",

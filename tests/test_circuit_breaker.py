@@ -2,7 +2,6 @@
 
 import pytest
 
-
 _fake_time = 1000.0
 
 
@@ -118,7 +117,7 @@ class TestGetBreaker:
     """Test the global breaker registry."""
 
     def test_returns_same_instance(self):
-        from services.circuit_breaker import get_breaker, _breakers
+        from services.circuit_breaker import _breakers, get_breaker
 
         _breakers.clear()
         b1 = get_breaker("test-provider", failure_threshold=5)
@@ -126,7 +125,7 @@ class TestGetBreaker:
         assert b1 is b2
 
     def test_different_names_get_different_instances(self):
-        from services.circuit_breaker import get_breaker, _breakers
+        from services.circuit_breaker import _breakers, get_breaker
 
         _breakers.clear()
         b1 = get_breaker("provider-a")
@@ -138,7 +137,7 @@ class TestCircuitProtected:
     """Test the @circuit_protected decorator."""
 
     def test_passes_through_when_closed(self):
-        from services.circuit_breaker import circuit_protected, _breakers
+        from services.circuit_breaker import _breakers, circuit_protected
 
         _breakers.clear()
 
@@ -150,10 +149,10 @@ class TestCircuitProtected:
 
     def test_raises_when_open(self):
         from services.circuit_breaker import (
-            circuit_protected,
-            get_breaker,
             CircuitOpenError,
             _breakers,
+            circuit_protected,
+            get_breaker,
         )
 
         _breakers.clear()
@@ -169,7 +168,7 @@ class TestCircuitProtected:
             my_func()
 
     def test_calls_fallback_when_open(self):
-        from services.circuit_breaker import circuit_protected, get_breaker, _breakers
+        from services.circuit_breaker import _breakers, circuit_protected, get_breaker
 
         _breakers.clear()
 
@@ -186,7 +185,7 @@ class TestCircuitProtected:
         assert my_func() == "fallback"
 
     def test_records_failure_on_exception(self):
-        from services.circuit_breaker import circuit_protected, get_breaker, _breakers
+        from services.circuit_breaker import _breakers, circuit_protected, get_breaker
 
         _breakers.clear()
 
@@ -201,7 +200,7 @@ class TestCircuitProtected:
         assert breaker._failure_count == 1
 
     def test_failure_in_half_open_reopens_circuit(self):
-        from services.circuit_breaker import circuit_protected, get_breaker, _breakers
+        from services.circuit_breaker import _breakers, circuit_protected, get_breaker
 
         _breakers.clear()
 
@@ -225,7 +224,7 @@ class TestCircuitProtected:
         assert breaker.state.value == "open"
 
     def test_records_success_on_return(self):
-        from services.circuit_breaker import circuit_protected, get_breaker, _breakers
+        from services.circuit_breaker import _breakers, circuit_protected, get_breaker
 
         _breakers.clear()
 
@@ -243,7 +242,7 @@ class TestCircuitBreakerMetrics:
 
     def _make_breaker(self, **kwargs):
         from services.circuit_breaker import CircuitBreaker
-        from services.metrics import reset_metrics, get_metrics
+        from services.metrics import get_metrics, reset_metrics
 
         reset_metrics()
         defaults = dict(

@@ -1,6 +1,6 @@
 """Tests for periodic cleanup tasks."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class TestCleanupOldPipelineLogs:
@@ -9,9 +9,9 @@ class TestCleanupOldPipelineLogs:
     def test_deletes_old_logs(self, app):
         """Logs older than 30 days should be deleted."""
         with app.app_context():
-            from tasks.cleanup import cleanup_old_pipeline_logs
-            from models import PipelineRun, PipelineLog
             from extensions import db
+            from models import PipelineLog, PipelineRun
+            from tasks.cleanup import cleanup_old_pipeline_logs
 
             run = PipelineRun(
                 run_type="crawl", status="completed", triggered_by="scheduled"
@@ -48,9 +48,9 @@ class TestCleanupOldPipelineLogs:
     def test_no_logs_deleted_when_all_recent(self, app):
         """When all logs are recent, nothing should be deleted."""
         with app.app_context():
-            from tasks.cleanup import cleanup_old_pipeline_logs
-            from models import PipelineRun, PipelineLog
             from extensions import db
+            from models import PipelineLog, PipelineRun
+            from tasks.cleanup import cleanup_old_pipeline_logs
 
             run = PipelineRun(
                 run_type="crawl", status="completed", triggered_by="scheduled"

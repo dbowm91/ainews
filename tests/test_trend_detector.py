@@ -1,7 +1,8 @@
 """Tests for the trend detector service."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestClassify:
@@ -86,6 +87,7 @@ class TestComputeVelocity:
 
     def test_newer_articles_higher_velocity(self):
         import time
+
         from services.trend_detector import compute_velocity
 
         now = time.time()
@@ -96,6 +98,7 @@ class TestComputeVelocity:
 
     def test_age_floor_prevents_extreme_values(self):
         import time
+
         from services.trend_detector import compute_velocity
 
         very_old = time.time() - 1000000
@@ -105,6 +108,7 @@ class TestComputeVelocity:
 
     def test_score_directly_affects_velocity(self):
         import time
+
         from services.trend_detector import compute_velocity
 
         now = time.time()
@@ -115,6 +119,7 @@ class TestComputeVelocity:
 
     def test_velocity_calculated_correctly(self):
         import time
+
         from services.trend_detector import compute_velocity
 
         now = time.time()

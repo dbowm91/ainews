@@ -1,6 +1,6 @@
 """Tests for tasks/scheduler.py."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,9 +30,9 @@ class TestPublishScheduledArticles:
     def test_publishes_due_articles(
         self, mock_release_lock, mock_get_redis, app, create_article
     ):
+        from constants import PipelineStatus
         from extensions import db
         from models import Article
-        from constants import PipelineStatus
 
         mock_redis = MagicMock()
         mock_redis.set.return_value = True
@@ -121,6 +121,7 @@ class TestPublishScheduledArticles:
         self, mock_get_redis, app, create_article
     ):
         import redis.exceptions
+
         from extensions import db
 
         mock_redis = MagicMock()

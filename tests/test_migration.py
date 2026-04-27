@@ -6,8 +6,9 @@ verify migration chain integrity, env.py configuration, and that
 db.create_all() produces a schema consistent with migration targets.
 """
 
-from extensions import db
 from sqlalchemy import inspect
+
+from extensions import db
 
 
 class TestMigrationChain:

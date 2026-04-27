@@ -1,22 +1,22 @@
 """Tests for admin login lockout behavior."""
 
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import redis.exceptions
 
 from routes.admin import (
+    _LOGIN_LOCKOUT_SECONDS,
+    _LOGIN_MAX_ATTEMPTS,
+    _cleanup_stale_entries,
+    _clear_attempts,
     _is_locked_out,
     _is_locked_out_memory,
+    _login_attempts_memory,
+    _memory_lock,
     _record_failed_attempt,
     _record_failed_attempt_memory,
-    _clear_attempts,
-    _cleanup_stale_entries,
-    _login_attempts_memory,
-    _LOGIN_MAX_ATTEMPTS,
-    _LOGIN_LOCKOUT_SECONDS,
-    _memory_lock,
 )
 
 

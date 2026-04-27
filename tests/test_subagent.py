@@ -1,7 +1,8 @@
 """Tests for the subagent service."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestSubagentResponse:
@@ -69,7 +70,7 @@ class TestSubagentTemplates:
     def test_get_task_template_loads_from_file(self, app, tmp_path):
         """When task_template is set and file exists, loads from file."""
         with app.app_context():
-            from schemas.pipeline import SubagentStageConfig, BASE_DIR
+            from schemas.pipeline import BASE_DIR, SubagentStageConfig
             from services.subagent import _get_task_template
 
             prompt_file = BASE_DIR / "prompts" / "test_template.txt"
@@ -210,8 +211,8 @@ class TestRunSubagent:
                         mock_metrics_instance = MagicMock()
                         mock_metrics.return_value = mock_metrics_instance
 
-                        from services.subagent import run_subagent
                         from schemas.llm_responses import ResearchSynthesisResponse
+                        from services.subagent import run_subagent
 
                         result = run_subagent(
                             task_type="research_synthesis",
@@ -250,8 +251,8 @@ class TestRunSubagent:
                         mock_metrics_instance = MagicMock()
                         mock_metrics.return_value = mock_metrics_instance
 
-                        from services.subagent import run_subagent
                         from schemas.llm_responses import ResearchSynthesisResponse
+                        from services.subagent import run_subagent
 
                         result = run_subagent(
                             task_type="research_synthesis",
@@ -291,8 +292,8 @@ class TestRunSubagent:
                         )
                         mock_get_provider.return_value = mock_provider
 
-                        from services.subagent import run_subagent
                         from schemas.llm_responses import ResearchSynthesisResponse
+                        from services.subagent import run_subagent
 
                         result = run_subagent(
                             task_type="research_synthesis",
@@ -335,8 +336,8 @@ class TestRunSubagent:
                         mock_metrics_instance = MagicMock()
                         mock_metrics.return_value = mock_metrics_instance
 
-                        from services.subagent import run_subagent
                         from schemas.llm_responses import ResearchSynthesisResponse
+                        from services.subagent import run_subagent
 
                         run_subagent(
                             task_type="research_synthesis",
@@ -395,8 +396,8 @@ class TestRunSubagent:
                         mock_metrics_instance = MagicMock()
                         mock_metrics.return_value = mock_metrics_instance
 
-                        from services.subagent import run_subagent
                         from schemas.llm_responses import ResearchSynthesisResponse
+                        from services.subagent import run_subagent
 
                         result = run_subagent(
                             task_type="research_synthesis",
@@ -439,8 +440,8 @@ class TestRunSubagent:
                         mock_metrics_instance = MagicMock()
                         mock_metrics.return_value = mock_metrics_instance
 
-                        from services.subagent import run_subagent
                         from schemas.llm_responses import ResearchSynthesisResponse
+                        from services.subagent import run_subagent
 
                         result = run_subagent(
                             task_type="research_synthesis",
@@ -623,8 +624,8 @@ class TestRunSubagentWithTools:
                         mock_metrics_instance = MagicMock()
                         mock_metrics.return_value = mock_metrics_instance
 
-                        from services.subagent import run_subagent_with_tools
                         from schemas.llm_responses import SubagentResponse
+                        from services.subagent import run_subagent_with_tools
 
                         result = run_subagent_with_tools(
                             task_type="research_synthesis",

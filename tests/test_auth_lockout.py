@@ -4,11 +4,11 @@ import time
 from unittest.mock import MagicMock, patch
 
 from routes.admin import (
-    _is_locked_out,
-    _check_and_record_attempt,
-    _record_failed_attempt,
-    _clear_attempts,
     _LOGIN_MAX_ATTEMPTS,
+    _check_and_record_attempt,
+    _clear_attempts,
+    _is_locked_out,
+    _record_failed_attempt,
 )
 
 

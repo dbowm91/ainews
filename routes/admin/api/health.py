@@ -1,11 +1,12 @@
 import logging
 
-from flask import jsonify, Response
+from flask import Response, jsonify
+
 from routes.admin import admin_bp, require_auth
-from services.circuit_breaker import get_all_breaker_status
-from services.limiter import get_limiter
 from services.cache import get_response_cache
+from services.circuit_breaker import get_all_breaker_status
 from services.health import run_health_checks
+from services.limiter import get_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ def workers_health() -> Response:
 @require_auth
 def task_status(task_id: str) -> Response:
     from celery.result import AsyncResult
+
     from celery_app import celery_app
 
     task = AsyncResult(task_id, app=celery_app)

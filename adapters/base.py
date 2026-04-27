@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import abc
 import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional, ClassVar
+from typing import Any, ClassVar, Optional
 
 from schemas.source import SourceConfig
 from services.url import normalize_url

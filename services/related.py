@@ -14,8 +14,9 @@ def find_related_articles_cached(article, limit: int = 5):
     Uses cache key pub:related:{article_id}.
     Returns Article ORM objects.
     """
-    from models import Article
     from sqlalchemy.orm import joinedload
+
+    from models import Article
 
     cache = get_response_cache()
     cache_key = f"pub:related:{article.id}"
@@ -47,10 +48,11 @@ def find_related_articles(article, limit: int = 5):
 
     Returns Article ORM objects.
     """
-    from models import Article, article_tags
     from sqlalchemy import func
     from sqlalchemy.orm import joinedload
+
     from extensions import db
+    from models import Article, article_tags
 
     article_tag_ids = {t.id for t in article.tags} if article.tags else set()
     article_words = _extract_keywords(article.original_title or "")
@@ -142,8 +144,9 @@ def find_related_articles_dicts(
     Uses the same scoring algorithm as find_related_articles but takes
     topics list instead of an Article object.
     """
-    from models import Article
     from sqlalchemy.orm import joinedload
+
+    from models import Article
 
     if not topics:
         return []

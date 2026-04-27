@@ -2,8 +2,9 @@
 
 import time
 from unittest.mock import MagicMock
-import redis.exceptions
+
 import pytest
+import redis.exceptions
 
 
 @pytest.fixture
@@ -184,8 +185,9 @@ class TestResponseCacheRedisError:
 
 class TestResponseCacheKeyHashing:
     def test_long_key_is_hashed(self, redis_client):
-        from services.cache import ResponseCache
         import hashlib
+
+        from services.cache import ResponseCache
 
         cache = ResponseCache(redis_client)
         long_key = "x" * 300

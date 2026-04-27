@@ -7,7 +7,8 @@ on long-running operations (HTTP fetches, LLM calls, DB queries).
 import functools
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from typing import Optional
 
 logger = logging.getLogger(__name__)

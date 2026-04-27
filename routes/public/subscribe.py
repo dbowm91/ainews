@@ -1,21 +1,21 @@
 """Subscription and verification routes: subscribe, unsubscribe, verify."""
 
+import logging
 import re
 import secrets
-import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from flask import request, render_template, redirect, current_app, Response
+from flask import Response, current_app, redirect, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
-from models import Subscriber
 from extensions import db
-from services.utils import is_valid_email
+from models import Subscriber
 from routes import limit_content_length
 from routes.public import (
-    public_bp,
     _get_categories,
+    public_bp,
 )
+from services.utils import is_valid_email
 
 logger = logging.getLogger(__name__)
 

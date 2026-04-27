@@ -1,6 +1,6 @@
 """Tests for services/crawling.py functions."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 
@@ -162,7 +162,7 @@ class TestRecordCrawlSuccess:
             assert source.last_error is None
 
     def test_re_enables_disabled(self, app, create_source):
-        from services.crawling import record_crawl_success, HEALTHY_THRESHOLD
+        from services.crawling import HEALTHY_THRESHOLD, record_crawl_success
 
         with app.app_context():
             source = create_source(active=False)
@@ -184,8 +184,8 @@ class TestRecordCrawlFailure:
 
     def test_auto_disables_at_threshold(self, app, create_source):
         from services.crawling import (
-            record_crawl_failure,
             _get_max_consecutive_failures,
+            record_crawl_failure,
         )
 
         with app.app_context():

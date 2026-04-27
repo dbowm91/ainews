@@ -8,8 +8,8 @@ class TestArticleVersioning:
 
     def test_edit_preserves_original_ai(self, app):
         """When the editor finalizes, original_ai_article should be set."""
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
 
         source = Source(
             source_key="ver_test", name="Ver Test", source_type="rss", feed_url=""
@@ -46,9 +46,9 @@ class TestArticleVersioning:
 
     def test_finalize_sets_original_ai(self, app):
         """_finalize should set original_ai_article from draft."""
-        from tasks.pipeline import _finalize
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from tasks.pipeline import _finalize
 
         source = Source(
             source_key="fin_test", name="Fin Test", source_type="rss", feed_url=""
@@ -85,9 +85,9 @@ class TestFindRelatedArticles:
         assert result == []
 
     def test_returns_dicts_with_matching_category(self, app):
-        from services.related import find_related_articles_dicts
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.related import find_related_articles_dicts
 
         source = Source(
             source_key="rel_test", name="Rel Test", source_type="rss", feed_url=""
@@ -131,9 +131,9 @@ class TestFindRelatedArticles:
             assert r["category"] == "ai"
 
     def test_excludes_specified_article(self, app):
-        from services.related import find_related_articles_dicts
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.related import find_related_articles_dicts
 
         source = Source(
             source_key="ex_test", name="Ex Test", source_type="rss", feed_url=""
@@ -167,9 +167,9 @@ class TestFindRelatedArticles:
             assert r["title"] != articles[0].original_title
 
     def test_respects_limit(self, app):
-        from services.related import find_related_articles_dicts
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.related import find_related_articles_dicts
 
         source = Source(
             source_key="lim_test", name="Lim Test", source_type="rss", feed_url=""

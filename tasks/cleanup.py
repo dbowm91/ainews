@@ -1,10 +1,10 @@
 """Periodic cleanup tasks for maintenance."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
+from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from billiard.exceptions import SoftTimeLimitExceeded
 
 logger = get_task_logger(__name__)
 
@@ -20,8 +20,8 @@ def cleanup_old_pipeline_logs(self):
     Runs daily via Celery Beat to prevent unbounded growth of the
     pipeline_logs table.
     """
-    from models import PipelineLog
     from extensions import db
+    from models import PipelineLog
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     BATCH_SIZE = 10000
@@ -65,8 +65,8 @@ def cleanup_expired_verifications(self):
     Runs every 15 minutes via Celery Beat. A subscriber is removed if
     they never confirmed their email and the verification window has passed.
     """
-    from models import Subscriber
     from extensions import db
+    from models import Subscriber
     from services.config_utils import get_config_with_default
 
     expiry_seconds = get_config_with_default("VERIFICATION_EXPIRY_SECONDS", 3600, int)
@@ -123,8 +123,8 @@ def consolidate_trend_memory(self):
     for a topic, any overlapping low-importance entries are promoted to medium
     importance and TTL'd.
     """
-    from services.trend_memory import consolidate_all_topics
     from extensions import db
+    from services.trend_memory import consolidate_all_topics
 
     try:
         results = consolidate_all_topics()
@@ -155,8 +155,8 @@ def recalculate_impact_scores(self):
     Runs nightly via Celery Beat (4:00 AM). Updates impact scores for articles
     in the DONE status by incorporating newsletter clicks and page loads.
     """
-    from models import Article, ArticleMetric
     from extensions import db
+    from models import Article, ArticleMetric
 
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
@@ -206,8 +206,8 @@ def purge_trend_memory(self):
     Runs nightly via Celery Beat (3:45 AM). Removes all entries whose
     expires_at timestamp has passed.
     """
-    from services.trend_memory import purge_expired
     from extensions import db
+    from services.trend_memory import purge_expired
 
     try:
         purged = purge_expired()
@@ -245,9 +245,9 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
         logger.warning("Invalid cleanup_old_article_versions input: %s", e)
         raise TypeError(f"Invalid cleanup_old_article_versions input: {e}") from e
 
-    from services.task_security import verify_task
-    from models import ArticleVersion
     from extensions import db
+    from models import ArticleVersion
+    from services.task_security import verify_task
 
     if not verify_task("cleanup_old_article_versions", (), {"days_to_keep": days_to_keep, "dry_run": dry_run}):
         raise ValueError("Invalid task signature")

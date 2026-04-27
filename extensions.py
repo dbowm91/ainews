@@ -1,12 +1,12 @@
-import os
 import logging
+import os
 import threading
 
-from flask_sqlalchemy import SQLAlchemy
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +80,9 @@ def get_redis():
         if _redis_client is not None:
             return _redis_client
 
-        import redis
         from urllib.parse import urlparse, urlunparse
+
+        import redis
 
         url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 

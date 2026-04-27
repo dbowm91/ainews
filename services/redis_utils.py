@@ -1,9 +1,10 @@
 """Redis utility functions with atomic operations."""
 
 import logging
-import redis.exceptions
 import weakref
 from typing import Any
+
+import redis.exceptions
 
 logger = logging.getLogger(__name__)
 

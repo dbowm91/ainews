@@ -6,7 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 import redis.exceptions
 from pydantic import BaseModel
-from services.config_cache import ConfigCache, _serialize, _deserialize, _import_class
+
+from services.config_cache import ConfigCache, _deserialize, _import_class, _serialize
 
 
 class _SampleModel(BaseModel):

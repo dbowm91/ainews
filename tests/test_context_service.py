@@ -1,8 +1,8 @@
 """Tests for the context service."""
 
-import pytest
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -95,8 +95,8 @@ class TestTopicNoteCrud:
     def test_create_topic_note_rollback_on_commit_failure(self, app):
         """Creating a topic note should rollback on commit failure."""
         with app.app_context():
-            from services.context_service import create_topic_note
             from extensions import db
+            from services.context_service import create_topic_note
 
             with patch.object(
                 db.session, "commit", side_effect=SQLAlchemyError("commit failed")
@@ -111,8 +111,8 @@ class TestTopicNoteCrud:
     def test_update_topic_note_rollback_on_commit_failure(self, app):
         """Updating a topic note should rollback on commit failure."""
         with app.app_context():
-            from services.context_service import create_topic_note, update_topic_note
             from extensions import db
+            from services.context_service import create_topic_note, update_topic_note
 
             note = create_topic_note("rollback-update", note="original", source="src")
 
@@ -134,8 +134,8 @@ class TestTopicNoteCrud:
     def test_delete_topic_note_rollback_on_commit_failure(self, app):
         """Deleting a topic note should rollback on commit failure."""
         with app.app_context():
-            from services.context_service import create_topic_note, delete_topic_note
             from extensions import db
+            from services.context_service import create_topic_note, delete_topic_note
 
             note = create_topic_note(
                 "rollback-delete", note="to be deleted", source="src"

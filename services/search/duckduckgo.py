@@ -1,5 +1,6 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from services.search.base import (
@@ -15,7 +16,8 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ddg_search")
 
 def _search_impl(provider: "DuckDuckGoSearchProvider", query: str, max_results: int) -> list[SearchResult]:
     from duckduckgo_search import DDGS
-    from services.url import validate_url_safe, UnsafeURLError
+
+    from services.url import UnsafeURLError, validate_url_safe
 
     with DDGS(timeout=15) as ddgs:
         results = ddgs.text(query, max_results=max_results)
@@ -42,7 +44,7 @@ def _search_impl(provider: "DuckDuckGoSearchProvider", query: str, max_results: 
 class DuckDuckGoSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         try:
-            from services.search import record_search_success, record_search_failure
+            from services.search import record_search_failure, record_search_success
 
             future = _EXECUTOR.submit(_search_impl, self, query, max_results)
             results = future.result(timeout=20)

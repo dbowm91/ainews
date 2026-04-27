@@ -1,5 +1,6 @@
 import pytest
-from constants import PipelineStatus, VALID_TRANSITIONS
+
+from constants import VALID_TRANSITIONS, PipelineStatus
 from tasks.pipeline import InvalidStateTransitionError, _transition_article_status
 
 

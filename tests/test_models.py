@@ -5,8 +5,8 @@ class TestArticleCascadeDeletions:
     def test_article_delete_cascades_to_citations(
         self, app, create_source, create_article
     ):
-        from models import Citation
         from extensions import db
+        from models import Citation
 
         with app.app_context():
             source = create_source(source_key="cascade-test-1")
@@ -29,8 +29,8 @@ class TestArticleCascadeDeletions:
     def test_article_delete_cascades_to_article_metrics(
         self, app, create_source, create_article
     ):
-        from models import ArticleMetric
         from extensions import db
+        from models import ArticleMetric
 
         with app.app_context():
             source = create_source(source_key="cascade-test-2")
@@ -50,8 +50,8 @@ class TestArticleCascadeDeletions:
     def test_article_delete_cascades_to_article_versions(
         self, app, create_source, create_article
     ):
-        from models import ArticleVersion
         from extensions import db
+        from models import ArticleVersion
 
         with app.app_context():
             source = create_source(source_key="cascade-test-3")
@@ -102,8 +102,8 @@ class TestSourceCascadeDeletions:
     def test_source_delete_cascades_to_articles(
         self, app, create_source, create_article
     ):
-        from models import Article
         from extensions import db
+        from models import Article
 
         with app.app_context():
             source = create_source(source_key="cascade-source-1")

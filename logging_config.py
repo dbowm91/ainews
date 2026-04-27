@@ -1,13 +1,13 @@
 """Structured logging configuration for the application."""
 
-import logging
 import json
+import logging
+import os
 import sys
 import time
 import uuid
-import os
-from datetime import datetime, timezone
 from contextvars import ContextVar
+from datetime import datetime, timezone
 
 # Context variable to store request ID across async contexts
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")

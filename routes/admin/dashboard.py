@@ -1,8 +1,10 @@
 import logging
+
 import redis.exceptions
 from flask import render_template
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
+
 from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
@@ -17,9 +19,10 @@ def _get_dashboard_cache_key() -> str:
 @admin_bp.route("/dead-letters")
 @require_auth
 def dead_letters() -> str:
-    from models import Article
-    from constants import PipelineStatus
     from flask import request
+
+    from constants import PipelineStatus
+    from models import Article
 
     failed_page = max(1, request.args.get("failed_page", 1, type=int))
     stuck_page = max(1, request.args.get("stuck_page", 1, type=int))
@@ -87,8 +90,8 @@ def dead_letters() -> str:
 
 
 def _compute_dashboard_stats():
-    from models import Article, Source, PipelineRun
     from extensions import db
+    from models import Article, PipelineRun, Source
     from services.llm import get_provider_info
     from services.pipeline_monitor import get_all_stages_stats
     from services.subscribers import get_subscriber_stats

@@ -1,18 +1,17 @@
+import logging
 from urllib.parse import urlparse
 
-from flask import render_template, request, redirect, url_for, session, current_app, Response
+from flask import Response, current_app, redirect, render_template, request, session, url_for
 
+from extensions import limiter
 from routes import limit_content_length
 from routes.admin import (
-    admin_bp,
-    _is_locked_out,
     _check_and_record_attempt,
     _clear_attempts,
+    _is_locked_out,
     _verify_password,
+    admin_bp,
 )
-from extensions import limiter
-
-import logging
 
 logger = logging.getLogger(__name__)
 

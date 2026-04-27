@@ -1,7 +1,7 @@
 import html
 import logging
 from datetime import datetime, timezone
-from xml.etree.ElementTree import Element, SubElement, tostring, indent
+from xml.etree.ElementTree import Element, SubElement, indent, tostring
 
 logger = logging.getLogger(__name__)
 

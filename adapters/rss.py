@@ -3,9 +3,9 @@ from typing import Any, Optional
 
 import feedparser
 import requests
+from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from bs4 import BeautifulSoup
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import RSSConfig

@@ -9,8 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from extensions import db
-from models import Article, Source, Tag, Subscriber, Newsletter, PipelineRun
-from models import Citation, TopicNote
+from models import Article, Citation, Newsletter, PipelineRun, Source, Subscriber, Tag, TopicNote
 
 # Counter for generating unique IDs within a test session
 _counter = 0
@@ -439,7 +438,7 @@ def create_article_with_relations(
     Returns:
         The created Article instance with relations
     """
-    from models import Citation, ArticleMetric, ArticleVersion
+    from models import ArticleMetric, ArticleVersion, Citation
 
     article = create_article(source=source, pipeline_status=pipeline_status)
     db.session.flush()

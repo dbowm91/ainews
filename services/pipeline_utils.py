@@ -1,6 +1,7 @@
 """Shared pipeline utilities extracted to break circular imports."""
 
 import threading
+
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -101,8 +102,8 @@ def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
         No exceptions are re-raised. Errors are logged and a metric is
         incremented.
     """
-    from models import PipelineLog
     from extensions import db
+    from models import PipelineLog
     from services.metrics import get_metrics
 
     if args:

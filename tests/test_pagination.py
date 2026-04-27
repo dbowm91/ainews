@@ -4,9 +4,9 @@
 
 class TestPagination:
     def test_paginate_query_basic(self, app):
-        from services.pagination import paginate_query
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.pagination import paginate_query
 
         source = Source(source_key="pg", name="PG", source_type="rss", feed_url="")
         db.session.add(source)
@@ -33,9 +33,9 @@ class TestPagination:
         assert next_page == 2
 
     def test_paginate_query_last_page(self, app):
-        from services.pagination import paginate_query
-        from models import Article, Source
         from extensions import db
+        from models import Article, Source
+        from services.pagination import paginate_query
 
         source = Source(source_key="pg2", name="PG2", source_type="rss", feed_url="")
         db.session.add(source)

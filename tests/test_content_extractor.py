@@ -1,6 +1,6 @@
 """Tests for content extraction service."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestContentExtractor:
@@ -52,7 +52,7 @@ class TestContentExtractor:
 
     @patch("services.content_extractor.trafilatura.fetch_url")
     def test_extract_article_fetch_error(self, mock_fetch):
-        from services.content_extractor import extract_article, ExtractionStatus
+        from services.content_extractor import ExtractionStatus, extract_article
 
         mock_fetch.side_effect = Exception("Network error")
         result = extract_article("https://example.com/article")
@@ -61,7 +61,7 @@ class TestContentExtractor:
 
     @patch("services.content_extractor.trafilatura.fetch_url")
     def test_extract_article_empty_response(self, mock_fetch):
-        from services.content_extractor import extract_article, ExtractionStatus
+        from services.content_extractor import ExtractionStatus, extract_article
 
         mock_fetch.return_value = None
         result = extract_article("https://example.com/article")
@@ -71,7 +71,7 @@ class TestContentExtractor:
     @patch("services.content_extractor.trafilatura.bare_extraction")
     @patch("services.content_extractor.trafilatura.fetch_url")
     def test_extract_article_success_trafilatura(self, mock_fetch, mock_extract):
-        from services.content_extractor import extract_article, ExtractionStatus
+        from services.content_extractor import ExtractionStatus, extract_article
 
         mock_fetch.return_value = "<html><body>Article content</body></html>"
         mock_extract.return_value = {
@@ -89,7 +89,7 @@ class TestContentExtractor:
     @patch("services.content_extractor.trafilatura.bare_extraction")
     @patch("services.content_extractor.trafilatura.fetch_url")
     def test_extract_article_paywall_detected(self, mock_fetch, mock_extract):
-        from services.content_extractor import extract_article, ExtractionStatus
+        from services.content_extractor import ExtractionStatus, extract_article
 
         mock_fetch.return_value = (
             "<html><body>Subscribe to continue reading</body></html>"
@@ -106,7 +106,7 @@ class TestContentExtractor:
     @patch("services.content_extractor.trafilatura.bare_extraction")
     @patch("services.content_extractor.trafilatura.fetch_url")
     def test_extract_article_fallback_to_readability(self, mock_fetch, mock_extract):
-        from services.content_extractor import extract_article, ExtractionStatus
+        from services.content_extractor import ExtractionStatus, extract_article
 
         mock_fetch.return_value = "<html><body>Short content</body></html>"
         mock_extract.return_value = {"text": "Short"}  # Too short for trafilatura
@@ -126,7 +126,7 @@ class TestContentExtractor:
     @patch("services.content_extractor.trafilatura.bare_extraction")
     @patch("services.content_extractor.trafilatura.fetch_url")
     def test_extract_article_empty_when_all_fail(self, mock_fetch, mock_extract):
-        from services.content_extractor import extract_article, ExtractionStatus
+        from services.content_extractor import ExtractionStatus, extract_article
 
         mock_fetch.return_value = "<html><body>Short</body></html>"
         mock_extract.return_value = {"text": "Short"}  # Too short

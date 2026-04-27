@@ -1,7 +1,9 @@
+from datetime import datetime, timezone
+
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime, timezone
+
 from constants import PipelineStatus, truncate_for_log
 from services.llm.errors import ProviderServerError
 from services.task_security import verify_task
@@ -41,13 +43,12 @@ def select_article(self, article_id: int, run_id=None):
     run_id = validated.run_id
 
     def work(article, provider, model, max_tokens):
-        from models import PipelineRun
         from extensions import db
-        from schemas.pipeline import get_role_config
+        from models import PipelineRun
         from schemas.llm_responses import SelectionResult
-        from services.prompts import get_system_prompt
-        from tasks.pipeline import _log_pipeline, _dispatch_next, _transition_article_status
-        from services.prompts import esc_xml_text
+        from schemas.pipeline import get_role_config
+        from services.prompts import esc_xml_text, get_system_prompt
+        from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status
 
         rc = get_role_config("selector")
         text_preview = (article.extracted_text or article.original_title or "")[:500]
@@ -63,8 +64,8 @@ def select_article(self, article_id: int, run_id=None):
             "Return JSON with selected (bool), score (1-10), reason (string), confidence (low|medium|high)."
         )
 
-        from services.metrics import time_histogram
         from services.logging_utils import traced_llm_call
+        from services.metrics import time_histogram
 
         with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="select"):
             with time_histogram(

@@ -1,14 +1,15 @@
 import concurrent.futures
-import trafilatura
+import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
-from readability import Document
-from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
-import logging
-import os
+
+import trafilatura
 import urllib3
+from bs4 import BeautifulSoup
+from readability import Document
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
 
 def extract_article(url: str) -> ExtractionResult:
     from services.config_unified import MIN_CONTENT_LENGTH
-    from services.url import validate_url_safe, UnsafeURLError
+    from services.url import UnsafeURLError, validate_url_safe
 
     try:
         validate_url_safe(url)

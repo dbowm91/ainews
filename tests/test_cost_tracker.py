@@ -1,11 +1,11 @@
 """Tests for the cost tracking service."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from services.cost_tracker import (
-    get_cost_summary,
-    _parse_metric_key,
     _load_rates,
+    _parse_metric_key,
+    get_cost_summary,
 )
 
 

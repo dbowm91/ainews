@@ -1,5 +1,6 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from schemas.common import resolve_env_var
@@ -21,8 +22,8 @@ def _is_configured(val: str) -> bool:
 def _search_impl(
     provider: "GoogleSearchProvider", query: str, max_results: int
 ) -> list[SearchResult]:
-    from services.url import validate_url_safe
     from services.search.session import get_session
+    from services.url import validate_url_safe
 
     validate_url_safe(provider.base_url)
 
@@ -68,7 +69,7 @@ class GoogleSearchProvider(BaseSearchProvider):
             return []
 
         try:
-            from services.search import record_search_success, record_search_failure
+            from services.search import record_search_failure, record_search_success
 
             future = _EXECUTOR.submit(_search_impl, self, query, max_results)
             results = future.result(timeout=20)
@@ -86,8 +87,8 @@ class GoogleSearchProvider(BaseSearchProvider):
 
     def health_check(self) -> dict[str, Any]:
         try:
-            from services.url import validate_url_safe, UnsafeURLError
             from services.search.session import get_session
+            from services.url import UnsafeURLError, validate_url_safe
 
             validate_url_safe(self.base_url)
 

@@ -7,6 +7,7 @@ Provides Redis minute-bucket counters for each pipeline stage
 import logging
 import time
 from typing import Optional
+
 import redis.exceptions
 
 logger = logging.getLogger(__name__)

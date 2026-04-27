@@ -1,6 +1,6 @@
 """Tests for services/webhooks.py."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestWebhooks:
@@ -27,9 +27,9 @@ class TestWebhooks:
 
     def test_dispatch_creates_event_record(self, app, create_source):
         """dispatch_webhook should create a WebhookEvent record in the database."""
-        from services.webhooks import dispatch_webhook
-        from models import Webhook, WebhookEvent
         from extensions import db
+        from models import Webhook, WebhookEvent
+        from services.webhooks import dispatch_webhook
 
         with app.app_context():
             webhook = Webhook(
@@ -66,9 +66,9 @@ class TestWebhooks:
 
     def test_trigger_event_only_calls_subscribed_webhooks(self, app):
         """trigger_event should only dispatch to webhooks subscribed to that event."""
-        from services.webhooks import trigger_event
-        from models import Webhook
         from extensions import db
+        from models import Webhook
+        from services.webhooks import trigger_event
 
         with app.app_context():
             webhook_a = Webhook(
@@ -103,9 +103,9 @@ class TestWebhooks:
 
     def test_webhook_idempotency_prevents_duplicate_events(self, app):
         """dispatch_webhook should skip delivery if idempotency_key was already delivered."""
-        from services.webhooks import dispatch_webhook
-        from models import Webhook, WebhookEvent
         from extensions import db
+        from models import Webhook, WebhookEvent
+        from services.webhooks import dispatch_webhook
 
         with app.app_context():
             webhook = Webhook(
@@ -206,8 +206,8 @@ class TestWebhooks:
 
         assert signature_with_ts != signature_without_ts, "Timestamp should affect signature"
 
-        import hmac
         import hashlib
+        import hmac
         expected = hmac.new(
             secret.encode("utf-8"),
             f"{timestamp}:{payload}".encode("utf-8"),
@@ -217,10 +217,11 @@ class TestWebhooks:
 
     def test_dispatch_webhook_returns_false_on_db_error(self, app):
         """dispatch_webhook should return False when database commit fails."""
-        from services.webhooks import dispatch_webhook
-        from models import Webhook
-        from extensions import db
         from sqlalchemy.exc import SQLAlchemyError
+
+        from extensions import db
+        from models import Webhook
+        from services.webhooks import dispatch_webhook
 
         with app.app_context():
             webhook = Webhook(

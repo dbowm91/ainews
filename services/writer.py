@@ -3,10 +3,9 @@ import logging
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
 from schemas.llm_responses import (  # noqa: F401
     CitationItem,
-    OriginalAttribution,
     CondensedArticle,
+    OriginalAttribution,
 )
-
 from services.prompts import esc_xml_text
 
 logger = logging.getLogger(__name__)

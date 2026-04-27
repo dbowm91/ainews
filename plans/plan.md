@@ -1047,7 +1047,7 @@ Document context service: TopicNote CRUD, related articles algorithm, caching, a
 
 ### wave7_5: Create docs/pipeline-failure-tracking.md
 
-Document pipeline failure tracking: Redis key structure, decision tree, stage degradation map, reprocessing behavior (DB reset but Redis keys persist), known bugs.
+**Status:** COMPLETED — Created `docs/pipeline-failure-tracking.md` with Redis key structure, decision tree, stage degradation map, reprocessing behavior (now includes Redis key clearing), known bugs.
 
 ---
 

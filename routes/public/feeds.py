@@ -73,9 +73,10 @@ def index() -> str:
     page = max(1, request.args.get("page", 1, type=int))
     category = request.args.get("category", "", type=str).strip()
     query = request.args.get("q", "", type=str).strip()
+    sort = request.args.get("sort", "recent", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}"
+    cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}:sort:{sort}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -86,6 +87,7 @@ def index() -> str:
         per_page=PER_PAGE,
         category=category if category else None,
         query=query if query else None,
+        sort=sort,
     )
 
     share_configs = _get_share_configs()
@@ -97,6 +99,7 @@ def index() -> str:
         page=page,
         category=category,
         query=query,
+        sort=sort,
         categories=_get_categories(),
         topic_icons=_get_topic_icons(),
         top_impact=parse_articles(_get_top_impact())
@@ -117,9 +120,10 @@ def topic_feed(category: str) -> str:
     from services.cache import get_response_cache
 
     page = max(1, request.args.get("page", 1, type=int))
+    sort = request.args.get("sort", "recent", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"pub:topic:{category}:page:{page}"
+    cache_key = f"pub:topic:{category}:page:{page}:sort:{sort}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -134,6 +138,7 @@ def topic_feed(category: str) -> str:
         page=page,
         per_page=PER_PAGE,
         category=category,
+        sort=sort,
     )
 
     share_configs = _get_share_configs()
@@ -145,6 +150,7 @@ def topic_feed(category: str) -> str:
         page=page,
         category=category,
         query="",
+        sort=sort,
         categories=_get_categories(),
         topic_icons=_get_topic_icons(),
         topic_def=topic_def,

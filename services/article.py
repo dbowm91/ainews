@@ -100,12 +100,25 @@ def track_metric(article_id: int, column: Column) -> None:
         raise
 
 
+def _get_sort_order(sort: str):
+    """Return sort column and direction for article listing."""
+    if sort == "impact":
+        return Article.impact_score.desc()
+    elif sort == "published":
+        from sqlalchemy import desc
+
+        return desc(Article.original_published_at)
+    else:  # "recent" or default
+        return Article.created_at.desc()
+
+
 def get_articles_paginated(
     page: int = 1,
     per_page: int = 20,
     category: Optional[str] = None,
     query: Optional[str] = None,
     status_filter: Optional[str] = None,
+    sort: str = "recent",
 ) -> tuple[list[Article], bool, int]:
     """Get paginated articles with optional filtering.
 
@@ -117,6 +130,7 @@ def get_articles_paginated(
         category: Filter by category
         query: Search query for title/content
         status_filter: Filter by pipeline status
+        sort: Sort order - "recent" (default), "impact", or "published"
 
     Returns:
         Tuple of (articles, has_next, next_page)
@@ -139,7 +153,7 @@ def get_articles_paginated(
             joinedload(Article.metrics),
         )
         .filter(Article.pipeline_status.in_(["done", "skipped"]))
-        .order_by(Article.created_at.desc())
+        .order_by(_get_sort_order(sort))
     )
 
     if category:

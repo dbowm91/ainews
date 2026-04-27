@@ -12,6 +12,90 @@ from services.task_security import get_signed_kwargs
 logger = logging.getLogger(__name__)
 
 
+@admin_bp.route("/api/articles/ids", methods=["GET"])
+@require_auth
+def get_article_ids():
+    """Return article IDs matching the current filter params for bulk selection.
+
+    Query params: q, status, category, source_id, date_from, date_to, impact_min, impact_max, tag
+    Returns: {"ids": [1, 2, 3], "count": 3}
+    """
+    from models import Article, Tag
+    from sqlalchemy.orm import joinedload
+    from services.article import _escape_like_pattern
+    from urllib.parse import urlparse
+
+    query = request.args.get("q", "", type=str).strip()
+    status = request.args.get("status", "", type=str).strip()
+    category = request.args.get("category", "", type=str).strip()
+    source_id = request.args.get("source_id", "", type=str).strip()
+    date_from = request.args.get("date_from", "", type=str).strip()
+    date_to = request.args.get("date_to", "", type=str).strip()
+    impact_min = request.args.get("impact_min", "", type=str).strip()
+    impact_max = request.args.get("impact_max", "", type=str).strip()
+    tag_slug = request.args.get("tag", "", type=str).strip()
+
+    def _query_looks_like_url(q_str):
+        if not q_str:
+            return False
+        if q_str.startswith("http://") or q_str.startswith("https://"):
+            return True
+        parsed = urlparse(q_str)
+        return bool(parsed.scheme and parsed.netloc)
+
+    q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+
+    if query:
+        if _query_looks_like_url(query):
+            escaped = _escape_like_pattern(query)
+            q = q.filter(Article.original_url.ilike(f"%{escaped}%", escape="\\"))
+        else:
+            escaped = _escape_like_pattern(query)
+            q = q.filter(Article.original_title.ilike(f"%{escaped}%", escape="\\"))
+    if status:
+        q = q.filter_by(pipeline_status=status)
+    if category:
+        q = q.filter_by(category=category)
+    if source_id:
+        try:
+            q = q.filter_by(source_id=int(source_id))
+        except ValueError:
+            pass
+    if date_from:
+        try:
+            dt = datetime.fromisoformat(date_from)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            q = q.filter(Article.created_at >= dt)
+        except ValueError:
+            logger.warning("Invalid date_from filter: %s", date_from)
+    if date_to:
+        try:
+            dt = datetime.fromisoformat(date_to)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            q = q.filter(Article.created_at <= dt)
+        except ValueError:
+            logger.warning("Invalid date_to filter: %s", date_to)
+    if impact_min:
+        try:
+            q = q.filter(Article.impact_score >= int(impact_min))
+        except ValueError:
+            pass
+    if impact_max:
+        try:
+            q = q.filter(Article.impact_score <= int(impact_max))
+        except ValueError:
+            pass
+    if tag_slug:
+        tag = Tag.query.filter_by(slug=tag_slug).first()
+        if tag:
+            q = q.filter(Article.tags.any(Tag.id == tag.id))
+
+    ids = [row.id for row in q.with_entities(Article.id).limit(1000).all()]
+    return jsonify({"ids": ids, "count": len(ids)})
+
+
 def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
     from schemas.topic import load_topics
     from services.audit import log_admin_action

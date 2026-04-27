@@ -21,8 +21,9 @@
              hx-get="/admin/articles"
              hx-trigger="input changed delay:300ms"
              hx-target="#articles-table"
-             hx-include="[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag']"
-             hx-indicator="#articles-table-spinner">
+             hx-include="[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag'],[name='date_from'],[name='date_to']"
+             hx-indicator="#articles-table-spinner"
+             hx-push-url="true">
       <div class="filter-bar mt-05" id="filter-bar">
         <input type="hidden" name="status" value="{{ status }}">
         <input type="hidden" name="category" value="{{ category }}">
@@ -83,18 +84,39 @@
           <input type="number" name="impact_min" id="impact_min" class="filter-input" aria-label="Min impact score"
                  placeholder="min" value="{{ impact_min }}" min="0" max="100"
                  hx-get="/admin/articles"
-                 hx-trigger="change"
+                 hx-trigger="input changed delay:500ms, change"
                  hx-target="#articles-table"
-                 hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_max']"
+                 hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_max'],[name='date_from'],[name='date_to']"
                  hx-indicator="#articles-table-spinner"
                  hx-push-url="true">
           <span class="filter-separator">to</span>
           <input type="number" name="impact_max" id="impact_max" class="filter-input" aria-label="Max impact score"
                  placeholder="max" value="{{ impact_max }}" min="0" max="100"
                  hx-get="/admin/articles"
+                 hx-trigger="input changed delay:500ms, change"
+                 hx-target="#articles-table"
+                 hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_min'],[name='date_from'],[name='date_to']"
+                 hx-indicator="#articles-table-spinner"
+                 hx-push-url="true">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label" for="date_from">from:</label>
+          <input type="date" name="date_from" id="date_from" class="filter-input"
+                 value="{{ date_from }}"
+                 hx-get="/admin/articles"
                  hx-trigger="change"
                  hx-target="#articles-table"
-                 hx-include="[name='q'],[name='status'],[name='category'],[name='tag'],[name='impact_min']"
+                 hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag'],[name='date_to']"
+                 hx-indicator="#articles-table-spinner"
+                 hx-push-url="true">
+          <span class="filter-separator">to</span>
+          <label class="filter-label" for="date_to">to:</label>
+          <input type="date" name="date_to" id="date_to" class="filter-input"
+                 value="{{ date_to }}"
+                 hx-get="/admin/articles"
+                 hx-trigger="change"
+                 hx-target="#articles-table"
+                 hx-include="[name='q'],[name='status'],[name='category'],[name='impact_min'],[name='impact_max'],[name='tag'],[name='date_from']"
                  hx-indicator="#articles-table-spinner"
                  hx-push-url="true">
         </div>

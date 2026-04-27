@@ -36,6 +36,18 @@
     {% endfor %}
   </div>
 
+  <select name="sort" class="sort-select" aria-label="Sort articles"
+          hx-get="{{ url_for('public.index') }}"
+          hx-trigger="change"
+          hx-target="#content"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-include="[name='category'],[name='q']">
+    <option value="recent" {% if sort == 'recent' %}selected{% endif %}>most recent</option>
+    <option value="impact" {% if sort == 'impact' %}selected{% endif %}>highest impact</option>
+    <option value="published" {% if sort == 'published' %}selected{% endif %}>published date</option>
+  </select>
+
   <div id="active-filters" class="active-filters">
     {% if category %}
       <span class="filter-pill">{{ category }}<a href="/" class="pill-close" aria-label="Remove {{ category }} filter">&times;</a></span>
@@ -78,7 +90,7 @@
 
   {% if has_next %}
   <div id="scroll-sentinel"
-       hx-get="{{ url_for('public.index', page=next_page, category=category, q=query) }}"
+       hx-get="{{ url_for('public.index', page=next_page, category=category, q=query, sort=sort) }}"
        hx-trigger="revealed"
        hx-swap="outerHTML"
        hx-target="#scroll-sentinel"
@@ -88,7 +100,7 @@
       <span class="spinner" aria-live="polite">loading more...</span>
     </div>
     <noscript>
-      <a href="{{ url_for('public.index', page=next_page, category=category, q=query) }}" class="btn-secondary mt-05">load more articles</a>
+      <a href="{{ url_for('public.index', page=next_page, category=category, q=query, sort=sort) }}" class="btn-secondary mt-05">load more articles</a>
     </noscript>
   </div>
   {% endif %}

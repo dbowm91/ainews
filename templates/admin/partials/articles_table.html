@@ -38,6 +38,16 @@
     <thead>
       <tr><th><input type="checkbox" id="select-all-checkbox" aria-label="Select all"></th><th>title</th><th>category</th><th>status</th><th>impact</th><th>created</th><th>actions</th></tr>
     </thead>
+    <tfoot>
+      <tr id="select-matching-row" style="display:none;">
+        <td colspan="7">
+          <button type="button" class="btn btn-sm btn-secondary" id="select-all-matching-btn">
+            select all {{ total_count }} matching
+          </button>
+          <button type="button" class="btn btn-sm" id="deselect-all-btn">deselect all</button>
+        </td>
+      </tr>
+    </tfoot>
     <tbody>
       {% for article in articles %}
         <tr>
@@ -67,7 +77,7 @@
     </tbody>
   </table>
   </div>
-  {{ pagination_nav(page, has_next, next_page, total_count, 20, "/admin/articles", {"q": query, "status": status, "category": category}) }}
+  {{ pagination_nav(page, has_next, next_page, total_count, 20, "/admin/articles", {"q": query, "status": status, "category": category, "date_from": date_from, "date_to": date_to, "impact_min": impact_min, "impact_max": impact_max, "tag_slug": tag_slug}) }}
   <script>
   (function() {
     var bar = document.getElementById('bulk-actions-bar');
@@ -111,6 +121,50 @@
         htmx.trigger(btn, 'click');
       });
     });
+  })();
+
+  (function() {
+    function checkFiltersActive() {
+      var params = new URLSearchParams(window.location.search);
+      return params.has('q') || params.has('status') || params.has('category') ||
+             params.has('date_from') || params.has('date_to') ||
+             params.has('impact_min') || params.has('impact_max') || params.has('tag');
+    }
+
+    var selectMatchingRow = document.getElementById('select-matching-row');
+    if (checkFiltersActive() && selectMatchingRow) {
+      selectMatchingRow.style.display = 'table-row';
+    }
+
+    var selectAllMatchingBtn = document.getElementById('select-all-matching-btn');
+    var deselectAllBtn = document.getElementById('deselect-all-btn');
+
+    if (selectAllMatchingBtn) {
+      selectAllMatchingBtn.addEventListener('click', function() {
+        var url = new URL('/admin/api/articles/ids', window.location.origin);
+        var params = new URLSearchParams(window.location.search);
+        params.delete('page');
+        url.search = params.toString();
+        fetch(url.toString())
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.ids) {
+              data.ids.forEach(function(id) {
+                var cb = document.querySelector('.article-checkbox[value="' + id + '"]');
+                if (cb) cb.checked = true;
+              });
+              if (typeof updateBar === 'function') updateBar();
+            }
+          });
+      });
+    }
+
+    if (deselectAllBtn) {
+      deselectAllBtn.addEventListener('click', function() {
+        document.querySelectorAll('.article-checkbox').forEach(function(cb) { cb.checked = false; });
+        if (typeof updateBar === 'function') updateBar();
+      });
+    }
   })();
   </script>
 {% else %}

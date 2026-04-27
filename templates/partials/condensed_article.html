@@ -62,10 +62,10 @@
 
 {# What To Watch #}
 {% if fa.what_to_watch %}
-  <section class="article-what-to-watch">
-    <h2 class="section-heading">what to watch</h2>
+  <details class="article-what-to-watch">
+    <summary class="section-heading">what to watch <span class="details-arrow">&#9658;</span></summary>
     <div class="what-to-watch-text">{{ fa.what_to_watch|e }}</div>
-  </section>
+  </details>
 {% endif %}
 
 {# Tags #}

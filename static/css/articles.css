@@ -314,10 +314,36 @@
 
 .article-what-to-watch {
   margin-bottom: 1.5rem;
-  padding: 1rem 1.25rem;
   background: rgba(139, 148, 158, 0.06);
   border: 1px solid var(--border);
   border-radius: 6px;
+}
+
+.article-what-to-watch > summary {
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.article-what-to-watch > summary::-webkit-details-marker {
+  display: none;
+}
+
+.article-what-to-watch > summary .details-arrow {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  transition: transform 0.2s ease;
+}
+
+.article-what-to-watch[open] > summary .details-arrow {
+  transform: rotate(90deg);
+}
+
+.article-what-to-watch > div {
+  padding: 0 1.25rem 1rem;
 }
 
 .what-to-watch-text {

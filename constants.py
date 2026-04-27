@@ -38,7 +38,7 @@ class PipelineStatus:
 # Valid pipeline status transitions
 # Each status maps to the set of statuses it can transition to
 VALID_TRANSITIONS: dict[str, frozenset] = {
-    PipelineStatus.PENDING: frozenset([PipelineStatus.RESEARCHING]),
+    PipelineStatus.PENDING: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
     PipelineStatus.RESEARCHING: frozenset([PipelineStatus.WRITING, PipelineStatus.FAILED]),
     PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
     PipelineStatus.EDITING: frozenset([PipelineStatus.REVIEW, PipelineStatus.DONE, PipelineStatus.FAILED]),

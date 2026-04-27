@@ -112,6 +112,10 @@ def create_app(config_name=None):
         "style-src": "'self' 'unsafe-inline'",
         "script-src": "'self'",
         "img-src": "'self' data:",
+        "connect-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'",
     }
     Talisman(
         app,

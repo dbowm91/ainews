@@ -90,9 +90,22 @@ class TestBulkArticles:
             db.session.commit()
         resp = auth_client.post(
             "/admin/api/articles/bulk",
-            json={"article_ids": [aid], "action": "set_status", "status": "done"},
+            json={"article_ids": [aid], "action": "set_status", "status": "researching"},
         )
         assert resp.status_code == 200
+
+    def test_set_status_invalid_transition(self, auth_client, create_article, app):
+        from extensions import db
+
+        with app.app_context():
+            aid = create_article(pipeline_status="pending").id
+            db.session.commit()
+        resp = auth_client.post(
+            "/admin/api/articles/bulk",
+            json={"article_ids": [aid], "action": "set_status", "status": "done"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid transition" in resp.json["error"]
 
     def test_set_category(self, auth_client, create_article, app):
         from extensions import db

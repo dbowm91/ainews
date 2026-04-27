@@ -91,7 +91,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
 - **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin UI at `/admin/webhooks` displays webhook list and event history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
 - **DEBUG warning in production**: `app.py` logs a warning if `DEBUG=True` in production context.
-- **Cost tracking**: `services/cost_tracker.py` tracks LLM costs with admin endpoint `GET /admin/api/costs`. Pricing for DeepSeek should be `output: 0.42` (currently incorrect at `1.10`). Also add pricing for: `ollama-local/qwen3:8b`, `anthropic/claude-sonnet-4-5-20250929`, `opencode/opencode`, `gemini/gemini-2.5-flash`.
+- **Cost tracking**: `services/cost_tracker.py` tracks LLM costs with admin endpoint `GET /admin/api/costs`. `_DEFAULT_RATES` dict maps provider/model to input/output per-1M-token pricing. See `plans/plan.md` for pending pricing corrections.
 
 ## Subagent system
 
@@ -684,4 +684,20 @@ retry_messages.append({
 **`traced_stage()` integrated**: Defined at `services/logging_utils.py:262-281` and now wired into `run_stage()` at `tasks/pipeline.py:308` via `with traced_stage(stage, "work"):`.
 
 **Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.
+
+**ShareConfig has no admin CRUD**: `routes/admin/shares.py` only has list and toggle routes. ShareConfig records are created via seed data in `app.py`. There is no create/edit/delete route. The `url_template` column has no validation (no scheme check).
+
+**Webhook events defined but not all triggered**: `KNOWN_WEBHOOK_EVENTS` at `routes/admin/api/webhooks.py:12-17` defines `article.published`, `article.failed`, `newsletter.sent`, `newsletter.failed`. Only `article.published` (tasks/edit.py) and `newsletter.sent` (tasks/newsletter.py) are actually triggered. `article.failed` and `newsletter.failed` have no trigger calls.
+
+**newsletter_id in webhook payload**: `tasks/newsletter.py:259` passes `nl.id` where `nl` is a `NewsletterConfig` (Pydantic schema from pipeline.yaml), not a `Newsletter` model. `nl.id` is always `None`. The actual Newsletter model is the local variable `newsletter` created earlier in the function.
+
+**share-a11y.js duplicates app.js**: Both `static/js/share-a11y.js` and `static/js/app.js` have toggle event listeners on `.share-details`. The app.js version handles dropdown positioning but sets `aria-expanded` to a boolean (line 61). The share-a11y.js version correctly uses `.toString()` and adds focus management. These should be merged into app.js.
+
+**`safe_href` filter usage**: The `safe_href` Jinja2 filter exists at `app.py:238-253` and validates URL scheme + SSRF. It is used in `article_card.html`, `condensed_article.html`, and `article_edit.html`. The share templates (`share_macro.html`, `share_redirect.html`) do NOT use it.
+
+**`find_related_articles_cached()`**: Exists at `services/related.py` with 600s TTL using key `pub:related:{article_id}`. The article detail route at `routes/public/links.py:50` calls the uncached `find_related_articles()` directly instead.
+
+**`_find_overlapping_low_entries` dead code**: Function at `services/trend_memory.py:274-287` is never called. `consolidate_topic` at line 290 uses direct SQL UPDATE instead. Safe to remove.
+
+**Implementation plan**: Active implementation items are tracked in `plans/plan.md`. Do not create new plan files — keep all pending items in the single consolidated plan.
 

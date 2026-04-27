@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Optional
 import logging
 import os
+import urllib3
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
     cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", str(timeout))
     try:
         return trafilatura.fetch_url(url, config=cfg)
-    except Exception as e:
+    except (urllib3.exceptions.HTTPError, ValueError) as e:
         logger.warning("Content fetch failed for %s: %s", url, e)
         return None
 

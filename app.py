@@ -3,6 +3,7 @@ import logging
 import time
 from flask import Flask, render_template, jsonify, request, g
 from sqlalchemy import event
+from sqlalchemy.exc import SQLAlchemyError
 from config import config
 from extensions import db, limiter, csrf, migrate
 from logging_config import setup_logging
@@ -50,7 +51,7 @@ def _seed_share_configs():
             db.session.add(ShareConfig(**d))
     try:
         db.session.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
         logger.warning("Failed to seed share configs", exc_info=True)
 

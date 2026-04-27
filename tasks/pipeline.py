@@ -19,17 +19,11 @@ from services.llm import (
     record_provider_failure,
 )
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
-from services.pipeline_degradation import (
-    apply_fallback as _apply_fallback,
-)
 from services.pipeline_degradation import (  # noqa: F401
     degrade_stage as _degrade_and_advance,
 )
 from services.pipeline_degradation import (
     finalize_article as _finalize,
-)
-from services.pipeline_degradation import (
-    should_route_to_review as _should_route_to_review,
 )
 from services.pipeline_failure import _get_max_stage_retries, _get_max_total_retries  # noqa: F401
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure  # noqa: F401

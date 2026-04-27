@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from routes import limit_content_length
-from constants import PipelineStatus, VALID_PIPELINE_STATUSES
+from constants import PipelineStatus, VALID_PIPELINE_STATUSES, VALID_TRANSITIONS
 from services.task_security import get_signed_kwargs
 
 logger = logging.getLogger(__name__)
@@ -248,8 +248,18 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
                     "error": f"Invalid status. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}"
                 }
             ), 400
+
         try:
             for article in articles:
+                current_status = article.pipeline_status
+                valid_next = VALID_TRANSITIONS.get(current_status, frozenset())
+                if new_status not in valid_next:
+                    return jsonify(
+                        {
+                            "error": f"Invalid transition from '{current_status}' to '{new_status}'. "
+                            f"Valid transitions from '{current_status}': {', '.join(sorted(valid_next)) if valid_next else 'none'}"
+                        }
+                    ), 400
                 article.pipeline_status = new_status
             db.session.commit()
         except SQLAlchemyError:

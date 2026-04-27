@@ -124,6 +124,7 @@ def consolidate_trend_memory(self):
     importance and TTL'd.
     """
     from services.trend_memory import consolidate_all_topics
+    from extensions import db
 
     try:
         results = consolidate_all_topics()
@@ -135,6 +136,7 @@ def consolidate_trend_memory(self):
         )
         return {"merged": total_merged, "topics": results}
     except SoftTimeLimitExceeded:
+        db.session.rollback()
         logger.error("consolidate_trend_memory exceeded soft time limit")
         raise
     except Exception as e:
@@ -205,12 +207,14 @@ def purge_trend_memory(self):
     expires_at timestamp has passed.
     """
     from services.trend_memory import purge_expired
+    from extensions import db
 
     try:
         purged = purge_expired()
         logger.info("Trend memory purge: removed %d expired entries", purged)
         return {"purged": purged}
     except SoftTimeLimitExceeded:
+        db.session.rollback()
         logger.error("purge_trend_memory exceeded soft time limit")
         raise
     except Exception as e:

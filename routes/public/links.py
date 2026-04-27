@@ -50,12 +50,25 @@ def article_detail(article_id: int) -> Response:
     related = parse_articles(find_related_articles(article, limit=5))
     share_configs = _get_share_configs()
 
+    word_count = 0
+    if article.final_article:
+        try:
+            import json
+            fa_data = json.loads(article.final_article)
+            text_fields = [fa_data.get("body", ""), fa_data.get("tldr", ""), fa_data.get("why_it_matters", ""), fa_data.get("what_to_watch", "")]
+            text_content = " ".join(str(f) for f in text_fields if f)
+            word_count = len(text_content.split())
+        except Exception:
+            word_count = 0
+    reading_time = max(1, word_count // 200)
+
     ctx = dict(
         article=article,
         topic_def=topic_def,
         max_key_points=max_key_points,
         related_articles=related,
         share_configs=share_configs,
+        reading_time=reading_time,
     )
     if request.headers.get("HX-Request"):
         response = render_template("partials/article_detail.html", **ctx)

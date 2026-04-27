@@ -19,14 +19,40 @@ def _get_dashboard_cache_key() -> str:
 def dead_letters() -> str:
     from models import Article
     from constants import PipelineStatus
+    from flask import request
+
+    failed_page = max(1, request.args.get("failed_page", 1, type=int))
+    stuck_page = max(1, request.args.get("stuck_page", 1, type=int))
+    per_page = 20
+
+    failed_count = (
+        Article.query.filter_by(pipeline_status=PipelineStatus.FAILED).count()
+    )
+    failed_total_pages = (failed_count + per_page - 1) // per_page
 
     dead_letter_articles = (
         Article.query.filter_by(pipeline_status=PipelineStatus.FAILED)
         .options(joinedload(Article.source))
         .order_by(Article.updated_at.desc())
-        .limit(100)
+        .offset((failed_page - 1) * per_page)
+        .limit(per_page)
         .all()
     )
+
+    stuck_count = (
+        Article.query.filter(
+            Article.pipeline_status.in_(
+                [
+                    PipelineStatus.RESEARCHING,
+                    PipelineStatus.WRITING,
+                    PipelineStatus.EDITING,
+                    PipelineStatus.PENDING,
+                ]
+            )
+        )
+        .count()
+    )
+    stuck_total_pages = (stuck_count + per_page - 1) // per_page
 
     stuck_articles = (
         Article.query.filter(
@@ -41,15 +67,10 @@ def dead_letters() -> str:
         )
         .options(joinedload(Article.source))
         .order_by(Article.updated_at.asc())
-        .limit(50)
+        .offset((stuck_page - 1) * per_page)
+        .limit(per_page)
         .all()
     )
-
-    failed_count = (
-        Article.query.filter_by(pipeline_status=PipelineStatus.FAILED).count()
-    )
-
-    stuck_count = len(stuck_articles)
 
     return render_template(
         "admin/dead_letters.html",
@@ -57,6 +78,11 @@ def dead_letters() -> str:
         stuck_articles=stuck_articles,
         failed_count=failed_count,
         stuck_count=stuck_count,
+        failed_page=failed_page,
+        stuck_page=stuck_page,
+        failed_total_pages=failed_total_pages,
+        stuck_total_pages=stuck_total_pages,
+        per_page=per_page,
     )
 
 

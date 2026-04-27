@@ -15,6 +15,10 @@
       <span class="meta-separator">&middot;</span>
       <span class="meta-author">{{ article.original_author | e }}</span>
     {% endif %}
+    {% if reading_time is defined and reading_time > 0 %}
+      <span class="meta-separator">&middot;</span>
+      <span class="meta-time">{{ reading_time }} min read</span>
+    {% endif %}
     {{ share_button(article, share_configs, request, 'detail-' ~ article.id) }}
   </div>
 </div>

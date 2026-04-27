@@ -220,6 +220,15 @@ def _generate_topic_newsletter_impl(
             topic_key,
             email_error,
         )
+        try:
+            from services.webhooks import trigger_event
+            trigger_event("newsletter.failed", {
+                "newsletter_id": newsletter.id,
+                "newsletter_type": topic_key,
+                "error": str(email_error),
+            })
+        except Exception as wh_exc:
+            logger.warning("Failed to trigger newsletter.failed webhook: %s", wh_exc)
         return {"type": topic_key, "articles": count, "sent": 0, "error": email_error}
 
     newsletter.recipients = sent
@@ -256,7 +265,7 @@ def _generate_topic_newsletter_impl(
         trigger_event(
             "newsletter.sent",
             {
-                "newsletter_id": nl.id if hasattr(nl, "id") else None,
+                "newsletter_id": newsletter.id,
                 "newsletter_type": topic_key,
                 "subject": subject,
                 "article_count": count,

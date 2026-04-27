@@ -139,11 +139,18 @@ class ResponseCache:
                     except redis.exceptions.RedisError:
                         pass
             else:
-                result = self._redis.blpop(lock_key, timeout=5)
-                if result is not None:
+                for _ in range(10):
                     cached = self.get(key)
                     if cached is not None:
                         return cached
+                    if not self._redis.exists(lock_key):
+                        break
+                    time.sleep(0.05)
+
+                cached = self.get(key)
+                if cached is not None:
+                    return cached
+
                 if self._redis.set(lock_key, "1", nx=True, ex=10):
                     try:
                         cached = self.get(key)

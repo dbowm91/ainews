@@ -1,6 +1,7 @@
 from flask import render_template, request
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from routes.admin import admin_bp, require_auth
 
 
@@ -32,6 +33,7 @@ def metrics():
     # Top articles by page loads
     top_by_views = (
         db.session.query(Article, ArticleMetric.page_loads)
+        .options(joinedload(Article.source))
         .join(ArticleMetric, Article.id == ArticleMetric.article_id)
         .filter(
             ArticleMetric.page_loads > 0,
@@ -45,6 +47,7 @@ def metrics():
     # Top articles by share clicks
     top_by_shares = (
         db.session.query(Article, ArticleMetric.share_button_clicks)
+        .options(joinedload(Article.source))
         .join(ArticleMetric, Article.id == ArticleMetric.article_id)
         .filter(
             ArticleMetric.share_button_clicks > 0,
@@ -58,6 +61,7 @@ def metrics():
     # Top articles by share link views
     top_by_link_views = (
         db.session.query(Article, ArticleMetric.share_link_views)
+        .options(joinedload(Article.source))
         .join(ArticleMetric, Article.id == ArticleMetric.article_id)
         .filter(
             ArticleMetric.share_link_views > 0,

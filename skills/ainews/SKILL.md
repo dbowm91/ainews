@@ -303,7 +303,7 @@ Available schemas in `schemas/tasks.py`:
 
 ## Dead Letter Queue UI
 
-Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
+Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`. Pagination supported via `failed_page` and `stuck_page` query params (20 items per page).
 
 ## Trend Memory Admin UI
 
@@ -353,7 +353,7 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **Redis TLS**: `extensions.py` and `services/config_cache.py` check for `REDIS_SSL=true` or `rediss://` scheme; `ssl=True` is only passed to ConnectionPool when needed (redis 6.4.0 compatibility)
 - **Cache key namespacing**: Public cache keys use `pub:` prefix (e.g., `pub:top_impact:10`, `pub:article_detail:123`). Admin invalidation uses `pub:` prefix. See `routes/public/feeds.py` and `routes/public/links.py`.
 - **Health endpoint detailed auth**: `GET /health?detailed=true` requires admin session — otherwise returns basic health only. Prevents information disclosure (git hash, DB pool stats)
-- **ResponseCache stampede protection**: `services/cache.py:get_or_set()` wraps the entire lock acquisition + value computation in `redis.exceptions.RedisError` try/except, falling back to uncached computation if Redis is unavailable
+- **ResponseCache stampede protection**: `services/cache.py:get_or_set()` wraps the entire lock acquisition + value computation in `redis.exceptions.RedisError` try/except, falling back to uncached computation if Redis is unavailable. Uses bounded polling with `redis.exists()` (10 × 50ms = 500ms max wait) instead of `blpop` to avoid WRONGTYPE errors on string lock keys.
 - **SoftTimeLimitExceeded work persistence**: When soft timeout occurs in pipeline stages, `tasks/pipeline.py` persists failure state (last_error, retry_count, total_retries) to DB before re-raising. The article retains its current `pipeline_status` so it retries in-place from the stage where it timed out, not from the beginning.
 - **ThreadPoolExecutor pattern**: Services use bounded pools with `submit()` + `future.result(timeout=N)` instead of spawning unbounded daemon threads. `services/article.py` uses 2-worker pool for search logging, `services/content_extractor.py` uses configurable pool (default 8 workers via `CONTENT_EXTRACTOR_WORKERS` env var).
 - **Exponential backoff**: Subagent retries use `min(1.0 * (2 ** attempt) + random.uniform(0, 0.5), retry_delay)` instead of fixed delays.

@@ -1,0 +1,21 @@
+{
+  "name": "ainews// AI News",
+  "short_name": "ainews",
+  "description": "AI news condensed by agents — stay current on AI, security, privacy, and more.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#58a6ff",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/svg/ai.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["news", "entertainment"],
+  "lang": "en",
+  "scope": "/"
+}

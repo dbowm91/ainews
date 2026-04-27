@@ -345,8 +345,8 @@ def process_item(
         try:
             from services.metrics import get_metrics
             get_metrics().increment("pipeline.dedup_check_failed", tags={"source": source_key})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to increment dedup_check_failed metric: %s", e)
 
     if duplicate:
         result = _handle_duplicate(

@@ -58,7 +58,11 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!e.target.classList.contains("share-details")) return;
     var summary = e.target.querySelector("summary");
     if (summary) {
-      summary.setAttribute("aria-expanded", e.target.open);
+      summary.setAttribute("aria-expanded", e.target.open.toString());
+    }
+    if (e.target.open) {
+      var focusable = e.target.querySelector(".share-dropdown input, .share-dropdown button, .share-dropdown a");
+      if (focusable) focusable.focus();
     }
     var dropdown = e.target.querySelector(".share-dropdown");
     if (!dropdown) return;

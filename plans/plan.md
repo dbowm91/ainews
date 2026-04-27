@@ -1,7 +1,7 @@
 # Consolidated Implementation Plan
 
 **Created:** April 26, 2026
-**Status:** COMPLETED — All 9 waves implemented
+**Status:** COMPLETED — All waves 1-9 implemented, all plan items verified and fixed
 
 ---
 
@@ -68,6 +68,7 @@ Each item can be implemented by a separate agent with no cross-dependencies.
 
 **File:** `routes/admin/api/pipeline.py:130`
 **Verified:** Yes — `s.last_error` is a Text field (string), calling `.isoformat()` on it crashes with `AttributeError` when non-empty
+**Status:** FIXED — `s.last_error.isoformat()` changed to `s.disabled_at.isoformat()` at line 130
 **Severity:** Critical — crash bug
 **Effort:** Trivial
 
@@ -87,8 +88,9 @@ Each item can be implemented by a separate agent with no cross-dependencies.
 
 ### wave1_2: Invalid state transition + silent failure in extract task
 
-**File:** `tasks/extract.py:180-187`
+**File:** `tasks/extract.py:185-191`
 **Verified:** Yes — direct `pipeline_status = "failed"` at line 183 bypasses state machine
+**Status:** FIXED — replaced with `db.session.rollback()` + re-raise, no direct status assignment
 **Severity:** Critical — data integrity violation
 **Effort:** Low
 
@@ -123,8 +125,9 @@ The exception is re-raised so the caller's exception handler at lines 366-383 ha
 
 ### wave1_3: health_check function indentation bug
 
-**File:** `services/search/google.py:82`
+**File:** `services/search/google.py:87-110`
 **Verified:** Yes — `def health_check(self)` at column 0 (module-level), not indented inside class
+**Status:** FIXED — properly indented as class method (8-space method body indentation)
 **Severity:** Critical — AttributeError when called as instance method
 **Effort:** Trivial
 
@@ -149,8 +152,10 @@ def health_check(self) -> dict[str, Any]:  # module-level! BUG
 
 ### wave1_4: Remove ast.Call from condition evaluator (SECURITY)
 
-**File:** `services/subagent.py:1025-1029`
+**File:** `services/subagent.py:1067-1076`
 **Verified:** Yes — `ast.Call` handler allows calling any function reachable through the evaluation chain
+**Status:** FIXED — `ast.Call` raises `ValueError("Function calls not allowed in conditions")`, re-raised by caller
+**Note:** Other unsafe constructs (`ast.Lambda`, `ast.BinOp`, `ast.UnaryOp`, `ast.Attribute` dunder access) also raise ValueError
 **Severity:** High — security
 **Effort:** Trivial
 
@@ -173,6 +178,7 @@ elif isinstance(node, ast.Call):
 
 **File:** `app.py:245-252`
 **Verified:** Yes — `except Exception` catches ImportError, AttributeError, etc. — too broad
+**Status:** FIXED — narrowed to `(UnsafeURLError, ValueError)` with `logger.debug`
 **Severity:** Medium
 **Effort:** Trivial
 
@@ -206,6 +212,7 @@ The `validate_url_safe` import is currently inside the try block. Move it to mod
 
 **File:** `.dockerignore`
 **Verified:** Partially — current file is functional but missing some entries
+**Status:** FIXED — added `.ruff_cache/`, `tests/`, `plans/`, `dump.rdb`, `.DS_Store`, `*.log`
 **Severity:** Low
 **Effort:** Trivial
 
@@ -224,7 +231,8 @@ dump.rdb
 ### wave1_7: Dead letters table missing columns
 
 **File:** `templates/admin/dead_letters.html`
-**Verified:** Yes — thead at line 59 defines 7 columns (title, source, category, status, error, updated, actions) but tbody (lines 63-75) only renders 5 `<td>` elements. Status and error columns are entirely missing.
+**Verified:** Yes — thead at line 59 defines 7 columns (title, source, category, status, error, updated, actions) but tbody only renders 5 `<td>` elements. Status and error columns are entirely missing.
+**Status:** FIXED — status and error columns added to tbody
 **Severity:** Medium — UI bug
 **Effort:** Trivial
 

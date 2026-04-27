@@ -689,29 +689,29 @@ retry_messages.append({
 
 The following bugs are documented and prioritized in `plans/plan.md` for implementation. Do not re-discover or re-report these — refer to the plan for details and fix instructions.
 
-- `initialize_tool_registry()` signature mismatch (`services/subagent.py:328`)
-- Subagent retry backoff off by one (`services/subagent.py:512`)
+- ~~`initialize_tool_registry()` signature mismatch~~ — FIXED (returns list[ToolDefinition])
+- ~~Subagent retry backoff off by one~~ — FIXED (2**attempt formula)
 - PENDING→REVIEW transition missing from `VALID_TRANSITIONS` (`constants.py:41`)
-- DuckDuckGo SSRF validation missing (`services/search/duckduckgo.py`)
-- Chain condition `previous` not in `_ALLOWED_NAMES` (`services/subagent.py:966`)
-- Single-brace template variables not resolved (`services/subagent.py:1050`)
-- `disabled_at` field bug in pipeline stats API (`routes/admin/api/pipeline.py:130`)
-- Direct `pipeline_status = "failed"` in extract task (`tasks/extract.py:183`)
-- Google `health_check` defined outside class (`services/search/google.py:82`)
-- `ast.Call` handler in condition evaluator (`services/subagent.py:1025-1029`)
-- `safe_href` catches all exceptions (`app.py:245`)
-- Dead letters table missing status/error columns (`templates/admin/dead_letters.html`)
+- ~~DuckDuckGo SSRF validation missing~~ — FIXED
+- ~~Chain condition `previous` not in `_ALLOWED_NAMES`~~ — FIXED
+- ~~Single-brace template variables not resolved~~ — FIXED
+- ~~`disabled_at` field bug in pipeline stats API~~ — FIXED
+- ~~Direct `pipeline_status = "failed"` in extract task~~ — FIXED (uses rollback + re-raise)
+- ~~Google `health_check` defined outside class~~ — FIXED (indented as class method)
+- ~~`ast.Call` handler in condition evaluator~~ — FIXED (raises ValueError, not allowed)
+- ~~`safe_href` catches all exceptions~~ — FIXED (narrowed to UnsafeURLError, ValueError)
+- ~~Dead letters table missing status/error columns~~ — FIXED
 - `set_status` admin route bypasses state machine (`routes/admin/api/articles.py:253`)
 - Missing `db.session.rollback()` in cleanup SoftTimeLimitExceeded handlers (`tasks/cleanup.py`)
 - Webhook returns prior success after rollback (`services/webhooks.py:274`)
 - Subscriber `.all()` OOM risk (`tasks/newsletter.py:507`)
-- AuthError bypasses provider fallback (`tasks/pipeline.py:188`)
-- Stage failure Redis keys not cleared on reprocess (`routes/admin/api/articles.py`)
+- ~~AuthError bypasses provider fallback~~ — FIXED (added to fallback tuple)
+- ~~Stage failure Redis keys not cleared on reprocess~~ — FIXED
 - ResponseCache blpop race condition (`services/cache.py:141`)
-- `_evict_stale()` only called in `set()`, not `get()` (`services/cache.py`)
-- `retry_stuck` task has no `autoretry_for` (`tasks/retry.py:20`)
-- `retry_backoff=30` in four pipeline tasks (should be `True`)
-- `aggregate_crawl_results` already has `autoretry_for` — do not re-add
+- ~~`_evict_stale()` only called in `set()`, not `get()`~~ — FIXED
+- ~~`retry_stuck` task has no `autoretry_for`~~ — FIXED (added autoretry_for)
+- ~~`retry_backoff=30` in four pipeline tasks~~ — FIXED (set to True)
+- ~~`aggregate_crawl_results` already has `autoretry_for`~~ — acknowledged, not re-added
 
 ## Codebase verification notes (April 26, 2026 session)
 

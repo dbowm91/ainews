@@ -2,13 +2,33 @@
 set -euo pipefail
 
 # ainews Installation Script
-# Run as root: sudo bash scripts/install.sh
+# Run as root: sudo bash scripts/install.sh [-d|--dir <path>] [--pull-ollama-model]
 
 APP_NAME="ainews"
 APP_USER="ainews"
 APP_GROUP="ainews"
 APP_DIR="/opt/ainews"
-REPO_URL="https://github.com/yourorg/ainews.git"
+REPO_URL="${REPO_URL:-https://github.com/yourorg/ainews.git}"
+
+# Default flags
+PULL_OLLAMA=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -d|--dir)
+            APP_DIR="$2"
+            shift 2
+            ;;
+        --pull-ollama-model)
+            PULL_OLLAMA=true
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -161,9 +181,7 @@ if command -v ollama &>/dev/null; then
     OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" "$APP_DIR/.env" 2>/dev/null | cut -d= -f2- || echo "")
     if [[ -n "$OLLAMA_MODEL" && "$OLLAMA_MODEL" != "llama3.1" ]]; then
         log_info "Ollama detected. Pull model '$OLLAMA_MODEL'?"
-        read -p "  Pull model now? (y/N) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [[ $PULL_OLLAMA == true ]] || (read -p "  Pull model now? (y/N) " -n 1 -r && echo && [[ $REPLY =~ ^[Yy]$ ]]); then
             ollama pull "$OLLAMA_MODEL"
             log_info "Model $OLLAMA_MODEL pulled"
         else
@@ -223,6 +241,11 @@ log_info "  systemctl status ainews-web"
 log_info ""
 log_info "View logs:"
 log_info "  journalctl -u ainews-web -f"
+log_info ""
+log_info "Install options used:"
+log_info "  -d, --dir <path>         : Override app directory (default: /opt/ainews)"
+log_info "  --pull-ollama-model     : Auto-pull Ollama model without prompting"
+log_info "  REPO_URL=<url>          : Override repo URL via environment variable"
 log_info ""
 log_info "IMPORTANT: Edit $APP_DIR/.env to configure:"
 log_info "  - SMTP settings for newsletter delivery"

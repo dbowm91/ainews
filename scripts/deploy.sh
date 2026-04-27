@@ -33,6 +33,9 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# Clean up git environment variables to prevent interference
+unset GIT_DIR GIT_WORK_TREE GIT_QUARANTINE_PATH GIT_ASKPASS GIT_NOTES_REF
+
 # Check if app directory exists
 if [[ ! -d "$APP_DIR" ]]; then
     log_error "Application directory $APP_DIR not found"
@@ -83,7 +86,19 @@ log_info "Running pre-deployment checks..."
 
 # Check git repository
 if [[ ! -d ".git" ]]; then
-    log_error "Not a git repository"
+    log_error "Not a git repository at $APP_DIR"
+    exit 1
+fi
+
+if [[ ! -r ".git/config" ]]; then
+    log_error ".git/config not readable. Check permissions on $APP_DIR/.git"
+    exit 1
+fi
+
+# Check for detached HEAD
+if sudo -u "$APP_USER" git rev-parse --verify HEAD &>/dev/null && ! sudo -u "$APP_USER" git symbolic-ref -q HEAD &>/dev/null; then
+    log_error "HEAD is detached. Cannot deploy from a detached HEAD state."
+    log_error "Checkout a branch and try again."
     exit 1
 fi
 

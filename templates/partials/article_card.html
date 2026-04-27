@@ -30,13 +30,16 @@
   {% elif article.summary and not article._summary %}
     <p class="card-summary">{{ article.summary|e }}</p>
   {% endif %}
-  {% if article.tags %}
-    <div class="card-tags">
-      {% for tag in article.tags %}
-        <a href="/tag/{{ tag.slug }}" class="tag-pill tag-pill-sm">{{ tag.name }}</a>
-      {% endfor %}
-    </div>
-  {% endif %}
+{% if article.tags %}
+  <div class="card-tags">
+    {% for tag in article.tags[:3] %}
+      <a href="/tag/{{ tag.slug }}" class="tag-pill tag-pill-sm">{{ tag.name }}</a>
+    {% endfor %}
+    {% if article.tags|length > 3 %}
+      <span class="tag-pill tag-pill-sm text-muted">+{{ article.tags|length - 3 }} more</span>
+    {% endif %}
+  </div>
+{% endif %}
   <div class="card-meta">
     {% if article.source %}
       <span class="card-source">{{ article.source.name }}</span>
@@ -50,7 +53,14 @@
   </div>
   <div class="card-footer">
     {% if article.original_url %}
-      <a href="{{ article.original_url|safe_href }}" target="_blank" rel="noopener" class="card-source-link" aria-label="Read original article">&nearr;</a>
+      <a href="{{ article.original_url|safe_href }}" target="_blank" rel="noopener" class="card-source-link article-origin-link" aria-label="View original article">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        <span>view original</span>
+      </a>
     {% endif %}
     {{ share_button(article, share_configs, request, 'card-' ~ article.id) }}
   </div>

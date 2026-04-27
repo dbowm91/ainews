@@ -84,27 +84,27 @@ class GoogleSearchProvider(BaseSearchProvider):
             record_search_failure(self.provider_id)
             return []
 
-def health_check(self) -> dict[str, Any]:
-    try:
-        from services.url import validate_url_safe, UnsafeURLError
-        from services.search.session import get_session
+    def health_check(self) -> dict[str, Any]:
+        try:
+            from services.url import validate_url_safe, UnsafeURLError
+            from services.search.session import get_session
 
-        validate_url_safe(self.base_url)
+            validate_url_safe(self.base_url)
 
-        resp = get_session().get(
-            self.base_url,
-            params={"key": self.api_key, "cx": self.cse_id, "q": "test", "num": 1},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return {"provider": self.provider_id, "status": "ok"}
-    except UnsafeURLError as e:
-        return {
-            "provider": self.provider_id,
-            "status": f"SSRF blocked: {e}",
-        }
-    except Exception as e:
-        return {
-            "provider": self.provider_id,
-            "status": f"error: {type(e).__name__}",
-        }
+            resp = get_session().get(
+                self.base_url,
+                params={"key": self.api_key, "cx": self.cse_id, "q": "test", "num": 1},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return {"provider": self.provider_id, "status": "ok"}
+        except UnsafeURLError as e:
+            return {
+                "provider": self.provider_id,
+                "status": f"SSRF blocked: {e}",
+            }
+        except Exception as e:
+            return {
+                "provider": self.provider_id,
+                "status": f"error: {type(e).__name__}",
+            }

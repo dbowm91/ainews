@@ -9,7 +9,7 @@ Create Date: 2026-04-27
 from alembic import op
 
 revision = '029_sources_health_indexes'
-down_revision = '028_article_experiment_group'
+down_revision = '028'
 
 
 def upgrade():

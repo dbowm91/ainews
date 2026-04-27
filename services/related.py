@@ -1,4 +1,6 @@
 import logging
+import os
+from datetime import datetime, timedelta, timezone
 
 from constants import PipelineStatus
 from services.cache import get_response_cache
@@ -6,6 +8,7 @@ from services.cache import get_response_cache
 logger = logging.getLogger(__name__)
 
 _RELATED_CACHE_TTL = 600
+_RELATED_CANDIDATE_LIMIT = int(os.environ.get("RELATED_CANDIDATE_LIMIT", "50"))
 
 
 def find_related_articles_cached(article, limit: int = 5):
@@ -84,12 +87,13 @@ def find_related_articles(article, limit: int = 5):
                 Article.id != article.id,
                 Article.pipeline_status == PipelineStatus.DONE,
                 Article.final_article.isnot(None),
+                Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
             )
             .order_by(
                 (func.coalesce(tag_count_subq.c.shared_tag_count, 0) * 2.0).desc(),
                 Article.created_at.desc(),
             )
-            .limit(50)
+            .limit(_RELATED_CANDIDATE_LIMIT)
             .all()
         )
     else:
@@ -99,9 +103,10 @@ def find_related_articles(article, limit: int = 5):
                 Article.id != article.id,
                 Article.pipeline_status == PipelineStatus.DONE,
                 Article.final_article.isnot(None),
+                Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
             )
             .order_by(Article.created_at.desc())
-            .limit(50)
+            .limit(_RELATED_CANDIDATE_LIMIT)
             .all()
         )
 

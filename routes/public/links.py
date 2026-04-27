@@ -24,7 +24,7 @@ def article_detail(article_id: int) -> Response:
     from schemas.topic import load_topics
     from services.article import parse_articles
     from services.cache import get_response_cache
-    from services.related import find_related_articles
+    from services.related import find_related_articles_cached
 
     cache = get_response_cache()
     cache_key = f"pub:article_detail:{article_id}"
@@ -47,7 +47,7 @@ def article_detail(article_id: int) -> Response:
     topics = load_topics().topics
     topic_def = topics.get(article.category) if article.category else None
     max_key_points = 5
-    related = parse_articles(find_related_articles(article, limit=5))
+    related = parse_articles(find_related_articles_cached(article, limit=5))
     share_configs = _get_share_configs()
 
     word_count = 0

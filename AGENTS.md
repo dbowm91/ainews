@@ -691,7 +691,7 @@ The following bugs are documented and prioritized in `plans/plan.md` for impleme
 
 - ~~`initialize_tool_registry()` signature mismatch~~ — FIXED (returns list[ToolDefinition])
 - ~~Subagent retry backoff off by one~~ — FIXED (2**attempt formula)
-- PENDING→REVIEW transition missing from `VALID_TRANSITIONS` (`constants.py:41`)
+- ~~PENDING→REVIEW transition missing from `VALID_TRANSITIONS`~~ — FIXED (constants.py:41)
 - ~~DuckDuckGo SSRF validation missing~~ — FIXED
 - ~~Chain condition `previous` not in `_ALLOWED_NAMES`~~ — FIXED
 - ~~Single-brace template variables not resolved~~ — FIXED
@@ -701,13 +701,13 @@ The following bugs are documented and prioritized in `plans/plan.md` for impleme
 - ~~`ast.Call` handler in condition evaluator~~ — FIXED (raises ValueError, not allowed)
 - ~~`safe_href` catches all exceptions~~ — FIXED (narrowed to UnsafeURLError, ValueError)
 - ~~Dead letters table missing status/error columns~~ — FIXED
-- `set_status` admin route bypasses state machine (`routes/admin/api/articles.py:253`)
-- Missing `db.session.rollback()` in cleanup SoftTimeLimitExceeded handlers (`tasks/cleanup.py`)
-- Webhook returns prior success after rollback (`services/webhooks.py:274`)
-- Subscriber `.all()` OOM risk (`tasks/newsletter.py:507`)
+- ~~`set_status` admin route bypasses state machine~~ — FIXED (now validates transitions)
+- ~~Missing `db.session.rollback()` in cleanup SoftTimeLimitExceeded handlers~~ — FIXED
+- ~~Webhook returns prior success after rollback~~ — FIXED (returns False on DB error)
+- ~~Subscriber `.all()` OOM risk~~ — FIXED (uses yield_per(500))
 - ~~AuthError bypasses provider fallback~~ — FIXED (added to fallback tuple)
 - ~~Stage failure Redis keys not cleared on reprocess~~ — FIXED
-- ResponseCache blpop race condition (`services/cache.py:141`)
+- ~~ResponseCache blpop race condition~~ — FIXED (uses polling with bounded wait)
 - ~~`_evict_stale()` only called in `set()`, not `get()`~~ — FIXED
 - ~~`retry_stuck` task has no `autoretry_for`~~ — FIXED (added autoretry_for)
 - ~~`retry_backoff=30` in four pipeline tasks~~ — FIXED (set to True)

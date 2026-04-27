@@ -504,7 +504,7 @@ def retry_failed_newsletter_deliveries(self):
             Subscriber.newsletter_type == nl.newsletter_type,
             Subscriber.active.is_(True),
         ]
-        subscribers = Subscriber.query.filter(*base_filters).all()
+        subscribers = Subscriber.query.filter(*base_filters).yield_per(500)
         if not subscribers:
             nl.error_message = None
             db.session.commit()

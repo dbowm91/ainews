@@ -273,8 +273,9 @@ def dispatch_webhook(
 
     try:
         db.session.commit()
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
         db.session.rollback()
+        return False, f"Database error: {e}"
 
     if success:
         logger.info("Webhook '%s' delivered successfully to %s", name, url)

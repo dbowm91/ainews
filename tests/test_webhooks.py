@@ -214,3 +214,42 @@ class TestWebhooks:
             hashlib.sha256,
         ).hexdigest()
         assert signature_with_ts == expected
+
+    def test_dispatch_webhook_returns_false_on_db_error(self, app):
+        """dispatch_webhook should return False when database commit fails."""
+        from services.webhooks import dispatch_webhook
+        from models import Webhook
+        from extensions import db
+        from sqlalchemy.exc import SQLAlchemyError
+
+        with app.app_context():
+            webhook = Webhook(
+                name="Test Webhook",
+                url="https://example.com/webhook",
+                secret="test-secret",
+                events=["article.published"],
+                active=True,
+            )
+            db.session.add(webhook)
+            db.session.commit()
+
+            webhook_id = webhook.id
+
+            with patch("requests.post") as mock_post:
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                mock_response.text = "OK"
+                mock_post.return_value = mock_response
+
+                with patch.object(db.session, "commit", side_effect=SQLAlchemyError("Test DB error")):
+                    success, error = dispatch_webhook(
+                        webhook_id=webhook_id,
+                        name="Test Webhook",
+                        url="https://example.com/webhook",
+                        secret="test-secret",
+                        event_type="article.published",
+                        event_data={"article_id": 42},
+                    )
+
+            assert success is False
+            assert "Database error:" in error

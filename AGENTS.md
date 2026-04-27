@@ -91,7 +91,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
 - **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin UI at `/admin/webhooks` displays webhook list and event history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
 - **DEBUG warning in production**: `app.py` logs a warning if `DEBUG=True` in production context.
-- **Cost tracking**: `services/cost_tracker.py` tracks LLM costs with admin endpoint `GET /admin/api/costs`. Pricing for some newer providers (DeepSeek, MiniMax, Gemini 2.0 Flash, Groq) may need to be added to `_DEFAULT_RATES`.
+- **Cost tracking**: `services/cost_tracker.py` tracks LLM costs with admin endpoint `GET /admin/api/costs`. Pricing for DeepSeek should be `output: 0.42` (currently incorrect at `1.10`). Also add pricing for: `ollama-local/qwen3:8b`, `anthropic/claude-sonnet-4-5-20250929`, `opencode/opencode`, `gemini/gemini-2.5-flash`.
 
 ## Subagent system
 
@@ -391,7 +391,7 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
 **Silent exception handlers**: When encountering `except Exception: pass` or `except Exception: return fallback`, add `logger.debug()` or `logger.warning()` to aid debugging. Exceptions should not be silently swallowed unless the catch is for a deliberate fallback (e.g., cache miss -> direct fetch). Use %-formatting in log calls.
 
-**Redis version conflict**: `requirements.txt` says `redis>=7.0.0,<8.0.0` but `pyproject.toml` pins `==6.4.0`. Use `pyproject.toml` as source of truth — the codebase runs with 6.4.0.
+**Redis version**: `pyproject.toml` pins `redis==6.4.0`. This version is used consistently.
 
 **verify_task fail-closed behavior**: `services/task_security.py:verify_task()` returns `False` when `CELERY_TASK_SECRET` is not configured (fail-closed), rejecting all unsigned task calls. This is intentional behavior for production security.
 
@@ -685,24 +685,3 @@ retry_messages.append({
 
 **Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.
 
-## Codebase verification notes
-
-**Subagent chain template resolution result is USED**: The concern that `_resolve_template_variables` result was overwritten is INACCURATE. The result flows through via `prompt_data_escaped = _escape_prompt_data(prompt_data)` and is used in `template.format(**prompt_data_escaped)`.
-
-**Webhooks article.failed and newsletter.failed events never triggered**: `services/webhooks.py` defines these in `KNOWN_WEBHOOK_EVENTS` but no code calls `trigger_event("article.failed", ...)` or `trigger_event("newsletter.failed", ...)`. These events are defined but not fired — webhook consumers expecting these events will not receive them.
-
-**Newsletter webhook nl parameter type mismatch**: `tasks/newsletter.py:259` uses `NewsletterConfig` object (not `Newsletter` model) for `nl` parameter. The `newsletter_id` is always NULL since `NewsletterConfig` has no `id` attribute.
-
-**trend_memory `_find_overlapping_low_entries` is dead code**: The function `services/trend_memory.py:270-281` is defined but never called anywhere. Safe to ignore or remove.
-
-**Admin UI time inconsistency in trend memory**: Admin UI at `/admin/trend-memory` uses `db.func.now()` for count but `datetime.now(timezone.utc)` for delete — this is a known display inconsistency, not a data corruption issue.
-
-**RSS adapter has per-request timeout**: `adapters/rss.py:38` passes `timeout=cfg.request_timeout` to `.get()`. The per-request timeout covers socket-level timeout. Adding `connect`/`read` params to the `Retry` object only controls retry-on-socket-error, not timeout itself.
-
-**API/Web adapter gap is retry logic, not connection pooling**: `requests.Session()` uses urllib3's default `HTTPAdapter` which already provides connection pooling. The gap is the absence of automatic retries on transient HTTP failures, unlike the RSS adapter which mounts an `HTTPAdapter` with `Retry`. Both adapters now use shared `get_crawl_session()` from `adapters/session.py` with retry configured.
-
-**ResponseCache stampede protection uses polling**: `services/cache.py:get_or_set()` uses bounded polling with `redis.exists()` (10 × 50ms = 500ms max wait) instead of `blpop`. This avoids WRONGTYPE errors on string lock keys.
-
-**Metrics route joinedload added**: `routes/admin/metrics.py` queries now use `joinedload(Article.source)` on all three metrics queries (`top_by_views`, `top_by_shares`, `top_by_link_views`) to prevent N+1 if the template accesses `article.source`.
-
-**`cleanup_stale_limiter_slots` uses default `max_retries=3`**: Celery defaults to `max_retries=3` when not specified, so the task already has reasonable retry behavior. Adding an explicit `max_retries=3` is cosmetic.

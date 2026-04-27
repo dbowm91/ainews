@@ -81,6 +81,24 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
 
     if article.total_retries >= max_total:
         article.pipeline_status = PipelineStatus.FAILED
+        try:
+            db.session.commit()
+        except SQLAlchemyError as commit_exc:
+            db.session.rollback()
+            logger.error(
+                "Failed to commit total retries exceeded for article %s: %s",
+                article.id,
+                commit_exc,
+            )
+        try:
+            from services.webhooks import trigger_event
+            trigger_event("article.failed", {
+                "article_id": article.id,
+                "stage": stage,
+                "reason": article.last_error or "total_retries_exceeded",
+            })
+        except Exception as wh_exc:
+            logger.warning("Failed to trigger article.failed webhook: %s", wh_exc)
         return True
 
     if stage_failures >= _MAX_STAGE_FAILURES:
@@ -102,6 +120,15 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
             stage,
             run_id,
         )
+        try:
+            from services.webhooks import trigger_event
+            trigger_event("article.failed", {
+                "article_id": article.id,
+                "stage": stage,
+                "reason": f"per_stage_limit ({stage_failures} failures)",
+            })
+        except Exception as wh_exc:
+            logger.warning("Failed to trigger article.failed webhook: %s", wh_exc)
         return True
 
     if article.retry_count >= max_stage:

@@ -35,6 +35,7 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = False  # overridden in ProductionConfig
+    SESSION_USE_SIGNER = True
     SESSION_COOKIE_PATH = "/"
     PERMANENT_SESSION_LIFETIME = timedelta(hours=2)
 

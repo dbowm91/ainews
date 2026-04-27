@@ -21,7 +21,7 @@ _DEFAULT_RATES = {
     "anthropic/claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
     "anthropic/claude-haiku-20241022": {"input": 0.25, "output": 1.25},
     "anthropic/claude-opus-4-20250514": {"input": 15.00, "output": 75.00},
-    "deepseek/deepseek-chat": {"input": 0.27, "output": 1.10},
+    "deepseek/deepseek-chat": {"input": 0.27, "output": 0.42},
     "minimax/MiniMax-M2.5": {"input": 0.20, "output": 1.10},
     "gemini/gemini-2.0-flash": {"input": 0.10, "output": 0.40},
     "groq/llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
@@ -31,6 +31,10 @@ _DEFAULT_RATES = {
     "fireworks/accounts/fireworks/models/llama-v3-70b-instruct": {"input": 0.80, "output": 0.80},
     "cerebras/llama-3.3-70b": {"input": 0.85, "output": 1.20},
     "zai/glm-4": {"input": 1.40, "output": 1.40},
+    "ollama-local/qwen3:8b": {"input": 0.00, "output": 0.00},
+    "anthropic/claude-sonnet-4-5-20250929": {"input": 3.00, "output": 15.00},
+    "opencode/opencode": {"input": 0.00, "output": 0.00},
+    "gemini/gemini-2.5-flash": {"input": 0.60, "output": 2.40},
 }
 
 

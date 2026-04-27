@@ -116,15 +116,17 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         return self._client
 
     def _retry_with_backoff(
-        self,
-        func: Callable[..., T],
-        *args: Any,
-        **kwargs: Any,
-    ) -> T:
+            self,
+            func: Callable[..., T],
+            model: str | None,
+            *args: Any,
+            **kwargs: Any,
+        ) -> T:
         """Execute a function with exponential backoff retry on transient errors.
 
         Args:
-            func: The function to call (e.g., self._do_chat)
+            func: The function to call (e.g. self._do_chat)
+            model: Model name for failure recording
             *args: Positional arguments for func
             **kwargs: Keyword arguments for func
 
@@ -147,6 +149,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             except (RateLimitError, ProviderTimeoutError, ProviderServerError) as e:
                 last_exc = e
                 if attempt == self.RETRY_MAX_ATTEMPTS - 1:
+                    self._record_failure(model or self.default_model or "unknown")
                     break
                 delay = min(
                     self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),
@@ -162,6 +165,14 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 )
                 time.sleep(delay)
         raise last_exc
+
+    def _record_success(self, model: str, tokens_used: int = 0) -> None:
+        from services.llm import record_provider_success
+        record_provider_success(self.provider_id, model, tokens_used)
+
+    def _record_failure(self, model: str) -> None:
+        from services.llm import record_provider_failure
+        record_provider_failure(self.provider_id, model)
 
     @abc.abstractmethod
     def _create_client(self) -> Any:
@@ -196,11 +207,13 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
         schema = response_model.model_json_schema()
         resp = self._chat_with_schema(
-            messages, response_model, model, system, temperature, max_tokens, schema
+            messages, response_model, system, temperature, max_tokens, schema, model
         )
         try:
             resp = _extract_json(resp)
-            return response_model.model_validate_json(resp)
+            result = response_model.model_validate_json(resp)
+            self._record_success(model or self.default_model)
+            return result
         except Exception as e:
             logger.warning(
                 "Validation failed for %s: %s. Raw response: %s",
@@ -215,7 +228,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             if max_validation_retries > 0:
                 get_metrics().counter_inc(
                     "llm.validation_retries",
-                    labels={"model": model or self.default_model, "provider": self.provider_id},
+                    labels={"model": self.default_model, "provider": self.provider_id},
                 )
                 import json as json_mod
                 schema_json = json_mod.dumps(schema, indent=2)
@@ -233,14 +246,16 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 resp = self._chat_with_schema(
                     retry_messages,
                     response_model,
-                    model,
                     system,
                     temperature,
                     max_tokens,
                     schema,
+                    model,
                 )
                 resp = _extract_json(resp)
-                return response_model.model_validate_json(resp)
+                result = response_model.model_validate_json(resp)
+                self._record_success(model or self.default_model)
+                return result
             raise
 
     @abc.abstractmethod

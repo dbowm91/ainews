@@ -103,18 +103,19 @@ class GeminiProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> LLMResponse:
         return self._retry_with_backoff(
-            self._do_chat, messages, model, system, temperature, max_tokens, **kwargs
+            self._do_chat, model,
+            messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs
         )
 
     def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
         response_model,
-        model: Optional[str],
         system: Optional[str],
         temperature: float,
         max_tokens: int,
         schema: dict,
+        model: Optional[str] = None,
     ) -> str:
         model = model or self.default_model
         contents, system_instruction = self._build_contents(messages, system)
@@ -138,15 +139,16 @@ class GeminiProvider(BaseLLMProvider):
         self,
         messages: list[dict[str, str]],
         response_model,
-        model: Optional[str],
         system: Optional[str],
         temperature: float,
         max_tokens: int,
         schema: dict,
+        model: Optional[str] = None,
     ) -> str:
         return self._retry_with_backoff(
-            self._do_chat_with_schema,
-            messages, response_model, model, system, temperature, max_tokens, schema,
+            self._do_chat_with_schema, model,
+            messages=messages, response_model=response_model, system=system,
+            temperature=temperature, max_tokens=max_tokens, schema=schema,
         )
 
     def _do_call_api_with_tools(
@@ -201,8 +203,9 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: int,
     ) -> tuple[Any, Any]:
         return self._retry_with_backoff(
-            self._do_call_api_with_tools,
-            model, messages, tools, tool_choice, temperature, max_tokens,
+            self._do_call_api_with_tools, model,
+            messages=messages, tools=tools, tool_choice=tool_choice,
+            temperature=temperature, max_tokens=max_tokens,
         )
 
     def _extract_text_and_tool_calls(

@@ -68,37 +68,43 @@ class GoogleSearchProvider(BaseSearchProvider):
             return []
 
         try:
+            from services.search import record_search_success, record_search_failure
+
             future = _EXECUTOR.submit(_search_impl, self, query, max_results)
-            return future.result(timeout=20)
+            results = future.result(timeout=20)
+            record_search_success(self.provider_id)
+            return results
         except (FuturesTimeoutError, TimeoutError):
             future.cancel()
             logger.warning("Google search timed out for '%s'", query)
+            record_search_failure(self.provider_id)
             return []
         except Exception as e:
             logger.warning("Google search failed for '%s': %s", query, type(e).__name__)
+            record_search_failure(self.provider_id)
             return []
 
 def health_check(self) -> dict[str, Any]:
-        try:
-            from services.url import validate_url_safe, UnsafeURLError
-            from services.search.session import get_session
+    try:
+        from services.url import validate_url_safe, UnsafeURLError
+        from services.search.session import get_session
 
-            validate_url_safe(self.base_url)
+        validate_url_safe(self.base_url)
 
-            resp = get_session().get(
-                self.base_url,
-                params={"key": self.api_key, "cx": self.cse_id, "q": "test", "num": 1},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            return {"provider": self.provider_id, "status": "ok"}
-        except UnsafeURLError as e:
-            return {
-                "provider": self.provider_id,
-                "status": f"SSRF blocked: {e}",
-            }
-        except Exception as e:
-            return {
-                "provider": self.provider_id,
-                "status": f"error: {type(e).__name__}",
-            }
+        resp = get_session().get(
+            self.base_url,
+            params={"key": self.api_key, "cx": self.cse_id, "q": "test", "num": 1},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return {"provider": self.provider_id, "status": "ok"}
+    except UnsafeURLError as e:
+        return {
+            "provider": self.provider_id,
+            "status": f"SSRF blocked: {e}",
+        }
+    except Exception as e:
+        return {
+            "provider": self.provider_id,
+            "status": f"error: {type(e).__name__}",
+        }

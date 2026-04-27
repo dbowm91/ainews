@@ -243,11 +243,11 @@ def create_app(config_name=None):
         if not url.startswith(("http://", "https://")):
             return "#"
         try:
-            from services.url import validate_url_safe
+            from services.url import validate_url_safe, UnsafeURLError
 
             validate_url_safe(value)
             return value
-        except Exception as e:
+        except (UnsafeURLError, ValueError) as e:
             logger.warning("safe_href validation failed for %s: %s", value, e)
             return "#"
 

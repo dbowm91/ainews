@@ -6,6 +6,7 @@ from typing import Any, Optional
 import requests
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
+from adapters.session import get_crawl_session
 from schemas.source import APIConfig
 from services.url import validate_url_safe
 
@@ -18,7 +19,7 @@ class APIAdapter(BaseSourceAdapter):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._session = requests.Session()
+        self._session = get_crawl_session()
         self._session.headers["User-Agent"] = self.adapter_config.user_agent
 
     def close(self):

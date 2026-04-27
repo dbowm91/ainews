@@ -1,4 +1,5 @@
 """Tests for AST-based condition evaluation (W1.3/W1.4)."""
+import pytest
 
 from services.subagent import _evaluate_condition
 
@@ -139,26 +140,28 @@ class TestEvaluateConditionPositive:
 
 
 class TestEvaluateConditionNegative:
-    """Negative test cases - should return False, not raise exceptions."""
-
-    def test_import_attempt(self):
-        context = {"count": 5}
-        assert _evaluate_condition("import os", context) is False
+    """Negative test cases - should raise ValueError for unsafe constructs."""
 
     def test_function_call(self):
         context = {"count": 5}
-        assert _evaluate_condition("len(results)", context) is False
-        assert _evaluate_condition("results.count.__class__", context) is False
+        with pytest.raises(ValueError, match="Function calls not allowed"):
+            _evaluate_condition("len(results)", context)
+        with pytest.raises(ValueError):
+            _evaluate_condition("results.count.__class__", context)
 
     def test_dunder_access(self):
         context = {"count": 5}
-        assert _evaluate_condition("results.__class__", context) is False
-        assert _evaluate_condition("results.__init__", context) is False
-        assert _evaluate_condition("results.__builtins__", context) is False
+        with pytest.raises(ValueError):
+            _evaluate_condition("results.__class__", context)
+        with pytest.raises(ValueError):
+            _evaluate_condition("results.__init__", context)
+        with pytest.raises(ValueError):
+            _evaluate_condition("results.__builtins__", context)
 
     def test_lambda_definition(self):
         context = {"count": 5}
-        assert _evaluate_condition("lambda x: x", context) is False
+        with pytest.raises(ValueError, match="Lambda expressions not allowed"):
+            _evaluate_condition("lambda x: x", context)
 
     def test_assignment(self):
         context = {"count": 5}
@@ -198,7 +201,8 @@ class TestEvaluateConditionEdgeCases:
 
     def test_unknown_operator(self):
         context = {"count": 5}
-        assert _evaluate_condition("results.count ** 2", context) is False
+        with pytest.raises(ValueError):
+            _evaluate_condition("results.count ** 2", context)
 
     def test_unsupported_node_type(self):
         context = {"count": 5}

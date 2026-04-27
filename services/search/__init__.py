@@ -9,8 +9,17 @@ from services.search.base import (
     SearchResult,
     _manager,
 )
+from services.circuit_breaker import get_breaker
 
 logger = logging.getLogger(__name__)
+
+
+def record_search_success(provider_id: str) -> None:
+    get_breaker(f"search:{provider_id}").record_success()
+
+
+def record_search_failure(provider_id: str) -> None:
+    get_breaker(f"search:{provider_id}").record_failure()
 
 
 def _load_search_config():

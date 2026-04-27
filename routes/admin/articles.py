@@ -1,5 +1,6 @@
 import json
 import logging
+import redis.exceptions
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from flask import flash, render_template, request, redirect, url_for, jsonify, g
@@ -432,6 +433,15 @@ def reprocess_article(article_id):
         db.session.rollback()
         logger.exception("Failed to reprocess article %s (%s stage)", article_id, stage)
         return jsonify({"error": "Failed to reprocess article"}), 500
+
+    try:
+        from extensions import get_redis
+        redis_client = get_redis()
+        pattern = f"ainews:article:stage_failures:{article_id}:*"
+        for key in redis_client.scan_iter(match=pattern):
+            redis_client.delete(key)
+    except redis.exceptions.RedisError:
+        logger.warning("Failed to clear stage failure keys for article %s", article_id)
 
     _TASKS = {
         "select_article": select_article,

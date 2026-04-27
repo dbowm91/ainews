@@ -65,6 +65,7 @@ class ResponseCache:
 
     def get(self, key: str) -> Any | None:
         """Get a cached value. Returns None on miss or error."""
+        self._evict_stale()
         full_key = self._make_key(key)
 
         # L1: in-memory

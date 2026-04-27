@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
+from adapters.session import get_crawl_session
 from schemas.source import WebConfig
 from services.url import validate_url_safe, UnsafeURLError
 
@@ -28,7 +29,7 @@ class WebAdapter(BaseSourceAdapter):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._session = requests.Session()
+        self._session = get_crawl_session()
         ua = self.adapter_config.user_agent
         self._session.headers["User-Agent"] = (
             ua if ua != "AINewsBot/1.0" else random.choice(USER_AGENTS)

@@ -14,10 +14,9 @@ from constants import (
 
 from services.config_utils import get_config_with_default
 from services.llm import get_provider_chain
-from services.llm.errors import RateLimitError, ProviderServerError, ProviderTimeoutError
+from services.llm.errors import RateLimitError, ProviderServerError, ProviderTimeoutError, AuthError
 from services.circuit_breaker import CircuitOpenError
 from services.llm import (
-    record_provider_success,
     record_provider_failure,
 )
 from services.pipeline_degradation import (  # noqa: F401
@@ -185,7 +184,7 @@ def _try_stage_work(stage: str, work_fn, article):
     for provider, model, max_tokens, provider_id in providers:
         try:
             return work_fn(article, provider, model, max_tokens), provider_id
-        except (RateLimitError, ProviderServerError, ProviderTimeoutError) as transient_err:
+        except (RateLimitError, ProviderServerError, ProviderTimeoutError, AuthError) as transient_err:
             logger.warning(
                 "Provider %s transient error (%s), trying fallback",
                 provider_id,
@@ -297,8 +296,6 @@ def run_stage(
         with traced_stage(stage, "work"):
             result, provider_id = _try_stage_work(stage, work_fn, article)
 
-        tokens_used = getattr(result, "tokens_used", 0) if hasattr(result, "tokens_used") else 0
-        record_provider_success(provider_id, model, tokens_used=tokens_used)
         article.retry_count = 0
         article.last_error = None
         try:

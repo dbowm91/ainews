@@ -62,14 +62,20 @@ class SearXNGSearchProvider(BaseSearchProvider):
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         try:
+            from services.search import record_search_success, record_search_failure
+
             future = _EXECUTOR.submit(_search_impl, self, query, max_results)
-            return future.result(timeout=20)
+            results = future.result(timeout=20)
+            record_search_success(self.provider_id)
+            return results
         except (FuturesTimeoutError, TimeoutError):
             future.cancel()
             logger.warning("SearXNG search timed out for '%s'", query)
+            record_search_failure(self.provider_id)
             return []
         except Exception as e:
             logger.warning("SearXNG search failed for '%s': %s", query, type(e).__name__)
+            record_search_failure(self.provider_id)
             return []
 
     def health_check(self) -> dict[str, Any]:

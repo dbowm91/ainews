@@ -121,6 +121,7 @@ def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
     cache.invalidate_prefix("pub:index")
     cache.invalidate_prefix("pub:topic")
     cache.invalidate_prefix("articles:list")
+    cache.invalidate_prefix("pub:related")
     try:
         log_admin_action(
             "article_bulk_set_category",
@@ -163,11 +164,23 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         db.session.rollback()
         return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
 
+    try:
+        from extensions import get_redis
+        import redis.exceptions
+        redis_client = get_redis()
+        for article in articles:
+            pattern = f"ainews:article:stage_failures:{article.id}:*"
+            for key in redis_client.scan_iter(match=pattern):
+                redis_client.delete(key)
+    except redis.exceptions.RedisError:
+        logger.warning("Failed to clear stage failure keys during reprocess")
+
     for article in articles:
         cache.invalidate(f"pub:article_detail:{article.id}")
     cache.invalidate_prefix("pub:index")
     cache.invalidate_prefix("pub:topic")
     cache.invalidate_prefix("articles:list")
+    cache.invalidate_prefix("pub:related")
 
     dispatched = 0
     failed_ids = []
@@ -247,6 +260,7 @@ def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
     cache.invalidate_prefix("pub:index")
     cache.invalidate_prefix("pub:topic")
     cache.invalidate_prefix("articles:list")
+    cache.invalidate_prefix("pub:related")
 
     clear_tag_cache()
     try:
@@ -314,6 +328,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             for article in articles:
                 cache.invalidate(f"pub:article_detail:{article.id}")
             cache.invalidate_prefix("articles:list")
+            cache.invalidate_prefix("pub:related")
             log_admin_action(
                 "article_bulk_delete",
                 target_type="article",
@@ -357,6 +372,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             for article in articles:
                 cache.invalidate(f"pub:article_detail:{article.id}")
             cache.invalidate_prefix("articles:list")
+            cache.invalidate_prefix("pub:related")
             log_admin_action(
                 "article_bulk_set_status",
                 target_type="article",

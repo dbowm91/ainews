@@ -47,30 +47,107 @@ def _build_context_tools() -> list[ToolDefinition]:
     def _get_topic_note(topic: str, source: str | None = None) -> str:
         from services.context_service import get_topic_note
 
-        note = get_topic_note(topic, source)
-        return note.note if note else "No note found for this topic."
+        try:
+            note = get_topic_note(topic, source)
+            return note.note if note else "No note found for this topic."
+        except Exception as e:
+            logger.warning("Tool get_topic_note failed for topic=%s: %s", topic, e)
+            return f"Error retrieving topic note: {type(e).__name__}"
 
     def _get_topic_notes_for_topics(topics: list[str]) -> str:
         from services.context_service import get_topic_notes_for_topics
 
-        result = get_topic_notes_for_topics(topics)
-        if not result:
-            return "No topic notes found."
-        return "\n".join(
-            f"Topic: {k}\nNotes: {'; '.join(v)}" for k, v in result.items()
-        )
+        try:
+            result = get_topic_notes_for_topics(topics)
+            if not result:
+                return "No topic notes found."
+            return "\n".join(
+                f"Topic: {k}\nNotes: {'; '.join(v)}" for k, v in result.items()
+            )
+        except Exception as e:
+            logger.warning("Tool get_topic_notes_for_topics failed: %s", e)
+            return f"Error retrieving topic notes: {type(e).__name__}"
 
     def _get_related_articles(
         topics: list[str], exclude_id: int, limit: int = 5
     ) -> str:
         from services.context_service import get_related_articles_for_edit
 
-        articles = get_related_articles_for_edit(topics, exclude_id, limit=limit)
-        if not articles:
-            return "No related articles found."
-        return "\n".join(
-            f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
-        )
+        try:
+            articles = get_related_articles_for_edit(topics, exclude_id, limit=limit)
+            if not articles:
+                return "No related articles found."
+            return "\n".join(
+                f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
+            )
+        except Exception as e:
+            logger.warning("Tool get_related_articles failed: %s", e)
+            return f"Error retrieving related articles: {type(e).__name__}"
+
+    def _get_trend_memory(
+        topics: list[str], min_importance: int = 1, max_age_days: int | None = None
+    ) -> str:
+        from services.trend_memory import get_memory_for_topics
+
+        try:
+            entries = get_memory_for_topics(topics, min_importance, max_age_days)
+            if not entries:
+                return "No trend memory found for these topics."
+            return "\n".join(
+                f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
+            )
+        except Exception as e:
+            logger.warning("Tool get_trend_memory failed: %s", e)
+            return f"Error retrieving trend memory: {type(e).__name__}"
+
+    def _get_article_by_id(article_id: int) -> str:
+        from extensions import db
+        from models import Article
+
+        try:
+            article = db.session.get(Article, article_id)
+            if not article:
+                return f'{{"error": "Article {article_id} not found"}}'
+            return json.dumps({
+                "id": article.id,
+                "title": article.title,
+                "pipeline_status": article.pipeline_status,
+                "impact_score": article.impact_score,
+                "created_at": article.created_at.isoformat() if article.created_at else None,
+            })
+        except Exception as e:
+            logger.warning("Tool get_article_by_id failed for %s: %s", article_id, e)
+            return f'{{"error": "{type(e).__name__}"}}'
+
+    def _search_articles(query: str, limit: int = 5) -> str:
+        from models import Article
+
+        try:
+            articles = Article.query.filter(
+                Article.original_title.ilike(f"%{query}%")
+            ).limit(limit).all()
+            return json.dumps([
+                {"id": a.id, "title": a.original_title} for a in articles
+            ])
+        except Exception as e:
+            logger.warning("Tool search_articles failed: %s", e)
+            return f'{{"error": "{type(e).__name__}"}}'
+
+    def _get_source_health() -> str:
+        from models import Source
+        from extensions import db
+
+        try:
+            sources = db.session.query(Source).all()
+            return json.dumps([{
+                "id": s.id,
+                "name": s.name,
+                "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
+                "consecutive_failures": s.consecutive_failures,
+            } for s in sources])
+        except Exception as e:
+            logger.warning("Tool get_source_health failed: %s", e)
+            return f'{{"error": "{type(e).__name__}"}}'
 
     tools.append(
         ToolDefinition(
@@ -137,18 +214,6 @@ def _build_context_tools() -> list[ToolDefinition]:
         )
     )
 
-    def _get_trend_memory(
-        topics: list[str], min_importance: int = 1, max_age_days: int | None = None
-    ) -> str:
-        from services.trend_memory import get_memory_for_topics
-
-        entries = get_memory_for_topics(topics, min_importance, max_age_days)
-        if not entries:
-            return "No trend memory found for these topics."
-        return "\n".join(
-            f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
-        )
-
     tools.append(
         ToolDefinition(
             name="get_trend_memory",
@@ -175,46 +240,6 @@ def _build_context_tools() -> list[ToolDefinition]:
             fn=_get_trend_memory,
         )
     )
-
-    def _get_article_by_id(article_id: int) -> str:
-        """Get article details by ID."""
-        from extensions import db
-        from models import Article
-
-        article = db.session.get(Article, article_id)
-        if not article:
-            return f'{{"error": "Article {article_id} not found"}}'
-        return json.dumps({
-            "id": article.id,
-            "title": article.title,
-            "pipeline_status": article.pipeline_status,
-            "impact_score": article.impact_score,
-            "created_at": article.created_at.isoformat() if article.created_at else None,
-        })
-
-    def _search_articles(query: str, limit: int = 5) -> str:
-        """Search articles by keyword."""
-        from models import Article
-
-        articles = Article.query.filter(
-            Article.original_title.ilike(f"%{query}%")
-        ).limit(limit).all()
-        return json.dumps([
-            {"id": a.id, "title": a.original_title} for a in articles
-        ])
-
-    def _get_source_health() -> str:
-        """Get source health summary."""
-        from models import Source
-        from extensions import db
-
-        sources = db.session.query(Source).all()
-        return json.dumps([{
-            "id": s.id,
-            "name": s.name,
-            "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
-            "consecutive_failures": s.consecutive_failures,
-        } for s in sources])
 
     tools.append(
         ToolDefinition(
@@ -275,16 +300,24 @@ def _build_search_tools() -> list[ToolDefinition]:
     def _search_web(query: str, max_results: int = 5) -> str:
         from services.search import search_web
 
-        results = search_web(query, max_results)
-        if not results:
-            return "No search results found."
-        return "\n".join(f"- {r.title}: {r.snippet[:150]}..." for r in results)
+        try:
+            results = search_web(query, max_results)
+            if not results:
+                return "No search results found."
+            return "\n".join(f"- {r.title}: {r.snippet[:150]}..." for r in results)
+        except Exception as e:
+            logger.warning("Tool search_web failed for '%s': %s", query, e)
+            return f"Error performing web search: {type(e).__name__}"
 
     def _get_search_provider(provider_id: str | None = None) -> str:
         from services.search import get_search_provider
 
-        prov = get_search_provider(provider_id)
-        return f"Using search provider: {prov.provider_id}"
+        try:
+            prov = get_search_provider(provider_id)
+            return f"Using search provider: {prov.provider_id}"
+        except Exception as e:
+            logger.warning("Tool get_search_provider failed: %s", e)
+            return f"Error getting search provider: {type(e).__name__}"
 
     tools.append(
         ToolDefinition(
@@ -325,12 +358,18 @@ def _build_search_tools() -> list[ToolDefinition]:
     return tools
 
 
-def initialize_tool_registry() -> None:
-    """Initialize the tool registry with built-in tools."""
+def initialize_tool_registry(tool_names: list[str] | None = None) -> list[ToolDefinition]:
+    """Initialize the tool registry with built-in tools, optionally filtered by name."""
+    all_tools = []
     for tool in _build_context_tools():
         register_tool(tool)
+        all_tools.append(tool)
     for tool in _build_search_tools():
         register_tool(tool)
+        all_tools.append(tool)
+    if tool_names is not None:
+        return [t for t in all_tools if t.name in tool_names]
+    return all_tools
 
 
 logger = logging.getLogger(__name__)
@@ -509,7 +548,7 @@ def run_subagent(
                 if attempt > 0:
                     import random
                     delay = min(
-                        1.0 * (2 ** (attempt - 1)) + random.uniform(0, 0.5),
+                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),
                         stage_config.retry_delay,
                     )
                     time.sleep(delay)
@@ -683,7 +722,7 @@ def run_subagent_with_tools(
                 if attempt > 0:
                     import random
                     delay = min(
-                        1.0 * (2 ** (attempt - 1)) + random.uniform(0, 0.5),
+                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),
                         stage_config.retry_delay,
                     )
                     time.sleep(delay)
@@ -880,6 +919,9 @@ def run_subagent_chain(
 
         step_succeeded = False
         for attempt in range(stage_config.max_retries + 1):
+            provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
+                stage_config, default_role="editor"
+            )
             try:
                 future = _subagent_executor.submit(_chain_call)
                 try:
@@ -963,7 +1005,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         ast.NotIn: lambda a, b: a not in b,
     }
 
-    _ALLOWED_NAMES = {"True", "False", "None", "results"}
+    _ALLOWED_NAMES = {"True", "False", "None", "results", "previous"}
 
     def _eval_node(node: ast.AST) -> Any:
         if isinstance(node, ast.Expression):
@@ -986,8 +1028,8 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         elif isinstance(node, ast.Name):
             if node.id not in _ALLOWED_NAMES:
                 raise ValueError(f"Unknown identifier: {node.id}")
-            if node.id == "results":
-                return context.get("results", context)
+            if node.id in ("results", "previous"):
+                return context.get(node.id, context)
             result = context.get(node.id)
             if result is None:
                 raise ValueError(f"Context has no key '{node.id}'")
@@ -1022,6 +1064,14 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
                     return obj[idx]
                 raise ValueError("List index must be an integer")
             raise ValueError("Subscript target must be dict or list")
+        elif isinstance(node, ast.Call):
+            raise ValueError("Function calls not allowed in conditions")
+        elif isinstance(node, ast.Lambda):
+            raise ValueError("Lambda expressions not allowed in conditions")
+        elif isinstance(node, ast.BinOp):
+            raise ValueError("Binary operations not allowed in conditions")
+        elif isinstance(node, ast.UnaryOp) and not isinstance(node.op, ast.Not):
+            raise ValueError("Unary operations not allowed in conditions")
         else:
             raise ValueError(f"Unsupported node type: {type(node).__name__}")
 
@@ -1033,7 +1083,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
     try:
         return bool(_eval_node(tree))
     except ValueError as e:
-        if "Unsupported node type" in str(e):
+        if any(seg in str(e) for seg in ("Unsupported node type", "not allowed")):
             raise
         return False
     except Exception:
@@ -1046,7 +1096,7 @@ def _resolve_template_variables(
     """Resolve template variables, including references to previous step results."""
     resolved = dict(initial_data)
     for key, value in resolved.items():
-        if isinstance(value, str) and "{{" in value:
+        if isinstance(value, str) and "{" in value:
             try:
                 resolved[key] = value.format(**results)
             except Exception as e:

@@ -685,39 +685,11 @@ retry_messages.append({
 
 **Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.
 
-## Known bugs tracked in plans/plan.md
-
-The following bugs are documented and prioritized in `plans/plan.md` for implementation. Do not re-discover or re-report these — refer to the plan for details and fix instructions.
-
-- ~~`initialize_tool_registry()` signature mismatch~~ — FIXED (returns list[ToolDefinition])
-- ~~Subagent retry backoff off by one~~ — FIXED (2**attempt formula)
-- ~~PENDING→REVIEW transition missing from `VALID_TRANSITIONS`~~ — FIXED (constants.py:41)
-- ~~DuckDuckGo SSRF validation missing~~ — FIXED
-- ~~Chain condition `previous` not in `_ALLOWED_NAMES`~~ — FIXED
-- ~~Single-brace template variables not resolved~~ — FIXED
-- ~~`disabled_at` field bug in pipeline stats API~~ — FIXED
-- ~~Direct `pipeline_status = "failed"` in extract task~~ — FIXED (uses rollback + re-raise)
-- ~~Google `health_check` defined outside class~~ — FIXED (indented as class method)
-- ~~`ast.Call` handler in condition evaluator~~ — FIXED (raises ValueError, not allowed)
-- ~~`safe_href` catches all exceptions~~ — FIXED (narrowed to UnsafeURLError, ValueError)
-- ~~Dead letters table missing status/error columns~~ — FIXED
-- ~~`set_status` admin route bypasses state machine~~ — FIXED (now validates transitions)
-- ~~Missing `db.session.rollback()` in cleanup SoftTimeLimitExceeded handlers~~ — FIXED
-- ~~Webhook returns prior success after rollback~~ — FIXED (returns False on DB error)
-- ~~Subscriber `.all()` OOM risk~~ — FIXED (uses yield_per(500))
-- ~~AuthError bypasses provider fallback~~ — FIXED (added to fallback tuple)
-- ~~Stage failure Redis keys not cleared on reprocess~~ — FIXED
-- ~~ResponseCache blpop race condition~~ — FIXED (uses polling with bounded wait)
-- ~~`_evict_stale()` only called in `set()`, not `get()`~~ — FIXED
-- ~~`retry_stuck` task has no `autoretry_for`~~ — FIXED (added autoretry_for)
-- ~~`retry_backoff=30` in four pipeline tasks~~ — FIXED (set to True)
-- ~~`aggregate_crawl_results` already has `autoretry_for`~~ — acknowledged, not re-added
-
-## Codebase verification notes (April 26, 2026 session)
+## Codebase verification notes
 
 **Subagent chain template resolution result is USED**: The concern that `_resolve_template_variables` result was overwritten is INACCURATE. The result flows through via `prompt_data_escaped = _escape_prompt_data(prompt_data)` and is used in `template.format(**prompt_data_escaped)`.
 
-**Webhooks article.failed and newsletter.failed events never triggered**: `services/webhooks.py` defines these in `KNOWN_WEBHOOK_EVENTS` but no code calls `trigger_event("article.failed", ...)` or `trigger_event("newsletter.failed", ...)`.
+**Webhooks article.failed and newsletter.failed events never triggered**: `services/webhooks.py` defines these in `KNOWN_WEBHOOK_EVENTS` but no code calls `trigger_event("article.failed", ...)` or `trigger_event("newsletter.failed", ...)`. These events are defined but not fired — webhook consumers expecting these events will not receive them.
 
 **Newsletter webhook nl parameter type mismatch**: `tasks/newsletter.py:259` uses `NewsletterConfig` object (not `Newsletter` model) for `nl` parameter. The `newsletter_id` is always NULL since `NewsletterConfig` has no `id` attribute.
 
@@ -725,12 +697,12 @@ The following bugs are documented and prioritized in `plans/plan.md` for impleme
 
 **Admin UI time inconsistency in trend memory**: Admin UI at `/admin/trend-memory` uses `db.func.now()` for count but `datetime.now(timezone.utc)` for delete — this is a known display inconsistency, not a data corruption issue.
 
-**`aggregate_crawl_results` already has `autoretry_for`**: `tasks/crawl.py:198` already has `autoretry_for=(ConnectionError, TimeoutError)`. Do not re-add this.
+**RSS adapter has per-request timeout**: `adapters/rss.py:38` passes `timeout=cfg.request_timeout` to `.get()`. The per-request timeout covers socket-level timeout. Adding `connect`/`read` params to the `Retry` object only controls retry-on-socket-error, not timeout itself.
 
-**RSS adapter has per-request timeout**: `adapters/rss.py:38` passes `timeout=cfg.request_timeout` to `.get()`. The "no socket-level timeout" claim was inaccurate — the per-request timeout covers this. Adding `connect`/`read` params to the `Retry` object only controls retry-on-socket-error, not timeout itself.
+**API/Web adapter gap is retry logic, not connection pooling**: `requests.Session()` uses urllib3's default `HTTPAdapter` which already provides connection pooling. The gap is the absence of automatic retries on transient HTTP failures, unlike the RSS adapter which mounts an `HTTPAdapter` with `Retry`. Both adapters now use shared `get_crawl_session()` from `adapters/session.py` with retry configured.
 
-**API/Web adapter gap is retry logic, not connection pooling**: `requests.Session()` uses urllib3's default `HTTPAdapter` which already provides connection pooling. The actual gap is the absence of automatic retries on transient HTTP failures, unlike the RSS adapter which mounts an `HTTPAdapter` with `Retry`.
+**ResponseCache stampede protection uses polling**: `services/cache.py:get_or_set()` uses bounded polling with `redis.exists()` (10 × 50ms = 500ms max wait) instead of `blpop`. This avoids WRONGTYPE errors on string lock keys.
 
-**Metrics route joinedload is preventive**: `routes/admin/metrics.py` queries don't use `joinedload(Article.source)`, but the current template doesn't access `article.source`, so there's no N+1 in practice. Adding joinedload is preventive for future template changes.
+**Metrics route joinedload added**: `routes/admin/metrics.py` queries now use `joinedload(Article.source)` on all three metrics queries (`top_by_views`, `top_by_shares`, `top_by_link_views`) to prevent N+1 if the template accesses `article.source`.
 
 **`cleanup_stale_limiter_slots` uses default `max_retries=3`**: Celery defaults to `max_retries=3` when not specified, so the task already has reasonable retry behavior. Adding an explicit `max_retries=3` is cosmetic.

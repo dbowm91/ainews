@@ -630,20 +630,29 @@ Applied in `services/content_extractor.py`.
 
 ```python
 _MARKDOWN_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
-_BRACE_JSON_RE = re.compile(r'\{[\s\S]*\}')
 ```
 
 Applied in `services/llm/base.py` for JSON extraction.
 
-**Exponential backoff for retries**: Use exponential backoff with jitter instead of fixed delays:
+**Article sorting**: `get_articles_paginated()` in `services/article.py` supports a `sort` parameter ("recent", "impact", "published"). Public routes pass `sort` via query param and include it in cache keys. Use `_get_sort_order(sort)` helper for column/direction mapping.
 
-```python
-import random
-delay = min(1.0 * (2 ** attempt) + random.uniform(0, 0.5), max_delay)
-time.sleep(delay)
-```
+**PWA support**: `static/manifest.json` defines app metadata. `static/js/service-worker.js` provides cache-first for static assets, network-first for pages, offline fallback. Service worker registered in `static/js/app.js` DOMContentLoaded. Base template includes PWA meta tags.
 
-Applied in `services/subagent.py` for all retry loops.
+**Reading time**: `routes/public/links.py:article_detail()` calculates reading time as `word_count // 200` (200 WPM average) from `final_article` JSON fields and passes `reading_time` to template.
+
+**Webhook event payload**: `WebhookEvent` model has a `payload` Text column storing the JSON sent to the webhook. Resend endpoint at `POST /admin/api/webhooks/events/<id>/resend`.
+
+**Dead letters pagination**: `routes/admin/dashboard.py:dead_letters()` supports `failed_page` and `stuck_page` query params with 20 items per page, total pages calculation.
+
+**Select all matching**: `GET /admin/api/articles/ids` returns up to 1000 article IDs matching current filter params for bulk selection UI.
+
+**Install script flags**: `scripts/install.sh` accepts `-d|--dir` for APP_DIR override, `--pull-ollama-model` for automatic Ollama model pull. `REPO_URL` env var overrides the default.
+
+**Deploy script hardening**: `scripts/deploy.sh` unsets git environment variables, checks for detached HEAD, and validates `.git/config` readability.
+
+**Docker static volume**: `docker-compose.yml` mounts `./static:/app/static:ro` on the web service for direct Nginx serving. Celery services have Redis-ping healthchecks.
+
+**Collapsible what-to-watch**: `templates/partials/condensed_article.html` uses `<details>/<summary>` for the what-to-watch section with CSS arrow rotation.
 
 **LLM JSON extraction helper**: LLM responses may contain markdown-wrapped JSON (especially from Ollama). Use `_extract_json()` to extract before validation:
 

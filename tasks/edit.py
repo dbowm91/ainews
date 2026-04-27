@@ -320,6 +320,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
                 system=get_editor_system_prompt(),
                 temperature=rc.temperature,
                 max_tokens=max_tokens,
+                stage="edit",
             )
 
     result_json = result.model_dump_json()

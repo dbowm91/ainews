@@ -78,6 +78,7 @@ def select_article(self, article_id: int, run_id=None):
                     system=get_system_prompt("selector", rc.system_prompt),
                     temperature=rc.temperature,
                     max_tokens=max_tokens,
+                    stage="select",
                 )
 
         article.selector_result = result.model_dump()

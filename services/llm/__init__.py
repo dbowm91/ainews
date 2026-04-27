@@ -95,21 +95,24 @@ def get_provider_chain(role: str):
             )
 
 
-def record_provider_success(provider_id: str, model: str, tokens_used: int = 0) -> None:
+def record_provider_success(provider_id: str, model: str, tokens_used: int = 0, stage: str = "") -> None:
     """Record a successful LLM call for circuit breaker tracking."""
     from services.metrics import get_metrics
 
     breaker = get_breaker(f"llm:{provider_id}:{model}")
     breaker.record_success()
     # Increment call counter
+    labels = {"provider": provider_id, "model": model}
+    if stage:
+        labels["stage"] = stage
     get_metrics().counter_inc(
-        "llm.calls", labels={"provider": provider_id, "model": model}
+        "llm.calls", labels=labels
     )
     if tokens_used:
         get_metrics().counter_inc(
             "llm.tokens",
             value=tokens_used,
-            labels={"provider": provider_id, "model": model},
+            labels=labels,
         )
 
 

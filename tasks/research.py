@@ -188,6 +188,7 @@ def research_article(self, article_id: int, run_id=None):
                     system=get_researcher_system_prompt(),
                     temperature=rc.temperature,
                     max_tokens=max_tokens,
+                    stage="research",
                 )
 
         article.research_brief = brief.model_dump_json()

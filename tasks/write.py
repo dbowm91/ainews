@@ -96,6 +96,7 @@ def write_article(self, article_id: int, run_id=None):
                     system=get_writer_system_prompt(),
                     temperature=rc.temperature,
                     max_tokens=max_tokens,
+                    stage="write",
                 )
 
         article.draft_article = result.model_dump_json()

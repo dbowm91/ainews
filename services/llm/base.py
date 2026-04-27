@@ -167,9 +167,9 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 time.sleep(delay)
         raise last_exc
 
-    def _record_success(self, model: str, tokens_used: int = 0) -> None:
+    def _record_success(self, model: str, tokens_used: int = 0, stage: str = "") -> None:
         from services.llm import record_provider_success
-        record_provider_success(self.provider_id, model, tokens_used)
+        record_provider_success(self.provider_id, model, tokens_used, stage)
 
     def _record_failure(self, model: str) -> None:
         from services.llm import record_provider_failure
@@ -202,6 +202,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         temperature: float = 0.0,
         max_tokens: int = 4096,
         max_validation_retries: int = 2,
+        stage: str = "",
     ) -> T:
         """Chat with structured output, returns validated Pydantic model."""
         from services.metrics import get_metrics
@@ -213,7 +214,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         try:
             resp = _extract_json(resp)
             result = response_model.model_validate_json(resp)
-            self._record_success(model or self.default_model)
+            self._record_success(model or self.default_model, stage=stage)
             return result
         except Exception as e:
             logger.warning(
@@ -255,7 +256,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 )
                 resp = _extract_json(resp)
                 result = response_model.model_validate_json(resp)
-                self._record_success(model or self.default_model)
+                self._record_success(model or self.default_model, stage=stage)
                 return result
             raise
 

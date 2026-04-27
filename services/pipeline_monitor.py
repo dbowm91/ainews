@@ -25,7 +25,7 @@ def _get_redis():
 
 
 def record_stage_result(
-    stage: str, success: bool, run_id: Optional[int] = None
+    stage: str, success: bool, run_id: Optional[int] = None, reason: Optional[str] = None
 ) -> None:
     """Record a pipeline stage result (success or failure).
 
@@ -33,6 +33,7 @@ def record_stage_result(
         stage: Pipeline stage name (crawl, select, research, write, edit)
         success: True if stage succeeded, False if failed
         run_id: Optional pipeline run ID for additional context
+        reason: Optional failure reason (rate_limit, timeout, server_error, etc.)
     """
     try:
         redis_client = _get_redis()
@@ -48,6 +49,10 @@ def record_stage_result(
         else:
             pipe.incr(failure_key)
             pipe.expire(failure_key, 1800)
+            if reason:
+                reason_key = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{current_minute}:failure:{reason}"
+                pipe.incr(reason_key)
+                pipe.expire(reason_key, 1800)
         pipe.execute()
 
         logger.debug(

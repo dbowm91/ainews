@@ -5,13 +5,18 @@
 
 ---
 
+## Completed Items
+
+| Item | Description | Completion Date |
+|------|-------------|-----------------|
+| B3 | ShareConfig validation on save | April 28, 2026 |
+
 ## Deferred Items
 
 The following items are intentionally deferred. Do not implement without further analysis.
 
 | Item | Description | Reason |
 |------|-------------|--------|
-| B3 | ShareConfig validation on save | No CRUD route exists for ShareConfig; records are seed data only. Add when admin CRUD is built. |
 | D1 | Degradation routing threshold change | Current `>= 2` behavior is intentional design. Changing to `> 0` may cause review queue overflow. Needs stakeholder input. |
 | CSS architecture refactor | Intentional duplication | `critical.css` must work standalone for first-paint performance. See AGENTS.md CSS module architecture section. |
 | Session cookie `__Secure-` prefix | Requires HTTPS in all environments | Local dev must also use HTTPS. Consider when forcing HTTPS everywhere. |

@@ -1,18 +1,36 @@
 <tr id="share-{{ config.id }}">
   <td><span class="source-type">{{ config.platform_key }}</span></td>
   <td>{{ config.label }}</td>
+  <td><code>{{ config.url_template }}</code></td>
+  <td>{{ config.icon_name }}</td>
   <td>
     <span class="pipeline-badge pipeline-{% if config.active %}done{% else %}skipped{% endif %}">
       {{ 'active' if config.active else 'inactive' }}
     </span>
   </td>
   <td>
-    <form method="POST" action="/admin/shares/{{ config.id }}/toggle" class="inline"
-          hx-post="/admin/shares/{{ config.id }}/toggle"
-          hx-target="#share-{{ config.id }}"
-          hx-swap="outerHTML"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-      <button type="submit" class="btn-secondary">{{ 'deactivate' if config.active else 'activate' }}</button>
-    </form>
+    <div class="flex gap-05">
+      <button class="btn-secondary btn-sm"
+              hx-get="/admin/shares/{{ config.id }}/edit-form"
+              hx-target="#share-{{ config.id }}"
+              hx-swap="outerHTML">
+        edit
+      </button>
+      <form method="POST" action="/admin/shares/{{ config.id }}/toggle" class="inline"
+            hx-post="/admin/shares/{{ config.id }}/toggle"
+            hx-target="#share-{{ config.id }}"
+            hx-swap="outerHTML"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
+        <button type="submit" class="btn-secondary btn-sm">{{ 'deactivate' if config.active else 'activate' }}</button>
+      </form>
+      <form method="POST" action="/admin/shares/{{ config.id }}/delete" class="inline"
+            hx-post="/admin/shares/{{ config.id }}/delete"
+            hx-target="#share-{{ config.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this share config?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
+        <button type="submit" class="btn-danger btn-sm">delete</button>
+      </form>
+    </div>
   </td>
 </tr>

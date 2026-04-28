@@ -1,0 +1,36 @@
+<tr id="share-{{ config.id }}">
+  <form hx-post="/admin/shares/{{ config.id }}/edit"
+        hx-target="#share-{{ config.id }}"
+        hx-swap="outerHTML"
+        class="edit-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <td>
+      <input type="text" name="platform_key" class="form-input form-input-sm" value="{{ config.platform_key }}" required>
+    </td>
+    <td>
+      <input type="text" name="label" class="form-input form-input-sm" value="{{ config.label }}" required>
+    </td>
+    <td>
+      <input type="text" name="url_template" class="form-input form-input-sm" value="{{ config.url_template }}" required>
+    </td>
+    <td>
+      <input type="text" name="icon_name" class="form-input form-input-sm" value="{{ config.icon_name }}" required>
+    </td>
+    <td>
+      <span class="pipeline-badge pipeline-{% if config.active %}done{% else %}skipped{% endif %}">
+        {{ 'active' if config.active else 'inactive' }}
+      </span>
+    </td>
+    <td>
+      <div class="flex gap-05">
+        <button type="submit" class="btn-primary btn-sm">save</button>
+        <button type="button" class="btn-secondary btn-sm"
+                hx-get="/admin/shares/{{ config.id }}/row"
+                hx-target="#share-{{ config.id }}"
+                hx-swap="outerHTML">
+          cancel
+        </button>
+      </div>
+    </td>
+  </form>
+</tr>

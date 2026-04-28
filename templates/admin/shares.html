@@ -12,7 +12,54 @@
 
 {% block content %}
 <div class="dashboard">
-  <h1 class="dashboard-title">share configuration</h1>
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">share configuration</h1>
+  </div>
+
+  <section class="dash-card dash-card-full">
+    <details class="share-details">
+      <summary class="btn-primary inline-block cursor-pointer mb-1">+ add platform</summary>
+      <div id="add-share-form">
+        <form hx-post="/admin/shares/add"
+              hx-target="#share-add-result"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful)this.reset()"
+              class="edit-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label for="platform-key">platform key</label>
+              <input type="text" id="platform-key" name="platform_key" class="form-input" required placeholder="e.g., x, facebook">
+            </div>
+            <div class="form-group form-group-half">
+              <label for="label">label</label>
+              <input type="text" id="label" name="label" class="form-input" required placeholder="e.g., X (Twitter)">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label for="url-template">url template</label>
+              <input type="text" id="url-template" name="url_template" class="form-input" required placeholder="https://...?url={url}&text={title}">
+            </div>
+            <div class="form-group form-group-half">
+              <label for="icon-name">icon name</label>
+              <input type="text" id="icon-name" name="icon_name" class="form-input" required placeholder="e.g., x, facebook">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label for="sort-order">sort order</label>
+              <input type="number" id="sort-order" name="sort_order" class="form-input" value="0" min="0">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">add platform</button>
+          </div>
+        </form>
+        <div id="share-add-result"></div>
+      </div>
+    </details>
+  </section>
 
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">social platforms</h2>
@@ -21,7 +68,7 @@
       <div class="table-responsive">
       <table class="dash-table" aria-label="Share configurations">
         <thead>
-          <tr><th>platform</th><th>label</th><th>status</th><th>actions</th></tr>
+          <tr><th>platform</th><th>label</th><th>url template</th><th>icon</th><th>status</th><th>actions</th></tr>
         </thead>
         <tbody>
           {% for config in configs %}

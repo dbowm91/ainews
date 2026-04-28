@@ -1,36 +1,26 @@
 # Implementation Plan - Deferred Items
 
 **Date:** April 28, 2026
-**Status:** Complete - All actionable items implemented. Remaining items are intentionally deferred.
+**Status:** Complete - All actionable items verified. Deferred items are intentionally not implemented.
 
-**Last Verified:** April 28, 2026 - CSP fixes applied (nonce attrs added, inline styles moved to external CSS)
+**Last Verified:** April 28, 2026 - All 8 completed items verified in code.
 
 ---
 
-## Completed Items
+## Verified Complete (April 28, 2026)
 
-| Item | Description | Completion Date |
-|------|-------------|-----------------|
-| B3 | ShareConfig validation on save | April 28, 2026 |
-| CSP `unsafe-inline` removal | Move inline handlers to external JS with nonce | April 28, 2026 |
-| Audit logging for admin actions | Implemented - AuditLog model, `log_admin_action()`, 36+ usages | April 28, 2026 |
-| Redis max_connections env var | `REDIS_MAX_CONNECTIONS` env var (default 100/20) | April 28, 2026 |
-| Static analysis (mypy) | Added mypy config to pyproject.toml | April 28, 2026 |
-| Pagination accessibility | Added ARIA labels to pagination nav | April 28, 2026 |
-| Pipeline throughput counters | Added throughput tracking to pipeline_monitor.py | April 28, 2026 |
-| CSP inline styles | Moved inline styles to external CSS (D4) | April 28, 2026 |
+| Item | Description | Verification |
+|------|-------------|--------------|
+| B3 | ShareConfig validation on save | routes/admin/shares.py:81-98 (all fields validated) |
+| CSP `unsafe-inline` removal | Inline handlers to external JS with nonce | webhooks.html:94, articles_table.html:81, base_admin.html:15,19 |
+| Audit logging for admin actions | AuditLog model, log_admin_action(), 37 usages | services/audit.py, 37 usages across admin routes |
+| Redis max_connections env var | `REDIS_MAX_CONNECTIONS` env var | extensions.py:107 (100), config_cache.py:250 (20) |
+| Static analysis (mypy) | mypy config in pyproject.toml | pyproject.toml:65-75, Python 3.12 target |
+| Pagination accessibility | ARIA labels in pagination nav | templates/partials/pagination.html:3-22 |
+| Pipeline throughput counters | record_throughput(), get_throughput_stats() | services/pipeline_monitor.py:141,164 |
+| CSP inline styles | Skeleton styles in external CSS | static/css/articles.css:1195-1233 |
 
-## Verification Summary (April 28, 2026)
-
-All completed items were verified against the codebase:
-- ✅ B3: ShareConfig validation in routes/admin/shares.py
-- ✅ CSP: Nonce attrs added to inline scripts in webhooks.html and articles_table.html
-- ✅ CSP inline styles: Moved from skeleton_article_detail.html to articles.css
-- ✅ Audit logging: 36+ usages verified across admin routes
-- ✅ Redis max_connections: Defaults 100 (extensions.py) and 20 (config_cache.py)
-- ✅ mypy: Config in pyproject.toml with Python 3.12 target
-- ✅ Pagination: ARIA labels in templates/partials/pagination.html
-- ✅ Pipeline throughput: record_throughput() and get_throughput_stats() in pipeline_monitor.py
+---
 
 ## Deferred Items
 

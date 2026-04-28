@@ -90,7 +90,7 @@ SQLite (WAL mode) is intentional. The workload is overwhelmingly read-heavy — 
 - **Newsletter delivery tracking**: Newsletter model has `delivered_count` and `error_message` fields. Admin endpoint `GET /admin/api/newsletters/stats` returns delivery stats.
 - **Search query analytics**: `SearchQuery` model tracks searches and clicks. Admin endpoint `GET /admin/api/search/analytics` returns top queries and zero-result queries.
 - **Webhook event audit trail**: `WebhookEvent` model tracks delivery history. Admin UI at `/admin/webhooks` displays webhook list and event history. Admin endpoint `GET /admin/api/webhooks/<id>/events` returns delivery events (HTML for HTMX, JSON for API calls).
-- **CSP directives**: `app.py` now includes `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` directives. These prevent unauthorized connections, plugin embedding, base tag injection, and form submission to external targets.
+- **CSP directives**: `app.py` now includes `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` directives. These prevent unauthorized connections, plugin embedding, base tag injection, and form submission to external targets. Inline scripts use `nonce="{{ csp_nonce() }}"` attribute (configured via `content_security_policy_nonce_in=["script-src"]`). Inline styles use dynamic CSS custom properties (allowed via `style-src 'self' 'unsafe-inline'`). Skeleton loading styles are in external CSS (`static/css/articles.css`).
 - **Session security**: `SESSION_USE_SIGNER = True` in `config.py` cryptographically signs session cookies to prevent client-side tampering. Flask's default is False (plaintext).
 
 ## Subagent system
@@ -420,6 +420,8 @@ q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 **Generator-based pagination for large queries**: When returning large result sets from route handlers, use `yield_per()` with generators instead of `.all()` loading to prevent OOM. Example in `routes/admin/subscribers.py` for CSV export.
 
 ## Additional security patterns
+
+**CSP nonce for inline scripts**: Inline `<script>` tags must include `nonce="{{ csp_nonce() }}"` attribute to comply with CSP. The nonce is configured via `content_security_policy_nonce_in=["script-src"]` in `app.py`. Templates using inline scripts (e.g., `webhooks.html`, `articles_table.html`) have been updated. Do NOT add new inline scripts without the nonce attribute.
 
 **Subagent chain prompt injection**: `run_subagent_chain()` at `services/subagent.py:748` now calls `_escape_prompt_data()` before `template.format()`:
 ```python

@@ -1,7 +1,8 @@
 """Pipeline monitoring and failure rate tracking.
 
 Provides Redis minute-bucket counters for each pipeline stage
-(crawl, select, research, write, edit) to track success/failure counts.
+(crawl, select, research, write, edit) to track success/failure counts
+and throughput (items processed per minute).
 """
 
 import logging
@@ -135,6 +136,88 @@ def get_all_stages_stats(minutes: int = 15) -> dict:
     """
     stages = ["crawl", "select", "research", "write", "edit"]
     return {stage: get_stage_stats(stage, minutes) for stage in stages}
+
+
+def record_throughput(stage: str, count: int = 1) -> None:
+    """Record pipeline throughput (items processed).
+
+    Args:
+        stage: Pipeline stage name (crawl, select, research, write, edit)
+        count: Number of items processed (default 1)
+    """
+    try:
+        redis_client = _get_redis()
+        current_minute = int(time.time() // _PIPELINE_WINDOW_SECONDS)
+        throughput_key = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{current_minute}:throughput"
+
+        pipe = redis_client.pipeline()
+        pipe.incrby(throughput_key, count)
+        pipe.expire(throughput_key, 1800)
+        pipe.execute()
+
+        logger.debug("Pipeline throughput: %s items for stage %s", count, stage)
+
+    except redis.exceptions.RedisError as e:
+        logger.warning("Failed to record pipeline throughput: %s", e)
+
+
+def get_throughput_stats(stage: str, minutes: int = 15) -> dict:
+    """Get pipeline throughput statistics for recent minutes.
+
+    Args:
+        stage: Pipeline stage name (crawl, select, research, write, edit)
+        minutes: Number of recent minutes to aggregate (default 15)
+
+    Returns:
+        dict with keys:
+            - total_items: Total items processed in window
+            - items_per_minute: Average items per minute
+            - window_minutes: Actual window size in minutes
+    """
+    try:
+        redis_client = _get_redis()
+        current_minute = int(time.time() // _PIPELINE_WINDOW_SECONDS)
+
+        keys = []
+        for i in range(minutes):
+            minute = current_minute - i
+            keys.append(f"{_PIPELINE_COUNTER_PREFIX}{stage}:{minute}:throughput")
+
+        values = redis_client.mget(keys)
+
+        total_items = 0
+        for val in values:
+            if val:
+                total_items += int(val)
+
+        items_per_minute = total_items / minutes if minutes > 0 else 0
+
+        return {
+            "total_items": total_items,
+            "items_per_minute": round(items_per_minute, 2),
+            "window_minutes": minutes,
+        }
+
+    except redis.exceptions.RedisError as e:
+        logger.error("Failed to get pipeline throughput stats: %s", e)
+        return {
+            "total_items": 0,
+            "items_per_minute": 0,
+            "window_minutes": minutes,
+        }
+
+
+def get_all_throughput_stats(minutes: int = 15) -> dict:
+    """Get throughput statistics for all pipeline stages.
+
+    Args:
+        minutes: Number of recent minutes to aggregate (default 15)
+
+    Returns:
+        dict mapping stage names to their throughput stats
+    """
+    stages = ["crawl", "select", "research", "write", "edit"]
+    return {stage: get_throughput_stats(stage, minutes) for stage in stages}
 
 
 def clear_stage_stats(stage: Optional[str] = None) -> None:

@@ -93,12 +93,14 @@ class TestSelectArticle:
     @patch("services.circuit_breaker.get_breaker")
     @patch("services.llm.get_provider_by_id")
     @patch("schemas.pipeline.get_role_config")
+    @patch("services.config_unified.get_config")
     @patch("services.limiter.get_limiter")
     @patch("tasks.pipeline._transition_article_status")
     def test_score_below_threshold_skips(
         self,
         mock_transition,
         mock_limiter_fn,
+        mock_get_config,
         mock_get_rc,
         mock_get_by_id,
         mock_get_breaker,
@@ -125,6 +127,18 @@ class TestSelectArticle:
         rc.system_prompt = "select articles"
         rc.temperature = 0.0
         mock_get_rc.return_value = rc
+
+        # Mock get_config to return experiment config
+        mock_get_config.return_value = {
+            "experiments": {
+                "enabled": True,
+                "assignment_salt": "test_salt",
+                "prompt_variants": {
+                    "writer": {"control": "test", "variant_a": "test_a", "variant_b": "test_b"},
+                    "editor": {"control": "test", "variant_a": "test_a", "variant_b": "test_b"},
+                },
+            }
+        }
 
         provider = MagicMock()
         result_obj = MagicMock()

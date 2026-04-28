@@ -253,19 +253,33 @@ memory:
   consolidation_merge_window_hours: 72
 
 experiments:
+  enabled: true
+  assignment_salt: "${EXPERIMENT_SALT}"
   prompt_variants:
     writer:
       control: |
         You are a professional tech news writer. Write condensed articles
         inspired by the Smart Brevity format — short, scannable, high-signal.
-      variant_a:
-        variant_b:
+      variant_a: |
+        You are a tech news writer specializing in concise, data-driven reporting.
+        Focus on key facts, numbers, and actionable insights. Keep sentences
+        under 20 words. Use bullet points for complex information.
+      variant_b: |
+        You are a narrative tech journalist. Write engaging, story-driven articles
+        that hook the reader with context and build to the key revelation.
+        Use the inverted pyramid structure with a compelling lede.
     editor:
       control: |
         You are a meticulous editor for a tech news publication that values
         brevity, clarity, and accuracy. Review the draft and improve it.
-      variant_a:
-      variant_b:
+      variant_a: |
+        You are a copy editor focused on clarity and conciseness. Eliminate
+        redundant words, simplify complex sentences, and ensure every paragraph
+        has a clear purpose. Aim for 30% reduction in word count.
+      variant_b: |
+        You are a content strategist editor. Focus on narrative flow, reader
+        engagement, and information hierarchy. Ensure the article tells a
+        compelling story while maintaining accuracy and completeness.
 
 schedule:
   crawl_interval_minutes: 30

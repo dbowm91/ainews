@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-
+import hashlib
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,6 +14,33 @@ logger = get_task_logger(__name__)
 # - Leaf tasks: re-raise for Celery retry
 # - Pipeline stages (select, research, write, edit): re-raise for Celery retry
 # - Orchestration tasks: return error dict with aggregated results
+
+
+def _assign_experiment_group(article_id: int, salt: str = "") -> str:
+    """Assign experiment group using hash of article_id + salt for deterministic assignment."""
+    from services.config_unified import get_config
+
+    config = get_config()
+    experiments = config.get("experiments", {})
+    if not experiments.get("enabled", False):
+        return "control"
+
+    prompt_variants = experiments.get("prompt_variants", {})
+    if not prompt_variants:
+        return "control"
+
+    # Use hash for deterministic assignment
+    hash_input = f"{article_id}:{salt}:experiment"
+    hash_val = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+
+    # 70% control, 15% variant_a, 15% variant_b
+    bucket = hash_val % 100
+    if bucket < 70:
+        return "control"
+    elif bucket < 85:
+        return "variant_a"
+    else:
+        return "variant_b"
 
 
 @shared_task(
@@ -84,7 +111,14 @@ def select_article(self, article_id: int, run_id=None):
         article.selector_result = result.model_dump()
 
         # A/B experiment assignment (if experiments configured)
-        # TODO: implement when experiment config is properly defined in pipeline.yaml
+        from services.config_unified import get_config
+        config = get_config()
+        experiments = config.get("experiments", {})
+        if experiments.get("enabled", False):
+            salt = experiments.get("assignment_salt", "")
+            group = _assign_experiment_group(article.id, salt)
+            article.experiment_group = group
+            logger.info("Assigned article %s to experiment group: %s", article.id, group)
 
         if result.selected and result.score >= (rc.min_score or 6):
             if result.confidence == "low":

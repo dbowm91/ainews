@@ -6,11 +6,29 @@ from services.prompts import esc_xml_attr, esc_xml_text
 logger = logging.getLogger(__name__)
 
 
-def get_editor_system_prompt() -> str:
-    from schemas.pipeline import get_role_config
+def get_editor_system_prompt(article=None) -> str:
+    """Get editor system prompt, optionally using experiment variant.
+
+    Args:
+        article: Optional article object with experiment_group attribute.
+                 If provided and experiment_group is set, uses the variant prompt.
+    """
+    from schemas.pipeline import get_config, get_role_config
     from services.prompts import get_system_prompt
 
     rc = get_role_config("editor")
+    config = get_config()
+
+    # Check for experiment variant
+    if article and hasattr(article, 'experiment_group') and article.experiment_group:
+        experiments = config.get("experiments", {})
+        if experiments.get("enabled", False):
+            prompt_variants = experiments.get("prompt_variants", {})
+            editor_variants = prompt_variants.get("editor", {})
+            variant_prompt = editor_variants.get(article.experiment_group)
+            if variant_prompt:
+                return get_system_prompt("editor", variant_prompt)
+
     return get_system_prompt("editor", rc.system_prompt)
 
 

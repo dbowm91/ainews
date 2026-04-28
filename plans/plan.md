@@ -4,6 +4,9 @@
 **Status:** COMPLETED - All actionable items done. Remaining items are intentionally deferred.
 
 All 14 original implementation items (A1-A4, B1-B5, C1-C4, D1-D5) have been implemented and verified.
+Two deferred items have been implemented:
+- Source health query cache in subagent (enabled in pipeline.yaml)
+- A/B experiment implementation (config and wiring complete)
 
 ---
 
@@ -27,9 +30,7 @@ The following items are intentionally deferred. Do not implement without further
 | Pagination accessibility announcements | Nice-to-have | Low signal for current user base. |
 | Queue depth backpressure | Significant new feature | Needs design discussion and stakeholder input. |
 | Pipeline throughput counters | Nice-to-have observability | Current success/failure counters are more actionable. |
-| Source health query cache in subagent | Tool registered, not enabled | Registered in `services/subagent.py:282-289`. Enable by adding `get_source_health` to `tools:` in `pipeline.yaml` subagent config. |
 | Redis max_connections env var | Nice-to-have | Hardcoded values (100 general, 20 config cache) are reasonable. Hasn't hit limits. |
-| A/B experiment implementation | Depends on experiment config | Requires `pipeline.yaml` experiment configuration first. |
 | Static analysis (mypy/ty) | Future tooling enhancement | Add when team is ready to adopt type checking. |
 | Inline event handler CSP fix | Already clean | No `onclick`/`onerror` handlers found in public templates. Admin templates have some (deferred with CSP `unsafe-inline` removal). |
 

@@ -1,24 +1,24 @@
 {% macro pagination_nav(page, has_next, next_page, total_count=None, per_page=20, base_url="/", query_params={}) %}
 {% set _qs = [] %}{% for k, v in query_params.items() %}{% if v %}{% if _qs.append('&' ~ k ~ '=' ~ v|urlencode) %}{% endif %}{% endif %}{% endfor %}{% set qs = _qs|join('') %}
-<nav class="pagination" aria-label="Pagination">
+<nav class="pagination" aria-label="Pagination" role="navigation">
   {% if page > 1 %}
-    <a href="{{ base_url }}?page={{ page - 1 }}{{ qs }}" class="pag-link">&larr; prev</a>
+    <a href="{{ base_url }}?page={{ page - 1 }}{{ qs }}" class="pag-link" aria-label="Go to previous page">&larr; prev</a>
   {% else %}
-    <span class="pag-link pag-disabled" aria-disabled="true">&larr; prev</span>
+    <span class="pag-link pag-disabled" aria-disabled="true" aria-label="Previous page (disabled)">&larr; prev</span>
   {% endif %}
   {% if total_count is not none %}
-    <span class="pag-info">
+    <span class="pag-info" aria-live="polite" aria-atomic="true">
       {% set start = (page - 1) * per_page + 1 %}
       {% set end = [start + per_page - 1, total_count] | min %}
-      {{ start }}–{{ end }} of {{ total_count }}
+      <span aria-label="Showing items {{ start }} to {{ end }} of {{ total_count }}">{{ start }}–{{ end }} of {{ total_count }}</span>
     </span>
   {% else %}
-    <span class="pag-info">page {{ page }}</span>
+    <span class="pag-info" aria-current="page">page {{ page }}</span>
   {% endif %}
   {% if has_next %}
-    <a href="{{ base_url }}?page={{ next_page }}{{ qs }}" class="pag-link">next &rarr;</a>
+    <a href="{{ base_url }}?page={{ next_page }}{{ qs }}" class="pag-link" aria-label="Go to next page">next &rarr;</a>
   {% else %}
-    <span class="pag-link pag-disabled" aria-disabled="true">next &rarr;</span>
+    <span class="pag-link pag-disabled" aria-disabled="true" aria-label="Next page (disabled)">next &rarr;</span>
   {% endif %}
 </nav>
 {% endmacro %}

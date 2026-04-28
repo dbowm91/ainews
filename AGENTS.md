@@ -48,7 +48,11 @@ Wrap `db.session.commit()` in try/except with `db.session.rollback()` in the exc
 
 Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders in config. It returns an empty string (not the raw placeholder) for missing vars, with deduplicated warnings.
 
-**providers.yaml env var resolution**: The `LLMProvidersConfig` model in `schemas/llm.py:58-59` does NOT call `resolve_env_vars()` on the raw YAML before constructing the config. This means `${ENV_VAR}` placeholders in `providers.yaml` may not be resolved at the top level, though individual provider adapters may handle it. Compare to `schemas/pipeline.py:153` which correctly calls `resolve_env_vars(raw)`.
+**providers.yaml env var resolution**: The `LLMProvidersConfig` model in `schemas/llm.py:58-59` does NOT call `resolve_env_vars()` on the raw YAML before constructing the config. This is a known issue tracked in Wave 1 of the implementation plan.
+
+### Fail-closed policy
+
+All distributed locks (Redis) and limiters must fail closed. If Redis is unavailable, the lock acquisition or limiter slot request should raise a `redis.exceptions.RedisError` (or return `False` for limiters) to prevent inconsistent state, race conditions, or uncontrolled resource usage. Do not silently swallow Redis errors in these critical paths.
 
 ### Rate limiting
 
@@ -570,6 +574,9 @@ When refactoring large functions, prefer importing at module level (not inside t
 System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each pipeline stage). The `prompts/*.txt` files are fallback prompts only — they are used when `pipeline.yaml` does not define a `system_prompt` for a given role. See `prompts/README.md` for details.
 
 ## Working with this codebase
+
+### Wave-based parallelization
+The `plans/plan.md` organizes tasks into "Waves". Items within a Wave can generally be executed in parallel by multiple sub-agents (using `invoke_agent` with `generalist` or `codebase_investigator`) to speed up implementation. Always check the "Implementation Context" column in the plan for specific instructions before starting an item.
 
 ### Jinja2 macro conventions
 

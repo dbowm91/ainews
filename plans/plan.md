@@ -1,7 +1,9 @@
 # Consolidated Implementation Plan
-**Date:** April 27, 2026
+**Date:** April 28, 2026
 **Status:** COMPLETED - All waves finished
 **Total verified items:** 17 action items across 3 phases
+
+**Last Update:** Fixed D5 `record_stage_result()` reason passing in `tasks/pipeline.py` (timeout, circuit_open, rate_limit, server_error, auth, unknown)
 
 ---
 ## Wave Structure

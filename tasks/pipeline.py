@@ -313,7 +313,7 @@ def run_stage(
         return result
     except SoftTimeLimitExceeded:
         db.session.rollback()
-        record_stage_result(stage, success=False, run_id=run_id)
+        record_stage_result(stage, success=False, run_id=run_id, reason="timeout")
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",
             time.monotonic() - t0,
@@ -331,7 +331,7 @@ def run_stage(
         raise
     except CircuitOpenError as ce:
         db.session.rollback()
-        record_stage_result(stage, success=False, run_id=run_id)
+        record_stage_result(stage, success=False, run_id=run_id, reason="circuit_open")
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",
             time.monotonic() - t0,
@@ -346,7 +346,16 @@ def run_stage(
         db.session.rollback()
         if 'provider_id' in dir() and provider_id:
             record_provider_failure(provider_id, model)
-        record_stage_result(stage, success=False, run_id=run_id)
+        reason = "unknown"
+        if isinstance(e, RateLimitError):
+            reason = "rate_limit"
+        elif isinstance(e, ProviderTimeoutError):
+            reason = "timeout"
+        elif isinstance(e, ProviderServerError):
+            reason = "server_error"
+        elif isinstance(e, AuthError):
+            reason = "auth"
+        record_stage_result(stage, success=False, run_id=run_id, reason=reason)
         get_metrics().histogram_observe(
             "pipeline.stage_duration_seconds",
             time.monotonic() - t0,

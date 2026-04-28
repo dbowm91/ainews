@@ -221,7 +221,11 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 
 ### Pipeline monitoring
 
-`services/pipeline_monitor.py` provides Redis minute-bucket counters for tracking pipeline stage success/failure rates. Use `record_stage_result()` from pipeline stages. Admin endpoint: `GET /admin/api/pipeline/stats`.
+`services/pipeline_monitor.py` provides Redis minute-bucket counters for tracking pipeline stage success/failure rates and throughput. Use `record_stage_result()` from pipeline stages. Use `record_throughput()` to track items processed per stage. Admin endpoint: `GET /admin/api/pipeline/stats`. Throughput stats available via `get_all_throughput_stats()`.
+
+### Pipeline throughput counters
+
+`services/pipeline_monitor.py` provides throughput tracking with `record_throughput(stage, count=1)` and `get_throughput_stats(stage, minutes=15)`. Returns `total_items` and `items_per_minute` for observability. Tracked in Redis with 30-minute TTL.
 
 ### Pipeline status constants
 
@@ -246,6 +250,12 @@ Sources have `consecutive_failures`, `last_success_at`, `last_error`, `disabled_
 ### Pipeline retry configuration
 
 `MAX_STAGE_RETRIES` and `MAX_TOTAL_RETRIES` are configurable via env vars (default 3 and 10). Set in `Config` class in `config.py`, read at runtime via `_get_max_stage_retries()` / `_get_max_total_retries()` helpers. Celery tasks must use `get_config_with_default()` from `services/config_utils.py` (correct for Celery context), not `current_app.config.get()` which raises `RuntimeError` outside Flask request context.
+
+### Redis max_connections config
+Redis connection pool sizes are configurable via `REDIS_MAX_CONNECTIONS` env var. Defaults to 100 for general Redis client (`extensions.py`) and 20 for config cache (`services/config_cache.py`). Allows tuning without code changes.
+
+### Redis max_connections config
+Redis connection pool sizes are configurable via `REDIS_MAX_CONNECTIONS` env var. Defaults to 100 for general Redis client (`extensions.py`) and 20 for config cache (`services/config_cache.py`). Allows tuning without code changes.
 
 ### Redis variable shadowing
 
@@ -559,15 +569,15 @@ System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each
 Shared macros live in `templates/macros/` (e.g., `badges.html` for `pipeline_badge` and `impact_score`). Shared partials live in `templates/partials/` (e.g., `pagination.html` for `pagination_nav`). Import with `{% from "macros/badges.html" import pipeline_badge %}` or `{% from "partials/pagination.html" import pagination_nav %}`.
 
 ### CSS utility classes
-
 Common utility classes are defined in `static/css/utilities.css` in the Utilities section. Use these instead of inline `style=` attributes:
-- `.inline`, `.inline-block` — display utilities
+- `.inline`, `.inline-block`, `.d-inline` — display utilities
+- `.hidden` — display:none utility
 - `.ml-05`, `.ml-1`, `.mt-05`, `.mt-15`, `.mb-1` — spacing utilities
 - `.text-muted`, `.text-danger` — text color utilities
 - `.no-decoration`, `.cursor-pointer` — behavior utilities
 - `.btn-sm` — small button variant
 
-Do not add new inline styles to templates — add CSS classes to the appropriate module instead.
+Do not add new inline styles to templates — add CSS classes to the appropriate module instead. Dyamic CSS custom properties (like `--bar-width`) can remain inline when values are dynamic.
 
 ### Large refactoring strategy
 

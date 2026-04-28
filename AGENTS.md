@@ -665,7 +665,6 @@ Applied in `services/llm/base.py` for JSON extraction.
 **Related articles caching**: `routes/public/links.py:article_detail()` now uses `find_related_articles_cached()` instead of uncached version. Cache key: `pub:related:{article_id}` with 600s TTL. Also added 30-day date prefilter (`Article.created_at >= now - 30d`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50).
 
 **Structured output retry guidance**: When retrying LLM structured output validation, include the schema in the retry message for better guidance:
-
 ```python
 retry_messages.append({
     "role": "user",
@@ -676,4 +675,14 @@ retry_messages.append({
     ),
 })
 ```
+
+### A/B Experiment System
+**Experiment config in `pipeline.yaml`**: Under `experiments:` section with `enabled: true`, `assignment_salt`, and `prompt_variants:` for writer/editor stages. Each variant (control, variant_a, variant_b) has its own system prompt.
+
+**Experiment assignment**: `_assign_experiment_group(article_id, salt)` in `tasks/select.py` uses MD5 hash of `article_id:salt:experiment` for deterministic 70/15/15 split across control/variant_a/variant_b. Article's `experiment_group` column stores the assignment.
+
+**Variant prompt selection**: `get_writer_system_prompt(article)` and `get_editor_system_prompt(article)` in `services/writer.py` and `services/editor.py` check `article.experiment_group` and return the variant prompt if available, falling back to control/default.
+
+### Subagent Tool: get_source_health
+**Tool registered**: `get_source_health` tool is registered in `services/subagent.py:282-289` and enabled in `pipeline.yaml` under `tools:` for the research subagent. Returns source health summary (disabled state, consecutive failures) for use during research synthesis.
 

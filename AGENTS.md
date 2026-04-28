@@ -683,29 +683,5 @@ retry_messages.append({
 })
 ```
 
-## Codebase verification notes
-
-**`TITLE_SIMILARITY_THRESHOLD` location**: Defined at `services/article.py:52`, configurable via env var. Used as default parameter at line 263. Do not look for it in constants.
-
-**`Article.updated_at` index**: SQLAlchemy model definition (`models.py:128-132`) now has `index=True`. Database-level index exists via migration `026_article_updated_at_index.py`.
-
-**`traced_stage()` integrated**: Defined at `services/logging_utils.py:262-281` and now wired into `run_stage()` at `tasks/pipeline.py:308` via `with traced_stage(stage, "work"):`.
-
-**Config reload endpoint**: `POST /admin/api/config/reload` in `routes/admin/api/config.py` now calls `Config.reload_beat_schedule()` after clearing caches.
-
-**ShareConfig has no admin CRUD**: `routes/admin/shares.py` only has list and toggle routes. ShareConfig records are created via seed data in `app.py`. There is no create/edit/delete route. The `url_template` column has no validation (no scheme check).
-
-**Webhook events**: `KNOWN_WEBHOOK_EVENTS` at `routes/admin/api/webhooks.py:12-17` defines `article.published`, `article.failed`, `newsletter.sent`, `newsletter.failed`. All four events are now triggered: `article.published` (tasks/edit.py), `article.failed` (services/pipeline_failure.py), `newsletter.sent` (tasks/newsletter.py), `newsletter.failed` (tasks/newsletter.py).
-
-**newsletter_id in webhook payload**: Fixed. `tasks/newsletter.py:259` now uses `newsletter.id` (the actual Newsletter model) instead of `nl.id` (NewsletterConfig Pydantic schema).
-
-**share-a11y.js merged into app.js**: `static/js/share-a11y.js` has been deleted. Focus management and `aria-expanded` fixes (`.toString()`) are now in `static/js/app.js`. Script tags removed from `templates/base.html` and `templates/base_admin.html`.
-
-**`safe_href` filter usage**: The `safe_href` Jinja2 filter exists at `app.py:238-253` and validates URL scheme + SSRF. It is used in `article_card.html`, `condensed_article.html`, `article_edit.html`, `share_macro.html`, and `share_redirect.html`.
-
-**`find_related_articles_cached()`**: Exists at `services/related.py` with 600s TTL using key `pub:related:{article_id}`. The article detail route at `routes/public/links.py:50` now calls the cached version. Added 30-day date prefilter (`Article.created_at >= now - 30d`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50).
-
-**`_find_overlapping_low_entries` dead code**: Function at `services/trend_memory.py:274-287` is never called. `consolidate_topic` at line 290 uses direct SQL UPDATE instead. Safe to remove.
-
-**Implementation plan**: Active implementation items are tracked in `plans/plan.md`. Do not create new plan files — keep all pending items in the single consolidated plan.
+**CODEBASE VERIFICATION NOTES**
 

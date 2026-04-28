@@ -3,6 +3,8 @@
 **Date:** April 28, 2026
 **Status:** Complete - All actionable items implemented. Remaining items are intentionally deferred.
 
+**Last Verified:** April 28, 2026 - CSP fixes applied (nonce attrs added, inline styles moved to external CSS)
+
 ---
 
 ## Completed Items
@@ -18,6 +20,18 @@
 | Pipeline throughput counters | Added throughput tracking to pipeline_monitor.py | April 28, 2026 |
 | CSP inline styles | Moved inline styles to external CSS (D4) | April 28, 2026 |
 
+## Verification Summary (April 28, 2026)
+
+All completed items were verified against the codebase:
+- ✅ B3: ShareConfig validation in routes/admin/shares.py
+- ✅ CSP: Nonce attrs added to inline scripts in webhooks.html and articles_table.html
+- ✅ CSP inline styles: Moved from skeleton_article_detail.html to articles.css
+- ✅ Audit logging: 36+ usages verified across admin routes
+- ✅ Redis max_connections: Defaults 100 (extensions.py) and 20 (config_cache.py)
+- ✅ mypy: Config in pyproject.toml with Python 3.12 target
+- ✅ Pagination: ARIA labels in templates/partials/pagination.html
+- ✅ Pipeline throughput: record_throughput() and get_throughput_stats() in pipeline_monitor.py
+
 ## Deferred Items
 
 The following items are intentionally deferred. Do not implement without further analysis.
@@ -30,7 +44,7 @@ The following items are intentionally deferred. Do not implement without further
 | HSTS `include_subdomains` | May break subdomains | Only add if certain no subdomains will be added later. |
 | Redis-backed sessions | Current cookie sessions adequate | Cookie sessions work fine for single-server deployment. |
 | Pipeline query parallelization | Do NOT parallelize | <1% savings, not worth complexity. |
-| JS bundling | Not needed | ~8KB total footprint, bundling adds complexity with no benefit. |
+| JS bundling | Not needed | ~16KB custom JS total footprint (~67KB with htmx), bundling adds complexity with no benefit. |
 | CSS token sync (critical.css) | Working as intended | Shared tokens match; missing tokens are below-the-fold. |
 | Queue depth backpressure | Significant new feature | Needs design discussion and stakeholder input. |
 

@@ -78,7 +78,7 @@
   </table>
   </div>
   {{ pagination_nav(page, has_next, next_page, total_count, 20, "/admin/articles", {"q": query, "status": status, "category": category, "date_from": date_from, "date_to": date_to, "impact_min": impact_min, "impact_max": impact_max, "tag_slug": tag_slug}) }}
-  <script>
+  <script nonce="{{ csp_nonce() }}">
   (function() {
     var bar = document.getElementById('bulk-actions-bar');
     var count = document.getElementById('bulk-count');

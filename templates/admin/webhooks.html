@@ -91,7 +91,7 @@
   </section>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 document.addEventListener('htmx:afterSwap', function(evt) {
   if (evt.detail.target.id && evt.detail.target.id.startsWith('webhook-events-')) {
     evt.detail.target.style.display = 'table-row';

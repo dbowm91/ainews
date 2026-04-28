@@ -104,12 +104,13 @@ def get_redis():
                     parsed.fragment,
                 ))
 
+        redis_max_conn = int(os.environ.get("REDIS_MAX_CONNECTIONS", "100"))
         ssl_env = os.environ.get("REDIS_SSL", "").lower()
         use_ssl = ssl_env == "true" or url.startswith("rediss://")
         if use_ssl:
             _redis_pool = redis.ConnectionPool.from_url(
                 url,
-                max_connections=100,
+                max_connections=redis_max_conn,
                 socket_timeout=5,
                 socket_connect_timeout=3,
                 socket_keepalive=True,
@@ -118,7 +119,7 @@ def get_redis():
         else:
             _redis_pool = redis.ConnectionPool.from_url(
                 url,
-                max_connections=100,
+                max_connections=redis_max_conn,
                 socket_timeout=5,
                 socket_connect_timeout=3,
                 socket_keepalive=True,

@@ -247,19 +247,20 @@ def get_config_cache() -> ConfigCache:
                 (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
             )
 
+        redis_max_conn = int(os.environ.get("REDIS_MAX_CONNECTIONS", "20"))
         ssl_env = os.environ.get("REDIS_SSL", "").lower()
         use_ssl = ssl_env == "true" or url.startswith("rediss://")
         if use_ssl:
             pool = redis.ConnectionPool.from_url(
                 url,
-                max_connections=20,
+                max_connections=redis_max_conn,
                 socket_timeout=5,
                 ssl=True,
             )
         else:
             pool = redis.ConnectionPool.from_url(
                 url,
-                max_connections=20,
+                max_connections=redis_max_conn,
                 socket_timeout=5,
             )
         client = redis.Redis(connection_pool=pool)

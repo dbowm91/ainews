@@ -1,12 +1,7 @@
 # Implementation Plan - Deferred Items
 
 **Date:** April 28, 2026
-**Status:** COMPLETED - All actionable items done. Remaining items are intentionally deferred.
-
-All 14 original implementation items (A1-A4, B1-B5, C1-C4, D1-D5) have been implemented and verified.
-Two deferred items have been implemented:
-- Source health query cache in subagent (enabled in pipeline.yaml)
-- A/B experiment implementation (config and wiring complete)
+**Status:** Active - All implementation complete. Only intentionally deferred items remain.
 
 ---
 
@@ -21,7 +16,7 @@ The following items are intentionally deferred. Do not implement without further
 | CSS architecture refactor | Intentional duplication | `critical.css` must work standalone for first-paint performance. See AGENTS.md CSS module architecture section. |
 | Session cookie `__Secure-` prefix | Requires HTTPS in all environments | Local dev must also use HTTPS. Consider when forcing HTTPS everywhere. |
 | CSP `unsafe-inline` removal | Medium effort, risk of breakage | Inline handlers exist in admin templates (`onclick=`). Requires moving to external JS + nonce implementation. |
-| Audit logging for admin actions | Significant effort (9 events) | No audit infrastructure exists yet. Needed for compliance in production. |
+| Audit logging for admin actions | Significant effort (9 events) | AuditLog model and `log_admin_action()` exist in `services/audit.py`. Full audit trail infrastructure deferred until compliance review. |
 | HSTS `include_subdomains` | May break subdomains | Only add if certain no subdomains will be added later. |
 | Redis-backed sessions | Current cookie sessions adequate | Cookie sessions work fine for single-server deployment. |
 | Pipeline query parallelization | Do NOT parallelize | <1% savings, not worth complexity. |
@@ -36,31 +31,6 @@ The following items are intentionally deferred. Do not implement without further
 
 ---
 
-## Completed Items (Archived)
-
-The following items have been implemented and verified:
-
-| Item | Description | Files Changed |
-|------|-------------|---------------|
-| A1 | Import sorting auto-fix | ~133 files |
-| A2 | LLM cost rate correction | services/cost_tracker.py |
-| A3 | Debug logging in silent exception blocks | routes/public/links.py, routes/admin/api/webhooks.py, tasks/extract.py |
-| A4 | Remove console.log from production code | static/js/app.js |
-| B1 | CSP missing directives | app.py |
-| B2 | safe_href filter in share templates | templates/partials/share_macro.html, templates/share_redirect.html |
-| B4 | Merge share-a11y.js into app.js + fix aria-expanded | static/js/app.js, templates/base.html, templates/base_admin.html |
-| B5 | Add SESSION_USE_SIGNER | config.py |
-| C1+C3 | Fix uncached related articles + add date prefilter | routes/public/links.py, services/related.py |
-| C2 | Fix O(n) cache eviction | services/cache.py |
-| C4 | Add Source health indexes | models.py, migrations/versions/029_sources_health_indexes.py |
-| D2+D5 | Fire article.failed webhook + add failure reason tracking | services/pipeline_failure.py, services/pipeline_monitor.py, tasks/pipeline.py |
-| D3 | Fire newsletter.failed webhook + fix newsletter_id | tasks/newsletter.py |
-| D4 | Add stage label to LLM metrics | services/llm/__init__.py, services/llm/base.py, tasks/select.py, tasks/research.py, tasks/write.py, tasks/edit.py |
-| safe_href filter unit tests | Test coverage for security filter | tests/test_safe_href_filter.py |
-| Remove _find_overlapping_low_entries | Dead code cleanup | services/trend_memory.py |
-
----
-
 ## Verification Commands
 
 ```bash
@@ -71,7 +41,7 @@ The following items have been implemented and verified:
 .venv/bin/python -m pytest tests/ -x -q
 
 # Specific affected tests
-.venv/bin/python -m pytest tests/test_response_cache.py tests/test_pipeline_monitor.py tests/test_cost_tracker.py tests/test_safe_href_filter.py -v
+.venv/bin/python -m pytest tests/test_safe_href_filter.py tests/test_response_cache.py tests/test_pipeline_monitor.py tests/test_cost_tracker.py -v
 ```
 
 *Last updated: April 28, 2026*

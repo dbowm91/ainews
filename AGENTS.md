@@ -577,14 +577,13 @@ When tackling multi-file changes:
 - If a change touches both tests and production code, update tests first to avoid false positives
 - For test fixture changes (`conftest.py`), run the full suite immediately — fixture changes can cause cascading failures that are hard to trace
 
----
+## Key patterns
 
-## New patterns
+### Cache key namespacing
+All cache keys should use a namespace prefix (`pub:` for public, `llm:` for LLM, etc.) to prevent collisions with admin operations. See `routes/public/feeds.py` for key naming conventions like `pub:top_impact:{limit}`.
 
-**Cache key namespacing**: All cache keys should use a namespace prefix (`pub:` for public, `llm:` for LLM, etc.) to prevent collisions with admin operations. See `routes/public/feeds.py` for key naming conventions like `pub:top_impact:{limit}`.
-
-**Redis TLS configuration**: Use conditional SSL based on URL scheme or environment. For redis 6.4.0 compatibility, only pass `ssl=True` when TLS is required:
-
+### Redis TLS configuration
+Use conditional SSL based on URL scheme or environment. For redis 6.4.0 compatibility, only pass `ssl=True` when TLS is required:
 ```python
 ssl_env = os.environ.get("REDIS_SSL", "").lower()
 use_ssl = ssl_env == "true" or url.startswith("rediss://")
@@ -594,8 +593,8 @@ else:
     pool = redis.ConnectionPool.from_url(url, max_connections=100)
 ```
 
-**SQL aggregation for SLA metrics**: Instead of loading all rows into Python, compute avg/p50/p95 using SQL window functions with `ROW_NUMBER() OVER()`:
-
+### SQL aggregation for SLA metrics
+Instead of loading all rows into Python, compute avg/p50/p95 using SQL window functions with `ROW_NUMBER() OVER()`:
 ```python
 p50_subq = session.query(
     duration_expr.label('duration'),
@@ -603,8 +602,8 @@ p50_subq = session.query(
 ).filter(*base_filters).subquery()
 ```
 
-**Bounded thread pools for fire-and-forget work**: Instead of spawning unbounded threads for fire-and-forget logging work, use a shared `ThreadPoolExecutor`:
-
+### Bounded thread pools for fire-and-forget work
+Instead of spawning unbounded threads for fire-and-forget logging work, use a shared `ThreadPoolExecutor`:
 ```python
 _search_logger = ThreadPoolExecutor(max_workers=2, thread_name_prefix="search_log")
 
@@ -614,57 +613,67 @@ def _log_async():
 
 _search_logger.submit(_log_async)
 ```
-
 Applied in `services/article.py` for search query logging.
 
-**Configurable thread pools**: ThreadPoolExecutor workers should be configurable via env var:
-
+### Configurable thread pools
+ThreadPoolExecutor workers should be configurable via env var:
 ```python
 CONTENT_EXTRACTOR_WORKERS = int(os.environ.get("CONTENT_EXTRACTOR_WORKERS", "8"))
 _CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=CONTENT_EXTRACTOR_WORKERS, ...)
 ```
+Applied in `services/content_extractor.py`. `SUBAGENT_WORKERS` env var controls `_subagent_executor` pool size in `services/subagent.py`.
 
-Applied in `services/content_extractor.py`.
-
-**Subagent thread pool configurability**: `SUBAGENT_WORKERS` env var controls `_subagent_executor` pool size in `services/subagent.py`.
-
-**Precompiled regex patterns**: Hot-path regex patterns should be precompiled at module level:
-
+### Precompiled regex patterns
+Hot-path regex patterns should be precompiled at module level:
 ```python
 _MARKDOWN_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
 ```
-
 Applied in `services/llm/base.py` for JSON extraction.
 
-**Article sorting**: `get_articles_paginated()` in `services/article.py` supports a `sort` parameter ("recent", "impact", "published"). Public routes pass `sort` via query param and include it in cache keys. Use `_get_sort_order(sort)` helper for column/direction mapping.
+### Article sorting
+`get_articles_paginated()` in `services/article.py` supports a `sort` parameter ("recent", "impact", "published"). Public routes pass `sort` via query param and include it in cache keys. Use `_get_sort_order(sort)` helper for column/direction mapping.
 
-**PWA support**: `static/manifest.json` defines app metadata. `static/js/service-worker.js` provides cache-first for static assets, network-first for pages, offline fallback. Service worker registered in `static/js/app.js` DOMContentLoaded. Base template includes PWA meta tags.
+### PWA support
+`static/manifest.json` defines app metadata. `static/js/service-worker.js` provides cache-first for static assets, network-first for pages, offline fallback. Service worker registered in `static/js/app.js` DOMContentLoaded. Base template includes PWA meta tags.
 
-**Reading time**: `routes/public/links.py:article_detail()` calculates reading time as `word_count // 200` (200 WPM average) from `final_article` JSON fields and passes `reading_time` to template.
+### Reading time
+`routes/public/links.py:article_detail()` calculates reading time as `word_count // 200` (200 WPM average) from `final_article` JSON fields and passes `reading_time` to template.
 
-**Webhook event payload**: `WebhookEvent` model has a `payload` Text column storing the JSON sent to the webhook. Resend endpoint at `POST /admin/api/webhooks/events/<id>/resend`.
+### Webhook event payload
+`WebhookEvent` model has a `payload` Text column storing the JSON sent to the webhook. Resend endpoint at `POST /admin/api/webhooks/events/<id>/resend`.
 
-**Dead letters pagination**: `routes/admin/dashboard.py:dead_letters()` supports `failed_page` and `stuck_page` query params with 20 items per page, total pages calculation.
+### Dead letters pagination
+`routes/admin/dashboard.py:dead_letters()` supports `failed_page` and `stuck_page` query params with 20 items per page, total pages calculation.
 
-**Select all matching**: `GET /admin/api/articles/ids` returns up to 1000 article IDs matching current filter params for bulk selection UI.
+### Select all matching
+`GET /admin/api/articles/ids` returns up to 1000 article IDs matching current filter params for bulk selection UI.
 
-**Install script flags**: `scripts/install.sh` accepts `-d|--dir` for APP_DIR override, `--pull-ollama-model` for automatic Ollama model pull. `REPO_URL` env var overrides the default.
+### Install script flags
+`scripts/install.sh` accepts `-d|--dir` for APP_DIR override, `--pull-ollama-model` for automatic Ollama model pull. `REPO_URL` env var overrides the default.
 
-**Deploy script hardening**: `scripts/deploy.sh` unsets git environment variables, checks for detached HEAD, and validates `.git/config` readability.
+### Deploy script hardening
+`scripts/deploy.sh` unsets git environment variables, checks for detached HEAD, and validates `.git/config` readability.
 
-**Docker static volume**: `docker-compose.yml` mounts `./static:/app/static:ro` on the web service for direct Nginx serving. Celery services have Redis-ping healthchecks.
+### Docker static volume
+`docker-compose.yml` mounts `./static:/app/static:ro` on the web service for direct Nginx serving. Celery services have Redis-ping healthchecks.
 
-**Collapsible what-to-watch**: `templates/partials/condensed_article.html` uses `<details>/<summary>` for the what-to-watch section with CSS arrow rotation.
+### Collapsible what-to-watch
+`templates/partials/condensed_article.html` uses `<details>/<summary>` for the what-to-watch section with CSS arrow rotation.
 
-**LLM stage tracking**: `services/llm/__init__.py:record_provider_success()` now accepts optional `stage` parameter. When provided, the `llm.calls` and `llm.tokens` metrics include a `stage` label (select, research, write, edit). Updated `chat_structured()` in `services/llm/base.py` and all pipeline tasks to pass `stage=` parameter.
+### Related articles caching
+`find_related_articles_cached(article, limit=5)` in `services/related.py` provides a cached wrapper around `find_related_articles()` with 600s TTL using key `pub:related:{article_id}`. Uses 30-day date prefilter and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50). Article detail route uses the cached version.
 
-**Pipeline failure webhooks**: `article.failed` webhook is now triggered from `services/pipeline_failure.py` when articles fail from per-stage limits or total retry exhaustion. Payload includes `article_id`, `stage`, and `reason`. `newsletter.failed` webhook is triggered from `tasks/newsletter.py` when email delivery fails.
+### LLM stage metrics
+`record_provider_success(provider_id, model, tokens_used, stage="")` in `services/llm/__init__.py` accepts optional `stage` parameter. When provided, `llm.calls` and `llm.tokens` metrics include `stage` label (select, research, write, edit). All pipeline tasks pass `stage=` parameter.
 
-**Failure reason tracking**: `services/pipeline_monitor.py:record_stage_result()` now accepts optional `reason` parameter. Failed pipeline stages record reason codes (rate_limit, timeout, server_error, etc.) in Redis with key pattern `ainews:pipeline:counters:{stage}:{minute}:failure:{reason}`.
+### Pipeline failure webhooks
+`article.failed` webhook is triggered from `services/pipeline_failure.py` when articles fail from per-stage limits or total retry exhaustion. Payload includes `article_id`, `stage`, and `reason`. `newsletter.failed` webhook is triggered from `tasks/newsletter.py` when email delivery fails.
 
-**Related articles caching**: `routes/public/links.py:article_detail()` now uses `find_related_articles_cached()` instead of uncached version. Cache key: `pub:related:{article_id}` with 600s TTL. Also added 30-day date prefilter (`Article.created_at >= now - 30d`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50).
+### Failure reason tracking
+`record_stage_result()` in `services/pipeline_monitor.py` accepts optional `reason` parameter. Failed pipeline stages record reason codes (rate_limit, timeout, server_error, etc.) in Redis with key pattern `ainews:pipeline:counters:{stage}:{minute}:failure:{reason}`.
 
-**Structured output retry guidance**: When retrying LLM structured output validation, include the schema in the retry message for better guidance:
+### Structured output retry guidance
+When retrying LLM structured output validation, include the schema in the retry message for better guidance:
 ```python
 retry_messages.append({
     "role": "user",
@@ -677,12 +686,11 @@ retry_messages.append({
 ```
 
 ### A/B Experiment System
-**Experiment config in `pipeline.yaml`**: Under `experiments:` section with `enabled: true`, `assignment_salt`, and `prompt_variants:` for writer/editor stages. Each variant (control, variant_a, variant_b) has its own system prompt.
-
-**Experiment assignment**: `_assign_experiment_group(article_id, salt)` in `tasks/select.py` uses MD5 hash of `article_id:salt:experiment` for deterministic 70/15/15 split across control/variant_a/variant_b. Article's `experiment_group` column stores the assignment.
-
-**Variant prompt selection**: `get_writer_system_prompt(article)` and `get_editor_system_prompt(article)` in `services/writer.py` and `services/editor.py` check `article.experiment_group` and return the variant prompt if available, falling back to control/default.
+**Experiment config in `pipeline.yaml`** under `experiments:` section with `enabled`, `assignment_salt`, and `prompt_variants:` for writer/editor stages. Assignment via `_assign_experiment_group(article_id, salt)` in `tasks/select.py` uses MD5 hash for deterministic 70/15/15 split. Variant prompt selection via `get_writer_system_prompt()` and `get_editor_system_prompt()` check `article.experiment_group`.
 
 ### Subagent Tool: get_source_health
-**Tool registered**: `get_source_health` tool is registered in `services/subagent.py:282-289` and enabled in `pipeline.yaml` under `tools:` for the research subagent. Returns source health summary (disabled state, consecutive failures) for use during research synthesis.
+`get_source_health` tool registered in `services/subagent.py:282-289` and enabled in `pipeline.yaml` under `tools:` for the research subagent. Returns source health summary (disabled state, consecutive failures) for use during research synthesis.
+
+### Share Accessibility JS
+`static/js/share-a11y.js` was merged into `static/js/app.js`. Focus management and `aria-expanded` fixes (`.toString()` conversion) are now in `app.js`. Script tag removed from `templates/base.html` and `templates/base_admin.html`.
 

@@ -198,6 +198,7 @@ subagent:
       - web_search
       - context_notes
       - related_articles
+      - get_source_health
     system_prompt: |
       You are a research synthesizer. Analyze external sources and the source article
       to provide a coherent synthesis that supplements the main research brief.

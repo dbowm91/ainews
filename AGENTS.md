@@ -214,6 +214,8 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 - **App fixture**: Uses `create_app("testing")` with `monkeypatch.setenv()` for env vars. Rate limiting is disabled via `limiter.enabled = False`. Teardown (`db.session.remove()` + `db.drop_all()`) runs inside `with app.app_context():`. Tests needing the full app (with Talisman, blueprints, template filters) should use the `app` fixture. `CELERY_BROKER_URL` must be a valid Redis URL in tests — `memory://` causes `get_redis()` to fail since it uses `redis.ConnectionPool.from_url()`.
 - **Subagent tests**: `tests/test_subagent.py` includes `TestRunSubagentWithTools`, `TestSubagentChain`, and `TestEvaluateCondition` classes for testing subagent tool calling, chain execution, and AST-based condition evaluation.
 - **Test mock return values**: When updating mocks for LLM provider responses, ensure the mock returns an object with `.tokens_used` attribute, not just a dict. Pipeline code expects this attribute on response objects.
+- **safe_href filter tests**: `tests/test_safe_href_filter.py` covers the `safe_href` template filter which validates URLs for http/https scheme and SSRF safety. Tests cover valid URLs, invalid schemes (javascript:, ftp:, data:), empty/None values, and SSRF-blocked URLs.
+- **Dead code removal**: Periodically check for and remove dead code (functions defined but never called). Example: `_find_overlapping_low_entries` was removed from `services/trend_memory.py` after confirming zero callers.
 
 ## Key infrastructure patterns
 
@@ -662,14 +664,6 @@ Applied in `services/llm/base.py` for JSON extraction.
 
 **Related articles caching**: `routes/public/links.py:article_detail()` now uses `find_related_articles_cached()` instead of uncached version. Cache key: `pub:related:{article_id}` with 600s TTL. Also added 30-day date prefilter (`Article.created_at >= now - 30d`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50).
 
-**Cache eviction optimization**: `services/cache.py` replaced O(n) full-scan `_evict_stale()` with incremental `_evict_batch()` that checks only 5 oldest entries per `get()`/`set()` call. Also removed unused `_EVICT_SAMPLE_RATE` and `_evict_sample_counter`.
-
-```python
-from services.llm.base import _extract_json
-resp = _extract_json(raw_response)
-model = response_model.model_validate_json(resp)
-```
-
 **Structured output retry guidance**: When retrying LLM structured output validation, include the schema in the retry message for better guidance:
 
 ```python
@@ -682,6 +676,4 @@ retry_messages.append({
     ),
 })
 ```
-
-**CODEBASE VERIFICATION NOTES**
 

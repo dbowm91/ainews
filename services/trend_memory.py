@@ -272,22 +272,6 @@ def _should_consolidate_topic(topic: str) -> bool:
     return recent is None
 
 
-def _find_overlapping_low_entries(
-    topic: str, high_entry: TrendMemory, window_hours: int
-) -> list[TrendMemory]:
-    window_start = high_entry.created_at - timedelta(hours=window_hours)
-    return (
-        TrendMemory.query.filter(
-            TrendMemory.topic == topic,
-            TrendMemory.importance == MemoryImportance.LOW,
-            TrendMemory.id != high_entry.id,
-            TrendMemory.created_at >= window_start,
-        )
-        .order_by(TrendMemory.created_at.desc())
-        .all()
-    )
-
-
 def consolidate_topic(topic: str) -> int:
     """Consolidate low-importance entries for a topic when a high-importance entry arrives.
 

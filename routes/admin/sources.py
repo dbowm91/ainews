@@ -85,6 +85,10 @@ def add_source() -> str:
         db.session.rollback()
         return '<div class="form-error" role="alert">failed to create source</div>', 500
 
+    from services.audit import log_admin_action
+
+    log_admin_action("source_create", target_type="source", target_id=source.id, details={"name": name, "source_type": source_type})
+
     return render_template("admin/partials/source_row.html", s=source)
 
 

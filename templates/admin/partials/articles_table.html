@@ -4,7 +4,7 @@
   <p class="result-count" id="result-count">
     Showing {{ articles|length }} of {{ total_count }} articles
   </p>
-  <div class="bulk-actions-bar" id="bulk-actions-bar" style="display:none;">
+  <div class="bulk-actions-bar hidden" id="bulk-actions-bar">
     <span class="bulk-count" id="bulk-count">0 selected</span>
     <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
             data-action="set_status"
@@ -39,7 +39,7 @@
       <tr><th><input type="checkbox" id="select-all-checkbox" aria-label="Select all"></th><th>title</th><th>category</th><th>status</th><th>impact</th><th>created</th><th>actions</th></tr>
     </thead>
     <tfoot>
-      <tr id="select-matching-row" style="display:none;">
+      <tr id="select-matching-row" class="hidden">
         <td colspan="7">
           <button type="button" class="btn btn-sm btn-secondary" id="select-all-matching-btn">
             select all {{ total_count }} matching

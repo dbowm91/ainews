@@ -14,6 +14,8 @@
 | Audit logging for admin actions | Implemented - AuditLog model, `log_admin_action()`, 36+ usages | April 28, 2026 |
 | Redis max_connections env var | `REDIS_MAX_CONNECTIONS` env var (default 100/20) | April 28, 2026 |
 | Static analysis (mypy) | Added mypy config to pyproject.toml | April 28, 2026 |
+| Pagination accessibility | Added ARIA labels to pagination nav | April 28, 2026 |
+| Pipeline throughput counters | Added throughput tracking to pipeline_monitor.py | April 28, 2026 |
 
 ## Deferred Items
 

@@ -117,7 +117,7 @@
             <span class="text-muted">{{ memory.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
           </td>
           <td>
-            <form method="post" action="{{ url_for('admin.trend_memory_delete', memory_id=memory.id) }}" style="display:inline;">
+            <form method="post" action="{{ url_for('admin.trend_memory_delete', memory_id=memory.id) }}" class="d-inline">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn-link text-danger"
                       hx-confirm="Delete this memory entry?">

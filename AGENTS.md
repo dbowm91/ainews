@@ -48,6 +48,8 @@ Wrap `db.session.commit()` in try/except with `db.session.rollback()` in the exc
 
 Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders in config. It returns an empty string (not the raw placeholder) for missing vars, with deduplicated warnings.
 
+**providers.yaml env var resolution**: The `LLMProvidersConfig` model in `schemas/llm.py:58-59` does NOT call `resolve_env_vars()` on the raw YAML before constructing the config. This means `${ENV_VAR}` placeholders in `providers.yaml` may not be resolved at the top level, though individual provider adapters may handle it. Compare to `schemas/pipeline.py:153` which correctly calls `resolve_env_vars(raw)`.
+
 ### Rate limiting
 
 **Do not add `@limiter.limit()` decorators to routes.** The application runs behind a reverse proxy/WAF that handles rate limiting more efficiently than Flask-Limiter. Adding per-route rate limiting adds unnecessary overhead and complexity.
@@ -437,6 +439,10 @@ prompt = template.format(**prompt_data_escaped)
 
 **Redis lock fail-closed**: When Redis is unavailable for distributed lock operations, tasks now raise immediately rather than proceeding unlocked. This applies to `crawl_source`, `retry_stuck`, and `publish_scheduled_articles`. Tests verifying Redis error handling must use `pytest.raises()` for the new fail-closed behavior (not assert result equals 1).
 
+**Fail-open bugs in locking**: `_acquire_stage_lock` in `tasks/pipeline.py:108-117` and `generate_daily_newsletters` in `tasks/newsletter.py:414-417` have fail-open behavior where Redis errors return `True` (allowing concurrent execution). This is inconsistent with the fail-closed policy — fix to raise on RedisError instead.
+
+**Version creation order in edit pipeline**: `create_article_version()` in `tasks/edit.py:333` is called AFTER modifying `article.final_article`, capturing the new state instead of the old. The version should be created BEFORE the modification.
+
 **Celery task signature pattern**: Internal tasks should use `.s()` (signature) with `.apply_async()` rather than `.delay()` for proper HMAC signing. Tests must mock `process_item.s.return_value.apply_async.assert_called_once()`. All task tests need `CELERY_TASK_SECRET` set in the test fixture or via `@patch.dict("os.environ", ...)`.
 
 **Non-blocking I/O with ThreadPoolExecutor**: Blocking operations (HTTP calls, content extraction) should be wrapped in `ThreadPoolExecutor` to avoid blocking Celery workers. Use `_EXECUTOR.submit(fn, *args)` with `future.result(timeout=N)`, catching `TimeoutError` and calling `future.cancel()`. See `services/content_extractor.py`, `services/search/searxng.py`, `services/search/google.py`, `services/search/duckduckgo.py`, `services/subagent.py` for examples. Timeout should be slightly higher than the operation timeout (e.g., +5s for content extraction).
@@ -500,6 +506,8 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 **HTML escaping in Jinja2 templates**: LLM-generated content from `final_article` JSON (headline, tldr, why_it_matters, body, what_to_watch, key_points, citations) and crawled content (original_title, original_url) must be escaped with the `|e` filter when rendered in templates. This applies to all templates under `templates/partials/` that render article content. The `safe_href` filter exists for URL fields but does NOT escape HTML — use `|e` for text content.
 
 **Safe expression evaluation**: Use AST-based evaluation instead of `eval()` for condition parsing in subagent logic (`services/subagent.py:_evaluate_condition`). The `ast` module approach with allowlisted operators is preferred over regex-based parsing for future extensibility.
+
+**Subagent bitwise operator bug**: `services/subagent.py:1015` uses `operator.and_` and `operator.or_` (bitwise) for logical operations with more than 2 operands. This causes incorrect behavior — use `all()` and `any()` instead.
 
 **Deserialization allowlists**: Any function that calls `importlib.import_module()` with data from external storage (Redis, user input) must validate against an allowlist of permitted class paths. See `services/config_cache.py:_import_class()`.
 
@@ -632,6 +640,8 @@ _CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=CONTENT_EXTRACTOR_WORKERS, .
 ```
 Applied in `services/content_extractor.py`. `SUBAGENT_WORKERS` env var controls `_subagent_executor` pool size in `services/subagent.py`.
 
+**ConfigCache stampede protection**: Unlike `ResponseCache.get_or_set()` which uses `SET NX EX` distributed locking, `ConfigCache.get()` lacks stampede protection. When multiple Celery workers encounter a cache miss simultaneously, they all execute `loader_fn()`. Consider adding distributed locking to `services/config_cache.py` when implementing cache improvements.
+
 ### Precompiled regex patterns
 Hot-path regex patterns should be precompiled at module level:
 ```python
@@ -671,6 +681,8 @@ Applied in `services/llm/base.py` for JSON extraction.
 
 ### Related articles caching
 `find_related_articles_cached(article, limit=5)` in `services/related.py` provides a cached wrapper around `find_related_articles()` with 600s TTL using key `pub:related:{article_id}`. Uses 30-day date prefilter and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50). Article detail route uses the cached version.
+
+**Cache key prefix patterns**: When invalidating caches, ensure the prefix matches the actual key pattern. For example, `cache.invalidate_prefix("pub:rss")` does NOT match keys like `pub:rss_feed:*` — use the full prefix `pub:rss_feed` instead. Verify cache key patterns in `routes/public/feeds.py` when adding invalidation.
 
 ### LLM stage metrics
 `record_provider_success(provider_id, model, tokens_used, stage="")` in `services/llm/__init__.py` accepts optional `stage` parameter. When provided, `llm.calls` and `llm.tokens` metrics include `stage` label (select, research, write, edit). All pipeline tasks pass `stage=` parameter.

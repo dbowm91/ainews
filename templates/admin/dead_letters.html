@@ -38,18 +38,17 @@
   <section class="dash-card dash-card-full">
     <div class="section-header">
       <h2 class="dash-card-title">failed articles</h2>
-      <form method="POST" action="/admin/api/articles/bulk" class="bulk-reprocess-form"
-            hx-post="/admin/api/articles/bulk"
-            hx-swap="none"
-            id="reprocess-failed-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="action" value="reprocess">
-        <input type="hidden" name="article_ids" id="reprocess-failed-ids" value="">
-        <button type="submit" class="btn btn-sm btn-secondary"
-                onclick="document.getElementById('reprocess-failed-ids').value = getAllFailedIds();">
-          reprocess all failed
-        </button>
-      </form>
+    <form method="POST" action="/admin/api/articles/bulk" class="bulk-reprocess-form"
+          hx-post="/admin/api/articles/bulk"
+          hx-swap="none"
+          id="reprocess-failed-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="reprocess">
+      <input type="hidden" name="article_ids" id="reprocess-failed-ids" value="">
+      <button type="submit" class="btn btn-sm btn-secondary" id="reprocess-all-failed-btn">
+        reprocess all failed
+      </button>
+    </form>
     </div>
 
     {% if dead_letter_articles %}
@@ -152,9 +151,4 @@
   </section>
 </div>
 
-<script>
-function getAllFailedIds() {
-  return [{% for article in dead_letter_articles %}{{ article.id }}{% if not loop.last %},{% endif %}{% endfor %}];
-}
-</script>
 {% endblock %}

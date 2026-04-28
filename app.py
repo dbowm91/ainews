@@ -120,6 +120,7 @@ def create_app(config_name=None):
     Talisman(
         app,
         content_security_policy=csp,
+        content_security_policy_nonce_in=["script-src"],
         frame_options="SAMEORIGIN",
         referrer_policy="strict-origin-when-cross-origin",
         strict_transport_security_max_age=31536000,

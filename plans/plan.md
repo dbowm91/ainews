@@ -10,6 +10,7 @@
 | Item | Description | Completion Date |
 |------|-------------|-----------------|
 | B3 | ShareConfig validation on save | April 28, 2026 |
+| CSP `unsafe-inline` removal | Move inline handlers to external JS with nonce | April 28, 2026 |
 
 ## Deferred Items
 

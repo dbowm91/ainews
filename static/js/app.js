@@ -328,7 +328,7 @@ document.addEventListener("DOMContentLoaded", function () {
   /* Service worker registration for PWA */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/static/js/service-worker.js').catch(function() {});
+      navigator.serviceWorker.register('/static/service-worker.js', {scope: '/'}).catch(function() {});
     });
   }
 });

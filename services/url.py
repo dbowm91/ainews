@@ -20,16 +20,21 @@ _dns_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns_resolv
 
 # Private/reserved IP ranges that should never be fetched
 _BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("0.0.0.0/8"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
 ]
+
+
+def _is_ipv4_mapped(ip: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
+    if ip.version == 6 and ip.ipv4_mapped:
+        return ip.ipv4_mapped
+    return None
 
 # DNS cache to prevent rebinding between validation and fetch.
 # 60-second TTL reduces DNS rebinding attack window while still
@@ -160,6 +165,12 @@ def _resolve_and_check(hostname: str) -> list[str]:
                 raise UnsafeURLError(
                     f"Hostname {hostname} resolves to private/reserved IP {ip} ({network})"
                 )
+            if isinstance(ip, ipaddress.IPv6Address):
+                ipv4_mapped = _is_ipv4_mapped(ip)
+                if ipv4_mapped and ipv4_mapped in network:
+                    raise UnsafeURLError(
+                        f"Hostname {hostname} resolves to private/reserved IP {ip} mapped to {ipv4_mapped} ({network})"
+                    )
         safe_ips.append(ip_str)
 
     _get_dns_cache().set(hostname, safe_ips)

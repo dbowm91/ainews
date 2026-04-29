@@ -247,10 +247,6 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
 
     from extensions import db
     from models import ArticleVersion
-    from services.task_security import verify_task
-
-    if not verify_task("cleanup_old_article_versions", (), {"days_to_keep": days_to_keep, "dry_run": dry_run}):
-        raise ValueError("Invalid task signature")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=validated.days_to_keep)
     try:

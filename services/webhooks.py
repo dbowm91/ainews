@@ -152,6 +152,7 @@ def _send_webhook_with_retry(
                 data=body,
                 headers=headers,
                 timeout=30,
+                allow_redirects=False,
             )
             if 200 <= response.status_code < 300:
                 return True, None, response.status_code, response.text[:5000], attempt + 1

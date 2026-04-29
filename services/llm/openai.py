@@ -70,6 +70,8 @@ class OpenAIProvider(BaseLLMProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_openai_error(e)
         if not resp.choices:
@@ -125,6 +127,8 @@ class OpenAIProvider(BaseLLMProvider):
                     },
                 },
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_openai_error(e)
         if not resp.choices:
@@ -182,6 +186,8 @@ class OpenAIProvider(BaseLLMProvider):
             )
         try:
             resp = self.client.chat.completions.create(**call_kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_openai_error(e)
         if not resp.choices:
@@ -256,6 +262,8 @@ class OpenAIProvider(BaseLLMProvider):
                 "model": self.default_model,
                 "available_models": [m.id for m in models.data[:10]],
             }
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             converted = _handle_openai_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}

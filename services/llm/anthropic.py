@@ -68,6 +68,8 @@ class AnthropicProvider(BaseLLMProvider):
             call_kwargs["system"] = system
         try:
             resp = self.client.messages.create(**call_kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_anthropic_error(e)
         if not resp.content:
@@ -117,7 +119,9 @@ class AnthropicProvider(BaseLLMProvider):
         if system:
             call_kwargs["system"] = system
         try:
-            resp = self.client.beta.messages.create(**call_kwargs)
+            resp = self.client.messages.create(**call_kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_anthropic_error(e)
         if not resp.content:
@@ -166,6 +170,8 @@ class AnthropicProvider(BaseLLMProvider):
             ]
         try:
             resp = self.client.messages.create(**call_kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_anthropic_error(e)
         if not resp.content:
@@ -244,6 +250,8 @@ class AnthropicProvider(BaseLLMProvider):
                 "status": "ok",
                 "model": self.default_model,
             }
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             converted = _handle_anthropic_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}

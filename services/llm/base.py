@@ -216,6 +216,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             result = response_model.model_validate_json(resp)
             self._record_success(model or self.default_model, stage=stage)
             return result
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.warning(
                 "Validation failed for %s: %s. Raw response: %s",
@@ -400,6 +402,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     try:
                         _, fn = tool_call_map[fn_name]
                         result_content = esc_xml_text(str(fn(**fn_args)))
+                    except (KeyboardInterrupt, SystemExit):
+                        raise
                     except Exception as e:
                         result_content = esc_xml_text(f"Error: {e}")
                 else:

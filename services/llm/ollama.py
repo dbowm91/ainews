@@ -70,6 +70,8 @@ class OllamaProvider(BaseLLMProvider):
                 messages=msgs,
                 options={"temperature": temperature, "num_predict": max_tokens},
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_ollama_error(e)
         return LLMResponse(
@@ -111,6 +113,8 @@ class OllamaProvider(BaseLLMProvider):
                 format=schema,
                 options={"temperature": temperature, "num_predict": max_tokens},
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_ollama_error(e)
         return self._extract_text(resp)
@@ -159,6 +163,8 @@ class OllamaProvider(BaseLLMProvider):
             ]
         try:
             resp = self.client.chat(**call_kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_ollama_error(e)
         return resp, resp
@@ -232,6 +238,8 @@ class OllamaProvider(BaseLLMProvider):
                 "model": self.default_model,
                 "available_models": [m.model for m in result.models],
             }
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             converted = _handle_ollama_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}

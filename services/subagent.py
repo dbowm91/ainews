@@ -169,7 +169,7 @@ def _build_context_tools() -> list[ToolDefinition]:
 
     tools.append(
         ToolDefinition(
-            name="get_topic_notes_for_topics",
+            name="context_notes",
             description="Get topic notes for multiple topics at once.",
             parameters={
                 "type": "object",
@@ -188,7 +188,7 @@ def _build_context_tools() -> list[ToolDefinition]:
 
     tools.append(
         ToolDefinition(
-            name="get_related_articles",
+            name="related_articles",
             description="Get related articles for editing context.",
             parameters={
                 "type": "object",
@@ -320,7 +320,7 @@ def _build_search_tools() -> list[ToolDefinition]:
 
     tools.append(
         ToolDefinition(
-            name="search_web",
+            name="web_search",
             description="Search the web for information on a topic.",
             parameters={
                 "type": "object",

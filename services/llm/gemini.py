@@ -83,6 +83,8 @@ class GeminiProvider(BaseLLMProvider):
                     "max_output_tokens": max_tokens,
                 },
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_gemini_error(e)
         usage = resp.usage_metadata
@@ -131,6 +133,8 @@ class GeminiProvider(BaseLLMProvider):
                     "response_schema": schema,
                 },
             )
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_gemini_error(e)
         return resp.text or "{}"
@@ -187,6 +191,8 @@ class GeminiProvider(BaseLLMProvider):
             ]
         try:
             resp = self.client.models.generate_content(**call_kwargs)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             raise _handle_gemini_error(e)
         if not resp.candidates:
@@ -270,6 +276,8 @@ class GeminiProvider(BaseLLMProvider):
                 "model": self.default_model,
                 "available_models": [m.name for m in result.models[:10]],
             }
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             converted = _handle_gemini_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}

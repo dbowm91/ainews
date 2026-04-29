@@ -25,7 +25,7 @@ def _reset_attempts(mock_redis):
     """Clear in-memory login attempts and Redis lockout data between tests."""
     with _memory_lock:
         _login_attempts_memory.clear()
-    with patch("routes.admin.get_redis", return_value=mock_redis):
+    with patch("routes.admin._get_redis", return_value=mock_redis):
         mock_redis.keys.return_value = []
         yield
     with _memory_lock:

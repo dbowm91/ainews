@@ -1,7 +1,7 @@
 from flask import Response, redirect, render_template, request, url_for
 
 from routes.admin import admin_bp, require_auth
-from routes.decorators import commit
+from routes.decorators import commit, validate_csrf_json
 
 
 @admin_bp.route("/shares")
@@ -15,6 +15,7 @@ def shares() -> str:
 
 @admin_bp.route("/shares/add", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def add_share() -> str | Response:
     from extensions import db
     from models import ShareConfig
@@ -66,6 +67,7 @@ def add_share() -> str | Response:
 
 @admin_bp.route("/shares/<int:config_id>/edit", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def edit_share(config_id: int) -> str | Response:
     from extensions import db
     from models import ShareConfig
@@ -116,6 +118,7 @@ def edit_share(config_id: int) -> str | Response:
 
 @admin_bp.route("/shares/<int:config_id>/delete", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def delete_share(config_id: int) -> str | Response:
     from extensions import db
     from models import ShareConfig
@@ -158,6 +161,7 @@ def share_row(config_id: int) -> str:
 
 @admin_bp.route("/shares/<int:config_id>/toggle", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def toggle_share(config_id: int) -> str | Response:
     from extensions import db
     from models import ShareConfig

@@ -1,13 +1,63 @@
 # Implementation Plan - Consolidated
 
 **Date:** April 28, 2026
-**Status:** Finalized Consolidated Plan
+**Status:** Partially Completed (April 29, 2026)
 **Total Items:** 85+ actionable items
 **Strategy:** Execute sequentially by Wave. Items within a Wave (unless noted) can be executed in parallel by multiple subagents.
 
 ---
 
+## April 29, 2026 Implementation Update
+
+The following items were completed on April 29, 2026:
+
+**Wave 1 (COMPLETED):**
+- W1.1: Subagent tool registry names fixed (web_search, context_notes, related_articles)
+- W1.2: IPv4-mapped IPv6 SSRF bypass fixed in url.py
+- W1.3: HTTP redirect SSRF prevention (allow_redirects=False + SSRFSafeRedirectHandler)
+- W1.4: Service worker scope corrected to '/'
+- W1.5-W1.6: Already correct in codebase
+- W1.7: LLM provider exception handling hardened (KeyboardInterrupt/SystemExit)
+- W1.8: Dead verify_task() removed from cleanup_old_article_versions
+
+**Wave 2 (COMPLETED):**
+- W2.1: LLM provider URL validation added to OllamaProvider and OpenAIProvider
+- W2.2: DNS cache TTL reduced from 60s to 5s
+- W2.3: @validate_csrf_json added to HTMX endpoints
+- W2.4: Password hashing strengthened with scrypt n=131072 and complexity validation
+
+**Wave 3 (COMPLETED):**
+- W3.1: Project root cleaned (.DS_Store, dump.rdb removed)
+- W3.2: requirements.txt and requirements-dev.txt removed
+- W3.3: SQLAlchemy 2.0 migration (Query.get() → db.session.get(), first_or_404 → db.first_or_404())
+- W3.4: Exception logging improved (added debug/exc_info to silent handlers)
+
+**Wave 4 (PARTIAL):**
+- W4.1: pytest-timeout added, Redis mocking fixed in test_admin_auth.py
+- W4.4: Mypy implementation deferred (20h effort)
+
+**Wave 5 (PARTIAL):**
+- W5.3: record_stage_result and record_throughput added to crawl.py
+- W5.1, W5.4, W5.6: Deferred
+
+**Wave 6 (PARTIAL):**
+- W6.4: Meta descriptions added to topic.html and tag.html
+- W6.1, W6.2, W6.3: Deferred
+
+**Wave 7 (PARTIAL):**
+- W7.2: Session binding to IP/User-Agent implemented
+- W7.1, W7.3: Deferred
+
+**Wave 8 (PARTIAL):**
+- W8.3: Coverage config updated to exclude tests
+- W8.2: Deferred
+
+---
+
+---
+
 ## Wave 1: Critical Bugs (Must Fix First - Sequential Execution)
+**Status: COMPLETED April 29, 2026**
 These items cause runtime crashes or security vulnerabilities. Fix before any other work.
 
 | ID | Item | Files | Effort | Implementation Context |

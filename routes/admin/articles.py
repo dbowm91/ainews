@@ -191,6 +191,7 @@ def articles():
 
 @admin_bp.route("/articles/<int:article_id>/edit", methods=["GET", "POST"])
 @require_auth
+@validate_csrf_json
 def edit_article(article_id):
     from extensions import db
     from models import Article
@@ -287,7 +288,7 @@ def edit_article(article_id):
             cache = get_response_cache()
             cache.invalidate_prefix("pub:index")
             cache.invalidate_prefix("pub:topic")
-            cache.invalidate_prefix("pub:rss")
+            cache.invalidate_prefix("pub:rss_feed")
             cache.invalidate(f"pub:article_detail:{article_id}")
         except Exception as e:
             logger.warning("Failed to invalidate article cache: %s", e)

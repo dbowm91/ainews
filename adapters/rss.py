@@ -11,6 +11,8 @@ from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import RSSConfig
 from services.url import validate_url_safe
 
+from .session import SSRFSafeRedirectHandler
+
 
 @register_adapter("rss")
 class RSSAdapter(BaseSourceAdapter):
@@ -23,6 +25,7 @@ class RSSAdapter(BaseSourceAdapter):
         adapter = HTTPAdapter(max_retries=retry)
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
+        self._session.redirect_handler = SSRFSafeRedirectHandler()
 
     def close(self):
         self._session.close()

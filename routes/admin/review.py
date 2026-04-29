@@ -93,7 +93,7 @@ def approve_article(article_id):
         cache = get_response_cache()
         cache.invalidate_prefix("pub:index")
         cache.invalidate_prefix("pub:topic")
-        cache.invalidate_prefix("pub:rss")
+        cache.invalidate_prefix("pub:rss_feed")
         if article.category:
             cache.invalidate_prefix(f"pub:topic:{article.category}")
     except Exception as e:

@@ -35,6 +35,10 @@ class PipelineStatus:
     FAILED = "failed"
 
 
+# Pipeline monitoring stages (order matters for display)
+PIPELINE_STAGES = ("crawl", "select", "research", "write", "edit")
+
+
 # Valid pipeline status transitions
 # Each status maps to the set of statuses it can transition to
 VALID_TRANSITIONS: dict[str, frozenset] = {

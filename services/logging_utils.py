@@ -154,9 +154,9 @@ class PipelineLogger:
 
     def _format(self, msg: str, **context) -> str:
         if context:
-            ctx = json.dumps(context, default=str)
-            return f"[{self.stage}] {msg} | {ctx}"
-        return f"[{self.stage}] {msg}"
+            ctx = json.dumps(context, default=str).replace("%", "%%")
+            return "[%s] %s | %s" % (self.stage, msg, ctx)
+        return "[%s] %s" % (self.stage, msg)
 
     def _build_context(self, **context):
         ctx = dict(context)

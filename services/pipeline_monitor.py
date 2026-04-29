@@ -11,6 +11,8 @@ from typing import Optional
 
 import redis.exceptions
 
+from constants import PIPELINE_STAGES
+
 logger = logging.getLogger(__name__)
 
 # Redis key prefix for pipeline counters
@@ -134,7 +136,7 @@ def get_all_stages_stats(minutes: int = 15) -> dict:
     Returns:
         dict mapping stage names to their stats
     """
-    stages = ["crawl", "select", "research", "write", "edit"]
+    stages = list(PIPELINE_STAGES)
     return {stage: get_stage_stats(stage, minutes) for stage in stages}
 
 
@@ -216,7 +218,7 @@ def get_all_throughput_stats(minutes: int = 15) -> dict:
     Returns:
         dict mapping stage names to their throughput stats
     """
-    stages = ["crawl", "select", "research", "write", "edit"]
+    stages = list(PIPELINE_STAGES)
     return {stage: get_throughput_stats(stage, minutes) for stage in stages}
 
 

@@ -74,18 +74,9 @@ def main():
 
     validate_password_strength(password)
 
-    hashed = generate_password_hash(password, method="scrypt", salt_len=16, key_len=32)
+    hashed = generate_password_hash(password, method="scrypt", salt_length=16)
 
     assert hashed.startswith("scrypt:"), f"Expected scrypt hash, got: {hashed.split('$')[0]}"
-
-    n_param = re.search(r'scrypt:n=(\d+)', hashed)
-    if n_param:
-        n_value = int(n_param.group(1))
-        if n_value < 131072:
-            print(
-                f"Warning: scrypt n={n_value} is below OWASP 2024-2026 recommendation of 131072",
-                file=sys.stderr,
-            )
 
     assert check_password_hash(hashed, password), "Hash verification failed"
     assert not check_password_hash(hashed, password + "wrong"), (

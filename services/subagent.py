@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import os
@@ -997,8 +998,6 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         ast.LtE: operator.le,
         ast.Gt: operator.gt,
         ast.GtE: operator.ge,
-        ast.And: operator.and_,
-        ast.Or: operator.or_,
         ast.Not: operator.not_,
         ast.In: lambda a, b: a in b,
         ast.NotIn: lambda a, b: a not in b,
@@ -1010,9 +1009,11 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         if isinstance(node, ast.Expression):
             return _eval_node(node.body)
         elif isinstance(node, ast.BoolOp):
-            op = _ALLOWED_OPS[type(node.op)]
             values = [_eval_node(v) for v in node.values]
-            return op(values[0], values[1]) if len(values) == 2 else op(*values)
+            if isinstance(node.op, ast.And):
+                return all(values)
+            elif isinstance(node.op, ast.Or):
+                return any(values)
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             return not _eval_node(node.operand)
         elif isinstance(node, ast.Compare):
@@ -1086,6 +1087,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
             raise
         return False
     except Exception:
+        logger.debug("Condition evaluation failed: %s", condition)
         return False
 
 

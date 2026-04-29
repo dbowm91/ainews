@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 from services.task_security import get_signed_kwargs
 
 
@@ -81,6 +82,7 @@ def pipeline_logs(run_id):
 
 @admin_bp.route("/trigger-crawl", methods=["POST"])
 @require_auth
+@validate_csrf_json
 def trigger_crawl():
     from extensions import db
     from models import PipelineRun

@@ -161,6 +161,7 @@ def find_related_articles_dicts(
             Article.id != exclude_id,
             Article.pipeline_status == PipelineStatus.DONE,
             Article.final_article.isnot(None),
+            Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
         )
         .options(joinedload(Article.source), joinedload(Article.tags))
         .order_by(Article.created_at.desc())

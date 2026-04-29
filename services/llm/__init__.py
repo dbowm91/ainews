@@ -60,7 +60,7 @@ def get_provider_chain(role: str):
     """
     rc = get_role_config(role)
     breaker = get_breaker(
-        f"llm:{rc.provider}:{rc.model}",
+        f"llm:{rc.provider}:{rc.model}:{role}",
         failure_threshold=_LLM_FAILURE_THRESHOLD,
         recovery_timeout=_LLM_RECOVERY_TIMEOUT,
     )
@@ -80,7 +80,7 @@ def get_provider_chain(role: str):
         if not fallback_model:
             continue
         fallback_breaker = get_breaker(
-            f"llm:{pdef.id}:{fallback_model}",
+            f"llm:{pdef.id}:{fallback_model}:{role}",
             failure_threshold=_LLM_FAILURE_THRESHOLD,
             recovery_timeout=_LLM_RECOVERY_TIMEOUT,
         )
@@ -99,7 +99,8 @@ def record_provider_success(provider_id: str, model: str, tokens_used: int = 0, 
     """Record a successful LLM call for circuit breaker tracking."""
     from services.metrics import get_metrics
 
-    breaker = get_breaker(f"llm:{provider_id}:{model}")
+    breaker_key = f"llm:{provider_id}:{model}:{stage}" if stage else f"llm:{provider_id}:{model}"
+    breaker = get_breaker(breaker_key)
     breaker.record_success()
     # Increment call counter
     labels = {"provider": provider_id, "model": model}
@@ -116,9 +117,10 @@ def record_provider_success(provider_id: str, model: str, tokens_used: int = 0, 
         )
 
 
-def record_provider_failure(provider_id: str, model: str) -> None:
+def record_provider_failure(provider_id: str, model: str, stage: str = "") -> None:
     """Record a failed LLM call for circuit breaker tracking."""
-    breaker = get_breaker(f"llm:{provider_id}:{model}")
+    breaker_key = f"llm:{provider_id}:{model}:{stage}" if stage else f"llm:{provider_id}:{model}"
+    breaker = get_breaker(breaker_key)
     breaker.record_failure()
 
 

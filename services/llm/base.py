@@ -171,9 +171,9 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         from services.llm import record_provider_success
         record_provider_success(self.provider_id, model, tokens_used, stage)
 
-    def _record_failure(self, model: str) -> None:
+    def _record_failure(self, model: str, stage: str = "") -> None:
         from services.llm import record_provider_failure
-        record_provider_failure(self.provider_id, model)
+        record_provider_failure(self.provider_id, model, stage)
 
     @abc.abstractmethod
     def _create_client(self) -> Any:

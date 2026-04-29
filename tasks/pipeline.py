@@ -190,7 +190,7 @@ def _try_stage_work(stage: str, work_fn, article):
                 provider_id,
                 auth_err,
             )
-            record_provider_failure(provider_id, model)
+            record_provider_failure(provider_id, model, stage)
             raise auth_err
         except (RateLimitError, ProviderServerError, ProviderTimeoutError) as transient_err:
             logger.warning(
@@ -198,7 +198,7 @@ def _try_stage_work(stage: str, work_fn, article):
                 provider_id,
                 transient_err,
             )
-            record_provider_failure(provider_id, model)
+            record_provider_failure(provider_id, model, stage)
             last_error = transient_err
             continue
 
@@ -353,7 +353,7 @@ def run_stage(
     except Exception as e:
         db.session.rollback()
         if 'provider_id' in dir() and provider_id:
-            record_provider_failure(provider_id, model)
+            record_provider_failure(provider_id, model, stage)
         reason = "unknown"
         if isinstance(e, RateLimitError):
             reason = "rate_limit"

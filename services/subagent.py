@@ -933,9 +933,6 @@ def run_subagent_chain(
 
         step_succeeded = False
         for attempt in range(stage_config.max_retries + 1):
-            provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
-                stage_config, default_role="editor"
-            )
             try:
                 future = _subagent_executor.submit(_chain_call)
                 try:

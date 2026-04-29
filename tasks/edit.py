@@ -324,15 +324,16 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
             )
 
     result_json = result.model_dump_json()
-    article.final_article = result_json
-    article.original_ai_article = result_json
-
-    _assign_tags(article, result.tags or [], db)
 
     from services.article import create_article_version
     create_article_version(
         article, change_reason="pipeline_edit", changed_by="pipeline:editor"
     )
+
+    article.final_article = result_json
+    article.original_ai_article = result_json
+
+    _assign_tags(article, result.tags or [], db)
 
     routing_result = _handle_validation_and_routing(article, db, run_id)
     if routing_result:

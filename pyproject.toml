@@ -51,7 +51,7 @@ addopts = "--durations=10"
 
 [tool.coverage.run]
 source = ["."]
-omit = [".venv/**", "migrations/**", "instance/**"]
+omit = [".venv/**", "migrations/**", "instance/**", "tests/**"]
 
 [tool.coverage.report]
 fail_under = 80

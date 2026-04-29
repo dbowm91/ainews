@@ -182,7 +182,7 @@ When adding columns with `server_default` in migrations, also set `nullable=Fals
 
 ## DNS cache in SSRF validation
 
-`services/url.py` uses a bounded `_TTLCache` (1024 entries, 60s TTL) to prevent DNS rebinding between validation and fetch. The 60-second TTL reduces the attack window. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
+`services/url.py` uses a bounded `_TTLCache` (1024 entries, 5s TTL) to prevent DNS rebinding between validation and fetch. The 5-second TTL minimizes the DNS rebinding attack window per Wave 2 item. In tests, use the `_clear_dns_cache` autouse fixture to prevent cross-test contamination:
 ```python
 from services.url import _dns_cache
 
@@ -236,6 +236,10 @@ Articles have a `total_retries` column (incremented on every stage failure). Whe
 ### Pipeline status constants
 
 Use `PipelineStatus` class from `constants.py` instead of string literals for pipeline states to avoid typos.
+
+### Pipeline stages constant
+
+`constants.py` defines `PIPELINE_STAGES` tuple `("crawl", "select", "research", "write", "edit")` for pipeline monitoring. Use this instead of hardcoded stage lists in `services/pipeline_monitor.py`. The stage order matters for display.
 
 ### Newsletter pipeline return types
 
@@ -511,7 +515,7 @@ All FK definitions in `models.py` use `ondelete="CASCADE"`. Relationships use `c
 
 **Safe expression evaluation**: Use AST-based evaluation instead of `eval()` for condition parsing in subagent logic (`services/subagent.py:_evaluate_condition`). The `ast` module approach with allowlisted operators is preferred over regex-based parsing for future extensibility.
 
-**Subagent bitwise operator bug**: `services/subagent.py:1015` uses `operator.and_` and `operator.or_` (bitwise) for logical operations with more than 2 operands. This causes incorrect behavior — use `all()` and `any()` instead.
+**Subagent bitwise operator bug (FIXED)**: `services/subagent.py` used `operator.and_` and `operator.or_` (bitwise) for logical operations with more than 2 operands. This has been fixed — `_evaluate_condition()` now uses `all()` and `any()` for BoolOp evaluation.
 
 **Deserialization allowlists**: Any function that calls `importlib.import_module()` with data from external storage (Redis, user input) must validate against an allowlist of permitted class paths. See `services/config_cache.py:_import_class()`.
 

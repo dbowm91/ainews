@@ -170,9 +170,17 @@ def topic_feed(category: str) -> str:
 
 @public_bp.route("/tag/<slug>")
 def tag_feed(slug: str) -> str:
+    from services.cache import get_response_cache
     from services.utils import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
+
+    cache = get_response_cache()
+    cache_key = f"pub:tag:{slug}:page:{page}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     tag = db.first_or_404(select(Tag).filter_by(slug=slug))
 
@@ -205,7 +213,10 @@ def tag_feed(slug: str) -> str:
         share_configs=share_configs,
     )
 
-    return _render_feed_or_page(ctx, "tag.html")
+    result = _render_feed_or_page(ctx, "tag.html")
+    if page == 1:
+        cache.set(cache_key, result, ttl=300)
+    return result
 
 
 @public_bp.route("/feed")

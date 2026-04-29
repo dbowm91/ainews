@@ -3,13 +3,12 @@
 import redis.exceptions
 from celery.utils.log import get_task_logger
 
-from constants import MAX_STAGE_RETRIES, MAX_TOTAL_RETRIES
+from constants import MAX_STAGE_RETRIES, MAX_STAGE_FAILURES, MAX_TOTAL_RETRIES
 from services.config_utils import get_config_with_default
 
 logger = get_task_logger(__name__)
 
 _STAGE_FAILURE_PREFIX = "ainews:article:stage_failures:"
-_MAX_STAGE_FAILURES = 3
 
 
 def _get_max_total_retries() -> int:
@@ -20,6 +19,11 @@ def _get_max_total_retries() -> int:
 def _get_max_stage_retries() -> int:
     """Get max stage retries from Flask config, falling back to default."""
     return get_config_with_default("MAX_STAGE_RETRIES", MAX_STAGE_RETRIES)
+
+
+def _get_max_stage_failures() -> int:
+    """Get max stage failures from Flask config, falling back to default."""
+    return get_config_with_default("MAX_STAGE_FAILURES", MAX_STAGE_FAILURES)
 
 
 def _track_stage_failure(article_id: int, stage: str) -> int:
@@ -101,7 +105,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
             logger.warning("Failed to trigger article.failed webhook: %s", wh_exc)
         return True
 
-    if stage_failures >= _MAX_STAGE_FAILURES:
+    if stage_failures >= _get_max_stage_failures():
         article.pipeline_status = PipelineStatus.FAILED
         article.last_error = f"{stage}: exceeded per-stage failure limit ({stage_failures} failures)"
         try:

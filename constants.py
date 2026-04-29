@@ -2,6 +2,7 @@
 
 # Pipeline retry limits (single source of truth)
 MAX_STAGE_RETRIES = 3
+MAX_STAGE_FAILURES = 3
 MAX_TOTAL_RETRIES = 10
 
 # Pipeline hard timeout (article can be in pipeline for at most this many seconds)

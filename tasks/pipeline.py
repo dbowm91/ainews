@@ -113,8 +113,8 @@ def _acquire_stage_lock(redis_client, lock_key, task_id, timeout_seconds):
         acquired = redis_client.set(lock_key, task_id, nx=True, ex=timeout_seconds)
         return acquired
     except redis.exceptions.RedisError:
-        logger.warning("Could not acquire stage lock, proceeding without")
-        return True
+        logger.warning("Could not acquire stage lock, Redis unavailable")
+        return False
 
 
 class InvalidStateTransitionError(Exception):

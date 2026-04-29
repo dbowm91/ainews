@@ -246,6 +246,19 @@ class TestRunStage:
         mocks["get_limiter"].assert_called()
         mocks["get_limiter"].return_value.release.assert_called_once()
 
+    def test_fails_closed_on_redis_error(self, mock_run_stage_deps):
+        """When Redis is unavailable, stage lock acquisition returns False to halt processing."""
+        import redis.exceptions
+
+        from tasks.pipeline import _acquire_stage_lock
+
+        redis_mock = MagicMock()
+        redis_mock.set.side_effect = redis.exceptions.RedisError("connection refused")
+
+        result = _acquire_stage_lock(redis_mock, "lock:test", "task-123", 300)
+
+        assert result is False
+
     def test_same_task_can_reacquire_lock(self, mock_run_stage_deps):
         """When lock is held by the same task ID (retry), set with nx succeeds."""
         from tasks.pipeline import run_stage

@@ -2,6 +2,12 @@
 
 {% block title %}ainews// {{ topic_def.display_name if topic_def else category }}{% endblock %}
 
+{% block meta %}
+<meta name="description" content="Latest AI news on {{ topic_def.display_name if topic_def else category }} — curated articles on AI, security, privacy, and programming.">
+<meta property="og:title" content="ainews// {{ topic_def.display_name if topic_def else category }}">
+<meta property="twitter:title" content="{{ topic_def.display_name if topic_def else category }} news">
+{% endblock %}
+
 {% block content %}
 <div class="feed-header">
   {% if topic_def %}

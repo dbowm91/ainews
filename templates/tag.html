@@ -2,6 +2,12 @@
 
 {% block title %}ainews// tag: {{ tag.name }}{% endblock %}
 
+{% block meta %}
+<meta name="description" content="Articles tagged with {{ tag.name }} on ainews — AI-curated news on AI, security, privacy, and programming.">
+<meta property="og:title" content="ainews// tag: {{ tag.name }}">
+<meta property="twitter:title" content="{{ tag.name }} articles">
+{% endblock %}
+
 {% block content %}
 <div class="tag-layout">
   <div class="tag-main">

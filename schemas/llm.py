@@ -56,6 +56,9 @@ def _load_providers_config_from_file(path: str | Path) -> LLMProvidersConfig:
     if not p.exists():
         return LLMProvidersConfig()
     raw = load_yaml_file(p)
+    from schemas.common import resolve_env_vars
+
+    raw = resolve_env_vars(raw)
     return LLMProvidersConfig(**raw)
 
 

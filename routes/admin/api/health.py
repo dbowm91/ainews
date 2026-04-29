@@ -89,6 +89,7 @@ def workers_health() -> Response:
         }
 
     except Exception as e:
+        logger.debug("Celery inspect failed: %s", e)
         result["status"] = "error"
         result["error"] = str(e)
 

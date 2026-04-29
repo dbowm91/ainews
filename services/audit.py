@@ -84,4 +84,4 @@ def log_admin_action(
         db.session.add(log_entry)
         db.session.commit()
     except Exception:
-        logger.warning("Failed to write audit log to database")
+        logger.warning("Failed to write audit log to database", exc_info=True)

@@ -49,7 +49,7 @@ def trend_memory_list():
 @validate_csrf_json
 @require_auth
 def trend_memory_delete(memory_id):
-    memory = TrendMemory.query.get(memory_id)
+    memory = db.session.get(TrendMemory, memory_id)
     if not memory:
         flash("Memory entry not found", "error")
         return redirect(url_for("admin.trend_memory_list"))

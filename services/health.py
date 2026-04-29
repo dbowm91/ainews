@@ -181,8 +181,8 @@ def get_version_info() -> dict[str, str]:
                     version_info["commit"] = ref_file.read_text().strip()[:12]
             else:
                 version_info["commit"] = content[:12]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to read git version info: %s", e)
 
     build_time = os.environ.get("BUILD_TIME")
     if build_time:

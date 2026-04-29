@@ -4,8 +4,10 @@ import logging
 import re
 
 from flask import Response, abort, make_response, redirect, render_template, request
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
+from extensions import db
 from models import Article, ArticleMetric
 from routes.decorators import validate_csrf_json
 from routes.public import (
@@ -93,7 +95,7 @@ def article_detail(article_id: int) -> Response:
 def short_url_redirect(short_id: str) -> Response:
     if not _SHORT_ID_RE.match(short_id):
         abort(404)
-    article = Article.query.filter_by(short_id=short_id).first_or_404()
+    article = db.first_or_404(select(Article).filter_by(short_id=short_id))
     track_metric(article.id, ArticleMetric.share_link_views)
     return redirect(f"/article/{article.id}")
 
@@ -102,7 +104,7 @@ def short_url_redirect(short_id: str) -> Response:
 def short_url_tracking_page(short_id: str) -> str:
     if not _SHORT_ID_RE.match(short_id):
         abort(404)
-    article = Article.query.filter_by(short_id=short_id).first_or_404()
+    article = db.first_or_404(select(Article).filter_by(short_id=short_id))
     parse_article_json(article)
     track_metric(article.id, ArticleMetric.share_link_views)
     share_configs = _get_share_configs()

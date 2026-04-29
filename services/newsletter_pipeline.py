@@ -263,7 +263,8 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                     "used_fallback": True,
                     "fallback_stages": fallback_stages,
                 }
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to parse summary JSON for fallback: %s", e)
                 return {
                     "summary": "",
                     "used_fallback": True,
@@ -278,7 +279,8 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                 "used_fallback": True,
                 "fallback_stages": fallback_stages + ["editor_disabled"],
             }
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to get editor result for fallback: %s", e)
             return {
                 "summary": "",
                 "used_fallback": True,

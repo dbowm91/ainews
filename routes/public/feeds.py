@@ -4,9 +4,11 @@ from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 
 from flask import Response, request
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_PUBLIC, PipelineStatus
+from extensions import db
 from models import Article, Tag
 from routes.public import (
     _get_categories,
@@ -172,7 +174,7 @@ def tag_feed(slug: str) -> str:
 
     page = max(1, request.args.get("page", 1, type=int))
 
-    tag = Tag.query.filter_by(slug=slug).first_or_404()
+    tag = db.first_or_404(select(Tag).filter_by(slug=slug))
 
     q = (
         Article.query.options(joinedload(Article.source), joinedload(Article.tags))

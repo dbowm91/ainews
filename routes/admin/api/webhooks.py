@@ -109,6 +109,7 @@ def create_webhook() -> tuple[Response, int] | Response:
 
         validate_url_safe(url)
     except Exception as e:
+        logger.debug("Invalid webhook URL: %s", e)
         return jsonify({"error": f"Invalid URL: {e}"}), 400
     if not events or not isinstance(events, list):
         return jsonify({"error": "events must be a non-empty list"}), 400
@@ -208,6 +209,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
             validate_url_safe(new_url)
         except Exception as e:
+            logger.debug("Invalid webhook URL update: %s", e)
             return jsonify({"error": f"Invalid URL: {e}"}), 400
         webhook.url = new_url
     if "events" in data:

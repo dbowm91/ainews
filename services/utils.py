@@ -1,6 +1,9 @@
 import json
+import logging
 import re
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 # Simple but effective email pattern - catches common mistakes
 _EMAIL_RE = re.compile(
@@ -57,5 +60,6 @@ def get_admin_categories() -> list[str]:
         from schemas.topic import load_topics
 
         return list(load_topics().topics.keys())
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load topics from config, using fallback: %s", e)
         return ["ai", "privacy", "security", "programming", "hardware"]

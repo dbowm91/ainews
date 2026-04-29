@@ -22,6 +22,10 @@ _ENCRYPTION_KEY: bytes | None = None
 _FALLBACK_KEYS: list[bytes] = []
 
 
+class WebhookSecretDecryptionError(Exception):
+    """Raised when webhook secret decryption fails."""
+
+
 def _get_encryption_key() -> bytes:
     """Get or validate the primary webhook encryption key from environment."""
     global _ENCRYPTION_KEY
@@ -331,11 +335,15 @@ def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> s
             return _decrypt_secret(secret)
         except Exception:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
-            return ""
+            raise WebhookSecretDecryptionError(
+                f"Failed to decrypt webhook secret for webhook {webhook_id}"
+            )
     if secret.startswith("enc:") or secret.startswith("v1:enc:"):
         try:
             return _decrypt_secret(secret)
         except Exception:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
-            return ""
+            raise WebhookSecretDecryptionError(
+                f"Failed to decrypt webhook secret for webhook {webhook_id}"
+            )
     return secret

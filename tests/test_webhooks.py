@@ -1,6 +1,7 @@
 """Tests for services/webhooks.py."""
 
 from unittest.mock import MagicMock, patch
+import pytest
 
 
 class TestWebhooks:
@@ -254,3 +255,11 @@ class TestWebhooks:
 
             assert success is False
             assert "Database error:" in error
+
+    def test_decryption_failure_raises_error(self, app):
+        """Failed decryption of webhook secret should raise WebhookSecretDecryptionError."""
+        from services.webhooks import _get_webhook_secret_from_db, WebhookSecretDecryptionError
+
+        with app.app_context():
+            with pytest.raises(WebhookSecretDecryptionError):
+                _get_webhook_secret_from_db("v2:enc:invalidencryptedvalue", webhook_id=1)

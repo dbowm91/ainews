@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+import pytest
 
 
 class TestGenerateNewsletterHTML:
@@ -399,6 +400,9 @@ class TestNewsletterHtmlWellFormed:
                 elif tag in self.stack:
                     self.errors.append(f"Unexpected close tag: {tag}")
 
+            def handle_data(self, data):
+                pass
+
         with app.app_context():
             article = MagicMock()
             article.id = 1
@@ -424,3 +428,33 @@ class TestNewsletterHtmlWellFormed:
                 assert not parser.stack, f"Unclosed tags: {parser.stack}"
             except Exception as e:
                 assert False, f"HTML parsing failed: {e}"
+
+
+class TestGenerateDailyNewsletters:
+    """Tests for generate_daily_newsletters task."""
+
+    def test_raises_on_redis_error(self, app, monkeypatch):
+        """When Redis is unavailable, newsletter generation raises instead of proceeding."""
+        import redis.exceptions
+
+        monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+
+        with app.app_context():
+            from unittest.mock import patch, MagicMock
+            from tasks import newsletter as newsletter_module
+
+            redis_mock = MagicMock()
+            redis_mock.exists.return_value = False
+            redis_mock.register_script.side_effect = redis.exceptions.RedisError("connection refused")
+
+            with patch("extensions.get_redis", return_value=redis_mock):
+                with patch("services.config_utils.get_config_with_default") as config_mock:
+                    config_mock.return_value = MagicMock(
+                        NEWSLETTER_DRY_RUN_EMAIL=None,
+                        MAX_NEWSLETTER_ARTICLES=20,
+                        NEWSLETTER_SUMMARY_ENABLED=True,
+                    )
+
+                    task = newsletter_module.generate_daily_newsletters
+                    with pytest.raises(redis.exceptions.RedisError):
+                        task(dry_run_email=None, run_id=None)

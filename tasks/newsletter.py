@@ -414,7 +414,8 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     try:
         lock_status = _newsletter_lock(keys=[lock_key], args=[task_id, 600])
     except redis.exceptions.RedisError:
-        lock_status = 2
+        logger.error("Redis error during newsletter lock acquisition, cannot proceed")
+        raise
 
     if lock_status == 0:
         logger.info("Newsletter generation already in progress, skipping")

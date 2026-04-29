@@ -1,189 +1,127 @@
-# Implementation Plan — ALL COMPLETED
+# Implementation Plan - Consolidated & Refined
 
-## Summary
-
-This plan has been fully implemented. All items from Waves 1-8 have been completed.
-**Implementation completed:** April 18, 2026
-**Verification & fixes completed:** April 19, 2026
+**Date:** May 10, 2026
+**Status:** IN PROGRESS
+**Strategy:** Execute sequentially by Wave. Items within a Wave (unless noted) can be executed in parallel by multiple subagents.
 
 ---
 
-## Post-Implementation Fixes (April 19, 2026)
-
-During verification, the following issues were identified and fixed:
-
-### W5.4: Database Query Logging Not Wired (FIXED)
-- **Issue**: `setup_query_logging()` was defined in `logging_config.py` but never called — SQL query logging listeners were not attached to any engine
-- **Fix**: Moved `setup_query_logging(db.engine)` call inside `app.py:168` within `app.app_context()` where the engine is initialized
-
-### W6.1: JSON API Endpoints CSRF Validation (FIXED)
-- **Issue**: Several JSON API endpoints lacked `@validate_csrf_json` decorator
-- **Fixes applied**:
-  - `/admin/api/articles/bulk` in `routes/admin/api/articles.py`
-  - `/admin/api/newsletter/preview` in `routes/admin/newsletters.py`
-  - `/admin/api/config/reload` in `routes/admin/api/config.py`
-- Also updated `validate_csrf_json` decorator to respect `WTF_CSRF_ENABLED = False` in TestingConfig
-
-### W3.5: Ollama Tool Call ID Synthesis (FIXED)
-- **Issue**: Ollama's `_extract_text_and_tool_calls()` created `ToolCall` with `id=""` (empty string)
-- **Fix**: Added `uuid.uuid4().hex[:12]` based ID synthesis in `services/llm/ollama.py:151`
+## Completed Work
+All items from Waves 1-8 of the original implementation phase (April 18-19, 2026) are COMPLETED, including security hardening, LLM provider optimizations, and core performance improvements.
 
 ---
 
-## Consolidated Plan Structure
+## WAVE 1: Critical Fixes & Security Hardening (Highest Priority)
 
-Items are organized into **8 waves** based on dependencies and parallelization potential:
+**Focus:** Eliminating fail-open vulnerabilities and fixing critical data integrity issues.
 
-| Wave | Focus | Items | Status |
-|------|-------|-------|--------|
-| **Wave 1** | Security & HTML Escaping | W1.1-W1.4 | COMPLETED |
-| **Wave 2** | Code Quality Fixes | W2.1-W2.6 | COMPLETED |
-| **Wave 3** | LLM Provider Improvements | W3.1-W3.10 | COMPLETED |
-| **Wave 4** | Performance Optimizations | W4.1-W4.9 | COMPLETED |
-| **Wave 5** | Newsletter & Operational | W5.1-W5.7 | COMPLETED |
-| **Wave 6** | Admin & Security Hardening | W6.1-W6.7 | COMPLETED |
-| **Wave 7** | Architecture & Future Work | W7.1-W7.9 | COMPLETED |
-| **Wave 8** | UI/UX Improvements | W8.1-W8.14 | COMPLETED |
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W1.1** | Fix fail-open stage lock in pipeline | `tasks/pipeline.py:108-117` | `_acquire_stage_lock` currently returns `True` on `RedisError`. It MUST return `False` or raise to prevent race conditions when Redis is down. |
+| **W1.2** | Fix fail-open newsletter lock | `tasks/newsletter.py:414-417` | `except redis.exceptions.RedisError` sets `lock_status = 2` (acquired). Change to raise or return 0 (skipped) to prevent concurrent newsletter generation. |
+| **W1.3** | Fix Version Creation Order in Edit Task | `tasks/edit.py:332-335` | `create_article_version()` is called AFTER modifying `article.final_article`. Move it BEFORE modification to capture the state before AI editing. |
+| **W1.4** | Session Fixation Prevention | `routes/admin/auth.py:55-58` | Ensure `session.clear()` is called immediately before setting `session["admin"] = True` on successful login. |
+| **W1.5** | Webhook Secret Decryption Safety | `services/webhooks.py:325-340` | `_get_webhook_secret_from_db` returns `""` on decryption failure. This silently breaks auth. Should raise a specific error to allow the dispatcher to skip or retry. |
+| **W1.6** | AuthError Transient Log Fix | `tasks/pipeline.py:187` | `AuthError` is logged as "transient error" but is actually terminal. Update log message to "non-retryable authentication error". |
 
----
-
-## Implementation Summary by Wave
-
-### Wave 1: Security & HTML Escaping ✅
-- W1.1: XSS in Admin Topic Notes Templates - Fixed in `topic_note_row.html`, `topic_notes.html`
-- W1.2: Missing HTML Escape for selector_result.reason - Fixed in `article_body.html`
-- W1.3: Unescaped URL in Newsletter HTML - Fixed in `newsletter.py`
-- W1.4: Email Subject Lines Not Escaped - Fixed in `newsletter.py`, `email.py`
-
-### Wave 2: Code Quality Fixes ✅
-- W2.1: Missing `nullable=False` on Citation.position - Fixed in `models.py`
-- W2.2: Redundant Exception Re-Raise in base.py - Fixed in `services/llm/base.py`
-- W2.3: Confusing Timeout Exception Import Alias - Fixed in `services/subagent.py`
-- W2.4: Incomplete Mock in setup_pipeline_mocks - Fixed in `tests/helpers/pipeline_mocks.py`
-- W2.5: Duplicate of W2.2 - No action needed
-- W2.6: Misleading CSRF Exemption Comment - Fixed in `routes/public/links.py`
-
-### Wave 3: LLM Provider Improvements ✅
-- W3.1: Dated Anthropic Structured Outputs Beta Flag - Fixed in `services/llm/anthropic.py`
-- W3.2: Provider Cache Invalidation Incomplete - Fixed in `services/llm/__init__.py`
-- W3.3: No Retry/Success Metrics in chat_structured - Fixed in `services/llm/base.py`
-- W3.4: Fallback Provider Model Not Validated - Fixed in `services/llm/__init__.py`
-- W3.5: Ollama Tool Call ID Synthesis Not Used - Fixed in `services/llm/ollama.py`
-- W3.6: Anthropic Health Check Uses Very Low max_tokens - Fixed in `services/llm/anthropic.py`
-- W3.7: Bare Re-Raise in chat_with_tools - Already fixed in W2.2
-- W3.8: System Prompt Insertion Inconsistency - Fixed in `services/llm/base.py`
-- W3.9: Ollama Thinking Block Fallback is Model-Specific - Fixed in `services/llm/ollama.py`
-- W3.10: ProviderManager Instantiation Failure Not Logged - Fixed in `services/provider_base.py`
-
-### Wave 4: Performance Optimizations ✅
-- W4.1: Missing Database Indexes on Foreign Keys - Fixed in `models.py`
-- W4.2: Missing Eager Loading in Newsletter Article Query - Fixed in `newsletter.py`, `routes/admin/newsletters.py`
-- W4.3: N+1 Query in Article Detail Route - Fixed in `routes/public/links.py`
-- W4.4: Unbounded PipelineRun Query - Fixed in `routes/admin/pipelines.py`
-- W4.5: find_duplicate_titles() Optimization - Fixed in `services/article.py`
-- W4.6: Non-Atomic Lock Reacquisition in Crawl Task - Fixed in `tasks/crawl.py`
-- W4.7: Newsletter Lock Multiple Redis Round-Trips - Fixed in `tasks/newsletter.py`
-- W4.8: Naive vs Aware Datetime Comparison - Fixed in `tasks/pipeline.py`
-- W4.9: scan_iter in Limiter Cleanup Batching - Fixed in `services/limiter.py`
-
-### Wave 5: Newsletter & Operational Improvements ✅
-- W5.1: Newsletter Generation Not Idempotent - Fixed in `tasks/newsletter.py`
-- W5.2: Article Version Cleanup Dry-Run Mode - Fixed in `tasks/cleanup.py`
-- W5.3: Per-Stage Failure Tracking - Fixed in `services/pipeline_failure.py`, `tasks/pipeline.py`
-- W5.4: Database Query Logging Not Wired - Fixed in `logging_config.py`
-- W5.5: Pipeline Metrics in Admin UI - Fixed in `routes/admin/dashboard.py`, `templates/admin/dashboard.html`
-- W5.6: Request ID Propagation - Fixed in `app.py`, `services/logging_utils.py`, `tasks/pipeline.py`
-- W5.7: Blocking Celery get() in Newsletter Tasks - Fixed in `tasks/newsletter.py`
-
-### Wave 6: Admin & Security Hardening ✅
-- W6.1: JSON API Endpoints Lack CSRF Validation - Fixed with `validate_csrf_json` decorator
-- W6.2: Plaintext Admin Password in .env - Fixed with startup check warning
-- W6.3: Default Secret Key Only Warns - Fixed with RuntimeError in DevelopmentConfig
-- W6.4: HTMX Subscribe Form CSRF Bypass - Fixed with `hx-headers` in `subscribe_box.html`
-- W6.5: TestingConfig Disables CSRF - Added `validate_csrf_json` decorator for tests
-- W6.6: safe_href Validation Failure Logging - Fixed with warning log in `app.py`
-- W6.7: Misleading CSRF Exemption Comment - Fixed in `routes/public/links.py`
-
-### Wave 7: Architecture & Future Work ✅
-- W7.1: Celery Batch Processing - Implemented with `InvalidStateTransitionError` and state machine
-- W7.2: Atomic Pipeline Stage Transitions - Implemented with `VALID_TRANSITIONS` and `_transition_article_status()`
-- W7.3: ResponseCache Stampede Uses Polling - Fixed with `blpop` in `services/cache.py`
-- W7.4: Dead Letter Queue UI - Added `/admin/dead-letters` route and template
-- W7.5: Dynamic Celery Beat Schedule - Fixed in `config.py` with `get_beat_schedule()` and `pipeline.yaml`
-- W7.6: Newsletter HTML Validation in CI - Fixed in `tests/test_newsletter.py`
-- W7.7: OpenTelemetry Tracing - Added in `services/logging_utils.py`
-- W7.8: Source Health Auto-Recovery Documentation - Documented in `services/crawling.py`
-- W7.9: Rate Limiting Documentation - Documented in `docs/deployment.md`
-
-### Wave 8: UI/UX Improvements ✅
-- W8.1: CSS Critical Path Consolidation - Fixed in `base.css`, `layout.css`, `critical_css.html`
-- W8.2: prefers-reduced-motion on Progress Bar - Fixed in `critical_css.html`
-- W8.3: Empty Media Query Block - No action needed (has content)
-- W8.4: Stale Comment References - Fixed in `pages.css`
-- W8.5: Duplicate .rss-* Rule Sets - Fixed in `articles.css`
-- W8.6: Search Input Missing Visible Label - Fixed in `feed.html`
-- W8.7: Pagination Missing aria-disabled - Fixed in `pagination.html`
-- W8.8: Hamburger Touch Target Size - Fixed in `layout.css`
-- W8.9: Article Title Truncation in Admin Table - Fixed in `pages.css`
-- W8.10: Admin Nav Overflow Skip Mechanism - Verified correct
-- W8.11: base.html Inline Styles - Fixed in `layout.css`
-- W8.12: Duplicate #content Transition - Fixed in `layout.css`
-- W8.13: Empty State Suggestions - Fixed in `feed.html`
-- W8.14: Share Button A11y - Fixed in `share_macro.html`
+**Parallelization:** W1.1-W1.2 (sequential in one task), W1.3, W1.4, W1.5-W1.6 can all be executed in parallel.
 
 ---
 
-## Testing Commands
+## WAVE 2: Pipeline Stability & Config (Priority 2)
 
-After making changes:
-```bash
-.venv/bin/ruff check . --exclude .venv
-.venv/bin/python -m pytest tests/ -x -q
-```
+**Focus:** Hardening the state machine and improving configuration robustness.
 
-For database migrations:
-```bash
-scripts/verify_backup.sh
-.venv/bin/python -m pytest tests/test_migration.py -v
-```
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W2.1** | Consistent State Transitions | `tasks/write.py`, `tasks/research.py` | Replace direct `article.pipeline_status = ...` assignments with `_transition_article_status()` to ensure validation and audit logging. |
+| **W2.2** | Quality Gate Logging | `tasks/research.py:222-223` | Add `_log_pipeline()` call before the early return at the quality gate to ensure the "review" routing is captured in logs. |
+| **W2.3** | LLM Config Env Var Resolution | `schemas/llm.py:58-59` | `_load_providers_config_from_file` does not call `resolve_env_vars()` on raw YAML. Ensure `${VAR}` placeholders are resolved before schema validation. |
+| **W2.4** | Per-Stage Circuit Breaking | `services/llm/__init__.py:62-66` | Key the circuit breaker by `provider+model+stage`. Currently, failure in one stage (e.g., research) can block all stages using that provider. |
+| **W2.5** | Retry-After Header Support | `services/llm/base.py:155-167` | Update `_retry_with_backoff` to respect `Retry-After` headers if present in 429/503 responses. |
+| **W2.6** | Configurable Failure Limits | `services/pipeline_failure.py` | Move `_MAX_STAGE_FAILURES = 3` to `constants.py` and make it configurable via `Config`. |
 
----
-
-## Rollback Plan
-
-If any change causes issues:
-1. Revert the specific file change
-2. Run tests to confirm restoration
-3. Re-analyze before re-applying
-4. For model changes, generate downgrade migration
-5. Clear relevant Redis keys (config cache, locks)
+**Parallelization:** W2.1-W2.2, W2.3, W2.4-W2.5, W2.6 can all be executed in parallel.
 
 ---
 
-## Notes for Future Agents
+## WAVE 3: Subagent & Search Improvements
 
-Key patterns implemented across these waves:
+**Focus:** Optimizing subagent performance and fixing search analytics.
 
-### HTML Escaping
-- All LLM-generated content and database content in templates must use `|e` filter
-- Email subjects must use `html.escape()` for user-controlled content
-- Newsletter unsubscribe URLs must be escaped with `quote=True`
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W3.1** | Provider Fetch Optimization | `services/subagent.py` | Move `get_provider_for_role` call outside the retry loop to avoid redundant Redis/DB hits. |
+| **W3.2** | Configurable Subagent Iterations | `services/subagent.py:722` | Replace hardcoded `10` iterations with a value from `pipeline.yaml`. |
+| **W3.3** | Search Analytics Query Fix | `routes/admin/api/search.py` | Fix the query at line 20 that incorrectly aggregates search counts. |
+| **W3.4** | Tag Feed Caching | `routes/public/feeds.py:172` | Implement caching for the tag-specific RSS feeds. |
 
-### State Machine for Pipeline
-- `constants.py` defines `VALID_TRANSITIONS` for atomic state changes
-- `_transition_article_status()` in `tasks/pipeline.py` validates transitions
-- Per-stage failure tracking prevents infinite retry loops
+---
 
-### Redis Patterns
-- Use Lua scripts for atomic lock operations (crawl task, newsletter task)
-- Use `blpop` instead of polling for stampede protection
-- Idempotency keys prevent duplicate operations
+## WAVE 4: Email & Newsletter Features
 
-### Request ID Propagation
-- `g.request_id` set in Flask `before_request`
-- Passed via Celery task headers
-- Available in task context via `get_task_request_id()`
+**Focus:** Improving email deliverability and AI-generated subjects.
 
-### OpenTelemetry
-- `get_tracer()` and `traced_llm_call()` / `traced_stage()` helpers in `services/logging_utils.py`
-- Noop exporter when OTel libraries unavailable
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W4.1** | Email Plain-Text Alternative | `services/email.py:187` | Generate and include a plain-text alternative in `MIMEMultipart('alternative')` for all outgoing emails. |
+| **W4.2** | List-Unsubscribe Header | `services/email.py` | Add `List-Unsubscribe` and `List-Unsubscribe-Post` headers (RFC 8058) to newsletter emails. |
+| **W4.3** | AI-Generated Newsletter Subject | `services/newsletter.py` | Use LLM to generate a catchy subject line based on the top stories in the newsletter instead of "Top Stories". |
+| **W4.4** | Source CRUD API | `routes/admin/api/` | Implement missing API endpoints for programmatic source management. |
+
+---
+
+## WAVE 5: Frontend & Accessibility
+
+**Focus:** Polishing the UI and adding user-facing state.
+
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W5.1** | RSS Icon Replacements | `templates/base.html` | Replace `[rss]` text with the project-standard SVG icon. |
+| **W5.2** | Mobile Nav UX | `templates/base.html` | Fix behavior where clicking a nav link doesn't close the mobile overlay on some browsers. |
+| **W5.3** | Client-side Bookmarking | `static/js/app.js` | Implement localStorage-based bookmarking for users to save articles locally. |
+| **W5.4** | Article Read State | `static/js/app.js` | Track read articles in localStorage and dim their titles in the feed. |
+
+---
+
+## WAVE 6: Observability & Metrics
+
+**Focus:** Deeper insights into pipeline performance.
+
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W6.1** | E2E Latency Histograms | `tasks/edit.py` | Record total pipeline latency (from crawl to finalization) using `pipeline.e2e_duration_seconds`. |
+| **W6.2** | Pipeline Backlog API | `routes/admin/api/` | New endpoint to report the count of articles in each status. |
+| **W6.3** | Subagent Context Caching | `services/subagent.py` | Wrap DB-heavy context lookups (`_get_topic_note`, `_get_related`) in short-lived `ResponseCache`. |
+
+---
+
+## WAVE 7: Backend Refinement & Quality
+
+**Focus:** Database optimizations and schema improvements.
+
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **W7.1** | Retry Count Indexes | `models.py` | Add indexes to `total_retries` and `status` columns for efficient cleanup and dashboard queries. |
+| **W7.2** | Config Validation Errors | `services/config_unified.py` | Improve the detail returned when a YAML config fails validation (show path/line if possible). |
+| **W7.3** | DNS Timeout Cancellation | `services/url.py:143-149` | Ensure `future.cancel()` is called on DNS lookup timeouts to prevent thread leak. |
+
+---
+
+## WAVE 8: Documentation & Future Work
+
+**Focus:** Operational readiness and subscriber management.
+
+| Item | Description | Location | Implementation Context |
+|------|-------------|----------|------------------------|
+| **D1** | Operations & Troubleshooting | `docs/` | Expand `operations.md` and `troubleshooting.md` with common error signatures and recovery steps. |
+| **D2** | Subscriber Sunset Policy | `services/subscribers.py` | Implement logic to flag/remove subscribers after N bounces or 6 months of inactivity. |
+
+---
+
+## Verification Protocol
+
+For every Wave, execute:
+1. `ruff check .`
+2. `pytest tests/ -x -q` (Ensuring no regressions in core pipeline).
+3. Manual verification of the specific fix (e.g., simulate Redis outage for W1.1).

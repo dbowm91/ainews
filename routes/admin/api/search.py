@@ -17,11 +17,11 @@ def search_analytics():
 
     top_queries = (
         SearchQuery.query.with_entities(
-            SearchQuery.query.label("query"),
+            SearchQuery.__table__.c.query.label("query"),
             func.count(SearchQuery.id).label("search_count"),
             func.sum(SearchQuery.results_count).label("total_results"),
         )
-        .group_by(SearchQuery.query)
+        .group_by(SearchQuery.__table__.c.query)
         .order_by(func.count(SearchQuery.id).desc())
         .limit(20)
         .all()
@@ -30,7 +30,7 @@ def search_analytics():
     zero_result_queries = (
         SearchQuery.query.filter(SearchQuery.results_count == 0)
         .with_entities(
-            SearchQuery.query.label("query"),
+            SearchQuery.__table__.c.query.label("query"),
             SearchQuery.created_at.label("last_searched"),
         )
         .order_by(SearchQuery.created_at.desc())

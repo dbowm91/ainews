@@ -154,3 +154,85 @@ python scripts/verify_backup.sh
 ./scripts/query_analysis.sh custom
 ./scripts/query_analysis.sh article 123
 ```
+
+## Common Error Signatures
+
+### Redis Connection Errors
+
+**Signature:** `redis.exceptions.ConnectionError: Error -2 connecting to localhost:6379`
+
+**Recovery:**
+1. Check Redis is running: `systemctl status redis`
+2. Check Redis logs: `journalctl -u redis`
+3. Verify Redis network connectivity: `redis-cli ping`
+
+**Signature:** `ResponseError: BUSY Redis is busy running a Lua script`
+
+**Recovery:** Wait for the script to complete or kill long-running scripts with `redis-cli debug sleep 0`
+
+### Pipeline Stage Failures
+
+**Signature:** `InvalidStateTransitionError: Invalid pipeline transition for article N: selecting -> failed`
+
+**Recovery:** Check the article's current status in admin UI. If stuck, reprocess via bulk action or manually reset status.
+
+**Signature:** `CircuitOpenError: All providers failed for stage: research`
+
+**Recovery:**
+1. Check provider health: `GET /admin/api/health`
+2. Verify providers.yaml configuration
+3. Check circuit breaker status in Redis: `redis-cli keys "*circuit*"`
+
+### Database Lock Errors
+
+**Signature:** `OperationalError: database is locked`
+
+**Recovery:**
+1. Increase SQLite timeout (already configured to 15s)
+2. Check for long-running transactions
+3. Restart the service to release locks
+4. For Celery workers, ensure only one worker per queue
+
+### Authentication Failures
+
+**Signature:** `AuthError: Non-retryable authentication error`
+
+**Recovery:** Verify LLM provider API keys are valid and not expired. Check provider status in admin dashboard.
+
+### Celery Task Failures
+
+**Signature:** `SoftTimeLimitExceeded: Soft time limit exceeded`
+
+**Recovery:** Tasks have 300s soft limit. If pipeline stages regularly timeout, increase `timeout_seconds` in pipeline.yaml for that stage.
+
+## Recovery Procedures
+
+### Recovering from Stuck Locks
+
+```bash
+# List active locks
+redis-cli keys "ainews:*lock*"
+
+# Clear a specific lock (use with caution)
+redis-cli DEL "ainews:lock:stage:article_id"
+```
+
+### Resetting Failed Pipeline Stages
+
+```bash
+# Via API
+curl -X POST http://localhost:5000/admin/api/articles/bulk \
+  -H "Content-Type: application/json" \
+  -H "X-CSRFToken: ..." \
+  -d '{"article_ids": [1,2,3], "action": "set_status", "status": "pending"}'
+```
+
+### Circuit Breaker Reset
+
+```bash
+# View circuit breaker state
+redis-cli keys "*breaker*"
+
+# Manually reset (clears all failure counts)
+redis-cli flushdb  # Use only in emergencies
+```

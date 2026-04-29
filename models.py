@@ -220,6 +220,9 @@ class Subscriber(db.Model):
     active = db.Column(db.Boolean, default=True)
     deleted_at = db.Column(db.DateTime, nullable=True)
     preferences = db.Column(db.JSON, nullable=True, default=dict)
+    bounce_count = db.Column(db.Integer, nullable=False, default=0)
+    last_bounce_at = db.Column(db.DateTime, nullable=True)
+    last_active_at = db.Column(db.DateTime, nullable=True, index=True)
 
     __table_args__ = (
         db.UniqueConstraint("email", "newsletter_type", name="uq_email_newsletter"),

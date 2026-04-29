@@ -9,7 +9,7 @@ Conventions for AI coding agents working in this codebase.
 .venv/bin/python -m pytest tests/ -x -q
 ```
 
-**Note:** Some LLM adapter tests may have pre-existing failures unrelated to code changes.
+**Note:** Some LLM adapter tests may have pre-existing failures unrelated to code changes. Mypy is not yet fully implemented across the codebase.
 
 ## Key conventions
 
@@ -447,10 +447,6 @@ prompt = template.format(**prompt_data_escaped)
 
 **Redis lock fail-closed**: When Redis is unavailable for distributed lock operations, tasks now raise immediately rather than proceeding unlocked. This applies to `crawl_source`, `retry_stuck`, and `publish_scheduled_articles`. Tests verifying Redis error handling must use `pytest.raises()` for the new fail-closed behavior (not assert result equals 1).
 
-**Fail-open bugs in locking**: `_acquire_stage_lock` in `tasks/pipeline.py:108-117` and `generate_daily_newsletters` in `tasks/newsletter.py:414-417` have fail-open behavior where Redis errors return `True` (allowing concurrent execution). This is inconsistent with the fail-closed policy — fix to raise on RedisError instead.
-
-**Version creation order in edit pipeline**: `create_article_version()` in `tasks/edit.py:333` is called AFTER modifying `article.final_article`, capturing the new state instead of the old. The version should be created BEFORE the modification.
-
 **Celery task signature pattern**: Internal tasks should use `.s()` (signature) with `.apply_async()` rather than `.delay()` for proper HMAC signing. Tests must mock `process_item.s.return_value.apply_async.assert_called_once()`. All task tests need `CELERY_TASK_SECRET` set in the test fixture or via `@patch.dict("os.environ", ...)`.
 
 **Non-blocking I/O with ThreadPoolExecutor**: Blocking operations (HTTP calls, content extraction) should be wrapped in `ThreadPoolExecutor` to avoid blocking Celery workers. Use `_EXECUTOR.submit(fn, *args)` with `future.result(timeout=N)`, catching `TimeoutError` and calling `future.cancel()`. See `services/content_extractor.py`, `services/search/searxng.py`, `services/search/google.py`, `services/search/duckduckgo.py`, `services/subagent.py` for examples. Timeout should be slightly higher than the operation timeout (e.g., +5s for content extraction).
@@ -578,9 +574,11 @@ When refactoring large functions, prefer importing at module level (not inside t
 System prompts are defined in `pipeline.yaml` (`system_prompt` fields under each pipeline stage). The `prompts/*.txt` files are fallback prompts only — they are used when `pipeline.yaml` does not define a `system_prompt` for a given role. See `prompts/README.md` for details.
 
 ## Working with this codebase
-
 ### Wave-based parallelization
+
 The `plans/plan.md` organizes tasks into "Waves". Items within a Wave can generally be executed in parallel by multiple sub-agents (using `invoke_agent` with `generalist` or `codebase_investigator`) to speed up implementation. Always check the "Implementation Context" column in the plan for specific instructions before starting an item.
+
+**Current plan status (April 29, 2026)**: The previous plan.md (85+ items completed) has been superseded by a consolidated plan.md containing ~65 pending items across 8 waves. Key items still requiring action include: fail-open Redis lock bugs (W1-P1, W1-P2), version creation order fix (W1-P4), env var resolution (W2-P3), and observability improvements (W6).
 
 ### Jinja2 macro conventions
 

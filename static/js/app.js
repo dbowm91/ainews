@@ -344,6 +344,54 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+/* Read articles: track in localStorage, dim titles */
+  (function () {
+    var READ_KEY = "read_articles";
+
+    function getReadIds() {
+      try {
+        return JSON.parse(localStorage.getItem(READ_KEY) || "[]");
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveReadIds(ids) {
+      try {
+        localStorage.setItem(READ_KEY, JSON.stringify(ids));
+      } catch (e) {}
+    }
+
+    function markArticleRead(articleId) {
+      var ids = getReadIds();
+      if (ids.indexOf(articleId) === -1) {
+        ids.push(articleId);
+        saveReadIds(ids);
+      }
+      var card = document.querySelector('.article-card[data-article-id="' + articleId + '"]');
+      if (card) card.classList.add("article-read");
+    }
+
+    function initReadArticles() {
+      var ids = getReadIds();
+      ids.forEach(function (id) {
+        var card = document.querySelector('.article-card[data-article-id="' + id + '"]');
+        if (card) card.classList.add("article-read");
+      });
+    }
+
+    document.addEventListener("click", function (e) {
+      var link = e.target.closest(".article-card a, .article-card");
+      if (!link) return;
+      var card = link.closest(".article-card");
+      if (!card) return;
+      var articleId = card.getAttribute("data-article-id");
+      if (articleId) markArticleRead(articleId);
+    });
+
+    initReadArticles();
+  })();
+
   /* Service worker registration for PWA */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {

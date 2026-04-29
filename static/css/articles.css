@@ -24,6 +24,10 @@
   transform: translateY(0);
 }
 
+.article-read .card-title {
+  opacity: 0.5;
+}
+
 .article-card:focus-within {
   border-color: var(--accent-dim);
   box-shadow: 0 0 0 2px var(--accent-alpha-25);

@@ -131,7 +131,7 @@ def write_article(self, article_id: int, run_id=None):
             _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
             return {"article_id": article_id, "quality_gate": "review"}
 
-        article.pipeline_status = PipelineStatus.EDITING
+        _transition_article_status(article, PipelineStatus.EDITING)
         try:
             db.session.commit()
         except SQLAlchemyError:

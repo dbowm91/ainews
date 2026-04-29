@@ -153,6 +153,8 @@ class Article(db.Model):
         db.Index("ix_articles_published", "original_published_at"),
         db.Index("ix_articles_impact", "impact_score"),
         db.Index("ix_articles_category_status", "category", "pipeline_status"),
+        db.Index("ix_articles_total_retries", "total_retries"),
+        db.Index("ix_articles_pipeline_status", "pipeline_status"),
     )
 
     def __repr__(self):

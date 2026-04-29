@@ -217,6 +217,7 @@ class ProductionConfig(Config):
         "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'prod.db'}"
     )
     SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {"timeout": 15},
         "pool_pre_ping": True,
         "pool_recycle": 3600,
     }

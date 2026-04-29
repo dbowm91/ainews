@@ -191,18 +191,37 @@ def reset_config() -> None:
         _instance = None
 
 
+def _fmt_yaml_error(e) -> str:
+    """Format yaml.YAMLError with line/column if available."""
+    msg = str(e)
+    if hasattr(e, "problem_mark") and e.problem_mark is not None:
+        mark = e.problem_mark
+        msg = f"{msg} (line {mark.line + 1}, column {mark.column + 1})"
+    return msg
+
+
 def validate_config() -> tuple[bool, list[str]]:
     """Validate current configuration.
 
     Returns:
         (is_valid, errors) tuple. errors is empty if valid.
     """
+    from pydantic import ValidationError
+
+    import yaml
+
     errors = []
 
     try:
         from schemas.pipeline import load_pipeline_config
 
         load_pipeline_config()
+    except ValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
+            errors.append(f"Pipeline config error [{loc}]: {err['msg']}")
+    except yaml.YAMLError as e:
+        errors.append(f"Pipeline config error: {_fmt_yaml_error(e)}")
     except Exception as e:
         errors.append(f"Pipeline config error: {e}")
 
@@ -210,6 +229,12 @@ def validate_config() -> tuple[bool, list[str]]:
         from schemas.topic import load_topics
 
         load_topics()
+    except ValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
+            errors.append(f"Topic config error [{loc}]: {err['msg']}")
+    except yaml.YAMLError as e:
+        errors.append(f"Topic config error: {_fmt_yaml_error(e)}")
     except Exception as e:
         errors.append(f"Topic config error: {e}")
 
@@ -217,6 +242,12 @@ def validate_config() -> tuple[bool, list[str]]:
         from schemas.source import load_sources
 
         load_sources()
+    except ValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
+            errors.append(f"Source config error [{loc}]: {err['msg']}")
+    except yaml.YAMLError as e:
+        errors.append(f"Source config error: {_fmt_yaml_error(e)}")
     except Exception as e:
         errors.append(f"Source config error: {e}")
 
@@ -224,6 +255,12 @@ def validate_config() -> tuple[bool, list[str]]:
         from schemas.llm import load_providers_config
 
         load_providers_config()
+    except ValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
+            errors.append(f"LLM providers config error [{loc}]: {err['msg']}")
+    except yaml.YAMLError as e:
+        errors.append(f"LLM providers config error: {_fmt_yaml_error(e)}")
     except Exception as e:
         errors.append(f"LLM providers config error: {e}")
 

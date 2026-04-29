@@ -146,6 +146,7 @@ def _resolve_and_check(hostname: str) -> list[str]:
     except (socket.gaierror, socket.herror, socket.timeout):
         raise UnsafeURLError(f"DNS resolution failed for {hostname}")
     except TimeoutError:
+        future.cancel()
         raise UnsafeURLError(f"DNS resolution timed out for {hostname}")
 
     seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()

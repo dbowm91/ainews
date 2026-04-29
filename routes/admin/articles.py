@@ -405,6 +405,7 @@ def delete_article(article_id):
 
 
 @admin_bp.route("/articles/<int:article_id>/reprocess", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def reprocess_article(article_id):
     from extensions import db

@@ -6,7 +6,7 @@ from flask import Response, jsonify, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from routes.admin import admin_bp, require_auth
-from routes.decorators import commit
+from routes.decorators import commit, validate_csrf_json
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,7 @@ def add_source() -> str:
 
 
 @admin_bp.route("/sources/<int:source_id>/enable", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def enable_source(source_id: int) -> tuple[Response, int]:
     from extensions import db
@@ -110,6 +111,7 @@ def enable_source(source_id: int) -> tuple[Response, int]:
 
 
 @admin_bp.route("/sources/<int:source_id>/disable", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def disable_source(source_id: int) -> tuple[Response, int]:
     from datetime import datetime, timezone

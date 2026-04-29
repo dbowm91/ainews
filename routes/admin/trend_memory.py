@@ -5,6 +5,7 @@ from flask import flash, redirect, render_template, request, url_for
 from extensions import db
 from models import TrendMemory
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 
 
 @admin_bp.route("/trend-memory")
@@ -45,6 +46,7 @@ def trend_memory_list():
 
 
 @admin_bp.route("/trend-memory/delete/<int:memory_id>", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def trend_memory_delete(memory_id):
     memory = TrendMemory.query.get(memory_id)
@@ -64,6 +66,7 @@ def trend_memory_delete(memory_id):
 
 
 @admin_bp.route("/trend-memory/delete-expired", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def trend_memory_delete_expired():
     from datetime import datetime, timezone

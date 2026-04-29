@@ -14,6 +14,7 @@ from services.llm.base import (
     register_provider,
 )
 from services.llm.errors import make_error_handler
+from services.url import validate_url_safe
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(provider_id, resolve_env_vars(config))
         cfg = OllamaConfig(**self.config)
         self.host = cfg.host
+        validate_url_safe(self.host)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
 

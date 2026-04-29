@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 from routes.admin import admin_bp, require_auth
+from routes.decorators import validate_csrf_json
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ def review_queue():
 
 
 @admin_bp.route("/review/<int:article_id>/approve", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def approve_article(article_id):
     from extensions import db
@@ -107,6 +109,7 @@ def approve_article(article_id):
 
 
 @admin_bp.route("/review/<int:article_id>/reject", methods=["POST"])
+@validate_csrf_json
 @require_auth
 def reject_article(article_id):
     from extensions import db

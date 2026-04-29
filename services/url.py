@@ -37,9 +37,8 @@ def _is_ipv4_mapped(ip: ipaddress.IPv6Address) -> ipaddress.IPv4Address | None:
     return None
 
 # DNS cache to prevent rebinding between validation and fetch.
-# 60-second TTL reduces DNS rebinding attack window while still
-# providing caching benefits for legitimate requests.
-_DNS_CACHE_TTL = 60  # seconds
+# 5-second TTL minimizes the DNS rebinding attack window per W2.2.
+_DNS_CACHE_TTL = 5  # seconds
 _DNS_CACHE_MAX = 1024
 
 

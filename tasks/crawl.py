@@ -163,6 +163,12 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             len(items),
             len(new_items),
         )
+
+        from services.pipeline_monitor import record_stage_result, record_throughput
+
+        record_stage_result("crawl", success=True, run_id=run_id)
+        record_throughput("crawl", len(new_items))
+
         return {
             "source_id": source_id,
             "fetched": len(items),
@@ -174,15 +180,20 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             run_id, "crawl", "error", "%s: soft time limit exceeded", source_id
         )
         logger.error("Task exceeded soft time limit for source %s", source_id)
+        from services.pipeline_monitor import record_stage_result
+
+        record_stage_result("crawl", success=False, run_id=run_id, reason="timeout")
         raise
     except Exception as e:
         db.session.rollback()
         _log_pipeline(run_id, "crawl", "error", "%s: %s", source_id, e)
         logger.error("Pipeline failed for %s: %s", source_id, e, exc_info=True)
         from services.crawling import record_crawl_failure
+        from services.pipeline_monitor import record_stage_result
 
         if source:
             record_crawl_failure(source, str(e))
+        record_stage_result("crawl", success=False, run_id=run_id, reason="error")
         raise
     finally:
         try:

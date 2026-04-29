@@ -27,8 +27,7 @@
   <section class="dash-card dash-card-full mb-1">
     <h2 class="dash-card-title">dry run</h2>
     <p class="form-hint">Generate newsletters and send only to a test email address instead of the full mailing list.</p>
-    <form hx-post="/admin/newsletters/dry-run" hx-target="#dry-run-result" hx-swap="innerHTML" class="dry-run-form" id="dry-run-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <form hx-post="/admin/newsletters/dry-run" hx-target="#dry-run-result" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}' class="dry-run-form" id="dry-run-form">
       <div class="form-row">
         <input type="email" name="test_email" placeholder="test@example.com" class="form-input" required>
         <button type="submit" class="btn-secondary">

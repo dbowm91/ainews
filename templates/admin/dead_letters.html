@@ -41,8 +41,8 @@
     <form method="POST" action="/admin/api/articles/bulk" class="bulk-reprocess-form"
           hx-post="/admin/api/articles/bulk"
           hx-swap="none"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
           id="reprocess-failed-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="reprocess">
       <input type="hidden" name="article_ids" id="reprocess-failed-ids" value="">
       <button type="submit" class="btn btn-sm btn-secondary" id="reprocess-all-failed-btn">

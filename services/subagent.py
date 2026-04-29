@@ -46,14 +46,20 @@ def _build_context_tools() -> list[ToolDefinition]:
     tools = []
 
     def _get_topic_note(topic: str, source: str | None = None) -> str:
-        from services.context_service import get_topic_note
+        from services.cache import get_response_cache
 
-        try:
-            note = get_topic_note(topic, source)
-            return note.note if note else "No note found for this topic."
-        except Exception as e:
-            logger.warning("Tool get_topic_note failed for topic=%s: %s", topic, e)
-            return f"Error retrieving topic note: {type(e).__name__}"
+        def _fetch_note() -> str:
+            from services.context_service import get_topic_note
+            try:
+                note = get_topic_note(topic, source)
+                return note.note if note else "No note found for this topic."
+            except Exception as e:
+                logger.warning("Tool get_topic_note failed for topic=%s: %s", topic, e)
+                return f"Error retrieving topic note: {type(e).__name__}"
+
+        cache = get_response_cache()
+        cache_key = f"topic_note:{topic}:{source or 'none'}"
+        return cache.get_or_set(cache_key, _fetch_note, ttl=120)
 
     def _get_topic_notes_for_topics(topics: list[str]) -> str:
         from services.context_service import get_topic_notes_for_topics
@@ -72,18 +78,24 @@ def _build_context_tools() -> list[ToolDefinition]:
     def _get_related_articles(
         topics: list[str], exclude_id: int, limit: int = 5
     ) -> str:
-        from services.context_service import get_related_articles_for_edit
+        from services.cache import get_response_cache
 
-        try:
-            articles = get_related_articles_for_edit(topics, exclude_id, limit=limit)
-            if not articles:
-                return "No related articles found."
-            return "\n".join(
-                f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
-            )
-        except Exception as e:
-            logger.warning("Tool get_related_articles failed: %s", e)
-            return f"Error retrieving related articles: {type(e).__name__}"
+        def _fetch_articles() -> str:
+            from services.context_service import get_related_articles_for_edit
+            try:
+                articles = get_related_articles_for_edit(topics, exclude_id, limit=limit)
+                if not articles:
+                    return "No related articles found."
+                return "\n".join(
+                    f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
+                )
+            except Exception as e:
+                logger.warning("Tool get_related_articles failed: %s", e)
+                return f"Error retrieving related articles: {type(e).__name__}"
+
+        cache = get_response_cache()
+        cache_key = f"related_articles:{','.join(sorted(topics))}:{exclude_id}:{limit}"
+        return cache.get_or_set(cache_key, _fetch_articles, ttl=120)
 
     def _get_trend_memory(
         topics: list[str], min_importance: int = 1, max_age_days: int | None = None

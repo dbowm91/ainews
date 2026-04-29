@@ -30,9 +30,9 @@
   </td>
   <td>
     {% if s.disabled_at or not s.active %}
-      <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/enable" hx-swap="outerHTML" hx-target="closest tr">enable</button>
+      <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/enable" hx-swap="outerHTML" hx-target="closest tr" hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>enable</button>
     {% else %}
-      <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/disable" hx-swap="outerHTML" hx-target="closest tr">disable</button>
+      <button class="btn-sm" hx-post="/admin/sources/{{ s.id }}/disable" hx-swap="outerHTML" hx-target="closest tr" hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>disable</button>
     {% endif %}
   </td>
 </tr>

@@ -2,8 +2,8 @@
   <form hx-post="/admin/shares/{{ config.id }}/edit"
         hx-target="#share-{{ config.id }}"
         hx-swap="outerHTML"
+        hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
         class="edit-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <td>
       <input type="text" name="platform_key" class="form-input form-input-sm" value="{{ config.platform_key }}" required>
     </td>

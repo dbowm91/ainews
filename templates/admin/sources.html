@@ -23,9 +23,9 @@
         <form hx-post="/admin/sources/add"
               hx-target="#source-add-result"
               hx-swap="innerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
               hx-on::after-request="if(event.detail.successful)this.reset()"
               class="edit-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="form-row">
             <div class="form-group form-group-half">
               <label for="source-name">name</label>

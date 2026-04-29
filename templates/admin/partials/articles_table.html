@@ -10,6 +10,7 @@
             data-action="set_status"
             hx-post="/admin/api/articles/bulk"
             hx-vals='{"action": "set_status"}'
+            hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
             hx-indicator=".bulk-spinner"
             hx-disabled-elt="this">
       set status
@@ -18,6 +19,7 @@
             data-action="reprocess"
             hx-post="/admin/api/articles/bulk"
             hx-vals='{"action": "reprocess"}'
+            hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
             hx-indicator=".bulk-spinner"
             hx-disabled-elt="this">
       reprocess
@@ -27,6 +29,7 @@
             hx-post="/admin/api/articles/bulk"
             hx-vals='{"action": "delete"}'
             hx-confirm="Delete selected articles?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
             hx-indicator=".bulk-spinner"
             hx-disabled-elt="this">
       delete

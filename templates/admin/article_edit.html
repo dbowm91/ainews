@@ -115,22 +115,22 @@
       <div class="reprocess-actions">
         <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
               hx-post="/admin/articles/{{ article.id }}/reprocess"
-              hx-confirm="Re-run full pipeline from selector?">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              hx-confirm="Re-run full pipeline from selector?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
           <input type="hidden" name="from_stage" value="select">
           <button type="submit" class="btn-secondary">from selector</button>
         </form>
         <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
               hx-post="/admin/articles/{{ article.id }}/reprocess"
-              hx-confirm="Re-run from researcher?">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              hx-confirm="Re-run from researcher?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
           <input type="hidden" name="from_stage" value="research">
           <button type="submit" class="btn-secondary">from researcher</button>
         </form>
         <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
               hx-post="/admin/articles/{{ article.id }}/reprocess"
-              hx-confirm="Re-run from writer?">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              hx-confirm="Re-run from writer?"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
           <input type="hidden" name="from_stage" value="write">
           <button type="submit" class="btn-secondary">from writer</button>
         </form>

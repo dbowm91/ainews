@@ -218,7 +218,7 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
 
     if article.crawled_at:
         sla_duration = (article.published_at - article.crawled_at).total_seconds()
-        get_metrics().histogram_observe("pipeline_sla_seconds", sla_duration)
+        get_metrics().histogram_observe("pipeline.e2e_duration_seconds", sla_duration)
 
     if run_id:
         _log_pipeline(

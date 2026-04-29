@@ -99,6 +99,23 @@ def get_article_ids():
     return jsonify({"ids": ids, "count": len(ids)})
 
 
+@admin_bp.route("/api/articles/counts-by-status", methods=["GET"])
+@require_auth
+def get_article_counts_by_status():
+    """Return article counts grouped by pipeline status."""
+    from extensions import db
+    from models import Article
+    from sqlalchemy import func
+
+    results = (
+        db.session.query(Article.pipeline_status, func.count(Article.id))
+        .group_by(Article.pipeline_status)
+        .all()
+    )
+    counts = {status: count for status, count in results}
+    return jsonify({"counts": counts, "total": sum(counts.values())})
+
+
 def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
     from schemas.topic import load_topics
     from services.audit import log_admin_action

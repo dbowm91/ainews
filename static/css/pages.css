@@ -124,6 +124,14 @@
 
 .admin-body .admin-header {
   border-bottom: 1px solid var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 1rem;
+}
+
+.admin-header .nav {
+  flex: 1;
 }
 
 .breadcrumbs {

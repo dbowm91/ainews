@@ -128,7 +128,7 @@ Unsubscribe from newsletter.
 
 ## Admin API Endpoints
 
-All admin endpoints require authentication via HTTP Basic Auth.
+All admin endpoints require authentication via session-based auth (login at `/admin/login`).
 
 ### Admin Health Check
 
@@ -136,7 +136,7 @@ All admin endpoints require authentication via HTTP Basic Auth.
 
 Returns detailed health status including circuit breakers, cache stats, and DNS cache.
 
-**Authentication:** Basic Auth (admin credentials)
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -161,7 +161,7 @@ Returns detailed health status including circuit breakers, cache stats, and DNS 
 
 Returns detailed Celery worker status.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -185,7 +185,7 @@ Returns detailed Celery worker status.
 
 Get status of a Celery task.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -202,7 +202,7 @@ Get status of a Celery task.
 
 Clear all cached configs and reload from disk. Validates config before reload.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Request Body:** None
 
@@ -222,7 +222,7 @@ Clear all cached configs and reload from disk. Validates config before reload.
 
 Get application metrics as JSON.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -239,7 +239,7 @@ Get application metrics as JSON.
 
 Get metrics in Prometheus text format.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```
@@ -254,7 +254,7 @@ requests_total 1000
 
 Get pipeline stage success/failure statistics.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Query Parameters:**
 - `minutes` (optional, integer): Time window in minutes (default: 15, max: 120)
@@ -275,7 +275,7 @@ Get pipeline stage success/failure statistics.
 
 Get statistics on stuck and failed articles.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -286,13 +286,74 @@ Get statistics on stuck and failed articles.
 }
 ```
 
+### Pipeline SLA
+
+**GET** `/admin/api/pipeline/sla`
+
+Get SLA metrics for article processing (avg, p50, p95 latencies).
+
+**Authentication:** Session required
+
+**Query Parameters:**
+- `days` (optional, integer): Time window in days (default: 7, max: 30)
+
+**Response (200 OK):**
+```json
+{
+  "crawl_to_select": {"avg": 12.5, "p50": 10.2, "p95": 25.0},
+  "select_to_research": {"avg": 45.0, "p50": 40.1, "p95": 90.5},
+  "select_to_done": {"avg": 180.0, "p50": 150.0, "p95": 400.0}
+}
+```
+
+### Article IDs
+
+**GET** `/admin/api/articles/ids`
+
+Return article IDs matching filter params for bulk selection UI.
+
+**Authentication:** Session required
+
+**Query Parameters:**
+- `q` (optional): Search query (URLs or titles)
+- `status` (optional): Pipeline status filter
+- `category` (optional): Category filter
+- `source_id` (optional): Source ID filter
+- `date_from`, `date_to` (optional): Date range (ISO format)
+- `impact_min`, `impact_max` (optional): Impact score range
+- `tag` (optional): Tag slug filter
+
+**Response (200 OK):**
+```json
+{"ids": [1, 2, 3], "count": 3}
+```
+
+### Newsletter Stats
+
+**GET** `/admin/api/newsletters/stats`
+
+Get newsletter delivery statistics.
+
+**Authentication:** Session required
+
+**Response (200 OK):**
+```json
+{
+  "total_newsletters": 100,
+  "total_recipients": 5000,
+  "total_delivered": 4800,
+  "total_with_errors": 50,
+  "recent": [...]
+}
+```
+
 ### Cost Summary
 
 **GET** `/admin/api/costs`
 
 Get LLM cost summary from token usage metrics.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -318,7 +379,7 @@ Get LLM cost summary from token usage metrics.
 
 Get health status of all sources.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -344,7 +405,7 @@ Get health status of all sources.
 
 Perform bulk operations on articles.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Request Body:**
 ```json
@@ -368,7 +429,7 @@ Perform bulk operations on articles.
 
 Generate newsletter HTML without sending.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Request Body:**
 ```json
@@ -392,7 +453,7 @@ Generate newsletter HTML without sending.
 
 **GET** `/admin/api/webhooks`
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -414,7 +475,7 @@ Generate newsletter HTML without sending.
 
 **POST** `/admin/api/webhooks`
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Request Body:**
 ```json
@@ -435,7 +496,7 @@ Generate newsletter HTML without sending.
 
 **PUT** `/admin/api/webhooks/<id>`
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Request Body:**
 ```json
@@ -456,7 +517,7 @@ Generate newsletter HTML without sending.
 
 **DELETE** `/admin/api/webhooks/<id>`
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -467,7 +528,7 @@ Generate newsletter HTML without sending.
 
 **POST** `/admin/api/webhooks/<id>/test`
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -478,7 +539,7 @@ Generate newsletter HTML without sending.
 
 **GET** `/admin/api/webhooks/<id>/events`
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -499,7 +560,7 @@ Generate newsletter HTML without sending.
 
 Get search query statistics and zero-result queries.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -520,7 +581,7 @@ Get search query statistics and zero-result queries.
 
 Get audit log entries.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Query Parameters:**
 - `action` (optional): Filter by action type
@@ -543,47 +604,13 @@ Get audit log entries.
 }
 ```
 
-### Worker Health
-
-**GET** `/admin/api/workers/health`
-
-Get detailed Celery worker status.
-
-**Authentication:** Basic Auth
-
-**Response (200 OK):**
-```json
-{
-  "status": "ok",
-  "workers": {"worker@host": "alive"},
-  "active_tasks": {"worker@host": 2}
-}
-```
-
-### Task Status
-
-**GET** `/admin/api/task/<task_id>`
-
-Get status of a Celery task.
-
-**Authentication:** Basic Auth
-
-**Response (200 OK):**
-```json
-{
-  "task_id": "abc123",
-  "status": "SUCCESS",
-  "result": {"article_id": 1}
-}
-```
-
 ### Reprocess Article
 
 **POST** `/admin/api/articles/<article_id>/reprocess`
 
 Reset article for reprocessing through the pipeline.
 
-**Authentication:** Basic Auth
+**Authentication:** Session required
 
 **Response (200 OK):**
 ```json
@@ -598,13 +625,7 @@ Articles can be searched via the admin interface with URL search, source filteri
 
 ## Authentication
 
-Admin endpoints use HTTP Basic Authentication:
-
-```
-Authorization: Basic base64(admin:password)
-```
-
-Session-based authentication is also supported via `/admin/login`.
+Admin endpoints use session-based authentication via `/admin/login`.
 
 Rate limiting on admin login prevents brute-force attacks. After 5 failed attempts within 15 minutes, the IP is locked out for 15 minutes.
 

@@ -133,18 +133,68 @@ class ConfigCache:
         except redis.exceptions.RedisError as e:
             logger.warning("Config cache read failed for %s: %s", key, e)
 
-        # Cache miss, load value
-        value = loader_fn()
-
+        # Cache miss, load value with stampede protection
+        full_lock_key = f"lock:{full_key}"
         try:
-            self._redis.setex(full_key, ttl, _serialize(value))
-        except redis.exceptions.RedisError as e:
-            logger.warning("Config cache write failed for %s: %s", key, e)
+            if self._redis.set(full_lock_key, "1", nx=True, ex=10):
+                try:
+                    # Double-check Redis cache after acquiring lock
+                    cached = self._redis.get(full_key)
+                    if cached is not None:
+                        if isinstance(cached, bytes):
+                            cached = cached.decode("utf-8")
+                        value = _deserialize(cached)
+                        with self._lock:
+                            self._memory[full_key] = (time.monotonic() + ttl, value)
+                        return value
 
-        with self._lock:
-            self._memory[full_key] = (time.monotonic() + ttl, value)
-            self._evict_stale()
-        return value
+                    value = loader_fn()
+                    try:
+                        self._redis.setex(full_key, ttl, _serialize(value))
+                    except redis.exceptions.RedisError as e:
+                        logger.warning("Config cache write failed for %s: %s", key, e)
+                    with self._lock:
+                        self._memory[full_key] = (time.monotonic() + ttl, value)
+                        self._evict_stale()
+                    return value
+                finally:
+                    try:
+                        self._redis.delete(full_lock_key)
+                    except redis.exceptions.RedisError:
+                        pass
+            else:
+                # Lock not acquired, poll for value or lock release
+                for _ in range(10):
+                    cached = self._redis.get(full_key)
+                    if cached is not None:
+                        if isinstance(cached, bytes):
+                            cached = cached.decode("utf-8")
+                        value = _deserialize(cached)
+                        with self._lock:
+                            self._memory[full_key] = (time.monotonic() + ttl, value)
+                        return value
+                    if not self._redis.exists(full_lock_key):
+                        break
+                    time.sleep(0.05)
+
+                # Fallback: load directly if lock holder failed
+                value = loader_fn()
+                try:
+                    self._redis.setex(full_key, ttl, _serialize(value))
+                except redis.exceptions.RedisError as e:
+                    logger.warning("Config cache write failed for %s: %s", key, e)
+                with self._lock:
+                    self._memory[full_key] = (time.monotonic() + ttl, value)
+                    self._evict_stale()
+                return value
+        except redis.exceptions.RedisError as e:
+            logger.warning("Config cache stampede protection failed for %s: %s", key, e)
+            # Fallback: load without caching
+            value = loader_fn()
+            with self._lock:
+                self._memory[full_key] = (time.monotonic() + ttl, value)
+                self._evict_stale()
+            return value
 
     def invalidate(self, key: str) -> None:
         full_key = f"{self.prefix}:{key}"

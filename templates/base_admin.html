@@ -27,7 +27,7 @@
     <nav class="nav">
       <a href="/admin/" class="logo">ainews<span class="logo-slash">//</span> admin</a>
       <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox" hidden>
-      <label for="nav-toggle" class="nav-toggle-label" aria-label="Toggle navigation">
+      <label for="nav-toggle" class="nav-toggle-label" role="button" tabindex="0" aria-label="Toggle navigation" aria-expanded="false">
         <span></span>
       </label>
       <div class="nav-links">
@@ -43,13 +43,13 @@
         <a href="/admin/trend-memory" {% if request.path.startswith('/admin/trend-memory') %}class="active"{% endif %}>trend memory</a>
         {% include "partials/theme_toggle.html" %}
       </div>
-      <div class="nav-meta">
-        <form method="POST" action="/admin/logout" class="inline" hx-boost="false">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-logout">logout</button>
-        </form>
-      </div>
     </nav>
+    <div class="nav-logout">
+      <form method="POST" action="/admin/logout" class="inline" hx-boost="false">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-logout">logout</button>
+      </form>
+    </div>
   </header>
 
   <main class="container">

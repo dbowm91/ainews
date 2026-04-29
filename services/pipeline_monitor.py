@@ -222,6 +222,49 @@ def get_all_throughput_stats(minutes: int = 15) -> dict:
     return {stage: get_throughput_stats(stage, minutes) for stage in stages}
 
 
+def get_stage_failure_reasons(stage: str, minutes: int = 15) -> dict[str, int]:
+    """Get failure reason breakdown for a pipeline stage.
+
+    Args:
+        stage: Pipeline stage name (crawl, select, research, write, edit)
+        minutes: Number of recent minutes to aggregate (default 15)
+
+    Returns:
+        dict mapping reason names to failure counts, e.g. {rate_limit: 5, timeout: 3}
+    """
+    try:
+        redis_client = _get_redis()
+        current_minute = int(time.time() // _PIPELINE_WINDOW_SECONDS)
+
+        reason_counts: dict[str, int] = {}
+        for i in range(minutes):
+            minute = current_minute - i
+            pattern = f"{_PIPELINE_COUNTER_PREFIX}{stage}:{minute}:failure:*"
+            for key in redis_client.scan_iter(match=pattern, count=100):
+                reason = key.split(":")[-1]
+                count = int(redis_client.get(key) or 0)
+                reason_counts[reason] = reason_counts.get(reason, 0) + count
+
+        return reason_counts
+
+    except redis.exceptions.RedisError as e:
+        logger.error("Failed to get stage failure reasons: %s", e)
+        return {}
+
+
+def get_all_stages_failure_reasons(minutes: int = 15) -> dict[str, dict[str, int]]:
+    """Get failure reason breakdown for all pipeline stages.
+
+    Args:
+        minutes: Number of recent minutes to aggregate (default 15)
+
+    Returns:
+        dict mapping stage names to their failure reason breakdowns
+    """
+    stages = list(PIPELINE_STAGES)
+    return {stage: get_stage_failure_reasons(stage, minutes) for stage in stages}
+
+
 def clear_stage_stats(stage: Optional[str] = None) -> None:
     """Clear pipeline stage statistics.
 

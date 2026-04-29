@@ -1,7 +1,7 @@
 {% macro search_form(q='', status='', category='', tag_slug='', impact_min='', impact_max='', action='/admin/articles', all_tags=None, categories=None) %}
 <div class="search-container">
   <input type="text" class="search-input" name="q" aria-label="Search articles" placeholder="search articles..."
-         value="{{ q }}"
+         value="{{ q }}" minlength="2"
          hx-get="{{ action }}"
          hx-trigger="input changed delay:300ms"
          hx-target="#articles-table"

@@ -17,7 +17,7 @@
   <section class="dash-card dash-card-full">
     <div class="search-container">
       <input type="text" class="search-input" name="q" aria-label="Search articles" placeholder="search articles..."
-             value="{{ query }}"
+             value="{{ query }}" minlength="2"
              hx-get="/admin/articles"
              hx-trigger="input changed delay:300ms"
              hx-target="#articles-table"

@@ -112,5 +112,5 @@ document.querySelectorAll('.share-copy-btn').forEach(btn => {
 
 ## Related Files
 
-- `static/js/share-a11y.js` - Copy functionality
+- `static/js/app.js` - Copy functionality and accessibility fixes
 - `templates/partials/share_button.html` - Reusable partial

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import json
 import logging
 import os
@@ -358,18 +359,31 @@ def _build_search_tools() -> list[ToolDefinition]:
     return tools
 
 
+@functools.lru_cache(maxsize=1)
+def _get_all_tools_cached() -> tuple[ToolDefinition, ...]:
+    """Build and cache all tool definitions. Returns tuple for hashability."""
+    tools = []
+    tools.extend(_build_context_tools())
+    tools.extend(_build_search_tools())
+    return tuple(tools)
+
+
 def initialize_tool_registry(tool_names: list[str] | None = None) -> list[ToolDefinition]:
-    """Initialize the tool registry with built-in tools, optionally filtered by name."""
-    all_tools = []
-    for tool in _build_context_tools():
-        register_tool(tool)
-        all_tools.append(tool)
-    for tool in _build_search_tools():
-        register_tool(tool)
-        all_tools.append(tool)
+    """Initialize the tool registry with built-in tools, optionally filtered by name.
+
+    Uses cached tool definitions to avoid rebuilding on every call.
+    """
+    global _TOOL_REGISTRY
+
+    all_tools = _get_all_tools_cached()
+
+    if not _TOOL_REGISTRY:
+        for tool in all_tools:
+            register_tool(tool)
+
     if tool_names is not None:
         return [t for t in all_tools if t.name in tool_names]
-    return all_tools
+    return list(all_tools)
 
 
 logger = logging.getLogger(__name__)

@@ -24,8 +24,14 @@
   transform: translateY(0);
 }
 
+.article-card:focus-within {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 2px var(--accent-alpha-25);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .article-card:hover {
+  .article-card:hover,
+  .article-card:focus-within {
     transform: none;
   }
 }

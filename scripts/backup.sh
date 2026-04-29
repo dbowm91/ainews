@@ -34,21 +34,8 @@ if command -v sqlite3 &>/dev/null; then
     sqlite3 "$DB_PATH" ".backup $BACKUP_FILE"
     echo "$(date): SQLite backup completed: $BACKUP_FILE"
 else
-    # Method 2: WAL checkpoint + file copy fallback
-    if [ -f "$DB_PATH" ]; then
-        # Checkpoint WAL to ensure consistent state
-        python3 -c "
-import sqlite3
-conn = sqlite3.connect('$DB_PATH')
-conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-conn.close()
-"
-        cp "$DB_PATH" "$BACKUP_FILE"
-        # Copy WAL/SHM files if they exist
-        [ -f "${DB_PATH}-wal" ] && cp "${DB_PATH}-wal" "${BACKUP_FILE}-wal"
-        [ -f "${DB_PATH}-shm" ] && cp "${DB_PATH}-shm" "${BACKUP_FILE}-shm"
-        echo "$(date): File copy backup completed: $BACKUP_FILE"
-    fi
+    echo "$(date): ERROR: sqlite3 is required for WAL checkpoint - backup cannot proceed"
+    exit 1
 fi
 
 # Compress backup

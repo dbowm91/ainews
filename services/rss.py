@@ -81,6 +81,7 @@ def generate_sitemap(articles: list, site_url: str = "") -> str:
             SubElement(url_el, "lastmod").text = article.created_at.strftime("%Y-%m-%d")
         SubElement(url_el, "changefreq").text = "weekly"
         SubElement(url_el, "priority").text = "0.6"
+        SubElement(url_el, "ttl").text = "5"
 
     indent(urlset, space="  ")
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(

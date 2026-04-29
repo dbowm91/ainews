@@ -327,5 +327,5 @@ def sitemap() -> Response:
     return Response(
         xml,
         mimetype="application/xml",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=600"},
     )

@@ -31,7 +31,25 @@ if ! sqlite3 "$DB_CHECK" "PRAGMA integrity_check;" | grep -q "^ok$"; then
 fi
 
 # Check required tables exist
-REQUIRED_TABLES=("articles" "sources" "tags" "subscribers" "newsletters")
+REQUIRED_TABLES=(
+    "articles"
+    "sources"
+    "tags"
+    "subscribers"
+    "newsletters"
+    "article_metrics"
+    "share_configs"
+    "pipeline_runs"
+    "pipeline_logs"
+    "article_versions"
+    "topic_notes"
+    "trend_memory"
+    "webhooks"
+    "webhook_events"
+    "audit_logs"
+    "search_queries"
+    "citations"
+)
 for table in "${REQUIRED_TABLES[@]}"; do
     count=$(sqlite3 "$DB_CHECK" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='$table';")
     if [[ "$count" != "1" ]]; then

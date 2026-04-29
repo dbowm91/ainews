@@ -72,12 +72,12 @@ fi
 # -------------------------------------------------------
 log_info "Installing system dependencies..."
 if command -v apt-get &>/dev/null; then
-    apt-get update
-    apt-get install -y python3.12 python3.12-venv redis-server nginx git
+    apt-get update || { log_error "apt-get update failed"; exit 1; }
+    apt-get install -y python3.12 python3.12-venv redis-server nginx git || { log_error "apt-get install failed"; exit 1; }
 elif command -v dnf &>/dev/null; then
-    dnf install -y python3.12 python3.12-venv redis nginx git
+    dnf install -y python3.12 python3.12-venv redis nginx git || { log_error "dnf install failed"; exit 1; }
 elif command -v yum &>/dev/null; then
-    yum install -y python3.12 python3.12-venv redis nginx git
+    yum install -y python3.12 python3.12-venv redis nginx git || { log_error "yum install failed"; exit 1; }
 else
     log_warn "Unsupported package manager. Please install dependencies manually."
 fi
@@ -145,9 +145,8 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
         sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$ADMIN_PASS_HASHED|" "$APP_DIR/.env"
         log_info "Admin password hashed with scrypt"
     else
-        # Fallback if hashing script fails
-        sed -i "s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=$ADMIN_PASS/" "$APP_DIR/.env"
-        log_warn "Could not hash password — stored as plaintext. Run 'python scripts/hash_password.py' to generate a hash."
+        log_error "Password hashing failed — cannot continue without secure password storage"
+        exit 1
     fi
 
     chmod 600 "$APP_DIR/.env"

@@ -202,10 +202,29 @@ document.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("htmx:afterSwap", function (e) {
     var content = document.querySelector("#content");
     if (!content) return;
-    var heading = content.querySelector("h1, h2, h3");
-    if (heading) {
-      heading.setAttribute("tabindex", "-1");
-      heading.focus();
+
+    /* If search input was focused before swap, restore focus to it after */
+    var activeEl = document.activeElement;
+    var wasSearchFocused = activeEl && (
+      activeEl.name === 'q' ||
+      activeEl.classList.contains('search-input') ||
+      activeEl.getAttribute('type') === 'search'
+    );
+
+    if (wasSearchFocused) {
+      var searchInput = content.querySelector('input[name="q"], input.search-input, input[type="search"]');
+      if (searchInput) {
+        searchInput.focus();
+        if (searchInput.value) {
+          searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        }
+      }
+    } else {
+      var heading = content.querySelector("h1, h2, h3");
+      if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus();
+      }
     }
 
     var cards = content.querySelectorAll(".article-card:not(.article-card-new)");

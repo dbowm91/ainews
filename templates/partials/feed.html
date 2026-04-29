@@ -15,6 +15,7 @@
       placeholder="search articles..."
       aria-label="Search articles (press / to focus)"
       class="search-input"
+      minlength="2"
       hx-get="{{ url_for('public.index') }}"
       hx-trigger="keyup changed delay:500ms, search"
       hx-target="#content"

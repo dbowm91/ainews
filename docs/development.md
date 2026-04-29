@@ -181,29 +181,30 @@ flask db current
 
 ### Adding a New LLM Provider
 
-1. Create adapter in `adapters/`:
-```python
-# adapters/myprovider.py
-from adapters.base import LLMAdapter, LLMResponse
+Providers are defined in `providers.yaml`. For OpenAI-compatible providers, add a new entry:
 
-class MyProviderAdapter(LLMAdapter):
-    def complete(self, messages, **kwargs) -> LLMResponse:
+```yaml
+  - id: myprovider
+    type: openai
+    enabled: false
+    config:
+      api_key: "${MYPROVIDER_API_KEY}"
+      base_url: "https://api.myprovider.com/v1"
+      model: "my-model"
+      max_tokens: 4096
+```
+
+For non-standard providers, create an adapter in `services/llm/`:
+
+```python
+# services/llm/myprovider.py
+from services.llm.base import BaseLLMProvider, LLMResponse
+
+class MyProviderAdapter(BaseLLMProvider):
+    def chat_structured(self, messages, response_model, **kwargs) -> LLMResponse:
         # Implementation
         pass
 ```
-
-2. Add configuration in `providers.yaml`:
-```yaml
-providers:
-  - id: myprovider
-    type: myprovider
-    enabled: true
-    config:
-      api_key: ${MYPROVIDER_API_KEY}
-      model: my-model
-```
-
-3. Register in `schemas/llm.py` if needed.
 
 ### Adding a New Pipeline Stage
 

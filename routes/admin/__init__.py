@@ -20,6 +20,18 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         if not session.get("admin"):
             return redirect(url_for("admin.login"))
+        stored_ip = session.get("ip")
+        stored_user_agent = session.get("user_agent")
+        current_ip = request.remote_addr or "unknown"
+        current_user_agent = request.headers.get("User-Agent", "")
+        if stored_ip and stored_ip != current_ip:
+            session.pop("admin", None)
+            logger.warning("Session hijacking detected: IP mismatch (%s vs %s)", stored_ip, current_ip)
+            return redirect(url_for("admin.login"))
+        if stored_user_agent and stored_user_agent != current_user_agent:
+            session.pop("admin", None)
+            logger.warning("Session hijacking detected: User-Agent mismatch")
+            return redirect(url_for("admin.login"))
         request_id = get_request_id()
         logger.info(
             "Admin access: %s %s",

@@ -54,6 +54,8 @@ def login() -> str | Response:
             _clear_attempts(ip)
             session.clear()
             session["admin"] = True
+            session["ip"] = ip
+            session["user_agent"] = request.headers.get("User-Agent", "")
             try:
                 from services.audit import log_admin_action
 

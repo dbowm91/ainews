@@ -651,7 +651,7 @@ _CONTENT_EXTRACTOR = ThreadPoolExecutor(max_workers=CONTENT_EXTRACTOR_WORKERS, .
 ```
 Applied in `services/content_extractor.py`. `SUBAGENT_WORKERS` env var controls `_subagent_executor` pool size in `services/subagent.py`.
 
-**ConfigCache stampede protection**: Unlike `ResponseCache.get_or_set()` which uses `SET NX EX` distributed locking, `ConfigCache.get()` lacks stampede protection. When multiple Celery workers encounter a cache miss simultaneously, they all execute `loader_fn()`. Consider adding distributed locking to `services/config_cache.py` when implementing cache improvements.
+**ConfigCache stampede protection**: `services/config_cache.py` uses `SET NX EX` distributed locking with polling fallback (same pattern as `ResponseCache.get_or_set()`). When multiple Celery workers encounter a cache miss simultaneously, only one executes `loader_fn()` while others poll with exponential backoff.
 
 ### Precompiled regex patterns
 Hot-path regex patterns should be precompiled at module level:
@@ -725,4 +725,25 @@ retry_messages.append({
 
 ### Share Accessibility JS
 `static/js/share-a11y.js` was merged into `static/js/app.js`. Focus management and `aria-expanded` fixes (`.toString()` conversion) are now in `app.js`. Script tag removed from `templates/base.html` and `templates/base_admin.html`.
+
+### Sitemap TTL Alignment
+Sitemap now includes `<ttl>5</ttl>` tag for articles. Cache-Control header aligned to `public, max-age=300, stale-while-revalidate=600` to match the 300s cache TTL in `routes/public/feeds.py`.
+
+### Subagent Tool Registry Caching
+`services/subagent.py` uses `@functools.lru_cache(maxsize=1)` on `_get_all_tools_cached()` to avoid rebuilding tool definitions on every `initialize_tool_registry()` call. The global `_TOOL_REGISTRY` dict is only rebuilt if empty.
+
+### Dead Letter Root Cause Aggregation
+`services/pipeline_monitor.py` provides:
+- `get_stage_failure_reasons(stage, minutes=15)` — returns `{reason: count}` breakdown for a single stage
+- `get_all_stages_failure_reasons(minutes=15)` — aggregates across all stages
+Uses Redis `scan_iter` to find failure reason keys.
+
+### Docker Resource Limits
+`docker-compose.yml` deploy.resources.limits: web (1G), celery-worker (512M), celery-beat (256M), redis (256M).
+
+### Install Script Hardening
+`scripts/install.sh` now fails with error if password hashing fails (no plaintext fallback). `apt-get update` and `apt-get install` have error handling with `|| exit 1`.
+
+### Backup Script Validation
+`scripts/backup.sh` fails with clear error if `sqlite3` is not available (no cp fallback). `scripts/verify_backup.sh` validates all 17 tables: articles, sources, tags, subscribers, newsletters, article_metrics, share_configs, pipeline_runs, pipeline_logs, article_versions, topic_notes, trend_memory, webhooks, webhook_events, audit_logs, search_queries, citations.
 

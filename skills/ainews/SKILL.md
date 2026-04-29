@@ -357,3 +357,103 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **ThreadPoolExecutor pattern**: Services use bounded pools with `submit()` + `future.result(timeout=N)` instead of spawning unbounded daemon threads. `services/article.py` uses 2-worker pool for search logging, `services/content_extractor.py` uses configurable pool (default 8 workers via `CONTENT_EXTRACTOR_WORKERS` env var).
 - **Exponential backoff**: Subagent retries use `min(1.0 * (2 ** attempt) + random.uniform(0, 0.5), retry_delay)` instead of fixed delays.
 - **LLM structured output**: `ChatModel.chat_structured()` uses `_extract_json()` helper to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
+
+## Subscriber Sunset Policy
+
+`services/subscribers.py` provides subscriber lifecycle management:
+
+- `cleanup_inactive_subscribers(db)` - flags inactive subscribers based on bounce count or inactivity
+- `record_bounce(subscriber_id, db)` - increments bounce count
+- `update_last_active(subscriber_id, db)` - updates last_active_at timestamp
+
+**Config thresholds** (via environment or Config):
+- `SUBSCRIBER_MAX_BOUNCES` (default 5) - bounce count threshold
+- `SUBSCRIBER_INACTIVITY_DAYS` (default 180) - inactivity threshold in days
+
+**Subscriber model fields** for tracking:
+- `bounce_count` - total bounce count
+- `last_bounce_at` - timestamp of last bounce
+- `last_active_at` - timestamp of last email open/click activity
+
+## Source CRUD API
+
+`routes/admin/api/sources.py` provides REST endpoints for programmatic source management:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/sources` | GET | List all sources |
+| `/api/sources` | POST | Create new source |
+| `/api/sources/<id>` | GET | Get source details |
+| `/api/sources/<id>` | PUT | Update source |
+| `/api/sources/<id>` | DELETE | Delete source |
+
+All endpoints require admin authentication and return JSON responses.
+
+## E2E Latency Tracking
+
+`tasks/edit.py` records total pipeline latency from crawl to finalization using:
+
+```python
+get_metrics().histogram_observe("pipeline.e2e_duration_seconds", sla_duration)
+```
+
+The SLA duration is computed from `article.crawled_at` to `article.selected_at` (for articles that complete). The `pipeline.e2e_duration_seconds` histogram tracks end-to-end latency for observability.
+
+## Subagent Context Caching
+
+`services/subagent.py` wraps DB-heavy context lookups in `ResponseCache` with 120s TTL:
+
+- `_get_topic_note()` - cached with key `topic_note:{topic}:{source}`
+- `_get_related_articles()` - cached with key `related_articles:{topics}:{exclude_id}:{limit}`
+
+This prevents redundant database queries on each subagent invocation within the caching window.
+
+## Newsletter AI Subject
+
+`services/newsletter.py:_generate_subject_line()` uses an LLM to generate engaging email subject lines based on article headlines. Falls back to "Top Stories" on any failure.
+
+## Plain-Text Email Alternative
+
+`services/email.py:_send_smtp()` sends multipart/alternative emails with:
+1. Plain-text version (generated from HTML via `html_to_plain_text()`)
+2. HTML version
+
+This ensures email clients that prefer plain-text display correctly.
+
+## List-Unsubscribe Headers (RFC 8058)
+
+`send_newsletter_email()` in `services/email.py` adds RFC 8058 headers:
+- `List-Unsubscribe: <{unsubscribe_url}>`
+- `List-Unsubscribe-Post: One-Click`
+
+These headers enable one-click unsubscription and are added only for newsletter emails (not transactional emails).
+
+## Per-Stage Circuit Breaker
+
+`services/llm/__init__.py` keys circuit breakers by `provider:model:stage`:
+
+```python
+breaker = get_breaker(f"llm:{rc.provider}:{rc.model}:{role}", ...)
+```
+
+This ensures failures in one stage (e.g., editor) don't block other stages (e.g., writer, researcher) using the same provider.
+
+## LLM Content Sanitization
+
+`final_article` content is sanitized using `bleach.clean()` in `services/article.py`:
+
+```python
+def sanitize_final_article(content: str) -> str:
+    allowed_tags = ['a', 'b', 'i', 'ul', 'li']
+    allowed_attrs = {'a': ['href', 'title']}
+    return bleach.clean(content, tags=allowed_tags, attributes=allowed_attrs, strip=True)
+```
+
+Applied in:
+- `tasks/edit.py` after editor stage
+- `services/dead_letter.py` when applying fallback
+- `services/pipeline_degradation.py` when applying fallback
+
+## Subagent Self-Correction
+
+`run_subagent_with_tools()` in `services/subagent.py` implements one self-correction attempt when JSONDecodeError or ValidationError occurs. The error is re-submitted to the LLM as a user message with correction instructions.

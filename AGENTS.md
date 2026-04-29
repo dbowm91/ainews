@@ -66,3 +66,12 @@ Rules are organized into focused modules in `static/css/`.
 - **Structured Logging:** Use `get_pipeline_logger(task_id)` for task correlation.
 - **Dead Letter Queue:** Managed via `/admin/dead-letters` UI.
 - **OpenTelemetry:** Tracing is integrated via `services/logging_utils.py:traced_stage`.
+- **Per-Stage Circuit Breaker:** Circuit breakers are keyed by `provider:model:stage` to prevent one stage's failures from blocking other stages.
+- **Subscriber Sunset Policy:** Subscribers are flagged inactive after configurable bounce threshold (`SUBSCRIBER_MAX_BOUNCES`, default 5) or inactivity (`SUBSCRIBER_INACTIVITY_DAYS`, default 180 days).
+- **LLM Content Sanitization:** `final_article` content is sanitized with `bleach.clean()` allowing only safe tags (`a`, `b`, `i`, `ul`, `li`).
+- **Source CRUD API:** REST endpoints at `/api/sources` for programmatic source management.
+- **E2E Latency Tracking:** `pipeline.e2e_duration_seconds` histogram records total pipeline latency from crawl to finalization.
+- **Subagent Context Caching:** `_get_topic_note` and `_get_related_articles` use `ResponseCache` with 120s TTL.
+- **Newsletter AI Subject:** LLM-generated subject lines based on top stories instead of static "Top Stories".
+- **Plain-Text Email Alt:** All emails include `multipart/alternative` with plain-text and HTML parts.
+- **List-Unsubscribe Headers:** Newsletter emails include RFC 8058 `List-Unsubscribe` and `List-Unsubscribe-Post` headers.

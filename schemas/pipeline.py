@@ -101,6 +101,7 @@ class SubagentStageConfig(BaseModel):
     retry_delay: float = Field(default=5.0, ge=0.0, le=60.0)
     task_template: Optional[str] = None
     tools: list[str] = Field(default_factory=list)
+    max_iterations: int = Field(default=5, ge=1, le=20)
 
 
 class SubagentChainStep(BaseModel):

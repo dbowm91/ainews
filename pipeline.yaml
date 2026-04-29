@@ -194,6 +194,7 @@ subagent:
     timeout_seconds: 120
     max_retries: 1
     retry_delay: 5.0
+    max_iterations: 5
     tools:
       - web_search
       - context_notes
@@ -214,6 +215,7 @@ subagent:
     timeout_seconds: 120
     max_retries: 1
     retry_delay: 5.0
+    max_iterations: 5
     tools:
       - context_notes
       - related_articles

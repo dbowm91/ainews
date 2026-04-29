@@ -719,7 +719,7 @@ def run_subagent_with_tools(
             system=system_prompt,
             temperature=temperature,
             max_tokens=max_tokens,
-            max_iterations=5,
+            max_iterations=stage_config.max_iterations,
         )
 
     result = None

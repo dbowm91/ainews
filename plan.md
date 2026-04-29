@@ -17,14 +17,12 @@ All items from Waves 1-8 of the original implementation phase (April 18-19, 2026
 
 | Item | Description | Location | Implementation Context |
 |------|-------------|----------|------------------------|
-| **W1.1** | Fix fail-open stage lock in pipeline | `tasks/pipeline.py:108-117` | `_acquire_stage_lock` currently returns `True` on `RedisError`. It MUST return `False` or raise to prevent race conditions when Redis is down. |
-| **W1.2** | Fix fail-open newsletter lock | `tasks/newsletter.py:414-417` | `except redis.exceptions.RedisError` sets `lock_status = 2` (acquired). Change to raise or return 0 (skipped) to prevent concurrent newsletter generation. |
+| **W1.1** | Fix fail-open stage lock in pipeline | `tasks/pipeline.py:108-117` | `_acquire_stage_lock` currently returns `True` on `RedisError`. It MUST return `False` or raise to prevent race conditions when Redis is down. **MANDATORY:** Add a test case simulating `RedisError` using `mock_redis` to verify execution halts. |
+| **W1.2** | Fix fail-open newsletter lock | `tasks/newsletter.py:414-417` | `except redis.exceptions.RedisError` sets `lock_status = 2` (acquired). Change to raise or return 0 (skipped). **MANDATORY:** Add a test case simulating `RedisError` to verify no newsletters are generated when Redis is offline. |
 | **W1.3** | Fix Version Creation Order in Edit Task | `tasks/edit.py:332-335` | `create_article_version()` is called AFTER modifying `article.final_article`. Move it BEFORE modification to capture the state before AI editing. |
 | **W1.4** | Session Fixation Prevention | `routes/admin/auth.py:55-58` | Ensure `session.clear()` is called immediately before setting `session["admin"] = True` on successful login. |
 | **W1.5** | Webhook Secret Decryption Safety | `services/webhooks.py:325-340` | `_get_webhook_secret_from_db` returns `""` on decryption failure. This silently breaks auth. Should raise a specific error to allow the dispatcher to skip or retry. |
 | **W1.6** | AuthError Transient Log Fix | `tasks/pipeline.py:187` | `AuthError` is logged as "transient error" but is actually terminal. Update log message to "non-retryable authentication error". |
-
-**Parallelization:** W1.1-W1.2 (sequential in one task), W1.3, W1.4, W1.5-W1.6 can all be executed in parallel.
 
 ---
 
@@ -41,8 +39,6 @@ All items from Waves 1-8 of the original implementation phase (April 18-19, 2026
 | **W2.5** | Retry-After Header Support | `services/llm/base.py:155-167` | Update `_retry_with_backoff` to respect `Retry-After` headers if present in 429/503 responses. |
 | **W2.6** | Configurable Failure Limits | `services/pipeline_failure.py` | Move `_MAX_STAGE_FAILURES = 3` to `constants.py` and make it configurable via `Config`. |
 
-**Parallelization:** W2.1-W2.2, W2.3, W2.4-W2.5, W2.6 can all be executed in parallel.
-
 ---
 
 ## WAVE 3: Subagent & Search Improvements
@@ -53,8 +49,9 @@ All items from Waves 1-8 of the original implementation phase (April 18-19, 2026
 |------|-------------|----------|------------------------|
 | **W3.1** | Provider Fetch Optimization | `services/subagent.py` | Move `get_provider_for_role` call outside the retry loop to avoid redundant Redis/DB hits. |
 | **W3.2** | Configurable Subagent Iterations | `services/subagent.py:722` | Replace hardcoded `10` iterations with a value from `pipeline.yaml`. |
-| **W3.3** | Search Analytics Query Fix | `routes/admin/api/search.py` | Fix the query at line 20 that incorrectly aggregates search counts. |
-| **W3.4** | Tag Feed Caching | `routes/public/feeds.py:172` | Implement caching for the tag-specific RSS feeds. |
+| **W3.3** | Subagent Self-Correction Loop | `services/subagent.py` | Update `run_subagent_with_tools` to catch `JSONDecodeError` or Pydantic validation errors from LLM tool calls. Re-submit the error to the LLM as a `user` message to allow 1 self-correction attempt. |
+| **W3.4** | Search Analytics Query Fix | `routes/admin/api/search.py` | Fix the query at line 20 that incorrectly aggregates search counts. |
+| **W3.5** | Tag Feed Caching | `routes/public/feeds.py:172` | Implement caching for the tag-specific RSS feeds. |
 
 ---
 
@@ -67,7 +64,8 @@ All items from Waves 1-8 of the original implementation phase (April 18-19, 2026
 | **W4.1** | Email Plain-Text Alternative | `services/email.py:187` | Generate and include a plain-text alternative in `MIMEMultipart('alternative')` for all outgoing emails. |
 | **W4.2** | List-Unsubscribe Header | `services/email.py` | Add `List-Unsubscribe` and `List-Unsubscribe-Post` headers (RFC 8058) to newsletter emails. |
 | **W4.3** | AI-Generated Newsletter Subject | `services/newsletter.py` | Use LLM to generate a catchy subject line based on the top stories in the newsletter instead of "Top Stories". |
-| **W4.4** | Source CRUD API | `routes/admin/api/` | Implement missing API endpoints for programmatic source management. |
+| **W4.4** | LLM Content Sanitization | `services/article.py` | Implement `bleach`-based sanitization for `final_article` content. Allow specific safe tags (`<a>`, `<b>`, `<i>`, `<ul>`, `<li>`) to preserve formatting while preventing XSS. |
+| **W4.5** | Source CRUD API | `routes/admin/api/` | Implement missing API endpoints for programmatic source management. |
 
 ---
 
@@ -93,6 +91,7 @@ All items from Waves 1-8 of the original implementation phase (April 18-19, 2026
 | **W6.1** | E2E Latency Histograms | `tasks/edit.py` | Record total pipeline latency (from crawl to finalization) using `pipeline.e2e_duration_seconds`. |
 | **W6.2** | Pipeline Backlog API | `routes/admin/api/` | New endpoint to report the count of articles in each status. |
 | **W6.3** | Subagent Context Caching | `services/subagent.py` | Wrap DB-heavy context lookups (`_get_topic_note`, `_get_related`) in short-lived `ResponseCache`. |
+| **W6.4** | HTMX CSRF Header Audit | `templates/admin/` | Audit all `hx-post`, `hx-put`, and `hx-delete` tags in admin templates. Ensure they include `hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'` to prevent CSRF bypass on dashboard actions. |
 
 ---
 
@@ -102,9 +101,10 @@ All items from Waves 1-8 of the original implementation phase (April 18-19, 2026
 
 | Item | Description | Location | Implementation Context |
 |------|-------------|----------|------------------------|
-| **W7.1** | Retry Count Indexes | `models.py` | Add indexes to `total_retries` and `status` columns for efficient cleanup and dashboard queries. |
-| **W7.2** | Config Validation Errors | `services/config_unified.py` | Improve the detail returned when a YAML config fails validation (show path/line if possible). |
-| **W7.3** | DNS Timeout Cancellation | `services/url.py:143-149` | Ensure `future.cancel()` is called on DNS lookup timeouts to prevent thread leak. |
+| **W7.1** | SQLite Busy Timeout | `config.py` | Add `SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"timeout": 15}}` to prevent `database is locked` errors during concurrent Celery writes. |
+| **W7.2** | Retry Count Indexes | `models.py` | Add indexes to `total_retries` and `status` columns for efficient cleanup and dashboard queries. |
+| **W7.3** | Config Validation Errors | `services/config_unified.py` | Improve the detail returned when a YAML config fails validation (show path/line if possible). |
+| **W7.4** | DNS Timeout Cancellation | `services/url.py:143-149` | Ensure `future.cancel()` is called on DNS lookup timeouts to prevent thread leak. |
 
 ---
 

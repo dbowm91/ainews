@@ -9,7 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
 from schemas.llm_responses import (  # noqa: F401
@@ -726,6 +726,7 @@ def run_subagent_with_tools(
     used_fallback = False
     fallback_stages = []
     last_exc = None
+    self_corrected = False
 
     for attempt in range(stage_config.max_retries + 1):
         try:
@@ -743,9 +744,27 @@ def run_subagent_with_tools(
                 future = _subagent_executor.submit(_call_with_timeout)
                 try:
                     tc_resp = future.result(timeout=stage_config.timeout_seconds)
-                    result = response_model.model_validate(
-                        {"synthesis": tc_resp.text}
-                    )
+                    try:
+                        result = response_model.model_validate(
+                            {"synthesis": tc_resp.text}
+                        )
+                    except (json.JSONDecodeError, ValidationError) as validation_err:
+                        if self_corrected:
+                            raise validation_err
+                        error_msg = (
+                            f"Your previous response was not valid JSON or did not match "
+                            f"the expected schema: {validation_err}. Please correct and "
+                            f"return valid JSON in the same format."
+                        )
+                        logger.info(
+                            "Subagent %s/%s self-correcting after validation error: %s",
+                            stage,
+                            task_type,
+                            validation_err,
+                        )
+                        messages.append({"role": "user", "content": error_msg})
+                        self_corrected = True
+                        continue
                 except TimeoutError:
                     future.cancel()
                     logger.warning(

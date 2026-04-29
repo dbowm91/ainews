@@ -184,7 +184,15 @@ def _try_stage_work(stage: str, work_fn, article):
     for provider, model, max_tokens, provider_id in providers:
         try:
             return work_fn(article, provider, model, max_tokens), provider_id
-        except (RateLimitError, ProviderServerError, ProviderTimeoutError, AuthError) as transient_err:
+        except AuthError as auth_err:
+            logger.error(
+                "Provider %s non-retryable authentication error (%s), abandoning stage",
+                provider_id,
+                auth_err,
+            )
+            record_provider_failure(provider_id, model)
+            raise auth_err
+        except (RateLimitError, ProviderServerError, ProviderTimeoutError) as transient_err:
             logger.warning(
                 "Provider %s transient error (%s), trying fallback",
                 provider_id,

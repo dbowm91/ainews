@@ -21,30 +21,15 @@ from routes.admin import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_attempts():
+def _reset_attempts(mock_redis):
     """Clear in-memory login attempts and Redis lockout data between tests."""
     with _memory_lock:
         _login_attempts_memory.clear()
-    # Also clear Redis lockout data
-    try:
-        from extensions import get_redis
-
-        r = get_redis()
-        for key in r.keys("ainews:login_attempts:*"):
-            r.delete(key)
-    except Exception:
-        pass
-    yield
+    with patch("routes.admin.get_redis", return_value=mock_redis):
+        mock_redis.keys.return_value = []
+        yield
     with _memory_lock:
         _login_attempts_memory.clear()
-    try:
-        from extensions import get_redis
-
-        r = get_redis()
-        for key in r.keys("ainews:login_attempts:*"):
-            r.delete(key)
-    except Exception:
-        pass
 
 
 class TestMemoryFallback:

@@ -4,12 +4,14 @@ For JSON parsing, see services/article_parser.py.
 For pagination and FTS search, see services/pagination.py.
 """
 
+import json
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
+import bleach
 from sqlalchemy import Column
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -20,6 +22,27 @@ from models import Article, ArticleMetric
 logger = logging.getLogger(__name__)
 
 _TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
+
+_SAFE_TAGS = ["a", "b", "i", "ul", "li"]
+_SAFE_ATTRS = {"a": ["href", "title"]}
+
+
+def sanitize_final_article(content: str) -> str:
+    """Sanitize HTML content in final_article body field using bleach.
+
+    Allows safe tags: a, b, i, ul, li
+    For a tags, allows href and title attributes.
+    Strips all other HTML to prevent XSS.
+    """
+    parsed = json.loads(content) if isinstance(content, str) else content
+    if "body" in parsed and parsed["body"]:
+        parsed["body"] = bleach.clean(
+            parsed["body"],
+            tags=_SAFE_TAGS,
+            attributes=_SAFE_ATTRS,
+            strip=True,
+        )
+    return json.dumps(parsed)
 
 # Re-export from extracted modules for backward compatibility
 from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402

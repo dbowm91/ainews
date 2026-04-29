@@ -12,5 +12,6 @@ from routes.admin.api import (  # noqa: E402, F401
     health,
     pipeline,
     search,
+    sources,
     webhooks,
 )

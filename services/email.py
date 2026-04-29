@@ -159,24 +159,52 @@ def send_newsletter_email(
           </td>
         </tr>"""
 
-    # Replace existing footer or inject before closing table tags
     if "condensed by agents" in html_content:
         html_content = _FOOTER_WITH_AGENTS_RE.sub(
             footer_html + "</table></td></tr></table>",
             html_content,
         )
     else:
-        # Find last </table> pair and inject footer before it
         html_content = _CLOSING_TABLE_RE.sub(
             footer_html + r"\1",
             html_content,
             count=1,
         )
 
-    _send_smtp(email, subject, html_content)
+    list_unsubscribe_url = f"<{unsubscribe_url}>"
+    _send_smtp(
+        email,
+        subject,
+        html_content,
+        extra_headers={
+            "List-Unsubscribe": list_unsubscribe_url,
+            "List-Unsubscribe-Post": "One-Click",
+        },
+    )
 
 
-def _send_smtp(to_email: str, subject: str, html_body: str):
+def html_to_plain_text(html_body: str) -> str:
+    """Convert HTML to plain text for email fallback."""
+    text = re.sub(r"<br\s*/?>", "\n", html_body, flags=re.IGNORECASE)
+    text = re.sub(r"</p\s*>", "\n\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</div\s*>", "\n\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</li\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<ul\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</ul\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<li\s*>", "• ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([^<]*)</a>", r"\2: \1", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"&nbsp;", " ", text)
+    text = re.sub(r"&amp;", "&", text)
+    text = re.sub(r"&lt;", "<", text)
+    text = re.sub(r"&gt;", ">", text)
+    text = re.sub(r"&quot;", '"', text)
+    text = re.sub(r"&#39;", "'", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict | None = None):
     """Low-level SMTP send."""
     cfg = get_smtp_config()
 
@@ -184,6 +212,9 @@ def _send_smtp(to_email: str, subject: str, html_body: str):
     msg["Subject"] = subject
     msg["From"] = cfg["from_addr"]
     msg["To"] = to_email
+    if extra_headers:
+        for key, value in extra_headers.items():
+            msg[key] = value
     msg.attach(MIMEText(html_body, "html"))
 
     try:

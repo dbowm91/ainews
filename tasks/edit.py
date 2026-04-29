@@ -325,12 +325,12 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 
     result_json = result.model_dump_json()
 
-    from services.article import create_article_version
+    from services.article import create_article_version, sanitize_final_article
     create_article_version(
         article, change_reason="pipeline_edit", changed_by="pipeline:editor"
     )
 
-    article.final_article = result_json
+    article.final_article = sanitize_final_article(result_json)
     article.original_ai_article = result_json
 
     _assign_tags(article, result.tags or [], db)

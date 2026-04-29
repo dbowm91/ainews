@@ -82,12 +82,14 @@ def _apply_dead_letter_fallback(article, reason: str) -> None:
         return
 
     if article.draft_article:
-        article.final_article = article.draft_article
+        from services.article import sanitize_final_article
+        article.final_article = sanitize_final_article(article.draft_article)
         article.original_ai_article = article.draft_article
         return
 
     fallback = build_fallback_article_json(article)
-    article.final_article = fallback
+    from services.article import sanitize_final_article
+    article.final_article = sanitize_final_article(fallback)
     article.original_ai_article = fallback
 
 

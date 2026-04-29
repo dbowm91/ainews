@@ -70,8 +70,9 @@ def _should_route_to_review(article) -> bool:
 
 
 def _apply_fallback(article):
+    from services.article import sanitize_final_article
     fallback = article.draft_article or _build_fallback_article(article)
-    article.final_article = fallback
+    article.final_article = sanitize_final_article(fallback)
     article.original_ai_article = fallback
 
 

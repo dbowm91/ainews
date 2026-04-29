@@ -2,11 +2,16 @@ import logging
 from datetime import datetime, timedelta, timezone
 from html import escape
 
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import joinedload
 
 from services.utils import parse_article_headline
 
 logger = logging.getLogger(__name__)
+
+
+class SubjectLine(BaseModel):
+    subject: str = Field(description="Catchy, engaging email subject line for a tech news newsletter")
 
 
 def generate_newsletter_html(
@@ -155,7 +160,8 @@ def _generate_newsletter(
         return "", "", 0
 
     date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
-    subject = f"ainews// — {escape(title)} — {date_str}"
+    generated_subject = _generate_subject_line(articles)
+    subject = f"ainews// — {escape(generated_subject)} — {date_str}"
     newsletter_html = generate_newsletter_html(
         articles,
         title,
@@ -164,6 +170,60 @@ def _generate_newsletter(
         executive_summary=executive_summary,
     )
     return newsletter_html, subject, len(articles)
+
+
+def _generate_subject_line(articles, topic_context: str = "") -> str:
+    """Generate an engaging newsletter subject line using LLM.
+
+    Args:
+        articles: List of Article objects with headlines
+        topic_context: Optional topic context string
+
+    Returns:
+        Subject line string, or fallback "Top Stories" on failure
+    """
+    from services.limiter import get_limiter
+    from services.llm import get_provider_for_role
+    from services.prompts import esc_xml_text
+
+    headlines = []
+    for article in articles[:10]:
+        headline, _ = parse_article_headline(article, fallback_headline="Untitled")
+        category = article.category or ""
+        headlines.append(f"- [{esc_xml_text(category)}] {esc_xml_text(headline)}")
+
+    headlines_text = "\n".join(headlines)
+
+    prompt = (
+        f"TOPIC CONTEXT: {topic_context or 'ainews// — autonomous tech news condensation'}\n\n"
+        f"HEADLINES:\n{headlines_text}\n\n"
+        f"Generate a catchy, engaging email subject line (under 60 characters) "
+        f"that makes readers want to open this newsletter. "
+        f"Be specific and intriguing, not generic. Do not use 'Top Stories' or similar."
+    )
+
+    try:
+        provider, model, max_tokens, provider_id = get_provider_for_role(
+            "newsletter_pipeline.writer"
+        )
+        limiter = get_limiter()
+        if limiter.acquire(provider_id, model, 1, 120):
+            try:
+                result = provider.chat_structured(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_model=SubjectLine,
+                    model=model,
+                    system="You are an expert email marketing copywriter specializing in tech news.",
+                    temperature=0.7,
+                    max_tokens=max_tokens,
+                )
+                return result.subject
+            finally:
+                limiter.release(provider_id, model, 120)
+    except Exception as e:
+        logger.warning("LLM subject line generation failed: %s", e)
+
+    return "Top Stories"
 
 
 def generate_main_newsletter(

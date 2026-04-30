@@ -1,122 +1,11 @@
-/* ainews - Layout */
+/* ainews - Layout (unique enhancements not in critical.css) */
 
 .htmx-indicator.spinner {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.nav {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0.75rem 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.logo {
-  font-family: var(--font-mono);
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.logo:hover {
-  text-decoration: none;
-  color: var(--accent);
-}
-
-.logo-slash {
-  color: var(--accent);
-}
-
-.nav-links {
-  display: flex;
-  gap: 0.75rem;
-  flex: 1;
-}
-
-.nav-links a {
-  font-family: var(--font-mono);
-  font-size: var(--text-md);
-  color: var(--text-muted);
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-md);
-  transition: all 0.15s ease;
-}
-
-.nav-links a:hover,
-.nav-links a.active {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  text-decoration: none;
-}
-
-.nav-meta {
-  flex-shrink: 0;
-}
-
 .nav-logout {
   flex-shrink: 0;
-}
-
-.container {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem;
-  flex: 1;
-  width: 100%;
-}
-
-.htmx-request #content {
-  opacity: 0.7;
-}
-
-.site-footer {
-  border-top: 1px solid var(--border);
-  padding: 1.25rem;
-  text-align: center;
-}
-
-.site-footer p {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--text-dim);
-}
-
-.site-footer a {
-  color: var(--text-muted);
-}
-
-.site-footer a:hover {
-  color: var(--accent);
-}
-
-.site-header {
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
-  position: sticky;
-  top: 0;
-  z-index: var(--z-index-sticky);
-}
-
-.nav-tag {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
-}
-
-.htmx-indicator {
-  opacity: 0;
-  transition: opacity 200ms ease-in;
-}
-
-.htmx-request .htmx-indicator,
-.htmx-request.htmx-indicator {
-  opacity: 1;
 }
 
 .loading-indicator {
@@ -139,72 +28,7 @@
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.nav-toggle-label {
-  display: none;
-}
-
 @media (max-width: 640px) {
-  .nav-toggle-label {
-    display: block;
-    width: 48px;
-    height: 48px;
-    position: relative;
-    cursor: pointer;
-  }
-  .nav-toggle-label span {
-    width: 28px;
-  }
-  .nav-toggle-label span,
-  .nav-toggle-label span::before,
-  .nav-toggle-label span::after {
-    display: block;
-    position: absolute;
-    width: 24px;
-    height: 2px;
-    background: var(--text-primary);
-    left: 50%;
-    transform: translateX(-50%);
-    transition: transform 0.3s, opacity 0.3s;
-  }
-  .nav-toggle-label span::before,
-  .nav-toggle-label span::after {
-    content: '';
-  }
-  .nav-toggle-label span::before {
-    top: -8px;
-  }
-  .nav-toggle-label span::after {
-    top: 8px;
-  }
-  .nav-toggle-checkbox:checked + .nav-toggle-label span {
-    background: transparent;
-  }
-  .nav-toggle-checkbox:checked + .nav-toggle-label span::before {
-    transform: translateX(-50%) rotate(45deg);
-  }
-  .nav-toggle-checkbox:checked + .nav-toggle-label span::after {
-    transform: translateX(-50%) rotate(-45deg);
-  }
-  .nav-links {
-    display: none;
-    order: 3;
-    width: 100%;
-  }
-  .nav-toggle-checkbox:checked ~ .nav-links {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .nav {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .nav-meta {
-    display: none;
-  }
-
   .nav-logout {
     display: block;
   }
@@ -235,12 +59,6 @@
     min-height: 44px;
   }
 
-  .nav-links a {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-  }
-
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
@@ -259,15 +77,6 @@
 }
 
 @media (min-width: 641px) and (max-width: 768px) {
-  .nav {
-    padding: 0.75rem 1rem;
-    gap: 1rem;
-  }
-
-  .container {
-    padding: 1.25rem 1rem;
-  }
-
   .dashboard-grid {
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;

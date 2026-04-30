@@ -49,17 +49,19 @@ class ResponseCache:
 
     def record_hit(self) -> None:
         """Record a cache hit, using Redis if available, else in-memory."""
+        self._hits += 1
         try:
             self._redis.hincrby(f"{self.prefix}:stats", "hits", 1)
         except redis.exceptions.RedisError:
-            self._hits += 1
+            pass
 
     def record_miss(self) -> None:
         """Record a cache miss, using Redis if available, else in-memory."""
+        self._misses += 1
         try:
             self._redis.hincrby(f"{self.prefix}:stats", "misses", 1)
         except redis.exceptions.RedisError:
-            self._misses += 1
+            pass
 
     def _evict_batch(self, batch: int = 5) -> None:
         """Remove expired entries from the head of the OrderedDict."""
@@ -215,9 +217,14 @@ class ResponseCache:
         """Return cache hit/miss statistics from Redis with in-memory fallback."""
         try:
             stats = self._redis.hgetall(f"{self.prefix}:stats")
-            hits = int(stats.get("hits", 0) or 0)
-            misses = int(stats.get("misses", 0) or 0)
-        except redis.exceptions.RedisError:
+            if not isinstance(stats, dict):
+                raise TypeError("Invalid stats from Redis")
+            # Redis returns dict with bytes keys/values
+            hits_raw = stats.get(b"hits") or stats.get("hits")
+            misses_raw = stats.get(b"misses") or stats.get("misses")
+            hits = int(hits_raw.decode() if isinstance(hits_raw, bytes) else hits_raw or 0)
+            misses = int(misses_raw.decode() if isinstance(misses_raw, bytes) else misses_raw or 0)
+        except Exception:
             hits = self._hits
             misses = self._misses
         total = hits + misses

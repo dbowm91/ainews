@@ -1,8 +1,9 @@
 import logging
 
-from flask import Response, jsonify
+from flask import Response
 
 from routes.admin import admin_bp, require_auth
+from routes.admin.api.utils import api_response
 from schemas.admin import TaskStatusParams
 from services.cache import get_response_cache
 from services.circuit_breaker import get_all_breaker_status
@@ -46,7 +47,7 @@ def health() -> Response:
         logger.warning("Health check: DNS cache stats failed: %s", e)
         status["dns_cache"] = "error"
 
-    return jsonify(status)
+    return api_response(data=status)
 
 
 @admin_bp.route("/api/workers/health")
@@ -69,7 +70,7 @@ def workers_health() -> Response:
         ping = inspect.ping()
         if not ping:
             result["status"] = "no_workers"
-            return jsonify(result)
+            return api_response(data=result)
 
         result["status"] = "ok"
         result["workers"] = {w: "alive" for w in ping}
@@ -94,7 +95,7 @@ def workers_health() -> Response:
         result["status"] = "error"
         result["error"] = str(e)
 
-    return jsonify(result)
+    return api_response(data=result)
 
 
 @admin_bp.route("/api/task/<task_id>")
@@ -104,7 +105,7 @@ def task_status(task_id: str) -> Response:
         validated = TaskStatusParams(task_id=task_id)
         task_id = validated.task_id
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return api_response(error=str(e), status=400)
 
     from celery.result import AsyncResult
 
@@ -120,4 +121,4 @@ def task_status(task_id: str) -> Response:
         response["result"] = task.result
     elif task.info:
         response["result"] = task.info
-    return jsonify(response)
+    return api_response(data=response)

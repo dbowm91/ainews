@@ -47,10 +47,12 @@ class TestHealth:
             resp = auth_client.get("/admin/api/health")
             assert resp.status_code == 200
             data = resp.get_json()
-            assert "flask" in data
-            assert "database" in data
-            assert "redis" in data
-            assert "circuit_breakers" in data
+            assert "data" in data
+            inner = data["data"]
+            assert "flask" in inner
+            assert "database" in inner
+            assert "redis" in inner
+            assert "circuit_breakers" in inner
 
 
 class TestConfigReload:
@@ -180,9 +182,10 @@ class TestSourcesHealth:
         resp = auth_client.get("/admin/api/sources/health")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["sources"]) == 1
-        assert data["sources"][0]["last_error"] == "Connection timeout"
-        assert data["sources"][0]["disabled_at"].startswith("2026-04-01")
+        assert "data" in data
+        assert len(data["data"]) == 1
+        assert data["data"][0]["last_error"] == "Connection timeout"
+        assert data["data"][0]["disabled_at"].startswith("2026-04-01")
 
 
 class TestArticleEdit:

@@ -1,9 +1,10 @@
 import logging
 
-from flask import Response, jsonify, request
+from flask import Response, request
 
 from constants import PipelineStatus
 from extensions import db
+from routes.admin.api.utils import api_response
 from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def pipeline_stats() -> Response:
         "multi_stage_degradations": multi_stage_count,
         "rate_percent": degradation_rate,
     }
-    return jsonify(stats)
+    return api_response(data=stats)
 
 
 @admin_bp.route("/api/pipeline/dead-letter/stats")
@@ -74,8 +75,8 @@ def dead_letter_stats() -> Response:
     metrics = get_metrics().get_metrics()
     gauge_val = metrics.get("gauges", {}).get("pipeline.stuck_articles", 0)
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "stuck_articles": stuck,
             "failed_articles": failed,
             "gauge_stuck": gauge_val,
@@ -112,8 +113,8 @@ def pipeline_backlog() -> Response:
 
     stuck_threshold = datetime.now(timezone.utc) - timedelta(minutes=threshold)
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "backlog_count": len(articles),
             "articles": [
                 {
@@ -138,8 +139,8 @@ def cost_summary() -> Response:
     from services.cost_tracker import get_cost_summary
 
     summary = get_cost_summary()
-    return jsonify(
-        {
+    return api_response(
+        data={
             "total_tokens": summary.total_tokens,
             "total_cost_usd": summary.total_cost_usd,
             "total_calls": summary.total_calls,
@@ -164,24 +165,22 @@ def sources_health() -> Response:
     from models import Source
 
     sources = Source.query.order_by(Source.name).all()
-    return jsonify(
-        {
-            "sources": [
-                {
-                    "id": s.id,
-                    "source_key": s.source_key,
-                    "name": s.name,
-                    "active": s.active,
-                    "consecutive_failures": s.consecutive_failures or 0,
-                    "last_success_at": s.last_success_at.isoformat()
-                    if s.last_success_at
-                    else None,
-                    "last_error": s.last_error,
-                    "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
-                }
-                for s in sources
-            ]
-        }
+    return api_response(
+        data=[
+            {
+                "id": s.id,
+                "source_key": s.source_key,
+                "name": s.name,
+                "active": s.active,
+                "consecutive_failures": s.consecutive_failures or 0,
+                "last_success_at": s.last_success_at.isoformat()
+                if s.last_success_at
+                else None,
+                "last_error": s.last_error,
+                "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
+            }
+            for s in sources
+        ]
     )
 
 
@@ -238,8 +237,8 @@ def pipeline_sla() -> Response:
 
     total_count = db.session.query(func.count(Article.id)).filter(*base_filters).scalar() or 0
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "period_days": days,
             "article_count": total_count,
             "sla": {

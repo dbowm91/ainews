@@ -23,13 +23,13 @@
   </div>
 </div>
 
-<h1 class="article-title">{% if fa.headline %}{{ fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}</h1>
+<h1 class="article-title">{% if fa.headline %}{{ fa.headline }}{% else %}{{ article.original_title|e }}{% endif %}</h1>
 
 {# Summary #}
 {% if fa.tldr %}
   <div class="article-tldr">
     <span class="tldr-label">tl;dr</span>
-    {{ fa.tldr|e }}
+    {{ fa.tldr }}
   </div>
 {% endif %}
 
@@ -37,7 +37,7 @@
 {% if fa.why_it_matters %}
   <section class="article-why-matters">
     <h2 class="section-heading">why it matters</h2>
-    <div class="why-matters-text">{{ fa.why_it_matters|e }}</div>
+    <div class="why-matters-text">{{ fa.why_it_matters }}</div>
   </section>
 {% endif %}
 
@@ -47,7 +47,7 @@
     <h2 class="section-heading">key takeaways{% if fa.key_points|length > (max_key_points or 5) %} <span class="keypoints-count">({{ fa.key_points|length }} total)</span>{% endif %}</h2>
     <ul class="keypoints-list">
       {% for point in fa.key_points[:max_key_points or 5] %}
-        <li>{{ point|e }}</li>
+        <li>{{ point }}</li>
       {% endfor %}
     </ul>
     {% if fa.key_points|length > (max_key_points or 5) %}
@@ -68,7 +68,7 @@
 {% if fa.what_to_watch %}
   <details class="article-what-to-watch">
     <summary class="section-heading">what to watch <span class="details-arrow">&#9658;</span></summary>
-    <div class="what-to-watch-text">{{ fa.what_to_watch|e }}</div>
+    <div class="what-to-watch-text">{{ fa.what_to_watch }}</div>
   </details>
 {% endif %}
 

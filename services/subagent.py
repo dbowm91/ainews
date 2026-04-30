@@ -55,7 +55,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             try:
                 note = get_topic_note(topic, source)
                 return note.note if note else "No note found for this topic."
-            except SQLAlchemyError as e:
+            except (SQLAlchemyError, KeyError, AttributeError) as e:
                 logger.error("Tool get_topic_note failed for topic=%s: %s", topic, e)
                 return f"Error retrieving topic note: {type(e).__name__}"
             except Exception as e:
@@ -76,7 +76,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             return "\n".join(
                 f"Topic: {k}\nNotes: {'; '.join(v)}" for k, v in result.items()
             )
-        except SQLAlchemyError as e:
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_topic_notes_for_topics failed: %s", e)
             return f"Error retrieving topic notes: {type(e).__name__}"
         except Exception as e:
@@ -97,7 +97,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 return "\n".join(
                     f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
                 )
-            except SQLAlchemyError as e:
+            except (SQLAlchemyError, KeyError, AttributeError) as e:
                 logger.error("Tool get_related_articles failed: %s", e)
                 return f"Error retrieving related articles: {type(e).__name__}"
             except Exception as e:
@@ -120,7 +120,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             return "\n".join(
                 f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
             )
-        except SQLAlchemyError as e:
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_trend_memory failed: %s", e)
             return f"Error retrieving trend memory: {type(e).__name__}"
         except Exception as e:
@@ -142,7 +142,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "impact_score": article.impact_score,
                 "created_at": article.created_at.isoformat() if article.created_at else None,
             })
-        except SQLAlchemyError as e:
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_article_by_id failed for %s: %s", article_id, e)
             return f'{{"error": "{type(e).__name__}"}}'
         except Exception as e:
@@ -159,7 +159,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             return json.dumps([
                 {"id": a.id, "title": a.original_title} for a in articles
             ])
-        except SQLAlchemyError as e:
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool search_articles failed: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
         except Exception as e:
@@ -178,7 +178,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
                 "consecutive_failures": s.consecutive_failures,
             } for s in sources])
-        except SQLAlchemyError as e:
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_source_health failed: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
         except Exception as e:

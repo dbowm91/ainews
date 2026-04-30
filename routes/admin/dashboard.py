@@ -9,7 +9,7 @@ from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
-_DASHBOARD_CACHE_TTL = 300
+_DASHBOARD_CACHE_TTL = 60
 
 
 def _get_dashboard_cache_key() -> str:
@@ -102,8 +102,8 @@ def _compute_dashboard_stats():
         .all()
     )
 
-    sources = Source.query.all()
-    source_count = Source.query.count()
+    sources = Source.query.with_entities(Source.id, Source.name, Source.active).all()
+    source_count = len(sources)
 
     article_counts = dict(
         db.session.query(Article.source_id, func.count(Article.id))
@@ -112,7 +112,8 @@ def _compute_dashboard_stats():
     )
 
     recent = (
-        Article.query.options(joinedload(Article.source))
+        db.session.query(Article.id, Article.original_title, Article.pipeline_status, Source.name)
+        .outerjoin(Source, Article.source_id == Source.id)
         .order_by(Article.created_at.desc())
         .limit(15)
         .all()
@@ -127,7 +128,16 @@ def _compute_dashboard_stats():
     total_subs, subs_by_type, _ = get_subscriber_stats(db)
 
     recent_runs = (
-        PipelineRun.query.order_by(PipelineRun.started_at.desc()).limit(5).all()
+        PipelineRun.query.with_entities(
+            PipelineRun.id,
+            PipelineRun.status,
+            PipelineRun.started_at,
+            PipelineRun.finished_at,
+            PipelineRun.error_message,
+        )
+        .order_by(PipelineRun.started_at.desc())
+        .limit(5)
+        .all()
     )
 
     running_count = PipelineRun.query.filter_by(status="running").count()
@@ -143,14 +153,14 @@ def _compute_dashboard_stats():
 
     return {
         "pipeline_stats": pipeline_stats,
-        "sources": [{"id": s.id, "name": s.name, "active": s.active} for s in sources],
+        "sources": [{"id": s[0], "name": s[1], "active": s[2]} for s in sources],
         "article_counts": article_counts,
         "recent": [
             {
-                "id": a.id,
-                "title": a.original_title,
-                "pipeline_status": a.pipeline_status,
-                "source_name": a.source.name if a.source else None,
+                "id": a[0],
+                "title": a[1],
+                "pipeline_status": a[2],
+                "source_name": a[3],
             }
             for a in recent
         ],
@@ -159,11 +169,11 @@ def _compute_dashboard_stats():
         "subs_by_type": subs_by_type,
         "recent_runs": [
             {
-                "id": r.id,
-                "status": r.status,
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
-                "error_message": r.error_message,
+                "id": r[0],
+                "status": r[1],
+                "started_at": r[2].isoformat() if r[2] else None,
+                "finished_at": r[3].isoformat() if r[3] else None,
+                "error_message": r[4],
             }
             for r in recent_runs
         ],

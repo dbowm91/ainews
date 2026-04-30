@@ -18,6 +18,22 @@ from services.utils import get_admin_categories as _admin_categories
 
 logger = logging.getLogger(__name__)
 
+MAX_HEADLINE_LENGTH = 500
+MAX_TLDR_LENGTH = 300
+MAX_BODY_LENGTH = 50000
+MAX_WHY_IT_MATTERS_LENGTH = 1000
+MAX_WHAT_TO_WATCH_LENGTH = 500
+MAX_KEY_POINTS_LENGTH = 2000
+MAX_TAGS_LENGTH = 500
+
+
+def _sanitize_field(value: str, max_length: int) -> str:
+    """Truncate a string to max_length characters."""
+    if not isinstance(value, str):
+        return ""
+    return value[:max_length]
+
+
 _REPROCESS_STAGES = {
     "select": {
         "status": PipelineStatus.PENDING,
@@ -215,13 +231,13 @@ def edit_article(article_id):
                 fa = {}
         original_fa = dict(fa)  # snapshot before overwriting
 
-        fa["headline"] = request.form.get("headline", "").strip()
-        fa["tldr"] = request.form.get("tldr", "").strip()
-        fa["why_it_matters"] = request.form.get("why_it_matters", "").strip()
-        fa["body"] = request.form.get("body", "").strip()
-        fa["what_to_watch"] = request.form.get("what_to_watch", "").strip()
+        fa["headline"] = _sanitize_field(request.form.get("headline", "").strip(), MAX_HEADLINE_LENGTH)
+        fa["tldr"] = _sanitize_field(request.form.get("tldr", "").strip(), MAX_TLDR_LENGTH)
+        fa["why_it_matters"] = _sanitize_field(request.form.get("why_it_matters", "").strip(), MAX_WHY_IT_MATTERS_LENGTH)
+        fa["body"] = _sanitize_field(request.form.get("body", "").strip(), MAX_BODY_LENGTH)
+        fa["what_to_watch"] = _sanitize_field(request.form.get("what_to_watch", "").strip(), MAX_WHAT_TO_WATCH_LENGTH)
 
-        key_points_raw = request.form.get("key_points", "").strip()
+        key_points_raw = _sanitize_field(request.form.get("key_points", "").strip(), MAX_KEY_POINTS_LENGTH)
         if key_points_raw:
             fa["key_points"] = [
                 kp.strip() for kp in key_points_raw.split("\n") if kp.strip()
@@ -229,7 +245,7 @@ def edit_article(article_id):
         else:
             fa["key_points"] = []
 
-        tags_raw = request.form.get("tags", "").strip()
+        tags_raw = _sanitize_field(request.form.get("tags", "").strip(), MAX_TAGS_LENGTH)
         if tags_raw:
             fa["tags"] = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
         else:

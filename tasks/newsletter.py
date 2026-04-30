@@ -542,6 +542,7 @@ def retry_failed_newsletter_deliveries(self):
             nl.delivered_count = sent
             db.session.commit()
         except smtplib.SMTPResponseException as e:
+            db.session.rollback()
             if e.smtp_code >= 500:
                 failed_count += 1
                 logger.error(
@@ -556,6 +557,7 @@ def retry_failed_newsletter_deliveries(self):
             )
             raise
         except Exception as e:
+            db.session.rollback()
             failed_count += 1
             logger.error("Failed to retry newsletter %s: %s", nl.id, e)
 

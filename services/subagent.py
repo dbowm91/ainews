@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Type
 
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
 from schemas.llm_responses import (  # noqa: F401
@@ -53,8 +54,11 @@ def _build_context_tools() -> list[ToolDefinition]:
             try:
                 note = get_topic_note(topic, source)
                 return note.note if note else "No note found for this topic."
+            except SQLAlchemyError as e:
+                logger.error("Tool get_topic_note failed for topic=%s: %s", topic, e)
+                return f"Error retrieving topic note: {type(e).__name__}"
             except Exception as e:
-                logger.warning("Tool get_topic_note failed for topic=%s: %s", topic, e)
+                logger.error("Unexpected error in get_topic_note for %s: %s", topic, e)
                 return f"Error retrieving topic note: {type(e).__name__}"
 
         cache = get_response_cache()
@@ -71,8 +75,11 @@ def _build_context_tools() -> list[ToolDefinition]:
             return "\n".join(
                 f"Topic: {k}\nNotes: {'; '.join(v)}" for k, v in result.items()
             )
+        except SQLAlchemyError as e:
+            logger.error("Tool get_topic_notes_for_topics failed: %s", e)
+            return f"Error retrieving topic notes: {type(e).__name__}"
         except Exception as e:
-            logger.warning("Tool get_topic_notes_for_topics failed: %s", e)
+            logger.error("Unexpected error in get_topic_notes_for_topics: %s", e)
             return f"Error retrieving topic notes: {type(e).__name__}"
 
     def _get_related_articles(
@@ -89,8 +96,11 @@ def _build_context_tools() -> list[ToolDefinition]:
                 return "\n".join(
                     f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
                 )
+            except SQLAlchemyError as e:
+                logger.error("Tool get_related_articles failed: %s", e)
+                return f"Error retrieving related articles: {type(e).__name__}"
             except Exception as e:
-                logger.warning("Tool get_related_articles failed: %s", e)
+                logger.error("Unexpected error in get_related_articles: %s", e)
                 return f"Error retrieving related articles: {type(e).__name__}"
 
         cache = get_response_cache()
@@ -109,8 +119,11 @@ def _build_context_tools() -> list[ToolDefinition]:
             return "\n".join(
                 f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
             )
+        except SQLAlchemyError as e:
+            logger.error("Tool get_trend_memory failed: %s", e)
+            return f"Error retrieving trend memory: {type(e).__name__}"
         except Exception as e:
-            logger.warning("Tool get_trend_memory failed: %s", e)
+            logger.error("Unexpected error in get_trend_memory: %s", e)
             return f"Error retrieving trend memory: {type(e).__name__}"
 
     def _get_article_by_id(article_id: int) -> str:
@@ -128,8 +141,11 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "impact_score": article.impact_score,
                 "created_at": article.created_at.isoformat() if article.created_at else None,
             })
+        except SQLAlchemyError as e:
+            logger.error("Tool get_article_by_id failed for %s: %s", article_id, e)
+            return f'{{"error": "{type(e).__name__}"}}'
         except Exception as e:
-            logger.warning("Tool get_article_by_id failed for %s: %s", article_id, e)
+            logger.error("Unexpected error in get_article_by_id for %s: %s", article_id, e)
             return f'{{"error": "{type(e).__name__}"}}'
 
     def _search_articles(query: str, limit: int = 5) -> str:
@@ -142,8 +158,11 @@ def _build_context_tools() -> list[ToolDefinition]:
             return json.dumps([
                 {"id": a.id, "title": a.original_title} for a in articles
             ])
+        except SQLAlchemyError as e:
+            logger.error("Tool search_articles failed: %s", e)
+            return f'{{"error": "{type(e).__name__}"}}'
         except Exception as e:
-            logger.warning("Tool search_articles failed: %s", e)
+            logger.error("Unexpected error in search_articles: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
 
     def _get_source_health() -> str:
@@ -158,8 +177,11 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
                 "consecutive_failures": s.consecutive_failures,
             } for s in sources])
+        except SQLAlchemyError as e:
+            logger.error("Tool get_source_health failed: %s", e)
+            return f'{{"error": "{type(e).__name__}"}}'
         except Exception as e:
-            logger.warning("Tool get_source_health failed: %s", e)
+            logger.error("Unexpected error in get_source_health: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
 
     tools.append(
@@ -318,8 +340,11 @@ def _build_search_tools() -> list[ToolDefinition]:
             if not results:
                 return "No search results found."
             return "\n".join(f"- {r.title}: {r.snippet[:150]}..." for r in results)
+        except (ConnectionError, TimeoutError, ValueError) as e:
+            logger.error("Tool search_web failed for '%s': %s", query, e)
+            return f"Error performing web search: {type(e).__name__}"
         except Exception as e:
-            logger.warning("Tool search_web failed for '%s': %s", query, e)
+            logger.error("Unexpected error in search_web for '%s': %s", query, e)
             return f"Error performing web search: {type(e).__name__}"
 
     def _get_search_provider(provider_id: str | None = None) -> str:
@@ -328,8 +353,11 @@ def _build_search_tools() -> list[ToolDefinition]:
         try:
             prov = get_search_provider(provider_id)
             return f"Using search provider: {prov.provider_id}"
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.error("Tool get_search_provider failed: %s", e)
+            return f"Error getting search provider: {type(e).__name__}"
         except Exception as e:
-            logger.warning("Tool get_search_provider failed: %s", e)
+            logger.error("Unexpected error in get_search_provider: %s", e)
             return f"Error getting search provider: {type(e).__name__}"
 
     tools.append(
@@ -618,8 +646,8 @@ def run_subagent(
             break
         except Exception as e:
             last_exc = e
-            logger.warning(
-                "Subagent %s/%s failed: %s — using fallback",
+            logger.error(
+                "Subagent %s/%s unexpected error: %s — using fallback",
                 stage,
                 task_type,
                 e,
@@ -819,8 +847,8 @@ def run_subagent_with_tools(
             break
         except Exception as e:
             last_exc = e
-            logger.warning(
-                "Subagent %s/%s failed: %s — using fallback",
+            logger.error(
+                "Subagent %s/%s unexpected error: %s — using fallback",
                 stage,
                 task_type,
                 e,
@@ -915,8 +943,8 @@ def run_subagent_chain(
                     )
                     results[step_name] = {"synthesis": "", "skipped": True}
                     continue
-            except Exception as e:
-                logger.warning(
+            except (ValueError, KeyError, AttributeError) as e:
+                logger.error(
                     "Chain %s step %d condition evaluation failed: %s",
                     chain_name,
                     i,
@@ -938,8 +966,8 @@ def run_subagent_chain(
             )
             prompt_data_escaped = _escape_prompt_data(prompt_data)
             prompt = template.format(**prompt_data_escaped)
-        except Exception as e:
-            logger.warning(
+        except (KeyError, ValueError, AttributeError) as e:
+            logger.error(
                 "Chain %s step %d template error: %s",
                 chain_name,
                 i,
@@ -1004,8 +1032,8 @@ def run_subagent_chain(
                 }
                 break
             except Exception as e:
-                logger.warning(
-                    "Chain %s step %d failed: %s",
+                logger.error(
+                    "Chain %s step %d unexpected error: %s",
                     chain_name,
                     i,
                     e,
@@ -1128,8 +1156,8 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         if any(seg in str(e) for seg in ("Unsupported node type", "not allowed")):
             raise
         return False
-    except Exception:
-        logger.debug("Condition evaluation failed: %s", condition)
+    except Exception as e:
+        logger.debug("Condition evaluation failed for '%s': %s", condition, e)
         return False
 
 
@@ -1142,7 +1170,7 @@ def _resolve_template_variables(
         if isinstance(value, str) and "{" in value:
             try:
                 resolved[key] = value.format(**results)
-            except Exception as e:
+            except (KeyError, ValueError, AttributeError) as e:
                 logger.warning(
                     "Template resolution failed for key '%s': %s",
                     key, e

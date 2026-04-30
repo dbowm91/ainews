@@ -96,6 +96,11 @@ class ResponseCache:
                     self._memory[full_key] = (expires_at, time.monotonic(), raw)
                     self._memory.move_to_end(full_key)
                 self.record_hit()
+                # Refresh Redis TTL on access
+                try:
+                    self._redis.expire(full_key, self._ttl)
+                except redis.exceptions.RedisError:
+                    pass
                 return json.loads(raw)
             with self._memory_lock:
                 self._memory.pop(full_key, None)

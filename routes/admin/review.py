@@ -137,6 +137,14 @@ def reject_article(article_id):
         logger.exception("Failed to reject article %s", article_id)
         return jsonify({"error": "Failed to reject article"}), 500
 
+    log_admin_action(
+        "article_reject",
+        target_type="article",
+        target_id=article.id,
+        details={"original_title": article.original_title, "pipeline_status": article.pipeline_status},
+        category="article",
+    )
+
     try:
         cache = get_response_cache()
         cache.invalidate_prefix("pub:index")

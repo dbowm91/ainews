@@ -87,6 +87,15 @@ def add_source() -> str:
         db.session.rollback()
         return '<div class="form-error" role="alert">failed to create source</div>', 500
 
+    try:
+        cache = get_response_cache()
+        cache.invalidate_prefix("pub:index")
+        cache.invalidate_prefix("pub:topic")
+        cache.invalidate_prefix("pub:rss_feed")
+        cache.invalidate_prefix("pub:related")
+    except Exception as e:
+        logger.warning("Failed to invalidate cache after source creation: %s", e)
+
     from services.audit import log_admin_action
 
     log_admin_action("source_create", target_type="source", target_id=source.id, details={"name": name, "source_type": source_type})

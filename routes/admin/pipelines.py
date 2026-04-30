@@ -5,6 +5,7 @@ from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from services.audit import log_admin_action
 from services.task_security import get_signed_kwargs
 
 
@@ -113,6 +114,13 @@ def trigger_crawl():
             db.session.rollback()
             raise
 
+        log_admin_action(
+            "pipeline_trigger_crawl",
+            target_type="pipeline",
+            target_id=run.id,
+            details={"run_type": "crawl"},
+            category="pipeline",
+        )
         message = "Crawl started"
         if request.headers.get("HX-Request"):
             return (

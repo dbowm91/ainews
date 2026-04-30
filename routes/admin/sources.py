@@ -7,6 +7,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit, validate_csrf_json
+from services.audit import log_admin_action
+from services.cache import get_response_cache
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,24 @@ def enable_source(source_id: int) -> tuple[Response, int]:
     error = commit(db, "Failed to enable source")
     if error:
         return error
+
+    log_admin_action(
+        "source_enable",
+        target_type="source",
+        target_id=source.id,
+        details={"name": source.name},
+        category="config",
+    )
+
+    try:
+        cache = get_response_cache()
+        cache.invalidate_prefix("pub:index")
+        cache.invalidate_prefix("pub:topic")
+        cache.invalidate_prefix("pub:rss_feed")
+        cache.invalidate_prefix("pub:related")
+    except Exception as e:
+        logger.warning("Failed to invalidate source cache: %s", e)
+
     return jsonify({"message": f"Source {source.name} enabled"}), 200
 
 
@@ -125,4 +145,22 @@ def disable_source(source_id: int) -> tuple[Response, int]:
     error = commit(db, "Failed to disable source")
     if error:
         return error
+
+    log_admin_action(
+        "source_disable",
+        target_type="source",
+        target_id=source.id,
+        details={"name": source.name},
+        category="config",
+    )
+
+    try:
+        cache = get_response_cache()
+        cache.invalidate_prefix("pub:index")
+        cache.invalidate_prefix("pub:topic")
+        cache.invalidate_prefix("pub:rss_feed")
+        cache.invalidate_prefix("pub:related")
+    except Exception as e:
+        logger.warning("Failed to invalidate source cache: %s", e)
+
     return jsonify({"message": f"Source {source.name} disabled"}), 200

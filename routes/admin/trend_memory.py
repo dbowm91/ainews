@@ -1,4 +1,5 @@
 """Admin routes for Trend Memory management."""
+import logging
 
 from flask import flash, redirect, render_template, request, url_for
 
@@ -6,6 +7,10 @@ from extensions import db
 from models import TrendMemory
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from services.audit import log_admin_action
+from services.cache import get_response_cache
+
+logger = logging.getLogger(__name__)
 
 
 @admin_bp.route("/trend-memory")
@@ -57,7 +62,19 @@ def trend_memory_delete(memory_id):
     try:
         db.session.delete(memory)
         db.session.commit()
+        log_admin_action(
+            "trend_memory_delete",
+            target_type="trend_memory",
+            target_id=memory.id,
+            details={"topic": memory.topic},
+            category="config",
+        )
         flash("Memory entry deleted", "success")
+        try:
+            cache = get_response_cache()
+            cache.invalidate_prefix("trend_memory")
+        except Exception as e:
+            logger.warning("Failed to invalidate trend_memory cache: %s", e)
     except Exception as e:
         db.session.rollback()
         flash(f"Error deleting memory: {e}", "error")
@@ -77,7 +94,19 @@ def trend_memory_delete_expired():
             TrendMemory.expires_at <= datetime.now(timezone.utc),
         ).delete(synchronize_session=False)
         db.session.commit()
+        log_admin_action(
+            "trend_memory_delete_expired",
+            target_type="trend_memory",
+            target_id=0,
+            details={"deleted_count": deleted},
+            category="config",
+        )
         flash(f"Deleted {deleted} expired memory entries", "success")
+        try:
+            cache = get_response_cache()
+            cache.invalidate_prefix("trend_memory")
+        except Exception as e:
+            logger.warning("Failed to invalidate trend_memory cache: %s", e)
     except Exception as e:
         db.session.rollback()
         flash(f"Error deleting expired memories: {e}", "error")

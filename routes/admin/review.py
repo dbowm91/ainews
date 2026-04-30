@@ -8,6 +8,8 @@ from sqlalchemy.orm import joinedload
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from services.cache import get_response_cache
+from services.audit import log_admin_action
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,14 @@ def approve_article(article_id):
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"error": "Failed to approve article"}), 500
 
+    log_admin_action(
+        "article_approve",
+        target_type="article",
+        target_id=article.id,
+        details={"original_title": article.original_title},
+        category="article",
+    )
+
     if article.crawled_at:
         sla_duration = (article.published_at - article.crawled_at).total_seconds()
         from services.metrics import get_metrics
@@ -126,6 +136,14 @@ def reject_article(article_id):
         db.session.rollback()
         logger.exception("Failed to reject article %s", article_id)
         return jsonify({"error": "Failed to reject article"}), 500
+
+    try:
+        cache = get_response_cache()
+        cache.invalidate_prefix("pub:index")
+        cache.invalidate_prefix("pub:topic")
+        cache.invalidate_prefix("pub:rss_feed")
+    except Exception as e:
+        logger.warning("Failed to invalidate article cache: %s", e)
 
     logger.info(
         "Rejected article %s: %s", article_id, (article.original_title or "")[:50]

@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from services.audit import log_admin_action
 from services.article import _escape_like_pattern
 from services.task_security import get_signed_kwargs
 from services.utils import get_admin_categories as _admin_categories
@@ -271,6 +272,17 @@ def edit_article(article_id):
 
         try:
             db.session.commit()
+            log_admin_action(
+                "article_edit",
+                target_type="article",
+                target_id=article.id,
+                details={
+                    "original_title": article.original_title,
+                    "category": new_category,
+                    "pipeline_status": new_status,
+                },
+                category="article",
+            )
         except SQLAlchemyError:
             db.session.rollback()
             logger.exception("Failed to save article %s", article_id)
@@ -370,6 +382,13 @@ def rollback_article(article_id, version_id):
 
     try:
         db.session.commit()
+        log_admin_action(
+            "article_rollback",
+            target_type="article",
+            target_id=article_id,
+            details={"version_id": version_id, "version_number": version.version_number},
+            category="article",
+        )
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception(
@@ -395,6 +414,13 @@ def delete_article(article_id):
     try:
         db.session.delete(article)
         db.session.commit()
+        log_admin_action(
+            "article_delete",
+            target_type="article",
+            target_id=article_id,
+            details={"original_title": article.original_title},
+            category="article",
+        )
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to delete article %s", article_id)
@@ -434,6 +460,13 @@ def reprocess_article(article_id):
 
     try:
         db.session.commit()
+        log_admin_action(
+            "article_reprocess",
+            target_type="article",
+            target_id=article_id,
+            details={"stage": stage},
+            category="pipeline",
+        )
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to reprocess article %s (%s stage)", article_id, stage)

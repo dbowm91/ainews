@@ -1,15 +1,20 @@
 """Admin routes for topic notes CRUD."""
+import logging
 
 from flask import flash, redirect, render_template, request, url_for
 
 from extensions import db
 from routes.admin import admin_bp, require_auth
+from services.audit import log_admin_action
+from services.cache import get_response_cache
 from services.context_service import (
     create_topic_note,
     delete_topic_note,
     get_all_topic_notes,
     get_topic_note,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @admin_bp.route("/topic-notes")
@@ -59,7 +64,19 @@ def topic_notes_create():
 
     try:
         create_topic_note(topic, note, source)
+        log_admin_action(
+            "topic_note_create",
+            target_type="topic_note",
+            target_id=0,
+            details={"topic": topic, "source": source},
+            category="config",
+        )
         flash("Topic note created", "success")
+        try:
+            cache = get_response_cache()
+            cache.invalidate_prefix("topic_note")
+        except Exception as e:
+            logger.warning("Failed to invalidate topic_note cache: %s", e)
     except Exception as e:
         flash(f"Error creating note: {e}", "error")
 
@@ -93,10 +110,29 @@ def topic_notes_edit():
             existing.note = note
             existing.source = source
             db.session.commit()
+            log_admin_action(
+                "topic_note_edit",
+                target_type="topic_note",
+                target_id=existing.id,
+                details={"topic": topic, "source": source},
+                category="config",
+            )
             flash("Topic note updated", "success")
         else:
             create_topic_note(topic, note, source)
+            log_admin_action(
+                "topic_note_create",
+                target_type="topic_note",
+                target_id=0,
+                details={"topic": topic, "source": source},
+                category="config",
+            )
             flash("Topic note created", "success")
+        try:
+            cache = get_response_cache()
+            cache.invalidate_prefix("topic_note")
+        except Exception as e:
+            logger.warning("Failed to invalidate topic_note cache: %s", e)
     except Exception as e:
         db.session.rollback()
         flash(f"Error updating note: {e}", "error")
@@ -112,7 +148,19 @@ def topic_notes_delete():
 
     try:
         if delete_topic_note(topic, source):
+            log_admin_action(
+                "topic_note_delete",
+                target_type="topic_note",
+                target_id=0,
+                details={"topic": topic, "source": source},
+                category="config",
+            )
             flash("Topic note deleted", "success")
+            try:
+                cache = get_response_cache()
+                cache.invalidate_prefix("topic_note")
+            except Exception as e:
+                logger.warning("Failed to invalidate topic_note cache: %s", e)
         else:
             flash("Note not found", "error")
     except Exception as e:

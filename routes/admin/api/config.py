@@ -4,6 +4,7 @@ from flask import Response, jsonify
 
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from services.audit import log_admin_action
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,14 @@ def reload_config() -> tuple[Response, int] | Response:
     from celery_app import celery_app
     from config import Config
     Config.reload_beat_schedule(celery_app)
+
+    log_admin_action(
+        "config_reload",
+        target_type="system",
+        target_id=0,
+        details={"action": "reload configuration"},
+        category="config",
+    )
 
     return jsonify({"message": "Config cache cleared"}), 200
 

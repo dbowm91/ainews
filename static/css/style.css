@@ -1,10 +1,12 @@
 /* ainews - Main Stylesheet */
 /* Imports all CSS modules */
 
-@import url('variables.css');
-@import url('base.css');
-@import url('layout.css');
-@import url('components.css');
-@import url('articles.css');
-@import url('pages.css');
-@import url('utilities.css');
+@layer reset, variables, layout, components, pages, utilities;
+
+@import url('variables.css') layer(variables);
+@import url('base.css') layer(reset);
+@import url('layout.css') layer(layout);
+@import url('components.css') layer(components);
+@import url('articles.css') layer(components);
+@import url('pages.css') layer(pages);
+@import url('utilities.css') layer(utilities);

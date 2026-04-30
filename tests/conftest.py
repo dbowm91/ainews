@@ -27,6 +27,17 @@ def _reset_singletons():
         clear_task_fn_cache()
     except (ImportError, AttributeError):
         pass
+    # Clear Redis metrics keys
+    try:
+        from extensions import get_redis
+        import redis.exceptions
+        redis_client = get_redis()
+        if redis_client is not None:
+            keys = redis_client.keys("metrics:*")
+            if keys:
+                redis_client.delete(*keys)
+    except (ImportError, AttributeError, redis.exceptions.RedisError):
+        pass
 
 
 @pytest.fixture(autouse=True)

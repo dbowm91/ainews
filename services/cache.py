@@ -119,22 +119,26 @@ class ResponseCache:
             logger.warning("Cache write failed for %s: %s", key, e)
 
     def get_or_set(self, key: str, loader_fn: Callable[[], Any], ttl: int = 120) -> Any:
-        """Get from cache or compute and cache. Uses per-key locking to prevent stampede."""
+        """Get from cache or compute and cache. Uses per-key locking with pub/sub notification."""
         cached = self.get(key)
         if cached is not None:
             return cached
 
         full_key = self._make_key(key)
         lock_key = f"lock:{full_key}"
+        done_channel = f"done:{full_key}"
 
         try:
-            if self._redis.set(lock_key, "1", nx=True, ex=10):
+            # Try to acquire compute lock
+            if self._redis.set(lock_key, "1", nx=True, ex=ttl):
                 try:
+                    # We got the lock - compute value
                     cached = self.get(key)
                     if cached is not None:
                         return cached
                     value = loader_fn()
                     self.set(key, value, ttl)
+                    self._redis.publish(done_channel, "1")
                     return value
                 finally:
                     try:
@@ -142,33 +146,19 @@ class ResponseCache:
                     except redis.exceptions.RedisError:
                         pass
             else:
-                for _ in range(10):
+                # Someone else computing - wait for result via pub/sub
+                pubsub = self._redis.pubsub()
+                try:
+                    pubsub.subscribe(done_channel)
+                    # Check if already completed while subscribing
                     cached = self.get(key)
                     if cached is not None:
                         return cached
-                    if not self._redis.exists(lock_key):
-                        break
-                    time.sleep(0.05)
-
-                cached = self.get(key)
-                if cached is not None:
-                    return cached
-
-                if self._redis.set(lock_key, "1", nx=True, ex=10):
-                    try:
-                        cached = self.get(key)
-                        if cached is not None:
-                            return cached
-                        value = loader_fn()
-                        self.set(key, value, ttl)
-                        return value
-                    finally:
-                        try:
-                            self._redis.delete(lock_key)
-                        except redis.exceptions.RedisError:
-                            pass
-                else:
-                    raise RuntimeError(f"Failed to acquire cache lock for key: {key}")
+                    # Wait with timeout for notification
+                    pubsub.get_message(timeout=ttl)
+                    return self.get(key)
+                finally:
+                    pubsub.unsubscribe(done_channel)
         except redis.exceptions.RedisError as e:
             logger.warning("Failed to acquire cache lock for %s: %s", lock_key, e)
             value = loader_fn()

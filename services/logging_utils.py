@@ -7,6 +7,7 @@ OpenTelemetry tracing integration for distributed tracing.
 
 import json
 import logging
+import os
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -16,7 +17,6 @@ try:
     from opentelemetry import trace
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.semconv.resource import ResourceAttributes
     from opentelemetry.trace import SpanKind, Tracer
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -37,6 +37,27 @@ _tracer: Optional[Tracer] = None
 _propagator = None
 
 
+def _setup_opentelemetry():
+    """Configure OpenTelemetry with OTLP exporter if endpoint is set."""
+    if not _OTEL_AVAILABLE:
+        return
+
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    if not endpoint:
+        logger.info("OTEL_EXPORTER_OTLP_ENDPOINT not set, skipping OTel setup")
+        return
+
+    from opentelemetry.exporter.otlp import OTLPSpanExporter
+
+    exporter = OTLPSpanExporter(endpoint=endpoint)
+    span_processor = BatchSpanProcessor(exporter)
+
+    trace.set_tracer_provider(TracerProvider(resource=Resource.create({ResourceAttributes.SERVICE_NAME: "ainews"})))
+    trace.get_tracer_provider().add_span_processor(span_processor)
+
+
 def get_tracer(name: str = __name__) -> Optional[Tracer]:
     """Get or create an OpenTelemetry tracer.
 
@@ -46,13 +67,9 @@ def get_tracer(name: str = __name__) -> Optional[Tracer]:
     if not _OTEL_AVAILABLE:
         return None
     if _tracer is None:
-        resource = Resource.create({ResourceAttributes.SERVICE_NAME: "ainews"})
-        provider = TracerProvider(resource=resource)
-        span_processor = BatchSpanProcessor(
-            type("NoopExporter", (), {"export": lambda *a, **k: None})()
-        )
-        provider.add_span_processor(span_processor)
-        trace.set_tracer_provider(provider)
+        _setup_opentelemetry()
+        if trace.get_tracer_provider() is None:
+            return None
         _tracer = trace.get_tracer(name)
     return _tracer
 

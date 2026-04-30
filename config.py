@@ -65,6 +65,9 @@ class Config:
     # Database query logging
     DB_QUERY_LOG_LEVEL = os.environ.get("DB_QUERY_LOG_LEVEL", "WARNING").upper()
 
+    # OpenTelemetry
+    OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
     # SMTP
     SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
     SMTP_PORT = safe_int("SMTP_PORT", 587)

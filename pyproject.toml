@@ -33,6 +33,7 @@ dependencies = [
     "bleach==6.2.0",
     "short_url==1.2.2",
     "defusedxml==0.7.1",
+    "opentelemetry-exporter-otlp==1.35.0",
 ]
 
 [project.optional-dependencies]

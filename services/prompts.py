@@ -151,6 +151,72 @@ def sliding_window_truncate(
     return text[:half] + ellipsis + text[-half:]
 
 
+def importance_weighted_truncate(
+    text: str,
+    max_chars: int = 8000,
+    key_topics: list[str] = None,
+) -> str:
+    """Truncate text by keeping highest-scoring segments based on key topics.
+
+    Segments are split by paragraphs. Each segment is scored by the number of
+    key topics it contains. Highest-scoring segments are kept up to max_chars,
+    preserving their original order.
+
+    Args:
+        text: The text to truncate
+        max_chars: Maximum characters allowed (default 8000)
+        key_topics: List of key topics to score segments against; if None,
+                    all segments have score 0 and are selected in original order.
+
+    Returns:
+        Truncated text, or empty string if input is empty
+    """
+    if not text or max_chars <= 0:
+        return text if max_chars > 0 else ""
+
+    # Split into non-empty paragraphs
+    segments = [seg.strip() for seg in text.split("\n\n") if seg.strip()]
+    if not segments:
+        return ""
+
+    # Normalize key topics to lowercase for case-insensitive matching
+    key_topics = [kt.lower() for kt in key_topics or []]
+
+    # Score segments: count how many key topics are present in the segment
+    scored_segments = []
+    for idx, seg in enumerate(segments):
+        seg_lower = seg.lower()
+        score = sum(1 for kt in key_topics if kt in seg_lower)
+        scored_segments.append((-score, idx, seg))  # Negative score for descending sort
+
+    # Sort segments by score descending (highest first), then original index ascending
+    scored_segments.sort(key=lambda x: (x[0], x[1]))
+
+    # Select segments up to max_chars, preserving original order
+    selected = []
+    total_len = 0
+    sep = "\n\n"
+    for neg_score, idx, seg in scored_segments:
+        # Calculate length of this segment plus separator if not first
+        seg_len = len(seg) + (len(sep) if selected else 0)
+        if total_len + seg_len > max_chars:
+            continue
+        selected.append((idx, seg))
+        total_len += seg_len
+        if total_len >= max_chars:
+            break
+
+    # If no segments selected, fall back to sliding window truncation
+    if not selected:
+        return sliding_window_truncate(text, max_chars, model=None)
+
+    # Sort selected segments by original index to preserve order
+    selected.sort(key=lambda x: x[0])
+
+    # Join with paragraph separators
+    return sep.join(seg for _, seg in selected)
+
+
 async def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, temperature: float = 0.0) -> str:
     """Summarize text using LLM to preserve key information.
 

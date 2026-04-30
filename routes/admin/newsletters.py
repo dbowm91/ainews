@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_NEWSLETTERS
 from extensions import db
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action
 from services.task_security import get_signed_kwargs
@@ -174,7 +174,7 @@ def newsletter_dry_run():
         return jsonify({"error": "Failed to start dry run"}), 503
 
 
-@admin_bp.route("/api/newsletters/stats", methods=["GET"])
+@admin_api_bp.route("/newsletters/stats", methods=["GET"])
 @require_auth
 def newsletters_stats():
     """Return newsletter delivery statistics."""
@@ -218,7 +218,7 @@ def newsletters_stats():
     })
 
 
-@admin_bp.route("/api/newsletter/preview", methods=["POST"])
+@admin_api_bp.route("/newsletter/preview", methods=["POST"])
 @require_auth
 @validate_csrf_json
 def newsletter_preview():

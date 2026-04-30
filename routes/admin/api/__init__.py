@@ -1,6 +1,6 @@
 import logging
 
-from routes.admin import admin_bp as admin_bp
+from routes.admin import admin_api_bp as admin_api_bp
 from routes.admin import require_auth as require_auth
 
 logger = logging.getLogger(__name__)

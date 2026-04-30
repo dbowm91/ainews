@@ -2,7 +2,7 @@ import logging
 
 from flask import Response, request
 
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 from routes.decorators import commit, validate_csrf_json
 from schemas.admin import CreateSourceRequest, UpdateSourceRequest
@@ -10,7 +10,7 @@ from schemas.admin import CreateSourceRequest, UpdateSourceRequest
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/sources", methods=["GET"])
+@admin_api_bp.route("/sources", methods=["GET"])
 @require_auth
 def list_sources() -> Response:
     """List all sources."""
@@ -42,7 +42,7 @@ def list_sources() -> Response:
     )
 
 
-@admin_bp.route("/api/sources", methods=["POST"])
+@admin_api_bp.route("/sources", methods=["POST"])
 @require_auth
 @validate_csrf_json
 def create_source() -> tuple[Response, int] | Response:
@@ -100,7 +100,7 @@ def create_source() -> tuple[Response, int] | Response:
     )
 
 
-@admin_bp.route("/api/sources/<int:source_id>", methods=["GET"])
+@admin_api_bp.route("/sources/<int:source_id>", methods=["GET"])
 @require_auth
 def get_source(source_id: int) -> Response:
     """Get a specific source."""
@@ -131,7 +131,7 @@ def get_source(source_id: int) -> Response:
     )
 
 
-@admin_bp.route("/api/sources/<int:source_id>", methods=["PUT"])
+@admin_api_bp.route("/sources/<int:source_id>", methods=["PUT"])
 @require_auth
 @validate_csrf_json
 def update_source(source_id: int) -> tuple[Response, int] | Response:
@@ -185,7 +185,7 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
     return api_response(meta={"message": "Source updated"})
 
 
-@admin_bp.route("/api/sources/<int:source_id>", methods=["PATCH"])
+@admin_api_bp.route("/sources/<int:source_id>", methods=["PATCH"])
 @require_auth
 @validate_csrf_json
 def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
@@ -257,7 +257,7 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
     )
 
 
-@admin_bp.route("/api/sources/<int:source_id>", methods=["DELETE"])
+@admin_api_bp.route("/sources/<int:source_id>", methods=["DELETE"])
 @require_auth
 @validate_csrf_json
 def delete_source(source_id: int) -> tuple[Response, int] | Response:

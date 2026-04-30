@@ -38,8 +38,8 @@
   <section class="dash-card dash-card-full">
     <div class="section-header">
       <h2 class="dash-card-title">failed articles</h2>
-    <form method="POST" action="/admin/api/articles/bulk" class="bulk-reprocess-form"
-          hx-post="/admin/api/articles/bulk"
+    <form method="POST" action="/api/v1/articles/bulk" class="bulk-reprocess-form"
+          hx-post="/api/v1/articles/bulk"
           hx-swap="none"
           hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
           id="reprocess-failed-form">

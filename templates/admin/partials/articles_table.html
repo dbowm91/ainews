@@ -8,7 +8,7 @@
     <span class="bulk-count" id="bulk-count">0 selected</span>
     <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
             data-action="set_status"
-            hx-post="/admin/api/articles/bulk"
+            hx-post="/api/v1/articles/bulk"
             hx-vals='{"action": "set_status"}'
             hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
             hx-indicator=".bulk-spinner"
@@ -17,7 +17,7 @@
     </button>
     <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
             data-action="reprocess"
-            hx-post="/admin/api/articles/bulk"
+            hx-post="/api/v1/articles/bulk"
             hx-vals='{"action": "reprocess"}'
             hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
             hx-indicator=".bulk-spinner"
@@ -26,7 +26,7 @@
     </button>
     <button type="button" class="btn btn-sm btn-danger bulk-action-btn"
             data-action="delete"
-            hx-post="/admin/api/articles/bulk"
+            hx-post="/api/v1/articles/bulk"
             hx-vals='{"action": "delete"}'
             hx-confirm="Delete selected articles?"
             hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
@@ -144,7 +144,7 @@
 
     if (selectAllMatchingBtn) {
       selectAllMatchingBtn.addEventListener('click', function() {
-        var url = new URL('/admin/api/articles/ids', window.location.origin);
+        var url = new URL('/api/v1/articles/ids', window.location.origin);
         var params = new URLSearchParams(window.location.search);
         params.delete('page');
         url.search = params.toString();

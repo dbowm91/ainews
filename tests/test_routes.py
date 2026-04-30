@@ -266,7 +266,7 @@ class TestAdminHealth:
     """Test admin health endpoint."""
 
     def test_health_requires_auth(self, client):
-        resp = client.get("/admin/api/health")
+        resp = client.get("/api/v1/health")
         assert resp.status_code == 302
 
     def test_health_returns_json(self, client, app, hashed_password):
@@ -274,11 +274,13 @@ class TestAdminHealth:
 
         app.config["ADMIN_PASSWORD"] = hashed_password
         client.post("/admin/login", data={"password": "testpass123"})
-        resp = client.get("/admin/api/health")
+        resp = client.get("/api/v1/health")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert "flask" in data
-        assert data["flask"] == "ok"
+        assert "data" in data
+        inner = data["data"]
+        assert "flask" in inner
+        assert inner["flask"] == "ok"
         db.session.remove()
 
 

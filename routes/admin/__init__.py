@@ -13,6 +13,7 @@ from services.validation import _is_password_hash
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+admin_api_bp = Blueprint("admin_api", __name__, url_prefix="/api/v1")
 
 
 def verify_api_token(token_str):

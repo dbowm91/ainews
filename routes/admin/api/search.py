@@ -2,12 +2,12 @@ import logging
 
 from flask import jsonify
 
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/search/analytics")
+@admin_api_bp.route("/search/analytics")
 @require_auth
 def search_analytics():
     """Return top queries and zero-result queries."""

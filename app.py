@@ -178,17 +178,17 @@ def create_app(config_name=None):
 
         _seed_share_configs()
 
-    from routes.admin import admin_bp
+    from routes.admin import admin_bp, admin_api_bp
     from routes.public import public_bp
 
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(admin_api_bp)
 
     def _wants_json() -> bool:
         """Detect if the client expects a JSON response."""
         return (
-            request.path.startswith("/api/")
-            or request.path.startswith("/admin/api/")
+            request.path.startswith("/api/v1/")
             or request.is_json
             or "application/json" in request.accept_mimetypes
         )

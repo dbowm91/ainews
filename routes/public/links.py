@@ -120,7 +120,7 @@ def short_url_tracking_page(short_id: str) -> str:
 # globally via Flask-Limiter (configured in extensions.py).
 
 
-@public_bp.route("/api/track/share-click/<int:article_id>", methods=["POST"])
+@public_bp.route("/api/v1/track/share-click/<int:article_id>", methods=["POST"])
 @validate_csrf_json
 def track_share_click(article_id: int) -> tuple[str, int]:
     track_metric(article_id, ArticleMetric.share_button_clicks)

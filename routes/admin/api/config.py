@@ -2,14 +2,14 @@ import logging
 
 from flask import Response, jsonify
 
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action
 
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/config/reload", methods=["POST"])
+@admin_api_bp.route("/config/reload", methods=["POST"])
 @require_auth
 @validate_csrf_json
 def reload_config() -> tuple[Response, int] | Response:
@@ -46,7 +46,7 @@ def reload_config() -> tuple[Response, int] | Response:
     return jsonify({"message": "Config cache cleared"}), 200
 
 
-@admin_bp.route("/api/metrics")
+@admin_api_bp.route("/metrics")
 @require_auth
 def app_metrics() -> Response:
     from services.metrics import get_metrics
@@ -54,7 +54,7 @@ def app_metrics() -> Response:
     return jsonify(get_metrics().get_metrics())
 
 
-@admin_bp.route("/api/metrics/prometheus")
+@admin_api_bp.route("/metrics/prometheus")
 @require_auth
 def prometheus_metrics() -> Response:
     from flask import Response

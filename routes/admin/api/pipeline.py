@@ -5,12 +5,12 @@ from flask import Response, request
 from constants import PipelineStatus
 from extensions import db
 from routes.admin.api.utils import api_response
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/pipeline/stats")
+@admin_api_bp.route("/pipeline/stats")
 @require_auth
 def pipeline_stats() -> Response:
     """Get pipeline stage success/failure statistics."""
@@ -45,7 +45,7 @@ def pipeline_stats() -> Response:
     return api_response(data=stats)
 
 
-@admin_bp.route("/api/pipeline/dead-letter/stats")
+@admin_api_bp.route("/pipeline/dead-letter/stats")
 @require_auth
 def dead_letter_stats() -> Response:
     """Get dead letter queue statistics."""
@@ -84,7 +84,7 @@ def dead_letter_stats() -> Response:
     )
 
 
-@admin_bp.route("/api/pipeline/backlog")
+@admin_api_bp.route("/pipeline/backlog")
 @require_auth
 def pipeline_backlog() -> Response:
     """Get pipeline backlog - articles currently being processed or pending."""
@@ -132,7 +132,7 @@ def pipeline_backlog() -> Response:
     )
 
 
-@admin_bp.route("/api/costs")
+@admin_api_bp.route("/costs")
 @require_auth
 def cost_summary() -> Response:
     """Get LLM cost summary from token usage metrics."""
@@ -158,7 +158,7 @@ def cost_summary() -> Response:
     )
 
 
-@admin_bp.route("/api/sources/health")
+@admin_api_bp.route("/sources/health")
 @require_auth
 def sources_health() -> Response:
     """Get health status of all sources."""
@@ -184,7 +184,7 @@ def sources_health() -> Response:
     )
 
 
-@admin_bp.route("/api/pipeline/sla")
+@admin_api_bp.route("/pipeline/sla")
 @require_auth
 def pipeline_sla() -> Response:
     """Return SLA metrics for article processing."""

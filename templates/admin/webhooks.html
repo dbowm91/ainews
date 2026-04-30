@@ -54,12 +54,12 @@
               </td>
               <td>
                 <button class="btn-sm"
-                        hx-get="/admin/api/webhooks/{{ w.id }}/events"
+                        hx-get="/api/v1/webhooks/{{ w.id }}/events"
                         hx-target="#webhook-events-{{ w.id }}"
                         hx-swap="innerHTML"
                         aria-label="View events for {{ w.name | e }}">events</button>
                 <button class="btn-sm"
-                        hx-post="/admin/api/webhooks/{{ w.id }}/test"
+                        hx-post="/api/v1/webhooks/{{ w.id }}/test"
                         hx-target="#webhook-test-{{ w.id }}"
                         hx-swap="innerHTML"
                         hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'

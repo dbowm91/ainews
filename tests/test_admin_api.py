@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 class TestHealth:
     def test_requires_auth(self, client):
-        assert client.get("/admin/api/health").status_code in (302, 401)
+        assert client.get("/api/v1/health").status_code in (302, 401)
 
     def test_run_health_checks_service(self, app):
         from services.health import run_health_checks
@@ -44,7 +44,7 @@ class TestHealth:
             m_cache.return_value.get_stats.return_value = {}
             m_circuit.return_value = {}
 
-            resp = auth_client.get("/admin/api/health")
+            resp = auth_client.get("/api/v1/health")
             assert resp.status_code == 200
             data = resp.get_json()
             assert "data" in data
@@ -57,16 +57,16 @@ class TestHealth:
 
 class TestConfigReload:
     def test_requires_auth(self, client):
-        assert client.post("/admin/api/config/reload").status_code in (302, 401)
+        assert client.post("/api/v1/config/reload").status_code in (302, 401)
 
     def test_authenticated(self, auth_client):
-        resp = auth_client.post("/admin/api/config/reload")
+        resp = auth_client.post("/api/v1/config/reload")
         assert resp.status_code == 200
 
 
 class TestBulkArticles:
     def test_requires_auth(self, client):
-        assert client.post("/admin/api/articles/bulk").status_code in (302, 401)
+        assert client.post("/api/v1/articles/bulk").status_code in (302, 401)
 
     def test_delete(self, auth_client, create_article, app):
         from extensions import db
@@ -77,7 +77,7 @@ class TestBulkArticles:
             db.session.commit()
 
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "delete"},
         )
         assert resp.status_code == 200
@@ -91,7 +91,7 @@ class TestBulkArticles:
             aid = create_article(pipeline_status="pending").id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "set_status", "status": "researching"},
         )
         assert resp.status_code == 200
@@ -103,7 +103,7 @@ class TestBulkArticles:
             aid = create_article(pipeline_status="pending").id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "set_status", "status": "done"},
         )
         assert resp.status_code == 400
@@ -116,7 +116,7 @@ class TestBulkArticles:
             aid = create_article().id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "set_category", "category": "ai"},
         )
         assert resp.status_code == 200
@@ -128,46 +128,46 @@ class TestBulkArticles:
             aid = create_article().id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "bogus"},
         )
         assert resp.status_code == 400
 
     def test_too_many_ids(self, auth_client):
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": list(range(501)), "action": "delete"},
         )
         assert resp.status_code == 400
 
     def test_empty_ids(self, auth_client):
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [], "action": "delete"},
         )
         assert resp.status_code == 400
 
     def test_no_json(self, auth_client):
         resp = auth_client.post(
-            "/admin/api/articles/bulk", content_type="application/json"
+            "/api/v1/articles/bulk", content_type="application/json"
         )
         assert resp.status_code == 400
 
 
 class TestPipelineStats:
     def test_requires_auth(self, client):
-        assert client.get("/admin/api/pipeline/stats").status_code in (302, 401)
+        assert client.get("/api/v1/pipeline/stats").status_code in (302, 401)
 
     def test_authenticated(self, auth_client):
         with patch("services.pipeline_monitor.get_all_stages_stats") as ms:
             ms.return_value = {"select": {"success": 10}}
-            resp = auth_client.get("/admin/api/pipeline/stats")
+            resp = auth_client.get("/api/v1/pipeline/stats")
             assert resp.status_code == 200
 
 
 class TestSourcesHealth:
     def test_requires_auth(self, client):
-        assert client.get("/admin/api/sources/health").status_code in (302, 401)
+        assert client.get("/api/v1/sources/health").status_code in (302, 401)
 
     def test_authenticated_with_last_error(self, auth_client, create_source, app):
         from datetime import datetime, timezone
@@ -179,7 +179,7 @@ class TestSourcesHealth:
             source.last_error = "Connection timeout"
             source.disabled_at = datetime(2026, 4, 1, tzinfo=timezone.utc)
             db.session.commit()
-        resp = auth_client.get("/admin/api/sources/health")
+        resp = auth_client.get("/api/v1/sources/health")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "data" in data
@@ -242,7 +242,7 @@ class TestBulkAddTags:
             aid = create_article().id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={
                 "article_ids": [aid],
                 "action": "add_tags",
@@ -265,7 +265,7 @@ class TestBulkAddTags:
             aid = create_article().id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "add_tags", "tags": []},
         )
         assert resp.status_code == 400
@@ -277,7 +277,7 @@ class TestBulkAddTags:
             aid = create_article().id
             db.session.commit()
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "add_tags", "tags": ["t"] * 11},
         )
         assert resp.status_code == 400
@@ -294,7 +294,7 @@ class TestBulkAddTags:
             aid = article.id
 
         resp = auth_client.post(
-            "/admin/api/articles/bulk",
+            "/api/v1/articles/bulk",
             json={"article_ids": [aid], "action": "reprocess"},
         )
         assert resp.status_code == 200
@@ -316,7 +316,7 @@ class TestBulkAddTags:
 
 class TestNewsletterPreview:
     def test_preview_requires_auth(self, client):
-        resp = client.post("/admin/api/newsletter/preview")
+        resp = client.post("/api/v1/newsletter/preview")
         assert resp.status_code in (302, 401)
 
     def test_preview_generates_html(self, auth_client, create_article, app):
@@ -325,12 +325,12 @@ class TestNewsletterPreview:
         with app.app_context():
             create_article(pipeline_status="done", impact_score=50)
             db.session.commit()
-        resp = auth_client.post("/admin/api/newsletter/preview")
+        resp = auth_client.post("/api/v1/newsletter/preview")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "html" in data
         assert "subject" in data
 
     def test_preview_no_articles(self, auth_client, app):
-        resp = auth_client.post("/admin/api/newsletter/preview")
+        resp = auth_client.post("/api/v1/newsletter/preview")
         assert resp.status_code == 400

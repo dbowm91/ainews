@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from flask import Response, jsonify, request
 
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 from routes.decorators import commit, validate_csrf_json
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def _get_webhook_secret(webhook) -> str:
     return secret
 
 
-@admin_bp.route("/api/webhooks", methods=["GET"])
+@admin_api_bp.route("/webhooks", methods=["GET"])
 @require_auth
 def list_webhooks() -> Response:
     """List all webhooks."""
@@ -84,7 +84,7 @@ def list_webhooks() -> Response:
     )
 
 
-@admin_bp.route("/api/webhooks", methods=["POST"])
+@admin_api_bp.route("/webhooks", methods=["POST"])
 @require_auth
 @validate_csrf_json
 def create_webhook() -> tuple[Response, int] | Response:
@@ -143,7 +143,7 @@ def create_webhook() -> tuple[Response, int] | Response:
     ), 201
 
 
-@admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["GET"])
+@admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["GET"])
 @require_auth
 def get_webhook(webhook_id: int) -> Response:
     """Get a specific webhook."""
@@ -187,7 +187,7 @@ def get_webhook(webhook_id: int) -> Response:
     )
 
 
-@admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["PUT", "PATCH"])
+@admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["PUT", "PATCH"])
 @require_auth
 @validate_csrf_json
 def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
@@ -231,7 +231,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     return jsonify({"message": "Webhook updated"})
 
 
-@admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["DELETE"])
+@admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["DELETE"])
 @require_auth
 @validate_csrf_json
 def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
@@ -248,7 +248,7 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     return jsonify({"message": "Webhook deleted"})
 
 
-@admin_bp.route("/api/webhooks/<int:webhook_id>/test", methods=["POST"])
+@admin_api_bp.route("/webhooks/<int:webhook_id>/test", methods=["POST"])
 @require_auth
 @validate_csrf_json
 def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
@@ -272,7 +272,7 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     return jsonify({"message": "Test webhook queued for delivery"}), 202
 
 
-@admin_bp.route("/api/webhooks/<int:webhook_id>/events", methods=["GET"])
+@admin_api_bp.route("/webhooks/<int:webhook_id>/events", methods=["GET"])
 @require_auth
 def list_webhook_events(webhook_id: int) -> Response:
     """List delivery events for a webhook."""
@@ -314,7 +314,7 @@ def list_webhook_events(webhook_id: int) -> Response:
     )
 
 
-@admin_bp.route("/api/webhooks/events/<int:event_id>/resend", methods=["POST"])
+@admin_api_bp.route("/webhooks/events/<int:event_id>/resend", methods=["POST"])
 @require_auth
 @validate_csrf_json
 def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:

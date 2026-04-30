@@ -2,12 +2,12 @@ import logging
 
 from flask import Response, jsonify, request
 
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/audit-logs", methods=["GET"])
+@admin_api_bp.route("/audit-logs", methods=["GET"])
 @require_auth
 def list_audit_logs() -> Response:
     """List audit log entries with optional filtering."""

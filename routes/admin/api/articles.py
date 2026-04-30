@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
 from routes import limit_content_length
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 from routes.decorators import validate_csrf_json
 from schemas.admin import ArticleIdsParams, BulkArticleRequest
 from services.task_security import get_signed_kwargs
@@ -15,7 +15,7 @@ from services.task_security import get_signed_kwargs
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/articles/ids", methods=["GET"])
+@admin_api_bp.route("/articles/ids", methods=["GET"])
 @require_auth
 def get_article_ids():
     """Return article IDs matching the current filter params for bulk selection.
@@ -146,7 +146,7 @@ def get_article_ids():
     return jsonify({"ids": ids, "count": len(ids)})
 
 
-@admin_bp.route("/api/articles/counts-by-status", methods=["GET"])
+@admin_api_bp.route("/articles/counts-by-status", methods=["GET"])
 @require_auth
 def get_article_counts_by_status():
     """Return article counts grouped by pipeline status."""
@@ -347,7 +347,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
     )
 
 
-@admin_bp.route("/api/articles/bulk", methods=["POST"])
+@admin_api_bp.route("/articles/bulk", methods=["POST"])
 @require_auth
 @validate_csrf_json
 @limit_content_length(32768)

@@ -2,7 +2,7 @@ import logging
 
 from flask import Response
 
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 from schemas.admin import TaskStatusParams
 from services.cache import get_response_cache
@@ -13,7 +13,7 @@ from services.limiter import get_limiter
 logger = logging.getLogger(__name__)
 
 
-@admin_bp.route("/api/health")
+@admin_api_bp.route("/health")
 @require_auth
 def health() -> Response:
     health_result = run_health_checks(include_celery=True)
@@ -50,7 +50,7 @@ def health() -> Response:
     return api_response(data=status)
 
 
-@admin_bp.route("/api/workers/health")
+@admin_api_bp.route("/workers/health")
 @require_auth
 def workers_health() -> Response:
     """Detailed Celery worker health check for admin monitoring."""
@@ -98,7 +98,7 @@ def workers_health() -> Response:
     return api_response(data=result)
 
 
-@admin_bp.route("/api/task/<task_id>")
+@admin_api_bp.route("/task/<task_id>")
 @require_auth
 def task_status(task_id: str) -> Response:
     try:

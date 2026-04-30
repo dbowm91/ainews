@@ -7,6 +7,7 @@ from services.prompts import (
     count_tokens,
     esc_xml_attr,
     esc_xml_text,
+    importance_weighted_truncate,
     max_tokens_for_model,
     sliding_window_truncate,
     smart_truncate_context,
@@ -239,6 +240,71 @@ class TestMaxTokensForModel:
 
     def test_none_model(self):
         assert max_tokens_for_model(None) == 4096
+
+
+class TestImportanceWeightedTruncate:
+    """Test importance-weighted truncation function."""
+
+    def test_no_truncation_needed(self):
+        text = "short text"
+        result = importance_weighted_truncate(text, max_chars=100)
+        assert result == text
+
+    def test_empty_string(self):
+        assert importance_weighted_truncate("") == ""
+        assert importance_weighted_truncate("", max_chars=0) == ""
+
+    def test_exact_max_length(self):
+        text = "a" * 50
+        result = importance_weighted_truncate(text, max_chars=50)
+        assert result == text
+
+    def test_keeps_high_scoring_segments(self):
+        text = (
+            "This is about AI and machine learning.\n\n"
+            "Random unrelated content here.\n\n"
+            "More AI and deep learning discussion."
+        )
+        result = importance_weighted_truncate(
+            text, max_chars=100, key_topics=["AI", "machine learning", "deep learning"]
+        )
+        assert "AI" in result
+        assert len(result) <= 100
+
+    def test_preserves_order_of_selected_segments(self):
+        text = (
+            "First paragraph about AI.\n\n"
+            "Second paragraph about cooking.\n\n"
+            "Third paragraph about machine learning.\n\n"
+            "Fourth paragraph about gardening."
+        )
+        result = importance_weighted_truncate(
+            text, max_chars=200, key_topics=["AI", "machine learning"]
+        )
+        # First and third paragraphs should be selected and in order
+        if "First" in result and "Third" in result:
+            assert result.index("First") < result.index("Third")
+
+    def test_fallback_to_sliding_window_when_nothing_selected(self):
+        text = "a" * 200
+        result = importance_weighted_truncate(text, max_chars=100, key_topics=["nonexistent"])
+        # Should fall back to sliding window
+        assert len(result) <= 100
+
+    def test_key_topics_case_insensitive(self):
+        text = "This is about AI and ML.\n\nAnother paragraph."
+        result = importance_weighted_truncate(
+            text, max_chars=200, key_topics=["ai", "ml"]
+        )
+        assert "AI" in result
+
+    def test_no_key_topics_keeps_order(self):
+        text = "First.\n\nSecond.\n\nThird."
+        result = importance_weighted_truncate(text, max_chars=100, key_topics=None)
+        assert result == text
+
+    def test_max_chars_zero_returns_empty(self):
+        assert importance_weighted_truncate("some text", max_chars=0) == ""
 
 
 class TestSlidingWindowTruncateWithModel:

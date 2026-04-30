@@ -19,6 +19,8 @@ logger = get_task_logger(__name__)
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     soft_time_limit=300,
     time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),

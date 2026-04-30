@@ -47,6 +47,8 @@ def _format_web_results(web_results: list[dict]) -> str:
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=2,
     default_retry_delay=60,
     soft_time_limit=300,

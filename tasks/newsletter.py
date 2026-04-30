@@ -18,6 +18,8 @@ logger = get_task_logger(__name__)
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=3,
     default_retry_delay=60,
     soft_time_limit=300,
@@ -359,6 +361,8 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=3,
     default_retry_delay=120,
     soft_time_limit=300,
@@ -471,6 +475,8 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     soft_time_limit=300,
     time_limit=360,
     autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError),

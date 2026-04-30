@@ -34,6 +34,8 @@ def _is_degenerate_write(article_obj: CondensedArticle) -> bool:
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=2,
     default_retry_delay=60,
     soft_time_limit=300,

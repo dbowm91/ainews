@@ -263,6 +263,8 @@ def _handle_duplicate(
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=2,
     default_retry_delay=30,
     soft_time_limit=300,

@@ -6,7 +6,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, soft_time_limit=120, time_limit=180)
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=120, time_limit=180)
 def publish_scheduled_articles(self):
     """Publish articles whose scheduled_publish_at time has arrived.
 

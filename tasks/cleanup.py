@@ -9,7 +9,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -91,7 +91,7 @@ def cleanup_expired_verifications(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=60, time_limit=120,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=60, time_limit=120,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -111,7 +111,7 @@ def cleanup_stale_limiter_slots(self):
     return {"cleaned": cleaned}
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -144,7 +144,7 @@ def consolidate_trend_memory(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -195,7 +195,7 @@ def recalculate_impact_scores(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -222,7 +222,7 @@ def purge_trend_memory(self):
         raise
 
 
-@shared_task(bind=True, soft_time_limit=300, time_limit=360,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,

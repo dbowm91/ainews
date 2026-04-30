@@ -17,6 +17,8 @@ logger = get_task_logger(__name__)
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=2,
     default_retry_delay=60,
     soft_time_limit=300,
@@ -204,7 +206,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             logger.warning("Failed to release crawl lock for %s", source_id)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=120, time_limit=180,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, max_retries=3, default_retry_delay=30, soft_time_limit=120, time_limit=180,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -252,6 +254,8 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=2,
     default_retry_delay=60,
     soft_time_limit=300,

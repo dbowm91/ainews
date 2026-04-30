@@ -45,6 +45,8 @@ def _assign_experiment_group(article_id: int, salt: str = "") -> str:
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=3,
     default_retry_delay=30,
     soft_time_limit=300,

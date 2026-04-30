@@ -352,6 +352,8 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 
 @shared_task(
     bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
     max_retries=2,
     default_retry_delay=60,
     soft_time_limit=300,

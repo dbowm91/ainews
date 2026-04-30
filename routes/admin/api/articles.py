@@ -64,7 +64,39 @@ def get_article_ids():
     q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
     if query:
-        if _query_looks_like_url(query):
+        # Try FTS5 search first, fall back to ILIKE if FTS5 unavailable
+        fts_results = None
+        try:
+            from sqlalchemy import text
+
+            from extensions import db
+
+            # Build FTS5 query - escape special chars
+            safe_query = (
+                query.replace('"', "'")
+                .replace("*", "")
+                .replace(":", " ")
+                .replace("(", " ")
+                .replace(")", " ")
+                .replace("-", " ")
+                .replace("+", " ")
+            )
+            words = [w.strip() for w in safe_query.split() if w.strip()]
+            if words:
+                fts_query = " AND ".join(f'"{w}"' for w in words)
+                if _query_looks_like_url(query):
+                    fts_query = f'original_url:"{query}"'
+                sql = text(
+                    "SELECT rowid FROM articles_admin_fts WHERE articles_admin_fts MATCH :q"
+                )
+                result = db.session.execute(sql, {"q": fts_query}).fetchall()
+                fts_results = [row[0] for row in result]
+        except Exception:
+            logger.debug("FTS5 search unavailable, falling back to ILIKE")
+
+        if fts_results is not None:
+            q = q.filter(Article.id.in_(fts_results))
+        elif _query_looks_like_url(query):
             escaped = _escape_like_pattern(query)
             q = q.filter(Article.original_url.ilike(f"%{escaped}%", escape="\\"))
         else:

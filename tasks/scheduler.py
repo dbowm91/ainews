@@ -2,6 +2,7 @@
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from services.task_security import verify_task
 
 logger = get_task_logger(__name__)
 
@@ -15,6 +16,10 @@ def publish_scheduled_articles(self):
     Articles in 'review' status with a past scheduled_publish_at are
     marked as 'done' and made publicly visible.
     """
+    if not verify_task("publish_scheduled_articles", (), {}):
+        logger.error("Invalid signature for publish_scheduled_articles")
+        raise ValueError("Invalid task signature")
+
     from datetime import datetime, timezone
 
     import redis.exceptions

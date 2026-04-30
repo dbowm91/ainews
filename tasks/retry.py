@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
 from constants import PipelineStatus
+from services.task_security import verify_task
 from services.config_unified import (
     get_retry_soft_cutoff_minutes,
     get_stuck_threshold_minutes,
@@ -40,6 +41,10 @@ def retry_stuck(self):
 
     Retried articles are batched (50 per batch) to reduce database commits.
     """
+    if not verify_task("retry_stuck", (), {}):
+        logger.error("Invalid signature for retry_stuck")
+        raise ValueError("Invalid task signature")
+
     import redis.exceptions
 
     from extensions import db, get_redis

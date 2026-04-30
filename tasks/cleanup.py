@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from services.task_security import verify_task
 
 logger = get_task_logger(__name__)
 
@@ -20,6 +21,10 @@ def cleanup_old_pipeline_logs(self):
     Runs daily via Celery Beat to prevent unbounded growth of the
     pipeline_logs table.
     """
+    if not verify_task("cleanup_old_pipeline_logs", (), {}):
+        logger.error("Invalid signature for cleanup_old_pipeline_logs")
+        raise ValueError("Invalid task signature")
+
     from extensions import db
     from models import PipelineLog
 
@@ -65,6 +70,10 @@ def cleanup_expired_verifications(self):
     Runs every 15 minutes via Celery Beat. A subscriber is removed if
     they never confirmed their email and the verification window has passed.
     """
+    if not verify_task("cleanup_expired_verifications", (), {}):
+        logger.error("Invalid signature for cleanup_expired_verifications")
+        raise ValueError("Invalid task signature")
+
     from extensions import db
     from models import Subscriber
     from services.config_utils import get_config_with_default
@@ -102,6 +111,10 @@ def cleanup_stale_limiter_slots(self):
     Runs every 5 minutes via Celery Beat to reclaim slots from tasks
     that exited without releasing their limiter slot (e.g., crashes).
     """
+    if not verify_task("cleanup_stale_limiter_slots", (), {}):
+        logger.error("Invalid signature for cleanup_stale_limiter_slots")
+        raise ValueError("Invalid task signature")
+
     from services.limiter import get_limiter
 
     limiter = get_limiter()
@@ -123,6 +136,10 @@ def consolidate_trend_memory(self):
     for a topic, any overlapping low-importance entries are promoted to medium
     importance and TTL'd.
     """
+    if not verify_task("consolidate_trend_memory", (), {}):
+        logger.error("Invalid signature for consolidate_trend_memory")
+        raise ValueError("Invalid task signature")
+
     from extensions import db
     from services.trend_memory import consolidate_all_topics
 
@@ -155,6 +172,10 @@ def recalculate_impact_scores(self):
     Runs nightly via Celery Beat (4:00 AM). Updates impact scores for articles
     in the DONE status by incorporating newsletter clicks and page loads.
     """
+    if not verify_task("recalculate_impact_scores", (), {}):
+        logger.error("Invalid signature for recalculate_impact_scores")
+        raise ValueError("Invalid task signature")
+
     from extensions import db
     from models import Article, ArticleMetric
 
@@ -206,6 +227,10 @@ def purge_trend_memory(self):
     Runs nightly via Celery Beat (3:45 AM). Removes all entries whose
     expires_at timestamp has passed.
     """
+    if not verify_task("purge_trend_memory", (), {}):
+        logger.error("Invalid signature for purge_trend_memory")
+        raise ValueError("Invalid task signature")
+
     from extensions import db
     from services.trend_memory import purge_expired
 
@@ -237,6 +262,10 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
         days_to_keep: Number of days to retain article versions.
         dry_run: If True, return what would be deleted without deleting.
     """
+    if not verify_task("cleanup_old_article_versions", (), {"days_to_keep": days_to_keep, "dry_run": dry_run}):
+        logger.error("Invalid signature for cleanup_old_article_versions")
+        raise ValueError("Invalid task signature")
+
     from schemas.tasks import CleanupArticleVersionsTask
 
     try:

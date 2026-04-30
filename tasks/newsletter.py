@@ -493,6 +493,10 @@ def retry_failed_newsletter_deliveries(self):
 
     Runs every 2 hours via Celery Beat.
     """
+    if not verify_task("retry_failed_newsletter_deliveries", (), {}):
+        logger.error("Invalid signature for retry_failed_newsletter_deliveries")
+        raise ValueError("Invalid task signature")
+
     from extensions import db
     from models import Newsletter, Subscriber
     from schemas.pipeline import load_pipeline_config

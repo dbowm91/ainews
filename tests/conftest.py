@@ -30,6 +30,13 @@ def _reset_singletons():
 
 
 @pytest.fixture(autouse=True)
+def _set_celery_task_secret(monkeypatch):
+    """Set CELERY_TASK_SECRET for all tests to enable HMAC verification."""
+    monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis():
     """Reset the global Redis singleton and config cache between tests."""
     _reset_singletons()

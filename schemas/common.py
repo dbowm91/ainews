@@ -29,21 +29,30 @@ class ProviderDef(BaseModel):
     config: dict = Field(default_factory=dict)
 
 
-def resolve_env_var(val: str) -> str:
+def resolve_env_var(val: str, required: bool = False) -> str:
     """Resolve a single ${ENV_VAR} placeholder.
 
+    Args:
+        val: The value to resolve. If it matches ${ENV_VAR} pattern, the env var is resolved.
+        required: If True, raise ValueError when the environment variable is not set.
+                   If False, return empty string and log a warning (default behavior).
+
     Returns the environment variable value if set, or an empty string
-    if the variable is not found (rather than returning the raw placeholder).
+    if the variable is not found and required=False.
     Only warns once per variable name to avoid log spam.
     """
     if isinstance(val, str) and val.startswith("${") and val.endswith("}"):
         var_name = val[2:-1]
-        resolved = os.environ.get(var_name, "")
-        if not resolved and var_name not in _warned_missing_vars:
-            _warned_missing_vars.add(var_name)
-            logger.warning(
-                "Environment variable %s is not set — using empty string", var_name
-            )
+        resolved = os.environ.get(var_name)
+        if resolved is None:
+            if required:
+                raise ValueError(f"Required environment variable {var_name} is not set")
+            elif var_name not in _warned_missing_vars:
+                _warned_missing_vars.add(var_name)
+                logger.warning(
+                    "Environment variable %s is not set", var_name
+                )
+            return ""
         return resolved
     return val
 

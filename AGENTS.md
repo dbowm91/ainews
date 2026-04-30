@@ -36,7 +36,7 @@ All outbound HTTP requests must validate URLs against private IP ranges via `ser
 Wrap `db.session.commit()` in `try/except` with `db.session.rollback()` in the `except` block. Never leave commits unguarded in route handlers or Celery tasks.
 
 ### Environment Variables
-Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders. Note that `LLMProvidersConfig` currently has a known limitation where it does not resolve placeholders in raw YAML; this is tracked for Wave 2.
+Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders in configuration schemas.
 
 ## Architectural Conventions
 

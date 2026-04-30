@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from flask import Response, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
 from routes import limit_content_length
@@ -22,8 +23,6 @@ def get_article_ids():
     Returns: {"ids": [1, 2, 3], "count": 3}
     """
     from urllib.parse import urlparse
-
-    from sqlalchemy.orm import joinedload
 
     from models import Article, Tag
     from services.article import _escape_like_pattern
@@ -329,7 +328,12 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    articles = Article.query.filter(Article.id.in_(article_ids)).all()
+    articles = (
+        Article.query
+        .filter(Article.id.in_(article_ids))
+        .options(joinedload(Article.source), joinedload(Article.tags))
+        .all()
+    )
     if not articles:
         return jsonify({"error": "No articles found"}), 404
 

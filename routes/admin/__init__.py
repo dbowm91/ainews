@@ -5,7 +5,7 @@ import time
 from functools import wraps
 
 import redis.exceptions
-from flask import Blueprint, redirect, request, session, url_for
+from flask import Blueprint, redirect, request, session, url_for, jsonify
 
 from logging_config import get_request_id
 from services.validation import _is_password_hash
@@ -15,9 +15,58 @@ logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
+def verify_api_token(token_str):
+    """Verify an API token and return True if valid."""
+    from werkzeug.security import check_password_hash
+    from models import ApiToken
+
+    # Token format: plain_token.hash
+    if "." not in token_str:
+        return False
+
+    parts = token_str.split(".", 1)
+    if len(parts) != 2:
+        return False
+
+    provided_hash = parts[1]
+
+    # Find token by checking all (inefficient but simple for now)
+    tokens = ApiToken.query.all()
+    for api_token in tokens:
+        if check_password_hash(api_token.token_hash, provided_hash):
+            # Update last_used_at
+            from datetime import datetime, timezone
+            from extensions import db
+            api_token.last_used_at = datetime.now(timezone.utc)
+            db.session.commit()
+            return True
+    return False
+
+
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Check for API token first
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if verify_api_token(token):
+                request_id = get_request_id()
+                logger.info(
+                    "Admin API access via token: %s %s",
+                    request.method,
+                    request.path,
+                    extra={
+                        "user": "api_token",
+                        "ip": request.remote_addr,
+                        "request_id": request_id,
+                        "admin": True,
+                    },
+                )
+                return f(*args, **kwargs)
+            else:
+                return jsonify({"error": "Invalid API token"}), 401
+
         if not session.get("admin"):
             return redirect(url_for("admin.login"))
         stored_ip = session.get("ip")
@@ -262,6 +311,9 @@ def _clear_attempts(ip: str) -> None:
 # These must come after Blueprint creation to avoid circular imports
 from routes.admin import (  # noqa: E402, F401
     api as api,
+)
+from routes.admin import (  # noqa: E402, F401
+    api_tokens as api_tokens,
 )
 from routes.admin import (  # noqa: E402, F401
     articles as articles,

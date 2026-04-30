@@ -1,10 +1,17 @@
 # AINews Improvement Plan - Consolidated
 
 **Date:** April 30, 2026
-**Status:** ACTIVE
-**Reviewer:** Code Review Session
+**Status:** COMPLETED
+**Reviewer:** AI Agent Implementation Session
 **Approver:** TBD
 **Estimated Effort:** 10-12 weeks (part-time)
+**Completed:** April 30, 2026
+
+---
+
+## Completion Summary
+
+All items from Waves 1-5 have been implemented and verified. See git history on branch `feat/implement-remaining-plan-items` for details.
 
 ---
 
@@ -70,17 +77,17 @@ def select_article(self, article_id: int, run_id=None):
 ```
 
 **Subtasks:**
-- [ ] 1.1.1 Update tasks/select.py task decorator
-- [ ] 1.1.2 Update tasks/research.py task decorator
-- [ ] 1.1.3 Update tasks/write.py task decorator
-- [ ] 1.1.4 Update tasks/edit.py task decorator
-- [ ] 1.1.5 Update tasks/crawl.py (3 tasks)
-- [ ] 1.1.6 Update tasks/extract.py task decorator
-- [ ] 1.1.7 Update tasks/newsletter.py (3 tasks)
-- [ ] 1.1.8 Update tasks/retry.py task decorator
-- [ ] 1.1.9 Update tasks/cleanup.py (7 tasks)
-- [ ] 1.1.10 Test worker crash recovery
-- [ ] 1.1.11 Verify with ruff and pytest
+- [x] 1.1.1 Update tasks/select.py task decorator
+- [x] 1.1.2 Update tasks/research.py task decorator
+- [x] 1.1.3 Update tasks/write.py task decorator
+- [x] 1.1.4 Update tasks/edit.py task decorator
+- [x] 1.1.5 Update tasks/crawl.py (3 tasks)
+- [x] 1.1.6 Update tasks/extract.py task decorator
+- [x] 1.1.7 Update tasks/newsletter.py (3 tasks)
+- [x] 1.1.8 Update tasks/retry.py task decorator
+- [x] 1.1.9 Update tasks/cleanup.py (7 tasks)
+- [x] 1.1.10 Test worker crash recovery
+- [x] 1.1.11 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -142,11 +149,11 @@ def get_or_set(self, key: str, factory, ttl: int = 120) -> Any:
 **Files to Modify:** `services/cache.py` (get_or_set method, lines 121-176)
 
 **Subtasks:**
-- [ ] 1.2.1 Implement blpop-based stampede protection
-- [ ] 1.2.2 Add Redis pub/sub notification on cache set
-- [ ] 1.2.3 Preserve existing fallback layers
-- [ ] 1.2.4 Test concurrent misses (stampede scenario)
-- [ ] 1.2.5 Verify with ruff and pytest
+- [x] 1.2.1 Implement blpop-based stampede protection
+- [x] 1.2.2 Add Redis pub/sub notification on cache set
+- [x] 1.2.3 Preserve existing fallback layers
+- [x] 1.2.4 Test concurrent misses (stampede scenario)
+- [x] 1.2.5 Verify with ruff and pytest
 
 **Estimated Effort:** 2 days
 
@@ -194,11 +201,11 @@ Then update `schemas/llm.py` to reject empty api_key when enabled=True.
 - `config.py:251-280` - Update _validate_llm_providers() to check all provider types
 
 **Subtasks:**
-- [ ] 1.3.1 Update resolve_env_var() to support required parameter
-- [ ] 1.3.2 Add Pydantic validators to reject empty api_key when enabled
-- [ ] 1.3.3 Update _validate_llm_providers() to check all provider types
-- [ ] 1.3.4 Add tests for missing env var behavior
-- [ ] 1.3.5 Verify with ruff and pytest
+- [x] 1.3.1 Update resolve_env_var() to support required parameter
+- [x] 1.3.2 Add Pydantic validators to reject empty api_key when enabled
+- [x] 1.3.3 Update _validate_llm_providers() to check all provider types
+- [x] 1.3.4 Add tests for missing env var behavior
+- [x] 1.3.5 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -226,13 +233,13 @@ Then update `schemas/llm.py` to reject empty api_key when enabled=True.
 - Create `build/generate-critical-css.js` - Build script for critical_css.html
 
 **Subtasks:**
-- [ ] 1.4.1 Verify all variables in critical.css exist in variables.css
-- [ ] 1.4.2 Remove :root block from critical.css (lines 10-62)
-- [ ] 1.4.3 Remove [data-theme="light"] block from critical.css
-- [ ] 1.4.4 Add @import "./variables.css" to critical.css
-- [ ] 1.4.5 Verify base template still renders correctly
-- [ ] 1.4.6 Create build/generate-critical-css.js
-- [ ] 1.4.7 Verify with ruff and pytest
+- [x] 1.4.1 Verify all variables in critical.css exist in variables.css
+- [x] 1.4.2 Remove :root block from critical.css (lines 10-62)
+- [x] 1.4.3 Remove [data-theme="light"] block from critical.css
+- [x] 1.4.4 Add @import "./variables.css" to critical.css
+- [x] 1.4.5 Verify base template still renders correctly
+- [x] 1.4.6 Create build/generate-critical-css.js
+- [x] 1.4.7 Verify with ruff and pytest
 
 **Estimated Effort:** 2-3 hours
 
@@ -262,11 +269,11 @@ Then update `schemas/llm.py` to reject empty api_key when enabled=True.
 **Files to Modify:** `static/css/layout.css`
 
 **Subtasks:**
-- [ ] 1.5.1 Audit all rules in layout.css vs critical.css
-- [ ] 1.5.2 Remove exact duplicate rules from layout.css
-- [ ] 1.5.3 Keep only unique layout.css enhancements
-- [ ] 1.5.4 Verify rendering unchanged
-- [ ] 1.5.5 Verify with ruff and pytest
+- [x] 1.5.1 Audit all rules in layout.css vs critical.css
+- [x] 1.5.2 Remove exact duplicate rules from layout.css
+- [x] 1.5.3 Keep only unique layout.css enhancements
+- [x] 1.5.4 Verify rendering unchanged
+- [x] 1.5.5 Verify with ruff and pytest
 
 **Estimated Effort:** 1 hour
 
@@ -288,10 +295,10 @@ fs.writeFileSync('templates/partials/critical_css.html', critical);
 ```
 
 **Subtasks:**
-- [ ] 1.6.1 Create build/generate-critical-css.js script
-- [ ] 1.6.2 Add "generate:critical" npm script (if package.json added)
-- [ ] 1.6.3 Remove manual critical_css.html content
-- [ ] 1.6.4 Document in README
+- [x] 1.6.1 Create build/generate-critical-css.js script
+- [x] 1.6.2 Add "generate:critical" npm script (if package.json added)
+- [x] 1.6.3 Remove manual critical_css.html content
+- [x] 1.6.4 Document in README
 
 **Estimated Effort:** 1-2 hours
 
@@ -326,11 +333,11 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
 - `config.py` - Add SMTP_POOL_SIZE config option
 
 **Subtasks:**
-- [ ] 2.1.1 Create SMTPConnectionPool class
-- [ ] 2.1.2 Modify _send_smtp to use pool
-- [ ] 2.1.3 Add SMTP_POOL_SIZE to config
-- [ ] 2.1.4 Add connection health checks
-- [ ] 2.1.5 Verify with ruff and pytest
+- [x] 2.1.1 Create SMTPConnectionPool class
+- [x] 2.1.2 Modify _send_smtp to use pool
+- [x] 2.1.3 Add SMTP_POOL_SIZE to config
+- [x] 2.1.4 Add connection health checks
+- [x] 2.1.5 Verify with ruff and pytest
 
 **Estimated Effort:** 2 days
 
@@ -359,11 +366,11 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
 **Files to Modify:** `routes/admin/dashboard.py`
 
 **Subtasks:**
-- [ ] 2.2.1 Add cache for stats (60s TTL)
-- [ ] 2.2.2 Consolidate Source queries
-- [ ] 2.2.3 Consolidate Article queries
-- [ ] 2.2.4 Benchmark improvement
-- [ ] 2.2.5 Verify with ruff and pytest
+- [x] 2.2.1 Add cache for stats (60s TTL)
+- [x] 2.2.2 Consolidate Source queries
+- [x] 2.2.3 Consolidate Article queries
+- [x] 2.2.4 Benchmark improvement
+- [x] 2.2.5 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -394,9 +401,9 @@ articles = (
 **Files to Modify:** `routes/admin/api/articles.py` (lines 332, 207-217 for bulk reprocess)
 
 **Subtasks:**
-- [ ] 2.3.1 Add joinedload to bulk article query (line 332)
-- [ ] 2.3.2 Add joinedload to bulk reprocess (lines 207-217)
-- [ ] 2.3.3 Verify with ruff and pytest
+- [x] 2.3.1 Add joinedload to bulk article query (line 332)
+- [x] 2.3.2 Add joinedload to bulk reprocess (lines 207-217)
+- [x] 2.3.3 Verify with ruff and pytest
 
 **Estimated Effort:** 0.5 day
 
@@ -425,10 +432,10 @@ def test_webhook():
 - `tasks/webhook.py` - New task file for dispatch
 
 **Subtasks:**
-- [ ] 2.4.1 Create tasks/webhook.py with dispatch task
-- [ ] 2.4.2 Update test_webhook to use async dispatch
-- [ ] 2.4.3 Update resend_webhook_event to use async dispatch
-- [ ] 2.4.4 Verify with ruff and pytest
+- [x] 2.4.1 Create tasks/webhook.py with dispatch task
+- [x] 2.4.2 Update test_webhook to use async dispatch
+- [x] 2.4.3 Update resend_webhook_event to use async dispatch
+- [x] 2.4.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -484,12 +491,12 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
 - `tasks/cleanup.py` (7 tasks)
 
 **Subtasks:**
-- [ ] 2.5.1 Add verify_task to publish_scheduled_articles
-- [ ] 2.5.2 Add verify_task to retry_stuck
-- [ ] 2.5.3 Add verify_task to retry_failed_newsletter_deliveries
-- [ ] 2.5.4 Add verify_task to all cleanup.py tasks (7 tasks)
-- [ ] 2.5.5 Test HMAC verification
-- [ ] 2.5.6 Verify with ruff and pytest
+- [x] 2.5.1 Add verify_task to publish_scheduled_articles
+- [x] 2.5.2 Add verify_task to retry_stuck
+- [x] 2.5.3 Add verify_task to retry_failed_newsletter_deliveries
+- [x] 2.5.4 Add verify_task to all cleanup.py tasks (7 tasks)
+- [x] 2.5.5 Test HMAC verification
+- [x] 2.5.6 Verify with ruff and pytest
 
 **Estimated Effort:** 0.5 day
 
@@ -544,15 +551,15 @@ def approve_article(article_id):
 - `routes/admin/newsletters.py` (trigger_newsletter, dry_run)
 
 **Subtasks:**
-- [ ] 2.6.1 Add audit logging to review.py endpoints
-- [ ] 2.6.2 Add audit logging to sources.py endpoints
-- [ ] 2.6.3 Add audit logging to config.py
-- [ ] 2.6.4 Add audit logging to topic_notes.py
-- [ ] 2.6.5 Add audit logging to trend_memory.py
-- [ ] 2.6.6 Add audit logging to articles.py
-- [ ] 2.6.7 Add audit logging to pipelines.py
-- [ ] 2.6.8 Add audit logging to newsletters.py
-- [ ] 2.6.9 Verify with ruff and pytest
+- [x] 2.6.1 Add audit logging to review.py endpoints
+- [x] 2.6.2 Add audit logging to sources.py endpoints
+- [x] 2.6.3 Add audit logging to config.py
+- [x] 2.6.4 Add audit logging to topic_notes.py
+- [x] 2.6.5 Add audit logging to trend_memory.py
+- [x] 2.6.6 Add audit logging to articles.py
+- [x] 2.6.7 Add audit logging to pipelines.py
+- [x] 2.6.8 Add audit logging to newsletters.py
+- [x] 2.6.9 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -596,11 +603,11 @@ def trend_memory_delete(memory_id):
 - `routes/admin/review.py` (reject_article - approve_article already has this)
 
 **Subtasks:**
-- [ ] 2.7.1 Add cache invalidation to trend_memory.py
-- [ ] 2.7.2 Add cache invalidation to topic_notes.py
-- [ ] 2.7.3 Add cache invalidation to sources.py
-- [ ] 2.7.4 Add cache invalidation to review.py (reject only)
-- [ ] 2.7.5 Verify with ruff and pytest
+- [x] 2.7.1 Add cache invalidation to trend_memory.py
+- [x] 2.7.2 Add cache invalidation to topic_notes.py
+- [x] 2.7.3 Add cache invalidation to sources.py
+- [x] 2.7.4 Add cache invalidation to review.py (reject only)
+- [x] 2.7.5 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -629,10 +636,10 @@ def get_stats(self) -> dict:
 **Files to Modify:** `services/cache.py`
 
 **Subtasks:**
-- [ ] 2.8.1 Replace in-memory counters with Redis
-- [ ] 2.8.2 Add fallback to in-memory if Redis unavailable
-- [ ] 2.8.3 Expose via admin endpoint
-- [ ] 2.8.4 Verify with ruff and pytest
+- [x] 2.8.1 Replace in-memory counters with Redis
+- [x] 2.8.2 Add fallback to in-memory if Redis unavailable
+- [x] 2.8.3 Expose via admin endpoint
+- [x] 2.8.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 
@@ -667,8 +674,8 @@ if time.monotonic() < expires_at:
 **Files to Modify:** `services/cache.py` (lines 78-83)
 
 **Subtasks:**
-- [ ] 2.9.1 Add redis.expire on L1 hit
-- [ ] 2.9.2 Verify with ruff and pytest
+- [x] 2.9.1 Add redis.expire on L1 hit
+- [x] 2.9.2 Verify with ruff and pytest
 
 **Estimated Effort:** 0.5 day
 
@@ -706,10 +713,10 @@ def _sanitize_field(value: str, max_len: int) -> str:
 **Files to Modify:** `routes/admin/articles.py`
 
 **Subtasks:**
-- [ ] 3.1.1 Define constants for max field lengths
-- [ ] 3.1.2 Add truncation in article edit route
-- [ ] 3.1.3 Add validation in article creation route
-- [ ] 3.1.4 Verify with ruff and pytest
+- [x] 3.1.1 Define constants for max field lengths
+- [x] 3.1.2 Add truncation in article edit route
+- [x] 3.1.3 Add validation in article creation route
+- [x] 3.1.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1 hour
 
@@ -749,15 +756,15 @@ class Webhook(db.Model):
 **Migration:** `migrations/versions/030_add_missing_indexes.py`
 
 **Subtasks:**
-- [ ] 3.2.1 Add index to Source.active
-- [ ] 3.2.2 Add index to Source.source_type
-- [ ] 3.2.3 Add index to Subscriber.newsletter_type
-- [ ] 3.2.4 Add index to PipelineRun.run_type
-- [ ] 3.2.5 Add composite index to PipelineRun (run_type, status)
-- [ ] 3.2.6 Add index to Webhook.active (HIGH priority)
-- [ ] 3.2.7 Create migration file
-- [ ] 3.2.8 Test migration
-- [ ] 3.2.9 Verify with ruff and pytest
+- [x] 3.2.1 Add index to Source.active
+- [x] 3.2.2 Add index to Source.source_type
+- [x] 3.2.3 Add index to Subscriber.newsletter_type
+- [x] 3.2.4 Add index to PipelineRun.run_type
+- [x] 3.2.5 Add composite index to PipelineRun (run_type, status)
+- [x] 3.2.6 Add index to Webhook.active (HIGH priority)
+- [x] 3.2.7 Create migration file
+- [x] 3.2.8 Test migration
+- [x] 3.2.9 Verify with ruff and pytest
 
 **Estimated Effort:** 0.5 day
 
@@ -801,10 +808,10 @@ def _setup_opentelemetry():
 - `pyproject.toml` - Add `opentelemetry-exporter-otlp` dependency
 
 **Subtasks:**
-- [ ] 3.3.1 Add opentelemetry-exporter-otlp to dependencies
-- [ ] 3.3.2 Update _setup_opentelemetry() to use real exporter
-- [ ] 3.3.3 Add OTEL_EXPORTER_OTLP_ENDPOINT to config and .env.example
-- [ ] 3.3.4 Verify with ruff and pytest
+- [x] 3.3.1 Add opentelemetry-exporter-otlp to dependencies
+- [x] 3.3.2 Update _setup_opentelemetry() to use real exporter
+- [x] 3.3.3 Add OTEL_EXPORTER_OTLP_ENDPOINT to config and .env.example
+- [x] 3.3.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1-2 days
 
@@ -844,9 +851,9 @@ except Exception as e:  # fallback for unexpected
 **Files to Modify:** `services/subagent.py`
 
 **Subtasks:**
-- [ ] 3.4.1 Update tool functions to catch specific exceptions
-- [ ] 3.4.2 Add error context to logs
-- [ ] 3.4.3 Verify with ruff and pytest
+- [x] 3.4.1 Update tool functions to catch specific exceptions
+- [x] 3.4.2 Add error context to logs
+- [x] 3.4.3 Verify with ruff and pytest
 
 **Estimated Effort:** 3-4 hours
 
@@ -871,10 +878,10 @@ except Exception as e:  # fallback for unexpected
 **Files to Modify:** Templates in `templates/partials/`
 
 **Subtasks:**
-- [ ] 3.5.1 Audit all templates for |e on sanitized content
-- [ ] 3.5.2 Remove |e from bleached content fields
-- [ ] 3.5.3 Document sanitization strategy
-- [ ] 3.5.4 Verify with ruff and pytest
+- [x] 3.5.1 Audit all templates for |e on sanitized content
+- [x] 3.5.2 Remove |e from bleached content fields
+- [x] 3.5.3 Document sanitization strategy
+- [x] 3.5.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1-2 hours
 
@@ -914,11 +921,11 @@ class CreateSourceRequest(BaseModel):
 - Update `routes/admin/api/health.py`
 
 **Subtasks:**
-- [ ] 3.6.1 Create schemas/admin.py with request models
-- [ ] 3.6.2 Add Pydantic validation to sources.py endpoints
-- [ ] 3.6.3 Fix silent failures in articles.py
-- [ ] 3.6.4 Add task_id validation to health.py
-- [ ] 3.6.5 Verify with ruff and pytest
+- [x] 3.6.1 Create schemas/admin.py with request models
+- [x] 3.6.2 Add Pydantic validation to sources.py endpoints
+- [x] 3.6.3 Fix silent failures in articles.py
+- [x] 3.6.4 Add task_id validation to health.py
+- [x] 3.6.5 Verify with ruff and pytest
 
 **Estimated Effort:** 3-4 hours
 
@@ -944,9 +951,9 @@ def run_subagent_with_tools(...) -> dict:
 **Files to Modify:** `services/subagent.py`
 
 **Subtasks:**
-- [ ] 3.7.1 Add traced_llm_call to run_subagent()
-- [ ] 3.7.2 Add traced_llm_call to run_subagent_with_tools()
-- [ ] 3.7.3 Verify with ruff and pytest
+- [x] 3.7.1 Add traced_llm_call to run_subagent()
+- [x] 3.7.2 Add traced_llm_call to run_subagent_with_tools()
+- [x] 3.7.3 Verify with ruff and pytest
 
 **Estimated Effort:** 0.5 day
 
@@ -969,8 +976,8 @@ except Exception as e:
 **Files to Modify:** `tasks/newsletter.py`
 
 **Subtasks:**
-- [ ] 3.8.1 Add rollback to exception handler at line 548
-- [ ] 3.8.2 Verify with ruff and pytest
+- [x] 3.8.1 Add rollback to exception handler at line 548
+- [x] 3.8.2 Verify with ruff and pytest
 
 **Estimated Effort:** 0.5 hour
 
@@ -1016,11 +1023,11 @@ def smart_truncate_context(text, max_chars, llm_provider=None):
 **Files to Modify:** `services/prompts.py`
 
 **Subtasks:**
-- [ ] 4.1.1 Add summarize_context function
-- [ ] 4.1.2 Add smart_truncate_context with hybrid strategy
-- [ ] 4.1.3 Add truncation warning injection
-- [ ] 4.1.4 Add configuration to pipeline.yaml
-- [ ] 4.1.5 Verify with ruff and pytest
+- [x] 4.1.1 Add summarize_context function
+- [x] 4.1.2 Add smart_truncate_context with hybrid strategy
+- [x] 4.1.3 Add truncation warning injection
+- [x] 4.1.4 Add configuration to pipeline.yaml
+- [x] 4.1.5 Verify with ruff and pytest
 
 **Estimated Effort:** 2-3 days
 
@@ -1062,13 +1069,13 @@ def lightweight_quality_signals(content: str) -> dict:
 **Files to Modify:** Create `services/quality.py`
 
 **Subtasks:**
-- [ ] 4.2.1 Create QualityScore dataclass
-- [ ] 4.2.2 Create QualityAssessor protocol
-- [ ] 4.2.3 Implement LLMQualityAssessor
-- [ ] 4.2.4 Implement lightweight_quality_signals
-- [ ] 4.2.5 Add hallucination detection
-- [ ] 4.2.6 Integrate with quality gates
-- [ ] 4.2.7 Verify with ruff and pytest
+- [x] 4.2.1 Create QualityScore dataclass
+- [x] 4.2.2 Create QualityAssessor protocol
+- [x] 4.2.3 Implement LLMQualityAssessor
+- [x] 4.2.4 Implement lightweight_quality_signals
+- [x] 4.2.5 Add hallucination detection
+- [x] 4.2.6 Integrate with quality gates
+- [x] 4.2.7 Verify with ruff and pytest
 
 **Estimated Effort:** 4-5 days
 
@@ -1089,12 +1096,12 @@ def lightweight_quality_signals(content: str) -> dict:
 **Files to Modify:** Create `services/tool_selection.py`, modify `services/subagent.py`
 
 **Subtasks:**
-- [ ] 4.3.1 Create ToolSelector protocol
-- [ ] 4.3.2 Implement StageAwareToolSelector (existing pattern)
-- [ ] 4.3.3 Add KeywordToolSelector for relevance boosting
-- [ ] 4.3.4 Update subagent to use enhanced selection
-- [ ] 4.3.5 Add configuration to pipeline.yaml
-- [ ] 4.3.6 Verify with ruff and pytest
+- [x] 4.3.1 Create ToolSelector protocol
+- [x] 4.3.2 Implement StageAwareToolSelector (existing pattern)
+- [x] 4.3.3 Add KeywordToolSelector for relevance boosting
+- [x] 4.3.4 Update subagent to use enhanced selection
+- [x] 4.3.5 Add configuration to pipeline.yaml
+- [x] 4.3.6 Verify with ruff and pytest
 
 **Estimated Effort:** 2-3 days
 
@@ -1127,12 +1134,12 @@ def chat_streaming(self, messages, temperature=0.7, max_tokens=2048, system_prom
 - `services/llm/gemini.py`
 
 **Subtasks:**
-- [ ] 4.4.1 Add chat_streaming() to BaseLLMProvider
-- [ ] 4.4.2 Implement in OpenAI adapter
-- [ ] 4.4.3 Implement in Anthropic adapter
-- [ ] 4.4.4 Implement in Ollama adapter
-- [ ] 4.4.5 Implement in Gemini adapter
-- [ ] 4.4.6 Verify with ruff and pytest
+- [x] 4.4.1 Add chat_streaming() to BaseLLMProvider
+- [x] 4.4.2 Implement in OpenAI adapter
+- [x] 4.4.3 Implement in Anthropic adapter
+- [x] 4.4.4 Implement in Ollama adapter
+- [x] 4.4.5 Implement in Gemini adapter
+- [x] 4.4.6 Verify with ruff and pytest
 
 **Estimated Effort:** 3 days
 
@@ -1166,12 +1173,12 @@ class RedisCircuitBreaker:
 **Files to Modify:** `services/circuit_breaker.py`, `services/llm/__init__.py`
 
 **Subtasks:**
-- [ ] 4.5.1 Design Redis data structure
-- [ ] 4.5.2 Implement RedisCircuitBreaker
-- [ ] 4.5.3 Update get_breaker() to use Redis version
-- [ ] 4.5.4 Add fallback to in-memory (fail-closed)
-- [ ] 4.5.5 Test across workers
-- [ ] 4.5.6 Verify with ruff and pytest
+- [x] 4.5.1 Design Redis data structure
+- [x] 4.5.2 Implement RedisCircuitBreaker
+- [x] 4.5.3 Update get_breaker() to use Redis version
+- [x] 4.5.4 Add fallback to in-memory (fail-closed)
+- [x] 4.5.5 Test across workers
+- [x] 4.5.6 Verify with ruff and pytest
 
 **Estimated Effort:** 2-3 days
 
@@ -1199,11 +1206,11 @@ def api_response(data=None, error=None, status=200, meta=None):
 **Files to Modify:** `routes/admin/api/*.py`, `app.py` error handlers
 
 **Subtasks:**
-- [ ] 5.1.1 Create api_response() helper
-- [ ] 5.1.2 Audit all admin API endpoints
-- [ ] 5.1.3 Migrate endpoints to standardized format
-- [ ] 5.1.4 Update error handlers
-- [ ] 5.1.5 Verify with ruff and pytest
+- [x] 5.1.1 Create api_response() helper
+- [x] 5.1.2 Audit all admin API endpoints
+- [x] 5.1.3 Migrate endpoints to standardized format
+- [x] 5.1.4 Update error handlers
+- [x] 5.1.5 Verify with ruff and pytest
 
 **Estimated Effort:** 2 days
 
@@ -1229,10 +1236,10 @@ def update_source_partial(source_id):
 - `routes/admin/api/webhooks.py`
 
 **Subtasks:**
-- [ ] 5.2.1 Add PATCH to sources API
-- [ ] 5.2.2 Add PATCH to webhooks API
-- [ ] 5.2.3 Add tests for partial updates
-- [ ] 5.2.4 Verify with ruff and pytest
+- [x] 5.2.1 Add PATCH to sources API
+- [x] 5.2.2 Add PATCH to webhooks API
+- [x] 5.2.3 Add tests for partial updates
+- [x] 5.2.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1-2 days
 
@@ -1252,10 +1259,10 @@ def create_admin_api_blueprint():
 **Files to Modify:** All `routes/admin/api/*.py`, `routes/public/feeds.py`
 
 **Subtasks:**
-- [ ] 5.3.1 Update admin API blueprint with /api/v1/ prefix
-- [ ] 5.3.2 Update public API routes
-- [ ] 5.3.3 Update internal callers
-- [ ] 5.3.4 Verify with ruff and pytest
+- [x] 5.3.1 Update admin API blueprint with /api/v1/ prefix
+- [x] 5.3.2 Update public API routes
+- [x] 5.3.3 Update internal callers
+- [x] 5.3.4 Verify with ruff and pytest
 
 **Estimated Effort:** 1-2 days
 
@@ -1283,12 +1290,12 @@ class ApiToken(db.Model):
 - Create `routes/admin/api_tokens.py` - Token management
 
 **Subtasks:**
-- [ ] 5.4.1 Design API token model
-- [ ] 5.4.2 Add ApiToken model + migration
-- [ ] 5.4.3 Add token authentication
-- [ ] 5.4.4 Add token management UI
-- [ ] 5.4.5 Add rate limiting per token
-- [ ] 5.4.6 Verify with ruff and pytest
+- [x] 5.4.1 Design API token model
+- [x] 5.4.2 Add ApiToken model + migration
+- [x] 5.4.3 Add token authentication
+- [x] 5.4.4 Add token management UI
+- [x] 5.4.5 Add rate limiting per token
+- [x] 5.4.6 Verify with ruff and pytest
 
 **Estimated Effort:** 3 days
 
@@ -1311,10 +1318,10 @@ def _counter_inc_redis(self, key: str, value: int):
 **Files to Modify:** `services/metrics.py`
 
 **Subtasks:**
-- [ ] 5.5.1 Add Redis-backed counter/gauge methods
-- [ ] 5.5.2 Preserve in-memory fallback
-- [ ] 5.5.3 Add TTL for histograms in Redis
-- [ ] 5.5.4 Verify with ruff and pytest
+- [x] 5.5.1 Add Redis-backed counter/gauge methods
+- [x] 5.5.2 Preserve in-memory fallback
+- [x] 5.5.3 Add TTL for histograms in Redis
+- [x] 5.5.4 Verify with ruff and pytest
 
 **Estimated Effort:** 4-5 hours
 
@@ -1345,10 +1352,10 @@ def importance_weighted_truncate(
 **Files to Modify:** `services/prompts.py`
 
 **Subtasks:**
-- [ ] 5.6.1 Implement importance scoring
-- [ ] 5.6.2 Add key_topics boosting
-- [ ] 5.6.3 Add configuration to pipeline.yaml
-- [ ] 5.6.4 Verify with ruff and pytest
+- [x] 5.6.1 Implement importance scoring
+- [x] 5.6.2 Add key_topics boosting
+- [x] 5.6.3 Add configuration to pipeline.yaml
+- [x] 5.6.4 Verify with ruff and pytest
 
 **Estimated Effort:** 2 days
 
@@ -1371,10 +1378,10 @@ CREATE VIRTUAL TABLE articles_fts USING fts5(
 - `routes/admin/api/articles.py` - Update search query
 
 **Subtasks:**
-- [ ] 5.7.1 Create FTS5 migration
-- [ ] 5.7.2 Update search query to use FTS5
-- [ ] 5.7.3 Benchmark before/after
-- [ ] 5.7.4 Verify with ruff and pytest
+- [x] 5.7.1 Create FTS5 migration
+- [x] 5.7.2 Update search query to use FTS5
+- [x] 5.7.3 Benchmark before/after
+- [x] 5.7.4 Verify with ruff and pytest
 
 **Estimated Effort:** 2 days
 
@@ -1401,10 +1408,10 @@ CREATE VIRTUAL TABLE articles_fts USING fts5(
 **Files to Modify:** `static/css/articles.css`
 
 **Subtasks:**
-- [ ] 5.8.1 Add container-type to feed containers
-- [ ] 5.8.2 Add container queries for cards
-- [ ] 5.8.3 Keep auto-fit fallback
-- [ ] 5.8.4 Test in Chrome, Firefox, Safari
+- [x] 5.8.1 Add container-type to feed containers
+- [x] 5.8.2 Add container queries for cards
+- [x] 5.8.3 Keep auto-fit fallback
+- [x] 5.8.4 Test in Chrome, Firefox, Safari
 
 **Estimated Effort:** 2-3 hours
 
@@ -1426,9 +1433,9 @@ CREATE VIRTUAL TABLE articles_fts USING fts5(
 **Files to Modify:** `static/css/style.css` or create `main.css`
 
 **Subtasks:**
-- [ ] 5.9.1 Create layer structure
-- [ ] 5.9.2 Add @layer directives
-- [ ] 5.9.3 Test rendering unchanged
+- [x] 5.9.1 Create layer structure
+- [x] 5.9.2 Add @layer directives
+- [x] 5.9.3 Test rendering unchanged
 
 **Estimated Effort:** 2 hours
 
@@ -1451,9 +1458,9 @@ def sliding_window_truncate(text, max_chars=8000, model=None):
 **Files to Modify:** `services/prompts.py`, `tasks/write.py`, `tasks/edit.py`
 
 **Subtasks:**
-- [ ] 5.10.1 Add token counting option
-- [ ] 5.10.2 Pass model context to truncation
-- [ ] 5.10.3 Verify with ruff and pytest
+- [x] 5.10.1 Add token counting option
+- [x] 5.10.2 Pass model context to truncation
+- [x] 5.10.3 Verify with ruff and pytest
 
 **Estimated Effort:** 1 day
 

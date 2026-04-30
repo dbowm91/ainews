@@ -15,7 +15,6 @@ ainews is an AI-curated news pipeline with a Flask backend, Celery workers, and 
 - HTML email newsletter generation
 
 ## Pipeline Stages
-
 ```
 pending → selecting → selected → researching → writing → written → editing → done/failed
 ```
@@ -39,6 +38,38 @@ Each stage is a Celery task in `tasks/` with:
 | `services/pipeline_failure.py` | `_handle_stage_failure()`, retry budget logic |
 | `services/pipeline_degradation.py` | `degrade_stage()`, `_finalize()`, `_apply_fallback()` |
 
+### A/B Experiment System
+**Config in `pipeline.yaml`** under `experiments:` section:
+```yaml
+experiments:
+  enabled: true
+  assignment_salt: "${EXPERIMENT_SALT}"
+  prompt_variants:
+    writer:
+      control: |
+        Your control prompt here...
+      variant_a: |
+        Your variant A prompt here...
+      variant_b: |
+        Your variant B prompt here...
+    editor:
+      control: |
+        Your control prompt here...
+      variant_a: |
+        Your variant A prompt here...
+      variant_b: |
+        Your variant B prompt here...
+```
+
+**Assignment:** `_assign_experiment_group(article_id, salt)` in `tasks/select.py` uses MD5 hash of `article_id:salt:experiment` for deterministic 70/15/15 split across control/variant_a/variant_b.
+
+**Variant selection:** 
+- `get_writer_system_prompt(article)` in `services/writer.py` checks `article.experiment_group` and returns variant prompt if available
+- `get_editor_system_prompt(article)` in `services/editor.py` same pattern
+- Falls back to control/default if no variant configured
+
+**Article column:** `experiment_group` column stores assignment ("control", "variant_a", "variant_b")
+
 ## Database
 
 SQLite (WAL mode) is intentional — workload is read-heavy (articles written once by Celery, served thousands of times by Flask). PostgreSQL adds operational overhead with no benefit at this scale.
@@ -50,6 +81,7 @@ SQLite (WAL mode) is intentional — workload is read-heavy (articles written on
 - `Newsletter` — newsletter records with `delivered_count` and `error_message`
 - `SearchQuery` — search analytics with query, results_count, clicked_article_id
 - `WebhookEvent` — webhook delivery history (status_code, response_body, error_message)
+- `AuditLog` — admin action audit trail (action, category, target_type, target_id, user, details, ip_address)
 - `PipelineRun` / `PipelineLog` — pipeline execution audit trail
 - `TopicNote` — manual editor notes per topic
 - `TrendMemory` — LLM-judged persistent memory entries
@@ -67,16 +99,17 @@ All providers implement `BaseLLMProvider` from `services/llm/base.py`. Registere
 
 **Timeouts:** All LLM providers use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from `constants.py`. Provider files should import and use this constant rather than hardcoding values.
 
-**LLM Retry with Backoff:** `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff (base=1s, max=30s). Does NOT retry on `AuthError` or `CircuitOpenError`. Applied to all provider methods via `_do_*` / `_*` internal method pattern.
+**LLM Retry with Backoff:** `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff (base=1s, max=30s). Does NOT retry on `AuthError` or `CircuitOpenError`. When `RateLimitError` carries a `retry_after` attribute (from server's Retry-After header), that value is used instead of exponential backoff. Applied to all provider methods via `_do_*` / `_*` internal method pattern.
 
 ## Subagent System
-
 `services/subagent.py` runs lightweight synchronous subagent tasks within pipeline stages. NOT a general-purpose agent framework.
 
 **Key functions:**
 - `run_subagent()` — single-step with timeout
 - `run_subagent_with_tools()` — tool calling (max 5 iterations)
 - `run_subagent_chain()` — multi-step with conditional execution
+
+**Tool:** `get_source_health` is registered in `services/subagent.py:282-289` and enabled in `pipeline.yaml` under `tools:` for the research subagent. Returns source health summary (disabled state, consecutive failures) for use during research synthesis.
 
 **Prompt data escaping:** All `prompt_data` is automatically escaped via `_escape_prompt_data()` before `template.format()`. This prevents XML-breaking injection.
 
@@ -302,7 +335,7 @@ Available schemas in `schemas/tasks.py`:
 
 ## Dead Letter Queue UI
 
-Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`. Pagination supported via `failed_page` and `stuck_page` query params (20 items per page).
+Admin UI at `/admin/dead-letters` shows articles that have failed or exceeded retry budget. Supports bulk reprocess and delete actions. Stats available at `GET /admin/api/pipeline/dead-letter/stats`.
 
 ## Trend Memory Admin UI
 
@@ -352,108 +385,136 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **Redis TLS**: `extensions.py` and `services/config_cache.py` check for `REDIS_SSL=true` or `rediss://` scheme; `ssl=True` is only passed to ConnectionPool when needed (redis 6.4.0 compatibility)
 - **Cache key namespacing**: Public cache keys use `pub:` prefix (e.g., `pub:top_impact:10`, `pub:article_detail:123`). Admin invalidation uses `pub:` prefix. See `routes/public/feeds.py` and `routes/public/links.py`.
 - **Health endpoint detailed auth**: `GET /health?detailed=true` requires admin session — otherwise returns basic health only. Prevents information disclosure (git hash, DB pool stats)
-- **ResponseCache stampede protection**: `services/cache.py:get_or_set()` wraps the entire lock acquisition + value computation in `redis.exceptions.RedisError` try/except, falling back to uncached computation if Redis is unavailable. Uses bounded polling with `redis.exists()` (10 × 50ms = 500ms max wait) instead of `blpop` to avoid WRONGTYPE errors on string lock keys.
+- **ResponseCache stampede protection**: `services/cache.py:get_or_set()` wraps the entire lock acquisition + value computation in `redis.exceptions.RedisError` try/except, falling back to uncached computation if Redis is unavailable
 - **SoftTimeLimitExceeded work persistence**: When soft timeout occurs in pipeline stages, `tasks/pipeline.py` persists failure state (last_error, retry_count, total_retries) to DB before re-raising. The article retains its current `pipeline_status` so it retries in-place from the stage where it timed out, not from the beginning.
 - **ThreadPoolExecutor pattern**: Services use bounded pools with `submit()` + `future.result(timeout=N)` instead of spawning unbounded daemon threads. `services/article.py` uses 2-worker pool for search logging, `services/content_extractor.py` uses configurable pool (default 8 workers via `CONTENT_EXTRACTOR_WORKERS` env var).
 - **Exponential backoff**: Subagent retries use `min(1.0 * (2 ** attempt) + random.uniform(0, 0.5), retry_delay)` instead of fixed delays.
 - **LLM structured output**: `ChatModel.chat_structured()` uses `_extract_json()` helper to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
+- **Plain-text email fallback**: `_send_smtp()` creates `multipart/alternative` message with both plain-text (via `html_to_plain_text()`) and HTML parts for RFC-compliant email delivery.
+- **Client-side bookmarking**: Articles support localStorage-based bookmark toggle via `.bookmark-btn` element in cards and detail views. State managed in `static/js/app.js` with `bookmarked_articles` key.
 
-## Subscriber Sunset Policy
+## CSP Directives
 
-`services/subscribers.py` provides subscriber lifecycle management:
+`app.py` includes additional CSP directives for defense-in-depth:
+- `connect-src 'self'` — allows fetch() to same origin (HTMX, share tracking, service worker)
+- `object-src 'none'` — prevents plugin embedding (Flash, Java)
+- `base-uri 'self'` — prevents base tag injection
+- `form-action 'self'` — restricts form submission targets
+- `script-src 'self'` with nonce via `content_security_policy_nonce_in=["script-src"]` — inline scripts must use `nonce="{{ csp_nonce() }}"` attribute
+- `style-src 'self' 'unsafe-inline'` — allows dynamic CSS custom properties (e.g., `--bar-width`) in inline styles
 
-- `cleanup_inactive_subscribers(db)` - flags inactive subscribers based on bounce count or inactivity
-- `record_bounce(subscriber_id, db)` - increments bounce count
-- `update_last_active(subscriber_id, db)` - updates last_active_at timestamp
+**Inline script requirement:** All `<script>` tags in templates must include `nonce="{{ csp_nonce() }}"` attribute. Templates updated: `webhooks.html`, `articles_table.html`, `base.html`, `base_admin.html`.
 
-**Config thresholds** (via environment or Config):
-- `SUBSCRIBER_MAX_BOUNCES` (default 5) - bounce count threshold
-- `SUBSCRIBER_INACTIVITY_DAYS` (default 180) - inactivity threshold in days
+**Inline styles:** Dynamic CSS custom properties (like `--bar-width`) can remain inline when values are dynamic per AGENTS.md. Skeleton loading styles moved from `skeleton_article_detail.html` to `static/css/articles.css`.
 
-**Subscriber model fields** for tracking:
-- `bounce_count` - total bounce count
-- `last_bounce_at` - timestamp of last bounce
-- `last_active_at` - timestamp of last email open/click activity
+## Session Security
 
-## Source CRUD API
+`SESSION_USE_SIGNER = True` in `config.py` cryptographically signs session cookies. Flask's default is False (plaintext). This prevents client-side tampering with session data.
 
-`routes/admin/api/sources.py` provides REST endpoints for programmatic source management:
+## URL Safety in Templates
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/sources` | GET | List all sources |
-| `/api/sources` | POST | Create new source |
-| `/api/sources/<id>` | GET | Get source details |
-| `/api/sources/<id>` | PUT | Update source |
-| `/api/sources/<id>` | DELETE | Delete source |
+The `safe_href` Jinja2 filter (defined at `app.py`) validates http/https scheme, checks SSRF via `validate_url_safe()`, and returns `#` for invalid URLs. Used in `article_card.html`, `condensed_article.html`, `article_edit.html`, `share_macro.html`, and `share_redirect.html`. Tests in `tests/test_safe_href_filter.py`.
 
-All endpoints require admin authentication and return JSON responses.
+## ResponseCache Incremental Eviction
 
-## E2E Latency Tracking
+`services/cache.py` uses O(1) incremental eviction instead of O(n) full scans. `_evict_batch(batch=5)` checks only the oldest 5 entries (FIFO via `OrderedDict`) on each `get()`/`set()` call. Removed `_EVICT_SAMPLE_RATE` and `_evict_sample_counter` (dead code). Memory tuple format is `(expires_at, access_time, raw)` — 3-tuple.
 
-`tasks/edit.py` records total pipeline latency from crawl to finalization using:
+## Source Health Indexes
 
-```python
-get_metrics().histogram_observe("pipeline.e2e_duration_seconds", sla_duration)
-```
+`models.py` Source class has `index=True` on `consecutive_failures` and `disabled_at` columns. Migration `029_sources_health_indexes.py` creates these indexes. Optimizes admin health endpoint queries (`consecutive_failures >= 10`, `disabled_at is not None`).
 
-The SLA duration is computed from `article.crawled_at` to `article.selected_at` (for articles that complete). The `pipeline.e2e_duration_seconds` histogram tracks end-to-end latency for observability.
+## Related Articles Caching
 
-## Subagent Context Caching
+`find_related_articles_cached(article, limit=5)` in `services/related.py` provides a cached wrapper with 600s TTL using key `pub:related:{article_id}`. Uses 30-day date prefilter (`Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30)`) and configurable candidate limit via `RELATED_CANDIDATE_LIMIT` env var (default 50). Article detail route uses the cached version.
 
-`services/subagent.py` wraps DB-heavy context lookups in `ResponseCache` with 120s TTL:
+## LLM Stage Metrics
 
-- `_get_topic_note()` - cached with key `topic_note:{topic}:{source}`
-- `_get_related_articles()` - cached with key `related_articles:{topics}:{exclude_id}:{limit}`
+`record_provider_success(provider_id, model, tokens_used, stage="")` in `services/llm/__init__.py` accepts optional `stage` parameter. When provided, `llm.calls` and `llm.tokens` metrics include `stage` label (select, research, write, edit). All pipeline tasks pass `stage=` parameter.
 
-This prevents redundant database queries on each subagent invocation within the caching window.
+## Pipeline Failure Tracking
 
-## Newsletter AI Subject
+`services/pipeline_failure.py` fires `article.failed` webhook on pipeline failure (per-stage limit or total retry exhaustion). Payload: `article_id`, `stage`, `reason`. `services/pipeline_monitor.py:record_stage_result()` accepts optional `reason` parameter — records failure reason counters in Redis (e.g., `rate_limit`, `timeout`, `server_error`, `circuit_open`).
 
-`services/newsletter.py:_generate_subject_line()` uses an LLM to generate engaging email subject lines based on article headlines. Falls back to "Top Stories" on any failure.
+## Newsletter Webhooks
 
-## Plain-Text Email Alternative
+`tasks/newsletter.py` fires `newsletter.failed` webhook on email delivery failure. Also uses correct `newsletter.id` (the ORM model) instead of `nl.id` (the Pydantic config schema) in `newsletter.sent` webhook payload.
 
-`services/email.py:_send_smtp()` sends multipart/alternative emails with:
-1. Plain-text version (generated from HTML via `html_to_plain_text()`)
-2. HTML version
+## Debug Logging for Silent Exceptions
 
-This ensures email clients that prefer plain-text display correctly.
+Silent `except Exception: pass` blocks have been replaced with `except Exception as e: logger.debug(...)`:
+- `routes/public/links.py` — reading time calculation failure
+- `routes/admin/api/webhooks.py` — webhook event payload parse failure
+- `tasks/extract.py` — dedup_check_failed metric increment failure
 
-## List-Unsubscribe Headers (RFC 8058)
+## Share Accessibility (JS Merged)
 
-`send_newsletter_email()` in `services/email.py` adds RFC 8058 headers:
-- `List-Unsubscribe: <{unsubscribe_url}>`
-- `List-Unsubscribe-Post: One-Click`
+`static/js/share-a11y.js` was merged into `static/js/app.js`. Focus management and `aria-expanded` fixes (`.toString()` conversion) are now in `app.js`. The script tag was removed from `templates/base.html` and `templates/base_admin.html`.
 
-These headers enable one-click unsubscription and are added only for newsletter emails (not transactional emails).
+## Dead Code Removal
 
-## Per-Stage Circuit Breaker
+Periodically check for and remove dead code (functions defined but never called). Example: `_find_overlapping_low_entries` was removed from `services/trend_memory.py` after confirming zero callers via grep.
 
-`services/llm/__init__.py` keys circuit breakers by `provider:model:stage`:
+## Audit Logging
 
-```python
-breaker = get_breaker(f"llm:{rc.provider}:{rc.model}:{role}", ...)
-```
+`services/audit.py` provides `log_admin_action()` for structured admin action logging to both application logs and the `AuditLog` database table. Admin API endpoint at `GET /admin/api/audit-logs` with filtering by action, target_type, and days. Supported categories: auth, article, pipeline, webhook, config, subscriber.
 
-This ensures failures in one stage (e.g., editor) don't block other stages (e.g., writer, researcher) using the same provider.
+## Pipeline Throughput Counters
 
-## LLM Content Sanitization
+`services/pipeline_monitor.py` provides throughput tracking with `record_throughput(stage, count=1)` and `get_throughput_stats(stage, minutes=15)`. Returns `total_items` and `items_per_minute` for observability. Tracked in Redis with 30-minute TTL.
 
-`final_article` content is sanitized using `bleach.clean()` in `services/article.py`:
+Use `get_all_throughput_stats()` to get throughput for all stages (crawl, select, research, write, edit).
 
-```python
-def sanitize_final_article(content: str) -> str:
-    allowed_tags = ['a', 'b', 'i', 'ul', 'li']
-    allowed_attrs = {'a': ['href', 'title']}
-    return bleach.clean(content, tags=allowed_tags, attributes=allowed_attrs, strip=True)
-```
+## Redis max_connections Config
 
-Applied in:
-- `tasks/edit.py` after editor stage
-- `services/dead_letter.py` when applying fallback
-- `services/pipeline_degradation.py` when applying fallback
+Redis connection pool sizes are configurable via `REDIS_MAX_CONNECTIONS` env var. Defaults to 100 for general Redis client (`extensions.py`) and 20 for config cache (`services/config_cache.py`). Allows tuning without code changes.
 
-## Subagent Self-Correction
+## Pagination Accessibility
 
-`run_subagent_with_tools()` in `services/subagent.py` implements one self-correction attempt when JSONDecodeError or ValidationError occurs. The error is re-submitted to the LLM as a user message with correction instructions.
+Pagination template (`templates/partials/pagination.html`) includes ARIA attributes:
+- `aria-label` on navigation links and disabled states
+- `aria-live="polite"` region for result count updates
+- `aria-current="page"` for current page indicator
+- `role="navigation"` on nav element
+
+## Recent Improvements (Wave 1-8)
+
+**Wave 1 - Critical Fixes:**
+- Redis lock fail-closed: `_acquire_stage_lock()` and newsletter generation now raise `RedisError` on Redis failures instead of proceeding unlocked
+- Version creation order: `create_article_version()` in edit pipeline called BEFORE modifying `article.final_article`
+- providers.yaml env resolution: `_load_providers_config_from_file()` calls `resolve_env_vars()` on raw YAML before Pydantic instantiation
+- Redis password: `docker-compose.yml` configures Redis with `requirepass` via `REDIS_PASSWORD` env var
+
+**Wave 2 - Security & Observability:**
+- Celery healthcheck: Uses `celery -A celery_app inspect ping` instead of `redis-cli ping`
+- File permission validation: `services/file_permissions.py` warns on world-writable sensitive files
+- Lua atomic lock: Admin login lockout uses Lua script for atomic check-and-delete
+- OpenTelemetry: `get_tracer()` uses `OTLPSpanExporter` when `OTEL_EXPORTER_OTLP_ENDPOINT` is set
+
+**Wave 3 - Frontend/Accessibility:**
+- Skip-link focus: `outline: none` removed from `.skip-link:focus` for keyboard visibility
+- Mobile nav keyboard: Label has `role="button"`, `tabindex="0"`, `aria-expanded`; Escape key closes mobile nav
+- Search UX: `minlength="2"` attribute on search inputs to prevent empty searches
+- Article card focus: `:focus-within` styling highlights card when links inside are focused
+
+**Wave 5 - Backend/Docker:**
+- Docker resource limits: `deploy.resources.limits` added to web (1G), celery-worker (512M), celery-beat (256M), redis (256M)
+- Granian workers: Now runs with 4 workers (aligned with systemd service)
+- Password hashing: install.sh fails with error if hashing script fails (no plaintext fallback)
+
+**Wave 6 - Performance:**
+- Cache invalidation: `pub:rss` changed to `pub:rss_feed` to match actual cache key pattern
+- Sitemap TTL: Aligned from 300s to 3600s
+- ConfigCache stampede protection: Uses `SET NX EX` distributed locking with polling fallback
+- Related articles date filter: `find_related_articles_dicts()` now filters to 30-day window
+- ThreadPoolExecutor cleanup: All module-level executors use `atexit.register()` for graceful shutdown
+
+**Wave 7 - Code Quality:**
+- _evaluate_condition fix: Uses `all()`/`any()` instead of `operator.and_`/`operator.or_` for logical operations
+- Type stubs: `types-requests` and `types-PyYAML` added to dev dependencies
+- PipelineLogger formatting: Uses `%-formatting` with `extra={}` for structured logging
+
+**Wave 8 - Pipeline Improvements:**
+- Dynamic stage lists: `get_all_stages_stats()` and `get_all_throughput_stats()` use `STAGE_STATUS_MAP.values()` instead of hardcoded list
+- Subagent tool registry caching: `initialize_tool_registry()` uses `@functools.lru_cache` on `_get_all_tools_cached()`
+- Error-type-specific retry: Pipeline tasks (select, research, write, edit) include `RateLimitError` in `autoretry_for`
+- Dead letter root cause aggregation: `get_stage_failure_reasons()` and `get_all_stages_failure_reasons()` provide failure reason breakdowns

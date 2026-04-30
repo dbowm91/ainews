@@ -258,6 +258,7 @@ def _validate_llm_providers():
     logger = logging.getLogger(__name__)
     enabled_providers = []
     try:
+        from schemas.common import resolve_env_var
         from schemas.llm import load_providers_config
 
         config = load_providers_config()
@@ -265,12 +266,19 @@ def _validate_llm_providers():
             if not pdef.enabled:
                 continue
             enabled_providers.append(pdef.id)
-            if pdef.type == "openai" and not pdef.config.get("api_key"):
-                raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
-            elif pdef.type == "anthropic" and not pdef.config.get("api_key"):
-                raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
-            elif pdef.type == "ollama" and not pdef.config.get("model"):
+            # Check for required config based on provider type
+            provider_type = pdef.type
+            if provider_type in ("openai", "anthropic", "gemini"):
+                api_key = pdef.config.get("api_key", "")
+                if not api_key or api_key.startswith("${") and not resolve_env_var(api_key):
+                    raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
+            if provider_type == "ollama" and not pdef.config.get("model"):
                 raise RuntimeError(f"Provider '{pdef.id}': missing model")
+            # Validate the provider config with Pydantic (includes field validators)
+            from schemas.llm import ADAPTER_CONFIGS
+            config_cls = ADAPTER_CONFIGS.get(provider_type)
+            if config_cls:
+                config_cls(**pdef.config)
     except (ImportError, RuntimeError, KeyError, ValueError) as e:
         logger.warning("Could not validate LLM providers: %s", e)
 

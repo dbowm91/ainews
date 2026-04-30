@@ -185,6 +185,78 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
     return api_response(meta={"message": "Source updated"})
 
 
+@admin_bp.route("/api/sources/<int:source_id>", methods=["PATCH"])
+@require_auth
+@validate_csrf_json
+def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
+    """Partially update a source."""
+    from extensions import db
+    from models import Source
+
+    source = db.get_or_404(Source, source_id)
+    data = request.get_json(silent=True)
+    if not data:
+        return api_response(error="Invalid JSON body", status=400)
+
+    if "source_key" in data:
+        new_key = data["source_key"]
+        existing = Source.query.filter(
+            Source.source_key == new_key,
+            Source.id != source_id,
+        ).first()
+        if existing:
+            return api_response(error=f"source_key '{new_key}' already exists", status=409)
+        source.source_key = new_key
+
+    if "name" in data:
+        source.name = data["name"]
+
+    if "url" in data:
+        new_url = data["url"]
+        if new_url:
+            try:
+                from services.url import validate_url_safe
+                validate_url_safe(new_url)
+            except Exception as e:
+                logger.debug("Invalid source URL in PATCH: %s", e)
+                return api_response(error=f"Invalid URL: {e}", status=400)
+        source.url = new_url or None
+
+    if "feed_url" in data:
+        source.feed_url = data["feed_url"] or None
+
+    if "source_type" in data:
+        source.source_type = data["source_type"]
+
+    if "active" in data:
+        source.active = data["active"]
+
+    error = commit(db, "Failed to update source via PATCH")
+    if error:
+        return error
+
+    return api_response(
+        data={
+            "id": source.id,
+            "source_key": source.source_key,
+            "name": source.name,
+            "url": source.url,
+            "feed_url": source.feed_url,
+            "source_type": source.source_type,
+            "active": source.active,
+            "last_crawled": source.last_crawled.isoformat() if source.last_crawled else None,
+            "created_at": source.created_at.isoformat() if source.created_at else None,
+            "updated_at": source.updated_at.isoformat() if source.updated_at else None,
+            "consecutive_failures": source.consecutive_failures or 0,
+            "consecutive_successes": source.consecutive_successes or 0,
+            "last_success_at": source.last_success_at.isoformat() if source.last_success_at else None,
+            "last_error": source.last_error,
+            "disabled_at": source.disabled_at.isoformat() if source.disabled_at else None,
+        },
+        meta={"message": "Source partially updated"}
+    )
+
+
 @admin_bp.route("/api/sources/<int:source_id>", methods=["DELETE"])
 @require_auth
 @validate_csrf_json

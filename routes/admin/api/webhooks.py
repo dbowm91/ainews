@@ -187,7 +187,7 @@ def get_webhook(webhook_id: int) -> Response:
     )
 
 
-@admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["PUT"])
+@admin_bp.route("/api/webhooks/<int:webhook_id>", methods=["PUT", "PATCH"])
 @require_auth
 @validate_csrf_json
 def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:

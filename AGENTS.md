@@ -198,16 +198,16 @@ Use reusable patterns from `routes/decorators.py`:
 
 ## Notes for Future Agents
 
-1. **Parallelization:** Most waves in the improvement plan can be implemented in parallel by separate agents working on different functional areas.
+1. **Test First:** Write tests before making changes to ensure the fix is verifiable. Use `tests/factories.py` for test object creation.
 
-2. **Test First:** For each item, write tests before making changes to ensure the fix is verifiable.
+2. **Preserve Fallback Layers:** The codebase has good fallback patterns (e.g., ResponseCache has multiple fallback strategies, Redis-backed metrics with in-memory fallback). Preserve these when making changes.
 
-3. **Preserve Fallback Layers:** The codebase has good fallback patterns (e.g., ResponseCache has multiple fallback strategies, Redis-backed metrics with in-memory fallback). Preserve these when making changes.
+3. **Configuration-Driven:** Features support configuration via `pipeline.yaml` or environment variables. Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders.
 
-4. **Configuration-Driven:** Many items support configuration via `pipeline.yaml` or environment variables. Use this pattern when adding new features.
+4. **Exception Handling:** When catching exceptions, prefer specific types (`SQLAlchemyError`, `ValueError`, `KeyError`, `AttributeError`) over broad `Exception` to preserve error context for debugging.
 
-5. **Verify Before Implementing:** When the plan references specific line numbers, verify them against current codebase as the code may have evolved.
+5. **Code Evolution:** Always verify line numbers and code patterns against the current codebase before making changes, as code evolves over time.
 
-6. **Exception Handling:** When catching exceptions, prefer specific types (`SQLAlchemyError`, `ValueError`, `KeyError`) over broad `Exception` to preserve error context for debugging.
+6. **Subagent System:** Tool filtering exists via `stage_config.tools` in pipeline.yaml and `initialize_tool_registry()` in services/subagent.py. The `ToolSelector` protocol in `services/tool_selection.py` provides stage-aware tool selection.
 
-7. **Subagent Tool Selection:** Tool filtering already exists via `stage_config.tools` in pipeline.yaml and `initialize_tool_registry()` in services/subagent.py. Build upon this infrastructure rather than claiming it doesn't exist.
+7. **Parallelization:** Many improvements can be implemented in parallel by separate agents working on different functional areas (e.g., tasks, services, routes, CSS).

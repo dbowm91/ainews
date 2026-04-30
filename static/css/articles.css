@@ -28,6 +28,34 @@
   opacity: 0.5;
 }
 
+.bookmark-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+
+.bookmark-btn:hover {
+  color: var(--accent);
+}
+
+.bookmark-btn.bookmarked {
+  color: var(--orange);
+}
+
+.bookmark-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .article-card:focus-within {
   border-color: var(--accent-dim);
   box-shadow: 0 0 0 2px var(--accent-alpha-25);

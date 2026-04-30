@@ -215,6 +215,8 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
     if extra_headers:
         for key, value in extra_headers.items():
             msg[key] = value
+    plain_text = html_to_plain_text(html_body)
+    msg.attach(MIMEText(plain_text, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
     try:

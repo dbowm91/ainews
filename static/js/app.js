@@ -392,6 +392,69 @@ document.addEventListener("DOMContentLoaded", function () {
     initReadArticles();
   })();
 
+  /* Bookmark articles: save to localStorage */
+  (function () {
+    var BOOKMARK_KEY = "bookmarked_articles";
+
+    function getBookmarkedIds() {
+      try {
+        return JSON.parse(localStorage.getItem(BOOKMARK_KEY) || "[]");
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveBookmarkedIds(ids) {
+      try {
+        localStorage.setItem(BOOKMARK_KEY, JSON.stringify(ids));
+      } catch (e) {}
+    }
+
+    function toggleBookmark(articleId) {
+      var ids = getBookmarkedIds();
+      var idx = ids.indexOf(articleId);
+      if (idx === -1) {
+        ids.push(articleId);
+      } else {
+        ids.splice(idx, 1);
+      }
+      saveBookmarkedIds(ids);
+      updateBookmarkUI(articleId);
+    }
+
+    function updateBookmarkUI(articleId) {
+      var btn = document.querySelector('.bookmark-btn[data-article-id="' + articleId + '"]');
+      if (!btn) return;
+      var ids = getBookmarkedIds();
+      if (ids.indexOf(articleId) !== -1) {
+        btn.classList.add("bookmarked");
+        btn.setAttribute("aria-label", "Remove bookmark");
+      } else {
+        btn.classList.remove("bookmarked");
+        btn.setAttribute("aria-label", "Bookmark article");
+      }
+    }
+
+    function initBookmarks() {
+      var ids = getBookmarkedIds();
+      ids.forEach(function (id) {
+        var btn = document.querySelector('.bookmark-btn[data-article-id="' + id + '"]');
+        if (btn) btn.classList.add("bookmarked");
+      });
+    }
+
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest(".bookmark-btn");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var articleId = btn.getAttribute("data-article-id");
+      if (articleId) toggleBookmark(articleId);
+    });
+
+    initBookmarks();
+  })();
+
   /* Service worker registration for PWA */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {

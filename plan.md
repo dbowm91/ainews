@@ -36,7 +36,7 @@ All items from Waves 1-8 are COMPLETED, including security hardening, LLM provid
 | **W2.2** | Quality Gate Logging | `tasks/research.py:222-223` | ✅ COMPLETED |
 | **W2.3** | LLM Config Env Var Resolution | `schemas/llm.py:58-59` | ✅ COMPLETED |
 | **W2.4** | Per-Stage Circuit Breaking | `services/llm/__init__.py:62-66` | ✅ COMPLETED |
-| **W2.5** | Retry-After Header Support | `services/llm/base.py:155-167` | ⚠️ DEFERRED |
+| **W2.5** | Retry-After Header Support | `services/llm/base.py:155-167` | ⚠️ DEFERRED (exponential backoff used, not Retry-After parsing) |
 | **W2.6** | Configurable Failure Limits | `services/pipeline_failure.py` | ✅ COMPLETED |
 
 ---
@@ -61,7 +61,7 @@ All items from Waves 1-8 are COMPLETED, including security hardening, LLM provid
 
 | Item | Description | Location | Status |
 |------|-------------|----------|--------|
-| **W4.1** | Email Plain-Text Alternative | `services/email.py:187` | ✅ COMPLETED |
+| **W4.1** | Email Plain-Text Alternative | `services/email.py:207-218` | ✅ COMPLETED (multipart/alternative with plain-text attached) |
 | **W4.2** | List-Unsubscribe Header | `services/email.py` | ✅ COMPLETED |
 | **W4.3** | AI-Generated Newsletter Subject | `services/newsletter.py` | ✅ COMPLETED |
 | **W4.4** | LLM Content Sanitization | `services/article.py` | ✅ COMPLETED |
@@ -75,9 +75,9 @@ All items from Waves 1-8 are COMPLETED, including security hardening, LLM provid
 
 | Item | Description | Location | Status |
 |------|-------------|----------|--------|
-| **W5.1** | RSS Icon Replacements | `templates/base.html` | ✅ COMPLETED |
+| **W5.1** | RSS Icon Replacements | `templates/base.html:47`, `static/svg/rss.svg` | ✅ COMPLETED (SVG icon with CSS flexbox styling) |
 | **W5.2** | Mobile Nav UX | `templates/base.html` | ✅ COMPLETED |
-| **W5.3** | Client-side Bookmarking | `static/js/app.js` | ✅ COMPLETED |
+| **W5.3** | Client-side Bookmarking | `static/js/app.js:395-462`, `static/css/articles.css` | ✅ COMPLETED (localStorage-based bookmark toggle with UI) |
 | **W5.4** | Article Read State | `static/js/app.js` | ✅ COMPLETED |
 
 ---
@@ -89,7 +89,7 @@ All items from Waves 1-8 are COMPLETED, including security hardening, LLM provid
 | Item | Description | Location | Status |
 |------|-------------|----------|--------|
 | **W6.1** | E2E Latency Histograms | `tasks/edit.py` | ✅ COMPLETED |
-| **W6.2** | Pipeline Backlog API | `routes/admin/api/` | ✅ COMPLETED |
+| **W6.2** | Pipeline Backlog API | `routes/admin/api/pipeline.py:85-136` | ✅ COMPLETED (`/api/pipeline/backlog` returns up to 100 active articles with stuck status) |
 | **W6.3** | Subagent Context Caching | `services/subagent.py` | ✅ COMPLETED |
 | **W6.4** | HTMX CSRF Header Audit | `templates/admin/` | ✅ COMPLETED |
 
@@ -102,7 +102,7 @@ All items from Waves 1-8 are COMPLETED, including security hardening, LLM provid
 | Item | Description | Location | Status |
 |------|-------------|----------|--------|
 | **W7.1** | SQLite Busy Timeout | `config.py` | ✅ COMPLETED |
-| **W7.2** | Retry Count Indexes | `models.py` | ✅ COMPLETED |
+| **W7.2** | Retry Count Indexes | `models.py:156-159` | ✅ COMPLETED (ix_articles_total_retries, ix_articles_retry_count, ix_articles_degradation_count) |
 | **W7.3** | Config Validation Errors | `services/config_unified.py` | ✅ COMPLETED |
 | **W7.4** | DNS Timeout Cancellation | `services/url.py:143-149` | ✅ COMPLETED |
 

@@ -83,6 +83,54 @@ def dead_letter_stats() -> Response:
     )
 
 
+@admin_bp.route("/api/pipeline/backlog")
+@require_auth
+def pipeline_backlog() -> Response:
+    """Get pipeline backlog - articles currently being processed or pending."""
+    from datetime import datetime, timedelta, timezone
+
+    from constants import _get_stuck_threshold_minutes
+    from models import Article
+
+    threshold = _get_stuck_threshold_minutes()
+
+    active_statuses = [
+        PipelineStatus.PENDING,
+        PipelineStatus.SELECTED,
+        PipelineStatus.RESEARCHING,
+        PipelineStatus.WRITING,
+        PipelineStatus.EDITING,
+        PipelineStatus.REVIEW,
+    ]
+
+    articles = (
+        Article.query.filter(Article.pipeline_status.in_(active_statuses))
+        .order_by(Article.updated_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    stuck_threshold = datetime.now(timezone.utc) - timedelta(minutes=threshold)
+
+    return jsonify(
+        {
+            "backlog_count": len(articles),
+            "articles": [
+                {
+                    "id": a.id,
+                    "title": (a.original_title or "")[:80],
+                    "pipeline_status": a.pipeline_status.value,
+                    "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+                    "is_stuck": a.updated_at < stuck_threshold if a.updated_at else False,
+                    "retry_count": a.retry_count or 0,
+                    "last_error": a.last_error[:100] if a.last_error else None,
+                }
+                for a in articles
+            ],
+        }
+    )
+
+
 @admin_bp.route("/api/costs")
 @require_auth
 def cost_summary() -> Response:

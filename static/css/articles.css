@@ -1,5 +1,17 @@
 /* ainews - Articles */
 
+/* Container queries for responsive card layout */
+#feed {
+  container-type: inline-size;
+  container-name: feed;
+}
+
+@supports (container-type: inline-size) {
+  .article-card {
+    width: 100cqi;
+  }
+}
+
 .article-card {
   border: 1px solid var(--border);
   border-radius: 6px;

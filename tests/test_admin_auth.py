@@ -21,13 +21,14 @@ from routes.admin import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_attempts(mock_redis):
+def _reset_attempts(mock_redis_with_eval):
     """Clear in-memory login attempts and Redis lockout data between tests."""
+    mock_redis_with_eval._store.clear()
     with _memory_lock:
         _login_attempts_memory.clear()
-    with patch("routes.admin._get_redis", return_value=mock_redis):
-        mock_redis.keys.return_value = []
+    with patch("routes.admin._get_redis", return_value=mock_redis_with_eval):
         yield
+    mock_redis_with_eval._store.clear()
     with _memory_lock:
         _login_attempts_memory.clear()
 
@@ -185,7 +186,7 @@ class TestLoginEndpoint:
             response = client.post("/admin/login", data={"password": "wrong"})
         assert response.status_code == 200  # Re-renders login page with error
 
-    def test_login_lockout_after_max_attempts(self, client, app):
+    def test_login_lockout_after_max_attempts(self, client, app, mock_redis_with_eval):
         app.config["ADMIN_PASSWORD"] = "scrypt:dummy:hash:for:testing"
         with patch("routes.admin.auth._verify_password", return_value=False):
             for _ in range(_LOGIN_MAX_ATTEMPTS):

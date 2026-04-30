@@ -100,11 +100,13 @@ class TestAnthropicProvider:
     def test_chat_with_schema(self):
         provider = self._make_provider()
         mock_resp = MagicMock()
-        mock_resp.content = [MagicMock(text='{"name": "test", "value": 42}')]
+        mock_content = MagicMock()
+        mock_content.text = '{"name": "test", "value": 42}'
+        mock_resp.content = [mock_content]
         mock_resp.usage.input_tokens = 5
         mock_resp.usage.output_tokens = 5
         provider._client = MagicMock()
-        provider._client.beta.messages.create.return_value = mock_resp
+        provider._client.messages.create.return_value = mock_resp
 
         class TestModel(BaseModel):
             name: str

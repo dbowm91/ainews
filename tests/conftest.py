@@ -51,6 +51,13 @@ def mock_redis_client():
 
 
 @pytest.fixture
+def mock_redis_with_eval():
+    """Return a MockRedisWithEval instance for login lockout testing."""
+    from tests.mock_redis import MockRedisWithEval
+    return MockRedisWithEval()
+
+
+@pytest.fixture
 def response_cache_setup(mock_redis_client):
     """Return a ResponseCache with a MockRedis backend."""
     from services.cache import ResponseCache

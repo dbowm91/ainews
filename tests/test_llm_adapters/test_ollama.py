@@ -1,9 +1,16 @@
 """Tests for OllamaProvider."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
+
+
+@pytest.fixture(autouse=True)
+def _patch_validate_url_safe():
+    """Patch validate_url_safe to allow localhost in tests."""
+    with patch("services.llm.ollama.validate_url_safe", return_value="http://localhost:11434"):
+        yield
 
 
 class TestOllamaProvider:
@@ -12,7 +19,7 @@ class TestOllamaProvider:
     def _make_provider(self, **config):
         from services.llm.ollama import OllamaProvider
 
-        cfg = {"model": "test-model", **config}
+        cfg = {"model": "test-model", "host": "http://localhost:11434", **config}
         return OllamaProvider("ollama-test", cfg)
 
     def test_lazy_client_initialization(self):

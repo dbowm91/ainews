@@ -116,7 +116,7 @@ class MockRedis:
         if full is None:
             return {}
         d = json.loads(full.decode())
-        return d
+        return {k.encode(): v for k, v in d.items()}
 
     def hincrby(self, key, field, amount=1):
         import json
@@ -166,3 +166,38 @@ class MockRedisWithPipelineAssertion(MockRedis):
 def mock_redis():
     """Factory function matching the fixture pattern used in conftest.py."""
     return MockRedis()
+
+
+class MockRedisWithEval(MockRedis):
+    """MockRedis with eval() support for login lockout testing.
+
+    Implements the login lockout Lua script logic:
+    - Check if count >= max_attempts -> return 1 (locked)
+    - Otherwise increment count, set first_attempt if new, and return 0 (not locked)
+    """
+
+    def eval(self, script, num_keys, *args):
+        import json
+        key = args[0] if num_keys > 0 else None
+        now = float(args[1]) if len(args) > 1 else 0
+        lockout_seconds = float(args[2]) if len(args) > 2 else 600
+        _ = lockout_seconds  # Reserved for future TTL-based expiry
+        max_attempts = int(args[3]) if len(args) > 3 else 5
+
+        if key is None:
+            return 0
+
+        full = self._store.get(key)
+        if full is None:
+            data = {"count": 1, "first_attempt": now}
+        else:
+            data = json.loads(full.decode())
+            count = data.get("count", 0)
+            if count >= max_attempts:
+                return 1  # Still locked
+            data["count"] = count + 1
+            if "first_attempt" not in data:
+                data["first_attempt"] = now
+
+        self._store[key] = json.dumps(data).encode()
+        return 0  # Not locked

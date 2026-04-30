@@ -99,6 +99,9 @@ class TestBuildMessages:
             def chat(self, *a, **kw):
                 pass
 
+            def chat_streaming(self, *a, **kw):
+                return iter([])
+
             def _chat_with_schema(self, *a, **kw):
                 pass
 
@@ -127,6 +130,9 @@ class TestBuildMessages:
         class DummyProvider(BaseLLMProvider):
             def chat(self, *a, **kw):
                 pass
+
+            def chat_streaming(self, *a, **kw):
+                return iter([])
 
             def _chat_with_schema(self, *a, **kw):
                 pass

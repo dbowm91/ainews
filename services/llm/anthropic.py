@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
@@ -105,6 +105,34 @@ class AnthropicProvider(BaseLLMProvider):
             self._do_chat, model,
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs
         )
+
+    def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        model = model or self.default_model
+        call_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if system:
+            call_kwargs["system"] = system
+        try:
+            with self.client.messages.stream(**call_kwargs) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            raise _handle_anthropic_error(e)
 
     def _do_chat_with_schema(
         self,

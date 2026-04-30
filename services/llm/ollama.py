@@ -1,7 +1,7 @@
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
@@ -95,6 +95,33 @@ class OllamaProvider(BaseLLMProvider):
             self._do_chat, model,
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs
         )
+
+    def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        model = model or self.default_model
+        msgs = self._build_messages(messages, system)
+        try:
+            stream = self.client.chat(
+                model=model,
+                messages=msgs,
+                options={"temperature": temperature, "num_predict": max_tokens},
+                stream=True,
+            )
+            for chunk in stream:
+                content = chunk.get("message", {}).get("content", "")
+                if content:
+                    yield content
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            raise _handle_ollama_error(e)
 
     def _do_chat_with_schema(
         self,

@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Type, TypeVar
+from typing import Any, Callable, Iterator, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -194,6 +194,19 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         **kwargs: Any,
     ) -> LLMResponse:
         """Basic chat completion, returns raw text."""
+        ...
+
+    @abc.abstractmethod
+    def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        """Stream chat completion, yielding text chunks as they arrive."""
         ...
 
     def chat_structured(

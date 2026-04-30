@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
@@ -108,6 +108,36 @@ class GeminiProvider(BaseLLMProvider):
             self._do_chat, model,
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs
         )
+
+    def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        model = model or self.default_model
+        contents, system_instruction = self._build_contents(messages, system)
+        try:
+            response = self.client.models.generate_content(
+                model=model,
+                contents=contents,
+                system_instruction=system_instruction,
+                generation_config={
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                },
+                stream=True,
+            )
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            raise _handle_gemini_error(e)
 
     def _do_chat_with_schema(
         self,

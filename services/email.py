@@ -2,10 +2,152 @@ import html
 import logging
 import re
 import smtplib
+import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from collections import deque
 
 logger = logging.getLogger(__name__)
+
+
+class SMTPConnectionPool:
+    """Pool of reusable SMTP connections."""
+
+    def __init__(self, pool_size: int = 5):
+        self._pool_size = pool_size
+        self._pool: deque[smtplib.SMTP] = deque()
+        self._lock = threading.Lock()
+        self._closed = False
+        self._cfg_hash = None
+
+    def _get_config(self) -> dict:
+        """Get current SMTP config."""
+        return get_smtp_config()
+
+    def _compute_cfg_hash(self, cfg: dict) -> str:
+        """Compute a simple hash of config to detect changes."""
+        import hashlib
+        import json
+
+        cfg_str = json.dumps(
+            {
+                "host": cfg.get("host"),
+                "port": cfg.get("port"),
+                "user": cfg.get("user"),
+                "password": cfg.get("password"),
+                "from_addr": cfg.get("from_addr"),
+                "use_tls": cfg.get("use_tls"),
+            },
+            sort_keys=True,
+        )
+        return hashlib.md5(cfg_str.encode()).hexdigest()
+
+    def _create_connection(self, cfg: dict) -> smtplib.SMTP:
+        """Create and authenticate a new SMTP connection."""
+        server = smtplib.SMTP(
+            cfg["host"], cfg["port"], timeout=30
+        )
+        if cfg["use_tls"]:
+            server.starttls()
+        if cfg["user"] and cfg["password"]:
+            server.login(cfg["user"], cfg["password"])
+        return server
+
+    def _is_healthy(self, server: smtplib.SMTP) -> bool:
+        """Check if connection is still alive."""
+        try:
+            server.noop()
+            return True
+        except Exception:
+            return False
+
+    def get_connection(self) -> smtplib.SMTP:
+        """Get a connection from the pool, creating one if needed."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Connection pool is closed")
+
+            cfg = self._get_config()
+            cfg_hash = self._compute_cfg_hash(cfg)
+
+            # Reset pool if config changed
+            if self._cfg_hash is not None and self._cfg_hash != cfg_hash:
+                self._close_all_unsafe()
+                self._pool = deque()
+
+            self._cfg_hash = cfg_hash
+
+            while self._pool:
+                server = self._pool.popleft()
+                if self._is_healthy(server):
+                    return server
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+
+            return self._create_connection(cfg)
+
+    def return_connection(self, server: smtplib.SMTP):
+        """Return a connection to the pool."""
+        with self._lock:
+            if self._closed:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+                return
+            if self._is_healthy(server):
+                self._pool.append(server)
+            else:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+
+    def _close_all_unsafe(self):
+        """Close all connections without lock (caller must hold lock)."""
+        while self._pool:
+            server = self._pool.popleft()
+            try:
+                server.quit()
+            except Exception:
+                pass
+
+    def close_all(self):
+        """Close all connections in the pool."""
+        with self._lock:
+            self._close_all_unsafe()
+
+
+# Global pool instance
+_pool_lock = threading.Lock()
+_smtp_pool: SMTPConnectionPool | None = None
+
+
+def _get_smtp_pool() -> SMTPConnectionPool:
+    """Get or create the global SMTP connection pool."""
+    global _smtp_pool
+    with _pool_lock:
+        if _smtp_pool is None:
+            pool_size = 5
+            try:
+                from flask import current_app
+                pool_size = current_app.config.get("SMTP_POOL_SIZE", 5)
+            except Exception:
+                import os
+                pool_size = int(os.environ.get("SMTP_POOL_SIZE", "5"))
+            _smtp_pool = SMTPConnectionPool(pool_size)
+        return _smtp_pool
+
+
+def _reset_smtp_pool():
+    """Reset the global SMTP pool. For testing purposes."""
+    global _smtp_pool
+    with _pool_lock:
+        if _smtp_pool is not None:
+            _smtp_pool.close_all()
+            _smtp_pool = None
 
 _FOOTER_WITH_AGENTS_RE = re.compile(
     r"<tr>\s*<td[^>]*>.*?condensed by agents.*?</td>\s*</tr>\s*</table>\s*</td></tr>\s*</table>",
@@ -205,7 +347,7 @@ def html_to_plain_text(html_body: str) -> str:
 
 
 def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict | None = None):
-    """Low-level SMTP send."""
+    """Low-level SMTP send using connection pool."""
     cfg = get_smtp_config()
 
     msg = MIMEMultipart("alternative")
@@ -219,16 +361,19 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
     msg.attach(MIMEText(plain_text, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
+    pool = _get_smtp_pool()
+    server = None
     try:
-        server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=30)
-
-        with server:
-            if cfg["use_tls"]:
-                server.starttls()
-            if cfg["user"] and cfg["password"]:
-                server.login(cfg["user"], cfg["password"])
-            server.sendmail(cfg["from_addr"], to_email, msg.as_string())
+        server = pool.get_connection()
+        server.sendmail(cfg["from_addr"], to_email, msg.as_string())
         logger.info("Email sent to %s: %s", to_email, subject)
+        pool.return_connection(server)
+        server = None
     except Exception as e:
         logger.error("Failed to send email to %s: %s", to_email, e)
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
         raise

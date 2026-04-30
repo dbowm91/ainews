@@ -13,6 +13,10 @@ from functools import wraps
 from threading import Lock
 from typing import Callable, Optional
 
+import os
+import redis
+from redis.exceptions import RedisError
+
 from services.metrics import get_metrics
 
 logger = logging.getLogger(__name__)
@@ -104,13 +108,7 @@ class CircuitBreaker:
         self._failure_count = len(self._failure_times)
 
     def record_success(self) -> None:
-        """Record a successful call.
-
-        In CLOSED state the sliding window of failures is pruned (no other
-        action is needed — successes don't reduce the failure count while
-        inside the window).  In HALF_OPEN state a success transitions the
-        circuit back to CLOSED, clearing all failure tracking.
-        """
+        """Record a successful call."""
         with self._lock:
             if self._state == State.HALF_OPEN:
                 old = self._state
@@ -124,13 +122,7 @@ class CircuitBreaker:
                 self._prune_old_failures()
 
     def record_failure(self) -> None:
-        """Record a failed call.
-
-        In HALF_OPEN state any failure immediately re-opens the circuit.  In
-        CLOSED state the failure timestamp is appended to the sliding window;
-        if the count meets or exceeds ``failure_threshold``, the circuit
-        transitions to OPEN.
-        """
+        """Record a failed call."""
         with self._lock:
             now = time.monotonic()
 
@@ -161,17 +153,7 @@ class CircuitBreaker:
                 self._on_state_change(old, self._state)
 
     def can_execute(self) -> bool:
-        """Check whether a call is permitted under the current circuit state.
-
-        In CLOSED state calls always pass.  In OPEN state calls are rejected.
-        In HALF_OPEN state a limited number of probe calls (up to
-        ``half_open_max_calls``) are allowed through; each call that checks
-        this method increments the half-open counter atomically.
-
-        Returns:
-            ``True`` if the call may proceed, ``False`` if it should be
-            short-circuited.
-        """
+        """Check whether a call is permitted under the current circuit state."""
         with self._lock:
             self._check_state_transition()
 
@@ -188,14 +170,7 @@ class CircuitBreaker:
         return False
 
     def get_status(self) -> dict:
-        """Return a serialisable snapshot of the circuit breaker state.
-
-        Useful for health-check endpoints and admin dashboards.
-
-        Returns:
-            Dict with ``name``, ``state``, ``failure_count``,
-            ``failure_threshold``, and ``recovery_timeout``.
-        """
+        """Return a serialisable snapshot of the circuit breaker state."""
         return {
             "name": self.name,
             "state": self.state.value,
@@ -203,6 +178,206 @@ class CircuitBreaker:
             "failure_threshold": self.failure_threshold,
             "recovery_timeout": self.recovery_timeout,
         }
+
+
+class RedisCircuitBreaker(CircuitBreaker):
+    """Distributed circuit breaker backed by Redis.
+
+    Extends CircuitBreaker to store state in Redis for distributed coordination.
+    Falls back to in-memory CircuitBreaker if Redis is unavailable
+    (fail-closed behavior per AGENTS.md).
+    """
+
+    def __init__(
+        self,
+        name: str,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 60.0,
+        half_open_max_calls: int = 1,
+        window_seconds: float = 120.0,
+        redis_client: Optional["redis.Redis"] = None,
+    ):
+        super().__init__(
+            name=name,
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout,
+            half_open_max_calls=half_open_max_calls,
+            window_seconds=window_seconds,
+        )
+        self._key = f"ainews:circuit:{name}"
+        self._redis_client = redis_client
+        self._local_lock = Lock()
+
+    def _get_redis(self) -> Optional["redis.Redis"]:
+        """Get Redis client, initializing from env if needed."""
+        if self._redis_client is not None:
+            return self._redis_client
+        try:
+            redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+            self._redis_client = redis.from_url(redis_url, decode_responses=True)
+            return self._redis_client
+        except Exception:
+            logger.debug("Failed to connect to Redis", exc_info=True)
+            return None
+
+    def record_success(self) -> None:
+        """Record a successful call."""
+        r = self._get_redis()
+        if r is None:
+            super().record_success()
+            return
+        try:
+            key = self._key
+            state = r.hget(key, "state")
+
+            if state == "half_open":
+                r.hset(key, "state", "closed")
+                r.hset(key, "opened_at", "-1")
+                r.hset(key, "half_open_calls", "0")
+                fail_key = f"{key}:fails"
+                r.delete(fail_key)
+                logger.info("Circuit %s: HALF_OPEN -> CLOSED (recovered via Redis)", self.name)
+                self._on_state_change(State.HALF_OPEN, State.CLOSED)
+            else:
+                super().record_success()
+
+            self._emit_metric("success")
+        except RedisError:
+            logger.debug("Redis unavailable, falling back to in-memory", exc_info=True)
+            super().record_success()
+
+    def record_failure(self) -> None:
+        """Record a failed call."""
+        r = self._get_redis()
+        if r is None:
+            super().record_failure()
+            return
+        try:
+            import uuid
+            now = time.monotonic()
+            key = self._key
+
+            state = r.hget(key, "state")
+
+            if state == "half_open":
+                r.hset(key, "state", "open")
+                r.hset(key, "opened_at", str(now))
+                r.expire(key, int(self.recovery_timeout * 3))
+                logger.warning("Circuit %s: HALF_OPEN -> OPEN (via Redis)", self.name)
+                self._on_state_change(State.HALF_OPEN, State.OPEN)
+                self._emit_metric("failure")
+                return
+
+            fail_key = f"{key}:fails"
+            r.zadd(fail_key, {f"{now}:{uuid.uuid4()}": now})
+            r.zremrangebyscore(fail_key, "-inf", now - self.window_seconds)
+            r.expire(fail_key, int(self.window_seconds * 2))
+
+            count = r.zcard(fail_key)
+            if count >= self.failure_threshold:
+                r.hset(key, "state", "open")
+                r.hset(key, "opened_at", str(now))
+                r.expire(key, int(self.recovery_timeout * 3))
+                logger.warning("Circuit %s: CLOSED -> OPEN (via Redis)", self.name)
+                self._on_state_change(State.CLOSED, State.OPEN)
+
+            super().record_failure()
+            self._emit_metric("failure")
+        except RedisError:
+            logger.debug("Redis unavailable, falling back to in-memory", exc_info=True)
+            super().record_failure()
+
+    def can_execute(self) -> bool:
+        """Check whether a call is permitted."""
+        r = self._get_redis()
+        if r is None:
+            return super().can_execute()
+        try:
+            now = time.monotonic()
+            key = self._key
+
+            state = r.hget(key, "state")
+            if state is None:
+                return super().can_execute()
+
+            if state == "open":
+                opened_at = r.hget(key, "opened_at")
+                if opened_at is None:
+                    opened_at = "-1"
+                opened_at = float(opened_at)
+
+                if now - opened_at >= self.recovery_timeout:
+                    r.hset(key, "state", "half_open")
+                    r.hset(key, "half_open_calls", "0")
+                else:
+                    return False
+
+            if state == "half_open":
+                calls = r.hget(key, "half_open_calls")
+                if calls is None:
+                    calls = "0"
+                calls = int(calls)
+
+                if calls < self.half_open_max_calls:
+                    r.hincrby(key, "half_open_calls", 1)
+                    return True
+                else:
+                    return False
+
+            return super().can_execute()
+        except RedisError:
+            logger.debug("Redis unavailable, falling back to in-memory", exc_info=True)
+            return super().can_execute()
+
+    @property
+    def state(self) -> State:
+        """Return the current circuit state."""
+        r = self._get_redis()
+        if r is None:
+            return super().state
+        try:
+            state_str = r.hget(self._key, "state")
+            if state_str is None:
+                return super().state
+            return State(state_str)
+        except RedisError:
+            return super().state
+
+    def _emit_metric(self, outcome: str) -> None:
+        """Emit a call outcome metric."""
+        try:
+            metrics = get_metrics()
+            metrics.counter_inc(
+                f"circuit_breaker.call.{outcome}",
+                labels={"provider": self.name},
+            )
+        except Exception:
+            logger.debug("Failed to emit circuit breaker metric", exc_info=True)
+
+    def get_status(self) -> dict:
+        """Return a serialisable snapshot of the circuit breaker state."""
+        r = self._get_redis()
+        if r is None:
+            status = super().get_status()
+            status["backend"] = "memory"
+            return status
+        try:
+            state = r.hget(self._key, "state")
+            if state is None:
+                state = "closed"
+            failure_count = r.zcard(f"{self._key}:fails")
+            return {
+                "name": self.name,
+                "state": state,
+                "failure_count": failure_count,
+                "failure_threshold": self.failure_threshold,
+                "recovery_timeout": self.recovery_timeout,
+                "backend": "redis",
+            }
+        except RedisError:
+            status = super().get_status()
+            status["backend"] = "memory"
+            return status
 
 
 # Global registry of circuit breakers
@@ -216,10 +391,13 @@ def get_breaker(
     recovery_timeout: float = 60.0,
     **kwargs,
 ) -> CircuitBreaker:
-    """Get or create a circuit breaker by name."""
+    """Get or create a circuit breaker by name.
+
+    Uses Redis-backed circuit breaker with in-memory fallback.
+    """
     with _registry_lock:
         if name not in _breakers:
-            _breakers[name] = CircuitBreaker(
+            _breakers[name] = RedisCircuitBreaker(
                 name=name,
                 failure_threshold=failure_threshold,
                 recovery_timeout=recovery_timeout,

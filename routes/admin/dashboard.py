@@ -9,12 +9,6 @@ from routes.admin import admin_bp, require_auth
 
 logger = logging.getLogger(__name__)
 
-_DASHBOARD_CACHE_TTL = 60
-
-
-def _get_dashboard_cache_key() -> str:
-    return "dashboard:stats:v2"
-
 
 @admin_bp.route("/dead-letters")
 @require_auth
@@ -92,9 +86,16 @@ def dead_letters() -> str:
 def _compute_dashboard_stats():
     from extensions import db
     from models import Article, PipelineRun, Source
+    from services.cache import get_response_cache
     from services.llm import get_provider_info
     from services.pipeline_monitor import get_all_stages_stats
     from services.subscribers import get_subscriber_stats
+
+    cache = get_response_cache()
+    cache_key = "admin:dashboard:stats"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
 
     pipeline_stats = dict(
         db.session.query(Article.pipeline_status, func.count(Article.id))
@@ -102,14 +103,15 @@ def _compute_dashboard_stats():
         .all()
     )
 
-    sources = Source.query.with_entities(Source.id, Source.name, Source.active).all()
-    source_count = len(sources)
-
-    article_counts = dict(
-        db.session.query(Article.source_id, func.count(Article.id))
-        .group_by(Article.source_id)
+    sources_with_counts = (
+        db.session.query(Source.id, Source.name, Source.active, func.count(Article.id))
+        .outerjoin(Article, Article.source_id == Source.id)
+        .group_by(Source.id, Source.name, Source.active)
         .all()
     )
+    source_count = len(sources_with_counts)
+    sources_query = [(s[0], s[1], s[2]) for s in sources_with_counts]
+    article_counts = {s[0]: s[3] for s in sources_with_counts}
 
     recent = (
         db.session.query(Article.id, Article.original_title, Article.pipeline_status, Source.name)
@@ -127,8 +129,8 @@ def _compute_dashboard_stats():
 
     total_subs, subs_by_type, _ = get_subscriber_stats(db)
 
-    recent_runs = (
-        PipelineRun.query.with_entities(
+    recent_runs_with_running = (
+        db.session.query(
             PipelineRun.id,
             PipelineRun.status,
             PipelineRun.started_at,
@@ -139,8 +141,10 @@ def _compute_dashboard_stats():
         .limit(5)
         .all()
     )
-
-    running_count = PipelineRun.query.filter_by(status="running").count()
+    recent_runs = recent_runs_with_running
+    running_count = sum(1 for r in recent_runs_with_running if r[1] == "running")
+    if running_count == 0:
+        running_count = PipelineRun.query.filter_by(status="running").count()
 
     pipeline_health = None
     try:
@@ -151,9 +155,9 @@ def _compute_dashboard_stats():
     except Exception as e:
         logger.warning("Failed to get pipeline health stats: %s", e)
 
-    return {
+    stats = {
         "pipeline_stats": pipeline_stats,
-        "sources": [{"id": s[0], "name": s[1], "active": s[2]} for s in sources],
+        "sources": [{"id": s[0], "name": s[1], "active": s[2]} for s in sources_query],
         "article_counts": article_counts,
         "recent": [
             {
@@ -181,48 +185,24 @@ def _compute_dashboard_stats():
         "pipeline_health": pipeline_health,
         "source_count": source_count,
     }
+    cache.set(cache_key, stats, 60)
+    return stats
 
 
 @admin_bp.route("/")
 @require_auth
 def dashboard() -> str:
     from extensions import get_redis
-    from services.cache import get_response_cache
 
     redis_ok = False
     try:
         redis_client = get_redis()
         redis_client.ping()
         redis_ok = True
-
-        cache = get_response_cache()
-        cached = cache.get_or_set(
-            _get_dashboard_cache_key(),
-            _compute_dashboard_stats,
-            _DASHBOARD_CACHE_TTL,
-        )
     except redis.exceptions.RedisError:
-        cached = None
+        pass
     except Exception as e:
-        logger.warning("Dashboard cache failed: %s", e)
-        cached = None
-
-    if cached:
-        return render_template(
-            "admin/dashboard.html",
-            pipeline_stats=cached["pipeline_stats"],
-            sources=cached["sources"],
-            article_counts=cached["article_counts"],
-            recent=cached["recent"],
-            llm_info=cached["llm_info"],
-            redis_ok=redis_ok,
-            total_subs=cached["total_subs"],
-            subs_by_type=cached["subs_by_type"],
-            recent_runs=cached["recent_runs"],
-            running_count=cached["running_count"],
-            pipeline_health=cached.get("pipeline_health"),
-            source_count=cached.get("source_count"),
-        )
+        logger.warning("Redis check failed: %s", e)
 
     cached = _compute_dashboard_stats()
 

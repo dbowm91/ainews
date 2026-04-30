@@ -131,6 +131,10 @@ class MemoryConfig(BaseModel):
     consolidation_cooldown_hours: int = 24
     max_entries_per_propose: int = 3
     consolidation_merge_window_hours: int = 72
+    truncation_llm_enabled: bool = True
+    truncation_llm_threshold: int = 2000
+    truncation_llm_max_tokens: int = 512
+    truncation_llm_temperature: float = 0.0
 
 
 class PipelineRootConfig(BaseModel):

@@ -3,6 +3,7 @@ import logging
 from flask import Response, jsonify
 
 from routes.admin import admin_bp, require_auth
+from schemas.admin import TaskStatusParams
 from services.cache import get_response_cache
 from services.circuit_breaker import get_all_breaker_status
 from services.health import run_health_checks
@@ -99,6 +100,12 @@ def workers_health() -> Response:
 @admin_bp.route("/api/task/<task_id>")
 @require_auth
 def task_status(task_id: str) -> Response:
+    try:
+        validated = TaskStatusParams(task_id=task_id)
+        task_id = validated.task_id
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
     from celery.result import AsyncResult
 
     from celery_app import celery_app

@@ -4,16 +4,9 @@ from flask import Response, jsonify, request
 
 from routes.admin import admin_bp, require_auth
 from routes.decorators import commit, validate_csrf_json
+from schemas.admin import CreateSourceRequest, UpdateSourceRequest
 
 logger = logging.getLogger(__name__)
-
-VALID_SOURCE_TYPES = frozenset({
-    "rss",
-    "atom",
-    "web",
-    "twitter",
-    "reddit",
-})
 
 
 @admin_bp.route("/api/sources", methods=["GET"])
@@ -62,41 +55,31 @@ def create_source() -> tuple[Response, int] | Response:
     if not data:
         return jsonify({"error": "Invalid JSON body"}), 400
 
-    source_key = data.get("source_key", "").strip()
-    name = data.get("name", "").strip()
-    url = data.get("url", "").strip()
-    feed_url = data.get("feed_url", "").strip()
-    source_type = data.get("source_type", "").strip()
+    try:
+        validated = CreateSourceRequest(**data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
-    if not source_key:
-        return jsonify({"error": "source_key is required"}), 400
-    if not name:
-        return jsonify({"error": "name is required"}), 400
-    if not source_type:
-        return jsonify({"error": "source_type is required"}), 400
-    if source_type not in VALID_SOURCE_TYPES:
-        return jsonify({"error": f"source_type must be one of: {sorted(VALID_SOURCE_TYPES)}"}), 400
-
-    existing = Source.query.filter_by(source_key=source_key).first()
+    existing = Source.query.filter_by(source_key=validated.source_key).first()
     if existing:
-        return jsonify({"error": f"source_key '{source_key}' already exists"}), 409
+        return jsonify({"error": f"source_key '{validated.source_key}' already exists"}), 409
 
-    if url:
+    if validated.url:
         try:
             from services.url import validate_url_safe
 
-            validate_url_safe(url)
+            validate_url_safe(validated.url)
         except Exception as e:
             logger.debug("Invalid source URL: %s", e)
             return jsonify({"error": f"Invalid URL: {e}"}), 400
 
     source = Source(
-        source_key=source_key,
-        name=name,
-        url=url or None,
-        feed_url=feed_url or None,
-        source_type=source_type,
-        active=data.get("active", True),
+        source_key=validated.source_key,
+        name=validated.name,
+        url=validated.url or None,
+        feed_url=validated.feed_url or None,
+        source_type=validated.source_type,
+        active=validated.active,
     )
     db.session.add(source)
     error = commit(db, "Failed to create source")
@@ -165,8 +148,13 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
     if not data:
         return jsonify({"error": "Invalid JSON body"}), 400
 
-    if "source_key" in data:
-        new_key = data["source_key"].strip()
+    try:
+        validated = UpdateSourceRequest(**data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+    if validated.source_key is not None:
+        new_key = validated.source_key
         existing = Source.query.filter(
             Source.source_key == new_key,
             Source.id != source_id,
@@ -175,26 +163,24 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
             return jsonify({"error": f"source_key '{new_key}' already exists"}), 409
         source.source_key = new_key
 
-    if "name" in data:
-        source.name = data["name"].strip()
-    if "url" in data:
-        if data["url"]:
+    if validated.name is not None:
+        source.name = validated.name
+    if validated.url is not None:
+        if validated.url:
             try:
                 from services.url import validate_url_safe
 
-                validate_url_safe(data["url"])
+                validate_url_safe(validated.url)
             except Exception as e:
                 logger.debug("Invalid source URL update: %s", e)
                 return jsonify({"error": f"Invalid URL: {e}"}), 400
-        source.url = data["url"] or None
-    if "feed_url" in data:
-        source.feed_url = data["feed_url"] or None
-    if "source_type" in data:
-        if data["source_type"] not in VALID_SOURCE_TYPES:
-            return jsonify({"error": f"source_type must be one of: {sorted(VALID_SOURCE_TYPES)}"}), 400
-        source.source_type = data["source_type"]
-    if "active" in data:
-        source.active = bool(data["active"])
+        source.url = validated.url or None
+    if validated.feed_url is not None:
+        source.feed_url = validated.feed_url or None
+    if validated.source_type is not None:
+        source.source_type = validated.source_type
+    if validated.active is not None:
+        source.active = validated.active
 
     error = commit(db, "Failed to update source")
     if error:

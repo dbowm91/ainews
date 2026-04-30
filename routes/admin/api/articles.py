@@ -9,6 +9,7 @@ from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
 from routes import limit_content_length
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
+from schemas.admin import ArticleIdsParams, BulkArticleRequest
 from services.task_security import get_signed_kwargs
 
 logger = logging.getLogger(__name__)
@@ -27,15 +28,30 @@ def get_article_ids():
     from models import Article, Tag
     from services.article import _escape_like_pattern
 
-    query = request.args.get("q", "", type=str).strip()
-    status = request.args.get("status", "", type=str).strip()
-    category = request.args.get("category", "", type=str).strip()
-    source_id = request.args.get("source_id", "", type=str).strip()
-    date_from = request.args.get("date_from", "", type=str).strip()
-    date_to = request.args.get("date_to", "", type=str).strip()
-    impact_min = request.args.get("impact_min", "", type=str).strip()
-    impact_max = request.args.get("impact_max", "", type=str).strip()
-    tag_slug = request.args.get("tag", "", type=str).strip()
+    try:
+        params = ArticleIdsParams(
+            q=request.args.get("q", "", type=str).strip(),
+            status=request.args.get("status", "", type=str).strip() or None,
+            category=request.args.get("category", "", type=str).strip() or None,
+            source_id=request.args.get("source_id", type=int),
+            date_from=request.args.get("date_from", "", type=str).strip() or None,
+            date_to=request.args.get("date_to", "", type=str).strip() or None,
+            impact_min=request.args.get("impact_min", type=int),
+            impact_max=request.args.get("impact_max", type=int),
+            tag=request.args.get("tag", "", type=str).strip() or None,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+    query = params.q
+    status = params.status or ""
+    category = params.category or ""
+    source_id = str(params.source_id) if params.source_id is not None else ""
+    date_from = params.date_from or ""
+    date_to = params.date_to or ""
+    impact_min = str(params.impact_min) if params.impact_min is not None else ""
+    impact_max = str(params.impact_max) if params.impact_max is not None else ""
+    tag_slug = params.tag or ""
 
     def _query_looks_like_url(q_str):
         if not q_str:
@@ -115,11 +131,11 @@ def get_article_counts_by_status():
     return jsonify({"counts": counts, "total": sum(counts.values())})
 
 
-def _bulk_set_category(articles, data, db) -> tuple[Response, int] | Response:
+def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Response:
     from schemas.topic import load_topics
     from services.audit import log_admin_action
 
-    new_category = data.get("category", "").strip()
+    new_category = (validated.category or "").strip()
     if not new_category:
         return jsonify({"error": "category is required"}), 400
     topics = load_topics().topics
@@ -254,16 +270,14 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     )
 
 
-def _bulk_add_tags(articles, data, db) -> tuple[Response, int] | Response:
+def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
     from services.audit import log_admin_action
     from tasks.edit import clear_tag_cache
     from tasks.pipeline import _assign_tags
 
-    tag_names = data.get("tags", [])
+    tag_names = validated.tags or []
     if not tag_names or not isinstance(tag_names, list):
         return jsonify({"error": "tags must be a non-empty list"}), 400
-    if len(tag_names) > 10:
-        return jsonify({"error": "Maximum 10 tags per bulk operation"}), 400
 
     try:
         from services.cache import get_response_cache
@@ -314,13 +328,13 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     if not data:
         return jsonify({"error": "Invalid JSON body"}), 400
 
-    article_ids = data.get("article_ids", [])
-    action = data.get("action", "")
+    try:
+        validated = BulkArticleRequest(**data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
-    if not article_ids or not isinstance(article_ids, list):
-        return jsonify({"error": "article_ids must be a non-empty list"}), 400
-    if len(article_ids) > 500:
-        return jsonify({"error": "Maximum 500 articles per bulk operation"}), 400
+    article_ids = validated.article_ids
+    action = validated.action
 
     try:
         from services.validation import validate_bulk_ids
@@ -365,7 +379,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         return jsonify({"message": f"Deleted {len(articles)} articles"})
 
     elif action == "set_status":
-        new_status = data.get("status", "")
+        new_status = validated.status or ""
         if new_status not in VALID_PIPELINE_STATUSES:
             return jsonify(
                 {
@@ -415,13 +429,13 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         )
 
     elif action == "set_category":
-        return _bulk_set_category(articles, data, db)
+        return _bulk_set_category(articles, validated, db)
 
     elif action == "reprocess":
         return _bulk_reprocess(articles, db)
 
     elif action == "add_tags":
-        return _bulk_add_tags(articles, data, db)
+        return _bulk_add_tags(articles, validated, db)
 
     else:
         return jsonify(

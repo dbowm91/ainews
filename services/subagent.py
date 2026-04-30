@@ -22,7 +22,7 @@ from schemas.pipeline import BASE_DIR, SubagentStageConfig, resolve_subagent_con
 from services.llm import get_provider_for_role
 from services.llm.base import ToolDefinition
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
-from services.logging_utils import log_pipeline_event
+from services.logging_utils import log_pipeline_event, traced_llm_call
 from services.metrics import get_metrics, time_histogram
 from services.prompts import esc_xml_text
 
@@ -579,14 +579,15 @@ def run_subagent(
     )
 
     def _call_with_timeout():
-        return provider.chat_structured(
-            messages=[{"role": "user", "content": prompt}],
-            response_model=response_model,
-            model=model,
-            system=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
+            return provider.chat_structured(
+                messages=[{"role": "user", "content": prompt}],
+                response_model=response_model,
+                model=model,
+                system=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
     result = None
     used_fallback = False
@@ -751,16 +752,17 @@ def run_subagent_with_tools(
     messages = [{"role": "user", "content": prompt}]
 
     def _call_with_timeout():
-        return provider.chat_with_tools(
-            messages=messages,
-            tools=tools,
-            tool_choice=None,
-            model=model,
-            system=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_iterations=stage_config.max_iterations,
-        )
+        with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
+            return provider.chat_with_tools(
+                messages=messages,
+                tools=tools,
+                tool_choice=None,
+                model=model,
+                system=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                max_iterations=stage_config.max_iterations,
+            )
 
     result = None
     used_fallback = False

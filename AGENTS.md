@@ -58,7 +58,7 @@ Rules are organized into focused modules in `static/css/`.
 - `articles.css`: Feed, cards, pagination.
 - Avoid inline styles; use utility classes from `utilities.css`.
 
-**CSS Consolidation Note:** When editing CSS variables, always edit `variables.css`. If `critical.css` or `critical_css.html` need updating, ensure all three files stay in sync (or use the build script at `build/generate-critical-css.js` once implemented).
+**CSS Consolidation Note:** When editing CSS variables, always edit `variables.css`. If `critical.css` or `critical_css.html` need updating, ensure all three files stay in sync using the build script at `build/generate-critical-css.js`.
 
 ### Testing Standards
 - Use `tests/factories.py` for object creation.
@@ -77,34 +77,73 @@ Rules are organized into focused modules in `static/css/`.
 
 ### Logging & Tracing
 - **Structured Logging:** Use `get_pipeline_logger(task_id)` for task correlation.
-- **OpenTelemetry:** Tracing integrated via `services/logging_utils.py:traced_stage`. Configure via `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable.
+- **OpenTelemetry:** Tracing integrated via `services/logging_utils.py:traced_stage`. Configure via `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable. Real `OTLPSpanExporter` used when endpoint is set.
 - **Request ID:** `X-Request-ID` header added to all responses via `app.after_request`.
+- **OTel Tracing for Subagents:** `traced_llm_call` wraps LLM invocations in `run_subagent()` and `run_subagent_with_tools()`.
 
 ### Pipeline & Tasks
 - **Dead Letter Queue:** Managed via `/admin/dead-letters` UI.
-- **Per-Stage Circuit Breaker:** Circuit breakers are keyed by `provider:model:stage` to prevent one stage's failures from blocking other stages.
+- **Per-Stage Circuit Breaker:** Circuit breakers are keyed by `provider:model:stage` to prevent one stage's failures from blocking other stages. Redis-backed via `RedisCircuitBreaker` in `services/circuit_breaker.py` with in-memory fallback.
 - **E2E Latency Tracking:** `pipeline.e2e_duration_seconds` histogram records total pipeline latency from crawl to finalization.
 - **State Machine Validation:** `VALID_TRANSITIONS` ensures clean state changes.
+- **Redis TTL Refresh:** L1 cache hits refresh Redis TTL via `self._redis.expire()` in `ResponseCache.get()`.
 
 ### Caching
 - **Subagent Context Caching:** `_get_topic_note` and `_get_related_articles` use `ResponseCache` with 120s TTL.
-- **Cache Invalidation Pattern:** Use `cache.invalidate_prefix()` for wildcard invalidation.
+- **Cache Invalidation Pattern:** Use `cache.invalidate_prefix()` for wildcard invalidation. Apply after admin mutations (source create/enable/disable, article approve/reject, topic note CRUD, trend memory delete).
+- **Redis-Backed Stats:** Cache hit/miss stats stored in Redis with in-memory fallback via `record_hit()`, `record_miss()`, `get_stats()` in `ResponseCache`.
+- **Redis-Backed Metrics:** `services/metrics.py` stores counters/gauges/histograms in Redis with in-memory fallback.
 
 ### Newsletter
 - **AI Subject Lines:** LLM-generated subject lines based on top stories.
 - **Plain-Text Email Alt:** All emails include `multipart/alternative` with plain-text and HTML parts.
 - **List-Unsubscribe Headers:** Newsletter emails include RFC 8058 `List-Unsubscribe` and `List-Unsubscribe-Post` headers.
+- **SMTP Connection Pool:** `SMTPConnectionPool` class in `services/email.py` with configurable pool size (default 5) and connection health checks.
 
 ### LLM Content
 - **Sanitization:** `final_article` content is sanitized with `bleach.clean()` allowing only safe tags (`a`, `b`, `i`, `ul`, `li`). Do NOT apply `|e` filter to already-sanitized content in templates.
+- **Memory Summarization:** `smart_truncate_context()` in `services/prompts.py` uses LLM-based summarization for large context overflow.
+- **Importance-Weighted Truncation:** `importance_weighted_truncate()` prioritizes key content segments.
+- **Token-Aware Truncation:** Truncation respects model token limits via `count_tokens()` and `max_tokens_for_model()`.
+- **Streaming Support:** `chat_streaming()` method in `BaseLLMProvider` with implementations in OpenAI, Anthropic, Ollama, Gemini adapters.
 
 ### Sources & Articles
-- **Source CRUD API:** REST endpoints at `/api/sources` for programmatic source management.
+- **Source CRUD API:** REST endpoints at `/api/v1/sources` for programmatic source management. Supports PATCH for partial updates.
+- **FTS5 Search:** Full-text search via `articles_fts` and `articles_admin_fts` virtual tables. Fallback to ILIKE for unsupported queries.
+- **Admin Article Validation:** MAX_ constants in `routes/admin/articles.py` limit field lengths (headline: 500, tldr: 300, body: 50000, etc.).
+- **Bulk Article Optimization:** N+1 queries prevented via `joinedload(Article.source)` and `joinedload(Article.tags)`.
 - **Subscriber Sunset Policy:** Subscribers are flagged inactive after configurable bounce threshold (`SUBSCRIBER_MAX_BOUNCES`, default 5) or inactivity (`SUBSCRIBER_INACTIVITY_DAYS`, default 180 days).
 
 ### Admin Security
-- **API Token Support:** Admin API supports Bearer token authentication (see `routes/admin/api_tokens.py` when implemented).
+- **API Token Support:** Admin API supports Bearer token authentication via `routes/admin/api_tokens.py`. ApiToken model in `models.py` with token_hash, name, created_at, last_used_at, expires_at fields.
 - **HMAC Task Signing:** All Celery tasks called externally (beat-scheduled) must verify HMAC signature via `verify_task()`.
+- **API Versioning:** All API routes use `/api/v1/` prefix (admin: `admin_api_bp`, public: updated routes).
+
+### Database
+- **Missing Indexes Added:** `Webhook.active`, `Source.active`, `Source.source_type`, `Subscriber.newsletter_type`, `PipelineRun.run_type`, composite `(run_type, status)` - all with `index=True` in models.py.
+
+### Admin API
+- **Standardized Response Format:** `api_response()` helper in `routes/admin/api/utils.py` provides consistent JSON envelope with `data`, `error`, `meta` fields.
+- **Admin API Schemas:** Pydantic models in `schemas/admin.py` for request validation (`ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`).
+- **Audit Logging:** `log_admin_action()` added to all mutation endpoints (review approve/reject, sources CRUD, topic notes CRUD, trend memory delete, articles edit/delete/reprocess/rollback, pipelines trigger, newsletters trigger).
+
+### Frontend
+- **CSS @layer Organization:** `static/css/style.css` uses `@layer reset, variables, layout, components, pages, utilities;` with layered `@import` statements.
+- **Container Queries:** `.article-feed` has `container-type: inline-size` with `@supports` fallback in `static/css/articles.css`.
+- **CSS Variables:** Canonical source in `variables.css`; `critical.css` uses `@import "./variables.css"`; build script at `build/generate-critical-css.js` syncs `critical_css.html`.
+
+### Webhooks
+- **Async Dispatch:** Webhook delivery moved to Celery task `dispatch_webhook_task` in `tasks/webhook.py`. Routes `test_webhook` and `resend_webhook_event` dispatch asynchronously.
+
+### Dashboard
+- **Query Consolidation:** `_compute_dashboard_stats()` uses caching (60s TTL) and consolidated queries with `outerjoin()` and `group_by()` for better performance.
+
+### Quality & Assessment
+- **Quality Assessment Infrastructure:** `services/quality.py` with `QualityScore` dataclass, `QualityAssessor` protocol, `LLMQualityAssessor`, and `lightweight_quality_signals()`.
+- **Stage-Aware Tool Selection:** `services/tool_selection.py` with `ToolSelector` protocol and `StageAwareToolSelector`.
+
+### Subagent System
+- **Exception Handling:** Tool functions catch specific exceptions (`SQLAlchemyError`, `KeyError`, `AttributeError`) before falling back to bare `Exception`.
 
 ## Common Patterns Reference
 

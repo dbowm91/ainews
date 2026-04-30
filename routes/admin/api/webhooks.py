@@ -255,12 +255,12 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Send a test event to a webhook."""
     from extensions import db
     from models import Webhook
-    from services.webhooks import dispatch_webhook
+    from tasks.webhook import dispatch_webhook_task
 
     webhook = db.get_or_404(Webhook, webhook_id)
 
     secret = _get_webhook_secret(webhook)
-    success, error = dispatch_webhook(
+    dispatch_webhook_task.delay(
         webhook_id=webhook.id,
         name=webhook.name,
         url=webhook.url,
@@ -269,9 +269,7 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
         event_data={"message": "This is a test webhook event"},
     )
 
-    if success:
-        return jsonify({"message": "Test webhook delivered successfully"})
-    return jsonify({"error": f"Test webhook failed: {error}"}), 500
+    return jsonify({"message": "Test webhook queued for delivery"}), 202
 
 
 @admin_bp.route("/api/webhooks/<int:webhook_id>/events", methods=["GET"])
@@ -323,7 +321,7 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
     """Resend a webhook event using the stored payload."""
     from extensions import db
     from models import Webhook, WebhookEvent
-    from services.webhooks import dispatch_webhook
+    from tasks.webhook import dispatch_webhook_task
 
     event = db.get_or_404(WebhookEvent, event_id)
     webhook = db.get_or_404(Webhook, event.webhook_id)
@@ -341,7 +339,7 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
         except Exception as e:
             logger.debug("Failed to parse webhook event payload: %s", e)
 
-    success, error = dispatch_webhook(
+    dispatch_webhook_task.delay(
         webhook_id=webhook.id,
         name=webhook.name,
         url=webhook.url,
@@ -351,6 +349,4 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
         idempotency_key=f"resend-{event.id}-{datetime.now(timezone.utc).isoformat()}",
     )
 
-    if success:
-        return jsonify({"message": "Webhook resent successfully"})
-    return jsonify({"error": f"Resend failed: {error}"}), 500
+    return jsonify({"message": "Webhook resend queued for delivery"}), 202

@@ -15,6 +15,7 @@ from tasks.research import research_article
 from tasks.retry import retry_stuck
 from tasks.scheduler import publish_scheduled_articles
 from tasks.select import select_article
+from tasks.webhook import dispatch_webhook_task
 from tasks.write import write_article
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "_handle_stage_failure",
     "_finalize",
     "_assign_tags",
+    "dispatch_webhook_task",
     "MAX_STAGE_RETRIES",
 ]

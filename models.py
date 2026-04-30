@@ -57,8 +57,8 @@ class Source(db.Model):
     name = db.Column(db.String(128), nullable=False, index=True)
     url = db.Column(db.String(512))
     feed_url = db.Column(db.String(512))
-    source_type = db.Column(db.String(32), nullable=False)
-    active = db.Column(db.Boolean, default=True)
+    source_type = db.Column(db.String(32), nullable=False, index=True)
+    active = db.Column(db.Boolean, default=True, index=True)
     last_crawled = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -203,7 +203,7 @@ class Subscriber(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(256), nullable=False, index=True)
-    newsletter_type = db.Column(db.String(32), nullable=False)
+    newsletter_type = db.Column(db.String(32), nullable=False, index=True)
     unsubscribe_token = db.Column(
         db.String(64),
         unique=True,
@@ -296,6 +296,11 @@ class PipelineRun(db.Model):
 
     logs = db.relationship(
         "PipelineLog", backref="run", lazy="dynamic", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        db.Index("ix_pipeline_runs_run_type", "run_type"),
+        db.Index("ix_pipeline_runs_run_type_status", "run_type", "status"),
     )
 
     def __repr__(self):
@@ -421,7 +426,7 @@ class Webhook(db.Model):
     url = db.Column(db.String(2048), nullable=False)
     secret = db.Column(db.String(128), nullable=False)
     events = db.Column(db.JSON, nullable=False, default=list)
-    active = db.Column(db.Boolean, default=True)
+    active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,

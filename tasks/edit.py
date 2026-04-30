@@ -297,7 +297,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     # Truncate draft to prevent token overflow
     from services.prompts import sliding_window_truncate
     draft_truncated = sliding_window_truncate(
-        article.draft_article or "", max_chars=8000
+        article.draft_article or "", max_chars=8000, model=model
     )
 
     rc = get_role_config("editor")

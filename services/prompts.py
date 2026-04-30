@@ -8,6 +8,56 @@ logger = logging.getLogger(__name__)
 # Fallback prompts — pipeline.yaml system_prompt fields are the source of truth.
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
+# Approximate chars per token for English text (used when tiktoken unavailable)
+_CHARS_PER_TOKEN = 4
+
+
+def count_tokens(text: str, model: str | None = None) -> int:
+    """Count tokens in text using tiktoken if available, otherwise approximate.
+
+    Args:
+        text: The text to count tokens for
+        model: Optional model name (currently unused, for future tiktoken support)
+
+    Returns:
+        Estimated token count
+    """
+    try:
+        import tiktoken
+
+        if model:
+            enc = tiktoken.encoding_for_model(model)
+        else:
+            enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
+    except ImportError:
+        # Fallback: approximate 1 token per 4 chars for English text
+        return len(text) // _CHARS_PER_TOKEN
+
+
+def max_tokens_for_model(model: str | None) -> int:
+    """Get approximate max context tokens for a model.
+
+    Returns a reasonable default if model not recognized.
+    Common context windows:
+    - GPT-4: 8192-128000
+    - Claude: 9000-200000
+    - Ollama models: vary widely
+    """
+    if not model:
+        return 4096
+    model_lower = model.lower()
+    if "gpt-4" in model_lower:
+        if "turbo" in model_lower or "128k" in model_lower:
+            return 128000
+        return 8192
+    if "claude" in model_lower:
+        if "3-5" in model_lower or "3.5" in model_lower:
+            return 200000
+        return 9000
+    return 4096
+
+
 # Truncation warning injected when content is truncated
 TRUNCATION_WARNING = "[Warning: The preceding context was truncated due to length limits. A summary may have been generated to preserve key information.]"
 
@@ -60,14 +110,42 @@ def get_system_prompt(role: str, yaml_prompt: str | None) -> str:
 
 
 def sliding_window_truncate(
-    text: str, max_chars: int = 8000, ellipsis: str = "\n\n[... truncated ...]\n\n"
+    text: str,
+    max_chars: int = 8000,
+    model: str | None = None,
+    ellipsis: str = "\n\n[... truncated ...]\n\n",
 ) -> str:
     """Truncate text using sliding window to preserve start and end.
 
     When text exceeds max_chars, keeps the first half and last half with ellipsis
     in between to maintain context from both ends of the content.
+
+    Args:
+        text: The text to truncate
+        max_chars: Maximum characters allowed (default 8000)
+        model: Optional model name for token-aware truncation.
+               If provided and token count exceeds model's context,
+               uses token estimate to determine truncation point.
+        ellipsis: String to insert between truncated parts
     """
-    if not text or len(text) <= max_chars:
+    if not text:
+        return text
+
+    # If model specified, check token count and adjust max_chars if needed
+    if model:
+        try:
+            tokens = count_tokens(text, model)
+            model_max = max_tokens_for_model(model)
+            # Use 50% of model's context as truncation threshold (reserve rest for output)
+            token_threshold = model_max // 2
+            if tokens > token_threshold:
+                # Approximate chars from tokens and use that as max
+                est_chars = tokens * _CHARS_PER_TOKEN
+                max_chars = min(max_chars, est_chars // 2)
+        except Exception:
+            logger.debug("Token counting failed, using char-based truncation")
+
+    if len(text) <= max_chars:
         return text
     half = (max_chars - len(ellipsis)) // 2
     return text[:half] + ellipsis + text[-half:]
@@ -118,6 +196,7 @@ async def summarize_context(text: str, llm_provider=None, max_tokens: int = 512,
 def smart_truncate_context(
     text: str,
     max_chars: int = 8000,
+    model: str | None = None,
     llm_provider=None,
     truncation_llm_threshold: int | None = None,
     truncation_llm_max_tokens: int | None = None,
@@ -134,6 +213,7 @@ def smart_truncate_context(
     Args:
         text: The text to truncate
         max_chars: Maximum characters allowed
+        model: Optional model name for token-aware truncation
         llm_provider: Optional LLM provider instance
         truncation_llm_threshold: Threshold for using LLM summarization (from config)
         truncation_llm_max_tokens: Max tokens for summary response
@@ -145,7 +225,22 @@ def smart_truncate_context(
     """
     from schemas.pipeline import load_pipeline_config
 
-    if not text or len(text) <= max_chars:
+    if not text:
+        return text, False
+
+    # If model specified, check token count and adjust max_chars if needed
+    if model:
+        try:
+            tokens = count_tokens(text, model)
+            model_max = max_tokens_for_model(model)
+            token_threshold = model_max // 2
+            if tokens > token_threshold:
+                est_chars = tokens * _CHARS_PER_TOKEN
+                max_chars = min(max_chars, est_chars // 2)
+        except Exception:
+            logger.debug("Token counting failed, using char-based truncation")
+
+    if len(text) <= max_chars:
         return text, False
 
     config = load_pipeline_config()
@@ -179,4 +274,4 @@ def smart_truncate_context(
         except Exception as e:
             logger.warning("LLM summarization failed, falling back to sliding window: %s", e)
 
-    return sliding_window_truncate(text, max_chars), True
+    return sliding_window_truncate(text, max_chars, model=model), True

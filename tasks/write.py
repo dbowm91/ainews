@@ -73,7 +73,7 @@ def write_article(self, article_id: int, run_id=None):
         # Truncate research_brief to prevent token overflow
         from services.prompts import sliding_window_truncate
         research_brief = sliding_window_truncate(
-            article.research_brief or "", max_chars=8000
+            article.research_brief or "", max_chars=8000, model=model
         )
 
         prompt = build_writer_prompt(

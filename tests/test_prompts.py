@@ -4,8 +4,10 @@ from unittest.mock import patch
 
 from services.prompts import (
     TRUNCATION_WARNING,
+    count_tokens,
     esc_xml_attr,
     esc_xml_text,
+    max_tokens_for_model,
     sliding_window_truncate,
     smart_truncate_context,
 )
@@ -189,5 +191,75 @@ class TestSmartTruncateContext:
             result, truncated = smart_truncate_context(text, max_chars=100)
             assert truncated is True
             assert "[... truncated ...]" in result
+
+
+class TestCountTokens:
+    """Test token counting function."""
+
+    def test_empty_string(self):
+        assert count_tokens("") == 0
+
+    def test_short_text(self):
+        text = "hello world"
+        tokens = count_tokens(text)
+        # Approximate: 11 chars / 4 = 2-3 tokens
+        assert tokens >= 1
+
+    def test_tiktoken_fallback(self):
+        """Test that fallback works when tiktoken unavailable."""
+        with patch("builtins.__import__", side_effect=ImportError("no tiktoken")):
+            text = "a" * 100
+            tokens = count_tokens(text)
+            # Fallback: 100 / 4 = 25 tokens
+            assert tokens == 25
+
+    def test_with_model(self):
+        text = "test " * 100
+        tokens = count_tokens(text, model="gpt-4")
+        assert tokens > 0
+
+
+class TestMaxTokensForModel:
+    """Test max tokens for model function."""
+
+    def test_unknown_model(self):
+        assert max_tokens_for_model("unknown") == 4096
+
+    def test_gpt4(self):
+        assert max_tokens_for_model("gpt-4") == 8192
+
+    def test_gpt4_turbo(self):
+        assert max_tokens_for_model("gpt-4-turbo") == 128000
+
+    def test_claude(self):
+        assert max_tokens_for_model("claude-3") == 9000
+
+    def test_claude_3_5(self):
+        assert max_tokens_for_model("claude-3-5-sonnet") == 200000
+
+    def test_none_model(self):
+        assert max_tokens_for_model(None) == 4096
+
+
+class TestSlidingWindowTruncateWithModel:
+    """Test sliding window truncation with model parameter."""
+
+    def test_model_param_no_effect_if_under_limit(self):
+        text = "short text"
+        result = sliding_window_truncate(text, max_chars=100, model="gpt-4")
+        assert result == text
+
+    def test_model_param_truncation(self):
+        text = "a" * 10000
+        result = sliding_window_truncate(text, max_chars=8000, model="gpt-4")
+        # Should still truncate since text is long
+        assert len(result) <= 8000
+        assert "[... truncated ...]" in result
+
+    def test_none_model_uses_default(self):
+        text = "b" * 10000
+        result1 = sliding_window_truncate(text, max_chars=8000, model=None)
+        result2 = sliding_window_truncate(text, max_chars=8000)
+        assert result1 == result2
 
 

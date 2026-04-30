@@ -47,6 +47,20 @@ class ResponseCache:
         self._misses = 0
         self._memory_lock = threading.Lock()
 
+    def record_hit(self) -> None:
+        """Record a cache hit, using Redis if available, else in-memory."""
+        try:
+            self._redis.hincrby(f"{self.prefix}:stats", "hits", 1)
+        except redis.exceptions.RedisError:
+            self._hits += 1
+
+    def record_miss(self) -> None:
+        """Record a cache miss, using Redis if available, else in-memory."""
+        try:
+            self._redis.hincrby(f"{self.prefix}:stats", "misses", 1)
+        except redis.exceptions.RedisError:
+            self._misses += 1
+
     def _evict_batch(self, batch: int = 5) -> None:
         """Remove expired entries from the head of the OrderedDict."""
         now = time.monotonic()
@@ -79,7 +93,7 @@ class ResponseCache:
                 with self._memory_lock:
                     self._memory[full_key] = (expires_at, time.monotonic(), raw)
                     self._memory.move_to_end(full_key)
-                self._hits += 1
+                self.record_hit()
                 return json.loads(raw)
             with self._memory_lock:
                 self._memory.pop(full_key, None)
@@ -89,12 +103,12 @@ class ResponseCache:
             cached = self._redis.get(full_key)
             if cached is not None:
                 raw = cached.decode("utf-8") if isinstance(cached, bytes) else cached
-                self._hits += 1
+                self.record_hit()
                 return json.loads(raw)
         except redis.exceptions.RedisError as e:
             logger.warning("Cache read failed for %s: %s", key, e)
 
-        self._misses += 1
+        self.record_miss()
         return None
 
     def set(self, key: str, value: Any, ttl: int = 120) -> None:
@@ -198,12 +212,19 @@ class ResponseCache:
             logger.warning("Cache invalidate_prefix failed: %s", e)
 
     def get_stats(self) -> dict:
-        """Return cache hit/miss statistics."""
-        total = self._hits + self._misses
+        """Return cache hit/miss statistics from Redis with in-memory fallback."""
+        try:
+            stats = self._redis.hgetall(f"{self.prefix}:stats")
+            hits = int(stats.get("hits", 0) or 0)
+            misses = int(stats.get("misses", 0) or 0)
+        except redis.exceptions.RedisError:
+            hits = self._hits
+            misses = self._misses
+        total = hits + misses
         return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "hit_rate": round(self._hits / total, 3) if total > 0 else 0,
+            "hits": hits,
+            "misses": misses,
+            "hit_rate": round(hits / total, 3) if total > 0 else 0,
             "memory_entries": len(self._memory),
         }
 

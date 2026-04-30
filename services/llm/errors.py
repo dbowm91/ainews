@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Callable
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,9 @@ def make_error_handler(
 class RateLimitError(Exception):
     """Raised when an LLM API rate limit is hit."""
 
-    pass
+    def __init__(self, message: str, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class AuthError(Exception):
@@ -68,7 +71,8 @@ def handle_provider_error(
     """Convert SDK-specific exceptions to generic provider errors."""
     if isinstance(e, rate_limit_exc):
         logger.warning("%s rate limit hit: %s", provider_name, e)
-        return RateLimitError(str(e))
+        retry_after = _extract_retry_after(e)
+        return RateLimitError(str(e), retry_after=retry_after)
     elif isinstance(e, auth_exc):
         logger.error("%s authentication failed: %s", provider_name, e)
         return AuthError(str(e))
@@ -78,7 +82,8 @@ def handle_provider_error(
     elif hasattr(e, "status_code"):
         status = e.status_code
         if status == 429:
-            return RateLimitError(str(e))
+            retry_after = _extract_retry_after(e)
+            return RateLimitError(str(e), retry_after=retry_after)
         elif status in (401, 403):
             return AuthError(str(e))
         elif status >= 500:
@@ -99,3 +104,31 @@ def handle_provider_error(
         logger.error("%s server error (5xx-like): %s", provider_name, e)
         return ProviderServerError(str(e))
     return e
+
+
+def _extract_retry_after(e: Exception) -> float | None:
+    """Extract Retry-After header value from an exception if available."""
+    if hasattr(e, "headers") and e.headers:
+        retry_after = e.headers.get("retry-after")
+        if retry_after:
+            return _parse_retry_after(retry_after)
+    if hasattr(e, "response") and e.response and hasattr(e.response, "headers"):
+        retry_after = e.response.headers.get("retry-after")
+        if retry_after:
+            return _parse_retry_after(retry_after)
+    return None
+
+
+def _parse_retry_after(value: str) -> float | None:
+    """Parse Retry-After header value (seconds or HTTP date)."""
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    from email.utils import parsedate_to_datetime
+
+    try:
+        dt = parsedate_to_datetime(value)
+        return (dt - datetime.now(timezone.utc)).total_seconds()
+    except Exception:
+        return None

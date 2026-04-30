@@ -1,15 +1,7 @@
 # Implementation Plan
 
 **Date:** April 29, 2026
-**Status:** IN PROGRESS - One item deferred from Wave 2
-
----
-
-## Deferred Items
-
-| Item | Description | Location | Status | Notes |
-|------|-------------|----------|--------|-------|
-| **W2.5** | Retry-After Header Support | `services/llm/base.py:155-167` | ⚠️ DEFERRED | Uses exponential backoff with jitter. Server-sent Retry-After headers are NOT parsed. |
+**Status:** ALL ITEMS COMPLETED
 
 ---
 
@@ -23,11 +15,11 @@ Before committing, always run:
 
 ---
 
-## Previously Completed
+## Completed Items
 
 All items from Waves 1-8 have been implemented and verified:
 - Wave 1 (Critical Fixes & Security): W1.1-W1.6
-- Wave 2 (Pipeline Stability): W2.1-W2.4, W2.6
+- Wave 2 (Pipeline Stability): W2.1-W2.6 (including W2.5 Retry-After Header Support)
 - Wave 3 (Subagent & Search): W3.1-W3.5
 - Wave 4 (Email & Newsletter): W4.1-W4.5
 - Wave 5 (Frontend & Accessibility): W5.1-W5.4
@@ -35,4 +27,4 @@ All items from Waves 1-8 have been implemented and verified:
 - Wave 7 (Backend Refinement): W7.1-W7.4
 - Wave 8 (Documentation): D1-D2
 
-Key capabilities implemented include: fail-closed Redis locks, session fixation prevention, per-stage circuit breakers, LLM content sanitization, plain-text email alternatives, List-Unsubscribe headers, AI-generated newsletter subjects, E2E latency tracking, subagent context caching, and subscriber sunset policy.
+Key capabilities implemented include: fail-closed Redis locks, session fixation prevention, per-stage circuit breakers, LLM content sanitization, plain-text email alternatives, List-Unsubscribe headers, AI-generated newsletter subjects, E2E latency tracking, subagent context caching, subscriber sunset policy, and Retry-After header support for LLM rate limit handling.

@@ -27,6 +27,14 @@ def _handle_openai_error(e: Exception) -> Exception:
         RateLimitError,
     )
 
+    if isinstance(e, RateLimitError):
+        retry_after = None
+        if hasattr(e, "headers") and e.headers:
+            retry_after = e.headers.get("retry-after")
+        elif hasattr(e, "response") and e.response and hasattr(e.response, "headers"):
+            retry_after = e.response.headers.get("retry-after")
+        return RateLimitError(str(e), retry_after=retry_after)
+
     return make_error_handler(
         "OpenAI",
         rate_limit_exc=(RateLimitError,),

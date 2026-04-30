@@ -152,10 +152,13 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 if attempt == self.RETRY_MAX_ATTEMPTS - 1:
                     self._record_failure(model or self.default_model or "unknown")
                     break
-                delay = min(
-                    self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),
-                    self.RETRY_MAX_DELAY,
-                )
+                if isinstance(e, RateLimitError) and e.retry_after is not None:
+                    delay = min(e.retry_after, self.RETRY_MAX_DELAY)
+                else:
+                    delay = min(
+                        self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),
+                        self.RETRY_MAX_DELAY,
+                    )
                 logger.warning(
                     "%s attempt %d/%d failed: %s. Retrying in %.1fs.",
                     self.provider_id,

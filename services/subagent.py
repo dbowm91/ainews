@@ -25,6 +25,7 @@ from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutE
 from services.logging_utils import log_pipeline_event, traced_llm_call
 from services.metrics import get_metrics, time_histogram
 from services.prompts import esc_xml_text
+from services.tool_selection import ToolSelector
 
 _TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
@@ -408,10 +409,22 @@ def _get_all_tools_cached() -> tuple[ToolDefinition, ...]:
     return tuple(tools)
 
 
-def initialize_tool_registry(tool_names: list[str] | None = None) -> list[ToolDefinition]:
-    """Initialize the tool registry with built-in tools, optionally filtered by name.
+def initialize_tool_registry(
+    tool_names: list[str] | None = None,
+    selector: ToolSelector | None = None,
+    context: dict[str, Any] | None = None,
+) -> list[ToolDefinition]:
+    """Initialize the tool registry with built-in tools, optionally filtered.
 
     Uses cached tool definitions to avoid rebuilding on every call.
+
+    Args:
+        tool_names: Optional list of tool names to include (backward compatible).
+        selector: Optional ToolSelector for advanced selection strategies.
+        context: Optional context dict passed to selector if provided.
+
+    Returns:
+        List of selected ToolDefinition objects.
     """
     global _TOOL_REGISTRY
 
@@ -420,6 +433,9 @@ def initialize_tool_registry(tool_names: list[str] | None = None) -> list[ToolDe
     if not _TOOL_REGISTRY:
         for tool in all_tools:
             register_tool(tool)
+
+    if selector is not None:
+        return selector.select_tools(all_tools, context)
 
     if tool_names is not None:
         return [t for t in all_tools if t.name in tool_names]

@@ -20,6 +20,7 @@ _dns_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns_resolv
 
 # Private/reserved IP ranges that should never be fetched
 _BLOCKED_NETWORKS = [
+    # IPv4 private/reserved
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
@@ -28,6 +29,13 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("224.0.0.0/4"),
     ipaddress.ip_network("240.0.0.0/4"),
+    # IPv6 private/reserved
+    ipaddress.ip_network("::1/128"),         # Loopback
+    ipaddress.ip_network("fc00::/7"),        # Unique local addresses
+    ipaddress.ip_network("fe80::/10"),       # Link-local unicast
+    ipaddress.ip_network("ff00::/8"),        # Multicast
+    ipaddress.ip_network("::/128"),          # Unspecified address
+    ipaddress.ip_network("::ffff:0:0/96"),   # IPv4-mapped IPv6
 ]
 
 

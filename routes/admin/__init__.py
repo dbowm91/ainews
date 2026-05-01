@@ -30,9 +30,10 @@ def verify_api_token(token_str):
         return False
 
     provided_hash = parts[1]
+    prefix = provided_hash[:16]
 
-    # Find token by checking all (inefficient but simple for now)
-    tokens = ApiToken.query.all()
+    # Find tokens by prefix, then verify full hash
+    tokens = ApiToken.query.filter(ApiToken.token_prefix == prefix).all()
     for api_token in tokens:
         if check_password_hash(api_token.token_hash, provided_hash):
             # Update last_used_at

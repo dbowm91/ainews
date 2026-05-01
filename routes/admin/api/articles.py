@@ -170,6 +170,7 @@ def get_article_counts_by_status():
 
 
 def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Response:
+    from models import Article
     from schemas.topic import load_topics
     from services.audit import log_admin_action
 
@@ -180,10 +181,14 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
     if new_category not in topics:
         return api_response(error=f"Unknown category: {new_category}", status=400)
     try:
+        from sqlalchemy import update
+
         from services.cache import get_response_cache
+
         cache = get_response_cache()
-        for article in articles:
-            article.category = new_category
+        article_ids = [a.id for a in articles]
+        stmt = update(Article).where(Article.id.in_(article_ids)).values(category=new_category)
+        db.session.execute(stmt)
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
@@ -212,24 +217,34 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
 
 
 def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
+    from models import Article
     from services.audit import log_admin_action
     from services.cache import get_response_cache
     from tasks.select import select_article
 
     cache = get_response_cache()
 
-    for article in articles:
-        article.pipeline_status = PipelineStatus.PENDING
-        article.pipeline_started_at = datetime.now(timezone.utc)
-        article.retry_count = 0
-        article.total_retries = 0
-        article.last_error = None
-        article.selector_result = None
-        article.research_brief = None
-        article.draft_article = None
-        article.final_article = None
-
     try:
+        from sqlalchemy import update
+
+        article_ids = [a.id for a in articles]
+        now = datetime.now(timezone.utc)
+        stmt = (
+            update(Article)
+            .where(Article.id.in_(article_ids))
+            .values(
+                pipeline_status=PipelineStatus.PENDING,
+                pipeline_started_at=now,
+                retry_count=0,
+                total_retries=0,
+                last_error=None,
+                selector_result=None,
+                research_brief=None,
+                draft_article=None,
+                final_article=None,
+            )
+        )
+        db.session.execute(stmt)
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
@@ -390,8 +405,10 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
 
     if action == "delete":
         try:
-            for article in articles:
-                db.session.delete(article)
+            from sqlalchemy import delete
+
+            stmt = delete(Article).where(Article.id.in_(article_ids))
+            db.session.execute(stmt)
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
@@ -424,6 +441,8 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             )
 
         try:
+            from sqlalchemy import update
+
             for article in articles:
                 current_status = article.pipeline_status
                 valid_next = VALID_TRANSITIONS.get(current_status, frozenset())
@@ -433,7 +452,8 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
                         f"Valid transitions from '{current_status}': {', '.join(sorted(valid_next)) if valid_next else 'none'}",
                         status=400,
                     )
-                article.pipeline_status = new_status
+            stmt = update(Article).where(Article.id.in_(article_ids)).values(pipeline_status=new_status)
+            db.session.execute(stmt)
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()

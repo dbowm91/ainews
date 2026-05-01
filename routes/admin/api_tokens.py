@@ -4,10 +4,12 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models import ApiToken
+from routes.admin import require_auth
 
 api_tokens_bp = Blueprint("api_tokens", __name__)
 
 
+@require_auth
 @api_tokens_bp.route("/api-tokens", methods=["GET"])
 def list_tokens():
     """List all API tokens (without exposing hashes)."""
@@ -24,6 +26,7 @@ def list_tokens():
     ])
 
 
+@require_auth
 @api_tokens_bp.route("/api-tokens", methods=["POST"])
 def create_token():
     """Create a new API token and return the plain text token."""
@@ -58,6 +61,7 @@ def create_token():
     }), 201
 
 
+@require_auth
 @api_tokens_bp.route("/api-tokens/<int:token_id>", methods=["DELETE"])
 def delete_token(token_id):
     """Delete an API token."""

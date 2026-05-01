@@ -57,6 +57,7 @@ check_deps() {
         cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
         log_warn "Edit .env to configure your settings before running"
     fi
+    chmod 600 "$PROJECT_DIR/.env" 2>/dev/null || true
 
     return $missing
 }

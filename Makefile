@@ -9,6 +9,7 @@ install: ## Create venv and install dependencies
 	.venv/bin/pip install -r requirements.txt
 	.venv/bin/pip install -r requirements-dev.txt
 	@test -f .env || (cp .env.example .env && echo "Created .env — edit it before running")
+	@chmod 600 .env
 
 dev: ## Start local development (Flask + Celery)
 	bash scripts/dev.sh

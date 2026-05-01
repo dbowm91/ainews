@@ -8,6 +8,7 @@ from flask import Response, request
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 from routes.decorators import commit, validate_csrf_json
+from services.audit import log_admin_action
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,21 @@ def create_webhook() -> tuple[Response, int] | Response:
     if error:
         return error
 
+    try:
+        log_admin_action(
+            "webhook_create",
+            target_type="webhook",
+            target_id=webhook.id,
+            details={
+                "name": webhook.name,
+                "url": webhook.url,
+                "events": webhook.events,
+            },
+            category="webhook",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for webhook_create")
+
     return api_response(
         data={
             "message": "Webhook created",
@@ -230,6 +246,22 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if error:
         return error
 
+    try:
+        log_admin_action(
+            "webhook_update",
+            target_type="webhook",
+            target_id=webhook.id,
+            details={
+                "name": webhook.name,
+                "url": webhook.url,
+                "events": webhook.events,
+                "active": webhook.active,
+            },
+            category="webhook",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for webhook_update")
+
     return api_response(meta={"message": "Webhook updated"})
 
 
@@ -246,6 +278,17 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     error = commit(db, "Failed to delete webhook")
     if error:
         return error
+
+    try:
+        log_admin_action(
+            "webhook_delete",
+            target_type="webhook",
+            target_id=webhook_id,
+            details={"name": webhook.name},
+            category="webhook",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for webhook_delete")
 
     return api_response(meta={"message": "Webhook deleted"})
 

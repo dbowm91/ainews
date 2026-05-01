@@ -6,6 +6,7 @@ from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 from routes.decorators import commit, validate_csrf_json
 from schemas.admin import CreateSourceRequest, UpdateSourceRequest
+from services.audit import log_admin_action
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,23 @@ def create_source() -> tuple[Response, int] | Response:
     error = commit(db, "Failed to create source")
     if error:
         return error
+
+    try:
+        log_admin_action(
+            "source_create",
+            target_type="source",
+            target_id=source.id,
+            details={
+                "source_key": source.source_key,
+                "name": source.name,
+                "url": source.url,
+                "source_type": source.source_type,
+                "active": source.active,
+            },
+            category="config",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for source_create")
 
     return api_response(
         data={
@@ -182,6 +200,23 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
     if error:
         return error
 
+    try:
+        log_admin_action(
+            "source_update",
+            target_type="source",
+            target_id=source.id,
+            details={
+                "source_key": source.source_key,
+                "name": source.name,
+                "url": source.url,
+                "source_type": source.source_type,
+                "active": source.active,
+            },
+            category="config",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for source_update")
+
     return api_response(meta={"message": "Source updated"})
 
 
@@ -235,6 +270,23 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
     if error:
         return error
 
+    try:
+        log_admin_action(
+            "source_update_partial",
+            target_type="source",
+            target_id=source.id,
+            details={
+                "source_key": source.source_key,
+                "name": source.name,
+                "url": source.url,
+                "source_type": source.source_type,
+                "active": source.active,
+            },
+            category="config",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for source_update_partial")
+
     return api_response(
         data={
             "id": source.id,
@@ -270,5 +322,16 @@ def delete_source(source_id: int) -> tuple[Response, int] | Response:
     error = commit(db, "Failed to delete source")
     if error:
         return error
+
+    try:
+        log_admin_action(
+            "source_delete",
+            target_type="source",
+            target_id=source_id,
+            details={"source_key": source.source_key},
+            category="config",
+        )
+    except Exception:
+        logger.warning("Audit logging failed for source_delete")
 
     return api_response(meta={"message": "Source deleted"})

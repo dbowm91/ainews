@@ -458,6 +458,112 @@ class TestRunSubagent:
                         assert result.used_fallback is True
                         assert mock_provider.chat_structured.call_count == 1
 
+    def test_run_subagent_template_missing_key_returns_fallback(self, app):
+        """When template has missing key, returns fallback."""
+        with app.app_context():
+            with patch("services.subagent.resolve_subagent_config") as mock_resolve:
+                from schemas.pipeline import SubagentStageConfig
+
+                mock_resolve.return_value = SubagentStageConfig(
+                    enabled=True,
+                    provider="ollama-local",
+                    model="qwen3:8b",
+                    max_tokens=2048,
+                    temperature=0.0,
+                )
+
+                from services.subagent import run_subagent
+
+                result = run_subagent(
+                    task_type="research_synthesis",
+                    stage="research",
+                    prompt_data={"title": "t", "body": "b"},  # missing web_results
+                    response_model=MagicMock(),
+                )
+
+                assert result.synthesis == ""
+                assert result.used_fallback is True
+
+    def test_run_subagent_provider_timeout_error_retries(self, app):
+        """Retry on ProviderTimeoutError."""
+        with app.app_context():
+            from services.llm.errors import ProviderTimeoutError
+
+            mock_provider = MagicMock()
+            mock_response = MagicMock()
+            mock_response.synthesis = "synthesized content"
+            mock_provider.chat_structured.side_effect = [
+                ProviderTimeoutError("timeout"),
+                mock_response,
+            ]
+
+            with patch("services.subagent.resolve_subagent_config") as mock_resolve:
+                with patch("services.llm.get_provider_by_id") as mock_get_provider:
+                    from schemas.pipeline import SubagentStageConfig
+
+                    mock_resolve.return_value = SubagentStageConfig(
+                        enabled=True,
+                        provider="ollama-local",
+                        model="qwen3:8b",
+                        max_tokens=2048,
+                        temperature=0.0,
+                        max_retries=1,
+                        retry_delay=0.01,
+                    )
+                    mock_get_provider.return_value = mock_provider
+
+                    from schemas.llm_responses import ResearchSynthesisResponse
+                    from services.subagent import run_subagent
+
+                    result = run_subagent(
+                        task_type="research_synthesis",
+                        stage="research",
+                        prompt_data={"title": "t", "body": "b", "web_results": "wr"},
+                        response_model=ResearchSynthesisResponse,
+                    )
+
+                    assert result.synthesis == "synthesized content"
+                    assert mock_provider.chat_structured.call_count == 2
+
+    def test_run_subagent_connection_error_retries(self, app):
+        """Retry on ConnectionError."""
+        with app.app_context():
+            mock_provider = MagicMock()
+            mock_response = MagicMock()
+            mock_response.synthesis = "synthesized content"
+            mock_provider.chat_structured.side_effect = [
+                ConnectionError("connection failed"),
+                mock_response,
+            ]
+
+            with patch("services.subagent.resolve_subagent_config") as mock_resolve:
+                with patch("services.llm.get_provider_by_id") as mock_get_provider:
+                    from schemas.pipeline import SubagentStageConfig
+
+                    mock_resolve.return_value = SubagentStageConfig(
+                        enabled=True,
+                        provider="ollama-local",
+                        model="qwen3:8b",
+                        max_tokens=2048,
+                        temperature=0.0,
+                        max_retries=1,
+                        retry_delay=0.01,
+                    )
+                    mock_get_provider.return_value = mock_provider
+
+                    from schemas.llm_responses import ResearchSynthesisResponse
+                    from services.subagent import run_subagent
+
+                    result = run_subagent(
+                        task_type="research_synthesis",
+                        stage="research",
+                        prompt_data={"title": "t", "body": "b", "web_results": "wr"},
+                        response_model=ResearchSynthesisResponse,
+                    )
+
+                    assert result.synthesis == "synthesized content"
+                    assert mock_provider.chat_structured.call_count == 2
+
 
 class TestResolveSubagentConfig:
     """Test resolve_subagent_config function."""
@@ -748,6 +854,36 @@ class TestRunSubagentWithTools:
                         assert result.used_fallback is False
                         assert mock_provider.chat_with_tools.call_count == 3
 
+    def test_run_subagent_with_tools_template_missing_key(self, app):
+        """When template has missing key, returns fallback."""
+        with app.app_context():
+            with patch("services.subagent.resolve_subagent_config") as mock_resolve:
+                from schemas.llm_responses import SubagentResponse
+                from schemas.pipeline import SubagentStageConfig
+
+                mock_resolve.return_value = SubagentStageConfig(
+                    enabled=True,
+                    provider="ollama-local",
+                    model="qwen3:8b",
+                    max_tokens=2048,
+                    temperature=0.0,
+                )
+
+                from services.subagent import run_subagent_with_tools
+
+                result = run_subagent_with_tools(
+                    task_type="research_synthesis",
+                    stage="research",
+                    prompt_data={"title": "t", "body": "b"},  # missing web_results
+                    response_model=SubagentResponse,
+                    tools=[],
+                )
+
+                assert result.synthesis == ""
+                assert result.used_fallback is True
+
+
+
 
 class TestSubagentChain:
     """Test run_subagent_chain function."""
@@ -935,6 +1071,49 @@ class TestSubagentChain:
                 assert result["used_fallback"] is True
                 assert "chain" in result["fallback_stages"]
 
+    def test_chain_step_condition_evaluation_error_skips_step(self, app):
+        """Step is skipped when condition evaluation raises ValueError."""
+        with app.app_context():
+            with patch("schemas.pipeline.load_pipeline_config") as mock_load:
+                with patch("services.llm.get_provider_by_id") as mock_get_provider:
+                    from schemas.pipeline import (
+                        SubagentChainConfig,
+                        SubagentChainStep,
+                        SubagentStageConfig,
+                    )
+
+                    chain_config = SubagentChainConfig(
+                        enabled=True,
+                        steps=[
+                            SubagentChainStep(
+                                task_type="research_synthesis",
+                                prompt_data_template="{title}",
+                                response_model=None,
+                                condition="unknown_var == 1",  # Will raise ValueError
+                            ),
+                        ],
+                        max_length=10,
+                    )
+                    mock_config = MagicMock()
+                    mock_config.subagent.chains = {"test_chain": chain_config}
+                    mock_config.subagent.research = SubagentStageConfig(enabled=True)
+                    mock_load.return_value = mock_config
+                    mock_get_provider.return_value = MagicMock()
+
+                    from services.subagent import run_subagent_chain
+
+                    result = run_subagent_chain(
+                        chain_name="test_chain",
+                        steps=[],
+                        initial_prompt_data={"title": "test"},
+                    )
+
+                    step_result = result["results"]["test_chain_step_0"]
+                    assert step_result["skipped"] is True
+                    assert step_result["synthesis"] == ""
+
+
+
 
 class TestEvaluateCondition:
     """Test _evaluate_condition function."""
@@ -1020,3 +1199,433 @@ class TestEvaluateCondition:
         assert _evaluate_condition("results['count'] >= 5", context) is True
         assert _evaluate_condition("results['active']", context) is True
         assert _evaluate_condition("results['key'] != 'wrong'", context) is True
+
+    def test_evaluate_condition_protected_attribute(self):
+        """Accessing protected attributes raises ValueError."""
+        from services.subagent import _evaluate_condition
+
+        class Obj:
+            _private = "value"
+
+        context = {"results": {"obj": Obj()}}
+        # Attribute access on _private should raise ValueError
+        with pytest.raises(ValueError):
+            _evaluate_condition("results['obj']._private == 'value'", context)
+
+    def test_evaluate_condition_subscript_non_dict(self):
+        """Subscript on non-dict/list returns False."""
+        from services.subagent import _evaluate_condition
+
+        context = {"results": {"items": "not a list"}}
+        # Subscript on string is not allowed, condition returns False
+        assert _evaluate_condition("results['items'][0] == 'a'", context) is False
+
+    def test_evaluate_condition_attribute_access(self):
+        """Attribute access on objects works."""
+        from services.subagent import _evaluate_condition
+
+        class Obj:
+            attr = "test"
+
+        context = {"results": {"obj": Obj()}}
+        assert _evaluate_condition("results['obj'].attr == 'test'", context) is True
+
+    def test_evaluate_condition_lambda_blocked(self):
+        """Lambda expressions in conditions raise ValueError."""
+        from services.subagent import _evaluate_condition
+
+        context = {"results": {}}
+        with pytest.raises(ValueError):
+            _evaluate_condition("lambda x: x", context)
+
+    def test_evaluate_condition_not_in_operator(self):
+        """'not in' operator works correctly."""
+        from services.subagent import _evaluate_condition
+
+        context = {"results": {"items": [1, 2, 3]}}
+        assert _evaluate_condition("5 not in results['items']", context) is True
+        assert _evaluate_condition("2 not in results['items']", context) is False
+
+
+class TestToolRegistry:
+    """Test tool registry functions."""
+
+    def test_register_tool(self):
+        from services.subagent import _TOOL_REGISTRY, register_tool, ToolDefinition
+
+        _TOOL_REGISTRY.clear()
+        tool = ToolDefinition(name="test_tool", description="test", parameters={}, fn=lambda: None)
+        register_tool(tool)
+        assert "test_tool" in _TOOL_REGISTRY
+        assert _TOOL_REGISTRY["test_tool"] == tool
+
+    def test_get_registered_tools(self):
+        from services.subagent import _TOOL_REGISTRY, get_registered_tools, register_tool, ToolDefinition
+
+        _TOOL_REGISTRY.clear()
+        tool1 = ToolDefinition(name="t1", description="t1", parameters={}, fn=lambda: None)
+        tool2 = ToolDefinition(name="t2", description="t2", parameters={}, fn=lambda: None)
+        register_tool(tool1)
+        register_tool(tool2)
+        tools = get_registered_tools()
+        assert len(tools) == 2
+        assert any(t.name == "t1" for t in tools)
+        assert any(t.name == "t2" for t in tools)
+
+    def test_initialize_tool_registry_no_filter(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry()
+            assert len(tools) > 0
+            tool_names = [t.name for t in tools]
+            assert "get_topic_note" in tool_names
+            assert "web_search" in tool_names
+
+    def test_initialize_tool_registry_with_tool_names(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["web_search"])
+            assert len(tools) == 1
+            assert tools[0].name == "web_search"
+
+    def test_initialize_tool_registry_with_selector(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            class MockSelector:
+                def select_tools(self, all_tools, context):
+                    return [t for t in all_tools if t.name == "get_topic_note"]
+
+            _TOOL_REGISTRY.clear()
+            selector = MockSelector()
+            tools = initialize_tool_registry(selector=selector)
+            assert len(tools) == 1
+            assert tools[0].name == "get_topic_note"
+
+    def test_initialize_tool_registry_with_context(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            class MockSelector:
+                def select_tools(self, all_tools, context):
+                    assert context == {"key": "value"}
+                    return all_tools
+
+            _TOOL_REGISTRY.clear()
+            selector = MockSelector()
+            tools = initialize_tool_registry(selector=selector, context={"key": "value"})
+            assert len(tools) > 0
+
+
+class TestBuiltInTools:
+    """Test built-in tool functions."""
+
+    def test_get_topic_note_success(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["get_topic_note"])
+            assert len(tools) == 1
+            tool = tools[0]
+            assert tool.name == "get_topic_note"
+
+            with patch("services.context_service.get_topic_note") as mock_get_note:
+                mock_note = MagicMock()
+                mock_note.note = "test note content"
+                mock_get_note.return_value = mock_note
+
+                with patch("services.cache.get_response_cache") as mock_cache:
+                    mock_cache_instance = MagicMock()
+                    mock_cache_instance.get_or_set.return_value = "test note content"
+                    mock_cache.return_value = mock_cache_instance
+
+                    result = tool.fn(topic="test_topic", source="test_source")
+                    assert result == "test note content"
+
+    def test_get_topic_note_not_found(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["get_topic_note"])
+            tool = tools[0]
+
+            with patch("services.context_service.get_topic_note") as mock_get_note:
+                mock_get_note.return_value = None
+
+                with patch("services.cache.get_response_cache") as mock_cache:
+                    mock_cache_instance = MagicMock()
+                    mock_cache_instance.get_or_set.return_value = "No note found for this topic."
+                    mock_cache.return_value = mock_cache_instance
+
+                    result = tool.fn(topic="test_topic")
+                    assert result == "No note found for this topic."
+
+    def test_search_web_success(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["web_search"])
+            assert len(tools) == 1
+            tool = tools[0]
+            assert tool.name == "web_search"
+
+            with patch("services.search.search_web") as mock_search:
+                mock_result = MagicMock()
+                mock_result.title = "Test Result"
+                mock_result.snippet = "Test snippet content"
+                mock_search.return_value = [mock_result]
+
+                result = tool.fn(query="test query", max_results=1)
+                assert "Test Result: Test snippet content..." in result
+
+    def test_search_web_no_results(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["web_search"])
+            tool = tools[0]
+
+            with patch("services.search.search_web") as mock_search:
+                mock_search.return_value = []
+                result = tool.fn(query="test query")
+                assert result == "No search results found."
+
+    def test_search_web_error(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["web_search"])
+            tool = tools[0]
+
+            with patch("services.search.search_web") as mock_search:
+                mock_search.side_effect = ConnectionError("connection failed")
+                result = tool.fn(query="test query")
+                assert "Error performing web search" in result
+
+    def test_get_topic_note_sql_error(self, app):
+        with app.app_context():
+            from sqlalchemy.exc import SQLAlchemyError
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["get_topic_note"])
+            tool = tools[0]
+
+            with patch("services.context_service.get_topic_note") as mock_get_note:
+                mock_get_note.side_effect = SQLAlchemyError("db error")
+
+                with patch("services.cache.get_response_cache") as mock_cache:
+                    mock_cache_instance = MagicMock()
+                    mock_cache_instance.get_or_set.return_value = "Error retrieving topic note: SQLAlchemyError"
+                    mock_cache.return_value = mock_cache_instance
+
+                    result = tool.fn(topic="test_topic")
+                    assert "Error retrieving topic note" in result
+
+    def test_get_topic_note_unexpected_error(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["get_topic_note"])
+            tool = tools[0]
+
+            with patch("services.context_service.get_topic_note") as mock_get_note:
+                mock_get_note.side_effect = Exception("unexpected")
+
+                with patch("services.cache.get_response_cache") as mock_cache:
+                    mock_cache_instance = MagicMock()
+                    mock_cache_instance.get_or_set.return_value = "Error retrieving topic note: Exception"
+                    mock_cache.return_value = mock_cache_instance
+
+                    result = tool.fn(topic="test_topic")
+                    assert "Error retrieving topic note" in result
+
+    def test_search_web_timeout_error(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["web_search"])
+            tool = tools[0]
+
+            with patch("services.search.search_web") as mock_search:
+                mock_search.side_effect = TimeoutError("timeout")
+                result = tool.fn(query="test query")
+                assert "Error performing web search" in result
+
+    def test_search_web_value_error(self, app):
+        with app.app_context():
+            from services.subagent import initialize_tool_registry, _TOOL_REGISTRY
+
+            _TOOL_REGISTRY.clear()
+            tools = initialize_tool_registry(tool_names=["web_search"])
+            tool = tools[0]
+
+            with patch("services.search.search_web") as mock_search:
+                mock_search.side_effect = ValueError("invalid query")
+                result = tool.fn(query="test query")
+                assert "Error performing web search" in result
+
+
+class TestResolveTemplateVariables:
+    """Test _resolve_template_variables function."""
+
+    def test_resolves_simple_variables(self):
+        from services.subagent import _resolve_template_variables
+
+        initial = {"title": "test title"}
+        results = {}
+        resolved = _resolve_template_variables("{title}", initial, results)
+        assert resolved["title"] == "test title"
+
+    def test_resolves_previous_step_results(self):
+        from services.subagent import _resolve_template_variables
+
+        initial = {"content": "{step_0}"}
+        results = {"step_0": "previous content"}
+        resolved = _resolve_template_variables("{content}", initial, results)
+        assert resolved["content"] == "previous content"
+
+    def test_handles_missing_keys_in_results(self):
+        from services.subagent import _resolve_template_variables
+
+        initial = {"content": "{missing_key}"}
+        results = {}
+        resolved = _resolve_template_variables("{content}", initial, results)
+        assert resolved["content"] == "{missing_key}"
+
+    def test_no_variables_no_change(self):
+        from services.subagent import _resolve_template_variables
+
+        initial = {"title": "no variables here"}
+        results = {}
+        resolved = _resolve_template_variables("{title}", initial, results)
+        assert resolved["title"] == "no variables here"
+
+
+class TestLoadPromptTemplate:
+    """Test _load_prompt_template function."""
+
+    def test_load_existing_file(self, tmp_path):
+        from services.subagent import _load_prompt_template, BASE_DIR
+        import os
+
+        test_file = BASE_DIR / "test_prompt.txt"
+        test_file.write_text("test content")
+        try:
+            result = _load_prompt_template("test_prompt.txt")
+            assert result == "test content"
+        finally:
+            os.remove(test_file)
+
+    def test_load_nonexistent_file(self):
+        from services.subagent import _load_prompt_template
+
+        result = _load_prompt_template("nonexistent/file.txt")
+        assert result is None
+
+
+class TestGetAllToolsCached:
+    """Test _get_all_tools_cached function."""
+
+    def test_returns_tuple_of_tools(self, app):
+        with app.app_context():
+            from services.subagent import _get_all_tools_cached
+
+            tools = _get_all_tools_cached()
+            assert isinstance(tools, tuple)
+            assert len(tools) > 0
+
+    def test_returns_same_object_on_multiple_calls(self, app):
+        with app.app_context():
+            from services.subagent import _get_all_tools_cached
+
+            tools1 = _get_all_tools_cached()
+            tools2 = _get_all_tools_cached()
+            assert tools1 is tools2
+
+
+class TestGetSubagentProviderAndConfig:
+    """Test _get_subagent_provider_and_config function."""
+
+    def test_uses_stage_config_provider_model(self, app):
+        with app.app_context():
+            from schemas.pipeline import SubagentStageConfig
+            from services.subagent import _get_subagent_provider_and_config
+
+            stage_config = SubagentStageConfig(
+                enabled=True,
+                provider="custom-provider",
+                model="custom-model",
+                max_tokens=4096,
+                temperature=0.5,
+            )
+
+            with patch("services.llm.get_provider_by_id") as mock_get_provider:
+                mock_provider = MagicMock()
+                mock_get_provider.return_value = mock_provider
+
+                provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
+                    stage_config, default_role="editor"
+                )
+
+                assert provider == mock_provider
+                assert model == "custom-model"
+                assert max_tokens == 4096
+                assert temperature == 0.5
+
+    def test_falls_back_to_role_config(self, app):
+        with app.app_context():
+            from schemas.pipeline import SubagentStageConfig
+            from services.subagent import _get_subagent_provider_and_config
+
+            stage_config = SubagentStageConfig(
+                enabled=True,
+                provider=None,
+                model=None,
+            )
+
+            with patch("services.subagent.get_provider_for_role") as mock_get_role:
+                mock_provider = MagicMock()
+                mock_get_role.return_value = (mock_provider, "role-model", 2048, 0.0)
+
+                provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
+                    stage_config, default_role="researcher"
+                )
+
+                assert provider == mock_provider
+                assert model == "role-model"
+                assert isinstance(max_tokens, int)
+                assert temperature == 0.0
+
+    def test_uses_stage_config_max_tokens_over_role(self, app):
+        with app.app_context():
+            from schemas.pipeline import SubagentStageConfig
+            from services.subagent import _get_subagent_provider_and_config
+
+            stage_config = SubagentStageConfig(
+                enabled=True,
+                provider=None,
+                model=None,
+                max_tokens=4096,
+            )
+
+            with patch("services.subagent.get_provider_for_role") as mock_get_role:
+                mock_provider = MagicMock()
+                mock_get_role.return_value = (mock_provider, "role-model", 2048, 0.0)
+
+                _, _, max_tokens, _ = _get_subagent_provider_and_config(
+                    stage_config, default_role="editor"
+                )
+
+                assert max_tokens == 4096

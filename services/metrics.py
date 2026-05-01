@@ -112,7 +112,7 @@ class MetricsCollector:
         # Clear Redis keys if available
         if self._redis is not None:
             try:
-                keys = self._redis.keys(f"{self._REDIS_PREFIX}:*")
+                keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:*"))
                 if keys:
                     self._redis.delete(*keys)
             except redis.exceptions.RedisError:
@@ -130,7 +130,7 @@ class MetricsCollector:
         # Try to get counters from Redis
         try:
             if self._redis is not None:
-                counter_keys = self._redis.keys(f"{self._REDIS_PREFIX}:counter:*")
+                counter_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:counter:*"))
                 if counter_keys:
                     for key in counter_keys:
                         key_str = key.decode() if isinstance(key, bytes) else key
@@ -147,7 +147,7 @@ class MetricsCollector:
         # Try to get gauges from Redis
         try:
             if self._redis is not None:
-                gauge_keys = self._redis.keys(f"{self._REDIS_PREFIX}:gauge:*")
+                gauge_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:gauge:*"))
                 if gauge_keys:
                     for key in gauge_keys:
                         key_str = key.decode() if isinstance(key, bytes) else key
@@ -166,7 +166,7 @@ class MetricsCollector:
         # Try to get histograms from Redis
         try:
             if self._redis is not None:
-                histogram_keys = self._redis.keys(f"{self._REDIS_PREFIX}:histogram:*")
+                histogram_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:histogram:*"))
                 if histogram_keys:
                     for key in histogram_keys:
                         key_str = key.decode() if isinstance(key, bytes) else key
@@ -222,7 +222,7 @@ class MetricsCollector:
         # Try Redis first for counters
         try:
             if self._redis is not None:
-                counter_keys = self._redis.keys(f"{self._REDIS_PREFIX}:counter:*")
+                counter_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:counter:*"))
                 for key in counter_keys:
                     key_str = key.decode() if isinstance(key, bytes) else key
                     metric_name = key_str.replace(f"{self._REDIS_PREFIX}:counter:", "", 1)
@@ -238,7 +238,7 @@ class MetricsCollector:
         # Try Redis first for gauges
         try:
             if self._redis is not None:
-                gauge_keys = self._redis.keys(f"{self._REDIS_PREFIX}:gauge:*")
+                gauge_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:gauge:*"))
                 for key in gauge_keys:
                     key_str = key.decode() if isinstance(key, bytes) else key
                     metric_name = key_str.replace(f"{self._REDIS_PREFIX}:gauge:", "", 1)
@@ -256,7 +256,7 @@ class MetricsCollector:
         # Try Redis first for histograms
         try:
             if self._redis is not None:
-                histogram_keys = self._redis.keys(f"{self._REDIS_PREFIX}:histogram:*")
+                histogram_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:histogram:*"))
                 for key in histogram_keys:
                     key_str = key.decode() if isinstance(key, bytes) else key
                     metric_name = key_str.replace(f"{self._REDIS_PREFIX}:histogram:", "", 1)

@@ -1,8 +1,9 @@
 import logging
 
-from flask import Response, jsonify, request
+from flask import Response, request
 
 from routes.admin import admin_api_bp, require_auth
+from routes.admin.api.utils import api_response
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,8 @@ def list_audit_logs() -> Response:
     if has_next:
         logs = logs[:per_page]
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "logs": [
                 {
                     "id": log.id,

@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timezone
 
-from flask import Response, jsonify, request
+from flask import Response, request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
 from routes import limit_content_length
 from routes.admin import admin_api_bp, require_auth
+from routes.admin.api.utils import api_response
 from routes.decorators import validate_csrf_json
 from schemas.admin import ArticleIdsParams, BulkArticleRequest
 from services.task_security import get_signed_kwargs
@@ -46,7 +47,7 @@ def get_article_ids():
             tag=request.args.get("tag", "", type=str).strip() or None,
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return api_response(error=str(e), status=400)
 
     query = params.q
     status = params.status or ""
@@ -148,7 +149,7 @@ def get_article_ids():
             q = q.filter(Article.tags.any(Tag.id == tag.id))
 
     ids = [row.id for row in q.with_entities(Article.id).limit(1000).all()]
-    return jsonify({"ids": ids, "count": len(ids)})
+    return api_response(data={"ids": ids, "count": len(ids)})
 
 
 @admin_api_bp.route("/articles/counts-by-status", methods=["GET"])
@@ -165,7 +166,7 @@ def get_article_counts_by_status():
         .all()
     )
     counts = {status: count for status, count in results}
-    return jsonify({"counts": counts, "total": sum(counts.values())})
+    return api_response(data={"counts": counts, "total": sum(counts.values())})
 
 
 def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Response:
@@ -174,10 +175,10 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
 
     new_category = (validated.category or "").strip()
     if not new_category:
-        return jsonify({"error": "category is required"}), 400
+        return api_response(error="category is required", status=400)
     topics = load_topics().topics
     if new_category not in topics:
-        return jsonify({"error": f"Unknown category: {new_category}"}), 400
+        return api_response(error=f"Unknown category: {new_category}", status=400)
     try:
         from services.cache import get_response_cache
         cache = get_response_cache()
@@ -186,7 +187,7 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"error": "Failed to update articles"}), 500
+        return api_response(error="Failed to update articles", status=500)
 
     for article in articles:
         cache.invalidate(f"pub:article_detail:{article.id}")
@@ -207,9 +208,7 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
         )
     except Exception:
         logger.warning("Audit logging failed for article_bulk_set_category")
-    return jsonify(
-        {"message": f"Updated {len(articles)} articles to category '{new_category}'"}
-    )
+    return api_response(meta={"message": f"Updated {len(articles)} articles to category '{new_category}'"})
 
 
 def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
@@ -234,7 +233,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"error": "Failed to reset articles for reprocessing"}), 500
+        return api_response(error="Failed to reset articles for reprocessing", status=500)
 
     try:
         import redis.exceptions
@@ -282,13 +281,14 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             )
         except Exception:
             logger.warning("Audit logging failed for article_bulk_reprocess")
-        return jsonify(
-            {
+        return api_response(
+            data={
                 "message": f"Partial success: {dispatched} dispatched, {len(failed_ids)} failed",
                 "dispatched": dispatched,
                 "failed_article_ids": failed_ids,
-            }
-        ), 207
+            },
+            status=207,
+        )
 
     try:
         log_admin_action(
@@ -302,8 +302,8 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
         )
     except Exception:
         logger.warning("Audit logging failed for article_bulk_reprocess")
-    return jsonify(
-        {"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
+    return api_response(
+        meta={"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
     )
 
 
@@ -314,7 +314,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
 
     tag_names = validated.tags or []
     if not tag_names or not isinstance(tag_names, list):
-        return jsonify({"error": "tags must be a non-empty list"}), 400
+        return api_response(error="tags must be a non-empty list", status=400)
 
     try:
         from services.cache import get_response_cache
@@ -324,7 +324,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
     except Exception as e:
         logger.warning("Bulk add tags failed: %s", e)
         db.session.rollback()
-        return jsonify({"error": "Failed to add tags"}), 500
+        return api_response(error="Failed to add tags", status=500)
 
     for article in articles:
         cache.invalidate(f"pub:article_detail:{article.id}")
@@ -347,8 +347,8 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
         )
     except Exception:
         logger.warning("Audit logging failed for article_bulk_add_tags")
-    return jsonify(
-        {"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"}
+    return api_response(
+        meta={"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"}
     )
 
 
@@ -363,12 +363,12 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
 
     data = request.get_json(silent=True)
     if not data:
-        return jsonify({"error": "Invalid JSON body"}), 400
+        return api_response(error="Invalid JSON body", status=400)
 
     try:
         validated = BulkArticleRequest(**data)
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return api_response(error=str(e), status=400)
 
     article_ids = validated.article_ids
     action = validated.action
@@ -377,7 +377,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         from services.validation import validate_bulk_ids
         article_ids = validate_bulk_ids(article_ids)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return api_response(error=str(e), status=400)
 
     articles = (
         Article.query
@@ -386,7 +386,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         .all()
     )
     if not articles:
-        return jsonify({"error": "No articles found"}), 404
+        return api_response(error="No articles found", status=404)
 
     if action == "delete":
         try:
@@ -395,7 +395,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
-            return jsonify({"error": "Failed to delete articles"}), 500
+            return api_response(error="Failed to delete articles", status=500)
         try:
             from services.audit import log_admin_action
             from services.cache import get_response_cache
@@ -413,33 +413,31 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             )
         except Exception:
             logger.warning("Cache invalidation or audit logging failed")
-        return jsonify({"message": f"Deleted {len(articles)} articles"})
+        return api_response(meta={"message": f"Deleted {len(articles)} articles"})
 
     elif action == "set_status":
         new_status = validated.status or ""
         if new_status not in VALID_PIPELINE_STATUSES:
-            return jsonify(
-                {
-                    "error": f"Invalid status. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}"
-                }
-            ), 400
+            return api_response(
+                error=f"Invalid status. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+                status=400,
+            )
 
         try:
             for article in articles:
                 current_status = article.pipeline_status
                 valid_next = VALID_TRANSITIONS.get(current_status, frozenset())
                 if new_status not in valid_next:
-                    return jsonify(
-                        {
-                            "error": f"Invalid transition from '{current_status}' to '{new_status}'. "
-                            f"Valid transitions from '{current_status}': {', '.join(sorted(valid_next)) if valid_next else 'none'}"
-                        }
-                    ), 400
+                    return api_response(
+                        error=f"Invalid transition from '{current_status}' to '{new_status}'. "
+                        f"Valid transitions from '{current_status}': {', '.join(sorted(valid_next)) if valid_next else 'none'}",
+                        status=400,
+                    )
                 article.pipeline_status = new_status
             db.session.commit()
         except SQLAlchemyError:
             db.session.rollback()
-            return jsonify({"error": "Failed to update articles"}), 500
+            return api_response(error="Failed to update articles", status=500)
         try:
             from services.audit import log_admin_action
             from services.cache import get_response_cache
@@ -461,8 +459,8 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             )
         except Exception:
             logger.warning("Cache invalidation or audit logging failed")
-        return jsonify(
-            {"message": f"Updated {len(articles)} articles to '{new_status}'"}
+        return api_response(
+            meta={"message": f"Updated {len(articles)} articles to '{new_status}'"}
         )
 
     elif action == "set_category":
@@ -475,8 +473,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         return _bulk_add_tags(articles, validated, db)
 
     else:
-        return jsonify(
-            {
-                "error": "Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags"
-            }
-        ), 400
+        return api_response(
+            error="Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags",
+            status=400,
+        )

@@ -299,8 +299,9 @@ class TestBulkAddTags:
         )
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "message" in data
-        assert "dispatched" in data or "reprocessing" in data["message"].lower()
+        assert "meta" in data
+        assert "message" in data["meta"]
+        assert "dispatched" in data["meta"]["message"].lower() or "reprocessing" in data["meta"]["message"].lower()
         mock_celery_tasks["select"].apply_async.assert_called_once()
         call_kwargs = mock_celery_tasks["select"].apply_async.call_args.kwargs
         assert call_kwargs["args"] == (aid,)

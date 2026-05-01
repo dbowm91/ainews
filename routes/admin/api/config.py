@@ -1,8 +1,9 @@
 import logging
 
-from flask import Response, jsonify
+from flask import Response
 
 from routes.admin import admin_api_bp, require_auth
+from routes.admin.api.utils import api_response
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action
 
@@ -22,7 +23,9 @@ def reload_config() -> tuple[Response, int] | Response:
 
     is_valid, errors = validate_config()
     if not is_valid:
-        return jsonify({"error": "Config validation failed", "details": errors}), 400
+        return api_response(
+            error="Config validation failed", meta={"details": errors}, status=400
+        )
 
     get_config_cache().invalidate_all()
     clear_provider_cache()
@@ -43,7 +46,7 @@ def reload_config() -> tuple[Response, int] | Response:
         category="config",
     )
 
-    return jsonify({"message": "Config cache cleared"}), 200
+    return api_response(meta={"message": "Config cache cleared"})
 
 
 @admin_api_bp.route("/metrics")
@@ -51,7 +54,7 @@ def reload_config() -> tuple[Response, int] | Response:
 def app_metrics() -> Response:
     from services.metrics import get_metrics
 
-    return jsonify(get_metrics().get_metrics())
+    return api_response(data=get_metrics().get_metrics())
 
 
 @admin_api_bp.route("/metrics/prometheus")

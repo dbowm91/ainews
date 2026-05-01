@@ -1,8 +1,7 @@
 import logging
 
-from flask import jsonify
-
 from routes.admin import admin_api_bp, require_auth
+from routes.admin.api.utils import api_response
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +37,8 @@ def search_analytics():
         .all()
     )
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "top_queries": [
                 {
                     "query": row.query,

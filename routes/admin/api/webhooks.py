@@ -3,9 +3,10 @@ import logging
 import secrets
 from datetime import datetime, timezone
 
-from flask import Response, jsonify, request
+from flask import Response, request
 
 from routes.admin import admin_api_bp, require_auth
+from routes.admin.api.utils import api_response
 from routes.decorators import commit, validate_csrf_json
 
 logger = logging.getLogger(__name__)
@@ -57,8 +58,8 @@ def list_webhooks() -> Response:
     from models import Webhook
 
     webhooks = Webhook.query.order_by(Webhook.created_at.desc()).all()
-    return jsonify(
-        {
+    return api_response(
+        data={
             "webhooks": [
                 {
                     "id": w.id,
@@ -94,28 +95,28 @@ def create_webhook() -> tuple[Response, int] | Response:
 
     data = request.get_json(silent=True)
     if not data:
-        return jsonify({"error": "Invalid JSON body"}), 400
+        return api_response(error="Invalid JSON body", status=400)
 
     name = data.get("name", "").strip()
     url = data.get("url", "").strip()
     events = data.get("events", [])
 
     if not name:
-        return jsonify({"error": "name is required"}), 400
+        return api_response(error="name is required", status=400)
     if not url:
-        return jsonify({"error": "url is required"}), 400
+        return api_response(error="url is required", status=400)
     try:
         from services.url import validate_url_safe
 
         validate_url_safe(url)
     except Exception as e:
         logger.debug("Invalid webhook URL: %s", e)
-        return jsonify({"error": f"Invalid URL: {e}"}), 400
+        return api_response(error=f"Invalid URL: {e}", status=400)
     if not events or not isinstance(events, list):
-        return jsonify({"error": "events must be a non-empty list"}), 400
+        return api_response(error="events must be a non-empty list", status=400)
     invalid_events = [e for e in events if e not in KNOWN_WEBHOOK_EVENTS]
     if invalid_events:
-        return jsonify({"error": f"unknown event types: {invalid_events}"}), 400
+        return api_response(error=f"unknown event types: {invalid_events}", status=400)
 
     webhook = Webhook(
         name=name,
@@ -129,8 +130,8 @@ def create_webhook() -> tuple[Response, int] | Response:
     if error:
         return error
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "message": "Webhook created",
             "webhook": {
                 "id": webhook.id,
@@ -139,8 +140,9 @@ def create_webhook() -> tuple[Response, int] | Response:
                 "secret": _mask_secret(webhook.secret),
                 "events": webhook.events,
             },
-        }
-    ), 201
+        },
+        status=201,
+    )
 
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["GET"])
@@ -151,8 +153,8 @@ def get_webhook(webhook_id: int) -> Response:
     from models import Webhook
 
     webhook = db.get_or_404(Webhook, webhook_id)
-    return jsonify(
-        {
+    return api_response(
+        data={
             "webhook": {
                 "id": webhook.id,
                 "name": webhook.name,
@@ -198,7 +200,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     webhook = db.get_or_404(Webhook, webhook_id)
     data = request.get_json(silent=True)
     if not data:
-        return jsonify({"error": "Invalid JSON body"}), 400
+        return api_response(error="Invalid JSON body", status=400)
 
     if "name" in data:
         webhook.name = data["name"].strip()
@@ -210,14 +212,14 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
             validate_url_safe(new_url)
         except Exception as e:
             logger.debug("Invalid webhook URL update: %s", e)
-            return jsonify({"error": f"Invalid URL: {e}"}), 400
+            return api_response(error=f"Invalid URL: {e}", status=400)
         webhook.url = new_url
     if "events" in data:
         if not isinstance(data["events"], list):
-            return jsonify({"error": "events must be a list"}), 400
+            return api_response(error="events must be a list", status=400)
         invalid_events = [e for e in data["events"] if e not in KNOWN_WEBHOOK_EVENTS]
         if invalid_events:
-            return jsonify({"error": f"unknown event types: {invalid_events}"}), 400
+            return api_response(error=f"unknown event types: {invalid_events}", status=400)
         webhook.events = data["events"]
     if "active" in data:
         webhook.active = bool(data["active"])
@@ -228,7 +230,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if error:
         return error
 
-    return jsonify({"message": "Webhook updated"})
+    return api_response(meta={"message": "Webhook updated"})
 
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["DELETE"])
@@ -245,7 +247,7 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     if error:
         return error
 
-    return jsonify({"message": "Webhook deleted"})
+    return api_response(meta={"message": "Webhook deleted"})
 
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>/test", methods=["POST"])
@@ -269,7 +271,7 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
         event_data={"message": "This is a test webhook event"},
     )
 
-    return jsonify({"message": "Test webhook queued for delivery"}), 202
+    return api_response(meta={"message": "Test webhook queued for delivery"}, status=202)
 
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>/events", methods=["GET"])
@@ -296,8 +298,8 @@ def list_webhook_events(webhook_id: int) -> Response:
 
         return render_template("admin/partials/webhook_events.html", events=events)
 
-    return jsonify(
-        {
+    return api_response(
+        data={
             "events": [
                 {
                     "id": e.id,
@@ -327,7 +329,7 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
     webhook = db.get_or_404(Webhook, event.webhook_id)
 
     if not webhook.active:
-        return jsonify({"error": "Webhook is inactive"}), 400
+        return api_response(error="Webhook is inactive", status=400)
 
     secret = _get_webhook_secret(webhook)
 
@@ -349,4 +351,4 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
         idempotency_key=f"resend-{event.id}-{datetime.now(timezone.utc).isoformat()}",
     )
 
-    return jsonify({"message": "Webhook resend queued for delivery"}), 202
+    return api_response(meta={"message": "Webhook resend queued for delivery"}, status=202)

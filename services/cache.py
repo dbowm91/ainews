@@ -46,6 +46,7 @@ class ResponseCache:
         self._hits = 0
         self._misses = 0
         self._memory_lock = threading.Lock()
+        self._ttl = 120  # Default TTL in seconds
 
     def record_hit(self) -> None:
         """Record a cache hit, using Redis if available, else in-memory."""

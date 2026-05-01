@@ -32,13 +32,6 @@ class TestRunStage:
         article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
-        mocks["get_provider_for_role"].return_value = (
-            MagicMock(),
-            "qwen3:8b",
-            2048,
-            "ollama",
-        )
-
         limiter = MagicMock()
         limiter.acquire.return_value = True
         mocks["get_limiter"].return_value = limiter
@@ -82,13 +75,6 @@ class TestRunStage:
         article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
 
-        mocks["get_provider_for_role"].return_value = (
-            MagicMock(),
-            "qwen3:8b",
-            2048,
-            "ollama",
-        )
-
         limiter = MagicMock()
         limiter.acquire.return_value = True
         mocks["get_limiter"].return_value = limiter
@@ -124,13 +110,6 @@ class TestRunStage:
         article.retry_count = 0
         article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
-
-        mocks["get_provider_for_role"].return_value = (
-            MagicMock(),
-            "qwen3:8b",
-            2048,
-            "ollama",
-        )
 
         limiter = MagicMock()
         limiter.acquire.return_value = True
@@ -187,13 +166,6 @@ class TestRunStage:
         article.retry_count = 0
         article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
-
-        mocks["get_provider_for_role"].return_value = (
-            MagicMock(),
-            "qwen3:8b",
-            2048,
-            "ollama",
-        )
 
         limiter = MagicMock()
         limiter.acquire.return_value = False
@@ -275,13 +247,6 @@ class TestRunStage:
         article.retry_count = 0
         article.pipeline_started_at = None
         mocks["db"].session.get.return_value = article
-
-        mocks["get_provider_for_role"].return_value = (
-            MagicMock(),
-            "qwen3:8b",
-            2048,
-            "ollama",
-        )
 
         limiter = MagicMock()
         limiter.acquire.return_value = True

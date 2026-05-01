@@ -1,6 +1,5 @@
 """Shared mock setup for pipeline stage tests."""
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 
@@ -16,12 +15,12 @@ def setup_pipeline_mocks():
         "Article": patch("models.Article"),
         "db": patch("extensions.db"),
         "get_role_config": patch("schemas.pipeline.get_role_config"),
-        "get_provider_for_role": patch("services.llm.get_provider_for_role"),
+        "get_provider_chain": patch("tasks.pipeline.get_provider_chain"),
         "record_success": patch("services.llm.record_provider_success"),
         "record_failure": patch("services.llm.record_provider_failure"),
         "get_limiter": patch("services.limiter.get_limiter"),
         "get_redis": patch("extensions.get_redis"),
-        "get_config_with_default": patch("services.config_utils.get_config_with_default"),
+        "get_config_with_default": patch("services.pipeline_failure.get_config_with_default"),
     }
     mocks = {}
     for name, p in patches.items():
@@ -39,12 +38,9 @@ def setup_pipeline_mocks():
     article.pipeline_started_at = None
     mocks["db"].session.get.return_value = article
 
-    mocks["get_provider_for_role"].return_value = (
-        SimpleNamespace(tokens_used=100),
-        "qwen3:8b",
-        2048,
-        "ollama",
-    )
+    mocks["get_provider_chain"].return_value = [
+        (MagicMock(), "qwen3:8b", 2048, "ollama"),
+    ]
 
     limiter = MagicMock()
     limiter.acquire.return_value = True
@@ -57,12 +53,18 @@ def setup_pipeline_mocks():
     redis_mock.register_script.return_value = MagicMock()
     mocks["get_redis"].return_value = redis_mock
 
-    config_mock = MagicMock()
-    config_mock.PIPELINE_TIMEOUT_MINUTES = 60
-    config_mock.MAX_STAGE_RETRIES = 3
-    config_mock.MAX_TOTAL_RETRIES = 10
-    config_mock.CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
-    config_mock.CIRCUIT_BREAKER_RECOVERY_SECONDS = 300
-    mocks["get_config_with_default"].return_value = config_mock
+    # Mock get_config_with_default to return appropriate values based on key
+    def _config_side_effect(key, default):
+        config_values = {
+            "MAX_STAGE_RETRIES": 3,
+            "MAX_TOTAL_RETRIES": 10,
+            "MAX_STAGE_FAILURES": 5,
+            "PIPELINE_TIMEOUT_MINUTES": 60,
+            "CIRCUIT_BREAKER_FAILURE_THRESHOLD": 5,
+            "CIRCUIT_BREAKER_RECOVERY_SECONDS": 300,
+        }
+        return config_values.get(key, default)
+
+    mocks["get_config_with_default"].side_effect = _config_side_effect
 
     return patches, mocks

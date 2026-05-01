@@ -18,15 +18,30 @@ class TestPipelineEndToEnd:
         """Set up common mocks for all run_stage calls."""
         patches = {
             "get_role_config": patch("schemas.pipeline.get_role_config"),
-            "get_provider_for_role": patch("services.llm.get_provider_for_role"),
+            "get_provider_chain": patch("tasks.pipeline.get_provider_chain"),
             "record_success": patch("services.llm.record_provider_success"),
             "record_failure": patch("services.llm.record_provider_failure"),
             "get_limiter": patch("services.limiter.get_limiter"),
             "get_redis": patch("extensions.get_redis"),
+            "get_config_with_default": patch("services.config_utils.get_config_with_default"),
         }
         mocks = {}
         for name, p in patches.items():
             mocks[name] = p.start()
+
+        # Mock get_config_with_default to return appropriate values
+        def _config_side_effect(key, default):
+            config_values = {
+                "MAX_STAGE_RETRIES": 3,
+                "MAX_TOTAL_RETRIES": 10,
+                "MAX_STAGE_FAILURES": 5,
+                "PIPELINE_TIMEOUT_MINUTES": 60,
+                "CIRCUIT_BREAKER_FAILURE_THRESHOLD": 5,
+                "CIRCUIT_BREAKER_RECOVERY_SECONDS": 300,
+            }
+            return config_values.get(key, default)
+
+        mocks["get_config_with_default"].side_effect = _config_side_effect
 
         class PatchesContext:
             def __init__(self, patches, mocks):
@@ -75,12 +90,11 @@ class TestPipelineEndToEnd:
             self._configure_limiter(mocks)
             self._configure_redis(mocks)
 
-            mocks["get_provider_for_role"].return_value = (
-                MagicMock(),
-                "qwen3:8b",
-                2048,
-                "ollama",
-            )
+            # Mock provider chain to return a mock provider
+            mock_provider = MagicMock()
+            mocks["get_provider_chain"].return_value = [
+                (mock_provider, "qwen3:8b", 2048, "ollama"),
+            ]
 
             with app.app_context():
                 article = create_article(
@@ -165,11 +179,11 @@ class TestPipelineEndToEnd:
 
             with app.app_context():
                 with patch("tasks.pipeline._assign_tags"):
-                        result = run_stage("editor", article_id, edit_work, task_self)
-                        article = db.session.get(Article, article_id)
-                        assert article.pipeline_status == "done"
-                        assert article.final_article is not None
-                        assert article.retry_count == 0
+                    result = run_stage("editor", article_id, edit_work, task_self)
+                    article = db.session.get(Article, article_id)
+                    assert article.pipeline_status == "done"
+                    assert article.final_article is not None
+                    assert article.retry_count == 0
 
     def test_pipeline_degrades_on_max_retries(self, app, create_article):
         """Article degrades to next stage after MAX_STAGE_RETRIES failures."""
@@ -178,12 +192,11 @@ class TestPipelineEndToEnd:
             self._configure_limiter(mocks)
             self._configure_redis(mocks)
 
-            mocks["get_provider_for_role"].return_value = (
-                MagicMock(),
-                "qwen3:8b",
-                2048,
-                "ollama",
-            )
+            # Mock provider chain
+            mock_provider = MagicMock()
+            mocks["get_provider_chain"].return_value = [
+                (mock_provider, "qwen3:8b", 2048, "ollama"),
+            ]
 
             with app.app_context():
                 article = create_article(
@@ -205,9 +218,10 @@ class TestPipelineEndToEnd:
                     article = db.session.get(Article, article_id)
                     assert article.pipeline_status == "researching"
 
-                with patch("tasks.write.write_article"):
-                    _handle_stage_failure(article, "research", Exception("fail"))
+                # After max retries, should degrade to next stage
+                _handle_stage_failure(article, "research", Exception("fail"))
                 article = db.session.get(Article, article_id)
+                # Should now be in writing stage (degraded from researching)
                 assert article.pipeline_status == "writing"
                 assert article.retry_count == 0
 
@@ -217,6 +231,12 @@ class TestPipelineEndToEnd:
             self._configure_rc(mocks)
             self._configure_limiter(mocks)
             self._configure_redis(mocks)
+
+            # Mock provider chain
+            mock_provider = MagicMock()
+            mocks["get_provider_chain"].return_value = [
+                (mock_provider, "qwen3:8b", 2048, "ollama"),
+            ]
 
             with app.app_context():
                 article = create_article(

@@ -476,45 +476,52 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 - `aria-current="page"` for current page indicator
 - `role="navigation"` on nav element
 
-## Recent Improvements (Wave 1-8)
+## Recent Improvements (Completed)
 
-**Wave 1 - Critical Fixes:**
-- Redis lock fail-closed: `_acquire_stage_lock()` and newsletter generation now raise `RedisError` on Redis failures instead of proceeding unlocked
-- Version creation order: `create_article_version()` in edit pipeline called BEFORE modifying `article.final_article`
-- providers.yaml env resolution: `_load_providers_config_from_file()` calls `resolve_env_vars()` on raw YAML before Pydantic instantiation
-- Redis password: `docker-compose.yml` configures Redis with `requirepass` via `REDIS_PASSWORD` env var
+All Waves 1-5 improvement items have been fully implemented:
 
-**Wave 2 - Security & Observability:**
-- Celery healthcheck: Uses `celery -A celery_app inspect ping` instead of `redis-cli ping`
-- File permission validation: `services/file_permissions.py` warns on world-writable sensitive files
-- Lua atomic lock: Admin login lockout uses Lua script for atomic check-and-delete
-- OpenTelemetry: `get_tracer()` uses `OTLPSpanExporter` when `OTEL_EXPORTER_OTLP_ENDPOINT` is set
+**Wave 1 - Critical Fixes (COMPLETED):**
+- Celery task decorators: All tasks now have `acks_late=True` and `task_reject_on_worker_lost=True`
+- Cache stampede protection: Redis pub/sub pattern replaces polling in `ResponseCache.get_or_set()`
+- Environment variables: `resolve_env_var()` now supports `required=True` parameter
+- CSS consolidation: `critical.css` imports `variables.css`, duplicates removed, build script created
+- L1 cache TTL refresh: Redis TTL refreshed on L1 cache hits
 
-**Wave 3 - Frontend/Accessibility:**
-- Skip-link focus: `outline: none` removed from `.skip-link:focus` for keyboard visibility
-- Mobile nav keyboard: Label has `role="button"`, `tabindex="0"`, `aria-expanded`; Escape key closes mobile nav
-- Search UX: `minlength="2"` attribute on search inputs to prevent empty searches
-- Article card focus: `:focus-within` styling highlights card when links inside are focused
+**Wave 2 - High Priority (COMPLETED):**
+- SMTP connection pooling: `SMTPConnectionPool` class with health checks in `services/email.py`
+- Dashboard query consolidation: Caching (60s TTL) and consolidated queries
+- Bulk article N+1 fix: `joinedload(Article.source, Article.tags)` added
+- Webhook async dispatch: Moved to Celery task `dispatch_webhook_task`
+- HMAC task signing: All 10+ scheduled tasks verify HMAC signatures
+- Audit logging: `log_admin_action()` added to all mutation endpoints
+- Cache invalidation: Applied after all admin mutations
+- Redis-backed cache stats: With in-memory fallback
 
-**Wave 5 - Backend/Docker:**
-- Docker resource limits: `deploy.resources.limits` added to web (1G), celery-worker (512M), celery-beat (256M), redis (256M)
-- Granian workers: Now runs with 4 workers (aligned with systemd service)
-- Password hashing: install.sh fails with error if hashing script fails (no plaintext fallback)
+**Wave 3 - Medium Priority (COMPLETED):**
+- Article input validation: MAX_ constants and `_sanitize_field()` in `routes/admin/articles.py`
+- Database indexes: Added to `Webhook.active`, `Source.active`, `Source.source_type`, `Subscriber.newsletter_type`, `PipelineRun.run_type`, composite `(run_type, status)`
+- OpenTelemetry: Real `OTLPSpanExporter` used when endpoint is set
+- Exception handling: Tool functions catch `(SQLAlchemyError, KeyError, AttributeError)` before falling back to `Exception`
+- Template escaping: `|e` filter removed from bleach-sanitized content in templates
+- Admin API schemas: `schemas/admin.py` with Pydantic models
+- OTel tracing: `traced_llm_call` wraps subagent LLM invocations
+- Newsletter rollbacks: `db.session.rollback()` added to all exception handlers
 
-**Wave 6 - Performance:**
-- Cache invalidation: `pub:rss` changed to `pub:rss_feed` to match actual cache key pattern
-- Sitemap TTL: Aligned from 300s to 3600s
-- ConfigCache stampede protection: Uses `SET NX EX` distributed locking with polling fallback
-- Related articles date filter: `find_related_articles_dicts()` now filters to 30-day window
-- ThreadPoolExecutor cleanup: All module-level executors use `atexit.register()` for graceful shutdown
+**Wave 4 - LLM Pipeline (COMPLETED):**
+- Memory summarization: `smart_truncate_context()` with LLM-based summarization for overflow
+- Quality assessment: `services/quality.py` with `QualityScore`, `QualityAssessor`, `LLMQualityAssessor`
+- Tool selection: `services/tool_selection.py` with `ToolSelector` protocol and `StageAwareToolSelector`
+- Streaming support: `chat_streaming()` implemented in all LLM adapters (OpenAI, Anthropic, Ollama, Gemini)
+- Redis circuit breaker: `RedisCircuitBreaker` class with in-memory fallback
 
-**Wave 7 - Code Quality:**
-- _evaluate_condition fix: Uses `all()`/`any()` instead of `operator.and_`/`operator.or_` for logical operations
-- Type stubs: `types-requests` and `types-PyYAML` added to dev dependencies
-- PipelineLogger formatting: Uses `%-formatting` with `extra={}` for structured logging
-
-**Wave 8 - Pipeline Improvements:**
-- Dynamic stage lists: `get_all_stages_stats()` and `get_all_throughput_stats()` use `STAGE_STATUS_MAP.values()` instead of hardcoded list
-- Subagent tool registry caching: `initialize_tool_registry()` uses `@functools.lru_cache` on `_get_all_tools_cached()`
-- Error-type-specific retry: Pipeline tasks (select, research, write, edit) include `RateLimitError` in `autoretry_for`
-- Dead letter root cause aggregation: `get_stage_failure_reasons()` and `get_all_stages_failure_reasons()` provide failure reason breakdowns
+**Wave 5 - Additional Features (COMPLETED):**
+- API response standardization: `api_response()` helper with consistent JSON envelope
+- PATCH support: Added to sources and webhooks API
+- API versioning: `/api/v1/` prefix on all API routes
+- API token support: `ApiToken` model, token management UI, Bearer auth
+- Redis-backed metrics: Counters/gauges/histograms with in-memory fallback
+- Importance-weighted truncation: `importance_weighted_truncate()` in `services/prompts.py`
+- FTS5 search: `articles_fts` and `articles_admin_fts` virtual tables with ILIKE fallback
+- Container queries: `container-type: inline-size` in `articles.css` with `@supports` fallback
+- CSS @layer: Organization in `style.css` with layered `@import` statements
+- Token-aware truncation: `count_tokens()` and `max_tokens_for_model()` support

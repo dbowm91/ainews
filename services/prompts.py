@@ -217,7 +217,7 @@ def importance_weighted_truncate(
     return sep.join(seg for _, seg in selected)
 
 
-async def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, temperature: float = 0.0) -> str:
+def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, temperature: float = 0.0) -> str:
     """Summarize text using LLM to preserve key information.
 
     Args:
@@ -323,16 +323,12 @@ def smart_truncate_context(
     overflow = len(text) - max_chars
 
     if truncation_llm_enabled and overflow > truncation_llm_threshold:
-        import asyncio
-
         try:
-            summary = asyncio.get_event_loop().run_until_complete(
-                summarize_context(
-                    text,
-                    llm_provider=llm_provider,
-                    max_tokens=truncation_llm_max_tokens,
-                    temperature=truncation_llm_temperature,
-                ),
+            summary = summarize_context(
+                text,
+                llm_provider=llm_provider,
+                max_tokens=truncation_llm_max_tokens,
+                temperature=truncation_llm_temperature,
             )
             if summary:
                 result = f"{summary}\n\n{TRUNCATION_WARNING}"

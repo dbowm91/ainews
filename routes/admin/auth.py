@@ -8,7 +8,6 @@ from routes import limit_content_length
 from routes.admin import (
     _check_and_record_attempt,
     _clear_attempts,
-    _is_locked_out,
     _verify_password,
     admin_bp,
 )
@@ -42,9 +41,6 @@ def login() -> str | Response:
         return redirect(url_for("admin.dashboard"))
 
     ip = request.remote_addr or "unknown"
-    if _is_locked_out(ip):
-        error = "Too many failed attempts. Try again later."
-        return render_template("admin/login.html", error=error), 429
 
     error = None
     if request.method == "POST":
@@ -73,6 +69,7 @@ def login() -> str | Response:
                 log_admin_action("admin_login_failed_locked", user="admin", details={"ip": ip})
             except Exception as e:
                 logger.error("Failed to log admin login failure: %s", e)
+            return render_template("admin/login.html", error=error), 429
         else:
             error = "Invalid password"
             try:

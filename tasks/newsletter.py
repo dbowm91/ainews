@@ -7,6 +7,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
 from services.task_security import verify_task
+from constants import CELERY_TASK_MAX_RETRIES
 
 logger = get_task_logger(__name__)
 
@@ -20,7 +21,7 @@ logger = get_task_logger(__name__)
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    max_retries=3,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,
@@ -363,7 +364,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    max_retries=3,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=120,
     soft_time_limit=300,
     time_limit=360,

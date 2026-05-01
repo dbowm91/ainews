@@ -2,7 +2,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from constants import PipelineStatus, truncate_for_log
+from constants import PipelineStatus, truncate_for_log, CELERY_TASK_MAX_RETRIES
 from services.llm.errors import ProviderServerError
 from services.writer import CondensedArticle
 
@@ -36,7 +36,7 @@ def _is_degenerate_write(article_obj: CondensedArticle) -> bool:
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    max_retries=2,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,

@@ -5,6 +5,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
 from services.task_security import verify_task
+from constants import CELERY_TASK_MAX_RETRIES
 
 logger = get_task_logger(__name__)
 
@@ -19,7 +20,7 @@ logger = get_task_logger(__name__)
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    max_retries=2,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,
@@ -206,7 +207,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
             logger.warning("Failed to release crawl lock for %s", source_id)
 
 
-@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, max_retries=3, default_retry_delay=30, soft_time_limit=120, time_limit=180,
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, max_retries=CELERY_TASK_MAX_RETRIES, default_retry_delay=30, soft_time_limit=120, time_limit=180,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -256,7 +257,7 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    max_retries=2,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,

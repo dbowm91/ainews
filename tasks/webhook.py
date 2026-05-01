@@ -2,11 +2,12 @@
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import CELERY_TASK_MAX_RETRIES
 
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30, soft_time_limit=30, time_limit=60,
+@shared_task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES, default_retry_delay=30, soft_time_limit=30, time_limit=60,
              acks_late=True, task_reject_on_worker_lost=True,
              autoretry_for=(ConnectionError, TimeoutError), retry_backoff=True, retry_jitter=True)
 def dispatch_webhook_task(self, webhook_id, name, url, secret, event_type, event_data, idempotency_key=None):

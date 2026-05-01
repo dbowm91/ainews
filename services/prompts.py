@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,7 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _CHARS_PER_TOKEN = 4
 
 
+@lru_cache(maxsize=128)
 def count_tokens(text: str, model: str | None = None) -> int:
     """Count tokens in text using tiktoken if available, otherwise approximate.
 

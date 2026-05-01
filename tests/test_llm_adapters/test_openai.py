@@ -40,9 +40,12 @@ class TestOpenAIProvider:
         try:
             c = provider.client
             assert c is mock_client
-            mock_openai.OpenAI.assert_called_once_with(
-                api_key="sk-test", base_url="https://api.openai.com/v1", timeout=120.0
-            )
+            mock_openai.OpenAI.assert_called_once()
+            call_kwargs = mock_openai.OpenAI.call_args.kwargs
+            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["base_url"] == "https://api.openai.com/v1"
+            assert call_kwargs["timeout"] == 120.0
+            assert "http_client" in call_kwargs
         finally:
             sys.modules.pop("openai", None)
             if saved_openai is not None:

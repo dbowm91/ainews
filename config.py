@@ -21,6 +21,19 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent
 
 
+def _is_strong_secret_key(key: str) -> bool:
+    """Check if SECRET_KEY is a valid 64-character hex string (32 bytes)."""
+    if not key or not isinstance(key, str):
+        return False
+    if len(key) != 64:
+        return False
+    try:
+        int(key, 16)
+        return True
+    except ValueError:
+        return False
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     SECRET_KEY_FALLBACKS = [
@@ -234,6 +247,8 @@ class ProductionConfig(Config):
             raise RuntimeError("SECRET_KEY must be set in production")
         if len(cls.SECRET_KEY) < 32:
             raise RuntimeError("SECRET_KEY must be at least 32 characters")
+        if not _is_strong_secret_key(cls.SECRET_KEY):
+            raise ValueError("SECRET_KEY must be a 64-character hex string (32 bytes)")
         if not cls.SESSION_COOKIE_SECURE:
             raise RuntimeError("SESSION_COOKIE_SECURE must be True in production")
         if not cls.ADMIN_PASSWORD:

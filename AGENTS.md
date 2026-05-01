@@ -109,6 +109,7 @@ Rules are organized into focused modules in `static/css/`.
 - **ThreadPoolExecutor Pattern:** Blocking I/O uses ThreadPoolExecutor to avoid blocking Celery workers. Applied in `services/content_extractor.py`, `services/search/searxng.py`, `services/search/google.py`, `services/search/duckduckgo.py`, `services/subagent.py`. Module-level singleton executor with `submit()` + `future.result(timeout=N)`.
 - **Pipeline Throughput Counters:** `services/pipeline_monitor.py` provides throughput tracking with `record_throughput(stage, count=1)` and `get_throughput_stats(stage, minutes=15)`. Returns `total_items` and `items_per_minute`.
 - **Pipeline Failure Tracking:** `services/pipeline_failure.py` fires `article.failed` webhook on pipeline failure. `services/pipeline_monitor.py:record_stage_result()` records failure reason counters (rate_limit, timeout, server_error, circuit_open) in Redis.
+- **Soft Time Limit Persistence:** When Celery soft timeout occurs in pipeline stages, `tasks/pipeline.py` persists failure state (last_error, retry_count, total_retries) to DB before re-raising. Articles retain current `pipeline_status` to retry in-place from the timed-out stage, not from the beginning.
 
 ### Caching
 - **Subagent Context Caching:** `_get_topic_note` and `_get_related_articles` use `ResponseCache` with 120s TTL.
@@ -134,6 +135,7 @@ Rules are organized into focused modules in `static/css/`.
 - **Token-Aware Truncation:** Truncation respects model token limits via `count_tokens()` and `max_tokens_for_model()`.
 - **Streaming Support:** `chat_streaming()` method in `BaseLLMProvider` with implementations in OpenAI, Anthropic, Ollama, Gemini adapters.
 - **LLM Stage Metrics:** `record_provider_success(provider_id, model, tokens_used, stage="")` in `services/llm/__init__.py` includes `stage` label (select, research, write, edit) in metrics. All pipeline tasks pass `stage=` parameter.
+- **LLM Structured Output:** `BaseLLMProvider.chat_structured()` uses `_extract_json()` helper to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
 
 ### Sources & Articles
 - **Source CRUD API:** REST endpoints at `/api/v1/sources` for programmatic source management. Supports PATCH for partial updates.
@@ -164,6 +166,7 @@ Rules are organized into focused modules in `static/css/`.
 - **CSS Variables:** Canonical source in `variables.css`; `critical.css` uses `@import "./variables.css"`; build script at `build/generate-critical-css.js` syncs `critical_css.html`.
 - **Share Accessibility (JS Merged):** `static/js/share-a11y.js` merged into `static/js/app.js` with focus management and `aria-expanded` fixes. Script tags removed from `templates/base.html` and `templates/base_admin.html`.
 - **Pagination Accessibility:** Pagination template (`templates/partials/pagination.html`) includes ARIA attributes: `aria-label`, `aria-live="polite"`, `aria-current="page"`, `role="navigation"`.
+- **Client-Side Bookmarking:** Articles support localStorage-based bookmark toggle via `.bookmark-btn` elements in cards and detail views. State managed in `static/js/app.js` under `bookmarked_articles` key.
 
 ### Webhooks
 - **Async Dispatch:** Webhook delivery moved to Celery task `dispatch_webhook_task` in `tasks/webhook.py`. Routes `test_webhook` and `resend_webhook_event` dispatch asynchronously.

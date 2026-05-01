@@ -141,8 +141,8 @@ class TestSmartTruncateContext:
         assert "[... truncated ...]" in result
 
     @patch("schemas.pipeline.load_pipeline_config")
-    @patch("asyncio.get_event_loop")
-    def test_large_overflow_with_llm_success(self, mock_loop, mock_config):
+    @patch("services.prompts.summarize_context")
+    def test_large_overflow_with_llm_success(self, mock_summarize, mock_config):
         from schemas.pipeline import MemoryConfig
 
         mock_config.return_value.memory = MemoryConfig(
@@ -151,7 +151,7 @@ class TestSmartTruncateContext:
             truncation_llm_max_tokens=512,
             truncation_llm_temperature=0.0,
         )
-        mock_loop.return_value.run_until_complete.return_value = "This is a summary of the text."
+        mock_summarize.return_value = "This is a summary of the text."
 
         text = "e" * 500
         result, truncated = smart_truncate_context(text, max_chars=100)
@@ -160,15 +160,15 @@ class TestSmartTruncateContext:
         assert TRUNCATION_WARNING in result
 
     @patch("schemas.pipeline.load_pipeline_config")
-    @patch("asyncio.get_event_loop")
-    def test_llm_failure_falls_back_to_sliding_window(self, mock_loop, mock_config):
+    @patch("services.prompts.summarize_context")
+    def test_llm_failure_falls_back_to_sliding_window(self, mock_summarize, mock_config):
         from schemas.pipeline import MemoryConfig
 
         mock_config.return_value.memory = MemoryConfig(
             truncation_llm_enabled=True,
             truncation_llm_threshold=50,
         )
-        mock_loop.return_value.run_until_complete.side_effect = Exception("LLM failed")
+        mock_summarize.side_effect = Exception("LLM failed")
 
         text = "f" * 500
         result, truncated = smart_truncate_context(text, max_chars=100)
@@ -185,8 +185,8 @@ class TestSmartTruncateContext:
             truncation_llm_max_tokens=512,
         )
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_loop.return_value.run_until_complete.return_value = ""
+        with patch("services.prompts.summarize_context") as mock_summarize:
+            mock_summarize.return_value = ""
 
             text = "g" * 500
             result, truncated = smart_truncate_context(text, max_chars=100)

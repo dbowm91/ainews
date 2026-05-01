@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Iterator, Optional
 
+import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.llm.base import (
@@ -16,6 +17,8 @@ from services.llm.errors import make_error_handler
 from services.url import validate_url_safe
 
 logger = logging.getLogger(__name__)
+
+_HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
 
 
 def _handle_openai_error(e: Exception) -> Exception:
@@ -60,7 +63,8 @@ class OpenAIProvider(BaseLLMProvider):
     def _create_client(self):
         from openai import OpenAI
 
-        return OpenAI(**self._client_kwargs)
+        http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=self._client_kwargs.get("timeout", DEFAULT_LLM_TIMEOUT_SECONDS))
+        return OpenAI(**self._client_kwargs, http_client=http_client)
 
     def _do_chat(
         self,

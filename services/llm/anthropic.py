@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Iterator, Optional
 
+import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.llm.base import (
@@ -14,6 +15,8 @@ from services.llm.base import (
 from services.llm.errors import make_error_handler
 
 logger = logging.getLogger(__name__)
+
+_HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
 
 
 def _handle_anthropic_error(e: Exception) -> Exception:
@@ -54,7 +57,8 @@ class AnthropicProvider(BaseLLMProvider):
     def _create_client(self):
         from anthropic import Anthropic
 
-        return Anthropic(api_key=self._api_key, timeout=self._timeout)
+        http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=self._timeout)
+        return Anthropic(api_key=self._api_key, timeout=self._timeout, http_client=http_client)
 
     def _do_chat(
         self,

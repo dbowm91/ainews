@@ -3,6 +3,7 @@ import logging
 import uuid
 from typing import Any, Iterator, Optional
 
+import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.llm.base import (
@@ -17,6 +18,8 @@ from services.llm.errors import make_error_handler
 from services.url import validate_url_safe
 
 logger = logging.getLogger(__name__)
+
+_HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
 
 
 def _handle_ollama_error(e: Exception) -> Exception:
@@ -44,7 +47,8 @@ class OllamaProvider(BaseLLMProvider):
     def _create_client(self):
         import ollama
 
-        return ollama.Client(host=self.host, timeout=DEFAULT_LLM_TIMEOUT_SECONDS)
+        http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=DEFAULT_LLM_TIMEOUT_SECONDS)
+        return ollama.Client(host=self.host, timeout=DEFAULT_LLM_TIMEOUT_SECONDS, client=http_client)
 
     def _extract_text(self, resp, return_thinking: bool = False) -> str:
         message = resp.get("message", {})

@@ -70,7 +70,7 @@ def get_provider_chain(role: str):
 
     # Primary circuit is open or failed — try other enabled providers
     logger.warning(
-        "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model
+        "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model,
     )
     config = _get_providers_config_cached()
     for pdef in config.providers:
@@ -107,7 +107,7 @@ def record_provider_success(provider_id: str, model: str, tokens_used: int = 0, 
     if stage:
         labels["stage"] = stage
     get_metrics().counter_inc(
-        "llm.calls", labels=labels
+        "llm.calls", labels=labels,
     )
     if tokens_used:
         get_metrics().counter_inc(

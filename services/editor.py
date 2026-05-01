@@ -50,11 +50,11 @@ def build_editor_prompt(
     if isinstance(draft, dict):
         parts.append("<draft_article>")
         parts.append(
-            f"  <headline>{esc_xml_text(draft.get('headline', ''))}</headline>"
+            f"  <headline>{esc_xml_text(draft.get('headline', ''))}</headline>",
         )
         parts.append(f"  <tldr>{esc_xml_text(draft.get('tldr', ''))}</tldr>")
         parts.append(
-            f"  <why_it_matters>{esc_xml_text(draft.get('why_it_matters', ''))}</why_it_matters>"
+            f"  <why_it_matters>{esc_xml_text(draft.get('why_it_matters', ''))}</why_it_matters>",
         )
         parts.append(f"  <body>\n{esc_xml_text(draft.get('body', ''))}\n  </body>")
         if draft.get("key_points"):
@@ -63,14 +63,14 @@ def build_editor_prompt(
                 parts.append(f"    <point>{esc_xml_text(kp)}</point>")
             parts.append("  </key_points>")
         parts.append(
-            f"  <what_to_watch>{esc_xml_text(draft.get('what_to_watch', ''))}</what_to_watch>"
+            f"  <what_to_watch>{esc_xml_text(draft.get('what_to_watch', ''))}</what_to_watch>",
         )
         if draft.get("citations"):
             parts.append("  <citations>")
             for c in draft["citations"]:
                 parts.append(
                     f"    <citation title='{esc_xml_attr(c.get('title', ''))}' "
-                    f"url='{esc_xml_attr(c.get('url', ''))}' />"
+                    f"url='{esc_xml_attr(c.get('url', ''))}' />",
                 )
             parts.append("  </citations>")
         parts.append("</draft_article>")
@@ -82,7 +82,7 @@ def build_editor_prompt(
     if isinstance(brief, dict):
         parts.append("<research_brief>")
         parts.append(
-            f"  <source_summary>{esc_xml_text(brief.get('source_summary', ''))}</source_summary>"
+            f"  <source_summary>{esc_xml_text(brief.get('source_summary', ''))}</source_summary>",
         )
         if brief.get("key_claims"):
             parts.append("  <key_claims>")
@@ -91,7 +91,7 @@ def build_editor_prompt(
                     f"    <claim "
                     f"source='{esc_xml_attr(kc.get('source', ''))}' "
                     f"confidence='{esc_xml_attr(kc.get('confidence', ''))}'>"
-                    f"{esc_xml_text(kc.get('claim', ''))}</claim>"
+                    f"{esc_xml_text(kc.get('claim', ''))}</claim>",
                 )
             parts.append("  </key_claims>")
         if brief.get("direct_quotes"):
@@ -99,7 +99,7 @@ def build_editor_prompt(
             for q in brief["direct_quotes"]:
                 parts.append(
                     f'    <quote attribution="{esc_xml_attr(q.get("attribution", ""))}">'
-                    f"{esc_xml_text(q.get('quote', ''))}</quote>"
+                    f"{esc_xml_text(q.get('quote', ''))}</quote>",
                 )
             parts.append("  </quotes>")
         parts.append("</research_brief>")
@@ -117,7 +117,7 @@ def build_editor_prompt(
     parts.append(f"<existing_tags>{esc_xml_text(tag_str)}</existing_tags>")
     parts.append(
         f"Assign 1-{max_tags} tags. Use existing tags if they fit, otherwise create new ones. "
-        "Tags must be lowercase, alphanumeric with hyphens (e.g., 'machine-learning', 'zero-day')."
+        "Tags must be lowercase, alphanumeric with hyphens (e.g., 'machine-learning', 'zero-day').",
     )
     parts.append("")
 
@@ -125,7 +125,7 @@ def build_editor_prompt(
         "Review and improve this draft. Return the corrected version in the same format. "
         "Preserve the headline unless it needs fixing. Fix factual errors, "
         "missing attributions, and clarity issues. "
-        "Ensure 'why_it_matters' and 'what_to_watch' sections are present and sharp."
+        "Ensure 'why_it_matters' and 'what_to_watch' sections are present and sharp.",
     )
 
     return "\n".join(parts)

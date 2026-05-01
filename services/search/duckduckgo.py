@@ -32,7 +32,7 @@ def _search_impl(provider: "DuckDuckGoSearchProvider", query: str, max_results: 
                         url=url,
                         snippet=r.get("body", ""),
                         source=provider.provider_id,
-                    )
+                    ),
                 )
             except UnsafeURLError:
                 logger.warning("DuckDuckGo returned blocked URL: %s", url)

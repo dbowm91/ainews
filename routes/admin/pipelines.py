@@ -49,7 +49,7 @@ def pipeline_logs(run_id):
     per_page = PER_PAGE_PIPELINE_LOGS
 
     q = PipelineLog.query.filter_by(run_id=run_id).order_by(
-        PipelineLog.created_at.asc()
+        PipelineLog.created_at.asc(),
     )
     if level:
         q = q.filter_by(level=level)
@@ -128,7 +128,7 @@ def trigger_crawl():
                 202,
             )
         return jsonify(
-            {"message": message, "task_id": result.id, "run_id": run.id}
+            {"message": message, "task_id": result.id, "run_id": run.id},
         ), 202
     except SQLAlchemyError as e:
         current_app.logger.exception("Failed to trigger crawl")

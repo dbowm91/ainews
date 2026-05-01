@@ -43,7 +43,7 @@ def cleanup_old_pipeline_logs(self):
             if not ids:
                 break
             deleted = PipelineLog.query.filter(PipelineLog.id.in_(ids)).delete(
-                synchronize_session=False
+                synchronize_session=False,
             )
             total_deleted += deleted
             db.session.commit()
@@ -297,7 +297,7 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
             ids = [
                 r.id
                 for r in ArticleVersion.query.filter(
-                    ArticleVersion.created_at < cutoff
+                    ArticleVersion.created_at < cutoff,
                 )
                 .with_entities(ArticleVersion.id)
                 .limit(BATCH_SIZE)
@@ -306,7 +306,7 @@ def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = F
             if not ids:
                 break
             deleted = ArticleVersion.query.filter(
-                ArticleVersion.id.in_(ids)
+                ArticleVersion.id.in_(ids),
             ).delete(synchronize_session=False)
             total_deleted += deleted
             db.session.commit()

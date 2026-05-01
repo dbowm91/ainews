@@ -180,7 +180,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
     except SoftTimeLimitExceeded:
         db.session.rollback()
         _log_pipeline(
-            run_id, "crawl", "error", "%s: soft time limit exceeded", source_id
+            run_id, "crawl", "error", "%s: soft time limit exceeded", source_id,
         )
         logger.error("Task exceeded soft time limit for source %s", source_id)
         from services.pipeline_monitor import record_stage_result

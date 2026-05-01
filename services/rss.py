@@ -37,7 +37,7 @@ def generate_rss_feed(
 
         if article.original_published_at:
             SubElement(item, "pubDate").text = _format_date(
-                article.original_published_at
+                article.original_published_at,
             )
         elif article.created_at:
             SubElement(item, "pubDate").text = _format_date(article.created_at)
@@ -50,7 +50,7 @@ def generate_rss_feed(
 
     indent(rss, space="  ")
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(
-        rss, encoding="unicode"
+        rss, encoding="unicode",
     )
 
 
@@ -85,7 +85,7 @@ def generate_sitemap(articles: list, site_url: str = "") -> str:
 
     indent(urlset, space="  ")
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(
-        urlset, encoding="unicode"
+        urlset, encoding="unicode",
     )
 
 

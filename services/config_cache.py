@@ -24,7 +24,7 @@ def _serialize(value: Any) -> str:
                 "_type": "pydantic",
                 "_class": f"{value.__class__.__module__}.{value.__class__.__qualname__}",
                 "data": value.model_dump(),
-            }
+            },
         )
     if isinstance(value, list) and value and isinstance(value[0], BaseModel):
         cls = value[0].__class__
@@ -33,7 +33,7 @@ def _serialize(value: Any) -> str:
                 "_type": "pydantic_list",
                 "_class": f"{cls.__module__}.{cls.__qualname__}",
                 "data": [item.model_dump() for item in value],
-            }
+            },
         )
     return json.dumps({"_type": "plain", "data": value})
 
@@ -237,7 +237,7 @@ class ConfigCache:
                 cached_mtime = float(
                     cached_mtime_raw.decode()
                     if isinstance(cached_mtime_raw, bytes)
-                    else cached_mtime_raw
+                    else cached_mtime_raw,
                 )
                 current_mtime = p.stat().st_mtime
                 if current_mtime > cached_mtime:
@@ -282,7 +282,7 @@ def get_config_cache() -> ConfigCache:
         url = _os.environ.get(
             "CONFIG_CACHE_REDIS_URL",
             _os.environ.get(
-                "CELERY_BROKER_URL", "redis://localhost:6379/1"
+                "CELERY_BROKER_URL", "redis://localhost:6379/1",
             ).replace("/0", "/1").replace("/2", "/1"),
         )
         password = _os.environ.get("REDIS_PASSWORD") or _os.environ.get("CONFIG_CACHE_REDIS_PASSWORD")
@@ -294,7 +294,7 @@ def get_config_cache() -> ConfigCache:
             if parsed.port:
                 netloc += f":{parsed.port}"
             url = urlunparse(
-                (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
+                (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment),
             )
 
         redis_max_conn = int(os.environ.get("REDIS_MAX_CONNECTIONS", "20"))

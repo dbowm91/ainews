@@ -98,7 +98,7 @@ def select_article(self, article_id: int, run_id=None):
 
         with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="select"):
             with time_histogram(
-                "pipeline.stage_duration_seconds", labels={"stage": "select"}
+                "pipeline.stage_duration_seconds", labels={"stage": "select"},
             ):
                 result = provider.chat_structured(
                     messages=[{"role": "user", "content": prompt}],
@@ -141,7 +141,7 @@ def select_article(self, article_id: int, run_id=None):
                         article_id=article.id,
                     )
                 _dispatch_next(
-                    article_id, run_id=run_id, next_status=PipelineStatus.REVIEW
+                    article_id, run_id=run_id, next_status=PipelineStatus.REVIEW,
                 )
             else:
                 _transition_article_status(article, PipelineStatus.RESEARCHING)
@@ -166,7 +166,7 @@ def select_article(self, article_id: int, run_id=None):
                         article_id=article.id,
                     )
                 _dispatch_next(
-                    article_id, run_id=run_id, next_status=PipelineStatus.RESEARCHING
+                    article_id, run_id=run_id, next_status=PipelineStatus.RESEARCHING,
                 )
         else:
             _transition_article_status(article, PipelineStatus.SKIPPED)

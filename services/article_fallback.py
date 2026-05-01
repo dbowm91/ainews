@@ -18,5 +18,5 @@ def build_fallback_article_json(article) -> str:
                 "author": article.original_author or "",
             },
             "tags": [],
-        }
+        },
     )

@@ -86,11 +86,11 @@ def research_article(self, article_id: int, run_id=None):
             if rc.web_search_provider:
                 search_prov = get_search_provider(rc.web_search_provider)
                 search_results = search_prov.search(
-                    search_query, max_results=rc.web_search_max_results or 5
+                    search_query, max_results=rc.web_search_max_results or 5,
                 )
             else:
                 search_results = search_web(
-                    search_query, max_results=rc.web_search_max_results or 5
+                    search_query, max_results=rc.web_search_max_results or 5,
                 )
             web_results = [
                 {"title": s.title, "url": s.url, "snippet": s.snippet}
@@ -140,7 +140,7 @@ def research_article(self, article_id: int, run_id=None):
 
         # DB lookup for related articles
         related = find_related_articles_dicts(
-            article.topics or [], article.id, limit=rc.db_related_max or 5
+            article.topics or [], article.id, limit=rc.db_related_max or 5,
         )
 
         # Fetch topic notes and trend memory if topics available
@@ -158,7 +158,7 @@ def research_article(self, article_id: int, run_id=None):
                     f"- {note}" for notes in topic_notes_dict.values() for note in notes
                 )
             trend_memory = _format_memory_for_prompt(
-                get_memory_for_topics(article.topics, min_importance=1)
+                get_memory_for_topics(article.topics, min_importance=1),
             )
 
         # Build prompt
@@ -181,7 +181,7 @@ def research_article(self, article_id: int, run_id=None):
 
         with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="research"):
             with time_histogram(
-                "pipeline.stage_duration_seconds", labels={"stage": "research"}
+                "pipeline.stage_duration_seconds", labels={"stage": "research"},
             ):
                 brief = provider.chat_structured(
                     messages=[{"role": "user", "content": prompt}],

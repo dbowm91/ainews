@@ -72,7 +72,7 @@ def _build_fts_query(query: str) -> str:
 
 
 def search_fts(
-    query: str, page: int, per_page: int, category: Optional[str] = None
+    query: str, page: int, per_page: int, category: Optional[str] = None,
 ) -> tuple[list[Article], bool, int]:
     """Search articles using SQLite FTS5.
 

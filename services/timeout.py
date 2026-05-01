@@ -53,7 +53,7 @@ def timeout(seconds: float, operation: Optional[str] = None):
                     return future.result(timeout=seconds)
                 except FuturesTimeout:
                     logger.warning(
-                        "Operation '%s' timed out after %.1fs", op_name, seconds
+                        "Operation '%s' timed out after %.1fs", op_name, seconds,
                     )
                     raise OperationTimeoutError(op_name, seconds)
             finally:

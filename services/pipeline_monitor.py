@@ -28,7 +28,7 @@ def _get_redis():
 
 
 def record_stage_result(
-    stage: str, success: bool, run_id: Optional[int] = None, reason: Optional[str] = None
+    stage: str, success: bool, run_id: Optional[int] = None, reason: Optional[str] = None,
 ) -> None:
     """Record a pipeline stage result (success or failure).
 
@@ -59,7 +59,7 @@ def record_stage_result(
         pipe.execute()
 
         logger.debug(
-            "Pipeline stage %s: %s", stage, "success" if success else "failure"
+            "Pipeline stage %s: %s", stage, "success" if success else "failure",
         )
 
     except redis.exceptions.RedisError as e:

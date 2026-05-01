@@ -37,12 +37,12 @@ class MetricsCollector:
         self._counters: dict[str, int] = defaultdict(int)
         self._gauges: dict[str, float] = {}
         self._histograms: dict[str, deque[float]] = defaultdict(
-            lambda: deque(maxlen=1000)
+            lambda: deque(maxlen=1000),
         )
         self._start_time = time.monotonic()
 
     def counter_inc(
-        self, name: str, value: int = 1, labels: dict[str, str] | None = None
+        self, name: str, value: int = 1, labels: dict[str, str] | None = None,
     ) -> None:
         """Increment a counter."""
         key = self._make_key(name, labels)
@@ -58,7 +58,7 @@ class MetricsCollector:
             self._counters[key] += value
 
     def gauge_set(
-        self, name: str, value: float, labels: dict[str, str] | None = None
+        self, name: str, value: float, labels: dict[str, str] | None = None,
     ) -> None:
         """Set a gauge value."""
         key = self._make_key(name, labels)
@@ -75,7 +75,7 @@ class MetricsCollector:
             self._gauges[key] = value
 
     def histogram_observe(
-        self, name: str, value: float, labels: dict[str, str] | None = None
+        self, name: str, value: float, labels: dict[str, str] | None = None,
     ) -> None:
         """Record a histogram observation."""
         key = self._make_key(name, labels)
@@ -343,7 +343,7 @@ def time_histogram(name: str, labels: dict[str, str] | None = None):
 
 
 def record_request(
-    method: str, path: str, status_code: int, duration_ms: float
+    method: str, path: str, status_code: int, duration_ms: float,
 ) -> None:
     """Record an HTTP request metric.
 

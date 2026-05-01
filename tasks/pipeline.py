@@ -89,9 +89,9 @@ def _assign_tags(articles, tag_names: list[str], db):
             article_tags.select()
             .where(
                 (article_tags.c.article_id.in_(article_ids))
-                & (article_tags.c.tag_id.in_(tag_ids))
+                & (article_tags.c.tag_id.in_(tag_ids)),
             )
-            .with_only_columns(article_tags.c.tag_id)
+            .with_only_columns(article_tags.c.tag_id),
         ).all()
     )
 
@@ -100,7 +100,7 @@ def _assign_tags(articles, tag_names: list[str], db):
             link_key = (article.id, tag.id)
             if link_key not in existing_links:
                 db.session.execute(
-                    article_tags.insert().values(article_id=article.id, tag_id=tag.id)
+                    article_tags.insert().values(article_id=article.id, tag_id=tag.id),
                 )
                 existing_links.add(link_key)
 
@@ -126,7 +126,7 @@ class InvalidStateTransitionError(Exception):
         self.to_status = to_status
         super().__init__(
             f"Invalid pipeline transition for article {article_id}: "
-            f"{from_status} -> {to_status}"
+            f"{from_status} -> {to_status}",
         )
 
 
@@ -262,11 +262,11 @@ def run_stage(
         limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
         redis_client = get_redis()
         lock_acquired = _acquire_stage_lock(
-            redis_client, lock_key, task_id, rc.timeout_seconds + 120
+            redis_client, lock_key, task_id, rc.timeout_seconds + 120,
         )
         if not lock_acquired:
             logger.info(
-                "Stage %s already running for article %s, skipping", stage, article_id
+                "Stage %s already running for article %s, skipping", stage, article_id,
             )
             return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
 
@@ -387,7 +387,7 @@ def run_stage(
     finally:
         if limiter is not None:
             limiter.release(
-                rc.provider, model if model is not None else None, rc.timeout_seconds
+                rc.provider, model if model is not None else None, rc.timeout_seconds,
             )
         if redis_client is not None:
             try:

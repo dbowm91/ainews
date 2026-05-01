@@ -39,7 +39,7 @@ def _get_encryption_key() -> bytes:
         Fernet(key.encode("utf-8"))
     except Exception:
         raise ValueError(
-            f"WEBHOOK_SECRET_KEY must be a valid Fernet key (44 base64 chars), got length {len(key)}"
+            f"WEBHOOK_SECRET_KEY must be a valid Fernet key (44 base64 chars), got length {len(key)}",
         )
     _ENCRYPTION_KEY = key.encode("utf-8")
     _load_fallback_keys()
@@ -250,7 +250,7 @@ def dispatch_webhook(
         payload["idempotency_key"] = idempotency_key
 
     success, error, status_code, response_body, attempt_number = _send_webhook_with_retry(
-        url, payload, secret, event_type
+        url, payload, secret, event_type,
     )
 
     webhook = db.session.get(Webhook, webhook_id)
@@ -336,7 +336,7 @@ def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> s
         except Exception:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
             raise WebhookSecretDecryptionError(
-                f"Failed to decrypt webhook secret for webhook {webhook_id}"
+                f"Failed to decrypt webhook secret for webhook {webhook_id}",
             )
     if secret.startswith("enc:") or secret.startswith("v1:enc:"):
         try:
@@ -344,6 +344,6 @@ def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> s
         except Exception:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
             raise WebhookSecretDecryptionError(
-                f"Failed to decrypt webhook secret for webhook {webhook_id}"
+                f"Failed to decrypt webhook secret for webhook {webhook_id}",
             )
     return secret

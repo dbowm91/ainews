@@ -32,7 +32,7 @@ def find_related_articles_cached(article, limit: int = 5):
 
         articles = (
             Article.query.options(
-                joinedload(Article.tags), joinedload(Article.source)
+                joinedload(Article.tags), joinedload(Article.source),
             )
             .filter(Article.id.in_(article_ids))
             .all()
@@ -141,7 +141,7 @@ def find_related_articles(article, limit: int = 5):
 
 
 def find_related_articles_dicts(
-    topics: list[str], exclude_id: int, limit: int = 5
+    topics: list[str], exclude_id: int, limit: int = 5,
 ) -> list[dict]:
     """Find related articles using scored matching (used by pipeline researcher).
 

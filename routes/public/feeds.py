@@ -234,8 +234,8 @@ def feed_all() -> Response:
             Article.query.options(joinedload(Article.source), joinedload(Article.tags))
             .filter(
                 Article.pipeline_status.in_(
-                    [PipelineStatus.DONE, PipelineStatus.SKIPPED]
-                )
+                    [PipelineStatus.DONE, PipelineStatus.SKIPPED],
+                ),
             )
             .order_by(Article.created_at.desc())
             .limit(50)
@@ -282,7 +282,7 @@ def feed_topic(category: str) -> Response:
             .filter(
                 Article.category == category,
                 Article.pipeline_status.in_(
-                    [PipelineStatus.DONE, PipelineStatus.SKIPPED]
+                    [PipelineStatus.DONE, PipelineStatus.SKIPPED],
                 ),
             )
             .order_by(Article.created_at.desc())
@@ -320,7 +320,7 @@ def sitemap() -> Response:
 
         rows = (
             Article.query.filter(
-                Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED])
+                Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
             )
             .with_entities(Article.id, Article.created_at)
             .order_by(Article.created_at.desc())

@@ -45,7 +45,7 @@ class ProviderManager:
             available = ", ".join(sorted(self._registry.keys()))
             raise KeyError(
                 f"No {self.category} provider for '{provider_type}'. "
-                f"Available: {available}"
+                f"Available: {available}",
             )
         return self._registry[provider_type]
 
@@ -72,7 +72,7 @@ class ProviderManager:
                 return provider
 
         raise RuntimeError(
-            f"{self.category.title()} provider '{provider_id}' not found or not enabled"
+            f"{self.category.title()} provider '{provider_id}' not found or not enabled",
         )
 
     def get_with_fallback(
@@ -91,7 +91,7 @@ class ProviderManager:
                     return self.get_cached(pdef.id, config_loader)
                 except Exception as e:
                     logger.warning(
-                        "Default %s provider %s failed: %s", self.category, pdef.id, e
+                        "Default %s provider %s failed: %s", self.category, pdef.id, e,
                     )
 
         # Fallback: first enabled provider

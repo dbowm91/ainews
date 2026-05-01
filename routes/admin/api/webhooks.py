@@ -45,7 +45,7 @@ def _get_webhook_secret(webhook) -> str:
             return _decrypt_secret(secret[4:])
         except Exception:
             logger.warning(
-                "Failed to decrypt webhook secret %s, using fallback", webhook.id
+                "Failed to decrypt webhook secret %s, using fallback", webhook.id,
             )
             return secret[4:]
     return secret
@@ -80,8 +80,8 @@ def list_webhooks() -> Response:
                     "failure_count": w.failure_count or 0,
                 }
                 for w in webhooks
-            ]
-        }
+            ],
+        },
     )
 
 
@@ -184,8 +184,8 @@ def get_webhook(webhook_id: int) -> Response:
                 ),
                 "failure_count": webhook.failure_count or 0,
                 "last_error": webhook.last_error,
-            }
-        }
+            },
+        },
     )
 
 
@@ -311,8 +311,8 @@ def list_webhook_events(webhook_id: int) -> Response:
                     "delivered_at": e.delivered_at.isoformat() if e.delivered_at else None,
                 }
                 for e in events
-            ]
-        }
+            ],
+        },
     )
 
 

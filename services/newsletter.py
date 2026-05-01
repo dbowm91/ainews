@@ -33,7 +33,7 @@ def generate_newsletter_html(
             p = p.strip()
             if p:
                 para_parts.append(
-                    f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{escape(p)}</p>'
+                    f'<p style="color:#333;font-size:14px;line-height:1.7;margin:0 0 12px 0;">{escape(p)}</p>',
                 )
         para_html = "".join(para_parts)
         if para_html:
@@ -204,7 +204,7 @@ def _generate_subject_line(articles, topic_context: str = "") -> str:
 
     try:
         provider, model, max_tokens, provider_id = get_provider_for_role(
-            "newsletter_pipeline.writer"
+            "newsletter_pipeline.writer",
         )
         limiter = get_limiter()
         if limiter.acquire(provider_id, model, 1, 120):

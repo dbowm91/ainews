@@ -45,7 +45,7 @@ class SMTPConnectionPool:
     def _create_connection(self, cfg: dict) -> smtplib.SMTP:
         """Create and authenticate a new SMTP connection."""
         server = smtplib.SMTP(
-            cfg["host"], cfg["port"], timeout=30
+            cfg["host"], cfg["port"], timeout=30,
         )
         if cfg["use_tls"]:
             server.starttls()

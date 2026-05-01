@@ -114,7 +114,7 @@ def subscribe() -> Response:
         from services.email import send_verification_email
 
         send_verification_email(
-            email, newsletter_type, verification_url, unsubscribe_url
+            email, newsletter_type, verification_url, unsubscribe_url,
         )
     except Exception as e:
         logger.warning("Verification email failed for %s: %s", email, e)
@@ -146,7 +146,7 @@ def unsubscribe(token: str) -> str:
     )
 
     return render_template(
-        "unsubscribe.html", token=token, found=subscriber is not None
+        "unsubscribe.html", token=token, found=subscriber is not None,
     )
 
 
@@ -219,7 +219,7 @@ def verify(token: str) -> str:
         from services.email import send_welcome_email
 
         send_welcome_email(
-            subscriber.email, subscriber.newsletter_type, unsubscribe_url
+            subscriber.email, subscriber.newsletter_type, unsubscribe_url,
         )
     except Exception as e:
         logger.warning("Welcome email failed for %s: %s", subscriber.email, e)

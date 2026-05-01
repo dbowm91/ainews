@@ -51,5 +51,5 @@ def search_analytics():
                 {"query": row.query, "last_searched": row.last_searched.isoformat() if row.last_searched else None}
                 for row in zero_result_queries
             ],
-        }
+        },
     )

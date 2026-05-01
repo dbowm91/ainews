@@ -225,7 +225,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
         schema = response_model.model_json_schema()
         resp = self._chat_with_schema(
-            messages, response_model, system, temperature, max_tokens, schema, model
+            messages, response_model, system, temperature, max_tokens, schema, model,
         )
         try:
             resp = _extract_json(resp)
@@ -261,7 +261,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                             f"Expected JSON format (Pydantic schema):\n{schema_json}\n\n"
                             f"Please respond with valid JSON matching this schema exactly."
                         ),
-                    }
+                    },
                 )
                 resp = self._chat_with_schema(
                     retry_messages,
@@ -312,7 +312,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
     @abc.abstractmethod
     def _extract_text_and_tool_calls(
-        self, response: Any
+        self, response: Any,
     ) -> tuple[str, list[ToolCall]]:
         """Extract text content and tool calls from provider response.
 
@@ -326,7 +326,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
     @abc.abstractmethod
     def _format_tool_result(
-        self, tool_call: ToolCall, result_content: str
+        self, tool_call: ToolCall, result_content: str,
     ) -> dict:
         """Format a tool result as a message dict for the provider's message format.
 
@@ -393,7 +393,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     ) + (getattr(raw_response, "eval_count", 0) or 0)
                 elif hasattr(raw_response, "usage_metadata"):
                     tokens_used = getattr(
-                        raw_response.usage_metadata, "total_token_count", 0
+                        raw_response.usage_metadata, "total_token_count", 0,
                     ) or 0
                 return ToolCallingResponse(
                     text=text_content,
@@ -440,9 +440,9 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                                         else tc.arguments
                                     ),
                                 },
-                            }
+                            },
                         ],
-                    }
+                    },
                 )
 
                 tool_result_msg = self._format_tool_result(tc, result_content)
@@ -456,7 +456,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         )
 
     def _build_messages(
-        self, messages: list[dict], system: Optional[str]
+        self, messages: list[dict], system: Optional[str],
     ) -> list[dict]:
         """Build message list with optional system prompt prepended."""
         result = []

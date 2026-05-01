@@ -171,13 +171,13 @@ def _resolve_and_check(hostname: str) -> list[str]:
         for network in _BLOCKED_NETWORKS:
             if ip in network:
                 raise UnsafeURLError(
-                    f"Hostname {hostname} resolves to private/reserved IP {ip} ({network})"
+                    f"Hostname {hostname} resolves to private/reserved IP {ip} ({network})",
                 )
             if isinstance(ip, ipaddress.IPv6Address):
                 ipv4_mapped = _is_ipv4_mapped(ip)
                 if ipv4_mapped and ipv4_mapped in network:
                     raise UnsafeURLError(
-                        f"Hostname {hostname} resolves to private/reserved IP {ip} mapped to {ipv4_mapped} ({network})"
+                        f"Hostname {hostname} resolves to private/reserved IP {ip} mapped to {ipv4_mapped} ({network})",
                     )
         safe_ips.append(ip_str)
 

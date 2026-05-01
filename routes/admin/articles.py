@@ -105,7 +105,7 @@ def articles():
         else:
             escaped_query = _escape_like_pattern(query)
             q = q.filter(
-                Article.original_title.ilike(f"%{escaped_query}%", escape="\\")
+                Article.original_title.ilike(f"%{escaped_query}%", escape="\\"),
             )
     if status:
         q = q.filter_by(pipeline_status=status)
@@ -271,7 +271,7 @@ def edit_article(article_id):
 
         # Validate pipeline_status
         new_status = request.form.get(
-            "pipeline_status", article.pipeline_status
+            "pipeline_status", article.pipeline_status,
         ).strip()
         if new_status in VALID_PIPELINE_STATUSES:
             article.pipeline_status = new_status
@@ -281,7 +281,7 @@ def edit_article(article_id):
         if impact_raw.strip():
             try:
                 article.impact_score = max(
-                    IMPACT_SCORE_MIN, min(IMPACT_SCORE_MAX, int(impact_raw))
+                    IMPACT_SCORE_MIN, min(IMPACT_SCORE_MAX, int(impact_raw)),
                 )
             except ValueError:
                 pass
@@ -372,7 +372,7 @@ def article_versions(article_id):
 
 
 @admin_bp.route(
-    "/articles/<int:article_id>/versions/<int:version_id>/rollback", methods=["POST"]
+    "/articles/<int:article_id>/versions/<int:version_id>/rollback", methods=["POST"],
 )
 @require_auth
 def rollback_article(article_id, version_id):
@@ -408,12 +408,12 @@ def rollback_article(article_id, version_id):
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception(
-            "Failed to rollback article %s to version %s", article_id, version_id
+            "Failed to rollback article %s to version %s", article_id, version_id,
         )
         return jsonify({"error": "Rollback failed"}), 500
 
     logger.info(
-        "Rolled back article %s to version %s", article_id, version.version_number
+        "Rolled back article %s to version %s", article_id, version.version_number,
     )
     return redirect(url_for("admin.article_versions", article_id=article_id))
 
@@ -459,8 +459,8 @@ def reprocess_article(article_id):
     if stage not in _REPROCESS_STAGES:
         return jsonify(
             {
-                "error": f"Invalid stage. Must be one of: {', '.join(sorted(_REPROCESS_STAGES))}"
-            }
+                "error": f"Invalid stage. Must be one of: {', '.join(sorted(_REPROCESS_STAGES))}",
+            },
         ), 400
 
     cfg = _REPROCESS_STAGES[stage]

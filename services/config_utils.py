@@ -47,7 +47,7 @@ def get_config_with_default(
         if value is None:
             if log_missing:
                 logger.warning(
-                    "Config key '%s' not found, using default: %s", key, default
+                    "Config key '%s' not found, using default: %s", key, default,
                 )
             return default
 

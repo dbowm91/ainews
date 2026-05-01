@@ -46,7 +46,7 @@ def _search_impl(provider: "SearXNGSearchProvider", query: str, max_results: int
                 url=item.get("url", ""),
                 snippet=item.get("content", ""),
                 source=provider.provider_id,
-            )
+            ),
         )
         if len(results) >= max_results:
             break

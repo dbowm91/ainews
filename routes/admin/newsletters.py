@@ -116,7 +116,7 @@ def trigger_newsletter():
             category="pipeline",
         )
         return jsonify(
-            {"message": "Newsletter generation started", "task_id": result.id}
+            {"message": "Newsletter generation started", "task_id": result.id},
         ), 202
     except Exception:
         current_app.logger.exception("Failed to trigger newsletter")
@@ -148,7 +148,7 @@ def newsletter_dry_run():
         kwargs = {"dry_run_email": test_email}
         signed_kwargs = get_signed_kwargs("generate_daily_newsletters", (), kwargs)
         result = generate_daily_newsletters.apply_async(
-            kwargs=signed_kwargs, headers=headers
+            kwargs=signed_kwargs, headers=headers,
         )
         log_admin_action(
             "newsletter_dry_run",
@@ -274,5 +274,5 @@ def newsletter_preview():
             "subject": subject,
             "article_count": count,
             "html": safe_html,
-        }
+        },
     )

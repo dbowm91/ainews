@@ -44,8 +44,8 @@ def dead_letters() -> str:
                     PipelineStatus.WRITING,
                     PipelineStatus.EDITING,
                     PipelineStatus.PENDING,
-                ]
-            )
+                ],
+            ),
         )
         .count()
     )
@@ -59,8 +59,8 @@ def dead_letters() -> str:
                     PipelineStatus.WRITING,
                     PipelineStatus.EDITING,
                     PipelineStatus.PENDING,
-                ]
-            )
+                ],
+            ),
         )
         .options(joinedload(Article.source))
         .order_by(Article.updated_at.asc())
@@ -100,7 +100,7 @@ def _compute_dashboard_stats():
     pipeline_stats = dict(
         db.session.query(Article.pipeline_status, func.count(Article.id))
         .group_by(Article.pipeline_status)
-        .all()
+        .all(),
     )
 
     sources_with_counts = (

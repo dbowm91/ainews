@@ -80,6 +80,18 @@ def create_app(config_name=None):
                 "sessions are insecure. Set SECRET_KEY env var for production."
             )
 
+    # Check .env file permissions
+    env_path = os.path.join(app.root_path, ".env")
+    if os.path.exists(env_path):
+        mode = oct(os.stat(env_path).st_mode)[-3:]
+        if mode != "600":
+            logger.warning(
+                ".env file permissions are %s, should be 600 (owner read/write only)",
+                mode,
+            )
+    else:
+        logger.warning(".env file not found at %s", env_path)
+
     # Setup structured logging
     setup_logging(
         app,

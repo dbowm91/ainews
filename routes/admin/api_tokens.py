@@ -42,6 +42,7 @@ def create_token():
     from werkzeug.security import generate_password_hash
     api_token = ApiToken(
         token_hash=generate_password_hash(token_hash),
+        raw_token_hash=token_hash,
         name=name,
     )
 

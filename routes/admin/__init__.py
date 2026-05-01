@@ -160,7 +160,7 @@ def _get_lockout_lua_script():
     global _LUA_SCRIPT
     if _LUA_SCRIPT is None:
         script_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "services", "login_lockout.lua"
+            os.path.dirname(__file__), "..", "..", "services", "login_lockout.lua",
         )
         with open(script_path) as f:
             _LUA_SCRIPT = f.read()
@@ -184,7 +184,7 @@ def _verify_password(stored: str, provided: str) -> bool:
         return check_password_hash(stored, provided)
     logger.error(
         "ADMIN_PASSWORD is not a valid hash. "
-        "Run 'python scripts/hash_password.py' and update your .env file."
+        "Run 'python scripts/hash_password.py' and update your .env file.",
     )
     return False
 

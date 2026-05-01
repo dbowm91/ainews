@@ -37,7 +37,7 @@ class ModelLimiter:
         self._release_script = self._redis.register_script(_RELEASE_SCRIPT)
 
     def acquire(
-        self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300
+        self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300,
     ) -> bool:
         """Acquire a slot with timeout. Returns True if slot acquired, False on timeout."""
         key = f"{self._prefix}:{provider_id}:{model}"
@@ -47,7 +47,7 @@ class ModelLimiter:
         while time.monotonic() < deadline:
             try:
                 result = self._acquire_script(
-                    keys=[key], args=[max_concurrent, timeout]
+                    keys=[key], args=[max_concurrent, timeout],
                 )
                 if result:
                     return True
@@ -101,11 +101,11 @@ class ModelLimiter:
                     from services.metrics import get_metrics
 
                     get_metrics().increment(
-                        "limiter.slot_leak", {"provider": provider_id, "model": model}
+                        "limiter.slot_leak", {"provider": provider_id, "model": model},
                     )
                 except Exception:
                     logger.warning(
-                        "Failed to record limiter slot leak metric", exc_info=True
+                        "Failed to record limiter slot leak metric", exc_info=True,
                     )
 
     def get_active(self, provider_id: str, model: str) -> int | None:
@@ -132,7 +132,7 @@ class ModelLimiter:
                         self._redis.delete(key)
                         cleaned += 1
                         logger.info(
-                            "Cleaned up stale limiter slot: %s (count=%d)", key, count
+                            "Cleaned up stale limiter slot: %s (count=%d)", key, count,
                         )
         except redis.exceptions.RedisError as e:
             logger.error("Limiter stale slot cleanup failed: %s", e)

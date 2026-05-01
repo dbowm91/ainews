@@ -93,7 +93,7 @@ def get_article_ids():
                 if _query_looks_like_url(query):
                     fts_query = f'original_url:"{_escape_fts5_string(query)}"'
                 sql = text(
-                    "SELECT rowid FROM articles_admin_fts WHERE articles_admin_fts MATCH :q"
+                    "SELECT rowid FROM articles_admin_fts WHERE articles_admin_fts MATCH :q",
                 )
                 result = db.session.execute(sql, {"q": fts_query}).fetchall()
                 fts_results = [row[0] for row in result]
@@ -263,7 +263,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             dispatched += 1
         except Exception as e:
             logger.warning(
-                "Failed to dispatch reprocess for article %s: %s", article.id, e
+                "Failed to dispatch reprocess for article %s: %s", article.id, e,
             )
             failed_ids.append(article.id)
 
@@ -303,7 +303,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
     except Exception:
         logger.warning("Audit logging failed for article_bulk_reprocess")
     return api_response(
-        meta={"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"}
+        meta={"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"},
     )
 
 
@@ -348,7 +348,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
     except Exception:
         logger.warning("Audit logging failed for article_bulk_add_tags")
     return api_response(
-        meta={"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"}
+        meta={"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"},
     )
 
 
@@ -460,7 +460,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         except Exception:
             logger.warning("Cache invalidation or audit logging failed")
         return api_response(
-            meta={"message": f"Updated {len(articles)} articles to '{new_status}'"}
+            meta={"message": f"Updated {len(articles)} articles to '{new_status}'"},
         )
 
     elif action == "set_category":

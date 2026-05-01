@@ -40,7 +40,7 @@ def article_detail(article_id: int) -> Response:
 
     article = Article.query.options(
         joinedload(Article.tags),
-        joinedload(Article.source)
+        joinedload(Article.source),
     ).get_or_404(article_id)
     parse_article_json(article)
 
@@ -85,7 +85,7 @@ def article_detail(article_id: int) -> Response:
     resp.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
     if article.updated_at:
         resp.headers["Last-Modified"] = article.updated_at.strftime(
-            "%a, %d %b %Y %H:%M:%S GMT"
+            "%a, %d %b %Y %H:%M:%S GMT",
         )
     cache.set(cache_key, resp.get_data(), ttl=300)
     return resp

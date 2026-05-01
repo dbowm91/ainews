@@ -132,7 +132,7 @@ class CircuitBreaker:
                 self._opened_at = now
                 self._half_open_calls = 0
                 logger.warning(
-                    "Circuit %s: HALF_OPEN -> OPEN (probe failed)", self.name
+                    "Circuit %s: HALF_OPEN -> OPEN (probe failed)", self.name,
                 )
                 self._on_state_change(old, self._state)
                 return
@@ -433,7 +433,7 @@ def circuit_protected(breaker_name: str, fallback: Optional[Callable] = None):
                 if fallback:
                     return fallback(*args, **kwargs)
                 raise CircuitOpenError(
-                    f"Circuit {breaker_name} is {breaker.state.value}"
+                    f"Circuit {breaker_name} is {breaker.state.value}",
                 )
             try:
                 result = func(*args, **kwargs)

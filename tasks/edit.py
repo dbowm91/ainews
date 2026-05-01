@@ -88,7 +88,7 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
 
     topic_notes = get_topic_notes_for_topics(article.topics)
     related_articles = get_related_articles_for_edit(
-        article.topics, article.id, limit=5
+        article.topics, article.id, limit=5,
     )
     from services.trend_memory import (
         _format_memory_for_prompt,
@@ -96,7 +96,7 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     )
 
     trend_memory = _format_memory_for_prompt(
-        get_memory_for_topics(article.topics, min_importance=1)
+        get_memory_for_topics(article.topics, min_importance=1),
     )
     if not topic_notes and not related_articles and not trend_memory:
         return ""
@@ -144,7 +144,7 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
 
 
 def _handle_validation_and_routing(
-    article, db, run_id: int | None = None
+    article, db, run_id: int | None = None,
 ) -> dict | None:
     """Validate article quality and determine routing.
 
@@ -297,7 +297,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     # Truncate draft to prevent token overflow
     from services.prompts import sliding_window_truncate
     draft_truncated = sliding_window_truncate(
-        article.draft_article or "", max_chars=8000, model=model
+        article.draft_article or "", max_chars=8000, model=model,
     )
 
     rc = get_role_config("editor")
@@ -311,7 +311,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 
     with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="edit"):
         with time_histogram(
-            "pipeline.stage_duration_seconds", labels={"stage": "edit"}
+            "pipeline.stage_duration_seconds", labels={"stage": "edit"},
         ):
             result = provider.chat_structured(
                 messages=[{"role": "user", "content": prompt}],
@@ -327,7 +327,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 
     from services.article import create_article_version, sanitize_final_article
     create_article_version(
-        article, change_reason="pipeline_edit", changed_by="pipeline:editor"
+        article, change_reason="pipeline_edit", changed_by="pipeline:editor",
     )
 
     article.final_article = sanitize_final_article(result_json)
@@ -366,5 +366,5 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 def edit_article(self, article_id: int, run_id=None):
     from tasks.pipeline import run_stage
     return run_stage(
-        "editor", article_id, _execute_editor_work, task_self=self, run_id=run_id, skip_next="finalize"
+        "editor", article_id, _execute_editor_work, task_self=self, run_id=run_id, skip_next="finalize",
     )

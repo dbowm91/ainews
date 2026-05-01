@@ -118,7 +118,7 @@ def check_limiter() -> tuple[str, Any]:
 
 
 def run_health_checks(
-    include_celery: bool = True, detailed: bool = False
+    include_celery: bool = True, detailed: bool = False,
 ) -> HealthResult:
     """Run all health checks and return consolidated result.
 

@@ -119,7 +119,7 @@ def filter_non_other_topics(items: list["RawItem"]) -> list["RawItem"]:
 
 
 def get_or_create_source(
-    source_key: str, name: str, source_type: str, url: str = "", feed_url: str = ""
+    source_key: str, name: str, source_type: str, url: str = "", feed_url: str = "",
 ) -> Source:
     """Get an existing Source or create one, handling race conditions.
 

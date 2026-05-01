@@ -45,7 +45,7 @@ class GeminiProvider(BaseLLMProvider):
         )
 
     def _build_contents(
-        self, messages: list[dict[str, str]], system: Optional[str]
+        self, messages: list[dict[str, str]], system: Optional[str],
     ) -> tuple[list[dict], Any]:
         """Build Gemini contents format with optional system instruction."""
         contents = []
@@ -55,7 +55,7 @@ class GeminiProvider(BaseLLMProvider):
                 {
                     "role": role,
                     "parts": [{"text": msg["content"]}],
-                }
+                },
             )
         system_instruction = None
         if system:
@@ -106,7 +106,7 @@ class GeminiProvider(BaseLLMProvider):
     ) -> LLMResponse:
         return self._retry_with_backoff(
             self._do_chat, model,
-            messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs
+            messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         )
 
     def chat_streaming(
@@ -216,8 +216,8 @@ class GeminiProvider(BaseLLMProvider):
                             "parameters": tool.parameters,
                         }
                         for tool in tools
-                    ]
-                }
+                    ],
+                },
             ]
         try:
             resp = self.client.models.generate_content(**call_kwargs)
@@ -245,7 +245,7 @@ class GeminiProvider(BaseLLMProvider):
         )
 
     def _extract_text_and_tool_calls(
-        self, response: Any
+        self, response: Any,
     ) -> tuple[str, list[ToolCall]]:
         candidate = response.candidates[0]
         content_parts = candidate.content.parts
@@ -264,7 +264,7 @@ class GeminiProvider(BaseLLMProvider):
                         id=fc.id or "",
                         name=fc.name,
                         arguments=fn_args,
-                    )
+                    ),
                 )
         return text_content, tool_calls
 
@@ -277,8 +277,8 @@ class GeminiProvider(BaseLLMProvider):
                         "id": tool_call.id,
                         "name": tool_call.name,
                         "response": {"result": result_content},
-                    }
-                }
+                    },
+                },
             ],
         }
 
@@ -294,7 +294,7 @@ class GeminiProvider(BaseLLMProvider):
         max_iterations: int = 5,
     ) -> ToolCallingResponse:
         return super().chat_with_tools(
-            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations
+            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations,
         )
 
     def health_check(self) -> dict[str, Any]:

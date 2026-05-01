@@ -125,5 +125,5 @@ def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
         savepoint.rollback()
         logger.error("Failed to write pipeline log: %s", e)
         metrics.counter_inc(
-            "pipeline.log_write_failed", labels={"stage": stage, "level": level}
+            "pipeline.log_write_failed", labels={"stage": stage, "level": level},
         )

@@ -92,7 +92,7 @@ class LLMQualityAssessor(QualityAssessor):
         return "\n".join(lines)
 
     def _build_assessment_prompt(
-        self, content: str, sources_text: str, context: dict[str, Any] | None
+        self, content: str, sources_text: str, context: dict[str, Any] | None,
     ) -> str:
         return f"""Evaluate the quality of this article content:
 
@@ -139,7 +139,7 @@ Return JSON: {{"groundedness": float, "coherence": float, "completeness": float,
 
 
 def detect_hallucination(
-    content: str, sources: list[dict[str, Any]]
+    content: str, sources: list[dict[str, Any]],
 ) -> list[str]:
     """Detect potential hallucinations by checking claims against sources.
 
@@ -196,7 +196,7 @@ def lightweight_quality_signals(
 
 
 def _assess_groundedness(
-    content: str, sources: list[dict[str, Any]] | None
+    content: str, sources: list[dict[str, Any]] | None,
 ) -> float:
     """Assess how well content is grounded in sources."""
     if not sources:

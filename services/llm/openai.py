@@ -107,7 +107,7 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> LLMResponse:
         return self._retry_with_backoff(
             self._do_chat, model,
-            messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs
+            messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         )
 
     def chat_streaming(
@@ -247,7 +247,7 @@ class OpenAIProvider(BaseLLMProvider):
         )
 
     def _extract_text_and_tool_calls(
-        self, response: Any
+        self, response: Any,
     ) -> tuple[str, list[ToolCall]]:
         msg = response
         tool_calls = []
@@ -264,7 +264,7 @@ class OpenAIProvider(BaseLLMProvider):
                         id=tc.id,
                         name=tc.function.name,
                         arguments=fn_args,
-                    )
+                    ),
                 )
         return msg.content or "", tool_calls
 
@@ -287,7 +287,7 @@ class OpenAIProvider(BaseLLMProvider):
         max_iterations: int = 5,
     ) -> ToolCallingResponse:
         return super().chat_with_tools(
-            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations
+            messages, tools, tool_choice, model, system, temperature, max_tokens, max_iterations,
         )
 
     def health_check(self) -> dict[str, Any]:

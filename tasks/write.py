@@ -67,13 +67,13 @@ def write_article(self, article_id: int, run_id=None):
                 get_memory_for_topics,
             )
             trend_memory = _format_memory_for_prompt(
-                get_memory_for_topics(article.topics, min_importance=1)
+                get_memory_for_topics(article.topics, min_importance=1),
             )
 
         # Truncate research_brief to prevent token overflow
         from services.prompts import sliding_window_truncate
         research_brief = sliding_window_truncate(
-            article.research_brief or "", max_chars=8000, model=model
+            article.research_brief or "", max_chars=8000, model=model,
         )
 
         prompt = build_writer_prompt(
@@ -89,7 +89,7 @@ def write_article(self, article_id: int, run_id=None):
 
         with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="write"):
             with time_histogram(
-                "pipeline.stage_duration_seconds", labels={"stage": "write"}
+                "pipeline.stage_duration_seconds", labels={"stage": "write"},
             ):
                 result = provider.chat_structured(
                     messages=[{"role": "user", "content": prompt}],

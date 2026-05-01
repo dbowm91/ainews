@@ -78,7 +78,7 @@ def retry_stuck(self):
                         PipelineStatus.WRITING,
                         PipelineStatus.EDITING,
                         PipelineStatus.PENDING,
-                    ]
+                    ],
                 ),
                 Article.updated_at < soft_cutoff,
             )
@@ -193,7 +193,7 @@ def _dead_letter(article):
 
     try:
         create_article_version(
-            article, change_reason="dead_letter", changed_by="retry_stuck"
+            article, change_reason="dead_letter", changed_by="retry_stuck",
         )
     except Exception as e:
         logger.warning("Failed to create article version for dead-letter: %s", e)

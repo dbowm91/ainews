@@ -24,7 +24,7 @@ def reload_config() -> tuple[Response, int] | Response:
     is_valid, errors = validate_config()
     if not is_valid:
         return api_response(
-            error="Config validation failed", meta={"details": errors}, status=400
+            error="Config validation failed", meta={"details": errors}, status=400,
         )
 
     get_config_cache().invalidate_all()

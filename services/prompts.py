@@ -105,7 +105,7 @@ def get_system_prompt(role: str, yaml_prompt: str | None) -> str:
     if file_prompt:
         return file_prompt
     raise ValueError(
-        f"No system prompt found for role '{role}' (checked YAML and prompts/{role}.txt)"
+        f"No system prompt found for role '{role}' (checked YAML and prompts/{role}.txt)",
     )
 
 
@@ -332,7 +332,7 @@ def smart_truncate_context(
                     llm_provider=llm_provider,
                     max_tokens=truncation_llm_max_tokens,
                     temperature=truncation_llm_temperature,
-                )
+                ),
             )
             if summary:
                 result = f"{summary}\n\n{TRUNCATION_WARNING}"

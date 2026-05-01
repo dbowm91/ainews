@@ -22,7 +22,7 @@ def get_subscriber_stats(db):
         .filter(Subscriber.deleted_at.is_(None))
         .filter_by(active=True)
         .group_by(Subscriber.newsletter_type)
-        .all()
+        .all(),
     )
     inactive = (
         Subscriber.query.filter(Subscriber.deleted_at.is_(None))

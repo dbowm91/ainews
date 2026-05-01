@@ -62,5 +62,5 @@ def list_audit_logs() -> Response:
             "per_page": per_page,
             "total": total,
             "has_next": has_next,
-        }
+        },
     )

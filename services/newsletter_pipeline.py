@@ -50,7 +50,7 @@ def build_reader_prompt(articles, topic_context: str) -> str:
             parts.append(f"   {esc_xml_text(tldr[:200])}")
     parts.append("")
     parts.append(
-        "Analyze these articles. Identify themes, highlights, and connections."
+        "Analyze these articles. Identify themes, highlights, and connections.",
     )
     return "\n".join(parts)
 
@@ -103,7 +103,7 @@ def _run_pipeline_stage(
 
     try:
         provider, model, max_tokens, _ = get_provider_for_role(
-            f"newsletter_pipeline.{role}"
+            f"newsletter_pipeline.{role}",
         )
         if limiter.acquire(
             stage_config.provider,
@@ -116,7 +116,7 @@ def _run_pipeline_stage(
                 return result, True
             finally:
                 limiter.release(
-                    stage_config.provider, model, stage_config.timeout_seconds
+                    stage_config.provider, model, stage_config.timeout_seconds,
                 )
         else:
             metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})
@@ -178,7 +178,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
             )
 
         brief, reader_success = _run_pipeline_stage(
-            "reader", nlp.reader, metrics, limiter, reader_llm_call, fallback_stages
+            "reader", nlp.reader, metrics, limiter, reader_llm_call, fallback_stages,
         )
         if reader_success:
             brief_json = brief.model_dump_json()
@@ -189,13 +189,13 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                 if not brief_data.get("themes") and not brief_data.get("highlights"):
                     logger.error("Reader stage produced empty brief")
                     metrics.counter_inc(
-                        "newsletter.pipeline_empty_stage", labels={"stage": "reader"}
+                        "newsletter.pipeline_empty_stage", labels={"stage": "reader"},
                     )
                     if "reader" not in fallback_stages:
                         fallback_stages.append("reader")
             except Exception:
                 logger.warning(
-                    "Failed to parse brief JSON for fallback check", exc_info=True
+                    "Failed to parse brief JSON for fallback check", exc_info=True,
                 )
 
     # Writer
@@ -213,7 +213,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
             )
 
         result, writer_success = _run_pipeline_stage(
-            "writer", nlp.writer, metrics, limiter, writer_llm_call, fallback_stages
+            "writer", nlp.writer, metrics, limiter, writer_llm_call, fallback_stages,
         )
         if writer_success:
             summary_json = result.model_dump_json()
@@ -246,7 +246,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
             )
 
         result, editor_success = _run_pipeline_stage(
-            "editor", nlp.editor, metrics, limiter, editor_llm_call, fallback_stages
+            "editor", nlp.editor, metrics, limiter, editor_llm_call, fallback_stages,
         )
         if editor_success:
             return {

@@ -83,7 +83,7 @@ def validate_article_id(value: int) -> int:
     """Validate an article ID is a positive integer."""
     if not isinstance(value, int) or value < 1:
         raise ValidationError(
-            "Article ID must be a positive integer", field="article_id"
+            "Article ID must be a positive integer", field="article_id",
         )
     return value
 
@@ -107,14 +107,14 @@ def validate_bulk_ids(article_ids: list, max_count: int = 500) -> list[int]:
         raise ValidationError("article_ids must not be empty", field="article_ids")
     if len(article_ids) > max_count:
         raise ValidationError(
-            f"Maximum {max_count} IDs per bulk operation", field="article_ids"
+            f"Maximum {max_count} IDs per bulk operation", field="article_ids",
         )
 
     validated = []
     for i, aid in enumerate(article_ids):
         if not isinstance(aid, int) or aid < 1:
             raise ValidationError(
-                f"Invalid article ID at index {i}", field="article_ids"
+                f"Invalid article ID at index {i}", field="article_ids",
             )
         validated.append(aid)
     return validated

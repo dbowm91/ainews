@@ -24,7 +24,7 @@ def _degrade_research(article):
             "context_notes": "Research stage failed; using source text only.",
             "newsworthiness": "Auto-generated after research failure.",
             "impact_score": 30,
-        }
+        },
     )
     article.impact_score = 30
 
@@ -48,7 +48,7 @@ _STAGE_DEGRADE_MAP = {
         "next_status": PipelineStatus.EDITING,
         "log_message": "Degraded: minimal draft for %s",
         "set_fields": lambda article: setattr(
-            article, "draft_article", _build_fallback_article(article)
+            article, "draft_article", _build_fallback_article(article),
         ),
     },
 }

@@ -100,7 +100,7 @@ def get_memory_for_topics(
         query = query.filter(TrendMemory.importance >= min_importance)
     now = datetime.now(timezone.utc)
     query = query.filter(
-        (TrendMemory.expires_at.is_(None)) | (TrendMemory.expires_at > now)
+        (TrendMemory.expires_at.is_(None)) | (TrendMemory.expires_at > now),
     )
     if max_age_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
@@ -231,7 +231,7 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
             e,
         )
         return SubagentResponse(
-            synthesis="", used_fallback=True, fallback_stages=["trend_memory"]
+            synthesis="", used_fallback=True, fallback_stages=["trend_memory"],
         )
 
     if not entries:
@@ -241,7 +241,7 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
         _save_memory_entries(entries, article.id)
     except SQLAlchemyError:
         return SubagentResponse(
-            synthesis="", used_fallback=True, fallback_stages=["trend_memory"]
+            synthesis="", used_fallback=True, fallback_stages=["trend_memory"],
         )
 
     get_metrics().counter_inc(
@@ -262,7 +262,7 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
 def _should_consolidate_topic(topic: str) -> bool:
     config = _get_config()
     cooldown = datetime.now(timezone.utc) - timedelta(
-        hours=config.consolidation_cooldown_hours
+        hours=config.consolidation_cooldown_hours,
     )
     recent = TrendMemory.query.filter(
         TrendMemory.topic == topic,
@@ -295,7 +295,7 @@ def consolidate_topic(topic: str) -> int:
         return 0
 
     window_start = most_recent_high - timedelta(
-        hours=config.consolidation_merge_window_hours
+        hours=config.consolidation_merge_window_hours,
     )
     now = datetime.now(timezone.utc)
     new_expires_at = _ttl_for_importance(MemoryImportance.MEDIUM)

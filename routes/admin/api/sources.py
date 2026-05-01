@@ -38,7 +38,7 @@ def list_sources() -> Response:
                 "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
             }
             for s in sources
-        ]
+        ],
     )
 
 
@@ -127,7 +127,7 @@ def get_source(source_id: int) -> Response:
             ),
             "last_error": source.last_error,
             "disabled_at": source.disabled_at.isoformat() if source.disabled_at else None,
-        }
+        },
     )
 
 
@@ -253,7 +253,7 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
             "last_error": source.last_error,
             "disabled_at": source.disabled_at.isoformat() if source.disabled_at else None,
         },
-        meta={"message": "Source partially updated"}
+        meta={"message": "Source partially updated"},
     )
 
 

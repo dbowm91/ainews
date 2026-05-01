@@ -32,7 +32,7 @@ logger = get_task_logger(__name__)
     retry_jitter=True,
 )
 def send_single_email(
-    self, email: str, subject: str, html: str, unsub_url: str
+    self, email: str, subject: str, html: str, unsub_url: str,
 ) -> dict:
     """Send a single newsletter email. Called by generate_daily_newsletters.
 
@@ -43,7 +43,7 @@ def send_single_email(
     try:
         from schemas.tasks import SendEmailTask
         validated = SendEmailTask(
-            email=email, subject=subject, html=html, unsub_url=unsub_url
+            email=email, subject=subject, html=html, unsub_url=unsub_url,
         )
     except Exception as e:
         logger.warning("Invalid send_single_email input: %s", e)
@@ -91,7 +91,7 @@ def _send_emails_parallel(subscribers_iter, subject, html, site_url):
                 subject=subject,
                 html=html,
                 unsub_url=unsub_url,
-            )
+            ),
         )
         if len(batch) >= BATCH_SIZE:
             job = group(batch)
@@ -340,7 +340,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
                 nl.max_articles,
                 dry_run,
                 nl,
-            )
+            ),
         )
 
     job = group(task_signatures)
@@ -547,14 +547,14 @@ def retry_failed_newsletter_deliveries(self):
             if e.smtp_code >= 500:
                 failed_count += 1
                 logger.error(
-                    "Permanent SMTP error retrying newsletter %s: %s", nl.id, e
+                    "Permanent SMTP error retrying newsletter %s: %s", nl.id, e,
                 )
             else:
                 raise
         except SoftTimeLimitExceeded:
             db.session.rollback()
             logger.error(
-                "retry_failed_newsletter_deliveries exceeded soft time limit"
+                "retry_failed_newsletter_deliveries exceeded soft time limit",
             )
             raise
         except Exception as e:

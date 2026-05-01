@@ -84,7 +84,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             return f"Error retrieving topic notes: {type(e).__name__}"
 
     def _get_related_articles(
-        topics: list[str], exclude_id: int, limit: int = 5
+        topics: list[str], exclude_id: int, limit: int = 5,
     ) -> str:
         from services.cache import get_response_cache
 
@@ -109,7 +109,7 @@ def _build_context_tools() -> list[ToolDefinition]:
         return cache.get_or_set(cache_key, _fetch_articles, ttl=120)
 
     def _get_trend_memory(
-        topics: list[str], min_importance: int = 1, max_age_days: int | None = None
+        topics: list[str], min_importance: int = 1, max_age_days: int | None = None,
     ) -> str:
         from services.trend_memory import get_memory_for_topics
 
@@ -154,7 +154,7 @@ def _build_context_tools() -> list[ToolDefinition]:
 
         try:
             articles = Article.query.filter(
-                Article.original_title.ilike(f"%{query}%")
+                Article.original_title.ilike(f"%{query}%"),
             ).limit(limit).all()
             return json.dumps([
                 {"id": a.id, "title": a.original_title} for a in articles
@@ -201,7 +201,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["topic"],
             },
             fn=_get_topic_note,
-        )
+        ),
     )
 
     tools.append(
@@ -220,7 +220,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["topics"],
             },
             fn=_get_topic_notes_for_topics,
-        )
+        ),
     )
 
     tools.append(
@@ -247,7 +247,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["topics", "exclude_id"],
             },
             fn=_get_related_articles,
-        )
+        ),
     )
 
     tools.append(
@@ -274,7 +274,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["topics"],
             },
             fn=_get_trend_memory,
-        )
+        ),
     )
 
     tools.append(
@@ -292,7 +292,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["article_id"],
             },
             fn=_get_article_by_id,
-        )
+        ),
     )
 
     tools.append(
@@ -311,7 +311,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "required": ["query"],
             },
             fn=_search_articles,
-        )
+        ),
     )
 
     tools.append(
@@ -323,7 +323,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "properties": {},
             },
             fn=_get_source_health,
-        )
+        ),
     )
 
     return tools
@@ -377,7 +377,7 @@ def _build_search_tools() -> list[ToolDefinition]:
                 "required": ["query"],
             },
             fn=_search_web,
-        )
+        ),
     )
 
     tools.append(
@@ -394,7 +394,7 @@ def _build_search_tools() -> list[ToolDefinition]:
                 },
             },
             fn=_get_search_provider,
-        )
+        ),
     )
 
     return tools
@@ -591,7 +591,7 @@ def run_subagent(
     system_prompt = stage_config.system_prompt or ""
 
     provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
-        stage_config, default_role=default_role
+        stage_config, default_role=default_role,
     )
 
     def _call_with_timeout():
@@ -635,7 +635,7 @@ def run_subagent(
                         stage_config.timeout_seconds,
                     )
                     raise ProviderTimeoutError(
-                        f"Subagent timed out after {stage_config.timeout_seconds}s"
+                        f"Subagent timed out after {stage_config.timeout_seconds}s",
                     )
             break
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
@@ -762,7 +762,7 @@ def run_subagent_with_tools(
 
     system_prompt = stage_config.system_prompt or ""
     provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
-        stage_config, default_role=default_role
+        stage_config, default_role=default_role,
     )
 
     messages = [{"role": "user", "content": prompt}]
@@ -804,7 +804,7 @@ def run_subagent_with_tools(
                     tc_resp = future.result(timeout=stage_config.timeout_seconds)
                     try:
                         result = response_model.model_validate(
-                            {"synthesis": tc_resp.text}
+                            {"synthesis": tc_resp.text},
                         )
                     except (json.JSONDecodeError, ValidationError) as validation_err:
                         if self_corrected:
@@ -832,7 +832,7 @@ def run_subagent_with_tools(
                         stage_config.timeout_seconds,
                     )
                     raise ProviderTimeoutError(
-                        f"Subagent timed out after {stage_config.timeout_seconds}s"
+                        f"Subagent timed out after {stage_config.timeout_seconds}s",
                     )
             break
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
@@ -980,7 +980,7 @@ def run_subagent_chain(
         try:
             template = step_config.prompt_data_template
             prompt_data = _resolve_template_variables(
-                template, initial_prompt_data, results
+                template, initial_prompt_data, results,
             )
             prompt_data_escaped = _escape_prompt_data(prompt_data)
             prompt = template.format(**prompt_data_escaped)
@@ -996,7 +996,7 @@ def run_subagent_chain(
 
         system_prompt = stage_config.system_prompt or ""
         provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
-            stage_config, default_role="editor"
+            stage_config, default_role="editor",
         )
 
         def _chain_call():
@@ -1026,7 +1026,7 @@ def run_subagent_chain(
                         attempt + 1,
                     )
                     raise ProviderTimeoutError(
-                        f"Chain step timed out after {stage_config.timeout_seconds}s"
+                        f"Chain step timed out after {stage_config.timeout_seconds}s",
                     )
             except (ProviderTimeoutError, TimeoutError) as e:
                 if attempt < stage_config.max_retries:
@@ -1132,7 +1132,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
                 return {}
             if node.attr.startswith("__") or node.attr.startswith("_"):
                 raise ValueError(
-                    f"Access to protected attribute '{node.attr}' is not allowed"
+                    f"Access to protected attribute '{node.attr}' is not allowed",
                 )
             try:
                 return getattr(obj, node.attr)
@@ -1180,7 +1180,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
 
 
 def _resolve_template_variables(
-    template: str, initial_data: dict, results: dict[str, Any]
+    template: str, initial_data: dict, results: dict[str, Any],
 ) -> dict:
     """Resolve template variables, including references to previous step results."""
     resolved = dict(initial_data)
@@ -1191,6 +1191,6 @@ def _resolve_template_variables(
             except (KeyError, ValueError, AttributeError) as e:
                 logger.warning(
                     "Template resolution failed for key '%s': %s",
-                    key, e
+                    key, e,
                 )
     return resolved

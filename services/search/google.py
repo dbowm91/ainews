@@ -20,7 +20,7 @@ def _is_configured(val: str) -> bool:
 
 
 def _search_impl(
-    provider: "GoogleSearchProvider", query: str, max_results: int
+    provider: "GoogleSearchProvider", query: str, max_results: int,
 ) -> list[SearchResult]:
     from services.search.session import get_session
     from services.url import validate_url_safe
@@ -48,7 +48,7 @@ def _search_impl(
                 url=item.get("link", ""),
                 snippet=item.get("snippet", ""),
                 source=provider.provider_id,
-            )
+            ),
         )
     return results[:max_results]
 
@@ -60,7 +60,7 @@ class GoogleSearchProvider(BaseSearchProvider):
         self.api_key = resolve_env_var(config.get("api_key", ""))
         self.cse_id = resolve_env_var(config.get("cse_id", ""))
         self.base_url = config.get(
-            "base_url", "https://www.googleapis.com/customsearch/v1"
+            "base_url", "https://www.googleapis.com/customsearch/v1",
         )
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:

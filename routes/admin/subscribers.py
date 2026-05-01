@@ -15,7 +15,7 @@ def subscribers() -> str:
     active_filter = request.args.get("active", "", type=str).strip()
 
     q = Subscriber.query.filter(Subscriber.deleted_at.is_(None)).order_by(
-        Subscriber.subscribed_at.desc()
+        Subscriber.subscribed_at.desc(),
     )
     if newsletter_type:
         q = q.filter_by(newsletter_type=newsletter_type)
@@ -82,7 +82,7 @@ def export_subscribers() -> Response:
                         sub.newsletter_type,
                         sub.subscribed_at.isoformat() if sub.subscribed_at else "",
                         sub.active,
-                    ]
+                    ],
                 )
                 count += 1
                 yield output.getvalue()

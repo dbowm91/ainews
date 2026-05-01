@@ -31,7 +31,7 @@ def safe_int(key: str, default: int) -> int:
         return int(value)
     except ValueError:
         logger.warning(
-            "Invalid integer value for %s: %r, using default %d", key, value, default
+            "Invalid integer value for %s: %r, using default %d", key, value, default,
         )
         return default
 
@@ -52,7 +52,7 @@ def get_stuck_threshold_minutes() -> int:
         from flask import current_app
 
         return current_app.config.get(
-            "STUCK_THRESHOLD_MINUTES", STUCK_THRESHOLD_MINUTES
+            "STUCK_THRESHOLD_MINUTES", STUCK_THRESHOLD_MINUTES,
         )
     except RuntimeError:
         return STUCK_THRESHOLD_MINUTES
@@ -64,7 +64,7 @@ def get_retry_soft_cutoff_minutes() -> int:
         from flask import current_app
 
         return current_app.config.get(
-            "RETRY_SOFT_CUTOFF_MINUTES", RETRY_SOFT_CUTOFF_MINUTES
+            "RETRY_SOFT_CUTOFF_MINUTES", RETRY_SOFT_CUTOFF_MINUTES,
         )
     except RuntimeError:
         return RETRY_SOFT_CUTOFF_MINUTES
@@ -133,7 +133,7 @@ class AppConfig:
                     session_cookie_samesite=cfg.get("SESSION_COOKIE_SAMESITE", "Lax"),
                     max_content_length=cfg.get("MAX_CONTENT_LENGTH", 64 * 1024),
                     verification_expiry_seconds=cfg.get(
-                        "VERIFICATION_EXPIRY_SECONDS", 3600
+                        "VERIFICATION_EXPIRY_SECONDS", 3600,
                     ),
                 ),
                 sources=SourceConfig(
@@ -159,7 +159,7 @@ class AppConfig:
                 .startswith("t"),
                 max_content_length=safe_int("MAX_CONTENT_LENGTH", 64 * 1024),
                 verification_expiry_seconds=safe_int(
-                    "VERIFICATION_EXPIRY_SECONDS", 3600
+                    "VERIFICATION_EXPIRY_SECONDS", 3600,
                 ),
             ),
             sources=SourceConfig(

@@ -50,7 +50,7 @@ from services.pagination import _escape_like_pattern, paginate_query, search_fts
 
 _search_logger = ThreadPoolExecutor(
     max_workers=2,
-    thread_name_prefix="search_log"
+    thread_name_prefix="search_log",
 )
 
 
@@ -89,8 +89,8 @@ def _get_duplicate_detection_days() -> int:
     try:
         return int(
             os.environ.get(
-                "DUPLICATE_DETECTION_DAYS", _DEFAULT_DUPLICATE_DETECTION_DAYS
-            )
+                "DUPLICATE_DETECTION_DAYS", _DEFAULT_DUPLICATE_DETECTION_DAYS,
+            ),
         )
     except (ValueError, TypeError):
         return _DEFAULT_DUPLICATE_DETECTION_DAYS
@@ -185,7 +185,7 @@ def get_articles_paginated(
         escaped_query = _escape_like_pattern(query)
         q = q.filter(
             Article.original_title.ilike(f"%{escaped_query}%", escape="\\")
-            | Article.final_article.ilike(f"%{escaped_query}%", escape="\\")
+            | Article.final_article.ilike(f"%{escaped_query}%", escape="\\"),
         )
     if status_filter:
         q = q.filter(Article.pipeline_status == status_filter)

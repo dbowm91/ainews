@@ -25,7 +25,7 @@ def pipeline_stats() -> Response:
     metrics = get_metrics().get_metrics()
     degradation_count = metrics.get("counters", {}).get("pipeline.degradation", 0)
     multi_stage_count = metrics.get("counters", {}).get(
-        "pipeline.multi_stage_degradation", 0
+        "pipeline.multi_stage_degradation", 0,
     )
     total_stage_completions = sum(
         s.get("success", 0) + s.get("failure", 0)
@@ -63,7 +63,7 @@ def dead_letter_stats() -> Response:
                 PipelineStatus.WRITING,
                 PipelineStatus.EDITING,
                 PipelineStatus.PENDING,
-            ]
+            ],
         ),
         Article.updated_at < cutoff,
     ).count()
@@ -80,7 +80,7 @@ def dead_letter_stats() -> Response:
             "stuck_articles": stuck,
             "failed_articles": failed,
             "gauge_stuck": gauge_val,
-        }
+        },
     )
 
 
@@ -128,7 +128,7 @@ def pipeline_backlog() -> Response:
                 }
                 for a in articles
             ],
-        }
+        },
     )
 
 
@@ -154,7 +154,7 @@ def cost_summary() -> Response:
                 }
                 for m in summary.models
             ],
-        }
+        },
     )
 
 
@@ -180,7 +180,7 @@ def sources_health() -> Response:
                 "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
             }
             for s in sources
-        ]
+        ],
     )
 
 
@@ -253,7 +253,7 @@ def pipeline_sla() -> Response:
                 "crawl_to_publish_p95": c2p["p95"],
             },
             "histogram": get_metrics().get_metrics().get("histograms", {}).get(
-                "pipeline_sla_seconds", {}
+                "pipeline_sla_seconds", {},
             ),
-        }
+        },
     )

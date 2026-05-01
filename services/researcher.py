@@ -84,14 +84,14 @@ def build_research_prompt(
                 f"  <article index='{i}'>"
                 f"{esc_xml_text(ra['title'])} ({esc_xml_text(ra['category'])}) - "
                 f"{esc_xml_text(ra['snippet'][:200])}"
-                f"</article>"
+                f"</article>",
             )
         parts.append("</related_articles>")
         parts.append("")
 
     parts.append(
         "Compile a comprehensive research brief using all available information. "
-        "Include external context where relevant. Attribute all claims to their sources."
+        "Include external context where relevant. Attribute all claims to their sources.",
     )
 
     return "\n".join(parts)

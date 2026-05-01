@@ -34,7 +34,7 @@ def create_topic_note(topic: str, note: str, source: Optional[str] = None) -> To
 
 
 def update_topic_note(
-    topic: str, note: str, source: Optional[str] = None
+    topic: str, note: str, source: Optional[str] = None,
 ) -> Optional[TopicNote]:
     topic_note = get_topic_note(topic, source)
     if topic_note:
@@ -73,7 +73,7 @@ def get_topic_notes_for_topics(topics: list[str]) -> dict[str, list[str]]:
 
 
 def get_related_articles_for_edit(
-    topics: list[str], exclude_id: int, limit: int = 5
+    topics: list[str], exclude_id: int, limit: int = 5,
 ) -> list[dict]:
     if not topics:
         return []

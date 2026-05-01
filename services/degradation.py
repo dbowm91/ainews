@@ -50,7 +50,7 @@ def degrade_on_failure(
 
 
 def fallback_chain(
-    *functions: Callable, exceptions: tuple[type[Exception], ...] = (Exception,)
+    *functions: Callable, exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
     """Try multiple functions in order, returning the first successful result.
 
@@ -86,7 +86,7 @@ def fallback_chain(
 
 
 def safe_default(
-    default: Any = None, exceptions: tuple[type[Exception], ...] = (Exception,)
+    default: Any = None, exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
     """Decorator that returns a default value on any exception.
 

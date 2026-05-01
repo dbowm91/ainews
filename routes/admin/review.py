@@ -110,7 +110,7 @@ def approve_article(article_id):
         logger.warning("Failed to invalidate article cache: %s", e)
 
     logger.info(
-        "Approved article %s: %s", article_id, (article.original_title or "")[:50]
+        "Approved article %s: %s", article_id, (article.original_title or "")[:50],
     )
 
     if request.headers.get("HX-Request"):
@@ -154,7 +154,7 @@ def reject_article(article_id):
         logger.warning("Failed to invalidate article cache: %s", e)
 
     logger.info(
-        "Rejected article %s: %s", article_id, (article.original_title or "")[:50]
+        "Rejected article %s: %s", article_id, (article.original_title or "")[:50],
     )
 
     if request.headers.get("HX-Request"):

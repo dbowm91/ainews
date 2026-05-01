@@ -66,7 +66,7 @@ def build_writer_prompt(
         f"'what_to_watch' (what happens next or what to monitor). "
         f"Limit key_points to {max_key_points} items. "
         f"Reference external sources and related articles from the brief in the body text. "
-        f"List all citations used."
+        f"List all citations used.",
     )
 
     return "".join(parts)

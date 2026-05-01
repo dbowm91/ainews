@@ -39,7 +39,7 @@ def _get_categories() -> list[str]:
     from schemas.topic import load_topics
 
     return get_config_cache().get(
-        "categories", lambda: list(load_topics().topics.keys()), ttl=300
+        "categories", lambda: list(load_topics().topics.keys()), ttl=300,
     )
 
 

@@ -147,7 +147,7 @@ def _create_article_record(
                 title=validated.title,
                 author=validated.author,
                 position=1,
-            )
+            ),
         )
 
     try:
@@ -232,7 +232,7 @@ def _handle_duplicate(
     if url and url != duplicate.original_url:
         try:
             existing_cite = Citation.query.filter_by(
-                article_id=duplicate.id, url=url
+                article_id=duplicate.id, url=url,
             ).first()
             if not existing_cite:
                 max_pos = (
@@ -248,16 +248,16 @@ def _handle_duplicate(
                         title=title,
                         author=author,
                         position=max_pos + 1,
-                    )
+                    ),
                 )
                 db.session.commit()
                 logger.info(
-                    "Added citation to article %s from %s", duplicate.id, url[:60]
+                    "Added citation to article %s from %s", duplicate.id, url[:60],
                 )
         except Exception as exc:
             db.session.rollback()
             logger.warning(
-                "Failed to add citation for duplicate %s: %s", duplicate.id, exc
+                "Failed to add citation for duplicate %s: %s", duplicate.id, exc,
             )
     return {"article_id": duplicate.id, "duplicate": True}
 

@@ -132,7 +132,7 @@ All admin endpoints require authentication via session-based auth (login at `/ad
 
 ### Admin Health Check
 
-**GET** `/admin/api/health`
+**GET** `/api/v1/health`
 
 Returns detailed health status including circuit breakers, cache stats, and DNS cache.
 
@@ -157,7 +157,7 @@ Returns detailed health status including circuit breakers, cache stats, and DNS 
 
 ### Worker Health
 
-**GET** `/admin/api/workers/health`
+**GET** `/api/v1/workers/health`
 
 Returns detailed Celery worker status.
 
@@ -181,7 +181,7 @@ Returns detailed Celery worker status.
 
 ### Task Status
 
-**GET** `/admin/api/task/<task_id>`
+**GET** `/api/v1/task/<task_id>`
 
 Get status of a Celery task.
 
@@ -198,7 +198,7 @@ Get status of a Celery task.
 
 ### Config Reload
 
-**POST** `/admin/api/config/reload`
+**POST** `/api/v1/config/reload`
 
 Clear all cached configs and reload from disk. Validates config before reload.
 
@@ -218,7 +218,7 @@ Clear all cached configs and reload from disk. Validates config before reload.
 
 ### Metrics
 
-**GET** `/admin/api/metrics`
+**GET** `/api/v1/metrics`
 
 Get application metrics as JSON.
 
@@ -235,7 +235,7 @@ Get application metrics as JSON.
 
 ### Prometheus Metrics
 
-**GET** `/admin/api/metrics/prometheus`
+**GET** `/api/v1/metrics/prometheus`
 
 Get metrics in Prometheus text format.
 
@@ -250,7 +250,7 @@ requests_total 1000
 
 ### Pipeline Stats
 
-**GET** `/admin/api/pipeline/stats`
+**GET** `/api/v1/pipeline/stats`
 
 Get pipeline stage success/failure statistics.
 
@@ -271,7 +271,7 @@ Get pipeline stage success/failure statistics.
 
 ### Dead Letter Stats
 
-**GET** `/admin/api/pipeline/dead-letter/stats`
+**GET** `/api/v1/pipeline/dead-letter/stats`
 
 Get statistics on stuck and failed articles.
 
@@ -288,7 +288,7 @@ Get statistics on stuck and failed articles.
 
 ### Pipeline SLA
 
-**GET** `/admin/api/pipeline/sla`
+**GET** `/api/v1/pipeline/sla`
 
 Get SLA metrics for article processing (avg, p50, p95 latencies).
 
@@ -308,7 +308,7 @@ Get SLA metrics for article processing (avg, p50, p95 latencies).
 
 ### Article IDs
 
-**GET** `/admin/api/articles/ids`
+**GET** `/api/v1/articles/ids`
 
 Return article IDs matching filter params for bulk selection UI.
 
@@ -330,7 +330,7 @@ Return article IDs matching filter params for bulk selection UI.
 
 ### Newsletter Stats
 
-**GET** `/admin/api/newsletters/stats`
+**GET** `/api/v1/newsletters/stats`
 
 Get newsletter delivery statistics.
 
@@ -349,7 +349,7 @@ Get newsletter delivery statistics.
 
 ### Cost Summary
 
-**GET** `/admin/api/costs`
+**GET** `/api/v1/costs`
 
 Get LLM cost summary from token usage metrics.
 
@@ -375,7 +375,7 @@ Get LLM cost summary from token usage metrics.
 
 ### Sources Health
 
-**GET** `/admin/api/sources/health`
+**GET** `/api/v1/sources/health`
 
 Get health status of all sources.
 
@@ -401,7 +401,7 @@ Get health status of all sources.
 
 ### Bulk Article Operations
 
-**POST** `/admin/api/articles/bulk`
+**POST** `/api/v1/articles/bulk`
 
 Perform bulk operations on articles.
 
@@ -425,7 +425,7 @@ Perform bulk operations on articles.
 
 ### Newsletter Preview
 
-**POST** `/admin/api/newsletter/preview`
+**POST** `/api/v1/newsletter/preview`
 
 Generate newsletter HTML without sending.
 
@@ -451,7 +451,7 @@ Generate newsletter HTML without sending.
 
 #### List Webhooks
 
-**GET** `/admin/api/webhooks`
+**GET** `/api/v1/webhooks`
 
 **Authentication:** Session required
 
@@ -473,7 +473,7 @@ Generate newsletter HTML without sending.
 
 #### Create Webhook
 
-**POST** `/admin/api/webhooks`
+**POST** `/api/v1/webhooks`
 
 **Authentication:** Session required
 
@@ -494,7 +494,7 @@ Generate newsletter HTML without sending.
 
 #### Update Webhook
 
-**PUT** `/admin/api/webhooks/<id>`
+**PUT** `/api/v1/webhooks/<id>`
 
 **Authentication:** Session required
 
@@ -515,7 +515,7 @@ Generate newsletter HTML without sending.
 
 #### Delete Webhook
 
-**DELETE** `/admin/api/webhooks/<id>`
+**DELETE** `/api/v1/webhooks/<id>`
 
 **Authentication:** Session required
 
@@ -526,7 +526,7 @@ Generate newsletter HTML without sending.
 
 #### Test Webhook
 
-**POST** `/admin/api/webhooks/<id>/test`
+**POST** `/api/v1/webhooks/<id>/test`
 
 **Authentication:** Session required
 
@@ -537,7 +537,7 @@ Generate newsletter HTML without sending.
 
 #### Webhook Events
 
-**GET** `/admin/api/webhooks/<id>/events`
+**GET** `/api/v1/webhooks/<id>/events`
 
 **Authentication:** Session required
 
@@ -556,7 +556,7 @@ Generate newsletter HTML without sending.
 
 ### Search Analytics
 
-**GET** `/admin/api/search/analytics`
+**GET** `/api/v1/search/analytics`
 
 Get search query statistics and zero-result queries.
 
@@ -577,7 +577,7 @@ Get search query statistics and zero-result queries.
 
 ### Audit Logs
 
-**GET** `/admin/api/audit-logs`
+**GET** `/api/v1/audit-logs`
 
 Get audit log entries.
 
@@ -606,7 +606,7 @@ Get audit log entries.
 
 ### Reprocess Article
 
-**POST** `/admin/api/articles/<article_id>/reprocess`
+**POST** `/api/v1/articles/<article_id>/reprocess`
 
 Reset article for reprocessing through the pipeline.
 

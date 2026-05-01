@@ -5,7 +5,7 @@ import time
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
-from constants import PipelineStatus
+from constants import PipelineStatus, CELERY_TASK_MAX_RETRIES
 from services.llm.errors import ProviderServerError
 
 logger = get_task_logger(__name__)
@@ -354,7 +354,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    max_retries=2,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=60,
     soft_time_limit=300,
     time_limit=360,

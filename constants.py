@@ -1,5 +1,10 @@
 """Shared constants for pagination and other configuration values."""
 
+import os
+
+# Celery task retry configuration
+CELERY_TASK_MAX_RETRIES = int(os.environ.get("CELERY_TASK_MAX_RETRIES", 3))
+
 # Pipeline retry limits (single source of truth)
 MAX_STAGE_RETRIES = 3
 MAX_STAGE_FAILURES = 3

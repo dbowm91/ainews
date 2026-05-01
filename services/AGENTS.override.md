@@ -60,3 +60,9 @@ Per-Stage Circuit Breaker: Circuit breakers are keyed by `provider:model:stage` 
 - **Condition Evaluation:** `run_subagent_chain()` uses AST-based parsing (not `eval()`) for conditional steps, blocking dunder attribute access
 - **Exception Handling:** Tool functions catch specific exceptions (`SQLAlchemyError`, `KeyError`, `AttributeError`) before falling back to bare `Exception`.
 - **ThreadPoolExecutor Pattern:** Blocking I/O uses ThreadPoolExecutor to avoid blocking Celery workers. Applied in `content_extractor.py`, `search/searxng.py`, `search/google.py`, `search/duckduckgo.py`, `subagent.py`. Module-level singleton executor with `submit()` + `future.result(timeout=N)`.
+- **Retry Logic Duplication:** Retry logic with exponential backoff + jitter is TRIPLICATED in subagent.py:
+  - `run_subagent`: Lines 619-625
+  - `run_subagent_with_tools`: Lines 795-801
+  - `run_subagent_chain`: Lines 1033-1038
+  Consider extracting into `_execute_with_retry()` helper.
+- **Thread Cancellation Limitation:** `future.cancel()` only requests cancellation - it doesn't guarantee thread termination. For robust cancellation, consider `ProcessPoolExecutor` or `executor.shutdown(wait=False)` with SIGTERM handling.

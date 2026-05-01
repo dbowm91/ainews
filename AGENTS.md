@@ -60,6 +60,7 @@ All distributed locks (Redis) and limiters MUST fail closed.
 - **Incorrect:** Returning `True` or proceeding on `RedisError`.
 - **Correct:** Raising the exception or returning `False` to halt execution.
 - **Reference:** `tasks/pipeline.py:_acquire_stage_lock` must NOT proceed without a lock.
+- **Note on Limiter:** `services/limiter.py:acquire()` returns `False` on RedisError - this is acceptable fail-closed behavior since callers interpret False as "slot not acquired." Both exception-raising and False-return are valid implementations.
 
 ### LLM Content Sanitization
 `final_article` content is sanitized with `bleach.clean()` allowing only safe tags (`a`, `b`, `i`, `ul`, `li`). Do NOT apply `|e` filter to already-sanitized content in templates.
@@ -151,3 +152,13 @@ if not self._redis.set(lock_key, "1", nx=True, ex=ttl):
 6. **Dead Code Removal:** Periodically check for and remove dead code (functions defined but never called). Confirm zero callers via grep before removal.
 
 7. **Parallelization:** Many improvements can be implemented in parallel by separate agents working on different functional areas (e.g., tasks, services, routes, CSS).
+
+8. **Plan Verification:** Always verify plan items against the current codebase before implementation. Line numbers and file paths become stale as code evolves. Use grep and read tools to confirm current state.
+
+9. **Actionable Plan Items:** Plan items should include:
+   - Specific file paths and line numbers (when known)
+   - The exact issue/change needed
+   - Expected behavior after the fix
+   - Dependencies on other items
+
+10. **Wave-Based Planning:** When consolidating plans, group items by dependency and parallelization potential. Independent items within a wave can run concurrently; items across waves should be sequential.

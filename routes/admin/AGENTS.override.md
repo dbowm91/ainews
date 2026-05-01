@@ -12,6 +12,7 @@ On successful admin login, ALWAYS call `session.clear()` before setting authenti
 
 - **API Token Support:** Admin API supports Bearer token authentication via `routes/admin/api_tokens.py`. ApiToken model in `models.py` with token_hash, name, created_at, last_used_at, expires_at fields.
 - **HMAC Task Signing:** All Celery tasks called externally (beat-scheduled) must verify HMAC signature via `verify_task()`.
+- **CSRF Validation:** `routes/decorators.py:validate_csrf_json` uses bare `except Exception:` at line 29. Should catch specific CSRF exceptions (e.g., `wtforms.csrf.session.SessionCSRFError`) for proper error handling.
 
 ## Admin API
 

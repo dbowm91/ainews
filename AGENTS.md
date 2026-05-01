@@ -180,7 +180,12 @@ Rules are organized into focused modules in `static/css/`.
 - **Stage-Aware Tool Selection:** `services/tool_selection.py` with `ToolSelector` protocol and `StageAwareToolSelector`.
 
 ### Subagent System
+- **Core Functions:** `run_subagent()`, `run_subagent_with_tools()`, `run_subagent_chain()` in `services/subagent.py` for pipeline-specific agentic tasks
+- **Tool Registry:** `initialize_tool_registry()` registers built-in tools. Add new tools via `_build_context_tools()` or new `_build_*_tools()` functions, then register in `initialize_tool_registry()`
+- **Prompt Templates:** Defined in `_SUBAGENT_TASK_TEMPLATES` (code) or `pipeline.yaml:subagent.<stage>.tools` (config). Resolved at call time via `_get_task_template()`
+- **Condition Evaluation:** `run_subagent_chain()` uses AST-based parsing (not `eval()`) for conditional steps, blocking dunder attribute access
 - **Exception Handling:** Tool functions catch specific exceptions (`SQLAlchemyError`, `KeyError`, `AttributeError`) before falling back to bare `Exception`.
+- **Skill Reference:** Detailed subagent, trend memory, and LLM harness patterns in `.opencode/skills/aiharness/SKILL.md`
 
 ## Common Patterns Reference
 

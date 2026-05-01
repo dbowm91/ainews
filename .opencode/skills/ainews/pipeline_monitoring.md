@@ -1,6 +1,10 @@
-# Pipeline Monitoring Skill
+---
+name: ainews-pipeline-monitoring
+description: "Monitor and debug the ainews pipeline stages using metrics, health endpoints, and logging utilities. Triggers: monitoring, metrics, health, pipeline, sla, dead letter, throughput."
+---
 
 ## Overview
+
 Monitor and debug the ainews pipeline stages (select → research → write → edit) using built-in metrics, health endpoints, and logging utilities.
 
 ## Key Monitoring Endpoints
@@ -17,7 +21,7 @@ GET /admin/api/pipeline/sla
 ```
 Returns avg/p50/p95 processing times for:
 - Crawl → Select
-- Select → Publish  
+- Select → Publish
 - Crawl → Publish
 
 Uses SQL aggregation with `ROW_NUMBER() OVER()` for efficiency.

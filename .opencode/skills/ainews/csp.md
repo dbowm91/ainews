@@ -1,5 +1,5 @@
 ---
-name: csp
+name: ainews-csp
 description: "Content Security Policy (CSP) patterns for ainews - nonce usage, inline script handling, and style-src configuration. Triggers: CSP, nonce, content security policy, inline script, unsafe-inline."
 ---
 

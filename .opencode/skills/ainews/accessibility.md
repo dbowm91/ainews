@@ -1,5 +1,5 @@
 ---
-name: accessibility
+name: ainews-accessibility
 description: "Accessibility patterns for ainews - ARIA labels, semantic HTML, keyboard navigation. Triggers: accessibility, ARIA, a11y, pagination, semantic HTML."
 ---
 

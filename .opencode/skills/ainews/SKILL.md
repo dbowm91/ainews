@@ -15,6 +15,7 @@ ainews is an AI-curated news pipeline with a Flask backend, Celery workers, and 
 - HTML email newsletter generation
 
 ## Pipeline Stages
+
 ```
 pending → selecting → selected → researching → writing → written → editing → done/failed
 ```
@@ -39,6 +40,7 @@ Each stage is a Celery task in `tasks/` with:
 | `services/pipeline_degradation.py` | `degrade_stage()`, `_finalize()`, `_apply_fallback()` |
 
 ### A/B Experiment System
+
 **Config in `pipeline.yaml`** under `experiments:` section:
 ```yaml
 experiments:
@@ -63,7 +65,7 @@ experiments:
 
 **Assignment:** `_assign_experiment_group(article_id, salt)` in `tasks/select.py` uses MD5 hash of `article_id:salt:experiment` for deterministic 70/15/15 split across control/variant_a/variant_b.
 
-**Variant selection:** 
+**Variant selection:**
 - `get_writer_system_prompt(article)` in `services/writer.py` checks `article.experiment_group` and returns variant prompt if available
 - `get_editor_system_prompt(article)` in `services/editor.py` same pattern
 - Falls back to control/default if no variant configured
@@ -100,20 +102,6 @@ All providers implement `BaseLLMProvider` from `services/llm/base.py`. Registere
 **Timeouts:** All LLM providers use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from `constants.py`. Provider files should import and use this constant rather than hardcoding values.
 
 **LLM Retry with Backoff:** `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff (base=1s, max=30s). Does NOT retry on `AuthError` or `CircuitOpenError`. When `RateLimitError` carries a `retry_after` attribute (from server's Retry-After header), that value is used instead of exponential backoff. Applied to all provider methods via `_do_*` / `_*` internal method pattern.
-
-## Subagent System
-`services/subagent.py` runs lightweight synchronous subagent tasks within pipeline stages. NOT a general-purpose agent framework.
-
-**Key functions:**
-- `run_subagent()` — single-step with timeout
-- `run_subagent_with_tools()` — tool calling (max 5 iterations)
-- `run_subagent_chain()` — multi-step with conditional execution
-
-**Tool:** `get_source_health` is registered in `services/subagent.py:282-289` and enabled in `pipeline.yaml` under `tools:` for the research subagent. Returns source health summary (disabled state, consecutive failures) for use during research synthesis.
-
-**Prompt data escaping:** All `prompt_data` is automatically escaped via `_escape_prompt_data()` before `template.format()`. This prevents XML-breaking injection.
-
-**Condition evaluation:** `run_subagent_chain()` uses AST-based parsing (NOT `eval()`) with allowlisted operators. Blocks dunder access.
 
 ## Celery Tasks
 

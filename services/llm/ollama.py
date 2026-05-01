@@ -6,6 +6,7 @@ from typing import Any, Iterator, Optional
 import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
+from services.circuit_breaker import circuit_protected
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -59,6 +60,7 @@ class OllamaProvider(BaseLLMProvider):
                 return thinking
         return content or ""
 
+    @circuit_protected("llm_ollama")
     def _do_chat(
         self,
         messages: list[dict[str, str]],
@@ -100,6 +102,7 @@ class OllamaProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         )
 
+    @circuit_protected("llm_ollama")
     def chat_streaming(
         self,
         messages: list[dict[str, str]],
@@ -127,6 +130,7 @@ class OllamaProvider(BaseLLMProvider):
         except Exception as e:
             raise _handle_ollama_error(e)
 
+    @circuit_protected("llm_ollama")
     def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
@@ -168,6 +172,7 @@ class OllamaProvider(BaseLLMProvider):
             temperature=temperature, max_tokens=max_tokens, schema=schema,
         )
 
+    @circuit_protected("llm_ollama")
     def _do_call_api_with_tools(
         self,
         model: str,

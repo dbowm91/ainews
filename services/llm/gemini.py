@@ -3,6 +3,7 @@ from typing import Any, Iterator, Optional
 
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
+from services.circuit_breaker import circuit_protected
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -62,6 +63,7 @@ class GeminiProvider(BaseLLMProvider):
             system_instruction = {"parts": [{"text": system}]}
         return contents, system_instruction
 
+    @circuit_protected("llm_gemini")
     def _do_chat(
         self,
         messages: list[dict[str, str]],
@@ -109,6 +111,7 @@ class GeminiProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         )
 
+    @circuit_protected("llm_gemini")
     def chat_streaming(
         self,
         messages: list[dict[str, str]],
@@ -139,6 +142,7 @@ class GeminiProvider(BaseLLMProvider):
         except Exception as e:
             raise _handle_gemini_error(e)
 
+    @circuit_protected("llm_gemini")
     def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
@@ -185,6 +189,7 @@ class GeminiProvider(BaseLLMProvider):
             temperature=temperature, max_tokens=max_tokens, schema=schema,
         )
 
+    @circuit_protected("llm_gemini")
     def _do_call_api_with_tools(
         self,
         model: str,

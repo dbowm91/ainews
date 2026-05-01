@@ -5,6 +5,7 @@ from typing import Any, Iterator, Optional
 import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
+from services.circuit_breaker import circuit_protected
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -66,6 +67,7 @@ class OpenAIProvider(BaseLLMProvider):
         http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=self._client_kwargs.get("timeout", DEFAULT_LLM_TIMEOUT_SECONDS))
         return OpenAI(**self._client_kwargs, http_client=http_client)
 
+    @circuit_protected("llm_openai")
     def _do_chat(
         self,
         messages: list[dict[str, str]],
@@ -114,6 +116,7 @@ class OpenAIProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         )
 
+    @circuit_protected("llm_openai")
     def chat_streaming(
         self,
         messages: list[dict[str, str]],
@@ -141,6 +144,7 @@ class OpenAIProvider(BaseLLMProvider):
         except Exception as e:
             raise _handle_openai_error(e)
 
+    @circuit_protected("llm_openai")
     def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
@@ -192,6 +196,7 @@ class OpenAIProvider(BaseLLMProvider):
             temperature=temperature, max_tokens=max_tokens, schema=schema,
         )
 
+    @circuit_protected("llm_openai")
     def _do_call_api_with_tools(
         self,
         model: str,

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
+from services.circuit_breaker import circuit_protected
 from services.search.base import (
     BaseSearchProvider,
     SearchResult,
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="searxng_search")
 
 
+@circuit_protected("search_searxng")
 def _search_impl(provider: "SearXNGSearchProvider", query: str, max_results: int) -> list[SearchResult]:
     from services.search.session import get_session
     from services.url import validate_url_safe

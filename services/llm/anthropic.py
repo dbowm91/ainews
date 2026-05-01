@@ -4,6 +4,7 @@ from typing import Any, Iterator, Optional
 import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
+from services.circuit_breaker import circuit_protected
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -60,6 +61,7 @@ class AnthropicProvider(BaseLLMProvider):
         http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=self._timeout)
         return Anthropic(api_key=self._api_key, timeout=self._timeout, http_client=http_client)
 
+    @circuit_protected("llm_anthropic")
     def _do_chat(
         self,
         messages: list[dict[str, str]],
@@ -110,6 +112,7 @@ class AnthropicProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         )
 
+    @circuit_protected("llm_anthropic")
     def chat_streaming(
         self,
         messages: list[dict[str, str]],
@@ -138,6 +141,7 @@ class AnthropicProvider(BaseLLMProvider):
         except Exception as e:
             raise _handle_anthropic_error(e)
 
+    @circuit_protected("llm_anthropic")
     def _do_chat_with_schema(
         self,
         messages: list[dict[str, str]],
@@ -184,6 +188,7 @@ class AnthropicProvider(BaseLLMProvider):
             temperature=temperature, max_tokens=max_tokens, schema=schema,
         )
 
+    @circuit_protected("llm_anthropic")
     def _do_call_api_with_tools(
         self,
         model: str,

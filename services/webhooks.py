@@ -12,6 +12,8 @@ from typing import Any
 import requests
 from sqlalchemy.exc import SQLAlchemyError
 
+from services.circuit_breaker import circuit_protected
+
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 5
@@ -120,6 +122,7 @@ def _sign_payload(payload: str, secret: str, timestamp: int | None = None) -> st
     ).hexdigest()
 
 
+@circuit_protected("webhook_delivery")
 def _send_webhook_with_retry(
     url: str,
     payload: dict[str, Any],

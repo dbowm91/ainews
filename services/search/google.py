@@ -4,6 +4,7 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from schemas.common import resolve_env_var
+from services.circuit_breaker import circuit_protected
 from services.search.base import (
     BaseSearchProvider,
     SearchResult,
@@ -19,6 +20,7 @@ def _is_configured(val: str) -> bool:
     return bool(val) and not val.startswith("${")
 
 
+@circuit_protected("search_google")
 def _search_impl(
     provider: "GoogleSearchProvider", query: str, max_results: int,
 ) -> list[SearchResult]:

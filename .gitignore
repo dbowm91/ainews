@@ -17,3 +17,4 @@ htmlcov/
 .pids/
 .last_deploy_commit
 .DS_Store
+.skills

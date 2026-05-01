@@ -513,3 +513,22 @@ All Waves 1-5 improvement items have been fully implemented:
 - Container queries: `container-type: inline-size` in `articles.css` with `@supports` fallback
 - CSS @layer: Organization in `style.css` with layered `@import` statements
 - Token-aware truncation: `count_tokens()` and `max_tokens_for_model()` support
+
+## Testing Conventions
+
+### Shared Singleton Isolation
+Many services use module-level singletons (e.g., `services.metrics.get_metrics()`, `services.circuit_breaker.get_breaker()`). Tests that interact with these singletons must reset them before each test to prevent pollution:
+
+- **Metrics:** Call `services.metrics.reset_metrics()` in test `setup_method` or fixture to clear both in-memory and Redis-backed metrics state.
+- **Circuit Breakers:** Since `get_breaker()` returns a shared instance, reset metrics (which clears circuit breaker state if using `RedisCircuitBreaker`) or use a fresh test namespace.
+
+**Example:**
+```python
+class TestCircuitBreakerMetrics:
+    def setup_method(self):
+        from services.metrics import reset_metrics
+        reset_metrics()
+```
+
+### Test Markers
+- `@pytest.mark.e2e` — End-to-end tests that require full environment (Celery worker, Redis, LLM access). Exclude with `-m "not e2e"`.

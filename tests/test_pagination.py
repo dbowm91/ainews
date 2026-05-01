@@ -1,7 +1,6 @@
 """Tests for pagination service."""
 
 
-
 class TestPagination:
     def test_paginate_query_basic(self, app):
         from extensions import db
@@ -69,7 +68,7 @@ class TestPagination:
         assert _escape_like_pattern("normal text") == "normal text"
 
     def test_build_fts_query(self):
-        from services.pagination import _build_fts_query
+        from services.search.sqlite_fts import _build_fts_query
 
         assert _build_fts_query("python") == '"python"'
         assert _build_fts_query("python ai") == '"python" AND "ai"'

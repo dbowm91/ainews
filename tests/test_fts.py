@@ -1,6 +1,6 @@
 """Tests for FTS5 query escaping to prevent injection vulnerabilities."""
 
-from routes.admin.api.articles import _escape_fts5_string
+from services.search.sqlite_fts import _escape_fts5_string
 
 
 class TestEscapeFTS5String:
@@ -32,7 +32,7 @@ class TestFTS5QueryWithEscapedChars:
 
     def test_fts5_query_with_escaped_url(self):
         """FTS5 query with escaped double quotes in URL is properly formed."""
-        from routes.admin.api.articles import _escape_fts5_string
+        from services.search.sqlite_fts import _escape_fts5_string
 
         # Build FTS5 query with escaped URL
         url = 'https://example.com/article?"id"=1'
@@ -60,7 +60,7 @@ class TestFTS5QueryWithEscapedChars:
         malicious_query = 'test" OR ""="'
 
         # Build the FTS5 query as done in the actual code
-        from routes.admin.api.articles import _escape_fts5_string
+        from services.search.sqlite_fts import _escape_fts5_string
 
         escaped = _escape_fts5_string(malicious_query)
         fts_query = f'original_url:"{escaped}"'

@@ -46,7 +46,7 @@ def sanitize_final_article(content: str) -> str:
 
 # Re-export from extracted modules for backward compatibility
 from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402
-from services.pagination import _escape_like_pattern, paginate_query, search_fts  # noqa: F401, E402
+from services.pagination import _escape_like_pattern, paginate_query  # noqa: F401, E402
 
 _search_logger = ThreadPoolExecutor(
     max_workers=2,
@@ -161,9 +161,30 @@ def get_articles_paginated(
     # Use FTS5 for text search when query is provided
     if query:
         try:
-            articles, has_next, next_page = search_fts(query, page, per_page, category=category)
-            _log_search_query(query, len(articles))
-            return articles, has_next, next_page
+            from services.search import get_article_search_provider
+
+            provider = get_article_search_provider()
+            results = provider.search(
+                query, page=page, per_page=per_page, category=category
+            )
+            _log_search_query(query, len(results))
+
+            if results:
+                article_ids = [r["id"] for r in results]
+                id_order = {id_: i for i, id_ in enumerate(article_ids)}
+                articles = (
+                    Article.query.options(
+                        joinedload(Article.source),
+                        joinedload(Article.tags),
+                        joinedload(Article.metrics),
+                    )
+                    .filter(Article.id.in_(article_ids))
+                    .all()
+                )
+                articles.sort(key=lambda a: id_order.get(a.id, 999))
+                parse_articles(articles)
+                has_next = len(results) >= per_page
+                return articles, has_next, page + 1
         except Exception:
             # FTS5 table may not exist yet (e.g., tests, fresh install)
             logger.debug("FTS5 search failed, falling back to ILIKE", exc_info=True)

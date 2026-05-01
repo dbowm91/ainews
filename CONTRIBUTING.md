@@ -82,7 +82,9 @@ See [AGENTS.md](AGENTS.md) for detailed conventions. Key points:
 
 ## Pipeline
 
-The article pipeline flows: **select → research → write → edit → done** (or **review**).
+The article pipeline flows: **research → write → edit → done** (or **review**).
+
+Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is now integrated into the research phase. Articles transition from `pending` to `researching`.
 
 Each stage runs as an independent Celery task. Pipeline status is tracked in the `Article.pipeline_status` column using constants from `PipelineStatus` in `constants.py`.
 

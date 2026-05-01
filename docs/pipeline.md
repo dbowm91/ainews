@@ -6,9 +6,11 @@ Articles flow through defined pipeline stages. Each stage transitions the articl
 
 ```
 pending → researching → writing → editing → (review) → done
-    ↓           ↓         ↓          ↓
-  skipped    failed   failed    failed
+     ↓           ↓         ↓          ↓
+   skipped    failed   failed    failed
 ```
+
+Note: `PipelineStatus.SELECTING` is deprecated and removed. Articles transition from `pending` to `researching` (selection logic is integrated into the research phase).
 
 ### Valid Transitions
 
@@ -33,8 +35,8 @@ pending → researching → writing → editing → (review) → done
 
 | Status | Meaning |
 |--------|---------|
-| pending | Awaiting selection |
-| researching | LLM evaluating newsworthiness |
+| pending | Awaiting processing (selection integrated into research) |
+| researching | LLM evaluating newsworthiness and selecting articles |
 | writing | LLM drafting article |
 | editing | LLM reviewing/polishing |
 | review | Needs manual review |

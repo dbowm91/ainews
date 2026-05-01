@@ -302,17 +302,19 @@ MONITOR
 Articles flow through stages:
 
 ```
-Crawl → Select → Research → Write → Edit → Newsletter
+Research → Write → Edit → Newsletter
 ```
+
+Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is integrated into the research phase.
 
 Each stage is a Celery task that can retry independently. On failure, the article enters a retry queue with exponential backoff.
 
 ### Data Flow
 
 ```
-RSS Feed → Crawler → Extractor → Pipeline (Select/Research/Write/Edit) → Database
-                                                    ↓
-                                           Newsletter Generator → Email
+RSS Feed → Crawler → Extractor → Pipeline (Research/Write/Edit) → Database
+                                                     ↓
+                                            Newsletter Generator → Email
 ```
 
 ### Caching Strategy
@@ -413,10 +415,12 @@ class MyProviderAdapter(BaseLLMProvider):
 Articles flow through stages:
 
 ```
-crawl → extract → select → research → write → edit → newsletter
-  ↓        ↓        ↓         ↓        ↓       ↓
-skipped  failed  skipped   failed   failed  failed
+research → write → edit → newsletter
+    ↓        ↓       ↓
+ failed   failed  failed
 ```
+
+Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is integrated into the research phase. Articles start in `pending` status and transition to `researching`.
 
 Each stage is a Celery task with independent retry budget.
 
@@ -424,8 +428,7 @@ Each stage is a Celery task with independent retry budget.
 
 | Stage | Description | Quality Gate |
 |-------|-------------|------------|
-| `select` | LLM scores newsworthiness (1-10), assigns confidence | Min score >= 6 |
-| `research` | LLM compiles research brief with external sources | Non-empty claims |
+| `research` | LLM evaluates newsworthiness, selects articles, compiles research brief | Min score >= 6 |
 | `write` | LLM drafts condensed article in Smart Brevity style | Min 500 char body |
 | `edit` | LLM reviews, polishes, assigns tags | Schema validation |
 

@@ -45,6 +45,22 @@ class TestModelLimiterAcquire:
         result = limiter.acquire("ollama", "qwen3:8b", max_concurrent=4)
         assert result is False
 
+    def test_acquire_returns_false_on_base_redis_error(self):
+        """Fail-closed: any RedisError (not just connection) must return False."""
+        from redis.exceptions import RedisError
+
+        mock_redis = MagicMock()
+        acquire_script = MagicMock(side_effect=RedisError("Redis base error"))
+        release_script = MagicMock()
+        mock_redis.register_script = MagicMock(
+            side_effect=lambda code: (
+                acquire_script if "INCR" in code else release_script
+            )
+        )
+        limiter = ModelLimiter(mock_redis)
+        result = limiter.acquire("ollama", "qwen3:8b", max_concurrent=4)
+        assert result is False
+
     def test_acquire_uses_correct_key(self):
         redis = MagicMock()
         acquire_script = MagicMock(return_value=1)

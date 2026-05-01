@@ -333,6 +333,32 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     article.final_article = sanitize_final_article(result_json)
     article.original_ai_article = result_json
 
+    # Shadow mode quality assessment (non-blocking)
+    try:
+        from services.quality import lightweight_quality_signals
+
+        import json
+
+        final_data = (
+            json.loads(article.final_article) if article.final_article else {}
+        )
+        final_text = final_data.get("body", "") if isinstance(final_data, dict) else ""
+        if final_text:
+            quality_score = lightweight_quality_signals(final_text)
+            logger.info(
+                "Edit quality (shadow): article_id=%s overall=%.2f groundedness=%.2f coherence=%.2f completeness=%.2f safety=%.2f",
+                article.id,
+                quality_score.overall,
+                quality_score.groundedness,
+                quality_score.coherence,
+                quality_score.completeness,
+                quality_score.safety,
+            )
+    except Exception as e:
+        logger.warning(
+            "Quality assessment failed for article %s: %s", article.id, e
+        )
+
     _assign_tags(article, result.tags or [], db)
 
     routing_result = _handle_validation_and_routing(article, db, run_id)

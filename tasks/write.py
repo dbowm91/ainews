@@ -103,6 +103,27 @@ def write_article(self, article_id: int, run_id=None):
         article.draft_article = result.model_dump_json()
         article.writer_model = model
 
+        # Shadow mode quality assessment (non-blocking)
+        try:
+            from services.quality import lightweight_quality_signals
+
+            draft_text = result.body or ""
+            if draft_text:
+                quality_score = lightweight_quality_signals(draft_text)
+                logger.info(
+                    "Write quality (shadow): article_id=%s overall=%.2f groundedness=%.2f coherence=%.2f completeness=%.2f safety=%.2f",
+                    article.id,
+                    quality_score.overall,
+                    quality_score.groundedness,
+                    quality_score.coherence,
+                    quality_score.completeness,
+                    quality_score.safety,
+                )
+        except Exception as e:
+            logger.warning(
+                "Quality assessment failed for article %s: %s", article.id, e
+            )
+
         # Quality gate: validate condensed article before advancing
         if _is_degenerate_write(result):
             logger.warning(

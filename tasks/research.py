@@ -196,6 +196,29 @@ def research_article(self, article_id: int, run_id=None):
         article.research_brief = brief.model_dump_json()
         article.impact_score = brief.impact_score
 
+        # Shadow mode quality assessment (non-blocking)
+        try:
+            from services.quality import lightweight_quality_signals
+
+            brief_text = " ".join(
+                claim.content for claim in (brief.key_claims or []) if claim.content
+            )
+            if brief_text:
+                quality_score = lightweight_quality_signals(brief_text)
+                logger.info(
+                    "Research quality (shadow): article_id=%s overall=%.2f groundedness=%.2f coherence=%.2f completeness=%.2f safety=%.2f",
+                    article.id,
+                    quality_score.overall,
+                    quality_score.groundedness,
+                    quality_score.coherence,
+                    quality_score.completeness,
+                    quality_score.safety,
+                )
+        except Exception as e:
+            logger.warning(
+                "Quality assessment failed for article %s: %s", article.id, e
+            )
+
         # Quality gate: validate brief before advancing
         if _is_degenerate_research(brief):
             logger.warning(

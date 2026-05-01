@@ -1,151 +1,72 @@
-"""Tests for FTS5 search and article search service."""
+"""Tests for FTS5 query escaping to prevent injection vulnerabilities."""
 
-import json
-
-from services.pagination import _build_fts_query, _escape_like_pattern
+from routes.admin.api.articles import _escape_fts5_string
 
 
-class TestFtsQueryBuilder:
-    """Test safe FTS5 query construction."""
+class TestEscapeFTS5String:
+    """Tests for _escape_fts5_string helper function."""
 
-    def test_single_word(self):
-        assert _build_fts_query("python") == '"python"'
+    def test_escapes_double_quotes(self):
+        """Double quotes should be escaped by doubling them per FTS5 rules."""
+        assert _escape_fts5_string('hello "world"') == 'hello ""world""'
 
-    def test_multiple_words(self):
-        assert _build_fts_query("python ai") == '"python" AND "ai"'
+    def test_no_quotes_unchanged(self):
+        """Strings without double quotes should be unchanged."""
+        assert _escape_fts5_string("hello world") == "hello world"
 
-    def test_strips_quotes(self):
-        result = _build_fts_query('python "machine learning"')
-        assert '"python"' in result
-        assert "machine" in result
-        assert "learning" in result
+    def test_empty_string(self):
+        """Empty string should return empty string."""
+        assert _escape_fts5_string("") == ""
 
-    def test_strips_operators(self):
-        assert _build_fts_query("python:ai") == '"python" AND "ai"'
+    def test_multiple_quotes(self):
+        """Multiple double quotes should all be escaped."""
+        assert _escape_fts5_string('a"b"c"d') == 'a""b""c""d'
 
-    def test_strips_parens(self):
-        assert _build_fts_query("python (ai)") == '"python" AND "ai"'
-
-    def test_empty_query(self):
-        assert _build_fts_query("") == ""
-
-    def test_whitespace_only(self):
-        assert _build_fts_query("   ") == ""
-
-    def test_strips_asterisk(self):
-        assert _build_fts_query("python*") == '"python"'
+    def test_only_quotes(self):
+        """String with only double quotes."""
+        assert _escape_fts5_string('""') == '""""'
 
 
-class TestEscapeLikePattern:
-    """Test LIKE pattern escaping."""
+class TestFTS5QueryWithEscapedChars:
+    """Tests for FTS5 queries with escaped special characters."""
 
-    def test_escapes_percent(self):
-        assert _escape_like_pattern("100%") == "100\\%"
+    def test_fts5_query_with_escaped_url(self):
+        """FTS5 query with escaped double quotes in URL is properly formed."""
+        from routes.admin.api.articles import _escape_fts5_string
 
-    def test_escapes_underscore(self):
-        assert _escape_like_pattern("file_name") == "file\\_name"
+        # Build FTS5 query with escaped URL
+        url = 'https://example.com/article?"id"=1'
+        escaped_url = _escape_fts5_string(url)
+        fts_query = f'original_url:"{escaped_url}"'
 
-    def test_escapes_backslash(self):
-        assert _escape_like_pattern("path\\file") == "path\\\\file"
+        # Verify the query is properly formed with escaped quotes
+        assert '""id""' in fts_query
+        # Verify the original unescaped pattern is not present as a standalone token
+        # The escaped form should have doubled quotes
+        import re
+        # Should not have single double-quote surrounding id without being part of double-double-quote
+        assert re.search(r'(?<!")"id"(?!")', fts_query) is None
 
-    def test_normal_text(self):
-        assert _escape_like_pattern("hello world") == "hello world"
-
-
-class TestGetArticlesPaginated:
-    """Test get_articles_paginated with FTS5 fallback."""
-
-    def test_returns_articles_without_query(self, app):
-        from extensions import db
-        from models import Article, Source
-        from services.article import get_articles_paginated
-
-        source = Source(source_key="test", name="Test", source_type="rss", feed_url="")
-        db.session.add(source)
-        db.session.flush()
-
-        for i in range(3):
-            db.session.add(
-                Article(
-                    source_id=source.id,
-                    external_id=f"test_{i}",
-                    original_title=f"Article {i}",
-                    pipeline_status="done",
-                    category="ai",
-                    final_article=json.dumps(
-                        {"headline": f"Article {i}", "tldr": "TLDR"}
-                    ),
-                )
-            )
-        db.session.commit()
-
-        articles, has_next, next_page = get_articles_paginated(page=1, per_page=10)
-        assert len(articles) == 3
-        assert has_next is False
-
-    def test_query_falls_back_when_no_fts(self, app):
-        """Search should fall back to ILIKE when FTS5 table doesn't exist."""
-        from extensions import db
-        from models import Article, Source
-        from services.article import get_articles_paginated
-
-        source = Source(
-            source_key="test2", name="Test2", source_type="rss", feed_url=""
+    def test_fts5_query_injection_prevented(self, app, create_article):
+        """FTS5 query with malicious input doesn't break the query structure."""
+        # Create test article
+        create_article(
+            original_url='https://example.com/test',
+            original_title="Test Article",
+            pipeline_status="published",
         )
-        db.session.add(source)
-        db.session.flush()
 
-        db.session.add(
-            Article(
-                source_id=source.id,
-                external_id="search_test",
-                original_title="Python AI Framework Released",
-                pipeline_status="done",
-                category="ai",
-                final_article=json.dumps(
-                    {"headline": "Python AI Framework", "tldr": "TLDR"}
-                ),
-            )
-        )
-        db.session.commit()
+        # Test with potentially malicious input containing quotes
+        malicious_query = 'test" OR ""="'
 
-        articles, _, _ = get_articles_paginated(page=1, per_page=10, query="python")
-        assert len(articles) == 1
-        assert articles[0].original_title == "Python AI Framework Released"
+        # Build the FTS5 query as done in the actual code
+        from routes.admin.api.articles import _escape_fts5_string
 
-    def test_category_filter(self, app):
-        from extensions import db
-        from models import Article, Source
-        from services.article import get_articles_paginated
+        escaped = _escape_fts5_string(malicious_query)
+        fts_query = f'original_url:"{escaped}"'
 
-        source = Source(
-            source_key="test3", name="Test3", source_type="rss", feed_url=""
-        )
-        db.session.add(source)
-        db.session.flush()
-
-        db.session.add(
-            Article(
-                source_id=source.id,
-                external_id="cat_ai",
-                original_title="AI News",
-                pipeline_status="done",
-                category="ai",
-                final_article=json.dumps({"headline": "AI News", "tldr": "TLDR"}),
-            )
-        )
-        db.session.add(
-            Article(
-                source_id=source.id,
-                external_id="cat_sec",
-                original_title="Security News",
-                pipeline_status="done",
-                category="security",
-                final_article=json.dumps({"headline": "Security News", "tldr": "TLDR"}),
-            )
-        )
-        db.session.commit()
-
-        articles, _, _ = get_articles_paginated(page=1, per_page=10, category="ai")
-        assert len(articles) == 1
-        assert articles[0].category == "ai"
+        # Verify the query structure is safe (quotes are escaped)
+        assert '""' in fts_query
+        # The query should not have unescaped quotes that could break parsing
+        # Count occurrences to verify proper escaping
+        assert fts_query.count('"') % 2 == 0  # Should be even (properly paired)

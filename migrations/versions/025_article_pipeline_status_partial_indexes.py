@@ -4,10 +4,9 @@ Revision ID: 025_article_pipeline_status_partial_indexes
 Revises: 024_missing_query_indexes
 Create Date: 2026-04-24
 
-These indexes add partial indexes for common pipeline status filters:
+These indexes improve common pipeline status queries:
 - Failed articles by updated_at
 - Review articles by impact_score
-- Active pipeline articles (pending, researching, writing, editing)
 """
 
 from typing import Sequence, Union

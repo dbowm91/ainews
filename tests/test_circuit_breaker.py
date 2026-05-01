@@ -240,6 +240,11 @@ class TestCircuitProtected:
 class TestCircuitBreakerMetrics:
     """Test that circuit breaker emits metrics on state transitions."""
 
+    def setup_method(self):
+        """Reset metrics before each test to ensure isolation."""
+        from services.metrics import reset_metrics
+        reset_metrics()
+
     def _make_breaker(self, **kwargs):
         from services.circuit_breaker import CircuitBreaker
         from services.metrics import get_metrics, reset_metrics

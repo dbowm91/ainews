@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from constants import PipelineStatus
+
 
 class TestSelectArticle:
     """Tests for select_article task through run_stage."""
@@ -14,13 +16,14 @@ class TestSelectArticle:
     @patch("services.circuit_breaker.get_breaker")
     @patch("services.llm.get_provider_by_id")
     @patch("schemas.pipeline.get_role_config")
+    @patch("services.config_unified.get_config")
     @patch("services.limiter.get_limiter")
     @patch("tasks.pipeline._transition_article_status")
-    @pytest.mark.skip(reason="Mock integration issue - needs refactoring")
     def test_score_above_threshold_selects(
         self,
         mock_transition,
         mock_limiter_fn,
+        mock_get_config,
         mock_get_rc,
         mock_get_by_id,
         mock_get_breaker,
@@ -36,6 +39,18 @@ class TestSelectArticle:
         mock_breaker = MagicMock()
         mock_breaker.can_execute.return_value = True
         mock_get_breaker.return_value = mock_breaker
+
+        # Mock get_config to return experiment config
+        mock_get_config.return_value = {
+            "experiments": {
+                "enabled": True,
+                "assignment_salt": "test_salt",
+                "prompt_variants": {
+                    "writer": {"control": "test", "variant_a": "test_a", "variant_b": "test_b"},
+                    "editor": {"control": "test", "variant_a": "test_a", "variant_b": "test_b"},
+                },
+            }
+        }
 
         rc = MagicMock()
         rc.enabled = True
@@ -83,9 +98,14 @@ class TestSelectArticle:
             with patch.object(pipeline_module, "get_provider_chain", mock_chain_fn):
                 result = select_article.__wrapped__(article_id=article_id, run_id=None)
 
-        assert result["article_id"] == article_id
-        assert result["result"]["selected"] is True
-        assert result["result"]["score"] == 8
+        # Article selected: should transition to RESEARCHING (or REVIEW if low confidence)
+        # and dispatch to next stage - result should be None since dispatch happens
+        assert result is None
+        # Verify transition was called
+        mock_transition.assert_called_once()
+        call_args = mock_transition.call_args
+        # First arg should be article, second should be PipelineStatus.RESEARCHING or REVIEW
+        assert call_args[0][1] in (PipelineStatus.RESEARCHING, PipelineStatus.REVIEW)
 
     @patch("extensions.get_redis")
     @patch("services.llm.record_provider_success")
@@ -278,13 +298,14 @@ class TestSelectArticle:
     @patch("services.circuit_breaker.get_breaker")
     @patch("services.llm.get_provider_by_id")
     @patch("schemas.pipeline.get_role_config")
+    @patch("services.config_unified.get_config")
     @patch("services.limiter.get_limiter")
     @patch("tasks.pipeline._transition_article_status")
-    @pytest.mark.skip(reason="Mock integration issue - needs refactoring")
     def test_selected_score_equal_to_threshold_selects(
         self,
         mock_transition,
         mock_limiter_fn,
+        mock_get_config,
         mock_get_rc,
         mock_get_by_id,
         mock_get_breaker,
@@ -301,6 +322,18 @@ class TestSelectArticle:
         mock_breaker = MagicMock()
         mock_breaker.can_execute.return_value = True
         mock_get_breaker.return_value = mock_breaker
+
+        # Mock get_config to return experiment config
+        mock_get_config.return_value = {
+            "experiments": {
+                "enabled": True,
+                "assignment_salt": "test_salt",
+                "prompt_variants": {
+                    "writer": {"control": "test", "variant_a": "test_a", "variant_b": "test_b"},
+                    "editor": {"control": "test", "variant_a": "test_a", "variant_b": "variant_b"},
+                },
+            }
+        }
 
         rc = MagicMock()
         rc.enabled = True
@@ -347,5 +380,12 @@ class TestSelectArticle:
             with patch.object(pipeline_module, "get_provider_chain", mock_chain_fn):
                 result = select_article.__wrapped__(article_id=article_id, run_id=None)
 
-        assert result["result"]["selected"] is True
-        assert result["result"]["score"] == 6
+        # Score equal to threshold: should select (>= comparison)
+        # Article selected: should transition to RESEARCHING (or REVIEW if low confidence)
+        # and dispatch to next stage - result should be None since dispatch happens
+        assert result is None
+        # Verify transition was called
+        mock_transition.assert_called_once()
+        call_args = mock_transition.call_args
+        # First arg should be article, second should be PipelineStatus.RESEARCHING or REVIEW
+        assert call_args[0][1] in (PipelineStatus.RESEARCHING, PipelineStatus.REVIEW)

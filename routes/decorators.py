@@ -16,7 +16,7 @@ def validate_csrf_json(f):
     Respects WTF_CSRF_ENABLED = False in TestingConfig.
     """
     from flask import current_app
-    from flask_wtf.csrf import validate_csrf
+    from flask_wtf.csrf import CSRFError, validate_csrf
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_app.config.get("WTF_CSRF_ENABLED", True):
@@ -26,7 +26,7 @@ def validate_csrf_json(f):
             return jsonify({"error": "CSRF token missing"}), 400
         try:
             validate_csrf(token)
-        except Exception:
+        except CSRFError:
             return jsonify({"error": "CSRF token invalid"}), 400
         return f(*args, **kwargs)
     return decorated

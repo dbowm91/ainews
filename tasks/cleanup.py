@@ -203,6 +203,15 @@ def recalculate_impact_scores(self):
         if updated > 0:
             db.session.commit()
             logger.info("Recalculated impact scores: updated %d articles", updated)
+            from services.cache import get_response_cache
+            try:
+                cache = get_response_cache()
+                cache.invalidate_prefix("pub:top_impact:")
+                cache.invalidate_prefix("pub:index:")
+                cache.invalidate_prefix("pub:article_detail:")
+                cache.invalidate_prefix("pub:related:")
+            except Exception as e:
+                logger.warning("Failed to invalidate cache: %s", e)
         else:
             logger.info("Recalculate impact scores: no articles needed updating")
 

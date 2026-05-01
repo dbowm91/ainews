@@ -39,6 +39,31 @@ class TrendMemory(db.Model):
     last_consolidated_at = db.Column(db.DateTime, nullable=True)
 ```
 
+## All Models Reference
+
+All application models are defined in `models.py` (not a `models/` directory). The 18 models are:
+
+| Model Name | Brief Description |
+|------------|-------------------|
+| Source | RSS/feed sources for article crawling, tracks crawl health and failure counts |
+| Tag | Article tags with unique name/slug for categorization |
+| Article | Core article model with pipeline status, content fields, SLA timestamps, and relationships |
+| Citation | Article citations with URL, title, author, and context for reference |
+| Newsletter | Generated newsletters with HTML content, delivery stats, and send status |
+| Subscriber | Email subscribers with preferences, bounce tracking, and verification status |
+| ArticleMetric | Per-article engagement metrics (page loads, newsletter clicks, shares) |
+| ShareConfig | Social share platform configurations (URL templates, icons, sort order) |
+| PipelineRun | Pipeline execution records (crawl/newsletter runs) with status and article counts |
+| PipelineLog | Per-stage pipeline logs linked to pipeline runs, with level and message |
+| ArticleVersion | Audit trail of article content versions for rollback and change tracking |
+| TopicNote | Editorial context notes linked to topics, optionally filtered by source |
+| TrendMemory | Tiered trend memory entries with importance, expiration, and topic linkage |
+| Webhook | Webhook endpoints for event notifications, with secret and event subscriptions |
+| WebhookEvent | Delivery logs for webhook events, including status codes and error messages |
+| AuditLog | Admin action audit trail with action, category, target, and user details |
+| SearchQuery | Search query logs with result counts and clicked article tracking |
+| ApiToken | API tokens for programmatic access, with hash, prefix, and expiration |
+
 ### Pydantic Models
 
 Defined in `services/trend_memory.py`:

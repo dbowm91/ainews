@@ -57,7 +57,6 @@ def write_article(self, article_id: int, run_id=None):
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("writer")
-        _transition_article_status(article, PipelineStatus.EDITING)
 
         # Fetch trend memory if topics available
         trend_memory = ""

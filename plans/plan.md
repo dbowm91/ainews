@@ -13,7 +13,7 @@ All improvement items from Waves 1-5 have been fully implemented and verified. T
 
 **Key Accomplishments:**
 - Fail-closed policies in limiters and Redis locks
-- SSRF protection with DNS rebinding prevention
+- SSRF protection with DNS rebinding prevention (IPv4 and IPv6)
 - Session security (`session.clear()` on login)
 - Circuit breakers per provider:model:stage (Redis-backed)
 - State machine for pipeline transitions with `VALID_TRANSITIONS`
@@ -43,6 +43,7 @@ All Waves (1-5) have been methodically verified:
 - Cache stampede protection: `ResponseCache.get()` uses pub/sub pattern with `blpop`
 - Environment variable resolution: `resolve_env_var()` implemented in LLM adapters and search services
 - CSS consolidation: `critical.css` imports `variables.css` via `@import`
+- SSRF protection: IPv4 and IPv6 private/reserved networks blocked in `services/url.py`
 
 ### Wave 2 (High Priority) - VERIFIED
 - SMTP connection pooling: `SMTPConnectionPool` class in `services/email.py`

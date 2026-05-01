@@ -41,6 +41,7 @@ class ModelLimiter:
     ) -> bool:
         """Acquire a slot with timeout. Returns True if slot acquired, False on timeout."""
         key = f"{self._prefix}:{provider_id}:{model}"
+        channel = f"{self._prefix}:done:{provider_id}:{model}"
         deadline = time.monotonic() + timeout
         poll_interval = 0.05
 
@@ -59,11 +60,21 @@ class ModelLimiter:
                     e,
                 )
                 return False
+
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            sleep_time = min(poll_interval, remaining)
-            time.sleep(sleep_time)
+
+            try:
+                pubsub = self._redis.pubsub()
+                pubsub.subscribe(channel)
+                try:
+                    pubsub.get_message(timeout=min(remaining, poll_interval))
+                finally:
+                    pubsub.unsubscribe(channel)
+            except redis.exceptions.RedisError:
+                pass
+            time.sleep(min(poll_interval, remaining))
             poll_interval = min(poll_interval * 1.5, 0.5)
 
         logger.warning(
@@ -76,8 +87,10 @@ class ModelLimiter:
 
     def release(self, provider_id: str, model: str, timeout: int = 300) -> None:
         key = f"{self._prefix}:{provider_id}:{model}"
+        channel = f"{self._prefix}:done:{provider_id}:{model}"
         try:
             self._release_script(keys=[key])
+            self._redis.publish(channel, "1")
         except redis.exceptions.RedisError as e:
             logger.error(
                 "Limiter release failed for %s/%s: %s "
@@ -91,6 +104,7 @@ class ModelLimiter:
             time.sleep(0.1)
             try:
                 self._release_script(keys=[key])
+                self._redis.publish(channel, "1")
             except redis.exceptions.RedisError:
                 logger.error(
                     "Slot leak detected for %s:%s (both release attempts failed)",

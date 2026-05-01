@@ -16,11 +16,6 @@ from services.task_security import get_signed_kwargs
 logger = logging.getLogger(__name__)
 
 
-def _escape_fts5_string(query: str) -> str:
-    """Escape double quotes for FTS5 queries by doubling them."""
-    return query.replace('"', '""')
-
-
 @admin_api_bp.route("/articles/ids", methods=["GET"])
 @require_auth
 def get_article_ids():
@@ -70,35 +65,15 @@ def get_article_ids():
     q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
     if query:
-        # Try FTS5 search first, fall back to ILIKE if FTS5 unavailable
-        fts_results = None
+        # Use new search provider for FTS5, fall back to ILIKE if unavailable
         try:
-            from sqlalchemy import text
+            from services.search import get_article_search_provider
 
-            from extensions import db
-
-            # Build FTS5 query - escape special chars
-            safe_query = (
-                query.replace('"', "'")
-                .replace("*", "")
-                .replace(":", " ")
-                .replace("(", " ")
-                .replace(")", " ")
-                .replace("-", " ")
-                .replace("+", " ")
-            )
-            words = [w.strip() for w in safe_query.split() if w.strip()]
-            if words:
-                fts_query = " AND ".join(f'"{w}"' for w in words)
-                if _query_looks_like_url(query):
-                    fts_query = f'original_url:"{_escape_fts5_string(query)}"'
-                sql = text(
-                    "SELECT rowid FROM articles_admin_fts WHERE articles_admin_fts MATCH :q",
-                )
-                result = db.session.execute(sql, {"q": fts_query}).fetchall()
-                fts_results = [row[0] for row in result]
+            provider = get_article_search_provider()
+            fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
         except Exception:
             logger.debug("FTS5 search unavailable, falling back to ILIKE")
+            fts_results = None
 
         if fts_results is not None:
             q = q.filter(Article.id.in_(fts_results))

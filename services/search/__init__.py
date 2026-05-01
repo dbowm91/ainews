@@ -3,10 +3,13 @@ import logging
 import services.search.duckduckgo  # noqa: E402, F401
 import services.search.google  # noqa: E402, F401
 import services.search.searxng  # noqa: E402, F401
+import services.search.sqlite_fts  # noqa: E402, F401
 from services.circuit_breaker import get_breaker
 from services.search.base import (
     BaseSearchProvider,
+    SearchProvider,
     SearchResult,
+    get_db_search_provider,
     _manager,
 )
 
@@ -45,3 +48,9 @@ def search_web(query: str, max_results: int = 5) -> list[SearchResult]:
     except Exception as e:
         logger.warning("Web search failed for '%s': %s", query, e)
         return []
+
+
+# Database search provider (FTS5)
+def get_article_search_provider() -> SearchProvider:
+    """Get the configured database search provider (e.g., SQLite FTS5)."""
+    return get_db_search_provider()

@@ -5,6 +5,7 @@ Contextual conventions for agents working in the `tasks/` directory.
 ## Celery Task Conventions
 
 - All Celery tasks should include `acks_late=True` and `task_reject_on_worker_lost=True` in their decorator to ensure task is not lost on worker crash.
+- Use `CELERY_TASK_MAX_RETRIES` and `CELERY_TASK_DEFAULT_RETRY_DELAY` constants for configuring task retries to ensure consistency across the worker fleet.
 - Beat-scheduled tasks need HMAC verification via `verify_task()` from `services/task_security.py`.
 - Internal pipeline tasks (research, write, edit) do NOT need HMAC verification as they are dispatched internally.
 - External task arguments must be validated with Pydantic schemas in `schemas/tasks.py` (SelectArticleTask, GenerateNewsletterTask, SendEmailTask, CleanupArticleVersionsTask, ProcessItemTask).
@@ -21,6 +22,7 @@ Use `constants.py:VALID_TRANSITIONS` for atomic state changes. NEVER assign `art
 
 ## Pipeline & Tasks
 
+- **Write Status Transition Fix:** `tasks/write.py` has been fixed to prevent premature status transitions; it now correctly ensures an article is in the `RESEARCHED` state before moving to `WRITING`, and `WRITTEN` after completion.
 - **Dead Letter Queue:** Managed via `/admin/dead-letters` UI.
 - **E2E Latency Tracking:** `pipeline.e2e_duration_seconds` histogram records total pipeline latency from crawl to finalization.
 - **Redis TTL Refresh:** L1 cache hits refresh Redis TTL via `self._redis.expire()` in `ResponseCache.get()`.

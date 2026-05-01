@@ -80,6 +80,7 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 - **Admin Article Validation:** MAX_ constants in `routes/admin/articles.py` limit field lengths (headline: 500, tldr: 300, body: 50000, etc.).
 - **Bulk Article Optimization:** N+1 queries prevented via `joinedload(Article.source)` and `joinedload(Article.tags)`.
 - **Subscriber Sunset Policy:** Subscribers are flagged inactive after configurable bounce threshold (`SUBSCRIBER_MAX_BOUNCES`, default 5) or inactivity (`SUBSCRIBER_INACTIVITY_DAYS`, default 180 days).
+- **Pipeline Status Deprecation:** `PipelineStatus.SELECTING` is deprecated and removed; the selection logic is now integrated into the research phase or handled via explicit assignment.
 
 ### Admin API
 - **Trend Memory Admin UI:** Admin UI at `/admin/trend-memory` with list view, filtering, stats (total, high/medium/low, expired count), delete individual/purge expired entries, links to source articles.
@@ -152,13 +153,3 @@ if not self._redis.set(lock_key, "1", nx=True, ex=ttl):
 6. **Dead Code Removal:** Periodically check for and remove dead code (functions defined but never called). Confirm zero callers via grep before removal.
 
 7. **Parallelization:** Many improvements can be implemented in parallel by separate agents working on different functional areas (e.g., tasks, services, routes, CSS).
-
-8. **Plan Verification:** Always verify plan items against the current codebase before implementation. Line numbers and file paths become stale as code evolves. Use grep and read tools to confirm current state.
-
-9. **Actionable Plan Items:** Plan items should include:
-   - Specific file paths and line numbers (when known)
-   - The exact issue/change needed
-   - Expected behavior after the fix
-   - Dependencies on other items
-
-10. **Wave-Based Planning:** When consolidating plans, group items by dependency and parallelization potential. Independent items within a wave can run concurrently; items across waves should be sequential.

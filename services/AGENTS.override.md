@@ -49,7 +49,7 @@ Per-Stage Circuit Breaker: Circuit breakers are keyed by `provider:model:stage` 
 
 ## Quality Assessment
 
-- **Quality Assessment Infrastructure:** `quality.py` with `QualityScore` dataclass, `QualityAssessor` protocol, `LLMQualityAssessor`, and `lightweight_quality_signals()`.
+- **Quality Assessment Infrastructure:** `quality.py` with `QualityScore` dataclass, `QualityAssessor` protocol, `LLMQualityAssessor`, and `lightweight_quality_signals()`. This is a fully implemented but currently auxiliary system (to be documented and integrated into the main pipeline).
 - **Stage-Aware Tool Selection:** `tool_selection.py` with `ToolSelector` protocol and `StageAwareToolSelector`.
 
 ## Subagent System
@@ -60,9 +60,6 @@ Per-Stage Circuit Breaker: Circuit breakers are keyed by `provider:model:stage` 
 - **Condition Evaluation:** `run_subagent_chain()` uses AST-based parsing (not `eval()`) for conditional steps, blocking dunder attribute access
 - **Exception Handling:** Tool functions catch specific exceptions (`SQLAlchemyError`, `KeyError`, `AttributeError`) before falling back to bare `Exception`.
 - **ThreadPoolExecutor Pattern:** Blocking I/O uses ThreadPoolExecutor to avoid blocking Celery workers. Applied in `content_extractor.py`, `search/searxng.py`, `search/google.py`, `search/duckduckgo.py`, `subagent.py`. Module-level singleton executor with `submit()` + `future.result(timeout=N)`.
-- **Retry Logic Duplication:** Retry logic with exponential backoff + jitter is TRIPLICATED in subagent.py:
-  - `run_subagent`: Lines 619-625
-  - `run_subagent_with_tools`: Lines 795-801
-  - `run_subagent_chain`: Lines 1033-1038
-  Consider extracting into `_execute_with_retry()` helper.
+- **Retry Logic Refactor:** Retry logic with exponential backoff + jitter has been refactored into the `_execute_with_retry()` helper in `subagent.py` to eliminate triple duplication.
+- **ModelLimiter Stampede Protection:** `ModelLimiter` uses a Redis pub/sub pattern for stampede protection, ensuring only one worker attempts to refresh model quotas/limits while others wait for the result.
 - **Thread Cancellation Limitation:** `future.cancel()` only requests cancellation - it doesn't guarantee thread termination. For robust cancellation, consider `ProcessPoolExecutor` or `executor.shutdown(wait=False)` with SIGTERM handling.

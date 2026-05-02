@@ -156,6 +156,16 @@ def run_subagent(
         stage_config, default_role=default_role,
     )
 
+    def _is_task_revoked():
+        try:
+            from celery import current_task
+
+            if current_task and not current_task.request.called_directly:
+                return current_task.request.is_effectively_revoked()
+        except ImportError:
+            pass
+        return False
+
     def _call_with_timeout():
         from . import traced_llm_call
 
@@ -173,9 +183,16 @@ def run_subagent(
     used_fallback = False
     fallback_stages = []
     last_exc = None
+    future = None
 
     def _attempt():
+        nonlocal future
         from . import time_histogram
+
+        if _is_task_revoked():
+            logger.info("Subagent %s/%s cancelled - task revoked", stage, task_type)
+            raise ProviderTimeoutError("Subagent task revoked")
+
         with time_histogram(
             "subagent.duration_seconds",
             labels={"stage": stage, "task_type": task_type},
@@ -232,6 +249,9 @@ def run_subagent(
         )
         used_fallback = True
         fallback_stages = [stage]
+    finally:
+        if future:
+            future.cancel()
 
     if result is None:
         used_fallback = True
@@ -337,6 +357,16 @@ def run_subagent_with_tools(
 
     messages = [{"role": "user", "content": prompt}]
 
+    def _is_task_revoked():
+        try:
+            from celery import current_task
+
+            if current_task and not current_task.request.called_directly:
+                return current_task.request.is_effectively_revoked()
+        except ImportError:
+            pass
+        return False
+
     def _call_with_timeout():
         from . import traced_llm_call
 
@@ -357,10 +387,16 @@ def run_subagent_with_tools(
     fallback_stages = []
     last_exc = None
     self_corrected = False
+    future = None
 
     def _attempt():
-        nonlocal self_corrected
+        nonlocal self_corrected, future
         from . import time_histogram
+
+        if _is_task_revoked():
+            logger.info("Subagent %s/%s cancelled - task revoked", stage, task_type)
+            raise ProviderTimeoutError("Subagent task revoked")
+
         with time_histogram(
             "subagent.duration_seconds",
             labels={"stage": stage, "task_type": task_type},
@@ -438,6 +474,9 @@ def run_subagent_with_tools(
         )
         used_fallback = True
         fallback_stages = [stage]
+    finally:
+        if future:
+            future.cancel()
 
     if result is None:
         used_fallback = True

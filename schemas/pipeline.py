@@ -137,6 +137,10 @@ class MemoryConfig(BaseModel):
     truncation_llm_temperature: float = 0.0
 
 
+class StageConfig(BaseModel):
+    tools: list[str] = Field(default_factory=list)
+
+
 class PipelineRootConfig(BaseModel):
     pipeline: PipelineConfig
     newsletter: NewsletterConfig = Field(default_factory=NewsletterConfig)
@@ -145,6 +149,7 @@ class PipelineRootConfig(BaseModel):
     )
     subagent: SubagentConfig = Field(default_factory=SubagentConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    stages: dict[str, StageConfig] = Field(default_factory=dict)
     schedule: dict = Field(default_factory=dict)
 
 

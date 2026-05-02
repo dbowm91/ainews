@@ -297,7 +297,7 @@ def run_all_sources(self, run_id=None):
             except SQLAlchemyError:
                 db.session.rollback()
                 raise
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
     if not configs:
         logger.info("No sources configured")

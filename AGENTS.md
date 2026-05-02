@@ -141,18 +141,15 @@ if not self._redis.set(lock_key, "1", nx=True, ex=ttl):
 ## Notes for Future Agents
 
 1. **Preserve Fallback Layers:** The codebase has good fallback patterns (e.g., ResponseCache has multiple fallback strategies, Redis-backed metrics with in-memory fallback). Preserve these when making changes.
-
 2. **Configuration-Driven:** Features support configuration via `pipeline.yaml` or environment variables. Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders.
-
 3. **Exception Handling:** When catching exceptions, prefer specific types (`SQLAlchemyError`, `ValueError`, `KeyError`, `AttributeError`) over broad `Exception` to preserve error context for debugging.
-
 4. **Code Evolution:** Always verify line numbers and code patterns against the current codebase before making changes, as code evolves over time.
-
-5. **Subagent System:** Tool filtering exists via `stage_config.tools` in pipeline.yaml and `initialize_tool_registry()` in services/subagent.py. The `ToolSelector` protocol in `services/tool_selection.py` provides stage-aware tool selection.
-
+5. **Subagent System:** `ToolSelector` protocol in `services/tool_selection.py` provides stage-aware tool selection. Integrated into `run_subagent()` path via `StageAwareToolSelector`.
 6. **Dead Code Removal:** Periodically check for and remove dead code (functions defined but never called). Confirm zero callers via grep before removal.
-
 7. **Parallelization:** Many improvements can be implemented in parallel by separate agents working on different functional areas (e.g., tasks, services, routes, CSS).
+
+---
+
 ## Completed Waves (as of 2026-05-02)
 
 All waves from `plans/plan.md` have been completed:
@@ -160,46 +157,51 @@ All waves from `plans/plan.md` have been completed:
 - **Wave 1** (14 items): Critical Security & Documentation Fixes ✅
 - **Wave 2** (20 items): High-Priority Backend Fixes ✅
 - **Wave 2.5** (2 items): Pre-Refactor Validation ✅
-- **Wave 3** (17 items): Code Quality & Performance ✅ (partial - see Remaining Issues)
+- **Wave 3** (17 items): Code Quality & Performance ✅
 - **Wave 4** (10 items): AI Harness & Advanced Features ✅
-- **Wave 5** (14 items): Frontend Polish & Low-Priority Items ✅ (partial - see Remaining Issues)
-
-## Remaining Issues (as of 2026-05-02)
-
-The following items were identified during verification but not fully resolved:
-
-### Wave 3 - Code Quality
-- **W3-R1: C901 Complexity Violations** (5 functions with complexity >15):
-  - `app.py:61`: `create_app` (complexity 31)
-  - `routes/admin/api/articles.py:23`: `get_article_ids` (complexity 25)
-  - `routes/admin/api/articles.py:351`: `bulk_article_operations` (complexity 19)
-  - `routes/admin/articles.py:79`: `articles` (complexity 21)
-  - `routes/admin/articles.py:212`: `edit_article` (complexity 16)
-  - **Resolution**: Manual refactoring required to break down complex functions
-
-- **W3-R4: ToolSelector Integration** - ToolSelector protocol exists in `services/tool_selection.py` but is NOT integrated into `run_subagent()` path
-  - **Status**: Infrastructure exists, integration incomplete
-
-### Wave 5 - Frontend & Low-Priority
-- **W5-B2: Subscriber Cleanup Task** - Function exists in `services/subscribers.py` but is NOT scheduled as a Celery task
-  - **Missing**: `@shared_task` decorator, not in `config.py:get_beat_schedule()`, not in `pipeline.yaml`
-  - **Status**: Dead code currently
-
-- **Font Scale Responsiveness** - No fluid typography using `clamp()` or media queries for font scaling
-  - **Status**: Fixed font sizes (16px root), no responsive scaling
-
-### Ruff Violations (Fixed During This Session)
-- **BLE001**: Fixed in `services/embeddings.py`, `services/subagent/runner.py`, `adapters/base.py`, `adapters/web.py`
-- **RUF100**: Fixed unused noqa comments in `adapters/web.py`, `app.py`, `celery_app.py`
-- **S311**: Fixed in `adapters/web.py` (replaced `random.choice()` with `secrets.randbelow()`)
+- **Wave 5** (14 items): Frontend Polish & Low-Priority Items ✅
 
 ---
 
-## New Features Added (2026-05-02)
+## All Issues Resolved (2026-05-02)
 
-During the implementation session, the following items were added:
+The following items were identified during verification and are now fully resolved:
 
-### Documentation
+### Wave 3 - Code Quality
+- **W3-R1: C901 Complexity Violations** - Fixed by refactoring:
+  - `app.py:create_app` - extracted 8 helper functions
+  - `routes/admin/api/articles.py:get_article_ids` - extracted helper functions
+  - `routes/admin/api/articles.py:bulk_article_operations` - extracted helpers
+  - `routes/admin/articles.py:articles` - extracted helper functions
+  - `routes/admin/articles.py:edit_article` - extracted helpers
+  - `tasks/research.py:research_article` and `work` - extracted 5 helpers
+
+- **W3-R4: ToolSelector Integration** - Completed:
+  - `ToolSelector` protocol now integrated into `run_subagent()` path
+  - `tasks/research.py` and `tasks/edit.py` use `StageAwareToolSelector`
+
+### Wave 5 - Frontend & Low-Priority
+- **W5-B2: Subscriber Cleanup Task** - Fixed:
+  - Created `tasks/subscribers.py` with Celery task
+  - Added to `config.py:get_beat_schedule()` (runs at 1:00 AM daily)
+
+- **Font Scale Responsiveness** - Fixed:
+  - Added fluid typography using `clamp()` in `static/css/variables.css`
+  - All font size variables now use responsive scaling
+
+### Ruff Violations (Fixed)
+- **BLE001**: Fixed in `tasks/pipeline.py` (added justified noqa comment)
+- **B904**: Fixed in `tasks/crawl.py` (added exception chaining with `from exc`)
+- **RUF100**: Cleaned up 245 unused noqa directives across 70 files
+- **W2-B1**: Fixed N+1 query in `tasks/cleanup.py` (added `contains_eager()`)
+
+### Additional Items Completed
+- **W4-A1**: Added `backfill_embeddings` to Celery beat schedule (runs at 2:00 AM daily)
+
+---
+
+## Documentation Added (2026-05-02)
+
 - `docs/dead_letter.md`: Comprehensive dead letter queue documentation
 - `docs/postgresql-migration-strategy.md`: PostgreSQL migration strategy (intentionally staying with SQLite)
 - `docs/redis-db-splitting.md`: Redis DB splitting strategy document
@@ -207,15 +209,14 @@ During the implementation session, the following items were added:
 - Fixed `docs/api.md` article ID references
 - Fixed `docs/trend-memory.md` and `docs/context-service.md` (19 models, not 18)
 
-### Tests Added
+---
+
+## Tests Added (2026-05-02)
+
 - `tests/test_subagent.py`: Added `TestBuiltInToolsExtended` (12 tests for previously untested tools)
 - `tests/test_subagent.py`: Added `TestMiddleware` (9 tests for middleware classes)
 - Improved subagent package coverage from 73% to 84%
 
-### Code Fixes
-- Fixed N+1 query in `tasks/cleanup.py` (added `contains_eager()`)
-- Fixed test failures: `test_ollama.py`, `test_retry.py`, `test_subagent.py`
-- Fixed circuit breaker reset in `tests/conftest.py`
-- Fixed import patches in test files
-
 ---
+
+*Last updated: 2026-05-02 - All plan items completed*

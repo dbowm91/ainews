@@ -178,6 +178,7 @@ def recalculate_impact_scores(self):
         raise ValueError("Invalid task signature")
 
     from extensions import db
+    from sqlalchemy.orm import contains_eager
     from models import Article, ArticleMetric
 
     try:
@@ -186,6 +187,7 @@ def recalculate_impact_scores(self):
             Article.query.filter(Article.pipeline_status == "done")
             .filter(Article.published_at >= cutoff)
             .join(ArticleMetric, Article.id == ArticleMetric.article_id)
+            .options(contains_eager(Article.metrics))
             .all()
         )
 

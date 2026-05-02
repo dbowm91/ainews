@@ -373,6 +373,39 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
     retry_backoff_max=300,
     retry_jitter=True,
 )
+def _check_newsletter_lock(redis_client, task_id):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    idempotency_key = f"idempotency:newsletter:{today}"
+    if redis_client.exists(idempotency_key):
+        logger.info("Newsletter generation already completed today, skipping")
+        return None, {"skipped": True, "reason": "already_generated_today"}
+
+    _NEWSLETTER_LOCK_SCRIPT = """
+    local current = redis.call('GET', KEYS[1])
+    if current == ARGV[1] then
+        redis.call('EXPIRE', KEYS[1], ARGV[2])
+        return 1
+    elseif not current then
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+        return 2
+    else
+        return 0
+    end
+    """
+    lock_key = "ainews:newsletter_lock"
+    _newsletter_lock = redis_client.register_script(_NEWSLETTER_LOCK_SCRIPT)
+    try:
+        lock_status = _newsletter_lock(keys=[lock_key], args=[task_id, 600])
+    except redis.exceptions.RedisError:
+        logger.error("Redis error during newsletter lock acquisition, cannot proceed")
+        raise
+
+    if lock_status == 0:
+        logger.info("Newsletter generation already in progress, skipping")
+        return None, {"skipped": True, "reason": "locked"}
+    return lock_status, None
+
+
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     try:
         from schemas.tasks import GenerateNewsletterTask
@@ -393,39 +426,13 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     from extensions import get_redis
 
     task_id = self.request.id or "manual"
-    lock_key = "ainews:newsletter_lock"
     redis_client = get_redis()
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    idempotency_key = f"idempotency:newsletter:{today}"
-    if redis_client.exists(idempotency_key):
-        logger.info("Newsletter generation already completed today, skipping")
-        return {"skipped": True, "reason": "already_generated_today"}
+    lock_status, skip_result = _check_newsletter_lock(redis_client, task_id)
+    if skip_result is not None:
+        return skip_result
 
-    _NEWSLETTER_LOCK_SCRIPT = """
-    local current = redis.call('GET', KEYS[1])
-    if current == ARGV[1] then
-        redis.call('EXPIRE', KEYS[1], ARGV[2])
-        return 1
-    elseif not current then
-        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-        return 2
-    else
-        return 0
-    end
-    """
-    _newsletter_lock = redis_client.register_script(_NEWSLETTER_LOCK_SCRIPT)
-
-    try:
-        lock_status = _newsletter_lock(keys=[lock_key], args=[task_id, 600])
-    except redis.exceptions.RedisError:
-        logger.error("Redis error during newsletter lock acquisition, cannot proceed")
-        raise
-
-    if lock_status == 0:
-        logger.info("Newsletter generation already in progress, skipping")
-        return {"skipped": True, "reason": "locked"}
-    elif lock_status == 1:
+    if lock_status == 1:
         logger.debug("Refreshed existing newsletter lock")
     else:
         logger.debug("Acquired new newsletter lock")

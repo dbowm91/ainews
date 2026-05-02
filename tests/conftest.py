@@ -38,6 +38,19 @@ def _reset_singletons():
                 redis_client.delete(*keys)
     except (ImportError, AttributeError, redis.exceptions.RedisError):
         pass
+    # Clear circuit breaker state
+    try:
+        from services.circuit_breaker import _breakers
+        _breakers.clear()
+        from extensions import get_redis
+        import redis.exceptions
+        redis_client = get_redis()
+        if redis_client is not None:
+            keys = redis_client.keys("ainews:circuit:*")
+            if keys:
+                redis_client.delete(*keys)
+    except (ImportError, AttributeError, redis.exceptions.RedisError):
+        pass
 
 
 @pytest.fixture(autouse=True)

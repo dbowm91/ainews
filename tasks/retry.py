@@ -171,7 +171,7 @@ def retry_stuck(self):
 
 def _dispatch_stage(article):
     """Re-dispatch a task for the article's current pipeline stage."""
-    from tasks.pipeline import _dispatch_for_status
+    from services.pipeline_utils import _dispatch_for_status
 
     _dispatch_for_status(article)
 

@@ -1595,7 +1595,7 @@ class TestGetSubagentProviderAndConfig:
                 model=None,
             )
 
-            with patch("services.subagent.get_provider_for_role") as mock_get_role:
+            with patch("services.subagent.config.get_provider_for_role") as mock_get_role:
                 mock_provider = MagicMock()
                 mock_get_role.return_value = (mock_provider, "role-model", 2048, 0.0)
 
@@ -1620,7 +1620,7 @@ class TestGetSubagentProviderAndConfig:
                 max_tokens=4096,
             )
 
-            with patch("services.subagent.get_provider_for_role") as mock_get_role:
+            with patch("services.subagent.config.get_provider_for_role") as mock_get_role:
                 mock_provider = MagicMock()
                 mock_get_role.return_value = (mock_provider, "role-model", 2048, 0.0)
 

@@ -1629,3 +1629,183 @@ class TestGetSubagentProviderAndConfig:
                 )
 
                 assert max_tokens == 4096
+
+class TestBuiltInToolsExtended:
+    """Test additional built-in tools that were previously untested."""
+
+    def test_get_topic_notes_for_topics_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "context_notes"), None)
+            assert tool is not None
+
+            with patch("services.context_service.get_topic_notes_for_topics") as mock_get:
+                mock_get.return_value = {"AI": ["note1", "note2"], "ML": ["note3"]}
+                result = tool.fn(topics=["AI", "ML"])
+                assert "Topic: AI" in result
+                assert "note1" in result
+                assert "Topic: ML" in result
+
+    def test_get_topic_notes_for_topics_empty(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "context_notes"), None)
+
+            with patch("services.context_service.get_topic_notes_for_topics") as mock_get:
+                mock_get.return_value = {}
+                result = tool.fn(topics=["Nonexistent"])
+                assert "No topic notes found" in result
+
+    def test_get_related_articles_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "related_articles"), None)
+            assert tool is not None
+
+            with patch("services.context_service.get_related_articles_for_edit") as mock_get:
+                mock_get.return_value = [
+                    {"title": "Article 1", "summary_snippet": "Summary 1"},
+                    {"title": "Article 2", "summary_snippet": "Summary 2"},
+                ]
+                result = tool.fn(topics=["AI"], exclude_id=5, limit=2)
+                assert "Article 1" in result
+                assert "Summary 1" in result
+
+    def test_get_related_articles_empty(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "related_articles"), None)
+
+            with patch("services.context_service.get_related_articles_for_edit") as mock_get:
+                mock_get.return_value = []
+                result = tool.fn(topics=["AI"], exclude_id=5)
+                assert "No related articles found" in result
+
+    def test_get_trend_memory_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "get_trend_memory"), None)
+            assert tool is not None
+
+            with patch("services.trend_memory.get_memory_for_topics") as mock_get:
+                mock_entry = MagicMock()
+                mock_entry.topic = "AI"
+                mock_entry.importance = 2
+                mock_entry.signal = "AI is hot"
+                mock_get.return_value = [mock_entry]
+                result = tool.fn(topics=["AI"], min_importance=1)
+                assert "AI is hot" in result
+
+    def test_get_trend_memory_empty(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "get_trend_memory"), None)
+
+            with patch("services.trend_memory.get_memory_for_topics") as mock_get:
+                mock_get.return_value = []
+                result = tool.fn(topics=["Nonexistent"])
+                assert "No trend memory found" in result
+
+    def test_get_article_by_id_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "get_article_by_id"), None)
+            assert tool is not None
+
+            mock_article = MagicMock()
+            mock_article.id = 123
+            mock_article.title = "Test Article"
+            mock_article.pipeline_status = "done"
+            mock_article.impact_score = 50
+            mock_article.created_at.isoformat.return_value = "2024-01-01T00:00:00"
+
+            with patch("extensions.db") as mock_db:
+                mock_db.session.get.return_value = mock_article
+                result = tool.fn(article_id=123)
+                import json
+                data = json.loads(result)
+                assert data["id"] == 123
+                assert data["title"] == "Test Article"
+
+    def test_get_article_by_id_not_found(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "get_article_by_id"), None)
+
+            with patch("extensions.db") as mock_db:
+                mock_db.session.get.return_value = None
+                result = tool.fn(article_id=999)
+                assert "not found" in result
+
+    def test_search_articles_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "search_articles"), None)
+            assert tool is not None
+
+            mock_article = MagicMock()
+            mock_article.id = 1
+            mock_article.original_title = "AI Breakthrough"
+
+            with patch("models.Article") as mock_article_cls:
+                mock_article_cls.query.filter.return_value.limit.return_value.all.return_value = [mock_article]
+                result = tool.fn(query="AI", limit=5)
+                import json
+                data = json.loads(result)
+                assert len(data) == 1
+                assert data[0]["title"] == "AI Breakthrough"
+
+    def test_search_articles_empty(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "search_articles"), None)
+
+            with patch("models.Article") as mock_article_cls:
+                mock_article_cls.query.filter.return_value.limit.return_value.all.return_value = []
+                result = tool.fn(query="Nonexistent")
+                assert "error" in result.lower() or "[]" in result
+
+    def test_get_source_health_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_context_tools
+            tools = _build_context_tools()
+            tool = next((t for t in tools if t.name == "get_source_health"), None)
+            assert tool is not None
+
+            mock_source = MagicMock()
+            mock_source.id = 1
+            mock_source.name = "Test Source"
+            mock_source.disabled_at = None
+            mock_source.consecutive_failures = 0
+
+            with patch("extensions.db") as mock_db:
+                mock_db.session.query.return_value.all.return_value = [mock_source]
+                result = tool.fn()
+                import json
+                data = json.loads(result)
+                assert len(data) == 1
+                assert data[0]["name"] == "Test Source"
+
+    def test_get_search_provider_success(self, app):
+        with app.app_context():
+            from services.subagent import _build_search_tools
+            tools = _build_search_tools()
+            tool = next((t for t in tools if t.name == "get_search_provider"), None)
+            assert tool is not None
+
+            with patch("services.search.get_search_provider") as mock_get:
+                mock_prov = MagicMock()
+                mock_prov.provider_id = "searxng"
+                mock_get.return_value = mock_prov
+                result = tool.fn()
+                assert "searxng" in result

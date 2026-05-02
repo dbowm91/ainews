@@ -21,6 +21,7 @@ def _call_crawl(cfg, run_id=1):
     return crawl_source.__wrapped__(cfg, run_id)
 
 
+@pytest.mark.timeout(30)
 class TestCrawlSource:
     """Tests for crawl_source task."""
 

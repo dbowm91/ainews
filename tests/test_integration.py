@@ -2,7 +2,10 @@
 
 import json
 
+import pytest
 
+
+@pytest.mark.timeout(30)
 class TestReviewQueue:
     """Test the admin review queue routes."""
 

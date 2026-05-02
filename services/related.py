@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from constants import PipelineStatus
 from services.cache import get_response_cache
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ _RELATED_CACHE_TTL = 600
 _RELATED_CANDIDATE_LIMIT = int(os.environ.get("RELATED_CANDIDATE_LIMIT", "50"))
 
 
-def find_related_articles_cached(article, limit: int = 5):
+def find_related_articles_cached(article, limit: int = 5) -> list:
     """Cached wrapper for find_related_articles with 600s TTL.
 
     Uses cache key pub:related:{article_id}.
@@ -19,6 +20,7 @@ def find_related_articles_cached(article, limit: int = 5):
     """
     from sqlalchemy.orm import joinedload
 
+    from extensions import db
     from models import Article
 
     cache = get_response_cache()
@@ -31,10 +33,12 @@ def find_related_articles_cached(article, limit: int = 5):
             return []
 
         articles = (
-            Article.query.options(
-                joinedload(Article.tags), joinedload(Article.source),
+            db.session.execute(
+                select(Article)
+                .options(joinedload(Article.tags), joinedload(Article.source))
+                .where(Article.id.in_(article_ids))
             )
-            .filter(Article.id.in_(article_ids))
+            .scalars()
             .all()
         )
         id_to_article = {a.id: a for a in articles}
@@ -78,35 +82,45 @@ def find_related_articles(article, limit: int = 5):
         )
 
         candidates = (
-            Article.query.options(joinedload(Article.tags), joinedload(Article.source))
-            .outerjoin(
-                tag_count_subq,
-                Article.id == tag_count_subq.c.article_id,
+            db.session.execute(
+                select(Article)
+                .options(joinedload(Article.tags), joinedload(Article.source))
+                .outerjoin(
+                    tag_count_subq,
+                    Article.id == tag_count_subq.c.article_id,
+                )
+                .where(
+                    Article.id != article.id,
+                    Article.pipeline_status == PipelineStatus.DONE,
+                    Article.final_article.isnot(None),
+                    Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+                )
+                .order_by(
+                    (func.coalesce(tag_count_subq.c.shared_tag_count, 0) * 2.0).desc(),
+                    Article.created_at.desc(),
+                )
+                .limit(_RELATED_CANDIDATE_LIMIT)
             )
-            .filter(
-                Article.id != article.id,
-                Article.pipeline_status == PipelineStatus.DONE,
-                Article.final_article.isnot(None),
-                Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
-            )
-            .order_by(
-                (func.coalesce(tag_count_subq.c.shared_tag_count, 0) * 2.0).desc(),
-                Article.created_at.desc(),
-            )
-            .limit(_RELATED_CANDIDATE_LIMIT)
+            .unique()
+            .scalars()
             .all()
         )
     else:
         candidates = (
-            Article.query.options(joinedload(Article.tags), joinedload(Article.source))
-            .filter(
-                Article.id != article.id,
-                Article.pipeline_status == PipelineStatus.DONE,
-                Article.final_article.isnot(None),
-                Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+            db.session.execute(
+                select(Article)
+                .options(joinedload(Article.tags), joinedload(Article.source))
+                .where(
+                    Article.id != article.id,
+                    Article.pipeline_status == PipelineStatus.DONE,
+                    Article.final_article.isnot(None),
+                    Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+                )
+                .order_by(Article.created_at.desc())
+                .limit(_RELATED_CANDIDATE_LIMIT)
             )
-            .order_by(Article.created_at.desc())
-            .limit(_RELATED_CANDIDATE_LIMIT)
+            .unique()
+            .scalars()
             .all()
         )
 
@@ -151,21 +165,27 @@ def find_related_articles_dicts(
     """
     from sqlalchemy.orm import joinedload
 
+    from extensions import db
     from models import Article
 
     if not topics:
         return []
 
     candidates = (
-        Article.query.filter(
-            Article.id != exclude_id,
-            Article.pipeline_status == PipelineStatus.DONE,
-            Article.final_article.isnot(None),
-            Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+        db.session.execute(
+            select(Article)
+            .options(joinedload(Article.tags), joinedload(Article.source))
+            .where(
+                Article.id != exclude_id,
+                Article.pipeline_status == PipelineStatus.DONE,
+                Article.final_article.isnot(None),
+                Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+            )
+            .order_by(Article.created_at.desc())
+            .limit(50)
         )
-        .options(joinedload(Article.source), joinedload(Article.tags))
-        .order_by(Article.created_at.desc())
-        .limit(50)
+        .unique()
+        .scalars()
         .all()
     )
 

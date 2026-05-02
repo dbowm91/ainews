@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 
+@pytest.mark.timeout(30)
 class TestGenerateNewsletterHTML:
     """Tests for generate_newsletter_html function."""
 

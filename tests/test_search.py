@@ -5,7 +5,10 @@ from services.search.duckduckgo import DuckDuckGoSearchProvider
 from services.search.google import GoogleSearchProvider
 from services.search.searxng import SearXNGSearchProvider
 
+import pytest
 
+
+@pytest.mark.timeout(30)
 class TestSearchProviderRegistry:
     def test_duckduckgo_registered(self):
         cls = get_search_provider_class("duckduckgo")

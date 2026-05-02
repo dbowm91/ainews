@@ -51,6 +51,9 @@ dev = [
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "--durations=10"
+markers = [
+    "timeout: marks tests as slow-running (deselect with '-m not timeout')",
+]
 
 [tool.coverage.run]
 source = ["."]

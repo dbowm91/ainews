@@ -1,33 +1,41 @@
 from datetime import timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from models import Subscriber
 from services.config_utils import get_config_with_default
 
 
-def get_subscriber_stats(db):
+def get_subscriber_stats(db) -> tuple[int, dict, int]:
     """Get subscriber statistics.
 
     Returns:
         Tuple of (total_active, subs_by_type_dict, inactive_count)
     """
     total_active = (
-        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=True)
-        .count()
+        db.session.scalar(
+            select(func.count(Subscriber.id))
+            .where(Subscriber.deleted_at.is_(None))
+            .where(Subscriber.active.is_(True))
+        )
+        or 0
     )
     subs_by_type = dict(
-        db.session.query(Subscriber.newsletter_type, func.count(Subscriber.id))
-        .filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=True)
-        .group_by(Subscriber.newsletter_type)
-        .all(),
+        db.session.execute(
+            select(Subscriber.newsletter_type, func.count(Subscriber.id))
+            .where(Subscriber.deleted_at.is_(None))
+            .where(Subscriber.active.is_(True))
+            .group_by(Subscriber.newsletter_type)
+        )
+        .all()
     )
     inactive = (
-        Subscriber.query.filter(Subscriber.deleted_at.is_(None))
-        .filter_by(active=False)
-        .count()
+        db.session.scalar(
+            select(func.count(Subscriber.id))
+            .where(Subscriber.deleted_at.is_(None))
+            .where(Subscriber.active.is_(False))
+        )
+        or 0
     )
     return total_active, subs_by_type, inactive
 
@@ -42,7 +50,7 @@ def _get_inactivity_days() -> int:
     return get_config_with_default("SUBSCRIBER_INACTIVITY_DAYS", 180)
 
 
-def cleanup_inactive_subscribers(db):
+def cleanup_inactive_subscribers(db) -> tuple[int, int]:
     """Flag or remove subscribers based on bounce count or inactivity.
 
     Subscribers are flagged inactive if:
@@ -64,10 +72,16 @@ def cleanup_inactive_subscribers(db):
     flagged = 0
     removed = 0
 
-    subscribers = Subscriber.query.filter(
-        Subscriber.deleted_at.is_(None),
-        Subscriber.active.is_(True),
-    ).all()
+    subscribers = (
+        db.session.execute(
+            select(Subscriber).where(
+                Subscriber.deleted_at.is_(None),
+                Subscriber.active.is_(True),
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     for sub in subscribers:
         should_flag = False
@@ -93,7 +107,7 @@ def cleanup_inactive_subscribers(db):
     return flagged, removed
 
 
-def record_bounce(subscriber_id: int, db):
+def record_bounce(subscriber_id: int, db) -> None:
     """Record a bounce for a subscriber.
 
     Args:
@@ -119,7 +133,7 @@ def record_bounce(subscriber_id: int, db):
         raise
 
 
-def update_last_active(subscriber_id: int, db):
+def update_last_active(subscriber_id: int, db) -> None:
     """Update the last_active_at timestamp for a subscriber.
 
     Args:

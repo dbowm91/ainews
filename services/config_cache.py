@@ -94,33 +94,16 @@ class ConfigCache:
             for k, _ in sorted_items[: len(self._memory) - _MAX_MEMORY_ENTRIES]:
                 del self._memory[k]
 
-    def get(
-        self,
-        key: str,
-        loader_fn: Callable[[], Any],
-        ttl: int = 300,
-    ) -> Any:
-        full_key = f"{self.prefix}:{key}"
-
-        # Double-checked locking pattern for memory cache
-        # First check without lock (fast path)
+    def _check_memory_cache(self, full_key, ttl):
         mem_entry = self._memory.get(full_key)
         if mem_entry is not None:
             expires_at, value = mem_entry
             if time.monotonic() < expires_at:
-                # Time-based stale eviction on read path
                 self._evict_stale()
                 return value
+        return None
 
-        with self._lock:
-            # Re-check after acquiring lock
-            mem_entry = self._memory.get(full_key)
-            if mem_entry is not None:
-                expires_at, value = mem_entry
-                if time.monotonic() < expires_at:
-                    return value
-
-        # Redis operations outside lock
+    def _read_redis_cache(self, full_key, ttl):
         try:
             cached = self._redis.get(full_key)
             if cached is not None:
@@ -131,14 +114,30 @@ class ConfigCache:
                     self._memory[full_key] = (time.monotonic() + ttl, value)
                 return value
         except redis.exceptions.RedisError as e:
-            logger.warning("Config cache read failed for %s: %s", key, e)
+            logger.warning("Config cache read failed for %s: %s", full_key, e)
+        return None
 
-        # Cache miss, load value with stampede protection
+    def _poll_for_cache(self, full_key, ttl):
+        for _ in range(10):
+            cached = self._redis.get(full_key)
+            if cached is not None:
+                if isinstance(cached, bytes):
+                    cached = cached.decode("utf-8")
+                value = _deserialize(cached)
+                with self._lock:
+                    self._memory[full_key] = (time.monotonic() + ttl, value)
+                return value
+            if not self._redis.exists(f"lock:{full_key}"):
+                break
+            time.sleep(0.05)
+        return None
+
+    def _handle_cache_miss(self, full_key, key, loader_fn, ttl):
         full_lock_key = f"lock:{full_key}"
         try:
             if self._redis.set(full_lock_key, "1", nx=True, ex=10):
                 try:
-                    # Double-check Redis cache after acquiring lock
+                    # Double-check Redis after lock
                     cached = self._redis.get(full_key)
                     if cached is not None:
                         if isinstance(cached, bytes):
@@ -163,21 +162,11 @@ class ConfigCache:
                     except redis.exceptions.RedisError:
                         pass
             else:
-                # Lock not acquired, poll for value or lock release
-                for _ in range(10):
-                    cached = self._redis.get(full_key)
-                    if cached is not None:
-                        if isinstance(cached, bytes):
-                            cached = cached.decode("utf-8")
-                        value = _deserialize(cached)
-                        with self._lock:
-                            self._memory[full_key] = (time.monotonic() + ttl, value)
-                        return value
-                    if not self._redis.exists(full_lock_key):
-                        break
-                    time.sleep(0.05)
-
-                # Fallback: load directly if lock holder failed
+                # Poll for value
+                value = self._poll_for_cache(full_key, ttl)
+                if value is not None:
+                    return value
+                # Fallback: load directly
                 value = loader_fn()
                 try:
                     self._redis.setex(full_key, ttl, _serialize(value))
@@ -189,12 +178,38 @@ class ConfigCache:
                 return value
         except redis.exceptions.RedisError as e:
             logger.warning("Config cache stampede protection failed for %s: %s", key, e)
-            # Fallback: load without caching
             value = loader_fn()
             with self._lock:
                 self._memory[full_key] = (time.monotonic() + ttl, value)
                 self._evict_stale()
             return value
+
+    def get(
+        self,
+        key: str,
+        loader_fn: Callable[[], Any],
+        ttl: int = 300,
+    ) -> Any:
+        full_key = f"{self.prefix}:{key}"
+
+        # First memory check (no lock)
+        val = self._check_memory_cache(full_key, ttl)
+        if val is not None:
+            return val
+
+        # Recheck memory under lock
+        with self._lock:
+            val = self._check_memory_cache(full_key, ttl)
+            if val is not None:
+                return val
+
+        # Check Redis
+        val = self._read_redis_cache(full_key, ttl)
+        if val is not None:
+            return val
+
+        # Handle cache miss
+        return self._handle_cache_miss(full_key, key, loader_fn, ttl)
 
     def invalidate(self, key: str) -> None:
         full_key = f"{self.prefix}:{key}"

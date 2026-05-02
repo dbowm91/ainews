@@ -31,7 +31,6 @@ class PipelineStatus:
     """Pipeline status constants to avoid typos."""
 
     PENDING = "pending"
-    SELECTING = "selecting"  # Added for completeness, though not in DB
     RESEARCHING = "researching"
     WRITING = "writing"
     EDITING = "editing"
@@ -72,7 +71,6 @@ def get_valid_next_statuses(current_status: str) -> frozenset:
 
 STAGE_STATUS_MAP = {
     "pending": "select",
-    "selecting": "select",
     "selected": "research",
     "researching": "research",
     "writing": "write",

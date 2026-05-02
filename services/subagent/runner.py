@@ -410,6 +410,32 @@ def _format_subagent_prompt(template, prompt_data, stage, task_type):
         return None
 
 
+def _is_task_revoked():
+    try:
+        from celery import current_task
+        if current_task and not current_task.request.called_directly:
+            return current_task.request.is_effectively_revoked()
+    except ImportError:
+        pass
+    return False
+
+
+def _call_with_timeout_module(provider, model, system_prompt, temperature, max_tokens, max_iterations, stage):
+    """Call LLM with tools and timeout."""
+    from . import traced_llm_call
+    with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
+        return provider.chat_with_tools(
+            messages=[{"role": "user", "content": prompt}],
+            tools=tools,
+            tool_choice=None,
+            model=model,
+            system=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_iterations=max_iterations,
+        )
+
+
 def run_subagent_with_tools(
     task_type: str,
     stage: str,
@@ -465,31 +491,6 @@ def run_subagent_with_tools(
 
     messages = [{"role": "user", "content": prompt}]
 
-    def _is_task_revoked():
-        try:
-            from celery import current_task
-
-            if current_task and not current_task.request.called_directly:
-                return current_task.request.is_effectively_revoked()
-        except ImportError:
-            pass
-        return False
-
-    def _call_with_timeout():
-        from . import traced_llm_call
-
-        with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
-            return provider.chat_with_tools(
-                messages=messages,
-                tools=tools,
-                tool_choice=None,
-                model=model,
-                system=system_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                max_iterations=stage_config.max_iterations,
-            )
-
     result = None
     used_fallback = False
     fallback_stages = []
@@ -509,7 +510,7 @@ def run_subagent_with_tools(
             "subagent.duration_seconds",
             labels={"stage": stage, "task_type": task_type},
         ):
-            future = _subagent_executor.submit(_call_with_timeout)
+            future = _subagent_executor.submit(_call_with_timeout_module, provider, model, system_prompt, temperature, max_tokens, stage_config.max_iterations, stage)
             try:
                 tc_resp = future.result(timeout=stage_config.timeout_seconds)
                 try:
@@ -586,51 +587,7 @@ def run_subagent_with_tools(
         if future:
             future.cancel()
 
-    if result is None:
-        used_fallback = True
-        fallback_stages = [stage]
-        from . import get_metrics, log_pipeline_event
-
-        get_metrics().counter_inc(
-            "subagent.failure",
-            labels={"stage": stage, "task_type": task_type},
-        )
-        log_pipeline_event(
-            stage="subagent",
-            event="subagent.failure",
-            article_id=article_id,
-            task_type=task_type,
-            stage_name=stage,
-            error=str(last_exc) if last_exc else None,
-        )
-    else:
-        from . import get_metrics, log_pipeline_event
-
-        get_metrics().counter_inc(
-            "subagent.success",
-            labels={"stage": stage, "task_type": task_type},
-        )
-        log_pipeline_event(
-            stage="subagent",
-            event="subagent.complete",
-            article_id=article_id,
-            task_type=task_type,
-            stage_name=stage,
-        )
-
-    from . import get_metrics
-
-    get_metrics().counter_inc(
-        "subagent.calls",
-        labels={
-            "stage": stage,
-            "task_type": task_type,
-            "status": "failure" if used_fallback else "success",
-        },
-    )
-
-    return SubagentResponse(
-        synthesis=result.synthesis if result else "",
-        used_fallback=used_fallback,
-        fallback_stages=fallback_stages,
+    return _finalize_subagent_result(
+        result, used_fallback, fallback_stages, last_exc,
+        stage, task_type, article_id, stage_config,
     )

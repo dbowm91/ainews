@@ -58,17 +58,8 @@ def _seed_share_configs():
         logger.warning("Failed to seed share configs", exc_info=True)
 
 
-def create_app(config_name=None):
-    if config_name is None:
-        config_name = os.environ.get("FLASK_CONFIG", "development")
-
-    app = Flask(
-        __name__,
-        template_folder="templates",
-        static_folder="static",
-    )
-    app.config.from_object(config[config_name])
-
+def _validate_config(app, config_name):
+    """Validate configuration and emit warnings."""
     # Development config warnings
     if config_name == "development":
         dev_cfg = config["development"]
@@ -92,25 +83,17 @@ def create_app(config_name=None):
     else:
         logger.warning(".env file not found at %s", env_path)
 
-    # Setup structured logging
-    setup_logging(
-        app,
-        level=logging.DEBUG if config_name == "development" else logging.INFO,
-        config_name=config_name,
-    )
-
     # Production secret validation
     if config_name == "production":
         config["production"].validate()
 
-    db.init_app(app)
+    # Warn if DEBUG is enabled in production context
+    if app.config.get("DEBUG") and config_name == "production":
+        logger.warning("DEBUG mode is enabled - do not use in production")
 
-    # CSRF protection
-    csrf.init_app(app)
 
-    # Rate limiting
-    limiter.init_app(app)
-
+def _setup_security(app):
+    """Setup security headers, CSP, and response compression."""
     # Response compression (gzip + brotli)
     from flask_compress import Compress
 
@@ -144,6 +127,10 @@ def create_app(config_name=None):
         },
     )
 
+
+def _setup_middleware(app):
+    """Setup request middleware (before/after request handlers)."""
+
     @app.before_request
     def start_request_timer():
         from logging_config import get_request_id
@@ -162,7 +149,10 @@ def create_app(config_name=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
-    import models
+
+def _setup_database(app, config_name):
+    """Initialize database, run migrations, and seed data."""
+    import models  # noqa: F401 # Needed for model registration
 
     with app.app_context():
         if db.engine.url.drivername == "sqlite":
@@ -186,10 +176,14 @@ def create_app(config_name=None):
 
         # Wire query logging after engine is ready (inside app context)
         from logging_config import setup_query_logging
+
         setup_query_logging(db.engine)
 
         _seed_share_configs()
 
+
+def _register_blueprints(app):
+    """Register Flask blueprints."""
     from routes.admin import admin_bp, admin_api_bp
     from routes.public import public_bp
 
@@ -197,15 +191,19 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_api_bp)
 
-    def _wants_json() -> bool:
-        """Detect if the client expects a JSON response."""
-        return (
-            request.path.startswith("/api/v1/")
-            or request.is_json
-            or "application/json" in request.accept_mimetypes
-        )
 
-    # Global error handlers
+def _wants_json() -> bool:
+    """Detect if the client expects a JSON response."""
+    return (
+        request.path.startswith("/api/v1/")
+        or request.is_json
+        or "application/json" in request.accept_mimetypes
+    )
+
+
+def _register_error_handlers(app):
+    """Register global error handlers."""
+
     @app.errorhandler(404)
     def not_found(e):
         logger.warning("404 Not Found: %s %s", request.method, request.path)
@@ -248,6 +246,10 @@ def create_app(config_name=None):
             return jsonify({"error": "Request too large"}), 413
         return "Request too large", 413
 
+
+def _register_template_filters(app):
+    """Register custom template filters."""
+
     @app.template_filter("urlencode")
     def urlencode_filter(value):
         from urllib.parse import quote
@@ -274,13 +276,57 @@ def create_app(config_name=None):
     @app.template_filter("format_date")
     def format_date_filter(dt):
         from services.date_utils import format_date
+
         return format_date(dt)
 
-    # Warn if DEBUG is enabled in production context
-    if app.config.get("DEBUG") and config_name == "production":
-        logger.warning("DEBUG mode is enabled - do not use in production")
 
+def create_app(config_name=None):
+    if config_name is None:
+        config_name = os.environ.get("FLASK_CONFIG", "development")
+
+    app = Flask(
+        __name__,
+        template_folder="templates",
+        static_folder="static",
+    )
+    app.config.from_object(config[config_name])
+
+    # Setup structured logging
+    setup_logging(
+        app,
+        level=logging.DEBUG if config_name == "development" else logging.INFO,
+        config_name=config_name,
+    )
+
+    # Validate configuration and emit warnings
+    _validate_config(app, config_name)
+
+    # Initialize extensions
+    db.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
+
+    # Setup security (Talisman, CSP, compression)
+    _setup_security(app)
+
+    # Setup middleware (before/after request handlers)
+    _setup_middleware(app)
+
+    # Setup database (migrations, SQLite pragmas, query logging, seed)
+    _setup_database(app, config_name)
+
+    # Register blueprints
+    _register_blueprints(app)
+
+    # Register error handlers
+    _register_error_handlers(app)
+
+    # Register template filters
+    _register_template_filters(app)
+
+    # Initialize tool registry
     from services.subagent import initialize_tool_registry
+
     initialize_tool_registry()
 
     return app

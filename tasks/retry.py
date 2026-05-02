@@ -13,7 +13,7 @@ from services.config_unified import (
     get_retry_soft_cutoff_minutes,
     get_stuck_threshold_minutes,
 )
-from tasks.pipeline import _get_max_stage_retries
+from services.pipeline_failure import _get_max_stage_retries
 
 logger = get_task_logger(__name__)
 

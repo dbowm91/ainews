@@ -6,11 +6,11 @@ from tasks.edit import edit_article
 from tasks.extract import process_item
 from tasks.pipeline import (
     _assign_tags,
-    _degrade_and_advance,
     _finalize,
     _handle_stage_failure,
     _log_pipeline,
 )
+from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 from tasks.research import research_article
 from tasks.retry import retry_stuck
 from tasks.scheduler import publish_scheduled_articles

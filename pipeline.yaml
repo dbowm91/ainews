@@ -302,4 +302,6 @@ schedule:
   cleanup_stale_limiter_interval_minutes: 5
   generate_newsletters_hour: 8
   consolidate_trend_memory_hour: 3
+  cleanup_inactive_subscribers_hour: 1
+  cleanup_inactive_subscribers_minute: 0
   cleanup_old_versions_days_to_keep: 90

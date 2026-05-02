@@ -140,6 +140,8 @@ class Config:
         cleanup_limiter_interval = int(sched.get("cleanup_stale_limiter_interval_minutes", 5))
         newsletters_hour = int(sched.get("generate_newsletters_hour", 8))
         trend_memory_hour = int(sched.get("consolidate_trend_memory_hour", 3))
+        cleanup_subscribers_hour = int(sched.get("cleanup_inactive_subscribers_hour", 1))
+        cleanup_subscribers_minute = int(sched.get("cleanup_inactive_subscribers_minute", 0))
 
         return {
             "run-all-sources": {
@@ -192,7 +194,7 @@ class Config:
             },
             "cleanup-inactive-subscribers": {
                 "task": "tasks.subscribers.cleanup_inactive_subscribers",
-                "schedule": crontab(hour=1, minute=0),
+                "schedule": crontab(hour=cleanup_subscribers_hour, minute=cleanup_subscribers_minute),
             },
             "backfill-embeddings": {
                 "task": "tasks.embeddings.backfill_embeddings",

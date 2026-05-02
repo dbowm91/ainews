@@ -65,6 +65,7 @@ def _init_celery():
 
     import tasks.crawl
     import tasks.edit
+    import tasks.embeddings
     import tasks.extract
     import tasks.newsletter
     import tasks.pipeline

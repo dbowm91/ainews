@@ -17,6 +17,7 @@ from tasks.scheduler import publish_scheduled_articles
 from tasks.select import select_article
 from tasks.webhook import dispatch_webhook_task
 from tasks.write import write_article
+from tasks.embeddings import backfill_embeddings
 
 __all__ = [
     "run_all_sources",
@@ -33,5 +34,6 @@ __all__ = [
     "_finalize",
     "_assign_tags",
     "dispatch_webhook_task",
+    "backfill_embeddings",
     "MAX_STAGE_RETRIES",
 ]

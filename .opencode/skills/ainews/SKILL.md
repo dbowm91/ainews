@@ -183,16 +183,15 @@ def _get_something() -> int:
 
 ## Pipeline State Machine
 
-`constants.py` defines `VALID_TRANSITIONS` dict mapping each `PipelineStatus` to list of valid next states:
+`constants.py` defines `VALID_TRANSITIONS` dict mapping each `PipelineStatus` to set of valid next states:
 
 ```python
 VALID_TRANSITIONS = {
-    PENDING: [EXTRACTING],
-    EXTRACTING: [SELECTING, FAILED],
-    SELECTING: [RESEARCHING, SELECTED, FAILED],
-    RESEARCHING: [WRITING, WRITTEN, FAILED],
-    WRITING: [EDITING, WRITTEN, FAILED],
-    EDITING: [DONE, FAILED],
+    PENDING: [RESEARCHING, REVIEW],
+    RESEARCHING: [WRITING, FAILED],
+    WRITING: [EDITING, FAILED],
+    EDITING: [REVIEW, DONE, FAILED],
+    REVIEW: [DONE, FAILED],
     # ...
 }
 ```

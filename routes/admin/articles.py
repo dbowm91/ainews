@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
+from models import Tag
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action
@@ -74,24 +75,36 @@ def _query_looks_like_url(query: str) -> bool:
     return bool(parsed.scheme and parsed.netloc)
 
 
-@admin_bp.route("/articles")
-@require_auth
-def articles():
-    from datetime import datetime, timezone
+def _apply_numeric_filter(q, field, value_str, operator=">="):
+    """Apply a numeric filter to the query if value_str is valid."""
+    if not value_str:
+        return q
+    try:
+        value = int(value_str)
+        if operator == ">=":
+            return q.filter(field >= value)
+        elif operator == "<=":
+            return q.filter(field <= value)
+    except ValueError:
+        pass
+    return q
 
-    from models import Article, Source, Tag
-    from services.utils import paginate_query
 
-    page = max(1, request.args.get("page", 1, type=int))
-    query = request.args.get("q", "", type=str).strip()
-    status = request.args.get("status", "", type=str).strip()
-    category = request.args.get("category", "", type=str).strip()
-    source_id = request.args.get("source_id", "", type=str).strip()
-    date_from = request.args.get("date_from", "", type=str).strip()
-    date_to = request.args.get("date_to", "", type=str).strip()
-    impact_min = request.args.get("impact_min", "", type=str).strip()
-    impact_max = request.args.get("impact_max", "", type=str).strip()
-    tag_slug = request.args.get("tag", "", type=str).strip()
+def _apply_tag_filter(q, tag_slug):
+    """Apply tag filter to query if tag exists."""
+    from models import Tag
+
+    if not tag_slug:
+        return q
+    tag = Tag.query.filter_by(slug=tag_slug).first()
+    if tag:
+        return q.filter(Article.tags.any(Tag.id == tag.id))
+    return q
+
+
+def _build_articles_query(query, status, category, source_id, date_from, date_to, impact_min, impact_max, tag_slug):
+    """Build the SQLAlchemy query for articles with all filters applied."""
+    from models import Article
 
     q = Article.query.options(
         joinedload(Article.source),
@@ -99,14 +112,12 @@ def articles():
     ).order_by(Article.created_at.desc())
 
     if query:
+        escaped_query = _escape_like_pattern(query)
         if _query_looks_like_url(query):
-            escaped_query = _escape_like_pattern(query)
             q = q.filter(Article.original_url.ilike(f"%{escaped_query}%", escape="\\"))
         else:
-            escaped_query = _escape_like_pattern(query)
-            q = q.filter(
-                Article.original_title.ilike(f"%{escaped_query}%", escape="\\"),
-            )
+            q = q.filter(Article.original_title.ilike(f"%{escaped_query}%", escape="\\"))
+
     if status:
         q = q.filter_by(pipeline_status=status)
     if category:
@@ -116,51 +127,54 @@ def articles():
             q = q.filter_by(source_id=int(source_id))
         except ValueError:
             pass
+
     date_errors = []
     if date_from:
-        try:
-            dt_from = datetime.fromisoformat(date_from)
-            if dt_from.tzinfo is None:
-                dt_from = dt_from.replace(tzinfo=timezone.utc)
+        dt_from, err = _parse_date_filter(date_from, "date_from")
+        if err:
+            date_errors.append(err)
+        elif dt_from:
             q = q.filter(Article.created_at >= dt_from)
-        except ValueError:
-            logger.warning("Invalid date_from filter: %s", date_from)
-            date_errors.append(f"Invalid start date: {date_from}")
     if date_to:
-        try:
-            dt_to = datetime.fromisoformat(date_to)
-            if dt_to.tzinfo is None:
-                dt_to = dt_to.replace(tzinfo=timezone.utc)
+        dt_to, err = _parse_date_filter(date_to, "date_to")
+        if err:
+            date_errors.append(err)
+        elif dt_to:
             q = q.filter(Article.created_at <= dt_to)
-        except ValueError:
-            logger.warning("Invalid date_to filter: %s", date_to)
-            date_errors.append(f"Invalid end date: {date_to}")
-    if impact_min:
-        try:
-            q = q.filter(Article.impact_score >= int(impact_min))
-        except ValueError:
-            pass
-    if impact_max:
-        try:
-            q = q.filter(Article.impact_score <= int(impact_max))
-        except ValueError:
-            pass
-    if tag_slug:
-        tag = Tag.query.filter_by(slug=tag_slug).first()
-        if tag:
-            q = q.filter(Article.tags.any(Tag.id == tag.id))
 
-    per_page = PER_PAGE_ADMIN_ARTICLES
-    total_count = q.count()
-    articles, has_next, next_page = paginate_query(q, page, per_page)
+    q = _apply_numeric_filter(q, Article.impact_score, impact_min, ">=")
+    q = _apply_numeric_filter(q, Article.impact_score, impact_max, "<=")
+    q = _apply_tag_filter(q, tag_slug)
 
-    # Get sources for filter dropdown
-    sources = Source.query.order_by(Source.name).all()
+    return q, date_errors
 
-    for err in date_errors:
-        flash(err, "warning")
 
-    if request.headers.get("HX-Request"):
+def _parse_date_filter(date_str, field_name):
+    """Parse a date string and return datetime with UTC timezone.
+
+    Returns tuple of (datetime or None, error_message or None).
+    """
+    from datetime import datetime, timezone
+
+    try:
+        dt = datetime.fromisoformat(date_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt, None
+    except ValueError:
+        logger.warning("Invalid %s filter: %s", field_name, date_str)
+        return None, f"Invalid {field_name.replace('_', ' ')}: {date_str}"
+
+
+def _render_articles_response(articles, has_next, next_page, page, total_count,
+                               query, status, category, source_id, date_from, date_to,
+                               impact_min, impact_max, tag_slug, sources, is_htmx=False):
+    """Render the appropriate template for the articles page."""
+    from models import Tag
+
+    categories = _admin_categories()
+
+    if is_htmx:
         return render_template(
             "admin/partials/articles_table.html",
             articles=articles,
@@ -177,11 +191,10 @@ def articles():
             impact_min=impact_min,
             impact_max=impact_max,
             tag_slug=tag_slug,
-            categories=_admin_categories(),
+            categories=categories,
             sources=sources,
         )
 
-    categories = _admin_categories()
     all_tags = Tag.query.order_by(Tag.name).all()
 
     return render_template(
@@ -206,6 +219,170 @@ def articles():
     )
 
 
+@admin_bp.route("/articles")
+@require_auth
+def articles():
+    from models import Source
+    from services.utils import paginate_query
+
+    page = max(1, request.args.get("page", 1, type=int))
+    query = request.args.get("q", "", type=str).strip()
+    status = request.args.get("status", "", type=str).strip()
+    category = request.args.get("category", "", type=str).strip()
+    source_id = request.args.get("source_id", "", type=str).strip()
+    date_from = request.args.get("date_from", "", type=str).strip()
+    date_to = request.args.get("date_to", "", type=str).strip()
+    impact_min = request.args.get("impact_min", "", type=str).strip()
+    impact_max = request.args.get("impact_max", "", type=str).strip()
+    tag_slug = request.args.get("tag", "", type=str).strip()
+
+    q, date_errors = _build_articles_query(
+        query, status, category, source_id, date_from, date_to, impact_min, impact_max, tag_slug,
+    )
+
+    per_page = PER_PAGE_ADMIN_ARTICLES
+    total_count = q.count()
+    articles, has_next, next_page = paginate_query(q, page, per_page)
+
+    # Get sources for filter dropdown
+    sources = Source.query.order_by(Source.name).all()
+
+    for err in date_errors:
+        flash(err, "warning")
+
+    is_htmx = bool(request.headers.get("HX-Request"))
+    return _render_articles_response(
+        articles, has_next, next_page, page, total_count,
+        query, status, category, source_id, date_from, date_to,
+        impact_min, impact_max, tag_slug, sources, is_htmx,
+    )
+
+
+def _parse_final_article(article):
+    """Parse the final_article JSON from an article.
+
+    Returns tuple of (parsed_dict, original_dict_or_none).
+    """
+    if not article.final_article:
+        return {}, None
+    try:
+        fa = json.loads(article.final_article)
+        return fa, fa
+    except (json.JSONDecodeError, TypeError):
+        return {}, None
+
+
+def _process_edit_form(article, form_data, original_fa):
+    """Process the edit form data and update the article's final_article.
+
+    Returns the updated final_article dict.
+    """
+    from constants import (
+        IMPACT_SCORE_MAX,
+        IMPACT_SCORE_MIN,
+        VALID_PIPELINE_STATUSES,
+    )
+
+    fa = dict(original_fa) if original_fa else {}
+
+    fa["headline"] = _sanitize_field(form_data.get("headline", "").strip(), MAX_HEADLINE_LENGTH)
+    fa["tldr"] = _sanitize_field(form_data.get("tldr", "").strip(), MAX_TLDR_LENGTH)
+    fa["why_it_matters"] = _sanitize_field(form_data.get("why_it_matters", "").strip(), MAX_WHY_IT_MATTERS_LENGTH)
+    fa["body"] = _sanitize_field(form_data.get("body", "").strip(), MAX_BODY_LENGTH)
+    fa["what_to_watch"] = _sanitize_field(form_data.get("what_to_watch", "").strip(), MAX_WHAT_TO_WATCH_LENGTH)
+
+    key_points_raw = _sanitize_field(form_data.get("key_points", "").strip(), MAX_KEY_POINTS_LENGTH)
+    if key_points_raw:
+        fa["key_points"] = [
+            kp.strip() for kp in key_points_raw.split("\n") if kp.strip()
+        ]
+    else:
+        fa["key_points"] = []
+
+    tags_raw = _sanitize_field(form_data.get("tags", "").strip(), MAX_TAGS_LENGTH)
+    if tags_raw:
+        fa["tags"] = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
+    else:
+        fa["tags"] = []
+
+    # Preserve structured fields not editable in the form
+    for preserve_key in ("citations", "original_attribution"):
+        if original_fa.get(preserve_key):
+            fa[preserve_key] = original_fa[preserve_key]
+
+    # Validate category
+    new_category = form_data.get("category", article.category).strip()
+    valid_categories = set(_admin_categories())
+    if new_category in valid_categories:
+        article.category = new_category
+
+    # Validate pipeline_status
+    new_status = form_data.get(
+        "pipeline_status", article.pipeline_status,
+    ).strip()
+    if new_status in VALID_PIPELINE_STATUSES:
+        article.pipeline_status = new_status
+
+    # Validate impact_score
+    impact_raw = form_data.get("impact_score", "")
+    if impact_raw.strip():
+        try:
+            article.impact_score = max(
+                IMPACT_SCORE_MIN, min(IMPACT_SCORE_MAX, int(impact_raw)),
+            )
+        except ValueError:
+            pass
+
+    return fa, new_category, new_status
+
+
+def _invalidate_article_caches(article_id):
+    """Invalidate response caches for an article."""
+    try:
+        from services.cache import get_response_cache
+
+        cache = get_response_cache()
+        cache.invalidate_prefix("pub:index")
+        cache.invalidate_prefix("pub:topic")
+        cache.invalidate_prefix("pub:rss_feed")
+        cache.invalidate(f"pub:article_detail:{article_id}")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Failed to invalidate article cache: %s", e)
+
+
+def _save_article_edit(article, fa, new_category, new_status):
+    """Save the edited article and log the action.
+
+    Returns (success, error_response).
+    """
+    from extensions import db
+
+    try:
+        db.session.commit()
+        log_admin_action(
+            "article_edit",
+            target_type="article",
+            target_id=article.id,
+            details={
+                "original_title": article.original_title,
+                "category": new_category,
+                "pipeline_status": new_status,
+            },
+            category="article",
+        )
+        return True, None
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.exception("Failed to save article %s", article.id)
+        return False, render_template(
+            "admin/article_edit.html",
+            article=article,
+            fa=fa,
+            categories=_admin_categories(),
+            error="Failed to save changes. Please try again.",
+        ), 500
+
+
 @admin_bp.route("/articles/<int:article_id>/edit", methods=["GET", "POST"])
 @require_auth
 @validate_csrf_json
@@ -216,120 +393,28 @@ def edit_article(article_id):
     article = db.get_or_404(Article, article_id)
 
     if request.method == "POST":
-        from constants import (
-            IMPACT_SCORE_MAX,
-            IMPACT_SCORE_MIN,
-            VALID_PIPELINE_STATUSES,
-        )
-
         # Parse final_article JSON and update fields
-        fa = {}
-        if article.final_article:
-            try:
-                fa = json.loads(article.final_article)
-            except (json.JSONDecodeError, TypeError):
-                fa = {}
-        original_fa = dict(fa)  # snapshot before overwriting
-
-        fa["headline"] = _sanitize_field(request.form.get("headline", "").strip(), MAX_HEADLINE_LENGTH)
-        fa["tldr"] = _sanitize_field(request.form.get("tldr", "").strip(), MAX_TLDR_LENGTH)
-        fa["why_it_matters"] = _sanitize_field(request.form.get("why_it_matters", "").strip(), MAX_WHY_IT_MATTERS_LENGTH)
-        fa["body"] = _sanitize_field(request.form.get("body", "").strip(), MAX_BODY_LENGTH)
-        fa["what_to_watch"] = _sanitize_field(request.form.get("what_to_watch", "").strip(), MAX_WHAT_TO_WATCH_LENGTH)
-
-        key_points_raw = _sanitize_field(request.form.get("key_points", "").strip(), MAX_KEY_POINTS_LENGTH)
-        if key_points_raw:
-            fa["key_points"] = [
-                kp.strip() for kp in key_points_raw.split("\n") if kp.strip()
-            ]
-        else:
-            fa["key_points"] = []
-
-        tags_raw = _sanitize_field(request.form.get("tags", "").strip(), MAX_TAGS_LENGTH)
-        if tags_raw:
-            fa["tags"] = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
-        else:
-            fa["tags"] = []
-
-        # Preserve structured fields not editable in the form
-        for preserve_key in ("citations", "original_attribution"):
-            if original_fa.get(preserve_key):
-                fa[preserve_key] = original_fa[preserve_key]
+        fa, original_fa = _parse_final_article(article)
 
         # Create version snapshot of OLD content before overwriting
         from services.article import create_article_version
 
         create_article_version(article, change_reason="admin_edit", changed_by="admin")
 
+        fa, new_category, new_status = _process_edit_form(article, request.form, original_fa or {})
+
         article.final_article = json.dumps(fa)
 
-        # Validate category
-        new_category = request.form.get("category", article.category).strip()
-        valid_categories = set(_admin_categories())
-        if new_category in valid_categories:
-            article.category = new_category
+        success, error_response = _save_article_edit(article, fa, new_category, new_status)
+        if not success:
+            return error_response
 
-        # Validate pipeline_status
-        new_status = request.form.get(
-            "pipeline_status", article.pipeline_status,
-        ).strip()
-        if new_status in VALID_PIPELINE_STATUSES:
-            article.pipeline_status = new_status
-
-        # Validate impact_score
-        impact_raw = request.form.get("impact_score", "")
-        if impact_raw.strip():
-            try:
-                article.impact_score = max(
-                    IMPACT_SCORE_MIN, min(IMPACT_SCORE_MAX, int(impact_raw)),
-                )
-            except ValueError:
-                pass
-
-        try:
-            db.session.commit()
-            log_admin_action(
-                "article_edit",
-                target_type="article",
-                target_id=article.id,
-                details={
-                    "original_title": article.original_title,
-                    "category": new_category,
-                    "pipeline_status": new_status,
-                },
-                category="article",
-            )
-        except SQLAlchemyError:
-            db.session.rollback()
-            logger.exception("Failed to save article %s", article_id)
-            return render_template(
-                "admin/article_edit.html",
-                article=article,
-                fa=fa,
-                categories=_admin_categories(),
-                error="Failed to save changes. Please try again.",
-            ), 500
-
-        try:
-            from services.cache import get_response_cache
-
-            cache = get_response_cache()
-            cache.invalidate_prefix("pub:index")
-            cache.invalidate_prefix("pub:topic")
-            cache.invalidate_prefix("pub:rss_feed")
-            cache.invalidate(f"pub:article_detail:{article_id}")
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Failed to invalidate article cache: %s", e)
+        _invalidate_article_caches(article.id)
 
         return redirect(url_for("admin.articles"))
 
     # Parse current final_article for form
-    fa = {}
-    if article.final_article:
-        try:
-            fa = json.loads(article.final_article)
-        except (json.JSONDecodeError, TypeError):
-            pass
+    fa, _ = _parse_final_article(article)
 
     return render_template(
         "admin/article_edit.html",

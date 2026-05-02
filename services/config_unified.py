@@ -200,68 +200,32 @@ def _fmt_yaml_error(e) -> str:
     return msg
 
 
+def _validate_config_section(import_path, func_name, section_name, errors):
+    from pydantic import ValidationError
+    import yaml
+    try:
+        module = __import__(import_path, fromlist=[func_name])
+        loader_fn = getattr(module, func_name)
+        loader_fn()
+    except ValidationError as e:
+        for err in e.errors():
+            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
+            errors.append(f"{section_name} config error [{loc}]: {err['msg']}")
+    except yaml.YAMLError as e:
+        errors.append(f"{section_name} config error: {_fmt_yaml_error(e)}")
+    except Exception as e:
+        errors.append(f"{section_name} config error: {e}")
+
+
 def validate_config() -> tuple[bool, list[str]]:
     """Validate current configuration.
 
     Returns:
         (is_valid, errors) tuple. errors is empty if valid.
     """
-    from pydantic import ValidationError
-
-    import yaml
-
     errors = []
-
-    try:
-        from schemas.pipeline import load_pipeline_config
-
-        load_pipeline_config()
-    except ValidationError as e:
-        for err in e.errors():
-            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
-            errors.append(f"Pipeline config error [{loc}]: {err['msg']}")
-    except yaml.YAMLError as e:
-        errors.append(f"Pipeline config error: {_fmt_yaml_error(e)}")
-    except Exception as e:
-        errors.append(f"Pipeline config error: {e}")
-
-    try:
-        from schemas.topic import load_topics
-
-        load_topics()
-    except ValidationError as e:
-        for err in e.errors():
-            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
-            errors.append(f"Topic config error [{loc}]: {err['msg']}")
-    except yaml.YAMLError as e:
-        errors.append(f"Topic config error: {_fmt_yaml_error(e)}")
-    except Exception as e:
-        errors.append(f"Topic config error: {e}")
-
-    try:
-        from schemas.source import load_sources
-
-        load_sources()
-    except ValidationError as e:
-        for err in e.errors():
-            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
-            errors.append(f"Source config error [{loc}]: {err['msg']}")
-    except yaml.YAMLError as e:
-        errors.append(f"Source config error: {_fmt_yaml_error(e)}")
-    except Exception as e:
-        errors.append(f"Source config error: {e}")
-
-    try:
-        from schemas.llm import load_providers_config
-
-        load_providers_config()
-    except ValidationError as e:
-        for err in e.errors():
-            loc = ".".join(str(seg) for seg in err["loc"]) if err["loc"] else "unknown"
-            errors.append(f"LLM providers config error [{loc}]: {err['msg']}")
-    except yaml.YAMLError as e:
-        errors.append(f"LLM providers config error: {_fmt_yaml_error(e)}")
-    except Exception as e:
-        errors.append(f"LLM providers config error: {e}")
-
+    _validate_config_section('schemas.pipeline', 'load_pipeline_config', 'Pipeline', errors)
+    _validate_config_section('schemas.topic', 'load_topics', 'Topic', errors)
+    _validate_config_section('schemas.source', 'load_sources', 'Source', errors)
+    _validate_config_section('schemas.llm', 'load_providers_config', 'LLM providers', errors)
     return (len(errors) == 0, errors)

@@ -43,147 +43,155 @@ def get_registered_tools() -> list[ToolDefinition]:
     return list(_TOOL_REGISTRY.values())
 
 
+# Context tool helpers
+def _context_tool_get_topic_note(topic: str, source: str | None = None) -> str:
+    from services.cache import get_response_cache
+
+    def _fetch_note() -> str:
+        from services.context_service import get_topic_note
+        try:
+            note = get_topic_note(topic, source)
+            return note.note if note else "No note found for this topic."
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
+            logger.error("Tool get_topic_note failed for topic=%s: %s", topic, e)
+            return f"Error retrieving topic note: {type(e).__name__}"
+        except Exception as e:  # noqa: BLE001
+            logger.error("Unexpected error in get_topic_note for %s: %s", topic, e)
+            return f"Error retrieving topic note: {type(e).__name__}"
+
+    cache = get_response_cache()
+    cache_key = f"topic_note:{topic}:{source or 'none'}"
+    return cache.get_or_set(cache_key, _fetch_note, ttl=120)
+
+
+def _context_tool_get_topic_notes_for_topics(topics: list[str]) -> str:
+    from services.context_service import get_topic_notes_for_topics
+
+    try:
+        result = get_topic_notes_for_topics(topics)
+        if not result:
+            return "No topic notes found."
+        return "\n".join(
+            f"Topic: {k}\nNotes: {'; '.join(v)}" for k, v in result.items()
+        )
+    except (SQLAlchemyError, KeyError, AttributeError) as e:
+        logger.error("Tool get_topic_notes_for_topics failed: %s", e)
+        return f"Error retrieving topic notes: {type(e).__name__}"
+    except Exception as e:  # noqa: BLE001
+        logger.error("Unexpected error in get_topic_notes_for_topics: %s", e)
+        return f"Error retrieving topic notes: {type(e).__name__}"
+
+
+def _context_tool_get_related_articles(
+    topics: list[str], exclude_id: int, limit: int = 5,
+) -> str:
+    from services.cache import get_response_cache
+
+    def _fetch_articles() -> str:
+        from services.context_service import get_related_articles_for_edit
+        try:
+            articles = get_related_articles_for_edit(topics, exclude_id, limit=limit)
+            if not articles:
+                return "No related articles found."
+            return "\n".join(
+                f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
+            )
+        except (SQLAlchemyError, KeyError, AttributeError) as e:
+            logger.error("Tool get_related_articles failed: %s", e)
+            return f"Error retrieving related articles: {type(e).__name__}"
+        except Exception as e:  # noqa: BLE001
+            logger.error("Unexpected error in get_related_articles: %s", e)
+            return f"Error retrieving related articles: {type(e).__name__}"
+
+    cache = get_response_cache()
+    cache_key = f"related_articles:{','.join(sorted(topics))}:{exclude_id}:{limit}"
+    return cache.get_or_set(cache_key, _fetch_articles, ttl=120)
+
+
+def _context_tool_get_trend_memory(
+    topics: list[str], min_importance: int = 1, max_age_days: int | None = None,
+) -> str:
+    from services.trend_memory import get_memory_for_topics
+
+    try:
+        entries = get_memory_for_topics(topics, min_importance, max_age_days)
+        if not entries:
+            return "No trend memory found for these topics."
+        return "\n".join(
+            f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
+        )
+    except (SQLAlchemyError, KeyError, AttributeError) as e:
+        logger.error("Tool get_trend_memory failed: %s", e)
+        return f"Error retrieving trend memory: {type(e).__name__}"
+    except Exception as e:  # noqa: BLE001
+        logger.error("Unexpected error in get_trend_memory: %s", e)
+        return f"Error retrieving trend memory: {type(e).__name__}"
+
+
+def _context_tool_get_article_by_id(article_id: int) -> str:
+    from extensions import db
+    from models import Article
+
+    try:
+        article = db.session.get(Article, article_id)
+        if not article:
+            return f'{{"error": "Article {article_id} not found"}}'
+        return json.dumps({
+            "id": article.id,
+            "title": article.title,
+            "pipeline_status": article.pipeline_status,
+            "impact_score": article.impact_score,
+            "created_at": article.created_at.isoformat() if article.created_at else None,
+        })
+    except (SQLAlchemyError, KeyError, AttributeError) as e:
+        logger.error("Tool get_article_by_id failed for %s: %s", article_id, e)
+        return f'{{"error": "{type(e).__name__}"}}'
+    except Exception as e:  # noqa: BLE001
+        logger.error("Unexpected error in get_article_by_id for %s: %s", article_id, e)
+        return f'{{"error": "{type(e).__name__}"}}'
+
+
+def _context_tool_search_articles(query: str, limit: int = 5) -> str:
+    from models import Article
+
+    try:
+        articles = Article.query.filter(
+            Article.original_title.ilike(f"%{query}%"),
+        ).limit(limit).all()
+        return json.dumps([
+            {"id": a.id, "title": a.original_title} for a in articles
+        ])
+    except (SQLAlchemyError, KeyError, AttributeError) as e:
+        logger.error("Tool search_articles failed: %s", e)
+        return f'{{"error": "{type(e).__name__}"}}'
+    except Exception as e:  # noqa: BLE001
+        logger.error("Unexpected error in search_articles: %s", e)
+        return f'{{"error": "{type(e).__name__}"}}'
+
+
+def _context_tool_get_source_health() -> str:
+    from extensions import db
+    from models import Source
+
+    try:
+        sources = db.session.query(Source).all()
+        return json.dumps([{
+            "id": s.id,
+            "name": s.name,
+            "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
+            "consecutive_failures": s.consecutive_failures,
+        } for s in sources])
+    except (SQLAlchemyError, KeyError, AttributeError) as e:
+        logger.error("Tool get_source_health failed: %s", e)
+        return f'{{"error": "{type(e).__name__}"}}'
+    except Exception as e:  # noqa: BLE001
+        logger.error("Unexpected error in get_source_health: %s", e)
+        return f'{{"error": "{type(e).__name__}"}}'
+
+
 def _build_context_tools() -> list[ToolDefinition]:
     """Build tool definitions from context_service functions."""
     tools = []
-
-    def _get_topic_note(topic: str, source: str | None = None) -> str:
-        from services.cache import get_response_cache
-
-        def _fetch_note() -> str:
-            from services.context_service import get_topic_note
-            try:
-                note = get_topic_note(topic, source)
-                return note.note if note else "No note found for this topic."
-            except (SQLAlchemyError, KeyError, AttributeError) as e:
-                logger.error("Tool get_topic_note failed for topic=%s: %s", topic, e)
-                return f"Error retrieving topic note: {type(e).__name__}"
-            except Exception as e:  # noqa: BLE001  # noqa: BLE001
-                logger.error("Unexpected error in get_topic_note for %s: %s", topic, e)
-                return f"Error retrieving topic note: {type(e).__name__}"
-
-        cache = get_response_cache()
-        cache_key = f"topic_note:{topic}:{source or 'none'}"
-        return cache.get_or_set(cache_key, _fetch_note, ttl=120)
-
-    def _get_topic_notes_for_topics(topics: list[str]) -> str:
-        from services.context_service import get_topic_notes_for_topics
-
-        try:
-            result = get_topic_notes_for_topics(topics)
-            if not result:
-                return "No topic notes found."
-            return "\n".join(
-                f"Topic: {k}\nNotes: {'; '.join(v)}" for k, v in result.items()
-            )
-        except (SQLAlchemyError, KeyError, AttributeError) as e:
-            logger.error("Tool get_topic_notes_for_topics failed: %s", e)
-            return f"Error retrieving topic notes: {type(e).__name__}"
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
-            logger.error("Unexpected error in get_topic_notes_for_topics: %s", e)
-            return f"Error retrieving topic notes: {type(e).__name__}"
-
-    def _get_related_articles(
-        topics: list[str], exclude_id: int, limit: int = 5,
-    ) -> str:
-        from services.cache import get_response_cache
-
-        def _fetch_articles() -> str:
-            from services.context_service import get_related_articles_for_edit
-            try:
-                articles = get_related_articles_for_edit(topics, exclude_id, limit=limit)
-                if not articles:
-                    return "No related articles found."
-                return "\n".join(
-                    f"- {a['title']}: {a.get('summary_snippet', '')[:100]}" for a in articles
-                )
-            except (SQLAlchemyError, KeyError, AttributeError) as e:
-                logger.error("Tool get_related_articles failed: %s", e)
-                return f"Error retrieving related articles: {type(e).__name__}"
-            except Exception as e:  # noqa: BLE001  # noqa: BLE001
-                logger.error("Unexpected error in get_related_articles: %s", e)
-                return f"Error retrieving related articles: {type(e).__name__}"
-
-        cache = get_response_cache()
-        cache_key = f"related_articles:{','.join(sorted(topics))}:{exclude_id}:{limit}"
-        return cache.get_or_set(cache_key, _fetch_articles, ttl=120)
-
-    def _get_trend_memory(
-        topics: list[str], min_importance: int = 1, max_age_days: int | None = None,
-    ) -> str:
-        from services.trend_memory import get_memory_for_topics
-
-        try:
-            entries = get_memory_for_topics(topics, min_importance, max_age_days)
-            if not entries:
-                return "No trend memory found for these topics."
-            return "\n".join(
-                f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
-            )
-        except (SQLAlchemyError, KeyError, AttributeError) as e:
-            logger.error("Tool get_trend_memory failed: %s", e)
-            return f"Error retrieving trend memory: {type(e).__name__}"
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
-            logger.error("Unexpected error in get_trend_memory: %s", e)
-            return f"Error retrieving trend memory: {type(e).__name__}"
-
-    def _get_article_by_id(article_id: int) -> str:
-        from extensions import db
-        from models import Article
-
-        try:
-            article = db.session.get(Article, article_id)
-            if not article:
-                return f'{{"error": "Article {article_id} not found"}}'
-            return json.dumps({
-                "id": article.id,
-                "title": article.title,
-                "pipeline_status": article.pipeline_status,
-                "impact_score": article.impact_score,
-                "created_at": article.created_at.isoformat() if article.created_at else None,
-            })
-        except (SQLAlchemyError, KeyError, AttributeError) as e:
-            logger.error("Tool get_article_by_id failed for %s: %s", article_id, e)
-            return f'{{"error": "{type(e).__name__}"}}'
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
-            logger.error("Unexpected error in get_article_by_id for %s: %s", article_id, e)
-            return f'{{"error": "{type(e).__name__}"}}'
-
-    def _search_articles(query: str, limit: int = 5) -> str:
-        from models import Article
-
-        try:
-            articles = Article.query.filter(
-                Article.original_title.ilike(f"%{query}%"),
-            ).limit(limit).all()
-            return json.dumps([
-                {"id": a.id, "title": a.original_title} for a in articles
-            ])
-        except (SQLAlchemyError, KeyError, AttributeError) as e:
-            logger.error("Tool search_articles failed: %s", e)
-            return f'{{"error": "{type(e).__name__}"}}'
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
-            logger.error("Unexpected error in search_articles: %s", e)
-            return f'{{"error": "{type(e).__name__}"}}'
-
-    def _get_source_health() -> str:
-        from extensions import db
-        from models import Source
-
-        try:
-            sources = db.session.query(Source).all()
-            return json.dumps([{
-                "id": s.id,
-                "name": s.name,
-                "disabled_at": s.disabled_at.isoformat() if s.disabled_at else None,
-                "consecutive_failures": s.consecutive_failures,
-            } for s in sources])
-        except (SQLAlchemyError, KeyError, AttributeError) as e:
-            logger.error("Tool get_source_health failed: %s", e)
-            return f'{{"error": "{type(e).__name__}"}}'
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
-            logger.error("Unexpected error in get_source_health: %s", e)
-            return f'{{"error": "{type(e).__name__}"}}'
 
     tools.append(
         ToolDefinition(
@@ -200,7 +208,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 },
                 "required": ["topic"],
             },
-            fn=_get_topic_note,
+            fn=_context_tool_get_topic_note,
         ),
     )
 
@@ -219,7 +227,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 },
                 "required": ["topics"],
             },
-            fn=_get_topic_notes_for_topics,
+            fn=_context_tool_get_topic_notes_for_topics,
         ),
     )
 
@@ -246,7 +254,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 },
                 "required": ["topics", "exclude_id"],
             },
-            fn=_get_related_articles,
+            fn=_context_tool_get_related_articles,
         ),
     )
 
@@ -273,7 +281,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 },
                 "required": ["topics"],
             },
-            fn=_get_trend_memory,
+            fn=_context_tool_get_trend_memory,
         ),
     )
 
@@ -291,7 +299,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 },
                 "required": ["article_id"],
             },
-            fn=_get_article_by_id,
+            fn=_context_tool_get_article_by_id,
         ),
     )
 
@@ -310,7 +318,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 },
                 "required": ["query"],
             },
-            fn=_search_articles,
+            fn=_context_tool_search_articles,
         ),
     )
 
@@ -322,7 +330,7 @@ def _build_context_tools() -> list[ToolDefinition]:
                 "type": "object",
                 "properties": {},
             },
-            fn=_get_source_health,
+            fn=_context_tool_get_source_health,
         ),
     )
 
@@ -1074,6 +1082,118 @@ def run_subagent_chain(
     }
 
 
+# AST evaluation helpers for _evaluate_condition
+def _eval_handle_expression(node: ast.Expression, eval_node_fn) -> Any:
+    return eval_node_fn(node.body)
+
+
+def _eval_handle_bool_op(node: ast.BoolOp, eval_node_fn, allowed_ops) -> Any:
+    values = [eval_node_fn(v) for v in node.values]
+    if isinstance(node.op, ast.And):
+        return all(values)
+    elif isinstance(node.op, ast.Or):
+        return any(values)
+    raise ValueError(f"Unsupported boolean operator: {type(node.op).__name__}")
+
+
+def _eval_handle_unary_not(node: ast.UnaryOp, eval_node_fn) -> Any:
+    return not eval_node_fn(node.operand)
+
+
+def _eval_handle_compare(node: ast.Compare, eval_node_fn, allowed_ops) -> Any:
+    left = eval_node_fn(node.left)
+    for op_node, comparator in zip(node.ops, node.comparators):
+        op = allowed_ops[type(op_node)]
+        right = eval_node_fn(comparator)
+        if not op(left, right):
+            return False
+        left = right
+    return True
+
+
+def _eval_handle_name(node: ast.Name, allowed_names, context) -> Any:
+    if node.id not in allowed_names:
+        raise ValueError(f"Unknown identifier: {node.id}")
+    if node.id in ("results", "previous"):
+        return context.get(node.id, context)
+    result = context.get(node.id)
+    if result is None:
+        raise ValueError(f"Context has no key '{node.id}'")
+    return result
+
+
+def _eval_handle_constant(node: ast.Constant) -> Any:
+    return node.value
+
+
+def _eval_handle_attribute(node: ast.Attribute, eval_node_fn, context) -> Any:
+    obj = eval_node_fn(node.value)
+    if isinstance(obj, dict) and node.attr in obj:
+        return obj[node.attr]
+    if obj is None:
+        return {}
+    if node.attr.startswith("__") or node.attr.startswith("_"):
+        raise ValueError(f"Access to protected attribute '{node.attr}' is not allowed")
+    try:
+        return getattr(obj, node.attr)
+    except AttributeError:
+        if isinstance(obj, dict):
+            raise
+        if node.attr in context:
+            return context[node.attr]
+        raise
+
+
+def _eval_handle_subscript(node: ast.Subscript, eval_node_fn) -> Any:
+    obj = eval_node_fn(node.value)
+    idx = eval_node_fn(node.slice)
+    if isinstance(obj, dict):
+        return obj[idx]
+    elif isinstance(obj, (list, tuple)):
+        if isinstance(idx, int):
+            return obj[idx]
+        raise ValueError("List index must be an integer")
+    raise ValueError("Subscript target must be dict or list")
+
+
+def _eval_node(
+    node: ast.AST,
+    allowed_ops: dict,
+    allowed_names: set,
+    context: dict,
+) -> Any:
+    """Recursively evaluate an AST node with given allowed ops/names/context."""
+    node_type = type(node)
+    if node_type is ast.Expression:
+        return _eval_handle_expression(node, _eval_node)
+    elif node_type is ast.BoolOp:
+        return _eval_handle_bool_op(node, _eval_node, allowed_ops)
+    elif node_type is ast.UnaryOp:
+        if isinstance(node.op, ast.Not):
+            return _eval_handle_unary_not(node, _eval_node)
+        else:
+            raise ValueError("Unary operations not allowed in conditions")
+    elif node_type is ast.Compare:
+        return _eval_handle_compare(node, _eval_node, allowed_ops)
+    elif node_type is ast.Name:
+        return _eval_handle_name(node, allowed_names, context)
+    elif node_type is ast.Constant:
+        return _eval_handle_constant(node)
+    elif node_type is ast.Attribute:
+        return _eval_handle_attribute(node, _eval_node, context)
+    elif node_type is ast.Subscript:
+        return _eval_handle_subscript(node, _eval_node)
+    elif node_type in (ast.Call, ast.Lambda, ast.BinOp):
+        disallowed_msgs = {
+            ast.Call: "Function calls not allowed in conditions",
+            ast.Lambda: "Lambda expressions not allowed in conditions",
+            ast.BinOp: "Binary operations not allowed in conditions",
+        }
+        raise ValueError(disallowed_msgs[node_type])
+    else:
+        raise ValueError(f"Unsupported node type: {node_type.__name__}")
+
+
 def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
     """Evaluate a condition expression against the context using AST-based parsing."""
     import ast
@@ -1093,88 +1213,18 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
 
     _ALLOWED_NAMES = {"True", "False", "None", "results", "previous"}
 
-    def _eval_node(node: ast.AST) -> Any:
-        if isinstance(node, ast.Expression):
-            return _eval_node(node.body)
-        elif isinstance(node, ast.BoolOp):
-            values = [_eval_node(v) for v in node.values]
-            if isinstance(node.op, ast.And):
-                return all(values)
-            elif isinstance(node.op, ast.Or):
-                return any(values)
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            return not _eval_node(node.operand)
-        elif isinstance(node, ast.Compare):
-            left = _eval_node(node.left)
-            for op_node, comparator in zip(node.ops, node.comparators):
-                op = _ALLOWED_OPS[type(op_node)]
-                right = _eval_node(comparator)
-                if not op(left, right):
-                    return False
-                left = right
-            return True
-        elif isinstance(node, ast.Name):
-            if node.id not in _ALLOWED_NAMES:
-                raise ValueError(f"Unknown identifier: {node.id}")
-            if node.id in ("results", "previous"):
-                return context.get(node.id, context)
-            result = context.get(node.id)
-            if result is None:
-                raise ValueError(f"Context has no key '{node.id}'")
-            return result
-        elif isinstance(node, ast.Constant):
-            return node.value
-        elif isinstance(node, ast.Attribute):
-            obj = _eval_node(node.value)
-            if isinstance(obj, dict) and node.attr in obj:
-                return obj[node.attr]
-            if obj is None:
-                return {}
-            if node.attr.startswith("__") or node.attr.startswith("_"):
-                raise ValueError(
-                    f"Access to protected attribute '{node.attr}' is not allowed",
-                )
-            try:
-                return getattr(obj, node.attr)
-            except AttributeError:
-                if isinstance(obj, dict):
-                    raise
-                if node.attr in context:
-                    return context[node.attr]
-                raise
-        elif isinstance(node, ast.Subscript):
-            obj = _eval_node(node.value)
-            idx = _eval_node(node.slice)
-            if isinstance(obj, dict):
-                return obj[idx]
-            elif isinstance(obj, (list, tuple)):
-                if isinstance(idx, int):
-                    return obj[idx]
-                raise ValueError("List index must be an integer")
-            raise ValueError("Subscript target must be dict or list")
-        elif isinstance(node, ast.Call):
-            raise ValueError("Function calls not allowed in conditions")
-        elif isinstance(node, ast.Lambda):
-            raise ValueError("Lambda expressions not allowed in conditions")
-        elif isinstance(node, ast.BinOp):
-            raise ValueError("Binary operations not allowed in conditions")
-        elif isinstance(node, ast.UnaryOp) and not isinstance(node.op, ast.Not):
-            raise ValueError("Unary operations not allowed in conditions")
-        else:
-            raise ValueError(f"Unsupported node type: {type(node).__name__}")
-
     try:
         tree = ast.parse(condition, mode="eval")
     except (SyntaxError, ValueError):
         return False
 
     try:
-        return bool(_eval_node(tree))
+        return bool(_eval_node(tree, _ALLOWED_OPS, _ALLOWED_NAMES, context))
     except ValueError as e:
         if any(seg in str(e) for seg in ("Unsupported node type", "not allowed")):
             raise
         return False
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         logger.debug("Condition evaluation failed for '%s': %s", condition, e)
         return False
 

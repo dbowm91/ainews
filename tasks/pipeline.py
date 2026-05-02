@@ -28,6 +28,30 @@ from services.pipeline_degradation import (
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure
 from services.pipeline_monitor import record_stage_result
 from services.pipeline_utils import _dispatch_next, _log_pipeline
+
+
+def _degrade_and_advance(article, stage):
+    """Degrade article from given stage and advance to next stage.
+    
+    Args:
+        article: Article model instance
+        stage: Stage name (e.g., "select", "research", "write", "edit")
+    """
+    from services.pipeline_degradation import degrade_article
+
+    # Map stage name to PipelineStatus
+    stage_map = {
+        "select": "RESEARCHING",
+        "research": "WRITING",
+        "write": "EDITING",
+        "edit": "EDITING",
+        "researching": "WRITING",
+        "writing": "EDITING",
+        "editing": "EDITING",
+    }
+    next_status = stage_map.get(stage.lower())
+    if next_status:
+        degrade_article(article, next_status)
 from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
 logger = get_task_logger(__name__)

@@ -63,6 +63,10 @@
   color: var(--orange);
 }
 
+.bookmark-btn.bookmarked svg {
+  fill: currentColor;
+}
+
 .bookmark-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

@@ -52,6 +52,11 @@
     <span class="card-time-relative">{{ article.created_at|format_date if article.created_at }}</span>
   </div>
   <div class="card-footer">
+    <button class="bookmark-btn" data-article-id="{{ article.id }}" aria-label="Bookmark article">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+      </svg>
+    </button>
     {% if article.original_url %}
       <a href="{{ article.original_url|safe_href }}" target="_blank" rel="noopener" class="card-source-link article-origin-link" aria-label="View original article">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

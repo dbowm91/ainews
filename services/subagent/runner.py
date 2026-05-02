@@ -309,6 +309,107 @@ def run_subagent(
     )
 
 
+def _handle_subagent_error(e, stage, task_type, stage_config, last_exc, used_fallback, fallback_stages):
+    if isinstance(e, (ProviderTimeoutError, TimeoutError, ConnectionError)):
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s failed after %d attempts: %s",
+            stage,
+            task_type,
+            stage_config.max_retries + 1,
+            e,
+        )
+    elif isinstance(e, (AuthError, ProviderServerError)):
+        last_exc = e
+        logger.warning(
+            "Subagent %s/%s failed with non-retryable error: %s",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
+    else:
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s unexpected error: %s — using fallback",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
+    return last_exc, used_fallback, fallback_stages
+
+
+def _finalize_subagent_result(
+    result, used_fallback, fallback_stages, last_exc,
+    stage, task_type, article_id, stage_config
+):
+    if result is None:
+        used_fallback = True
+        fallback_stages = [stage]
+        from . import get_metrics, log_pipeline_event
+
+        get_metrics().counter_inc(
+            "subagent.failure",
+            labels={"stage": stage, "task_type": task_type},
+        )
+        log_pipeline_event(
+            stage="subagent",
+            event="subagent.failure",
+            article_id=article_id,
+            task_type=task_type,
+            stage_name=stage,
+            error=str(last_exc) if last_exc else None,
+        )
+    else:
+        from . import get_metrics, log_pipeline_event
+
+        get_metrics().counter_inc(
+            "subagent.success",
+            labels={"stage": stage, "task_type": task_type},
+        )
+        log_pipeline_event(
+            stage="subagent",
+            event="subagent.complete",
+            article_id=article_id,
+            task_type=task_type,
+            stage_name=stage,
+        )
+
+    from . import get_metrics
+
+    get_metrics().counter_inc(
+        "subagent.calls",
+        labels={
+            "stage": stage,
+            "task_type": task_type,
+            "status": "failure" if used_fallback else "success",
+        },
+    )
+
+    return SubagentResponse(
+        synthesis=result.synthesis if result else "",
+        used_fallback=used_fallback,
+        fallback_stages=fallback_stages,
+    )
+
+
+def _format_subagent_prompt(template, prompt_data, stage, task_type):
+    try:
+        prompt_data_escaped = _escape_prompt_data(prompt_data)
+        return template.format(**prompt_data_escaped)
+    except KeyError as e:
+        logger.warning(
+            "Subagent %s/%s template missing key: %s",
+            stage,
+            task_type,
+            e,
+        )
+        return None
+
+
 def run_subagent_with_tools(
     task_type: str,
     stage: str,
@@ -338,16 +439,8 @@ def run_subagent_with_tools(
     )
 
     template = _get_task_template(task_type, stage_config)
-    try:
-        prompt_data_escaped = _escape_prompt_data(prompt_data)
-        prompt = template.format(**prompt_data_escaped)
-    except KeyError as e:
-        logger.warning(
-            "Subagent %s/%s template missing key: %s",
-            stage,
-            task_type,
-            e,
-        )
+    prompt = _format_subagent_prompt(template, prompt_data, stage, task_type)
+    if prompt is None:
         return SubagentResponse(
             synthesis="",
             used_fallback=True,

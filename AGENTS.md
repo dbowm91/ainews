@@ -160,16 +160,62 @@ All waves from `plans/plan.md` have been completed:
 - **Wave 1** (14 items): Critical Security & Documentation Fixes ✅
 - **Wave 2** (20 items): High-Priority Backend Fixes ✅
 - **Wave 2.5** (2 items): Pre-Refactor Validation ✅
-- **Wave 3** (17 items): Code Quality & Performance ✅
+- **Wave 3** (17 items): Code Quality & Performance ✅ (partial - see Remaining Issues)
 - **Wave 4** (10 items): AI Harness & Advanced Features ✅
-- **Wave 5** (14 items): Frontend Polish & Low-Priority Items ✅
+- **Wave 5** (14 items): Frontend Polish & Low-Priority Items ✅ (partial - see Remaining Issues)
 
-**New Features Added:**
-- Vector embeddings (`services/embeddings.py`) with background backfill task
-- Hybrid search (SQL FTS5 + vector similarity) in `services/search/hybrid.py`
-- Two-factor authentication (2FA) for admin users
-- Semantic trend memory search
-- Tool execution middleware (`services/subagent/middleware.py`)
-- Pipeline observability with trace IDs (`services/tracing.py`)
-- Search DAL (`services/search/` package with base class and providers)
-- Subagent system modularized into `services/subagent/` package
+## Remaining Issues (as of 2026-05-02)
+
+The following items were identified during verification but not fully resolved:
+
+### Wave 3 - Code Quality
+- **W3-R1: C901 Complexity Violations** (5 functions with complexity >15):
+  - `app.py:61`: `create_app` (complexity 31)
+  - `routes/admin/api/articles.py:23`: `get_article_ids` (complexity 25)
+  - `routes/admin/api/articles.py:351`: `bulk_article_operations` (complexity 19)
+  - `routes/admin/articles.py:79`: `articles` (complexity 21)
+  - `routes/admin/articles.py:212`: `edit_article` (complexity 16)
+  - **Resolution**: Manual refactoring required to break down complex functions
+
+- **W3-R4: ToolSelector Integration** - ToolSelector protocol exists in `services/tool_selection.py` but is NOT integrated into `run_subagent()` path
+  - **Status**: Infrastructure exists, integration incomplete
+
+### Wave 5 - Frontend & Low-Priority
+- **W5-B2: Subscriber Cleanup Task** - Function exists in `services/subscribers.py` but is NOT scheduled as a Celery task
+  - **Missing**: `@shared_task` decorator, not in `config.py:get_beat_schedule()`, not in `pipeline.yaml`
+  - **Status**: Dead code currently
+
+- **Font Scale Responsiveness** - No fluid typography using `clamp()` or media queries for font scaling
+  - **Status**: Fixed font sizes (16px root), no responsive scaling
+
+### Ruff Violations (Fixed During This Session)
+- **BLE001**: Fixed in `services/embeddings.py`, `services/subagent/runner.py`, `adapters/base.py`, `adapters/web.py`
+- **RUF100**: Fixed unused noqa comments in `adapters/web.py`, `app.py`, `celery_app.py`
+- **S311**: Fixed in `adapters/web.py` (replaced `random.choice()` with `secrets.randbelow()`)
+
+---
+
+## New Features Added (2026-05-02)
+
+During the implementation session, the following items were added:
+
+### Documentation
+- `docs/dead_letter.md`: Comprehensive dead letter queue documentation
+- `docs/postgresql-migration-strategy.md`: PostgreSQL migration strategy (intentionally staying with SQLite)
+- `docs/redis-db-splitting.md`: Redis DB splitting strategy document
+- Fixed `README.md` pipeline diagram (removed deprecated SELECTING)
+- Fixed `docs/api.md` article ID references
+- Fixed `docs/trend-memory.md` and `docs/context-service.md` (19 models, not 18)
+
+### Tests Added
+- `tests/test_subagent.py`: Added `TestBuiltInToolsExtended` (12 tests for previously untested tools)
+- `tests/test_subagent.py`: Added `TestMiddleware` (9 tests for middleware classes)
+- Improved subagent package coverage from 73% to 84%
+
+### Code Fixes
+- Fixed N+1 query in `tasks/cleanup.py` (added `contains_eager()`)
+- Fixed test failures: `test_ollama.py`, `test_retry.py`, `test_subagent.py`
+- Fixed circuit breaker reset in `tests/conftest.py`
+- Fixed import patches in test files
+
+---

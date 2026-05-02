@@ -5,7 +5,7 @@ from routes.admin import require_auth as require_auth
 
 logger = logging.getLogger(__name__)
 
-from routes.admin.api import (  # noqa: F401, E402
+from routes.admin.api import (  # noqa: E402
     articles,
     audit,
     config,

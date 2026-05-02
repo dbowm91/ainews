@@ -34,18 +34,18 @@ from .tools import (
 )
 
 # Backward-compat re-exports from schemas
-from schemas.llm_responses import (  # noqa: F401, E402
+from schemas.llm_responses import (
     EditContextualizationResponse,
     ResearchSynthesisResponse,
     SubagentResponse,
 )
-from schemas.pipeline import BASE_DIR, SubagentStageConfig, resolve_subagent_config  # noqa: F401, E402
+from schemas.pipeline import BASE_DIR, SubagentStageConfig, resolve_subagent_config
 
 # Re-export services for backward compat with tests that patch these
-from services.logging_utils import log_pipeline_event, traced_llm_call  # noqa: F401, E402
-from services.metrics import get_metrics, time_histogram  # noqa: F401, E402
-from services.llm.base import ToolDefinition  # noqa: F401, E402
-from services.llm import get_provider_for_role, get_provider_by_id  # noqa: F401, E402
+from services.logging_utils import log_pipeline_event, traced_llm_call
+from services.metrics import get_metrics, time_histogram
+from services.llm.base import ToolDefinition
+from services.llm import get_provider_for_role, get_provider_by_id
 
 
 __all__ = [

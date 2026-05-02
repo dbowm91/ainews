@@ -31,8 +31,9 @@ class WebAdapter(BaseSourceAdapter):
         super().__init__(*args, **kwargs)
         self._session = get_crawl_session()
         ua = self.adapter_config.user_agent
+        index = secrets.randbelow(len(USER_AGENTS))
         self._session.headers["User-Agent"] = (
-            ua if ua != "AINewsBot/1.0" else random.choice(USER_AGENTS)  # noqa: S311
+            u/a if u/a != "AINewsBot/1.0" else USER_AGENTS[index]
         )
         self._session.headers.update(
             {
@@ -62,7 +63,7 @@ class WebAdapter(BaseSourceAdapter):
                     articles.append((soup, url))
             except UnsafeURLError as e:
                 logger.warning("[%s] Blocked unsafe URL %s: %s", self.source_id, url, e)
-            except Exception as e:  # noqa: BLE001
+            except (ValueError, KeyError, AttributeError) as e: 
                 logger.warning("[%s] Failed to scrape %s: %s", self.source_id, url, e)
         return articles
 
@@ -115,7 +116,7 @@ class WebAdapter(BaseSourceAdapter):
                 extracted = trafilatura.extract(html_str)
                 if extracted and len(extracted) >= MIN_CONTENT_LENGTH:
                     body = extracted
-            except Exception as e:  # noqa: BLE001
+            except (ImportError, ValueError, AttributeError) as e: 
                 logger.warning("Content extraction failed for %s: %s", url, e)
 
         ext_id = self._hash_ext_id(url, title)

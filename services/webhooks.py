@@ -39,7 +39,7 @@ def _get_encryption_key() -> bytes:
     from cryptography.fernet import Fernet
     try:
         Fernet(key.encode("utf-8"))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise ValueError(
             f"WEBHOOK_SECRET_KEY must be a valid Fernet key (44 base64 chars), got length {len(key)}",
         ) from e
@@ -325,7 +325,7 @@ def trigger_event(
                     event_data=event_data,
                     idempotency_key=idempotency_key,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("Failed to trigger webhook %s", webhook.name)
 
 
@@ -336,7 +336,7 @@ def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> s
     if secret.startswith("v2:enc:"):
         try:
             return _decrypt_secret(secret)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
             raise WebhookSecretDecryptionError(
                 f"Failed to decrypt webhook secret for webhook {webhook_id}",
@@ -344,7 +344,7 @@ def _get_webhook_secret_from_db(secret: str, webhook_id: int | None = None) -> s
     if secret.startswith("enc:") or secret.startswith("v1:enc:"):
         try:
             return _decrypt_secret(secret)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Failed to decrypt webhook secret for webhook %s", webhook_id)
             raise WebhookSecretDecryptionError(
                 f"Failed to decrypt webhook secret for webhook {webhook_id}",

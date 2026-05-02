@@ -1,12 +1,12 @@
 import logging
 
-import services.search.duckduckgo  # noqa: F401
-import services.search.google  # noqa: F401
-import services.search.searxng  # noqa: F401
-import services.search.sqlite_fts  # noqa: F401
-import services.search.hybrid  # noqa: F401
+import services.search.duckduckgo
+import services.search.google
+import services.search.searxng
+import services.search.sqlite_fts
+import services.search.hybrid
 from services.circuit_breaker import get_breaker
-from services.search.base import (  # noqa: F401
+from services.search.base import (
     BaseSearchProvider,
     SearchProvider,
     SearchResult,

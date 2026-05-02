@@ -439,7 +439,7 @@ def circuit_protected(breaker_name: str, fallback: Optional[Callable] = None):
                 result = func(*args, **kwargs)
                 breaker.record_success()
                 return result
-            except Exception:  # noqa: BLE001
+            except Exception:
                 breaker.record_failure()
                 raise
 

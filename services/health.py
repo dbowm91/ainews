@@ -63,7 +63,7 @@ def check_database() -> tuple[str, Any]:
         if pool_stats:
             result["pool"] = pool_stats
         return "database", result
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Health check: database ping failed")
         return "database", {"status": "error"}
 
@@ -97,7 +97,7 @@ def check_celery() -> tuple[str, Any]:
         if ping_response and any(ping_response.values()):
             return "celery", "ok"
         return "celery", "no_workers"
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Health check: Celery inspect failed")
         return "celery", "error"
 
@@ -112,7 +112,7 @@ def check_limiter() -> tuple[str, Any]:
 
         ok = get_limiter().is_healthy()
         return "limiter", "ok" if ok else "degraded"
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Health check: limiter check failed")
         return "limiter", "error"
 

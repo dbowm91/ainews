@@ -186,7 +186,7 @@ def _dispatch_after_extraction(article_id: int, run_id: int | None = None) -> No
 
     try:
         _dispatch_next(article_id, run_id=run_id, next_status="pending")
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         article.last_error = "Failed to dispatch to pipeline"
         db.session.rollback()
         logger.error("Failed to dispatch select_article for article %s: %s", article_id, e)
@@ -316,7 +316,7 @@ def process_item(
             min_content_length=min_content_length,
             run_id=run_id,
         )
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.warning("Invalid process_item input: %s", e)
         raise TypeError(f"Invalid process_item input: {e}") from e
 
@@ -383,7 +383,7 @@ def process_item(
         db.session.rollback()
         logger.error("process_item exceeded soft time limit for %s", validated.external_id)
         raise
-    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
+    except Exception as exc:
         db.session.rollback()
         logger.error("DB operation failed for %s: %s", validated.external_id, exc)
         if run_id:

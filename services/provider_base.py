@@ -60,7 +60,7 @@ class ProviderManager:
                 cls = self.get_class(pdef.type)
                 try:
                     provider = cls(pdef.id, pdef.config)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(
                         "Failed to instantiate %s provider %s: %s",
                         self.category,

@@ -369,7 +369,7 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
         logger.info("Email sent to %s: %s", to_email, subject)
         pool.return_connection(server)
         server = None
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.error("Failed to send email to %s: %s", to_email, e)
         if server is not None:
             try:

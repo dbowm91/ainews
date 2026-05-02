@@ -41,7 +41,7 @@ def generate_embedding(text: str, fallback_dim: int = 384) -> list[float] | None
             model = _get_model()
             embedding = model.encode(text, show_progress_bar=False)
             return embedding.tolist()
-        except Exception as e:
+        except (RuntimeError, ValueError, ImportError) as e:
             logger.warning("Embedding generation failed: %s", e)
             return None
     else:

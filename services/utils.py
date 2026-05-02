@@ -20,7 +20,7 @@ def is_valid_email(email: str) -> bool:
 
 
 # Re-export from canonical location
-from services.pagination import paginate_query  # noqa: F401, E402
+from services.pagination import paginate_query  # noqa: E402
 
 
 def parse_article_headline(

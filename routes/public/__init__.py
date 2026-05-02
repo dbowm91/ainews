@@ -50,7 +50,7 @@ def _get_topic_icons() -> dict[str, str]:
 
             topics = load_topics().topics
             return {k: v.icon for k, v in topics.items() if v.icon}
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Failed to load topic icons")
             return {}
 

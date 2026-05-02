@@ -45,7 +45,7 @@ def send_single_email(
         validated = SendEmailTask(
             email=email, subject=subject, html=html, unsub_url=unsub_url,
         )
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.warning("Invalid send_single_email input: %s", e)
         raise TypeError(f"Invalid send_single_email input: {e}") from e
 
@@ -377,7 +377,7 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     try:
         from schemas.tasks import GenerateNewsletterTask
         validated = GenerateNewsletterTask(dry_run_email=dry_run_email, run_id=run_id)
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.warning("Invalid generate_daily_newsletters input: %s", e)
         raise TypeError(f"Invalid generate_daily_newsletters input: {e}") from e
 
@@ -450,7 +450,7 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
                     db.session.rollback()
         logger.error("Newsletter generation exceeded soft time limit")
         raise
-    except Exception:  # noqa: BLE001  # noqa: BLE001
+    except Exception:
         from extensions import db
         from models import PipelineRun
 

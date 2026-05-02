@@ -46,8 +46,8 @@ def sanitize_final_article(content: str) -> str:
     return json.dumps(parsed)
 
 # Re-export from extracted modules for backward compatibility
-from services.article_parser import parse_article_json, parse_articles  # noqa: F401, E402
-from services.pagination import _escape_like_pattern, paginate_query  # noqa: F401, E402
+from services.article_parser import parse_article_json, parse_articles  # noqa: E402
+from services.pagination import _escape_like_pattern, paginate_query  # noqa: E402
 
 _search_logger = ThreadPoolExecutor(
     max_workers=2,

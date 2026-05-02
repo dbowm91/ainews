@@ -162,7 +162,7 @@ def create_app(config_name=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
-    import models  # noqa: F401
+    import models
 
     with app.app_context():
         if db.engine.url.drivername == "sqlite":

@@ -84,7 +84,7 @@ class AnthropicProvider(BaseLLMProvider):
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
@@ -138,7 +138,7 @@ class AnthropicProvider(BaseLLMProvider):
                     yield text
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise _handle_anthropic_error(e) from e
 
     @circuit_protected("llm_anthropic")
@@ -166,7 +166,7 @@ class AnthropicProvider(BaseLLMProvider):
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
@@ -217,7 +217,7 @@ class AnthropicProvider(BaseLLMProvider):
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")

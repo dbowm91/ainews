@@ -100,7 +100,7 @@ def cleanup_inactive_subscribers(db) -> tuple[int, int]:
     if flagged:
         try:
             db.session.commit()
-        except Exception:  # noqa: BLE001
+        except Exception:
             db.session.rollback()
             raise
 
@@ -128,7 +128,7 @@ def record_bounce(subscriber_id: int, db) -> None:
 
     try:
         db.session.commit()
-    except Exception:  # noqa: BLE001
+    except Exception:
         db.session.rollback()
         raise
 
@@ -153,6 +153,6 @@ def update_last_active(subscriber_id: int, db) -> None:
 
     try:
         db.session.commit()
-    except Exception:  # noqa: BLE001
+    except Exception:
         db.session.rollback()
         raise

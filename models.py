@@ -142,6 +142,7 @@ class Article(db.Model):
         "Citation", backref="article", lazy="selectin", cascade="all, delete-orphan"
     )
     experiment_group = db.Column(db.String(32), nullable=True, index=True)
+    embedding = db.Column(db.Text)  # JSON array of floats for vector embedding
     tags = db.relationship("Tag", secondary=article_tags, lazy="selectin")
     metrics = db.relationship(
         "ArticleMetric", backref="article", uselist=False, cascade="all, delete-orphan"

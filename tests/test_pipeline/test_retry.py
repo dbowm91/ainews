@@ -29,7 +29,8 @@ class TestHandleStageFailure:
 
     def test_degrades_after_max_retries(self, app):
         from models import Article
-        from tasks.pipeline import _get_max_stage_retries, _handle_stage_failure
+        from tasks.pipeline import _handle_stage_failure
+        from services.pipeline_failure import _get_max_stage_retries
 
         max_retries = _get_max_stage_retries()
         article = MagicMock(spec=Article)
@@ -107,7 +108,7 @@ class TestRetryStuck:
         self, mock_celery_tasks, mock_article_query
     ):
         """Articles with retry_count >= MAX_STAGE_RETRIES should be degraded."""
-        from tasks.pipeline import _get_max_stage_retries
+        from services.pipeline_failure import _get_max_stage_retries
         from tasks.retry import retry_stuck
 
         max_retries = _get_max_stage_retries()
@@ -205,7 +206,8 @@ class TestRetryBudget:
     def test_stage_retries_reset_on_degrade(self, app):
         """Per-stage retry_count resets on degrade, but total_retries keeps accumulating."""
         from models import Article
-        from tasks.pipeline import _get_max_stage_retries, _handle_stage_failure
+        from tasks.pipeline import _handle_stage_failure
+        from services.pipeline_failure import _get_max_stage_retries
 
         max_retries = _get_max_stage_retries()
         article = MagicMock(spec=Article)

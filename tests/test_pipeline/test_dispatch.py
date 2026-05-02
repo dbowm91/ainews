@@ -6,12 +6,13 @@ class TestDispatchNextCache:
 
     @staticmethod
     def _get_cache():
-        import tasks.pipeline as tp
+        import services.pipeline_utils as pu
 
-        return tp._task_fn_cache
+        return pu._task_fn_cache
 
     def test_dispatch_populates_cache(self):
-        from tasks.pipeline import _dispatch_next, clear_task_fn_cache
+        from tasks.pipeline import _dispatch_next
+        from services.pipeline_utils import clear_task_fn_cache
 
         clear_task_fn_cache()
         cache = self._get_cache()
@@ -26,7 +27,7 @@ class TestDispatchNextCache:
         mock_task.apply_async.assert_called_once_with(args=[1], kwargs={"run_id": None}, headers=None)
 
     def test_clear_empties_cache(self):
-        from tasks.pipeline import clear_task_fn_cache
+        from services.pipeline_utils import clear_task_fn_cache
 
         cache = self._get_cache()
         cache["pending"] = ("mod", "fn")
@@ -38,7 +39,8 @@ class TestDispatchNextCache:
         assert len(self._get_cache()) == 0
 
     def test_dispatch_reuses_cached_entry(self):
-        from tasks.pipeline import _dispatch_next, clear_task_fn_cache
+        from tasks.pipeline import _dispatch_next
+        from services.pipeline_utils import clear_task_fn_cache
 
         clear_task_fn_cache()
 
@@ -52,7 +54,8 @@ class TestDispatchNextCache:
         assert mock_task.apply_async.call_count == 2
 
     def test_clear_allows_repopulation(self):
-        from tasks.pipeline import _dispatch_next, clear_task_fn_cache
+        from tasks.pipeline import _dispatch_next
+        from services.pipeline_utils import clear_task_fn_cache
 
         mock_task = MagicMock()
         mock_module = MagicMock(write_article=mock_task)

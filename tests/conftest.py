@@ -22,7 +22,7 @@ def _reset_singletons():
         except (ImportError, AttributeError):
             pass
     try:
-        from tasks.pipeline import clear_task_fn_cache
+        from services.pipeline_utils import clear_task_fn_cache
 
         clear_task_fn_cache()
     except (ImportError, AttributeError):

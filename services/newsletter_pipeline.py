@@ -129,6 +129,34 @@ def _run_pipeline_stage(
         return None, False
 
 
+def _get_topic_context(topic_key):
+    if topic_key == "main":
+        return "ainews// — autonomous tech news condensation — AI, privacy, security, programming, hardware"
+    from schemas.topic import load_topics
+    topics = load_topics().topics
+    topic_def = topics.get(topic_key)
+    topic_name = topic_def.display_name if topic_def else topic_key
+    topic_desc = topic_def.description if topic_def else ""
+    return f"ainews// — {topic_name}: {topic_desc}"
+
+
+def _handle_reader_fallback(brief_json, metrics, fallback_stages):
+    try:
+        brief_data = json.loads(brief_json)
+        if not brief_data.get("themes") and not brief_data.get("highlights"):
+            logger.error("Reader stage produced empty brief")
+            metrics.counter_inc(
+                "newsletter.pipeline_empty_stage", labels={"stage": "reader"},
+            )
+            if "reader" not in fallback_stages:
+                fallback_stages.append("reader")
+    except Exception:
+        logger.warning(
+            "Failed to parse brief JSON for fallback check", exc_info=True,
+        )
+    return fallback_stages
+
+
 def generate_executive_summary(articles, topic_key="main") -> dict:
     """Generate executive summary using reader -> writer -> editor pipeline.
 
@@ -148,16 +176,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
     used_fallback = False
     fallback_stages = []
 
-    if topic_key == "main":
-        topic_context = "ainews// — autonomous tech news condensation — AI, privacy, security, programming, hardware"
-    else:
-        from schemas.topic import load_topics
-
-        topics = load_topics().topics
-        topic_def = topics.get(topic_key)
-        topic_name = topic_def.display_name if topic_def else topic_key
-        topic_desc = topic_def.description if topic_def else ""
-        topic_context = f"ainews// — {topic_name}: {topic_desc}"
+    topic_context = _get_topic_context(topic_key)
 
     limiter = get_limiter()
     brief_json = json.dumps({"themes": [], "highlights": [], "connections": []})
@@ -184,19 +203,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
             brief_json = brief.model_dump_json()
         else:
             used_fallback = True
-            try:
-                brief_data = json.loads(brief_json)
-                if not brief_data.get("themes") and not brief_data.get("highlights"):
-                    logger.error("Reader stage produced empty brief")
-                    metrics.counter_inc(
-                        "newsletter.pipeline_empty_stage", labels={"stage": "reader"},
-                    )
-                    if "reader" not in fallback_stages:
-                        fallback_stages.append("reader")
-            except Exception:
-                logger.warning(
-                    "Failed to parse brief JSON for fallback check", exc_info=True,
-                )
+            fallback_stages = _handle_reader_fallback(brief_json, metrics, fallback_stages)
 
     # Writer
     if nlp.writer.enabled:

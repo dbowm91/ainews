@@ -458,4 +458,8 @@ class TestGenerateDailyNewsletters:
 
                     task = newsletter_module.generate_daily_newsletters
                     with pytest.raises(redis.exceptions.RedisError):
-                        task(dry_run_email=None, run_id=None)
+                        # Create mock self with request.id for bound task
+                        from unittest.mock import MagicMock
+                        mock_self = MagicMock()
+                        mock_self.request.id = "test-run-id"
+                        task(mock_self, dry_run_email=None, run_id=None)

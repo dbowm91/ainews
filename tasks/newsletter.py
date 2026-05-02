@@ -285,7 +285,7 @@ def _generate_topic_newsletter_impl(
     return result_dict
 
 
-def _generate_newsletters_impl(task_self, dry_run_email, run_id):
+def _generate_newsletters_impl(task_id, dry_run_email, run_id):
     """Implementation of newsletter generation logic.
 
     Newsletter generation is parallelized using Celery group for each
@@ -309,7 +309,7 @@ def _generate_newsletters_impl(task_self, dry_run_email, run_id):
 
     if run_id is None:
         run = PipelineRun(
-            task_id=task_self.request.id,
+            task_id=task_id,
             run_type="newsletter",
             status="running",
             triggered_by="manual" if is_dry_run else "scheduled",
@@ -406,26 +406,11 @@ def _check_newsletter_lock(redis_client, task_id):
     return lock_status, None
 
 
-def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
-    try:
-        from schemas.tasks import GenerateNewsletterTask
-        validated = GenerateNewsletterTask(dry_run_email=dry_run_email, run_id=run_id)
-    except Exception as e:
-        logger.warning("Invalid generate_daily_newsletters input: %s", e)
-        raise TypeError(f"Invalid generate_daily_newsletters input: {e}") from e
-
-    if not verify_task("generate_daily_newsletters", (), {"dry_run_email": validated.dry_run_email, "run_id": validated.run_id}):
-        logger.error("Invalid signature for generate_daily_newsletters task")
-        raise ValueError("Invalid task signature")
-
-    dry_run_email = validated.dry_run_email
-    run_id = validated.run_id
-
+def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
+    """Core newsletter generation logic without self dependency."""
     import redis.exceptions
-
     from extensions import get_redis
 
-    task_id = self.request.id or "manual"
     redis_client = get_redis()
 
     lock_status, skip_result = _check_newsletter_lock(redis_client, task_id)
@@ -438,7 +423,7 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         logger.debug("Acquired new newsletter lock")
 
     try:
-        result = _generate_newsletters_impl(self, dry_run_email, run_id)
+        result = _generate_newsletters_impl(task_id, dry_run_email, run_id)
         redis_client.setex(idempotency_key, 86400 * 2, "1")
         return result
     except SoftTimeLimitExceeded:
@@ -479,6 +464,25 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
             release_lock(redis_client, lock_key, task_id)
         except redis.exceptions.RedisError:
             logger.warning("Failed to release newsletter lock")
+
+
+def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
+    try:
+        from schemas.tasks import GenerateNewsletterTask
+        validated = GenerateNewsletterTask(dry_run_email=dry_run_email, run_id=run_id)
+    except Exception as e:
+        logger.warning("Invalid generate_daily_newsletters input: %s", e)
+        raise TypeError(f"Invalid generate_daily_newsletters input: {e}") from e
+
+    if not verify_task("generate_daily_newsletters", (), {"dry_run_email": validated.dry_run_email, "run_id": validated.run_id}):
+        logger.error("Invalid signature for generate_daily_newsletters task")
+        raise ValueError("Invalid task signature")
+
+    dry_run_email = validated.dry_run_email
+    run_id = validated.run_id
+
+    task_id = self.request.id or "manual"
+    return _generate_daily_newsletters_core(task_id, dry_run_email, run_id)
 
 
 @shared_task(

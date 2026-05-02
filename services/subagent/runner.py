@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from concurrent.futures import TimeoutError
 from typing import Any, Type
 
@@ -16,6 +15,7 @@ from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutE
 from services.prompts import esc_xml_text
 
 from .config import _subagent_executor
+from .utils import _retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -174,71 +174,64 @@ def run_subagent(
     fallback_stages = []
     last_exc = None
 
-    for attempt in range(stage_config.max_retries + 1):
-        try:
-            from . import time_histogram
-
-            with time_histogram(
-                "subagent.duration_seconds",
-                labels={"stage": stage, "task_type": task_type},
-            ):
-                if attempt > 0:
-                    import random
-
-                    delay = min(
-                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
-                        stage_config.retry_delay,
-                    )
-                    time.sleep(delay)
-                future = _subagent_executor.submit(_call_with_timeout)
-                try:
-                    result = future.result(timeout=stage_config.timeout_seconds)
-                except TimeoutError as e:
-                    future.cancel()
-                    logger.warning(
-                        "Subagent %s/%s timed out after %ss",
-                        stage,
-                        task_type,
-                        stage_config.timeout_seconds,
-                    )
-                    raise ProviderTimeoutError(
-                        f"Subagent timed out after {stage_config.timeout_seconds}s",
-                    ) from e
-            break
-        except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
-            last_exc = e
-            if attempt < stage_config.max_retries:
-                logger.info(
-                    "Subagent %s/%s attempt %d failed, retrying in %ss: %s",
+    def _attempt():
+        from . import time_histogram
+        with time_histogram(
+            "subagent.duration_seconds",
+            labels={"stage": stage, "task_type": task_type},
+        ):
+            future = _subagent_executor.submit(_call_with_timeout)
+            try:
+                return future.result(timeout=stage_config.timeout_seconds)
+            except TimeoutError as e:
+                future.cancel()
+                logger.warning(
+                    "Subagent %s/%s timed out after %ss",
                     stage,
                     task_type,
-                    attempt + 1,
-                    stage_config.retry_delay,
-                    e,
+                    stage_config.timeout_seconds,
                 )
-            continue
-        except (AuthError, ProviderServerError) as e:
-            last_exc = e
-            logger.warning(
-                "Subagent %s/%s failed with non-retryable error: %s",
-                stage,
-                task_type,
-                e,
-            )
-            used_fallback = True
-            fallback_stages = [stage]
-            break
-        except Exception as e:  # noqa: BLE001
-            last_exc = e
-            logger.error(
-                "Subagent %s/%s unexpected error: %s — using fallback",
-                stage,
-                task_type,
-                e,
-            )
-            used_fallback = True
-            fallback_stages = [stage]
-            break
+                raise ProviderTimeoutError(
+                    f"Subagent timed out after {stage_config.timeout_seconds}s",
+                ) from e
+
+    try:
+        result = _retry_with_backoff(
+            _attempt,
+            max_retries=stage_config.max_retries + 1,
+            base_delay=1.0,
+            max_delay=stage_config.retry_delay,
+            retryable_exceptions=(ProviderTimeoutError, TimeoutError, ConnectionError),
+        )
+    except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s failed after %d attempts: %s",
+            stage,
+            task_type,
+            stage_config.max_retries + 1,
+            e,
+        )
+    except (AuthError, ProviderServerError) as e:
+        last_exc = e
+        logger.warning(
+            "Subagent %s/%s failed with non-retryable error: %s",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
+    except Exception as e:  # noqa: BLE001
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s unexpected error: %s — using fallback",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
 
     if result is None:
         used_fallback = True
@@ -365,98 +358,86 @@ def run_subagent_with_tools(
     last_exc = None
     self_corrected = False
 
-    for attempt in range(stage_config.max_retries + 1):
-        try:
-            from . import time_histogram
-
-            with time_histogram(
-                "subagent.duration_seconds",
-                labels={"stage": stage, "task_type": task_type},
-            ):
-                if attempt > 0:
-                    import random
-
-                    delay = min(
-                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
-                        stage_config.retry_delay,
-                    )
-                    time.sleep(delay)
-                future = _subagent_executor.submit(_call_with_timeout)
+    def _attempt():
+        nonlocal self_corrected
+        from . import time_histogram
+        with time_histogram(
+            "subagent.duration_seconds",
+            labels={"stage": stage, "task_type": task_type},
+        ):
+            future = _subagent_executor.submit(_call_with_timeout)
+            try:
+                tc_resp = future.result(timeout=stage_config.timeout_seconds)
                 try:
-                    tc_resp = future.result(timeout=stage_config.timeout_seconds)
-                    try:
-                        result = response_model.model_validate(
-                            {"synthesis": tc_resp.text},
-                        )
-                    except (json.JSONDecodeError, ValidationError) as validation_err:
-                        if self_corrected:
-                            raise validation_err
-                        error_msg = (
-                            f"Your previous response was not valid JSON or did not match "
-                            f"the expected schema: {validation_err}. Please correct and "
-                            f"return valid JSON in the same format."
-                        )
-                        logger.info(
-                            "Subagent %s/%s self-correcting after validation error: %s",
-                            stage,
-                            task_type,
-                            validation_err,
-                        )
-                        messages.append({"role": "user", "content": error_msg})
-                        self_corrected = True
-                        continue
-                except TimeoutError as e:
-                    future.cancel()
-                    logger.warning(
-                        "Subagent %s/%s timed out after %ss",
+                    return response_model.model_validate(
+                        {"synthesis": tc_resp.text},
+                    )
+                except (json.JSONDecodeError, ValidationError) as validation_err:
+                    if self_corrected:
+                        raise validation_err
+                    error_msg = (
+                        f"Your previous response was not valid JSON or did not match "
+                        f"the expected schema: {validation_err}. Please correct and "
+                        f"return valid JSON in the same format."
+                    )
+                    logger.info(
+                        "Subagent %s/%s self-correcting after validation error: %s",
                         stage,
                         task_type,
-                        stage_config.timeout_seconds,
+                        validation_err,
                     )
-                    raise ProviderTimeoutError(
-                        f"Subagent timed out after {stage_config.timeout_seconds}s",
-                    ) from e
-            break
-        except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
-            last_exc = e
-            if attempt < stage_config.max_retries:
-                import random
-
-                delay = min(
-                    1.0 * (2 ** attempt) + random.uniform(0, 0.5),
-                    stage_config.retry_delay,
-                )
-                logger.info(
-                    "Subagent %s/%s attempt %d failed, retrying in %ss: %s",
+                    messages.append({"role": "user", "content": error_msg})
+                    self_corrected = True
+                    raise  # Trigger retry
+            except TimeoutError as e:
+                future.cancel()
+                logger.warning(
+                    "Subagent %s/%s timed out after %ss",
                     stage,
                     task_type,
-                    attempt + 1,
-                    delay,
-                    e,
+                    stage_config.timeout_seconds,
                 )
-            continue
-        except (AuthError, ProviderServerError) as e:
-            last_exc = e
-            logger.warning(
-                "Subagent %s/%s failed with non-retryable error: %s",
-                stage,
-                task_type,
-                e,
-            )
-            used_fallback = True
-            fallback_stages = [stage]
-            break
-        except Exception as e:  # noqa: BLE001
-            last_exc = e
-            logger.error(
-                "Subagent %s/%s unexpected error: %s — using fallback",
-                stage,
-                task_type,
-                e,
-            )
-            used_fallback = True
-            fallback_stages = [stage]
-            break
+                raise ProviderTimeoutError(
+                    f"Subagent timed out after {stage_config.timeout_seconds}s",
+                ) from e
+
+    try:
+        result = _retry_with_backoff(
+            _attempt,
+            max_retries=stage_config.max_retries + 1,
+            base_delay=1.0,
+            max_delay=stage_config.retry_delay,
+            retryable_exceptions=(ProviderTimeoutError, TimeoutError, ConnectionError),
+        )
+    except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s failed after %d attempts: %s",
+            stage,
+            task_type,
+            stage_config.max_retries + 1,
+            e,
+        )
+    except (AuthError, ProviderServerError) as e:
+        last_exc = e
+        logger.warning(
+            "Subagent %s/%s failed with non-retryable error: %s",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
+    except Exception as e:
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s unexpected error: %s — using fallback",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
 
     if result is None:
         used_fallback = True

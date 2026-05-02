@@ -77,6 +77,25 @@ class SearchProvider(abc.ABC):
         """Search using admin FTS table, return list of article IDs."""
         ...
 
+    def hybrid_search(
+        self, query: str, limit: int = 10, vector_weight: float = 0.5, **kwargs
+    ) -> list[dict]:
+        """Search articles using hybrid FTS + vector similarity.
+
+        Default implementation falls back to standard search.
+        Subclasses should override for true hybrid search.
+
+        Args:
+            query: Search query string.
+            limit: Maximum number of results.
+            vector_weight: Weight for vector similarity score (0-1).
+            **kwargs: Additional arguments passed to search().
+
+        Returns:
+            List of dicts with 'id', 'rank', and optional 'score' keys.
+        """
+        return self.search(query, limit=limit, **kwargs)
+
 
 class SearchProviderManager:
     """Simple registry for database search providers."""

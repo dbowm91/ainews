@@ -37,10 +37,10 @@ class SSRFSafeRedirectHandler:
                 validate_url_safe(location)
             except UnsafeURLError:
                 raise
-            except ValueError:
+            except ValueError as e:
                 parsed = urlparse(location)
                 if not parsed.scheme or not parsed.netloc:
-                    raise requests.exceptions.InvalidURL(f"Invalid redirect location: {location}")
+                    raise requests.exceptions.InvalidURL(f"Invalid redirect location: {location}") from e
             self._redirect_count = 0
             return request
         return None

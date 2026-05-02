@@ -140,6 +140,6 @@ def get_provider_info() -> dict:
         return cache.get_or_set("llm:provider:info", _fetch, ttl=300)
     except (KeyboardInterrupt, SystemExit):
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - fallback to direct fetch on cache error
         logger.debug("Cache fallback for provider info: %s", e)
         return _fetch()

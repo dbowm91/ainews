@@ -36,8 +36,8 @@ class ArticleIdsParams(BaseModel):
             return v
         try:
             datetime.fromisoformat(v)
-        except ValueError:
-            raise ValueError(f"Invalid ISO date format: {v}")
+        except ValueError as e:
+            raise ValueError(f"Invalid ISO date format: {v}") from e
         return v
 
     @field_validator("status")

@@ -63,14 +63,14 @@ def _init_celery():
     _celery.config_from_object(app.config, namespace="CELERY")
     _celery.Task = FlaskTask
 
-    import tasks.crawl  # noqa: F401
-    import tasks.edit  # noqa: F401
-    import tasks.extract  # noqa: F401
-    import tasks.newsletter  # noqa: F401
-    import tasks.pipeline  # noqa: F401
-    import tasks.research  # noqa: F401
-    import tasks.retry  # noqa: F401
-    import tasks.select  # noqa: F401
+    import tasks.crawl
+    import tasks.edit
+    import tasks.extract
+    import tasks.newsletter
+    import tasks.pipeline
+    import tasks.research
+    import tasks.retry
+    import tasks.select
     import tasks.write  # noqa: F401
 
     app.extensions["celery"] = _celery

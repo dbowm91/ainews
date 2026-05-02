@@ -151,15 +151,15 @@ def _resolve_and_check(hostname: str) -> list[str]:
     future = _dns_executor.submit(socket.getaddrinfo, hostname, None)
     try:
         addr_infos = future.result(timeout=_DNS_RESOLVE_TIMEOUT)
-    except (socket.gaierror, socket.herror, socket.timeout):
-        raise UnsafeURLError(f"DNS resolution failed for {hostname}")
-    except TimeoutError:
+    except (socket.gaierror, socket.herror, socket.timeout) as e:
+        raise UnsafeURLError(f"DNS resolution failed for {hostname}") from e
+    except TimeoutError as e:
         future.cancel()
-        raise UnsafeURLError(f"DNS resolution timed out for {hostname}")
+        raise UnsafeURLError(f"DNS resolution timed out for {hostname}") from e
 
     seen_ips: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
     safe_ips: list[str] = []
-    for family, _, _, _, sockaddr in addr_infos:
+    for _family, _, _, _, sockaddr in addr_infos:
         ip_str = sockaddr[0]
         try:
             ip = ipaddress.ip_address(ip_str)

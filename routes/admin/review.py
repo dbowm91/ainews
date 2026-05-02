@@ -106,7 +106,7 @@ def approve_article(article_id):
         cache.invalidate_prefix("pub:rss_feed")
         if article.category:
             cache.invalidate_prefix(f"pub:topic:{article.category}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate article cache: %s", e)
 
     logger.info(
@@ -150,7 +150,7 @@ def reject_article(article_id):
         cache.invalidate_prefix("pub:index")
         cache.invalidate_prefix("pub:topic")
         cache.invalidate_prefix("pub:rss_feed")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate article cache: %s", e)
 
     logger.info(

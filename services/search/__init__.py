@@ -1,11 +1,11 @@
 import logging
 
-import services.search.duckduckgo  # noqa: E402, F401
-import services.search.google  # noqa: E402, F401
-import services.search.searxng  # noqa: E402, F401
-import services.search.sqlite_fts  # noqa: E402, F401
+import services.search.duckduckgo  # noqa: F401
+import services.search.google  # noqa: F401
+import services.search.searxng  # noqa: F401
+import services.search.sqlite_fts  # noqa: F401
 from services.circuit_breaker import get_breaker
-from services.search.base import (
+from services.search.base import (  # noqa: F401
     BaseSearchProvider,
     SearchProvider,
     SearchResult,
@@ -45,7 +45,7 @@ def search_web(query: str, max_results: int = 5) -> list[SearchResult]:
     try:
         provider = get_search_provider_with_fallback()
         return provider.search(query, max_results)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # noqa: BLE001
         logger.warning("Web search failed for '%s': %s", query, e)
         return []
 

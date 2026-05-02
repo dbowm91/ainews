@@ -220,7 +220,7 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
     try:
         result = _call_llm_for_memory(draft, topics, summary, engagement_info)
         entries = result.entries
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         get_metrics().counter_inc(
             "trend_memory.propose_failure",
             labels={"article_id": str(article.id) if article.id else "unknown"},

@@ -80,8 +80,8 @@ class OllamaProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_ollama_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_ollama_error(e) from e
         return LLMResponse(
             text=self._extract_text(resp),
             model=model,
@@ -127,8 +127,8 @@ class OllamaProvider(BaseLLMProvider):
                     yield content
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_ollama_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_ollama_error(e) from e
 
     @circuit_protected("llm_ollama")
     def _do_chat_with_schema(
@@ -152,8 +152,8 @@ class OllamaProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_ollama_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_ollama_error(e) from e
         return self._extract_text(resp)
 
     def _chat_with_schema(
@@ -203,8 +203,8 @@ class OllamaProvider(BaseLLMProvider):
             resp = self.client.chat(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_ollama_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_ollama_error(e) from e
         return resp, resp
 
     def _call_api_with_tools(
@@ -229,7 +229,7 @@ class OllamaProvider(BaseLLMProvider):
         content = msg.get("content", "")
         tool_calls_raw = msg.get("tool_calls") or []
         tool_calls = []
-        for i, tc in enumerate(tool_calls_raw):
+        for _i, tc in enumerate(tool_calls_raw):
             fn = tc.get("function", {})
             fn_args = fn.get("arguments", {})
             if isinstance(fn_args, str):
@@ -278,7 +278,7 @@ class OllamaProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - return error status on any exception
             converted = _handle_ollama_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

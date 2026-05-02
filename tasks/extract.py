@@ -25,7 +25,7 @@ def _extract_content_if_needed(url: str, text_content: str | None, min_content_l
             extraction = extract_article(url)
             if extraction and extraction.text and len(extraction.text) >= min_content_length:
                 extracted_text = extraction.text
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # noqa: BLE001
             logger.warning("Extraction failed for %s: %s", url, exc)
 
     return extracted_text, extraction
@@ -186,7 +186,7 @@ def _dispatch_after_extraction(article_id: int, run_id: int | None = None) -> No
 
     try:
         _dispatch_next(article_id, run_id=run_id, next_status="pending")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # noqa: BLE001
         article.last_error = "Failed to dispatch to pipeline"
         db.session.rollback()
         logger.error("Failed to dispatch select_article for article %s: %s", article_id, e)
@@ -254,7 +254,7 @@ def _handle_duplicate(
                 logger.info(
                     "Added citation to article %s from %s", duplicate.id, url[:60],
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # noqa: BLE001
             db.session.rollback()
             logger.warning(
                 "Failed to add citation for duplicate %s: %s", duplicate.id, exc,
@@ -316,7 +316,7 @@ def process_item(
             min_content_length=min_content_length,
             run_id=run_id,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # noqa: BLE001
         logger.warning("Invalid process_item input: %s", e)
         raise TypeError(f"Invalid process_item input: {e}") from e
 
@@ -343,12 +343,12 @@ def process_item(
     duplicate = None
     try:
         duplicate = _find_duplicate_article(validated.url, validated.title)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
         logger.warning("Dedup check failed for %s: %s", truncate_for_log(validated.title), exc)
         try:
             from services.metrics import get_metrics
             get_metrics().increment("pipeline.dedup_check_failed", tags={"source": source_key})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.debug("Failed to increment dedup_check_failed metric: %s", e)
 
     if duplicate:
@@ -383,7 +383,7 @@ def process_item(
         db.session.rollback()
         logger.error("process_item exceeded soft time limit for %s", validated.external_id)
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  # noqa: BLE001
         db.session.rollback()
         logger.error("DB operation failed for %s: %s", validated.external_id, exc)
         if run_id:

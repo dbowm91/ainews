@@ -16,10 +16,10 @@ from services.url import UnsafeURLError, validate_url_safe
 logger = logging.getLogger(__name__)
 
 # User-Agent strings - intentionally long for authenticity
-USER_AGENTS = [  # noqa: E501
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",  # noqa: E501
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",  # noqa: E501
-    "Mozilla/5.0 (X11; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0",  # noqa: E501
+USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0",
 ]
 
 
@@ -32,7 +32,7 @@ class WebAdapter(BaseSourceAdapter):
         self._session = get_crawl_session()
         ua = self.adapter_config.user_agent
         self._session.headers["User-Agent"] = (
-            ua if ua != "AINewsBot/1.0" else random.choice(USER_AGENTS)
+            ua if ua != "AINewsBot/1.0" else random.choice(USER_AGENTS)  # noqa: S311
         )
         self._session.headers.update(
             {
@@ -62,7 +62,7 @@ class WebAdapter(BaseSourceAdapter):
                     articles.append((soup, url))
             except UnsafeURLError as e:
                 logger.warning("[%s] Blocked unsafe URL %s: %s", self.source_id, url, e)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning("[%s] Failed to scrape %s: %s", self.source_id, url, e)
         return articles
 
@@ -115,7 +115,7 @@ class WebAdapter(BaseSourceAdapter):
                 extracted = trafilatura.extract(html_str)
                 if extracted and len(extracted) >= MIN_CONTENT_LENGTH:
                     body = extracted
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning("Content extraction failed for %s: %s", url, e)
 
         ext_id = self._hash_ext_id(url, title)
@@ -168,14 +168,14 @@ class WebAdapter(BaseSourceAdapter):
     def _polite_get(self, url: str) -> Optional[BeautifulSoup]:
         cfg = self.adapter_config
         validate_url_safe(url)
-        delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)
+        delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)  # noqa: S311
         time.sleep(delay)
 
         for attempt in range(cfg.max_retries):
             try:
                 resp = self._session.get(url, timeout=15)
                 if resp.status_code == 429:
-                    wait = 2**attempt * 5 + random.uniform(0, 2)
+                    wait = 2**attempt * 5 + random.uniform(0, 2)  # noqa: S311
                     time.sleep(wait)
                     continue
                 resp.raise_for_status()

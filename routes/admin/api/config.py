@@ -19,7 +19,7 @@ def reload_config() -> tuple[Response, int] | Response:
     from services.config_unified import reset_config, validate_config
     from services.llm import clear_provider_cache
     from tasks.edit import clear_tag_cache
-    from tasks.pipeline import clear_task_fn_cache
+    from services.pipeline_utils import clear_task_fn_cache
 
     is_valid, errors = validate_config()
     if not is_valid:

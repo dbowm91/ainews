@@ -12,6 +12,8 @@ from constants import (
     PIPELINE_TIMEOUT_SECONDS,
     PipelineStatus,
 )
+from extensions import db
+from models import Article
 from services.circuit_breaker import CircuitOpenError
 from services.config_utils import get_config_with_default
 from services.llm import (
@@ -19,10 +21,12 @@ from services.llm import (
     record_provider_failure,
 )
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
+from services.metrics import get_metrics
 from services.pipeline_degradation import (
     finalize_article as _finalize,
 )
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure
+from services.pipeline_monitor import record_stage_result
 from services.pipeline_utils import _dispatch_next, _log_pipeline
 from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
@@ -353,6 +357,7 @@ def run_stage(
     retry_max: int = 15,
 ):
     """Execute a pipeline stage with standard lifecycle management."""
+    from schemas.pipeline import get_role_config
     _setup_request_id(task_self)
     trace_id = generate_trace_id()
     rc = get_role_config(stage)
@@ -370,6 +375,8 @@ def run_stage(
         logger.info("TraceID=%s: Stage %s already running for article %s, skipping", trace_id, stage, article_id)
         return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
     
+    model = None
+    provider_id = None
     try:
         result, provider_id, model = _run_stage_core(stage, article_id, work_fn, rc, t0, run_id)
         return result

@@ -254,6 +254,14 @@ memory:
   max_entries_per_propose: 3
   consolidation_merge_window_hours: 72
 
+stages:
+  research:
+    tools: ["search_web", "get_topic_note"]
+  write:
+    tools: ["search_web"]
+  edit:
+    tools: ["get_topic_note", "get_related_articles", "get_trend_memory"]
+
 experiments:
   enabled: true
   assignment_salt: "${EXPERIMENT_SALT}"

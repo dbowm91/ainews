@@ -12,9 +12,22 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models import Article, TrendMemory
 from schemas.llm_responses import SubagentResponse
+from services.embeddings import deserialize_embedding, generate_embedding, serialize_embedding
 from services.llm import get_provider_for_role
 from services.metrics import get_metrics
 from services.prompts import esc_xml_text
+
+
+def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    if not vec1 or not vec2:
+        return 0.0
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    norm_a = sum(a * a for a in vec1) ** 0.5
+    norm_b = sum(b * b for b in vec2) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(dot_product / (norm_a * norm_b))
 
 
 class MemoryImportance(IntEnum):
@@ -165,6 +178,9 @@ def _save_memory_entries(
             source_article_id=article_id,
             expires_at=expires_at,
         )
+        embedding = generate_embedding(entry.signal)
+        if embedding:
+            memory.embedding = serialize_embedding(embedding)
         db.session.add(memory)
     try:
         db.session.commit()
@@ -369,3 +385,38 @@ def purge_expired() -> int:
         db.session.rollback()
         raise
     return len(deleted)
+
+
+def semantic_search_trends(query: str, limit: int = 10) -> list[dict]:
+    """Search trends semantically using embedding similarity.
+
+    Args:
+        query: The search query string.
+        limit: Maximum number of results to return.
+
+    Returns:
+        List of dicts with 'memory' (TrendMemory object) and 'similarity' score.
+    """
+    query_embedding = generate_embedding(query)
+    if not query_embedding:
+        return []
+
+    memories = (
+        db.session.execute(
+            select(TrendMemory)
+            .where(TrendMemory.embedding.isnot(None))
+            .where(TrendMemory.embedding != "")
+        )
+        .scalars()
+        .all()
+    )
+
+    scored = []
+    for memory in memories:
+        memory_embedding = deserialize_embedding(memory.embedding)
+        if memory_embedding:
+            similarity = cosine_similarity(query_embedding, memory_embedding)
+            scored.append({"memory": memory, "similarity": similarity})
+
+    scored.sort(key=lambda x: x["similarity"], reverse=True)
+    return scored[:limit]

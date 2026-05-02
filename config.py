@@ -190,6 +190,10 @@ class Config:
                 "task": "tasks.cleanup.recalculate_impact_scores",
                 "schedule": crontab(hour=4, minute=0),
             },
+            "cleanup-inactive-subscribers": {
+                "task": "tasks.subscribers.cleanup_inactive_subscribers",
+                "schedule": crontab(hour=1, minute=0),
+            },
         }
 
     @classmethod

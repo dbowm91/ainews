@@ -18,19 +18,16 @@ from services.task_security import get_signed_kwargs
 logger = logging.getLogger(__name__)
 
 
-@admin_api_bp.route("/articles/ids", methods=["GET"])
-@require_auth
-def get_article_ids():
-    """Return article IDs matching the current filter params for bulk selection.
+def _query_looks_like_url(q_str):
+    if not q_str:
+        return False
+    if q_str.startswith("http://") or q_str.startswith("https://"):
+        return True
+    parsed = urlparse(q_str)
+    return bool(parsed.scheme and parsed.netloc)
 
-    Query params: q, status, category, source_id, date_from, date_to, impact_min, impact_max, tag
-    Returns: {"ids": [1, 2, 3], "count": 3}
-    """
-    from urllib.parse import urlparse
 
-    from models import Article, Tag
-    from services.article import _escape_like_pattern
-
+def _parse_article_ids_params(request):
     try:
         params = ArticleIdsParams(
             q=request.args.get("q", "", type=str).strip(),
@@ -43,37 +40,34 @@ def get_article_ids():
             impact_max=request.args.get("impact_max", type=int),
             tag=request.args.get("tag", "", type=str).strip() or None,
         )
+        return params, None
     except ValidationError as e:
-        return api_response(error=str(e), status=400)
+        return None, api_response(error=str(e), status=400)
+
+
+def _build_article_ids_query(params):
+    from models import Article, Tag
+    from services.article import _escape_like_pattern
+
+    q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
     query = params.q
     status = params.status or ""
     category = params.category or ""
-    source_id = str(params.source_id) if params.source_id is not None else ""
-    date_from = params.date_from or ""
-    date_to = params.date_to or ""
-    impact_min = str(params.impact_min) if params.impact_min is not None else ""
-    impact_max = str(params.impact_max) if params.impact_max is not None else ""
+    source_id = params.source_id
+    date_from = params.date_from
+    date_to = params.date_to
+    impact_min = params.impact_min
+    impact_max = params.impact_max
     tag_slug = params.tag or ""
 
-    def _query_looks_like_url(q_str):
-        if not q_str:
-            return False
-        if q_str.startswith("http://") or q_str.startswith("https://"):
-            return True
-        parsed = urlparse(q_str)
-        return bool(parsed.scheme and parsed.netloc)
-
-    q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
-
     if query:
-        # Use new search provider for FTS5, fall back to ILIKE if unavailable
         try:
             from services.search import get_article_search_provider
 
             provider = get_article_search_provider()
             fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
-        except Exception:  # noqa: BLE001 - fall back to ILIKE on any FTS5 error  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - fall back to ILIKE on any FTS5 error
             logger.debug("FTS5 search unavailable, falling back to ILIKE")
             fts_results = None
 
@@ -89,7 +83,7 @@ def get_article_ids():
         q = q.filter_by(pipeline_status=status)
     if category:
         q = q.filter_by(category=category)
-    if source_id:
+    if source_id is not None:
         try:
             q = q.filter_by(source_id=int(source_id))
         except ValueError:
@@ -110,12 +104,12 @@ def get_article_ids():
             q = q.filter(Article.created_at <= dt)
         except ValueError:
             logger.warning("Invalid date_to filter: %s", date_to)
-    if impact_min:
+    if impact_min is not None:
         try:
             q = q.filter(Article.impact_score >= int(impact_min))
         except ValueError:
             pass
-    if impact_max:
+    if impact_max is not None:
         try:
             q = q.filter(Article.impact_score <= int(impact_max))
         except ValueError:
@@ -125,6 +119,24 @@ def get_article_ids():
         if tag:
             q = q.filter(Article.tags.any(Tag.id == tag.id))
 
+    return q
+
+
+@admin_api_bp.route("/articles/ids", methods=["GET"])
+@require_auth
+def get_article_ids():
+    """Return article IDs matching the current filter params for bulk selection.
+
+    Query params: q, status, category, source_id, date_from, date_to, impact_min, impact_max, tag
+    Returns: {"ids": [1, 2, 3], "count": 3}
+    """
+    from models import Article
+
+    params, error = _parse_article_ids_params(request)
+    if error:
+        return error
+
+    q = _build_article_ids_query(params)
     ids = [row.id for row in q.with_entities(Article.id).limit(1000).all()]
     return api_response(data={"ids": ids, "count": len(ids)})
 
@@ -344,6 +356,90 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
     )
 
 
+def _bulk_delete(articles, article_ids, db) -> tuple[Response, int] | Response:
+    from models import Article
+    from sqlalchemy import delete
+
+    try:
+        stmt = delete(Article).where(Article.id.in_(article_ids))
+        db.session.execute(stmt)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return api_response(error="Failed to delete articles", status=500)
+    try:
+        from services.audit import log_admin_action
+        from services.cache import get_response_cache
+
+        cache = get_response_cache()
+        for article in articles:
+            cache.invalidate(f"pub:article_detail:{article.id}")
+        cache.invalidate_prefix("articles:list")
+        cache.invalidate_prefix("pub:related")
+        log_admin_action(
+            "article_bulk_delete",
+            target_type="article",
+            category="article",
+            details={"count": len(articles), "ids": article_ids},
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Cache invalidation or audit logging failed")
+    return api_response(meta={"message": f"Deleted {len(articles)} articles"})
+
+
+def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, int] | Response:
+    from models import Article
+    from sqlalchemy import update
+
+    new_status = validated.status or ""
+    if new_status not in VALID_PIPELINE_STATUSES:
+        return api_response(
+            error=f"Invalid status. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
+            status=400,
+        )
+
+    for article in articles:
+        current_status = article.pipeline_status
+        valid_next = VALID_TRANSITIONS.get(current_status, frozenset())
+        if new_status not in valid_next:
+            return api_response(
+                error=f"Invalid transition from '{current_status}' to '{new_status}'. "
+                f"Valid transitions from '{current_status}': {', '.join(sorted(valid_next)) if valid_next else 'none'}",
+                status=400,
+            )
+    try:
+        stmt = update(Article).where(Article.id.in_(article_ids)).values(pipeline_status=new_status)
+        db.session.execute(stmt)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return api_response(error="Failed to update articles", status=500)
+    try:
+        from services.audit import log_admin_action
+        from services.cache import get_response_cache
+
+        cache = get_response_cache()
+        for article in articles:
+            cache.invalidate(f"pub:article_detail:{article.id}")
+        cache.invalidate_prefix("articles:list")
+        cache.invalidate_prefix("pub:related")
+        log_admin_action(
+            "article_bulk_set_status",
+            target_type="article",
+            category="article",
+            details={
+                "count": len(articles),
+                "ids": article_ids,
+                "status": new_status,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Cache invalidation or audit logging failed")
+    return api_response(
+        meta={"message": f"Updated {len(articles)} articles to '{new_status}'"},
+    )
+
+
 @admin_api_bp.route("/articles/bulk", methods=["POST"])
 @require_auth
 @validate_csrf_json
@@ -381,84 +477,10 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
         return api_response(error="No articles found", status=404)
 
     if action == "delete":
-        try:
-            from sqlalchemy import delete
-
-            stmt = delete(Article).where(Article.id.in_(article_ids))
-            db.session.execute(stmt)
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            return api_response(error="Failed to delete articles", status=500)
-        try:
-            from services.audit import log_admin_action
-            from services.cache import get_response_cache
-
-            cache = get_response_cache()
-            for article in articles:
-                cache.invalidate(f"pub:article_detail:{article.id}")
-            cache.invalidate_prefix("articles:list")
-            cache.invalidate_prefix("pub:related")
-            log_admin_action(
-                "article_bulk_delete",
-                target_type="article",
-                category="article",
-                details={"count": len(articles), "ids": article_ids},
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("Cache invalidation or audit logging failed")
-        return api_response(meta={"message": f"Deleted {len(articles)} articles"})
+        return _bulk_delete(articles, article_ids, db)
 
     elif action == "set_status":
-        new_status = validated.status or ""
-        if new_status not in VALID_PIPELINE_STATUSES:
-            return api_response(
-                error=f"Invalid status. Must be one of: {', '.join(sorted(VALID_PIPELINE_STATUSES))}",
-                status=400,
-            )
-
-        try:
-            from sqlalchemy import update
-
-            for article in articles:
-                current_status = article.pipeline_status
-                valid_next = VALID_TRANSITIONS.get(current_status, frozenset())
-                if new_status not in valid_next:
-                    return api_response(
-                        error=f"Invalid transition from '{current_status}' to '{new_status}'. "
-                        f"Valid transitions from '{current_status}': {', '.join(sorted(valid_next)) if valid_next else 'none'}",
-                        status=400,
-                    )
-            stmt = update(Article).where(Article.id.in_(article_ids)).values(pipeline_status=new_status)
-            db.session.execute(stmt)
-            db.session.commit()
-        except SQLAlchemyError:
-            db.session.rollback()
-            return api_response(error="Failed to update articles", status=500)
-        try:
-            from services.audit import log_admin_action
-            from services.cache import get_response_cache
-
-            cache = get_response_cache()
-            for article in articles:
-                cache.invalidate(f"pub:article_detail:{article.id}")
-            cache.invalidate_prefix("articles:list")
-            cache.invalidate_prefix("pub:related")
-            log_admin_action(
-                "article_bulk_set_status",
-                target_type="article",
-                category="article",
-                details={
-                    "count": len(articles),
-                    "ids": article_ids,
-                    "status": new_status,
-                },
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("Cache invalidation or audit logging failed")
-        return api_response(
-            meta={"message": f"Updated {len(articles)} articles to '{new_status}'"},
-        )
+        return _bulk_set_status(articles, validated, article_ids, db)
 
     elif action == "set_category":
         return _bulk_set_category(articles, validated, db)

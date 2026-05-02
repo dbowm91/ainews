@@ -120,6 +120,8 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 - `cleanup-stale-limiter-slots` — every 5 min
 - `retry-failed-newsletter-deliveries` — every 2 hours
 - `recalculate-impact-scores` — daily at 4:00 AM
+- `cleanup-inactive-subscribers` — daily at 1:00 AM (flags inactive subscribers)
+- `backfill-embeddings` — daily at 2:00 AM (generates missing article embeddings)
 
 **Scripts in `scripts/`:**
 - `backup.sh` — SQLite backup with verification

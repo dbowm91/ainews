@@ -31,7 +31,7 @@ Providers are registered in `providers.yaml` and loaded via `services/llm/__init
 - `run_subagent(task_type, stage, prompt_data, response_model, article_id)` — single-step subagent
 - `run_subagent_with_tools(task_type, stage, prompt_data, response_model, tools, article_id)` — with tool calling (max 5 iterations)
 - `run_subagent_chain(chain_name, steps, initial_prompt_data, article_id)` — multi-step chains with conditional execution
-- `initialize_tool_registry()` — registers built-in tools; call once at startup
+- `initialize_tool_registry(selector=None)` — registers built-in tools; call once at startup. Now supports `ToolSelector` for stage-aware tool selection.
 
 **Built-in tools** (`_build_context_tools()` + `_build_search_tools()`):
 - `get_topic_note(topic, source)` — single topic note lookup

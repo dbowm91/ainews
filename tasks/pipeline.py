@@ -30,28 +30,43 @@ from services.pipeline_monitor import record_stage_result
 from services.pipeline_utils import _dispatch_next, _log_pipeline
 
 
-def _degrade_and_advance(article, stage):
-    """Degrade article from given stage and advance to next stage.
-    
-    Args:
-        article: Article model instance
-        stage: Stage name (e.g., "select", "research", "write", "edit")
-    """
+def _degrade_and_advance(article, failed_stage: str, run_id=None):
+    """Advance article to next stage with degraded quality on persistent failure."""
+    from extensions import db
     from services.pipeline_degradation import degrade_article
+    from services.pipeline_utils import _log_pipeline
 
-    # Map stage name to PipelineStatus
-    stage_map = {
-        "select": "RESEARCHING",
-        "research": "WRITING",
-        "write": "EDITING",
-        "edit": "EDITING",
-        "researching": "WRITING",
-        "writing": "EDITING",
-        "editing": "EDITING",
-    }
-    next_status = stage_map.get(stage.lower())
-    if next_status:
-        degrade_article(article, next_status)
+    # Normalize: accept both action names ("write") and status names ("writing")
+    from constants import _STAGE_STATUS_MAP
+    failed_stage = _STAGE_STATUS_MAP.get(failed_stage, failed_stage)
+
+    logger.warning(
+        f"Degrading article {article.id} from stage '{failed_stage}' (retry_count={article.retry_count})"
+    )
+
+    if failed_stage == "select":
+        article.selector_result = {
+            "selected": True,
+            "score": 6,
+            "reason": "auto-selected after failure",
+        }
+        article.pipeline_status = "researching"
+        article.retry_count = 0
+        article.last_error = None
+        db.session.commit()
+        _log_pipeline(failed_stage, article.id, run_id, "degraded_to_research")
+    elif failed_stage == "research":
+        degrade_article(article, "writing")
+        _log_pipeline(failed_stage, article.id, run_id, "degraded_to_write")
+    elif failed_stage == "write":
+        degrade_article(article, "editing")
+        _log_pipeline(failed_stage, article.id, run_id, "degraded_to_edit")
+    elif failed_stage == "edit":
+        # Final degradation: finalize with fallback
+        from services.pipeline_degradation import finalize_article
+        finalize_article(article, run_id)
+    else:
+        logger.error(f"Unknown stage for degradation: {failed_stage}")
 from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
 logger = get_task_logger(__name__)

@@ -521,3 +521,22 @@ class ApiToken(db.Model):
 
     def __repr__(self):
         return f"<ApiToken {self.name or self.id}>"
+
+
+class AdminUser(db.Model):
+    __tablename__ = "admin_users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(128), nullable=False)
+    totp_secret = db.Column(db.String(32))
+    totp_enabled = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self):
+        return f"<AdminUser {self.username}>"

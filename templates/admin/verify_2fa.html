@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ainews// 2FA verification</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+</head>
+<body class="admin-body">
+  <noscript><p class="noscript-warning">JavaScript is required for theme toggle and full functionality.</p></noscript>
+  <main class="login-container">
+    <div class="login-box">
+      <h1 class="login-title">ainews<span class="logo-slash">//</span></h1>
+      <p class="login-subtitle">two-factor authentication</p>
+      {% if error %}
+        <p class="login-error">{{ error|e }}</p>
+      {% endif %}
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="token" class="sr-only">Authentication Code</label>
+        <input
+          type="text"
+          name="token"
+          id="token"
+          placeholder="123456"
+          class="login-input"
+          autocomplete="one-time-code"
+          autofocus
+          required
+          inputmode="numeric"
+          pattern="[0-9]*"
+        >
+        <button type="submit" class="login-btn">verify</button>
+      </form>
+      <a href="{{ url_for('admin.login') }}" class="login-back-link">back to login</a>
+    </div>
+  </main>
+</body>
+</html>

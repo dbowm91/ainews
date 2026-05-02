@@ -162,6 +162,15 @@ def run_subagent(
         stage_config, default_role=default_role,
     )
 
+    # Initialize tool registry with stage-aware tool selection
+    from services.tool_selection import StageAwareToolSelector
+    from .registry import initialize_tool_registry
+
+    tools = None
+    if stage_config.tools:
+        selector = StageAwareToolSelector(tool_names=stage_config.tools)
+        tools = initialize_tool_registry(selector=selector, context={"stage": stage})
+
     def _is_task_revoked():
         try:
             from celery import current_task
@@ -176,14 +185,41 @@ def run_subagent(
         from . import traced_llm_call
 
         with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
-            return provider.chat_structured(
-                messages=[{"role": "user", "content": prompt}],
-                response_model=response_model,
-                model=model,
-                system=system_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            if tools:
+                # Use chat_with_tools for tool-calling support
+                max_iterations = getattr(stage_config, 'max_iterations', 5)
+                tc_resp = provider.chat_with_tools(
+                    messages=[{"role": "user", "content": prompt}],
+                    tools=tools,
+                    tool_choice=None,
+                    model=model,
+                    system=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    max_iterations=max_iterations,
+                )
+                # Validate tool-calling response against response_model
+                try:
+                    return response_model.model_validate(
+                        {"synthesis": tc_resp.text},
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Subagent %s/%s validation error on tool-calling response: %s",
+                        stage,
+                        task_type,
+                        e,
+                    )
+                    raise
+            else:
+                return provider.chat_structured(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_model=response_model,
+                    model=model,
+                    system=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
 
     result = None
     used_fallback = False

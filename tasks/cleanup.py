@@ -158,7 +158,66 @@ def consolidate_trend_memory(self):
         logger.error("consolidate_trend_memory exceeded soft time limit")
         raise
     except Exception as e:
-        logger.error("Trend memory consolidation failed: %s", e)
+        logger.error("Article version cleanup failed: %s", e)
+        raise
+
+
+@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,)
+def cleanup_inactive_subscribers(self):
+    """Clean up inactive subscribers based on bounce threshold and inactivity.
+
+    Subscribers are flagged as inactive when:
+    - Bounce count exceeds SUBSCRIBER_MAX_BOUNCES (default: 5)
+    - No activity for SUBSCRIBER_INACTIVITY_DAYS (default: 180 days)
+
+    Runs daily via Celery Beat to maintain subscriber list health.
+    """
+    if not verify_task("cleanup_inactive_subscribers", (), {}):
+        logger.error("Invalid signature for cleanup_inactive_subscribers")
+        raise ValueError("Invalid task signature")
+
+    from extensions import db
+    from models import Subscriber
+    from services.config_utils import get_config_with_default
+
+    max_bounces = get_config_with_default("SUBSCRIBER_MAX_BOUNCES", 5, int)
+    inactivity_days = get_config_with_default("SUBSCRIBER_INACTIVITY_DAYS", 180, int)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=inactivity_days)
+
+    try:
+        bounced = (
+            Subscriber.query.filter(Subscriber.bounce_count >= max_bounces)
+            .filter(Subscriber.active.is_(True))
+            .update({"active": False}, synchronize_session=False)
+        )
+        inactive = (
+            Subscriber.query.filter(Subscriber.last_active_at < cutoff)
+            .filter(Subscriber.active.is_(True))
+            .update({"active": False}, synchronize_session=False)
+        )
+        db.session.commit()
+        total = bounced + inactive
+        if total:
+            logger.info(
+                "Cleaned up %s inactive subscribers (bounced: %s, inactive: %s)",
+                total,
+                bounced,
+                inactive,
+            )
+        else:
+            logger.info("No inactive subscribers to clean up")
+        return {"bounced": bounced, "inactive": inactive, "total": total}
+    except SoftTimeLimitExceeded:
+        db.session.rollback()
+        logger.error("cleanup_inactive_subscribers exceeded soft time limit")
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error("Subscriber cleanup failed: %s", e)
         raise
 
 

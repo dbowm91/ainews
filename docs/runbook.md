@@ -126,6 +126,33 @@ curl -X POST http://localhost:5000/admin/api/config/reload \
   -H "X-CSRFToken: your_csrf_token"
 ```
 
+## Scheduled Tasks
+
+The following tasks are run automatically via Celery Beat:
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| `cleanup_old_pipeline_logs` | Daily | Delete pipeline logs older than 30 days |
+| `cleanup_expired_verifications` | Every 15 min | Remove unverified subscribers past expiry |
+| `cleanup_stale_limiter_slots` | Every 5 min | Reclaim stale model limiter slots |
+| `consolidate_trend_memory` | Nightly (3:30 AM) | Merge low-importance trend entries |
+| `recalculate_impact_scores` | Nightly (4:00 AM) | Update article impact from engagement |
+| `purge_trend_memory` | Nightly (3:45 AM) | Remove expired trend memory entries |
+| `cleanup_old_article_versions` | Daily | Delete article versions older than 90 days |
+| `cleanup_inactive_subscribers` | Daily | Deactivate subscribers with excessive bounces or inactivity |
+
+### Subscriber Cleanup
+
+The `cleanup_inactive_subscribers` task automatically deactivates subscribers based on:
+- **Bounce threshold**: `SUBSCRIBER_MAX_BOUNCES` (default: 5) - subscribers with bounce count at or above this threshold are deactivated
+- **Inactivity period**: `SUBSCRIBER_INACTIVITY_DAYS` (default: 180 days) - subscribers with no activity since before cutoff are deactivated
+
+Configure via environment variables:
+```bash
+export SUBSCRIBER_MAX_BOUNCES=5
+export SUBSCRIBER_INACTIVITY_DAYS=180
+```
+
 ## Troubleshooting
 
 ### Redis Connection Issues

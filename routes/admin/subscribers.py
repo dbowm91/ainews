@@ -95,9 +95,9 @@ def export_subscribers() -> Response:
                     category="subscriber",
                     details={"count": count},
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning("Audit logging failed for subscriber_export")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("CSV export failed: %s", e)
             yield f"# ERROR: {e}\n"
 

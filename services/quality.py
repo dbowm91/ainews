@@ -72,7 +72,7 @@ class LLMQualityAssessor(QualityAssessor):
                 max_tokens=512,
             )
             return self._parse_response(response.text)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("LLM quality assessment failed: %s", e)
             return QualityScore(
                 groundedness=0.5,

@@ -122,7 +122,7 @@ def _run_pipeline_stage(
             metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})
             fallback_stages.append(role)
             return None, False
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error("%s failed: %s", role, e)
         metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})
         fallback_stages.append(role)
@@ -193,7 +193,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                     )
                     if "reader" not in fallback_stages:
                         fallback_stages.append("reader")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning(
                     "Failed to parse brief JSON for fallback check", exc_info=True,
                 )
@@ -263,7 +263,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                     "used_fallback": True,
                     "fallback_stages": fallback_stages,
                 }
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.debug("Failed to parse summary JSON for fallback: %s", e)
                 return {
                     "summary": "",
@@ -279,7 +279,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
                 "used_fallback": True,
                 "fallback_stages": fallback_stages + ["editor_disabled"],
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug("Failed to get editor result for fallback: %s", e)
             return {
                 "summary": "",

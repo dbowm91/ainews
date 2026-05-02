@@ -123,7 +123,7 @@ def _compute_dashboard_stats():
 
     try:
         llm_info = get_provider_info()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("Provider info failed: %s", e)
         llm_info = {"status": "error", "error": str(e)}
 
@@ -152,7 +152,7 @@ def _compute_dashboard_stats():
         redis_client = get_redis()
         redis_client.ping()
         pipeline_health = get_all_stages_stats(minutes=15)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("Failed to get pipeline health stats: %s", e)
 
     stats = {
@@ -201,7 +201,7 @@ def dashboard() -> str:
         redis_ok = True
     except redis.exceptions.RedisError:
         pass
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("Redis check failed: %s", e)
 
     cached = _compute_dashboard_stats()

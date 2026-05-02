@@ -212,7 +212,7 @@ def recalculate_impact_scores(self):
                 cache.invalidate_prefix("pub:index:")
                 cache.invalidate_prefix("pub:article_detail:")
                 cache.invalidate_prefix("pub:related:")
-            except Exception as e:  # noqa: BLE001 - cache invalidation is non-critical
+            except Exception as e:
                 logger.warning("Failed to invalidate cache: %s", e)
         else:
             logger.info("Recalculate impact scores: no articles needed updating")

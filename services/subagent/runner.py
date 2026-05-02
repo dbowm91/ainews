@@ -4,7 +4,7 @@ import logging
 from concurrent.futures import TimeoutError
 from typing import Any, Type
 
-import json  # noqa: F401 - needed for JSON operations in tools
+import json
 
 from pydantic import BaseModel, ValidationError
 
@@ -245,7 +245,7 @@ def run_subagent(
         )
         used_fallback = True
         fallback_stages = [stage]
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s unexpected error: %s — using fallback",
@@ -479,7 +479,7 @@ def run_subagent_with_tools(
         )
         used_fallback = True
         fallback_stages = [stage]
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s unexpected error: %s — using fallback",

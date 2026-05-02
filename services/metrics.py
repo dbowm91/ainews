@@ -311,7 +311,7 @@ def get_metrics() -> MetricsCollector:
         from extensions import get_redis
         try:
             redis_client = get_redis()
-        except Exception:  # noqa: BLE001
+        except Exception:
             redis_client = None
         _metrics_instance = MetricsCollector(redis_client=redis_client)
     return _metrics_instance

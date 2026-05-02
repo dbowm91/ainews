@@ -231,7 +231,7 @@ def _finalize(article_id: int):
             )
 
             db.session.commit()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         db.session.rollback()
         logger.error("Finalize failed for article %s: %s", article_id, e)
 

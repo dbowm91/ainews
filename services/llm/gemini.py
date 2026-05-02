@@ -313,9 +313,9 @@ class GeminiProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:  # noqa: BLE001 - return error status on any exception
+        except Exception as e:
             converted = _handle_gemini_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 
 
-from schemas.llm import GeminiConfig  # noqa: E402
+from schemas.llm import GeminiConfig

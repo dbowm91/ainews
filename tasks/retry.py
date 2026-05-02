@@ -107,7 +107,7 @@ def retry_stuck(self):
         for article in articles_to_dead_letter:
             try:
                 _dead_letter(article)
-            except Exception:  # noqa: BLE001  # noqa: BLE001
+            except Exception:
                 logger.error("Failed to dead-letter article %s", article.id)
                 continue
             dead_lettered += 1
@@ -195,7 +195,7 @@ def _dead_letter(article):
         create_article_version(
             article, change_reason="dead_letter", changed_by="retry_stuck",
         )
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.warning("Failed to create article version for dead-letter: %s", e)
 
     _apply_fallback(article)

@@ -121,7 +121,7 @@ class ModelLimiter:
                     get_metrics().increment(
                         "limiter.slot_leak", {"provider": provider_id, "model": model},
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.warning(
                         "Failed to record limiter slot leak metric", exc_info=True,
                     )

@@ -73,9 +73,9 @@ def trend_memory_delete(memory_id):
         try:
             cache = get_response_cache()
             cache.invalidate_prefix("trend_memory")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Failed to invalidate trend_memory cache: %s", e)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         db.session.rollback()
         flash(f"Error deleting memory: {e}", "error")
 
@@ -105,9 +105,9 @@ def trend_memory_delete_expired():
         try:
             cache = get_response_cache()
             cache.invalidate_prefix("trend_memory")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Failed to invalidate trend_memory cache: %s", e)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         db.session.rollback()
         flash(f"Error deleting expired memories: {e}", "error")
 

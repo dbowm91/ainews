@@ -287,7 +287,7 @@ def run_all_sources(self, run_id=None):
 
     try:
         configs = load_sources()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log_pipeline(run_id, "crawl", "error", "Failed to load sources: %s", exc)
         run = db.session.get(PipelineRun, run_id)
         if run:

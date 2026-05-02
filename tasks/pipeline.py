@@ -379,7 +379,7 @@ def run_stage(
         raise
     except CircuitOpenError as ce:
         return _handle_circuit_open(ce)
-    except Exception as e:  # noqa: BLE001 - catch-all for pipeline stage resilience
+    except Exception as e:
         return _handle_generic_exception(e)
     finally:
         if limiter is not None:

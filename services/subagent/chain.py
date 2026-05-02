@@ -150,7 +150,7 @@ def run_subagent_chain(
                 "synthesis": f"[Fallback: {e}]",
                 "used_fallback": True,
                 }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(
                 "Chain %s step %d unexpected error: %s",
                 chain_name,

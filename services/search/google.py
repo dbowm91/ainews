@@ -82,7 +82,7 @@ class GoogleSearchProvider(BaseSearchProvider):
             logger.warning("Google search timed out for '%s'", query)
             record_search_failure(self.provider_id)
             return []
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
+        except Exception as e:
             logger.warning("Google search failed for '%s': %s", query, type(e).__name__)
             record_search_failure(self.provider_id)
             return []
@@ -106,7 +106,7 @@ class GoogleSearchProvider(BaseSearchProvider):
                 "provider": self.provider_id,
                 "status": f"SSRF blocked: {e}",
             }
-        except Exception as e:  # noqa: BLE001  # noqa: BLE001
+        except Exception as e:
             return {
                 "provider": self.provider_id,
                 "status": f"error: {type(e).__name__}",

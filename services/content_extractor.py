@@ -82,7 +82,7 @@ def extract_article(url: str) -> ExtractionResult:
         future.cancel()
         logger.warning("Content extraction timeout for %s", url)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.warning("Fetch failed for %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
@@ -115,7 +115,7 @@ def extract_article(url: str) -> ExtractionResult:
                 status=ExtractionStatus.SUCCESS,
                 content_length=len(text),
             )
-    except Exception as e:  # noqa: BLE001  # noqa: BLE001
+    except Exception as e:
         logger.debug("Readability fallback failed for %s: %s", url, e)
 
     return ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)

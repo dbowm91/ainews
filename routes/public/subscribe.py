@@ -116,7 +116,7 @@ def subscribe() -> Response:
         send_verification_email(
             email, newsletter_type, verification_url, unsubscribe_url,
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("Verification email failed for %s: %s", email, e)
         email_failed = True
 
@@ -221,7 +221,7 @@ def verify(token: str) -> str:
         send_welcome_email(
             subscriber.email, subscriber.newsletter_type, unsubscribe_url,
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("Welcome email failed for %s: %s", subscriber.email, e)
 
     return render_template("verify.html", found=True, subscriber=subscriber)

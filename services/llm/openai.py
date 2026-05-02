@@ -310,10 +310,10 @@ class OpenAIProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:  # noqa: BLE001 - return error status on any exception
+        except Exception as e:
             converted = _handle_openai_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 
 
 # Re-export for backward compatibility
-from schemas.llm import OpenAIConfig  # noqa: E402
+from schemas.llm import OpenAIConfig

@@ -93,7 +93,7 @@ class CircuitBreaker:
                     "circuit_breaker.opened",
                     labels={"provider": self.name},
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("Failed to emit circuit breaker metric", exc_info=True)
 
     def _prune_old_failures(self) -> None:
@@ -216,7 +216,7 @@ class RedisCircuitBreaker(CircuitBreaker):
             redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
             self._redis_client = redis.from_url(redis_url, decode_responses=True)
             return self._redis_client
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("Failed to connect to Redis", exc_info=True)
             return None
 
@@ -351,7 +351,7 @@ class RedisCircuitBreaker(CircuitBreaker):
                 f"circuit_breaker.call.{outcome}",
                 labels={"provider": self.name},
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("Failed to emit circuit breaker metric", exc_info=True)
 
     def get_status(self) -> dict:

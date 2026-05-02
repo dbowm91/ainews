@@ -67,7 +67,7 @@ def _build_article_ids_query(params):
 
             provider = get_article_search_provider()
             fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
-        except Exception:  # noqa: BLE001 - fall back to ILIKE on any FTS5 error
+        except Exception:
             logger.debug("FTS5 search unavailable, falling back to ILIKE")
             fts_results = None
 
@@ -200,7 +200,7 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
                 "category": new_category,
             },
         )
-    except Exception:  # noqa: BLE001 - audit logging is non-critical  # noqa: BLE001
+    except Exception:
         logger.warning("Audit logging failed for article_bulk_set_category")
     return api_response(meta={"message": f"Updated {len(articles)} articles to category '{new_category}'"})
 
@@ -265,7 +265,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             signed_kwargs = get_signed_kwargs("select_article", (article.id,), {})
             select_article.apply_async(args=(article.id,), kwargs=signed_kwargs)
             dispatched += 1
-        except Exception as e:  # noqa: BLE001 - continue dispatching other articles  # noqa: BLE001
+        except Exception as e:
             logger.warning(
                 "Failed to dispatch reprocess for article %s: %s", article.id, e,
             )
@@ -283,7 +283,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
                     "failed_ids": failed_ids,
                 },
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("Audit logging failed for article_bulk_reprocess")
         return api_response(
             data={
@@ -304,7 +304,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
                 "dispatched": dispatched,
             },
         )
-    except Exception:  # noqa: BLE001 - audit logging is non-critical  # noqa: BLE001
+    except Exception:
         logger.warning("Audit logging failed for article_bulk_reprocess")
     return api_response(
         meta={"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"},
@@ -349,7 +349,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
                 "tags": tag_names,
             },
         )
-    except Exception:  # noqa: BLE001 - audit logging is non-critical  # noqa: BLE001
+    except Exception:
         logger.warning("Audit logging failed for article_bulk_add_tags")
     return api_response(
         meta={"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"},
@@ -382,7 +382,7 @@ def _bulk_delete(articles, article_ids, db) -> tuple[Response, int] | Response:
             category="article",
             details={"count": len(articles), "ids": article_ids},
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Cache invalidation or audit logging failed")
     return api_response(meta={"message": f"Deleted {len(articles)} articles"})
 
@@ -433,7 +433,7 @@ def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, in
                 "status": new_status,
             },
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Cache invalidation or audit logging failed")
     return api_response(
         meta={"message": f"Updated {len(articles)} articles to '{new_status}'"},

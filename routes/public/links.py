@@ -60,7 +60,7 @@ def article_detail(article_id: int) -> Response:
             text_fields = [fa_data.get("body", ""), fa_data.get("tldr", ""), fa_data.get("why_it_matters", ""), fa_data.get("what_to_watch", "")]
             text_content = " ".join(str(f) for f in text_fields if f)
             word_count = len(text_content.split())
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug("Failed to parse final_article for reading time: %s", e)
             word_count = 0
     reading_time = max(1, word_count // 200)

@@ -222,7 +222,7 @@ def validate_config() -> tuple[bool, list[str]]:
             errors.append(f"Pipeline config error [{loc}]: {err['msg']}")
     except yaml.YAMLError as e:
         errors.append(f"Pipeline config error: {_fmt_yaml_error(e)}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         errors.append(f"Pipeline config error: {e}")
 
     try:
@@ -235,7 +235,7 @@ def validate_config() -> tuple[bool, list[str]]:
             errors.append(f"Topic config error [{loc}]: {err['msg']}")
     except yaml.YAMLError as e:
         errors.append(f"Topic config error: {_fmt_yaml_error(e)}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         errors.append(f"Topic config error: {e}")
 
     try:
@@ -248,7 +248,7 @@ def validate_config() -> tuple[bool, list[str]]:
             errors.append(f"Source config error [{loc}]: {err['msg']}")
     except yaml.YAMLError as e:
         errors.append(f"Source config error: {_fmt_yaml_error(e)}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         errors.append(f"Source config error: {e}")
 
     try:
@@ -261,7 +261,7 @@ def validate_config() -> tuple[bool, list[str]]:
             errors.append(f"LLM providers config error [{loc}]: {err['msg']}")
     except yaml.YAMLError as e:
         errors.append(f"LLM providers config error: {_fmt_yaml_error(e)}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         errors.append(f"LLM providers config error: {e}")
 
     return (len(errors) == 0, errors)

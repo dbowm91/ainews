@@ -73,7 +73,7 @@ def cached_config(key: str, loader_fn: Callable[[], T], ttl: int = 300) -> T:
         from services.config_cache import get_config_cache
 
         return get_config_cache().get(key=key, loader_fn=loader_fn, ttl=ttl)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return loader_fn()
 
 
@@ -89,5 +89,5 @@ def cached_config_with_mtime(
         result = cache.get(key=key, loader_fn=loader_fn, ttl=ttl)
         cache._record_mtime(key, config_path)
         return result
-    except Exception:  # noqa: BLE001
+    except Exception:
         return loader_fn()

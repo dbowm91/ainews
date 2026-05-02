@@ -121,7 +121,7 @@ def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
         )
         db.session.add(log)
         savepoint.commit()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         savepoint.rollback()
         logger.error("Failed to write pipeline log: %s", e)
         metrics.counter_inc(

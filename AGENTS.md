@@ -153,3 +153,23 @@ if not self._redis.set(lock_key, "1", nx=True, ex=ttl):
 6. **Dead Code Removal:** Periodically check for and remove dead code (functions defined but never called). Confirm zero callers via grep before removal.
 
 7. **Parallelization:** Many improvements can be implemented in parallel by separate agents working on different functional areas (e.g., tasks, services, routes, CSS).
+## Completed Waves (as of 2026-05-02)
+
+All waves from `plans/plan.md` have been completed:
+
+- **Wave 1** (14 items): Critical Security & Documentation Fixes ✅
+- **Wave 2** (20 items): High-Priority Backend Fixes ✅
+- **Wave 2.5** (2 items): Pre-Refactor Validation ✅
+- **Wave 3** (17 items): Code Quality & Performance ✅
+- **Wave 4** (10 items): AI Harness & Advanced Features ✅
+- **Wave 5** (14 items): Frontend Polish & Low-Priority Items ✅
+
+**New Features Added:**
+- Vector embeddings (`services/embeddings.py`) with background backfill task
+- Hybrid search (SQL FTS5 + vector similarity) in `services/search/hybrid.py`
+- Two-factor authentication (2FA) for admin users
+- Semantic trend memory search
+- Tool execution middleware (`services/subagent/middleware.py`)
+- Pipeline observability with trace IDs (`services/tracing.py`)
+- Search DAL (`services/search/` package with base class and providers)
+- Subagent system modularized into `services/subagent/` package

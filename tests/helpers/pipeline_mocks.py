@@ -12,8 +12,8 @@ def setup_pipeline_mocks():
         the mock objects returned by each patch.
     """
     patches = {
-        "Article": patch("models.Article"),
-        "db": patch("extensions.db"),
+        "Article": patch("tasks.pipeline.Article"),
+        "db": patch("tasks.pipeline.db"),
         "get_role_config": patch("schemas.pipeline.get_role_config"),
         "get_provider_chain": patch("tasks.pipeline.get_provider_chain"),
         "record_success": patch("services.llm.record_provider_success"),
@@ -21,6 +21,7 @@ def setup_pipeline_mocks():
         "get_limiter": patch("services.limiter.get_limiter"),
         "get_redis": patch("extensions.get_redis"),
         "get_config_with_default": patch("services.pipeline_failure.get_config_with_default"),
+        "track_stage_failure": patch("services.pipeline_failure._track_stage_failure", return_value=0),
     }
     mocks = {}
     for name, p in patches.items():

@@ -28,17 +28,18 @@ from services.pipeline_degradation import (
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure
 from services.pipeline_monitor import record_stage_result
 from services.pipeline_utils import _dispatch_next, _log_pipeline
+from services.logging_utils import traced_stage
 
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
     """Advance article to next stage with degraded quality on persistent failure."""
     from extensions import db
-    from services.pipeline_degradation import degrade_article
+    from services.pipeline_degradation import degrade_stage
     from services.pipeline_utils import _log_pipeline
 
     # Normalize: accept both action names ("write") and status names ("writing")
-    from constants import _STAGE_STATUS_MAP
-    failed_stage = _STAGE_STATUS_MAP.get(failed_stage, failed_stage)
+    from constants import STAGE_STATUS_MAP
+    failed_stage = STAGE_STATUS_MAP.get(failed_stage, failed_stage)
 
     logger.warning(
         f"Degrading article {article.id} from stage '{failed_stage}' (retry_count={article.retry_count})"
@@ -56,10 +57,10 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         db.session.commit()
         _log_pipeline(failed_stage, article.id, run_id, "degraded_to_research")
     elif failed_stage == "research":
-        degrade_article(article, "writing")
+        degrade_stage(article, "writing")
         _log_pipeline(failed_stage, article.id, run_id, "degraded_to_write")
     elif failed_stage == "write":
-        degrade_article(article, "editing")
+        degrade_stage(article, "editing")
         _log_pipeline(failed_stage, article.id, run_id, "degraded_to_edit")
     elif failed_stage == "edit":
         # Final degradation: finalize with fallback

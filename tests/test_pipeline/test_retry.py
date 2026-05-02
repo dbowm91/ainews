@@ -92,7 +92,7 @@ class TestRetryStuck:
         """Fixture that patches the Article model with a mock query chain."""
         mock_query = MagicMock()
 
-        with patch("models.Article") as MockArticle:
+        with patch("tasks.retry.Article") as MockArticle:
             MockArticle.query = mock_query
             MockArticle.pipeline_status = MagicMock()
             MockArticle.pipeline_status.in_ = MagicMock(return_value=MagicMock())

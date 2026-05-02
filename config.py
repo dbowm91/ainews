@@ -194,6 +194,10 @@ class Config:
                 "task": "tasks.subscribers.cleanup_inactive_subscribers",
                 "schedule": crontab(hour=1, minute=0),
             },
+            "backfill-embeddings": {
+                "task": "tasks.embeddings.backfill_embeddings",
+                "schedule": crontab(hour=2, minute=0),
+            },
         }
 
     @classmethod

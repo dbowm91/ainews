@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from functools import lru_cache
 
+from services.tracing import get_current_trace_id
+
 logger = logging.getLogger(__name__)
 
 # Fallback prompts — pipeline.yaml system_prompt fields are the source of truth.
@@ -87,7 +89,7 @@ def load_prompt_file(name: str) -> str | None:
     try:
         return path.read_text().strip()
     except FileNotFoundError:
-        logger.debug("Prompt file not found: %s", path)
+        logger.debug("TraceID=%s: Prompt file not found: %s", get_current_trace_id(), path)
         return None
 
 
@@ -257,7 +259,7 @@ def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, tempe
         )
         return response.text.strip() if response and response.text else ""
     except Exception as e:  # noqa: BLE001
-        logger.warning("LLM summarization failed, will fall back to sliding window: %s", e)
+        logger.warning("TraceID=%s: LLM summarization failed, will fall back to sliding window: %s", get_current_trace_id(), e)
         return ""
 
 
@@ -336,6 +338,6 @@ def smart_truncate_context(
                 result = f"{summary}\n\n{TRUNCATION_WARNING}"
                 return result, True
         except Exception as e:  # noqa: BLE001
-            logger.warning("LLM summarization failed, falling back to sliding window: %s", e)
+            logger.warning("TraceID=%s: LLM summarization failed, falling back to sliding window: %s", get_current_trace_id(), e)
 
     return sliding_window_truncate(text, max_chars, model=model), True

@@ -15,6 +15,7 @@ from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
 from services.prompts import esc_xml_text
 from services.provider_base import BaseProvider, ProviderManager
+from services.tracing import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             AuthError: On first attempt (no retry)
             CircuitOpenError: On first attempt (no retry)
         """
+        trace_id = get_current_trace_id()
         last_exc: Optional[Exception] = None
         for attempt in range(self.RETRY_MAX_ATTEMPTS):
             try:
@@ -160,7 +162,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                         self.RETRY_MAX_DELAY,
                     )
                 logger.warning(
-                    "%s attempt %d/%d failed: %s. Retrying in %.1fs.",
+                    "TraceID=%s: %s attempt %d/%d failed: %s. Retrying in %.1fs.",
+                    trace_id,
                     self.provider_id,
                     attempt + 1,
                     self.RETRY_MAX_ATTEMPTS,
@@ -223,7 +226,16 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         """Chat with structured output, returns validated Pydantic model."""
         from services.metrics import get_metrics
 
+        trace_id = get_current_trace_id()
         schema = response_model.model_json_schema()
+        logger.info(
+            "TraceID=%s: LLM call to %s (model=%s, stage=%s) - structured output: %s",
+            trace_id,
+            self.provider_id,
+            model or self.default_model,
+            stage,
+            response_model.__name__,
+        )
         resp = self._chat_with_schema(
             messages, response_model, system, temperature, max_tokens, schema, model,
         )
@@ -231,12 +243,20 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             resp = _extract_json(resp)
             result = response_model.model_validate_json(resp)
             self._record_success(model or self.default_model, stage=stage)
+            logger.info(
+                "TraceID=%s: LLM call succeeded for %s (model=%s, stage=%s)",
+                trace_id,
+                response_model.__name__,
+                model or self.default_model,
+                stage,
+            )
             return result
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception as e:
             logger.warning(
-                "Validation failed for %s: %s. Raw response: %s",
+                "TraceID=%s: Validation failed for %s: %s. Raw response: %s",
+                trace_id,
                 response_model.__name__,
                 e,
                 resp[:500] if resp else "(empty)",

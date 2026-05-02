@@ -26,6 +26,7 @@ from services.pipeline_degradation import (
 from services.pipeline_failure import _get_max_stage_retries, _get_max_total_retries  # noqa: F401
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure  # noqa: F401
 from services.pipeline_utils import _dispatch_next, _log_pipeline, _task_fn_cache, clear_task_fn_cache  # noqa: F401
+from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
 logger = get_task_logger(__name__)
 
@@ -272,6 +273,7 @@ def run_stage(
         return False
 
     def _handle_soft_timeout():
+        trace_id = get_current_trace_id()
         db.session.rollback()
         record_stage_result(stage, success=False, run_id=run_id, reason="timeout")
         get_metrics().histogram_observe("pipeline.stage_duration_seconds", time.monotonic() - t0, labels={"stage": stage, "success": "false"})
@@ -284,18 +286,22 @@ def run_stage(
                 db.session.commit()
             except SQLAlchemyError:
                 db.session.rollback()
+        logger.warning("TraceID=%s: Soft timeout in %s stage for article %s", trace_id, stage, article_id)
 
     def _handle_circuit_open(ce):
+        trace_id = get_current_trace_id()
         db.session.rollback()
         record_stage_result(stage, success=False, run_id=run_id, reason="circuit_open")
         get_metrics().histogram_observe("pipeline.stage_duration_seconds", time.monotonic() - t0, labels={"stage": stage, "success": "false"})
         exc_article = db.session.get(Article, article_id)
         if exc_article and _handle_stage_failure(exc_article, stage, ce, run_id=run_id):
+            logger.warning("TraceID=%s: %s stage degraded for article %s", trace_id, stage.title(), article_id)
             return {"article_id": article_id, "result": "degraded"}
-        logger.error("%s failed for article %s: no providers available", stage.title(), article_id)
+        logger.error("TraceID=%s: %s failed for article %s: no providers available", trace_id, stage.title(), article_id)
         raise
 
     def _handle_generic_exception(e):
+        trace_id = get_current_trace_id()
         db.session.rollback()
         if 'provider_id' in dir() and provider_id:
             record_provider_failure(provider_id, model, stage)
@@ -312,16 +318,19 @@ def run_stage(
         get_metrics().histogram_observe("pipeline.stage_duration_seconds", time.monotonic() - t0, labels={"stage": stage, "success": "false"})
         exc_article = db.session.get(Article, article_id)
         if exc_article and _handle_stage_failure(exc_article, stage, e, run_id=run_id):
+            logger.warning("TraceID=%s: %s stage degraded for article %s", trace_id, stage.title(), article_id)
             return {"article_id": article_id, "result": "degraded"}
         if run_id:
             _log_pipeline(run_id, stage, "error", "Article %s: %s", article_id, e, article_id=article_id)
-        logger.error("%s failed for article %s: %s", stage.title(), article_id, e)
+        logger.error("TraceID=%s: %s failed for article %s: %s", trace_id, stage.title(), article_id, e)
         raise
 
     # Main logic
     _setup_request_id()
+    trace_id = generate_trace_id()
     rc = get_role_config(stage)
     if _handle_disabled():
+        logger.info("TraceID=%s: Stage %s disabled for article %s, skipping", trace_id, stage, article_id)
         return {"article_id": article_id, "decision": f"skip_{stage}"}
 
     limiter = None
@@ -334,19 +343,24 @@ def run_stage(
     lock_acquired = False
     try:
         if not _acquire_resources():
+            logger.info("TraceID=%s: Stage %s already running for article %s, skipping", trace_id, stage, article_id)
             return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
 
         article = db.session.get(Article, article_id)
         if not article:
+            logger.warning("TraceID=%s: Article %s not found", trace_id, article_id)
             return {"article_id": article_id, "error": "not found"}
 
         if _check_timeout(article):
+            logger.error("TraceID=%s: Article %s exceeded pipeline timeout", trace_id, article_id)
             return {"article_id": article_id, "error": "pipeline_timeout"}
 
         provider, model, max_tokens, provider_id = _get_provider_for_stage(stage)
+        logger.info("TraceID=%s: Starting %s stage for article %s with provider %s", trace_id, stage, article_id, provider_id)
 
-        with traced_stage(stage, "work"):
-            result, provider_id = _try_stage_work(stage, work_fn, article)
+        with TraceContext(trace_id):
+            with traced_stage(stage, "work"):
+                result, provider_id = _try_stage_work(stage, work_fn, article)
 
         article.retry_count = 0
         article.last_error = None
@@ -357,6 +371,7 @@ def run_stage(
             raise
         record_stage_result(stage, success=True, run_id=run_id)
         get_metrics().histogram_observe("pipeline.stage_duration_seconds", time.monotonic() - t0, labels={"stage": stage, "success": "true"})
+        logger.info("TraceID=%s: Completed %s stage for article %s", trace_id, stage, article_id)
         return result
 
     except SoftTimeLimitExceeded:

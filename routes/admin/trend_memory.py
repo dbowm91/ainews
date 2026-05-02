@@ -1,7 +1,6 @@
 """Admin routes for Trend Memory management."""
 import logging
-
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 
 from extensions import db
 from models import TrendMemory
@@ -9,6 +8,7 @@ from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action
 from services.cache import get_response_cache
+from services.trend_memory import semantic_search_trends
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +112,32 @@ def trend_memory_delete_expired():
         flash(f"Error deleting expired memories: {e}", "error")
 
     return redirect(url_for("admin.trend_memory_list"))
+
+
+@admin_bp.route("/api/trend-memory/semantic-search", methods=["GET"])
+@require_auth
+def trend_memory_semantic_search():
+    """Semantic search endpoint for trend memory."""
+    query = request.args.get("q", "").strip()
+    limit = request.args.get("limit", 10, type=int)
+
+    if not query:
+        return jsonify({"results": [], "message": "Query parameter 'q' is required"}), 400
+
+    results = semantic_search_trends(query, limit=limit)
+
+    return jsonify({
+        "results": [
+            {
+                "id": r["memory"].id,
+                "topic": r["memory"].topic,
+                "signal": r["memory"].signal,
+                "importance": r["memory"].importance,
+                "similarity": r["similarity"],
+                "created_at": r["memory"].created_at.isoformat() if r["memory"].created_at else None,
+            }
+            for r in results
+        ],
+        "query": query,
+        "count": len(results),
+    })

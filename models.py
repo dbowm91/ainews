@@ -409,6 +409,7 @@ class TrendMemory(db.Model):
     expires_at = db.Column(db.DateTime, nullable=True)
     last_consolidated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    embedding = db.Column(db.Text, nullable=True)
 
     __table_args__ = (
         db.Index("ix_trend_memory_topic_importance", "topic", "importance"),

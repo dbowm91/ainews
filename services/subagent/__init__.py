@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 # Re-export public API from submodules
 from .chain import run_subagent_chain, _resolve_template_variables
 from .conditions import _evaluate_condition
@@ -46,6 +48,9 @@ from services.logging_utils import log_pipeline_event, traced_llm_call  # noqa: 
 from services.metrics import get_metrics, time_histogram  # noqa: F401, E402
 from services.llm.base import ToolDefinition  # noqa: F401, E402
 from services.llm import get_provider_for_role, get_provider_by_id  # noqa: F401, E402
+
+from .utils import _retry_with_backoff
+
 
 __all__ = [
     "EditContextualizationResponse",

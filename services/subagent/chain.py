@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from concurrent.futures import TimeoutError
 from typing import Any
 
@@ -9,6 +8,7 @@ from services.llm.errors import ProviderTimeoutError
 
 from .conditions import _evaluate_condition
 from .config import _get_subagent_provider_and_config, _subagent_executor
+from .utils import _retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -127,59 +127,40 @@ def run_subagent_chain(
             )
 
         step_succeeded = False
-        for attempt in range(stage_config.max_retries + 1):
-            try:
-                future = _subagent_executor.submit(_chain_call)
-                try:
-                    resp = future.result(timeout=stage_config.timeout_seconds)
-                    step_succeeded = True
-                    break
-                except TimeoutError as e:
-                    future.cancel()
-                    logger.warning(
-                        "Chain %s step %d timed out after %ss (attempt %d)",
-                        chain_name,
-                        i,
-                        stage_config.timeout_seconds,
-                        attempt + 1,
-                    )
-                    raise ProviderTimeoutError(
-                        f"Chain step timed out after {stage_config.timeout_seconds}s",
-                    ) from e
-            except (ProviderTimeoutError, TimeoutError) as e:
-                if attempt < stage_config.max_retries:
-                    import random
-
-                    delay = min(
-                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
-                        stage_config.retry_delay,
-                    )
-                    time.sleep(delay)
-                    continue
-                logger.warning(
-                    "Chain %s step %d failed after %d attempts: %s",
-                    chain_name,
-                    i,
-                    attempt + 1,
-                    e,
-                )
-                results[step_name] = {
-                    "synthesis": f"[Fallback: {e}]",
-                    "used_fallback": True,
+        try:
+            resp = _retry_with_backoff(
+                lambda: _subagent_executor.submit(_chain_call).result(
+                    timeout=stage_config.timeout_seconds
+                ),
+                max_retries=stage_config.max_retries + 1,
+                base_delay=1.0,
+                max_delay=stage_config.retry_delay,
+                retryable_exceptions=(ProviderTimeoutError, TimeoutError),
+            )
+            step_succeeded = True
+        except (ProviderTimeoutError, TimeoutError) as e:
+            logger.warning(
+                "Chain %s step %d failed after %d attempts: %s",
+                chain_name,
+                i,
+                stage_config.max_retries + 1,
+                e,
+            )
+            results[step_name] = {
+                "synthesis": f"[Fallback: {e}]",
+                "used_fallback": True,
                 }
-                break
-            except Exception as e:  # noqa: BLE001
-                logger.error(
-                    "Chain %s step %d unexpected error: %s",
-                    chain_name,
-                    i,
-                    e,
-                )
-                results[step_name] = {
-                    "synthesis": f"[Fallback: {e}]",
-                    "used_fallback": True,
-                }
-                break
+        except Exception as e:  # noqa: BLE001
+            logger.error(
+                "Chain %s step %d unexpected error: %s",
+                chain_name,
+                i,
+                e,
+            )
+            results[step_name] = {
+                "synthesis": f"[Fallback: {e}]",
+                "used_fallback": True,
+            }
 
         if step_succeeded:
             results[step_name] = {"synthesis": resp.text, "used_fallback": False}

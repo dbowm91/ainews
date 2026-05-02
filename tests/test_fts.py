@@ -2,7 +2,10 @@
 
 from services.search.sqlite_fts import _escape_fts5_string
 
+import pytest
 
+
+@pytest.mark.timeout(30)
 class TestEscapeFTS5String:
     """Tests for _escape_fts5_string helper function."""
 

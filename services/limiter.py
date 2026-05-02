@@ -30,14 +30,18 @@ return 0
 
 
 class ModelLimiter:
-    def __init__(self, redis_client):
+    def __init__(self, redis_client: redis.Redis) -> None:
         self._redis = redis_client
         self._prefix = "ainews:llm"
         self._acquire_script = self._redis.register_script(_ACQUIRE_SCRIPT)
         self._release_script = self._redis.register_script(_RELEASE_SCRIPT)
 
     def acquire(
-        self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300,
+        self,
+        provider_id: str,
+        model: str,
+        max_concurrent: int,
+        timeout: int = 300,
     ) -> bool:
         """Acquire a slot with timeout. Returns True if slot acquired, False on timeout."""
         key = f"{self._prefix}:{provider_id}:{model}"

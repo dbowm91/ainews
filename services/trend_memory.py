@@ -6,6 +6,7 @@ from enum import IntEnum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
@@ -95,18 +96,18 @@ def get_memory_for_topics(
 ) -> list[TrendMemory]:
     if not topics:
         return []
-    query = TrendMemory.query.filter(TrendMemory.topic.in_(topics))
+    stmt = select(TrendMemory).where(TrendMemory.topic.in_(topics))
     if min_importance > 1:
-        query = query.filter(TrendMemory.importance >= min_importance)
+        stmt = stmt.where(TrendMemory.importance >= min_importance)
     now = datetime.now(timezone.utc)
-    query = query.filter(
+    stmt = stmt.where(
         (TrendMemory.expires_at.is_(None)) | (TrendMemory.expires_at > now),
     )
     if max_age_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
-        query = query.filter(TrendMemory.created_at >= cutoff)
-    query = query.order_by(TrendMemory.importance.desc(), TrendMemory.created_at.desc())
-    return query.all()
+        stmt = stmt.where(TrendMemory.created_at >= cutoff)
+    stmt = stmt.order_by(TrendMemory.importance.desc(), TrendMemory.created_at.desc())
+    return db.session.execute(stmt).scalars().all()
 
 
 def _format_memory_for_prompt(memory_entries: list[TrendMemory]) -> str:
@@ -264,11 +265,18 @@ def _should_consolidate_topic(topic: str) -> bool:
     cooldown = datetime.now(timezone.utc) - timedelta(
         hours=config.consolidation_cooldown_hours,
     )
-    recent = TrendMemory.query.filter(
-        TrendMemory.topic == topic,
-        TrendMemory.last_consolidated_at.isnot(None),
-        TrendMemory.last_consolidated_at >= cooldown,
-    ).first()
+    recent = (
+        db.session.execute(
+            select(TrendMemory)
+            .where(
+                TrendMemory.topic == topic,
+                TrendMemory.last_consolidated_at.isnot(None),
+                TrendMemory.last_consolidated_at >= cooldown,
+            )
+            .limit(1)
+        )
+        .scalar_one_or_none()
+    )
     return recent is None
 
 
@@ -283,13 +291,12 @@ def consolidate_topic(topic: str) -> int:
 
     from sqlalchemy import update
 
-    most_recent_high = (
-        db.session.query(db.func.max(TrendMemory.created_at))
-        .filter(
+    most_recent_high = db.session.scalar(
+        select(db.func.max(TrendMemory.created_at))
+        .where(
             TrendMemory.topic == topic,
             TrendMemory.importance == MemoryImportance.HIGH,
         )
-        .scalar()
     )
     if not most_recent_high:
         return 0
@@ -326,13 +333,16 @@ def consolidate_topic(topic: str) -> int:
 def consolidate_all_topics() -> dict[str, int]:
     """Run consolidation across all topics with high-importance entries."""
     topics = (
-        db.session.query(TrendMemory.topic)
-        .filter(TrendMemory.importance == MemoryImportance.HIGH)
-        .distinct()
+        db.session.execute(
+            select(TrendMemory.topic)
+            .where(TrendMemory.importance == MemoryImportance.HIGH)
+            .distinct()
+        )
+        .scalars()
         .all()
     )
     results = {}
-    for (topic,) in topics:
+    for topic in topics:
         results[topic] = consolidate_topic(topic)
     return results
 
@@ -340,13 +350,22 @@ def consolidate_all_topics() -> dict[str, int]:
 def purge_expired() -> int:
     """Remove all expired memory entries. Returns count of deleted rows."""
     now = datetime.now(timezone.utc)
-    deleted = TrendMemory.query.filter(
-        TrendMemory.expires_at.isnot(None),
-        TrendMemory.expires_at <= now,
-    ).delete(synchronize_session=False)
+    deleted = (
+        db.session.execute(
+            select(TrendMemory)
+            .where(
+                TrendMemory.expires_at.isnot(None),
+                TrendMemory.expires_at <= now,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for entry in deleted:
+        db.session.delete(entry)
     try:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         raise
-    return deleted
+    return len(deleted)

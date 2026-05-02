@@ -12,9 +12,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
 import bleach
-from sqlalchemy import Column
+from sqlalchemy import Column, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
 from extensions import db
 from models import Article, ArticleMetric
@@ -123,13 +124,13 @@ def track_metric(article_id: int, column: Column) -> None:
         raise
 
 
-def _get_sort_order(sort: str):
+def _get_sort_order(sort: str) -> ColumnElement:
     """Return sort column and direction for article listing."""
+    from sqlalchemy import desc
+
     if sort == "impact":
         return Article.impact_score.desc()
     elif sort == "published":
-        from sqlalchemy import desc
-
         return desc(Article.original_published_at)
     else:  # "recent" or default
         return Article.created_at.desc()
@@ -173,12 +174,16 @@ def get_articles_paginated(
                 article_ids = [r["id"] for r in results]
                 id_order = {id_: i for i, id_ in enumerate(article_ids)}
                 articles = (
-                    Article.query.options(
-                        joinedload(Article.source),
-                        joinedload(Article.tags),
-                        joinedload(Article.metrics),
+                    db.session.execute(
+                        select(Article)
+                        .options(
+                            joinedload(Article.source),
+                            joinedload(Article.tags),
+                            joinedload(Article.metrics),
+                        )
+                        .where(Article.id.in_(article_ids))
                     )
-                    .filter(Article.id.in_(article_ids))
+                    .scalars()
                     .all()
                 )
                 articles.sort(key=lambda a: id_order.get(a.id, 999))
@@ -191,27 +196,32 @@ def get_articles_paginated(
 
     # Standard SQL query (no search, or ILIKE fallback)
     q = (
-        Article.query.options(
+        select(Article)
+        .options(
             joinedload(Article.source),
             joinedload(Article.tags),
             joinedload(Article.metrics),
         )
-        .filter(Article.pipeline_status.in_(["done", "skipped"]))
+        .where(Article.pipeline_status.in_(["done", "skipped"]))
         .order_by(_get_sort_order(sort))
     )
 
     if category:
-        q = q.filter(Article.category == category)
+        q = q.where(Article.category == category)
     if query:
         escaped_query = _escape_like_pattern(query)
-        q = q.filter(
+        q = q.where(
             Article.original_title.ilike(f"%{escaped_query}%", escape="\\")
             | Article.final_article.ilike(f"%{escaped_query}%", escape="\\"),
         )
     if status_filter:
-        q = q.filter(Article.pipeline_status == status_filter)
+        q = q.where(Article.pipeline_status == status_filter)
 
-    articles = q.offset((page - 1) * per_page).limit(per_page + 1).all()
+    articles = (
+        db.session.execute(q.offset((page - 1) * per_page).limit(per_page + 1))
+        .scalars()
+        .all()
+    )
     has_next = len(articles) > per_page
     if has_next:
         articles = articles[:per_page]
@@ -246,9 +256,11 @@ def create_article_version(
     max_retries = 2
     for attempt in range(max_retries):
         max_version = (
-            db.session.query(db.func.max(ArticleVersion.version_number))
-            .filter_by(article_id=article.id)
-            .scalar()
+            db.session.scalar(
+                select(db.func.max(ArticleVersion.version_number)).where(
+                    ArticleVersion.article_id == article.id
+                )
+            )
             or 0
         )
 
@@ -286,9 +298,13 @@ def get_article_versions(article_id: int, limit: int = 20) -> list:
     from models import ArticleVersion
 
     return (
-        ArticleVersion.query.filter_by(article_id=article_id)
-        .order_by(ArticleVersion.version_number.desc())
-        .limit(limit)
+        db.session.execute(
+            select(ArticleVersion)
+            .where(ArticleVersion.article_id == article_id)
+            .order_by(ArticleVersion.version_number.desc())
+            .limit(limit)
+        )
+        .scalars()
         .all()
     )
 
@@ -353,20 +369,20 @@ def find_duplicate_titles(
 
     matched_ids = []
     rows = (
-        Article.query.filter(
-            Article.source_id != source_id,
-            Article.created_at >= cutoff,
-            Article.original_title.isnot(None),
+        db.session.execute(
+            select(Article.id, Article.original_title)
+            .where(
+                Article.source_id != source_id,
+                Article.created_at >= cutoff,
+                Article.original_title.isnot(None),
+                db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
+                >= min_words,
+                db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
+                <= max_words,
+            )
+            .order_by(Article.created_at.desc())
+            .limit(DUPLICATE_DETECTION_LIMIT)
         )
-        .filter(
-            db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
-            >= min_words,
-            db.func.length(db.func.replace(Article.original_title, " ", "")) + 1
-            <= max_words,
-        )
-        .order_by(Article.created_at.desc())
-        .with_entities(Article.id, Article.original_title)
-        .limit(DUPLICATE_DETECTION_LIMIT)
         .all()
     )
     for article_id, other_title in rows:
@@ -376,5 +392,11 @@ def find_duplicate_titles(
             break
 
     if matched_ids:
-        return Article.query.filter(Article.id.in_(matched_ids)).all()
+        return (
+            db.session.execute(
+                select(Article).where(Article.id.in_(matched_ids))
+            )
+            .scalars()
+            .all()
+        )
     return []

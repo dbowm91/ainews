@@ -7,10 +7,13 @@ Mocks LLM providers at each stage and verifies status transitions.
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from extensions import db
 from models import Article
 
 
+@pytest.mark.timeout(60)
 class TestPipelineEndToEnd:
     """Test full pipeline: pending -> researching -> writing -> editing -> done."""
 

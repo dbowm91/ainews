@@ -5,27 +5,10 @@ from datetime import datetime, timedelta, timezone
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from celery.utils.log import get_task_logger
-from services.task_security import verify_task
+from sqlalchemy import update
+from sqlalchemy.orm import contains_eager
 
-logger = get_task_logger(__name__)
-
-
-@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
-    autoretry_for=(ConnectionError, TimeoutError),
-    retry_backoff=True,
-    retry_backoff_max=300,
-    retry_jitter=True,)
-def cleanup_old_pipeline_logs(self):
-    """Delete pipeline logs older than 30 days.
-
-    Runs daily via Celery Beat to prevent unbounded growth of the
-    pipeline_logs table.
-    """
-    if not verify_task("cleanup_old_pipeline_logs", (), {}):
-        logger.error("Invalid signature for cleanup_old_pipeline_logs")
-        raise ValueError("Invalid task signature")
-
-    from extensions import db
+from extensions import db
     from models import PipelineLog
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=30)
@@ -245,6 +228,7 @@ def recalculate_impact_scores(self):
             Article.query.filter(Article.pipeline_status == "done")
             .filter(Article.published_at >= cutoff)
             .join(ArticleMetric, Article.id == ArticleMetric.article_id)
+            .options(contains_eager(Article.metrics))
             .all()
         )
 

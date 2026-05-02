@@ -15,6 +15,12 @@ from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutE
 from services.prompts import esc_xml_text
 
 from .config import _subagent_executor
+from .middleware import (
+    ErrorHandlingMiddleware,
+    LoggingMiddleware,
+    TimingMiddleware,
+    apply_middleware,
+)
 from .utils import _retry_with_backoff
 
 logger = logging.getLogger(__name__)
@@ -354,6 +360,15 @@ def run_subagent_with_tools(
     provider, model, max_tokens, temperature = _get_subagent_provider_and_config(
         stage_config, default_role=default_role,
     )
+
+    middleware_chain = [
+        LoggingMiddleware(logger),
+        TimingMiddleware(logger),
+        ErrorHandlingMiddleware(logger),
+    ]
+    for tool in tools:
+        if tool.fn:
+            tool.fn = apply_middleware(tool.fn, middleware_chain)
 
     messages = [{"role": "user", "content": prompt}]
 

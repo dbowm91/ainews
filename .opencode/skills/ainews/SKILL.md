@@ -17,7 +17,7 @@ ainews is an AI-curated news pipeline with a Flask backend, Celery workers, and 
 ## Pipeline Stages
 
 ```
-pending → selecting → selected → researching → writing → written → editing → done/failed
+pending → selected → researching → writing → written → editing → done/failed
 ```
 
 Each stage is a Celery task in `tasks/` with:

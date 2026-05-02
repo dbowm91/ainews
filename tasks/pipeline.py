@@ -20,12 +20,10 @@ from services.llm import (
 )
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
 from services.pipeline_degradation import (
-    degrade_stage as _degrade_and_advance,
     finalize_article as _finalize,
 )
-from services.pipeline_failure import _get_max_stage_retries, _get_max_total_retries
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure
-from services.pipeline_utils import _dispatch_next, _log_pipeline, _task_fn_cache, clear_task_fn_cache
+from services.pipeline_utils import _dispatch_next, _log_pipeline
 from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
 logger = get_task_logger(__name__)
@@ -379,7 +377,7 @@ def run_stage(
         raise
     except CircuitOpenError as ce:
         return _handle_circuit_open(ce)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 # Fallback handler for unhandled exceptions after specific cases
         return _handle_generic_exception(e)
     finally:
         if limiter is not None:

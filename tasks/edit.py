@@ -105,8 +105,10 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     stage_config = resolve_subagent_config("edit", default_role="editor")
     if stage_config.tools:
         from services.subagent import initialize_tool_registry
+        from services.tool_selection import StageAwareToolSelector
 
-        tools = initialize_tool_registry(stage_config.tools)
+        selector = StageAwareToolSelector(stage_config.tools)
+        tools = initialize_tool_registry(selector=selector)
         context_result = run_subagent_with_tools(
             task_type="edit_contextualization",
             stage="edit",

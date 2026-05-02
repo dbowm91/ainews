@@ -105,8 +105,10 @@ def research_article(self, article_id: int, run_id=None):
                 stage_config = resolve_subagent_config("research", default_role="researcher")
                 if stage_config.tools:
                     from services.subagent import initialize_tool_registry
+                    from services.tool_selection import StageAwareToolSelector
 
-                    tools = initialize_tool_registry(stage_config.tools)
+                    selector = StageAwareToolSelector(stage_config.tools)
+                    tools = initialize_tool_registry(selector=selector)
                     web_synthesis_result = run_subagent_with_tools(
                         task_type="research_synthesis",
                         stage="research",

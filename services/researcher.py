@@ -1,7 +1,7 @@
 import logging
 
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
-from schemas.llm_responses import (  # noqa: F401
+from schemas.llm_responses import (  # noqa: F401, E402
     DirectQuote,
     ExternalSource,
     KeyClaim,

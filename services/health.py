@@ -63,7 +63,7 @@ def check_database() -> tuple[str, Any]:
         if pool_stats:
             result["pool"] = pool_stats
         return "database", result
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("Health check: database ping failed")
         return "database", {"status": "error"}
 
@@ -97,7 +97,7 @@ def check_celery() -> tuple[str, Any]:
         if ping_response and any(ping_response.values()):
             return "celery", "ok"
         return "celery", "no_workers"
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("Health check: Celery inspect failed")
         return "celery", "error"
 
@@ -112,7 +112,7 @@ def check_limiter() -> tuple[str, Any]:
 
         ok = get_limiter().is_healthy()
         return "limiter", "ok" if ok else "degraded"
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("Health check: limiter check failed")
         return "limiter", "error"
 
@@ -181,7 +181,7 @@ def get_version_info() -> dict[str, str]:
                     version_info["commit"] = ref_file.read_text().strip()[:12]
             else:
                 version_info["commit"] = content[:12]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Failed to read git version info: %s", e)
 
     build_time = os.environ.get("BUILD_TIME")

@@ -130,5 +130,5 @@ def _parse_retry_after(value: str) -> float | None:
     try:
         dt = parsedate_to_datetime(value)
         return (dt - datetime.now(timezone.utc)).total_seconds()
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None

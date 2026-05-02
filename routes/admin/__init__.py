@@ -131,7 +131,7 @@ def _cleanup_stale_entries() -> None:
     with _memory_lock:
         now = time.monotonic()
         stale_keys = []
-        for ip, (count, first_time) in _login_attempts_memory.items():
+        for ip, (_count, first_time) in _login_attempts_memory.items():
             if now - first_time >= _get_login_lockout_seconds():
                 stale_keys.append(ip)
 
@@ -311,48 +311,48 @@ def _clear_attempts(ip: str) -> None:
 
 # Import all sub-modules to register routes with the blueprint
 # These must come after Blueprint creation to avoid circular imports
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     api as api,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     api_tokens as api_tokens,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     articles as articles,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     auth as auth,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     dashboard as dashboard,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     metrics as metrics,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     newsletters as newsletters,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     pipelines as pipelines,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     review as review,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     shares as shares,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     sources as sources,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     subscribers as subscribers,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     topic_notes as topic_notes,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     trend_memory as trend_memory,
 )
-from routes.admin import (  # noqa: E402, F401
+from routes.admin import (  # noqa: E402
     webhooks as webhooks,
 )

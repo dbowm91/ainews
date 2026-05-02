@@ -371,7 +371,7 @@ class TestNewsletterHtmlWellFormed:
                 parser.feed(html)
                 assert not parser.errors, f"HTML parsing errors: {parser.errors}"
                 assert not parser.stack, f"Unclosed tags: {parser.stack}"
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 assert False, f"HTML parsing failed: {e}"
 
     def test_newsletter_with_all_article_fields_is_well_formed(self, app):
@@ -426,7 +426,7 @@ class TestNewsletterHtmlWellFormed:
                 parser.feed(html)
                 assert not parser.errors, f"HTML parsing errors: {parser.errors}"
                 assert not parser.stack, f"Unclosed tags: {parser.stack}"
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 assert False, f"HTML parsing failed: {e}"
 
 

@@ -213,7 +213,7 @@ class TestPipelineEndToEnd:
             with app.app_context():
                 article = db.session.get(Article, article_id)
 
-                for i in range(MAX_STAGE_RETRIES - 1):
+                for _i in range(MAX_STAGE_RETRIES - 1):
                     _handle_stage_failure(article, "research", Exception("fail"))
                     article = db.session.get(Article, article_id)
                     assert article.pipeline_status == "researching"

@@ -50,7 +50,7 @@ def _get_topic_icons() -> dict[str, str]:
 
             topics = load_topics().topics
             return {k: v.icon for k, v in topics.items() if v.icon}
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.exception("Failed to load topic icons")
             return {}
 
@@ -121,6 +121,6 @@ def health() -> tuple[Response, int]:
 
 
 # Import submodules to register routes
-from routes.public import feeds as feeds  # noqa: E402, F401
-from routes.public import links as links  # noqa: E402, F401
-from routes.public import subscribe as subscribe  # noqa: E402, F401
+from routes.public import feeds as feeds  # noqa: E402
+from routes.public import links as links  # noqa: E402
+from routes.public import subscribe as subscribe  # noqa: E402

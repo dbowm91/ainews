@@ -19,15 +19,13 @@ from services.llm import (
     record_provider_failure,
 )
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
-from services.pipeline_degradation import (  # noqa: F401
-    degrade_stage as _degrade_and_advance,
-)
 from services.pipeline_degradation import (
+    degrade_stage as _degrade_and_advance,  # noqa: F401
     finalize_article as _finalize,
 )
 from services.pipeline_failure import _get_max_stage_retries, _get_max_total_retries  # noqa: F401
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure  # noqa: F401
-from services.pipeline_utils import _STAGE_TASKS, _dispatch_for_status, _dispatch_next, _log_pipeline, _task_fn_cache, clear_task_fn_cache  # noqa: F401
+from services.pipeline_utils import _dispatch_next, _log_pipeline, _task_fn_cache, clear_task_fn_cache  # noqa: F401
 
 logger = get_task_logger(__name__)
 
@@ -143,7 +141,7 @@ def _transition_article_status(article, new_status: str) -> None:
     Raises:
         InvalidStateTransitionError: If the transition is not valid
     """
-    from constants import is_valid_transition  # noqa: F811
+    from constants import is_valid_transition
 
     current = article.pipeline_status
     if not is_valid_transition(current, new_status):

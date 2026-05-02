@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
-from schemas.llm_responses import (  # noqa: F401
+from schemas.llm_responses import (  # noqa: F401, E402
     EditContextualizationResponse,
     ResearchSynthesisResponse,
     SubagentResponse,
@@ -58,7 +58,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             except (SQLAlchemyError, KeyError, AttributeError) as e:
                 logger.error("Tool get_topic_note failed for topic=%s: %s", topic, e)
                 return f"Error retrieving topic note: {type(e).__name__}"
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # noqa: BLE001
                 logger.error("Unexpected error in get_topic_note for %s: %s", topic, e)
                 return f"Error retrieving topic note: {type(e).__name__}"
 
@@ -79,7 +79,7 @@ def _build_context_tools() -> list[ToolDefinition]:
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_topic_notes_for_topics failed: %s", e)
             return f"Error retrieving topic notes: {type(e).__name__}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in get_topic_notes_for_topics: %s", e)
             return f"Error retrieving topic notes: {type(e).__name__}"
 
@@ -100,7 +100,7 @@ def _build_context_tools() -> list[ToolDefinition]:
             except (SQLAlchemyError, KeyError, AttributeError) as e:
                 logger.error("Tool get_related_articles failed: %s", e)
                 return f"Error retrieving related articles: {type(e).__name__}"
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # noqa: BLE001
                 logger.error("Unexpected error in get_related_articles: %s", e)
                 return f"Error retrieving related articles: {type(e).__name__}"
 
@@ -123,7 +123,7 @@ def _build_context_tools() -> list[ToolDefinition]:
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_trend_memory failed: %s", e)
             return f"Error retrieving trend memory: {type(e).__name__}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in get_trend_memory: %s", e)
             return f"Error retrieving trend memory: {type(e).__name__}"
 
@@ -145,7 +145,7 @@ def _build_context_tools() -> list[ToolDefinition]:
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_article_by_id failed for %s: %s", article_id, e)
             return f'{{"error": "{type(e).__name__}"}}'
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in get_article_by_id for %s: %s", article_id, e)
             return f'{{"error": "{type(e).__name__}"}}'
 
@@ -162,7 +162,7 @@ def _build_context_tools() -> list[ToolDefinition]:
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool search_articles failed: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in search_articles: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
 
@@ -181,7 +181,7 @@ def _build_context_tools() -> list[ToolDefinition]:
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_source_health failed: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in get_source_health: %s", e)
             return f'{{"error": "{type(e).__name__}"}}'
 
@@ -344,7 +344,7 @@ def _build_search_tools() -> list[ToolDefinition]:
         except (ConnectionError, TimeoutError, ValueError) as e:
             logger.error("Tool search_web failed for '%s': %s", query, e)
             return f"Error performing web search: {type(e).__name__}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in search_web for '%s': %s", query, e)
             return f"Error performing web search: {type(e).__name__}"
 
@@ -357,7 +357,7 @@ def _build_search_tools() -> list[ToolDefinition]:
         except (ValueError, KeyError, AttributeError) as e:
             logger.error("Tool get_search_provider failed: %s", e)
             return f"Error getting search provider: {type(e).__name__}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             logger.error("Unexpected error in get_search_provider: %s", e)
             return f"Error getting search provider: {type(e).__name__}"
 
@@ -619,14 +619,14 @@ def run_subagent(
                 if attempt > 0:
                     import random
                     delay = min(
-                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),
+                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
                         stage_config.retry_delay,
                     )
                     time.sleep(delay)
                 future = _subagent_executor.submit(_call_with_timeout)
                 try:
                     result = future.result(timeout=stage_config.timeout_seconds)
-                except TimeoutError:
+                except TimeoutError as e:
                     future.cancel()
                     logger.warning(
                         "Subagent %s/%s timed out after %ss",
@@ -636,7 +636,7 @@ def run_subagent(
                     )
                     raise ProviderTimeoutError(
                         f"Subagent timed out after {stage_config.timeout_seconds}s",
-                    )
+                    ) from e
             break
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
             last_exc = e
@@ -661,7 +661,7 @@ def run_subagent(
             used_fallback = True
             fallback_stages = [stage]
             break
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             last_exc = e
             logger.error(
                 "Subagent %s/%s unexpected error: %s — using fallback",
@@ -795,7 +795,7 @@ def run_subagent_with_tools(
                 if attempt > 0:
                     import random
                     delay = min(
-                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),
+                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
                         stage_config.retry_delay,
                     )
                     time.sleep(delay)
@@ -823,7 +823,7 @@ def run_subagent_with_tools(
                         messages.append({"role": "user", "content": error_msg})
                         self_corrected = True
                         continue
-                except TimeoutError:
+                except TimeoutError as e:
                     future.cancel()
                     logger.warning(
                         "Subagent %s/%s timed out after %ss",
@@ -833,7 +833,7 @@ def run_subagent_with_tools(
                     )
                     raise ProviderTimeoutError(
                         f"Subagent timed out after {stage_config.timeout_seconds}s",
-                    )
+                    ) from e
             break
         except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
             last_exc = e
@@ -863,7 +863,7 @@ def run_subagent_with_tools(
             used_fallback = True
             fallback_stages = [stage]
             break
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # noqa: BLE001
             last_exc = e
             logger.error(
                 "Subagent %s/%s unexpected error: %s — using fallback",
@@ -1016,7 +1016,7 @@ def run_subagent_chain(
                     resp = future.result(timeout=stage_config.timeout_seconds)
                     step_succeeded = True
                     break
-                except TimeoutError:
+                except TimeoutError as e:
                     future.cancel()
                     logger.warning(
                         "Chain %s step %d timed out after %ss (attempt %d)",
@@ -1027,12 +1027,12 @@ def run_subagent_chain(
                     )
                     raise ProviderTimeoutError(
                         f"Chain step timed out after {stage_config.timeout_seconds}s",
-                    )
+                    ) from e
             except (ProviderTimeoutError, TimeoutError) as e:
                 if attempt < stage_config.max_retries:
                     import random
                     delay = min(
-                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),
+                        1.0 * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
                         stage_config.retry_delay,
                     )
                     time.sleep(delay)
@@ -1049,7 +1049,7 @@ def run_subagent_chain(
                     "used_fallback": True,
                 }
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # noqa: BLE001
                 logger.error(
                     "Chain %s step %d unexpected error: %s",
                     chain_name,
@@ -1174,7 +1174,7 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         if any(seg in str(e) for seg in ("Unsupported node type", "not allowed")):
             raise
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # noqa: BLE001
         logger.debug("Condition evaluation failed for '%s': %s", condition, e)
         return False
 

@@ -118,7 +118,7 @@ def trigger_newsletter():
         return jsonify(
             {"message": "Newsletter generation started", "task_id": result.id},
         ), 202
-    except Exception:
+    except Exception:  # noqa: BLE001
         current_app.logger.exception("Failed to trigger newsletter")
         return jsonify({"error": "Failed to start newsletter generation"}), 503
 
@@ -164,7 +164,7 @@ def newsletter_dry_run():
                 202,
             )
         return jsonify({"message": msg, "task_id": result.id}), 202
-    except Exception:
+    except Exception:  # noqa: BLE001
         current_app.logger.exception("Failed to trigger newsletter dry run")
         if is_htmx:
             return (
@@ -254,7 +254,7 @@ def newsletter_preview():
     try:
         result = generate_executive_summary(articles, topic_key="main")
         exec_summary = result["summary"]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception("Preview exec summary failed")
         exec_summary = f"(Summary generation failed: {e})"
 
@@ -264,7 +264,7 @@ def newsletter_preview():
             max_articles=20,
             executive_summary=exec_summary,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.exception("Preview HTML generation failed")
         return jsonify({"error": f"Failed to generate preview: {e}"}), 500
 

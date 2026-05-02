@@ -156,7 +156,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     delay = min(e.retry_after, self.RETRY_MAX_DELAY)
                 else:
                     delay = min(
-                        self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),
+                        self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
                         self.RETRY_MAX_DELAY,
                     )
                 logger.warning(
@@ -420,7 +420,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                         result_content = esc_xml_text(str(fn(**fn_args)))
                     except (KeyboardInterrupt, SystemExit):
                         raise
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - return error text on any exception
                         result_content = esc_xml_text(f"Error: {e}")
                 else:
                     result_content = esc_xml_text(f"Unknown tool: {fn_name}")

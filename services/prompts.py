@@ -144,7 +144,7 @@ def sliding_window_truncate(
                 # Approximate chars from tokens and use that as max
                 est_chars = tokens * _CHARS_PER_TOKEN
                 max_chars = min(max_chars, est_chars // 2)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Token counting failed, using char-based truncation")
 
     if len(text) <= max_chars:
@@ -198,7 +198,7 @@ def importance_weighted_truncate(
     selected = []
     total_len = 0
     sep = "\n\n"
-    for neg_score, idx, seg in scored_segments:
+    for _neg_score, idx, seg in scored_segments:
         # Calculate length of this segment plus separator if not first
         seg_len = len(seg) + (len(sep) if selected else 0)
         if total_len + seg_len > max_chars:
@@ -256,7 +256,7 @@ def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, tempe
             max_tokens=max_tokens,
         )
         return response.text.strip() if response and response.text else ""
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("LLM summarization failed, will fall back to sliding window: %s", e)
         return ""
 
@@ -305,7 +305,7 @@ def smart_truncate_context(
             if tokens > token_threshold:
                 est_chars = tokens * _CHARS_PER_TOKEN
                 max_chars = min(max_chars, est_chars // 2)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Token counting failed, using char-based truncation")
 
     if len(text) <= max_chars:
@@ -335,7 +335,7 @@ def smart_truncate_context(
             if summary:
                 result = f"{summary}\n\n{TRUNCATION_WARNING}"
                 return result, True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("LLM summarization failed, falling back to sliding window: %s", e)
 
     return sliding_window_truncate(text, max_chars, model=model), True

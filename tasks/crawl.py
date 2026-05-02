@@ -187,7 +187,7 @@ def crawl_source(self, source_config: dict, run_id: int) -> dict:
 
         record_stage_result("crawl", success=False, run_id=run_id, reason="timeout")
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         db.session.rollback()
         _log_pipeline(run_id, "crawl", "error", "%s: %s", source_id, e)
         logger.error("Pipeline failed for %s: %s", source_id, e, exc_info=True)
@@ -287,7 +287,7 @@ def run_all_sources(self, run_id=None):
 
     try:
         configs = load_sources()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _log_pipeline(run_id, "crawl", "error", "Failed to load sources: %s", exc)
         run = db.session.get(PipelineRun, run_id)
         if run:
@@ -297,7 +297,7 @@ def run_all_sources(self, run_id=None):
             except SQLAlchemyError:
                 db.session.rollback()
                 raise
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc)  # noqa: B904
 
     if not configs:
         logger.info("No sources configured")

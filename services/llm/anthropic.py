@@ -84,8 +84,8 @@ class AnthropicProvider(BaseLLMProvider):
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return LLMResponse(
@@ -138,8 +138,8 @@ class AnthropicProvider(BaseLLMProvider):
                     yield text
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_anthropic_error(e) from e
 
     @circuit_protected("llm_anthropic")
     def _do_chat_with_schema(
@@ -166,8 +166,8 @@ class AnthropicProvider(BaseLLMProvider):
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp.content[0].text
@@ -217,8 +217,8 @@ class AnthropicProvider(BaseLLMProvider):
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_anthropic_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
         return resp, resp
@@ -297,7 +297,7 @@ class AnthropicProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - return error status on any exception
             converted = _handle_anthropic_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

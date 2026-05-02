@@ -88,8 +88,8 @@ class OpenAIProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_openai_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return LLMResponse(
@@ -141,8 +141,8 @@ class OpenAIProvider(BaseLLMProvider):
                     yield chunk.choices[0].delta.content
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_openai_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_openai_error(e) from e
 
     @circuit_protected("llm_openai")
     def _do_chat_with_schema(
@@ -174,8 +174,8 @@ class OpenAIProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_openai_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message.content or "{}"
@@ -234,8 +234,8 @@ class OpenAIProvider(BaseLLMProvider):
             resp = self.client.chat.completions.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
-            raise _handle_openai_error(e)
+        except Exception as e:  # noqa: BLE001
+            raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         return resp.choices[0].message, resp
@@ -310,7 +310,7 @@ class OpenAIProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - return error status on any exception
             converted = _handle_openai_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

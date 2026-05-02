@@ -119,7 +119,7 @@ def write_article(self, article_id: int, run_id=None):
                     quality_score.completeness,
                     quality_score.safety,
                 )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
                 "Quality assessment failed for article %s: %s", article.id, e
             )

@@ -101,7 +101,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
                 "stage": stage,
                 "reason": article.last_error or "total_retries_exceeded",
             })
-        except Exception as wh_exc:
+        except Exception as wh_exc:  # noqa: BLE001
             logger.warning("Failed to trigger article.failed webhook: %s", wh_exc)
         return True
 
@@ -131,7 +131,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
                 "stage": stage,
                 "reason": f"per_stage_limit ({stage_failures} failures)",
             })
-        except Exception as wh_exc:
+        except Exception as wh_exc:  # noqa: BLE001
             logger.warning("Failed to trigger article.failed webhook: %s", wh_exc)
         return True
 

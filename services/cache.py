@@ -230,7 +230,7 @@ class ResponseCache:
             misses_raw = stats.get(b"misses") or stats.get("misses")
             hits = int(hits_raw.decode() if isinstance(hits_raw, bytes) else hits_raw or 0)
             misses = int(misses_raw.decode() if isinstance(misses_raw, bytes) else misses_raw or 0)
-        except Exception:
+        except Exception:  # noqa: BLE001
             hits = self._hits
             misses = self._misses
         total = hits + misses

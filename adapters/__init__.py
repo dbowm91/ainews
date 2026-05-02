@@ -1,3 +1,3 @@
-import adapters.api  # noqa: F401
-import adapters.rss  # noqa: F401
+import adapters.api
+import adapters.rss
 import adapters.web  # noqa: F401

@@ -5,6 +5,8 @@ from flask import Response, request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from pydantic import ValidationError
+
 from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
 from routes import limit_content_length
 from routes.admin import admin_api_bp, require_auth
@@ -41,7 +43,7 @@ def get_article_ids():
             impact_max=request.args.get("impact_max", type=int),
             tag=request.args.get("tag", "", type=str).strip() or None,
         )
-    except Exception as e:
+    except ValidationError as e:
         return api_response(error=str(e), status=400)
 
     query = params.q
@@ -71,7 +73,7 @@ def get_article_ids():
 
             provider = get_article_search_provider()
             fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back to ILIKE on any FTS5 error  # noqa: BLE001
             logger.debug("FTS5 search unavailable, falling back to ILIKE")
             fts_results = None
 
@@ -186,7 +188,7 @@ def _bulk_set_category(articles, validated, db) -> tuple[Response, int] | Respon
                 "category": new_category,
             },
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - audit logging is non-critical  # noqa: BLE001
         logger.warning("Audit logging failed for article_bulk_set_category")
     return api_response(meta={"message": f"Updated {len(articles)} articles to category '{new_category}'"})
 
@@ -251,7 +253,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
             signed_kwargs = get_signed_kwargs("select_article", (article.id,), {})
             select_article.apply_async(args=(article.id,), kwargs=signed_kwargs)
             dispatched += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - continue dispatching other articles  # noqa: BLE001
             logger.warning(
                 "Failed to dispatch reprocess for article %s: %s", article.id, e,
             )
@@ -269,7 +271,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
                     "failed_ids": failed_ids,
                 },
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Audit logging failed for article_bulk_reprocess")
         return api_response(
             data={
@@ -290,7 +292,7 @@ def _bulk_reprocess(articles, db) -> tuple[Response, int] | Response:
                 "dispatched": dispatched,
             },
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - audit logging is non-critical  # noqa: BLE001
         logger.warning("Audit logging failed for article_bulk_reprocess")
     return api_response(
         meta={"message": f"Reprocessing {len(articles)} articles ({dispatched} dispatched)"},
@@ -311,7 +313,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
         cache = get_response_cache()
         _assign_tags(articles, tag_names, db)
         db.session.commit()
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.warning("Bulk add tags failed: %s", e)
         db.session.rollback()
         return api_response(error="Failed to add tags", status=500)
@@ -335,7 +337,7 @@ def _bulk_add_tags(articles, validated, db) -> tuple[Response, int] | Response:
                 "tags": tag_names,
             },
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - audit logging is non-critical  # noqa: BLE001
         logger.warning("Audit logging failed for article_bulk_add_tags")
     return api_response(
         meta={"message": f"Added {min(len(tag_names), 10)} tags to {len(articles)} articles"},
@@ -357,7 +359,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
 
     try:
         validated = BulkArticleRequest(**data)
-    except Exception as e:
+    except ValidationError as e:
         return api_response(error=str(e), status=400)
 
     article_ids = validated.article_ids
@@ -403,7 +405,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
                 category="article",
                 details={"count": len(articles), "ids": article_ids},
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Cache invalidation or audit logging failed")
         return api_response(meta={"message": f"Deleted {len(articles)} articles"})
 
@@ -452,7 +454,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
                     "status": new_status,
                 },
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Cache invalidation or audit logging failed")
         return api_response(
             meta={"message": f"Updated {len(articles)} articles to '{new_status}'"},

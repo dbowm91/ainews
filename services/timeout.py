@@ -51,11 +51,11 @@ def timeout(seconds: float, operation: Optional[str] = None):
                 future = executor.submit(func, *args, **kwargs)
                 try:
                     return future.result(timeout=seconds)
-                except FuturesTimeout:
+                except FuturesTimeout as e:
                     logger.warning(
                         "Operation '%s' timed out after %.1fs", op_name, seconds,
                     )
-                    raise OperationTimeoutError(op_name, seconds)
+                    raise OperationTimeoutError(op_name, seconds) from e
             finally:
                 executor.shutdown(wait=False, cancel_futures=True)
 

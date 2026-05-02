@@ -25,7 +25,7 @@ class TopicNote(db.Model):
 
 ## All Models Reference
 
-All application models are defined in `models.py` (not a `models/` directory). The 18 models are:
+All application models are defined in `models.py` (not a `models/` directory). The 19 models are:
 
 | Model Name | Brief Description |
 |------------|-------------------|
@@ -47,6 +47,7 @@ All application models are defined in `models.py` (not a `models/` directory). T
 | AuditLog | Admin action audit trail with action, category, target, and user details |
 | SearchQuery | Search query logs with result counts and clicked article tracking |
 | ApiToken | API tokens for programmatic access, with hash, prefix, and expiration |
+| AdminUser | Admin users with password hash, 2FA secret, and session management |
 
 - `topic`: The topic keyword (e.g., "LLM", "AI safety")
 - `source`: Optional source identifier for source-specific notes

@@ -44,9 +44,7 @@ Nginx → Granian (WSGI) → Flask
                LLM (Ollama / OpenAI / Anthropic)
 ```
 
-**Pipeline:** `select → research → write → edit → publish`
-
-Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is integrated into the research phase.
+**Pipeline:** `pending → researching → writing → editing → publish`
 
 ## Features
 

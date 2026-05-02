@@ -72,12 +72,25 @@ Returns articles filtered by topic.
 
 ### Article Detail
 
-**GET** `/article/<short_id>`
+**GET** `/article/<article_id>`
 
 Returns article detail page.
 
 **Parameters:**
-- `short_id`: Short article identifier
+- `article_id`: Numeric article identifier
+
+### Short URLs
+
+**GET** `/s/<short_id>`
+
+Redirects to the article detail page using a short ID.
+
+**GET** `/a/<short_id>`
+
+Alternative short URL redirect to article detail page.
+
+**Parameters:**
+- `short_id`: Short article identifier (from `Article.short_id`)
 
 ### Subscribe
 

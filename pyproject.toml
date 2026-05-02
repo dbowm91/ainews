@@ -36,6 +36,7 @@ dependencies = [
     "defusedxml==0.7.1",
     "opentelemetry-exporter-otlp==1.35.0",
     "sentence-transformers==5.1.0",
+    "pyotp==2.9.0",
 ]
 
 [project.optional-dependencies]

@@ -118,6 +118,64 @@ class MetricsCollector:
             except redis.exceptions.RedisError:
                 pass
 
+    def _get_counters_from_redis(self) -> dict:
+        result = {}
+        if self._redis is None:
+            return result
+        try:
+            counter_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:counter:*"))
+            if counter_keys:
+                for key in counter_keys:
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    metric_name = key_str.replace(f"{self._REDIS_PREFIX}:counter:", "", 1)
+                    result[metric_name] = int(self._redis.get(key) or 0)
+        except redis.exceptions.RedisError:
+            pass
+        return result
+
+    def _get_gauges_from_redis(self) -> dict:
+        result = {}
+        if self._redis is None:
+            return result
+        try:
+            gauge_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:gauge:*"))
+            if gauge_keys:
+                for key in gauge_keys:
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    metric_name = key_str.replace(f"{self._REDIS_PREFIX}:gauge:", "", 1)
+                    val = self._redis.get(key)
+                    if val is not None:
+                        result[metric_name] = float(val)
+        except redis.exceptions.RedisError:
+            pass
+        return result
+
+    def _get_histograms_from_redis(self) -> dict:
+        result = {}
+        if self._redis is None:
+            return result
+        try:
+            histogram_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:histogram:*"))
+            if histogram_keys:
+                for key in histogram_keys:
+                    key_str = key.decode() if isinstance(key, bytes) else key
+                    metric_name = key_str.replace(f"{self._REDIS_PREFIX}:histogram:", "", 1)
+                    values = [float(v) for v in self._redis.lrange(key, 0, -1)]
+                    if values:
+                        sorted_vals = sorted(values)
+                        result[metric_name] = {
+                            "count": len(values),
+                            "min": sorted_vals[0],
+                            "max": sorted_vals[-1],
+                            "avg": round(sum(values) / len(values), 3),
+                            "p50": sorted_vals[len(sorted_vals) // 2],
+                            "p95": sorted_vals[int(len(sorted_vals) * 0.95)],
+                            "p99": sorted_vals[int(len(sorted_vals) * 0.99)],
+                        }
+        except redis.exceptions.RedisError:
+            pass
+        return result
+
     def get_metrics(self) -> dict[str, Any]:
         """Return all metrics as a structured dict."""
         result = {
@@ -127,66 +185,20 @@ class MetricsCollector:
             "histograms": {},
         }
 
-        # Try to get counters from Redis
-        try:
-            if self._redis is not None:
-                counter_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:counter:*"))
-                if counter_keys:
-                    for key in counter_keys:
-                        key_str = key.decode() if isinstance(key, bytes) else key
-                        metric_name = key_str.replace(f"{self._REDIS_PREFIX}:counter:", "", 1)
-                        result["counters"][metric_name] = int(self._redis.get(key) or 0)
-        except redis.exceptions.RedisError:
-            pass
-
-        # Fallback to in-memory counters if Redis failed or empty
+        # Counters
+        result["counters"] = self._get_counters_from_redis()
         if not result["counters"]:
             with self._lock:
                 result["counters"] = dict(self._counters)
 
-        # Try to get gauges from Redis
-        try:
-            if self._redis is not None:
-                gauge_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:gauge:*"))
-                if gauge_keys:
-                    for key in gauge_keys:
-                        key_str = key.decode() if isinstance(key, bytes) else key
-                        metric_name = key_str.replace(f"{self._REDIS_PREFIX}:gauge:", "", 1)
-                        val = self._redis.get(key)
-                        if val is not None:
-                            result["gauges"][metric_name] = float(val)
-        except redis.exceptions.RedisError:
-            pass
-
-        # Fallback to in-memory gauges if Redis failed or empty
+        # Gauges
+        result["gauges"] = self._get_gauges_from_redis()
         if not result["gauges"]:
             with self._lock:
                 result["gauges"] = dict(self._gauges)
 
-        # Try to get histograms from Redis
-        try:
-            if self._redis is not None:
-                histogram_keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:histogram:*"))
-                if histogram_keys:
-                    for key in histogram_keys:
-                        key_str = key.decode() if isinstance(key, bytes) else key
-                        metric_name = key_str.replace(f"{self._REDIS_PREFIX}:histogram:", "", 1)
-                        values = [float(v) for v in self._redis.lrange(key, 0, -1)]
-                        if values:
-                            sorted_vals = sorted(values)
-                            result["histograms"][metric_name] = {
-                                "count": len(values),
-                                "min": sorted_vals[0],
-                                "max": sorted_vals[-1],
-                                "avg": round(sum(values) / len(values), 3),
-                                "p50": sorted_vals[len(sorted_vals) // 2],
-                                "p95": sorted_vals[int(len(sorted_vals) * 0.95)],
-                                "p99": sorted_vals[int(len(sorted_vals) * 0.99)],
-                            }
-        except redis.exceptions.RedisError:
-            pass
-
-        # Fallback to in-memory histograms if Redis failed or empty
+        # Histograms
+        result["histograms"] = self._get_histograms_from_redis()
         if not result["histograms"]:
             with self._lock:
                 for key, values in self._histograms.items():

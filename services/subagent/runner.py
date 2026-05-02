@@ -479,7 +479,7 @@ def run_subagent_with_tools(
         )
         used_fallback = True
         fallback_stages = [stage]
-    except (RuntimeError, ValueError, KeyError, AttributeError) as e:
+    except Exception as e:  # noqa: BLE001
         last_exc = e
         logger.error(
             "Subagent %s/%s unexpected error: %s — using fallback",

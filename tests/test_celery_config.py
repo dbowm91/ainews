@@ -23,7 +23,7 @@ class TestCeleryBeatSchedule:
 
     def test_all_tasks_present(self):
         schedule = Config.get_beat_schedule()
-        assert len(schedule) == 12
+        assert len(schedule) == 14
 
     def test_run_all_sources_task(self):
         schedule = Config.get_beat_schedule()

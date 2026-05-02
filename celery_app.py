@@ -72,7 +72,7 @@ def _init_celery():
     import tasks.research
     import tasks.retry
     import tasks.select
-    import tasks.write
+    import tasks.write  # noqa: F401 - needed for Celery task discovery
 
     app.extensions["celery"] = _celery
 

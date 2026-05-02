@@ -45,9 +45,66 @@ def _parse_article_ids_params(request):
         return None, api_response(error=str(e), status=400)
 
 
+def _parse_date(date_str):
+    try:
+        dt = datetime.fromisoformat(date_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
+def _apply_source_filter(q, source_id):
+    try:
+        return q.filter_by(source_id=int(source_id))
+    except ValueError:
+        return q
+
+
+def _apply_impact_filter(q, impact_val, op):
+    from models import Article
+    try:
+        val = int(impact_val)
+        if op == 'ge':
+            return q.filter(Article.impact_score >= val)
+        elif op == 'le':
+            return q.filter(Article.impact_score <= val)
+    except ValueError:
+        return q
+
+
+def _apply_tag_filter(q, tag_slug):
+    from models import Article, Tag
+    tag = Tag.query.filter_by(slug=tag_slug).first()
+    if tag:
+        return q.filter(Article.tags.any(Tag.id == tag.id))
+    return q
+
+
+def _apply_query_filter(q, query):
+    from models import Article
+    from services.article import _escape_like_pattern
+    try:
+        from services.search import get_article_search_provider
+        provider = get_article_search_provider()
+        fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
+    except Exception:
+        logger.debug("FTS5 search unavailable, falling back to ILIKE")
+        fts_results = None
+
+    if fts_results is not None:
+        return q.filter(Article.id.in_(fts_results))
+    elif _query_looks_like_url(query):
+        escaped = _escape_like_pattern(query)
+        return q.filter(Article.original_url.ilike(f"%{escaped}%", escape="\\"))
+    else:
+        escaped = _escape_like_pattern(query)
+        return q.filter(Article.original_title.ilike(f"%{escaped}%", escape="\\"))
+
+
 def _build_article_ids_query(params):
     from models import Article, Tag
-    from services.article import _escape_like_pattern
 
     q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 
@@ -62,62 +119,31 @@ def _build_article_ids_query(params):
     tag_slug = params.tag or ""
 
     if query:
-        try:
-            from services.search import get_article_search_provider
-
-            provider = get_article_search_provider()
-            fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
-        except Exception:
-            logger.debug("FTS5 search unavailable, falling back to ILIKE")
-            fts_results = None
-
-        if fts_results is not None:
-            q = q.filter(Article.id.in_(fts_results))
-        elif _query_looks_like_url(query):
-            escaped = _escape_like_pattern(query)
-            q = q.filter(Article.original_url.ilike(f"%{escaped}%", escape="\\"))
-        else:
-            escaped = _escape_like_pattern(query)
-            q = q.filter(Article.original_title.ilike(f"%{escaped}%", escape="\\"))
+        q = _apply_query_filter(q, query)
     if status:
         q = q.filter_by(pipeline_status=status)
     if category:
         q = q.filter_by(category=category)
     if source_id is not None:
-        try:
-            q = q.filter_by(source_id=int(source_id))
-        except ValueError:
-            pass
+        q = _apply_source_filter(q, source_id)
     if date_from:
-        try:
-            dt = datetime.fromisoformat(date_from)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+        dt = _parse_date(date_from)
+        if dt:
             q = q.filter(Article.created_at >= dt)
-        except ValueError:
+        else:
             logger.warning("Invalid date_from filter: %s", date_from)
     if date_to:
-        try:
-            dt = datetime.fromisoformat(date_to)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+        dt = _parse_date(date_to)
+        if dt:
             q = q.filter(Article.created_at <= dt)
-        except ValueError:
+        else:
             logger.warning("Invalid date_to filter: %s", date_to)
     if impact_min is not None:
-        try:
-            q = q.filter(Article.impact_score >= int(impact_min))
-        except ValueError:
-            pass
+        q = _apply_impact_filter(q, impact_min, 'ge')
     if impact_max is not None:
-        try:
-            q = q.filter(Article.impact_score <= int(impact_max))
-        except ValueError:
-            pass
+        q = _apply_impact_filter(q, impact_max, 'le')
     if tag_slug:
-        tag = Tag.query.filter_by(slug=tag_slug).first()
-        if tag:
-            q = q.filter(Article.tags.any(Tag.id == tag.id))
+        q = _apply_tag_filter(q, tag_slug)
 
     return q
 

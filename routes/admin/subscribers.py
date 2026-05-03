@@ -8,7 +8,7 @@ from routes.admin import admin_bp, require_auth
 @require_auth
 def subscribers() -> str:
     from models import Subscriber
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
     newsletter_type = request.args.get("type", "", type=str).strip()

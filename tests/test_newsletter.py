@@ -428,7 +428,6 @@ class TestNewsletterHtmlWellFormed:
 class TestGenerateDailyNewsletters:
     """Tests for generate_daily_newsletters task."""
 
-    @pytest.mark.skip(reason="Failing due to mock self issue, to be fixed later")
     def test_raises_on_redis_error(self, app, monkeypatch):
         """When Redis is unavailable, newsletter generation raises instead of proceeding."""
         import redis.exceptions
@@ -436,25 +435,12 @@ class TestGenerateDailyNewsletters:
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
 
         with app.app_context():
-            from unittest.mock import patch, MagicMock
-            from tasks import newsletter as newsletter_module
+            from unittest.mock import patch
 
-            redis_mock = MagicMock()
-            redis_mock.exists.return_value = False
-            redis_mock.register_script.side_effect = redis.exceptions.RedisError("connection refused")
+            with patch("tasks.newsletter._check_newsletter_lock") as mock_check_lock:
+                mock_check_lock.side_effect = redis.exceptions.RedisError("connection refused")
 
-            with patch("extensions.get_redis", return_value=redis_mock):
-                with patch("services.config_utils.get_config_with_default") as config_mock:
-                    config_mock.return_value = MagicMock(
-                        NEWSLETTER_DRY_RUN_EMAIL=None,
-                        MAX_NEWSLETTER_ARTICLES=20,
-                        NEWSLETTER_SUMMARY_ENABLED=True,
-                    )
+                from tasks.newsletter import _generate_daily_newsletters_core
 
-                    task = newsletter_module.generate_daily_newsletters
-                    with pytest.raises(redis.exceptions.RedisError):
-                        # Create mock self with request.id for bound task
-                        from unittest.mock import MagicMock
-                        mock_self = MagicMock()
-                        mock_self.request.id = "test-run-id"
-                        task(mock_self, dry_run_email=None, run_id=None)
+                with pytest.raises(redis.exceptions.RedisError):
+                    _generate_daily_newsletters_core("test-run-id", dry_run_email=None, run_id=None)

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @require_auth
 def review_queue():
     from models import Article
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
     per_page = PER_PAGE_ADMIN_ARTICLES

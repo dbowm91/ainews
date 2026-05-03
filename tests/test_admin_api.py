@@ -326,11 +326,19 @@ class TestNewsletterPreview:
         with app.app_context():
             create_article(pipeline_status="done", impact_score=50)
             db.session.commit()
-        resp = auth_client.post("/api/v1/newsletter/preview")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "html" in data
-        assert "subject" in data
+
+        with (
+            patch("services.newsletter_pipeline.generate_executive_summary") as m_summary,
+            patch("services.newsletter.generate_main_newsletter") as m_newsletter,
+        ):
+            m_summary.return_value = {"summary": "Test executive summary"}
+            m_newsletter.return_value = ("<p>Test newsletter HTML</p>", "Test Subject", 1)
+
+            resp = auth_client.post("/api/v1/newsletter/preview")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "html" in data
+            assert "subject" in data
 
     def test_preview_no_articles(self, auth_client, app):
         resp = auth_client.post("/api/v1/newsletter/preview")

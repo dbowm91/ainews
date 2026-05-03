@@ -11,7 +11,7 @@ Usage pattern (inside task body):
     def select_article(self, article_id: int, run_id=None):
         try:
             validated = SelectArticleTask(article_id=article_id, run_id=run_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Invalid task input: %s", e)
             raise TypeError(f"Invalid select_article input: {e}")
 

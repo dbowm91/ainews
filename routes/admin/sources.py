@@ -56,7 +56,7 @@ def add_source() -> str:
             from services.url import validate_url_safe
 
             validate_url_safe(source_url)
-        except Exception as e:
+        except UnsafeURLError as e:
             logger.warning("Source URL validation failed: %s", e)
             return (
                 '<div class="form-error" role="alert">Invalid source URL</div>',

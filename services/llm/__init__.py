@@ -7,7 +7,7 @@ import redis.exceptions
 import services.llm.anthropic
 import services.llm.gemini
 import services.llm.ollama
-import services.llm.openai  # noqa: F401
+import services.llm.openai
 from schemas.llm import load_providers_config
 from schemas.pipeline import get_role_config
 from services.circuit_breaker import CircuitOpenError, get_breaker

@@ -3,7 +3,7 @@ import logging
 from routes.admin import admin_api_bp as admin_api_bp
 from routes.admin import require_auth as require_auth
 
-from routes.admin.api import (  # noqa: F401
+from routes.admin.api import (
     articles,
     audit,
     config,

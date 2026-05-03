@@ -13,7 +13,7 @@ from services.task_security import get_signed_kwargs
 @require_auth
 def pipelines():
     from models import PipelineRun
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
     run_type = request.args.get("type", "", type=str).strip()
@@ -41,7 +41,7 @@ def pipelines():
 @require_auth
 def pipeline_logs(run_id):
     from models import PipelineLog, PipelineRun
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     run = db.get_or_404(PipelineRun, run_id)
     level = request.args.get("level", "", type=str).strip()

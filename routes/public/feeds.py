@@ -171,7 +171,7 @@ def topic_feed(category: str) -> str:
 @public_bp.route("/tag/<slug>")
 def tag_feed(slug: str) -> str:
     from services.cache import get_response_cache
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
 

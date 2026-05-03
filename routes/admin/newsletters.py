@@ -71,7 +71,7 @@ def _sanitize_newsletter_html(html: str) -> str:
 @require_auth
 def newsletters():
     from models import Newsletter
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
     per_page = PER_PAGE_NEWSLETTERS

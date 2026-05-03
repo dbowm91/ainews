@@ -27,7 +27,7 @@ class TestConfigCacheConcurrency:
                 for _ in range(iterations):
                     cache.get("some_key", loader_fn=lambda: None)
                     cache.invalidate("some_key")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=worker) for _ in range(10)]
@@ -51,7 +51,7 @@ class TestConfigCacheConcurrency:
                 for _ in range(100):
                     val = cache.get("key", lambda: {"value": 42}, ttl=300)
                     results.append(val)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=reader) for _ in range(10)]
@@ -78,7 +78,7 @@ class TestConfigCacheConcurrency:
                     key = f"key_{key_suffix}_{i}"
                     cache.get(key, lambda i=i: {"thread": key_suffix, "seq": i}, ttl=60)
                     written.append(key)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=writer, args=(t,)) for t in range(5)]
@@ -102,7 +102,7 @@ class TestConfigCacheConcurrency:
                 for _ in range(50):
                     cache.invalidate("a")
                     cache.invalidate("b")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=inval) for _ in range(5)]
@@ -126,7 +126,7 @@ class TestConfigCacheConcurrency:
                 for _ in range(100):
                     val = cache.get("key", lambda: {"fallback": True}, ttl=300)
                     results.append(val)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=reader) for _ in range(10)]
@@ -151,7 +151,7 @@ class TestMetricsSingletonConcurrency:
                 for _ in range(100):
                     metrics = get_metrics()
                     metrics.counter_inc("test_counter")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=worker) for _ in range(10)]
@@ -172,7 +172,7 @@ class TestMetricsSingletonConcurrency:
             try:
                 m = get_metrics()
                 instances.append(id(m))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=get_instance) for _ in range(20)]
@@ -194,7 +194,7 @@ class TestMetricsSingletonConcurrency:
             try:
                 for _ in range(1000):
                     m.counter_inc("test_counter")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=incrementer) for _ in range(10)]
@@ -217,7 +217,7 @@ class TestMetricsSingletonConcurrency:
             try:
                 for _ in range(100):
                     m.gauge_set("test_gauge", float(val))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=setter, args=(i,)) for i in range(10)]
@@ -241,7 +241,7 @@ class TestMetricsSingletonConcurrency:
             try:
                 for i in range(100):
                     m.histogram_observe("test_hist", float(i))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=observer) for _ in range(10)]
@@ -267,7 +267,7 @@ class TestMetricsSingletonConcurrency:
                 for _ in range(50):
                     output = m.get_prometheus()
                     results.append(output)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=exporter) for _ in range(5)]

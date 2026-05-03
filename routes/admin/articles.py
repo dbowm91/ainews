@@ -222,7 +222,7 @@ def _render_articles_response(articles, has_next, next_page, page, total_count,
 @require_auth
 def articles():
     from models import Source
-    from services.utils import paginate_query
+    from services.pagination import paginate_query
 
     page = max(1, request.args.get("page", 1, type=int))
     query = request.args.get("q", "", type=str).strip()

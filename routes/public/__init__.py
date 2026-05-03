@@ -122,6 +122,6 @@ def health() -> tuple[Response, int]:
 
 # Import submodules to register routes
 # These must come after Blueprint creation to avoid circular imports
-from routes.public import feeds as feeds  # noqa: E402
-from routes.public import links as links  # noqa: E402
-from routes.public import subscribe as subscribe  # noqa: E402
+from routes.public import feeds as feeds
+from routes.public import links as links
+from routes.public import subscribe as subscribe

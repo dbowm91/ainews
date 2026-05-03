@@ -89,7 +89,7 @@ def _apply_query_filter(q, query):
         from services.search import get_article_search_provider
         provider = get_article_search_provider()
         fts_results = provider.search_admin(query, url_search=_query_looks_like_url(query))
-    except Exception:
+    except (ImportError, AttributeError, SQLAlchemyError):
         logger.debug("FTS5 search unavailable, falling back to ILIKE")
         fts_results = None
 

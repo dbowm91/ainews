@@ -14,6 +14,8 @@ from services.llm.base import (
 )
 from services.llm.errors import make_error_handler
 
+from schemas.llm import GeminiConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -322,5 +324,3 @@ class GeminiProvider(BaseLLMProvider):
             converted = _handle_gemini_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 
-
-from schemas.llm import GeminiConfig

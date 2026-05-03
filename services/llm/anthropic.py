@@ -15,6 +15,8 @@ from services.llm.base import (
 )
 from services.llm.errors import make_error_handler
 
+from schemas.llm import AnthropicConfig
+
 logger = logging.getLogger(__name__)
 
 _HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
@@ -306,6 +308,3 @@ class AnthropicProvider(BaseLLMProvider):
             converted = _handle_anthropic_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 
-
-# Re-export for backward compatibility
-from schemas.llm import AnthropicConfig

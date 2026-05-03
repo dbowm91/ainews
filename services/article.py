@@ -20,6 +20,9 @@ from sqlalchemy.sql.elements import ColumnElement
 from extensions import db
 from models import Article, ArticleMetric
 
+from services.article_parser import parse_articles
+from services.pagination import _escape_like_pattern
+
 logger = logging.getLogger(__name__)
 
 _TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
@@ -45,9 +48,6 @@ def sanitize_final_article(content: str) -> str:
         )
     return json.dumps(parsed)
 
-# Re-export from extracted modules for backward compatibility
-from services.article_parser import parse_articles
-from services.pagination import _escape_like_pattern
 
 _search_logger = ThreadPoolExecutor(
     max_workers=2,

@@ -18,6 +18,8 @@ from services.llm.base import (
 from services.llm.errors import make_error_handler
 from services.url import validate_url_safe
 
+from schemas.llm import OllamaConfig
+
 logger = logging.getLogger(__name__)
 
 _HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
@@ -287,6 +289,3 @@ class OllamaProvider(BaseLLMProvider):
             converted = _handle_ollama_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 
-
-# Re-export for backward compatibility
-from schemas.llm import OllamaConfig

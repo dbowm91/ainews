@@ -30,6 +30,8 @@ from services.pipeline_monitor import record_stage_result
 from services.pipeline_utils import _dispatch_next, _log_pipeline
 from services.logging_utils import traced_stage
 
+from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
+
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
     """Advance article to next stage with degraded quality on persistent failure."""
@@ -68,7 +70,6 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         finalize_article(article, run_id)
     else:
         logger.error(f"Unknown stage for degradation: {failed_stage}")
-from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
 logger = get_task_logger(__name__)
 

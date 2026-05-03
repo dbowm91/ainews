@@ -4,7 +4,7 @@ import services.search.duckduckgo
 import services.search.google
 import services.search.searxng
 import services.search.sqlite_fts
-import services.search.hybrid
+import services.search.hybrid  # noqa: F401
 from services.circuit_breaker import get_breaker
 from services.search.base import (
     BaseSearchProvider,

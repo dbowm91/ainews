@@ -368,12 +368,9 @@ class TestNewsletterHtmlWellFormed:
             )
 
             parser = WellFormednessChecker()
-            try:
-                parser.feed(html)
-                assert not parser.errors, f"HTML parsing errors: {parser.errors}"
-                assert not parser.stack, f"Unclosed tags: {parser.stack}"
-            except Exception as e:
-                assert False, f"HTML parsing failed: {e}"
+            parser.feed(html)
+            assert not parser.errors, f"HTML parsing errors: {parser.errors}"
+            assert not parser.stack, f"Unclosed tags: {parser.stack}"
 
     def test_newsletter_with_all_article_fields_is_well_formed(self, app):
         """Test well-formedness with a fully populated article."""
@@ -423,12 +420,9 @@ class TestNewsletterHtmlWellFormed:
             )
 
             parser = WellFormednessChecker()
-            try:
-                parser.feed(html)
-                assert not parser.errors, f"HTML parsing errors: {parser.errors}"
-                assert not parser.stack, f"Unclosed tags: {parser.stack}"
-            except Exception as e:
-                assert False, f"HTML parsing failed: {e}"
+            parser.feed(html)
+            assert not parser.errors, f"HTML parsing errors: {parser.errors}"
+            assert not parser.stack, f"Unclosed tags: {parser.stack}"
 
 
 class TestGenerateDailyNewsletters:

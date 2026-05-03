@@ -8,7 +8,6 @@ from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
 from constants import PipelineStatus
-from extensions import db
 from models import Article
 from services.task_security import verify_task
 from services.config_unified import (

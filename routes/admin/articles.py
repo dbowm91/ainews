@@ -9,7 +9,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
-from models import Tag
 from routes.admin import admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action

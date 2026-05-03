@@ -96,7 +96,7 @@ def _get_task_template(task_type: str, stage_config: SubagentStageConfig) -> str
     return _SUBAGENT_TASK_TEMPLATES.get(task_type, "")
 
 
-def run_subagent(
+def run_subagent(  # noqa: C901
     task_type: str,
     stage: str,
     prompt_data: dict,

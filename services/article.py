@@ -21,6 +21,7 @@ from extensions import db
 from models import Article, ArticleMetric
 
 from services.article_parser import parse_articles
+from services.article_parser import parse_article_json as parse_article_json
 from services.pagination import _escape_like_pattern
 
 logger = logging.getLogger(__name__)

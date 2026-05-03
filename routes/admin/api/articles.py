@@ -104,7 +104,7 @@ def _apply_query_filter(q, query):
 
 
 def _build_article_ids_query(params):
-    from models import Article, Tag
+    from models import Article
 
     q = Article.query.options(joinedload(Article.source), joinedload(Article.tags))
 

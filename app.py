@@ -152,7 +152,6 @@ def _setup_middleware(app):
 
 def _setup_database(app, config_name):
     """Initialize database, run migrations, and seed data."""
-    import models
 
     with app.app_context():
         if db.engine.url.drivername == "sqlite":

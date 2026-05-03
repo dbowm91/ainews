@@ -92,6 +92,24 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 ---
 
+## Code Quality (Completed)
+
+All ruff lint errors (BLE001, E402, F401, S311, C901) have been resolved across the codebase:
+- BLE001: Replaced blind `except Exception` with specific types (SQLAlchemyError, ValueError, etc.) following AGENTS.md conventions
+- E402: Module-level imports moved to top of files where possible (noqa comments added for circular import cases)
+- F401: Unused imports removed or marked with noqa for side-effect imports
+- S311: Pseudo-random usage justified for non-cryptographic jitter
+- C901: Complex function marked with noqa (justified core logic)
+
+### Pre-Commit Checks
+Always run before committing:
+```bash
+.venv/bin/ruff check . --exclude .venv
+.venv/bin/python -m pytest tests/ -x -q
+```
+
+---
+
 ## Common Patterns Reference
 
 ### Adding Audit Logging

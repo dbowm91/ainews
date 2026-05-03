@@ -2,8 +2,11 @@ import logging
 from datetime import datetime, timedelta, timezone
 from html import escape
 
+import redis.exceptions
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import joinedload
+
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
 
 from services.utils import parse_article_headline
 
@@ -220,7 +223,9 @@ def _generate_subject_line(articles, topic_context: str = "") -> str:
                 return result.subject
             finally:
                 limiter.release(provider_id, model, 120)
-    except Exception as e:
+    except (ImportError, redis.exceptions.RedisError,
+            AuthError, ProviderServerError, ProviderTimeoutError,
+            ConnectionError) as e:
         logger.warning("LLM subject line generation failed: %s", e)
 
     return "Top Stories"

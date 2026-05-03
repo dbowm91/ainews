@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from enum import IntEnum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -237,7 +237,8 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
     try:
         result = _call_llm_for_memory(draft, topics, summary, engagement_info)
         entries = result.entries
-    except Exception as e:
+    except (ImportError, json.JSONDecodeError, ValidationError,
+            SQLAlchemyError, ValueError, AttributeError) as e:
         get_metrics().counter_inc(
             "trend_memory.propose_failure",
             labels={"article_id": str(article.id) if article.id else "unknown"},

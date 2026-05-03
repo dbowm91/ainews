@@ -3,6 +3,7 @@
 import threading
 
 from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_task_logger(__name__)
 
@@ -121,7 +122,7 @@ def _log_pipeline(run_id, stage, level, message, *args, article_id=None):
         )
         db.session.add(log)
         savepoint.commit()
-    except Exception as e:
+    except (SQLAlchemyError, ImportError) as e:
         savepoint.rollback()
         logger.error("Failed to write pipeline log: %s", e)
         metrics.counter_inc(

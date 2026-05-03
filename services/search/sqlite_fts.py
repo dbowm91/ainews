@@ -7,6 +7,7 @@ into a dedicated provider class.
 import logging
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from services.search.base import SearchProvider, register_db_search_provider
@@ -121,7 +122,7 @@ class SQLiteFTSProvider(SearchProvider):
                 "body": article.final_article or "",
             })
             db.session.commit()
-        except Exception as e:
+        except (SQLAlchemyError, ImportError) as e:
             logger.warning("Failed to index article %s in FTS5: %s", article.id, e)
             db.session.rollback()
 
@@ -133,7 +134,7 @@ class SQLiteFTSProvider(SearchProvider):
             sql = text("DELETE FROM articles_fts WHERE rowid = :rowid")
             db.session.execute(sql, {"rowid": article_id})
             db.session.commit()
-        except Exception as e:
+        except (SQLAlchemyError, ImportError) as e:
             logger.warning("Failed to delete article %s from FTS5: %s", article_id, e)
             db.session.rollback()
 
@@ -181,7 +182,7 @@ class SQLiteFTSProvider(SearchProvider):
                 )
                 result = db.session.execute(sql, {"q": fts_query}).fetchall()
                 fts_results = [row[0] for row in result]
-        except Exception:
+        except (SQLAlchemyError, ImportError):
             logger.debug("FTS5 admin search unavailable, falling back", exc_info=True)
 
         return fts_results if fts_results is not None else []

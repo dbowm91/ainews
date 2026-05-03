@@ -46,8 +46,8 @@ def sanitize_final_article(content: str) -> str:
     return json.dumps(parsed)
 
 # Re-export from extracted modules for backward compatibility
-from services.article_parser import parse_article_json, parse_articles
-from services.pagination import _escape_like_pattern, paginate_query
+from services.article_parser import parse_articles
+from services.pagination import _escape_like_pattern
 
 _search_logger = ThreadPoolExecutor(
     max_workers=2,
@@ -65,7 +65,7 @@ def _log_search_query(query: str, results_count: int) -> None:
             sq = SearchQuery(query=query[:256], results_count=results_count)
             db.session.add(sq)
             db.session.commit()
-        except Exception as e:
+        except (ImportError, SQLAlchemyError) as e:
             logger.warning("Failed to log search query '%s': %s", query[:50], e)
 
     _search_logger.submit(_async_log)
@@ -190,7 +190,7 @@ def get_articles_paginated(
                 parse_articles(articles)
                 has_next = len(results) >= per_page
                 return articles, has_next, page + 1
-        except Exception:
+        except SQLAlchemyError:
             # FTS5 table may not exist yet (e.g., tests, fresh install)
             logger.debug("FTS5 search failed, falling back to ILIKE", exc_info=True)
 

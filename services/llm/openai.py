@@ -88,7 +88,8 @@ class OpenAIProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, httpx.HTTPError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
@@ -141,7 +142,8 @@ class OpenAIProvider(BaseLLMProvider):
                     yield chunk.choices[0].delta.content
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, httpx.HTTPError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_openai_error(e) from e
 
     @circuit_protected("llm_openai")
@@ -174,7 +176,8 @@ class OpenAIProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, httpx.HTTPError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
@@ -234,7 +237,8 @@ class OpenAIProvider(BaseLLMProvider):
             resp = self.client.chat.completions.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, httpx.HTTPError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
@@ -310,7 +314,8 @@ class OpenAIProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, httpx.HTTPError, ConnectionError,
+                TimeoutError, ValueError) as e:
             converted = _handle_openai_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

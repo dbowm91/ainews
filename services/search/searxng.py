@@ -76,7 +76,8 @@ class SearXNGSearchProvider(BaseSearchProvider):
             logger.warning("SearXNG search timed out for '%s'", query)
             record_search_failure(self.provider_id)
             return []
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             logger.warning("SearXNG search failed for '%s': %s", query, type(e).__name__)
             record_search_failure(self.provider_id)
             return []
@@ -103,7 +104,8 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 "status": f"SSRF blocked: {e}",
                 "host": self.host,
             }
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             return {
                 "provider": self.provider_id,
                 "status": f"error: {e}",

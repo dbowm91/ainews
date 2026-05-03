@@ -1,9 +1,13 @@
 """Prompt utilities: system prompt loading, safe text escaping, and context truncation for LLM input."""
 
+import json
 import logging
 from pathlib import Path
 from functools import lru_cache
 
+from pydantic import ValidationError
+
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
 from services.tracing import get_current_trace_id
 
 logger = logging.getLogger(__name__)
@@ -146,7 +150,7 @@ def sliding_window_truncate(
                 # Approximate chars from tokens and use that as max
                 est_chars = tokens * _CHARS_PER_TOKEN
                 max_chars = min(max_chars, est_chars // 2)
-        except Exception:
+        except (ImportError, ValueError, AttributeError):
             logger.debug("Token counting failed, using char-based truncation")
 
     if len(text) <= max_chars:
@@ -258,7 +262,9 @@ def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, tempe
             max_tokens=max_tokens,
         )
         return response.text.strip() if response and response.text else ""
-    except Exception as e:
+    except (ImportError, json.JSONDecodeError, ValidationError,
+            AuthError, ProviderServerError, ProviderTimeoutError,
+            ConnectionError, ValueError, AttributeError) as e:
         logger.warning("TraceID=%s: LLM summarization failed, will fall back to sliding window: %s", get_current_trace_id(), e)
         return ""
 
@@ -307,7 +313,7 @@ def smart_truncate_context(
             if tokens > token_threshold:
                 est_chars = tokens * _CHARS_PER_TOKEN
                 max_chars = min(max_chars, est_chars // 2)
-        except Exception:
+        except (ImportError, ValueError, AttributeError):
             logger.debug("Token counting failed, using char-based truncation")
 
     if len(text) <= max_chars:
@@ -337,7 +343,9 @@ def smart_truncate_context(
             if summary:
                 result = f"{summary}\n\n{TRUNCATION_WARNING}"
                 return result, True
-        except Exception as e:
+        except (ImportError, json.JSONDecodeError, ValidationError,
+                AuthError, ProviderServerError, ProviderTimeoutError,
+                ConnectionError, ValueError, AttributeError) as e:
             logger.warning("TraceID=%s: LLM summarization failed, falling back to sliding window: %s", get_current_trace_id(), e)
 
     return sliding_window_truncate(text, max_chars, model=model), True

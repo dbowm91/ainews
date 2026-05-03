@@ -8,6 +8,7 @@ import logging
 from typing import Any, Optional
 
 from flask import request
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -83,5 +84,5 @@ def log_admin_action(
         )
         db.session.add(log_entry)
         db.session.commit()
-    except Exception:
+    except (SQLAlchemyError, ImportError):
         logger.warning("Failed to write audit log to database", exc_info=True)

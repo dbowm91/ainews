@@ -87,7 +87,8 @@ class GeminiProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             raise _handle_gemini_error(e) from e
         usage = resp.usage_metadata
         tokens_used = usage.total_token_count if usage else 0
@@ -139,7 +140,8 @@ class GeminiProvider(BaseLLMProvider):
                     yield chunk.text
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             raise _handle_gemini_error(e) from e
 
     @circuit_protected("llm_gemini")
@@ -169,7 +171,8 @@ class GeminiProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             raise _handle_gemini_error(e) from e
         return resp.text or "{}"
 
@@ -228,7 +231,8 @@ class GeminiProvider(BaseLLMProvider):
             resp = self.client.models.generate_content(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             raise _handle_gemini_error(e) from e
         if not resp.candidates:
             raise RuntimeError(f"Gemini returned no candidates for model {model}")
@@ -313,7 +317,8 @@ class GeminiProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             converted = _handle_gemini_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

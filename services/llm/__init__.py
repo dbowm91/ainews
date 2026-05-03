@@ -2,6 +2,8 @@ import logging
 import os
 from typing import Tuple
 
+import redis.exceptions
+
 import services.llm.anthropic
 import services.llm.gemini
 import services.llm.ollama
@@ -140,6 +142,8 @@ def get_provider_info() -> dict:
         return cache.get_or_set("llm:provider:info", _fetch, ttl=300)
     except (KeyboardInterrupt, SystemExit):
         raise
-    except Exception as e:
+    except (ImportError, redis.exceptions.RedisError, CircuitOpenError,
+            ProviderServerError, ProviderTimeoutError,
+            ConnectionError) as e:
         logger.debug("Cache fallback for provider info: %s", e)
         return _fetch()

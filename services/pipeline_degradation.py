@@ -3,6 +3,7 @@
 import json
 
 from celery.utils.log import get_task_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 from constants import STAGE_STATUS_MAP, PipelineStatus
 from services.article_fallback import build_fallback_article_json
@@ -231,7 +232,7 @@ def _finalize(article_id: int):
             )
 
             db.session.commit()
-    except Exception as e:
+    except (SQLAlchemyError, ImportError) as e:
         db.session.rollback()
         logger.error("Finalize failed for article %s: %s", article_id, e)
 

@@ -39,7 +39,7 @@ def _get_encryption_key() -> bytes:
     from cryptography.fernet import Fernet
     try:
         Fernet(key.encode("utf-8"))
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise ValueError(
             f"WEBHOOK_SECRET_KEY must be a valid Fernet key (44 base64 chars), got length {len(key)}",
         ) from e
@@ -62,7 +62,7 @@ def _load_fallback_keys() -> None:
         if key:
             try:
                 _FALLBACK_KEYS.append(Fernet(key.encode("utf-8")))
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.debug("Skipping invalid fallback key: %s", e)
 
 
@@ -91,7 +91,7 @@ def _decrypt_secret(ciphertext: str) -> str:
         for fallback in _FALLBACK_KEYS:
             try:
                 return fallback.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
-            except Exception:
+            except (ValueError, TypeError):
                 continue
         raise ValueError("Failed to decrypt v1 ciphertext with fallback keys")
 
@@ -239,7 +239,7 @@ def dispatch_webhook(
         from services.url import validate_url_safe
 
         validate_url_safe(url)
-    except Exception as e:
+    except (ImportError, ValueError, AttributeError) as e:
         logger.error("Webhook '%s' rejected due to unsafe URL %s: %s", name, url, e)
         return False, f"Unsafe URL: {e}"
 
@@ -325,7 +325,8 @@ def trigger_event(
                     event_data=event_data,
                     idempotency_key=idempotency_key,
                 )
-            except Exception:
+            except (ImportError, requests.exceptions.RequestException,
+                    ValueError, AttributeError):
                 logger.exception("Failed to trigger webhook %s", webhook.name)
 
 

@@ -83,7 +83,7 @@ def _load_patterns_from_file() -> dict[str, list[str]]:
                 if k not in patterns:
                     patterns[k] = v
             return patterns
-    except Exception as e:
+    except (ImportError, KeyError, AttributeError, ValueError) as e:
         logger.debug("Failed to load patterns from file: %s", e)
         pass
     return dict(_FALLBACK_PATTERNS)
@@ -98,7 +98,7 @@ def _load_patterns() -> dict[str, list[str]]:
             loader_fn=_load_patterns_from_file,
             ttl=300,
         )
-    except Exception as e:
+    except (ImportError, KeyError, AttributeError, ValueError) as e:
         logger.debug("Config cache failed for trend patterns: %s", e)
         return _load_patterns_from_file()
 

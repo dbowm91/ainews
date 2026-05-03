@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional, Type, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
@@ -253,7 +253,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             return result
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (ValidationError, json.JSONDecodeError, ImportError,
+                ValueError, AttributeError) as e:
             logger.warning(
                 "TraceID=%s: Validation failed for %s: %s. Raw response: %s",
                 trace_id,
@@ -440,7 +441,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                         result_content = esc_xml_text(str(fn(**fn_args)))
                     except (KeyboardInterrupt, SystemExit):
                         raise
-                    except Exception as e:
+                    except (KeyError, TypeError, ValueError,
+                            AttributeError) as e:
                         result_content = esc_xml_text(f"Error: {e}")
                 else:
                     result_content = esc_xml_text(f"Unknown tool: {fn_name}")

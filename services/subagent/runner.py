@@ -203,7 +203,7 @@ def run_subagent(
                     return response_model.model_validate(
                         {"synthesis": tc_resp.text},
                     )
-                except Exception as e:
+                except ValidationError as e:
                     logger.warning(
                         "Subagent %s/%s validation error on tool-calling response: %s",
                         stage,
@@ -281,7 +281,7 @@ def run_subagent(
         )
         used_fallback = True
         fallback_stages = [stage]
-    except Exception as e:
+    except (ValidationError, json.JSONDecodeError, ValueError, AttributeError) as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s unexpected error: %s — using fallback",
@@ -609,7 +609,7 @@ def run_subagent_with_tools(
         )
         used_fallback = True
         fallback_stages = [stage]
-    except Exception as e:
+    except (ValidationError, json.JSONDecodeError, ValueError, AttributeError) as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s unexpected error: %s — using fallback",

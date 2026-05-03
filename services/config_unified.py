@@ -213,7 +213,7 @@ def _validate_config_section(import_path, func_name, section_name, errors):
             errors.append(f"{section_name} config error [{loc}]: {err['msg']}")
     except yaml.YAMLError as e:
         errors.append(f"{section_name} config error: {_fmt_yaml_error(e)}")
-    except Exception as e:
+    except (ImportError, AttributeError, KeyError, ValueError) as e:
         errors.append(f"{section_name} config error: {e}")
 
 

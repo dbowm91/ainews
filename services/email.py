@@ -58,7 +58,7 @@ class SMTPConnectionPool:
         try:
             server.noop()
             return True
-        except Exception:
+        except smtplib.SMTPException:
             return False
 
     def get_connection(self) -> smtplib.SMTP:
@@ -83,7 +83,7 @@ class SMTPConnectionPool:
                     return server
                 try:
                     server.quit()
-                except Exception:
+                except smtplib.SMTPException:
                     pass
 
             return self._create_connection(cfg)
@@ -94,7 +94,7 @@ class SMTPConnectionPool:
             if self._closed:
                 try:
                     server.quit()
-                except Exception:
+                except smtplib.SMTPException:
                     pass
                 return
             if self._is_healthy(server):
@@ -102,7 +102,7 @@ class SMTPConnectionPool:
             else:
                 try:
                     server.quit()
-                except Exception:
+                except smtplib.SMTPException:
                     pass
 
     def _close_all_unsafe(self):
@@ -111,7 +111,7 @@ class SMTPConnectionPool:
             server = self._pool.popleft()
             try:
                 server.quit()
-            except Exception:
+            except smtplib.SMTPException:
                 pass
 
     def close_all(self):
@@ -134,7 +134,7 @@ def _get_smtp_pool() -> SMTPConnectionPool:
             try:
                 from flask import current_app
                 pool_size = current_app.config.get("SMTP_POOL_SIZE", 5)
-            except Exception:
+            except smtplib.SMTPException:
                 import os
                 pool_size = int(os.environ.get("SMTP_POOL_SIZE", "5"))
             _smtp_pool = SMTPConnectionPool(pool_size)
@@ -167,9 +167,9 @@ def get_smtp_config():
             "user": current_app.config.get("SMTP_USER", ""),
             "password": current_app.config.get("SMTP_PASSWORD", ""),
             "from_addr": current_app.config.get("SMTP_FROM", "noreply@ainews.dev"),
-            "use_tls": current_app.config.get("SMTP_USE_TLS", True),
-        }
-    except Exception:
+        "use_tls": current_app.config.get("SMTP_USE_TLS", True),
+    }
+    except (ImportError, KeyError, ValueError, AttributeError):
         import os
 
         return {
@@ -369,11 +369,11 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
         logger.info("Email sent to %s: %s", to_email, subject)
         pool.return_connection(server)
         server = None
-    except Exception as e:
+    except smtplib.SMTPException as e:
         logger.error("Failed to send email to %s: %s", to_email, e)
         if server is not None:
             try:
                 server.quit()
-            except Exception:
+            except smtplib.SMTPException:
                 pass
         raise

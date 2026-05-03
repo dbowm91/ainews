@@ -82,7 +82,8 @@ def extract_article(url: str) -> ExtractionResult:
         future.cancel()
         logger.warning("Content extraction timeout for %s", url)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
-    except Exception as e:
+    except (ImportError, ConnectionError, TimeoutError,
+            ValueError, AttributeError) as e:
         logger.warning("Fetch failed for %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
@@ -115,7 +116,8 @@ def extract_article(url: str) -> ExtractionResult:
                 status=ExtractionStatus.SUCCESS,
                 content_length=len(text),
             )
-    except Exception as e:
+    except (ImportError, ConnectionError, TimeoutError,
+            ValueError, AttributeError) as e:
         logger.debug("Readability fallback failed for %s: %s", url, e)
 
     return ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)

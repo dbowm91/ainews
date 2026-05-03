@@ -80,7 +80,8 @@ class OllamaProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (httpx.HTTPError, ImportError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_ollama_error(e) from e
         return LLMResponse(
             text=self._extract_text(resp),
@@ -127,7 +128,8 @@ class OllamaProvider(BaseLLMProvider):
                     yield content
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (httpx.HTTPError, ImportError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_ollama_error(e) from e
 
     @circuit_protected("llm_ollama")
@@ -152,7 +154,8 @@ class OllamaProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (httpx.HTTPError, ImportError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_ollama_error(e) from e
         return self._extract_text(resp)
 
@@ -203,7 +206,8 @@ class OllamaProvider(BaseLLMProvider):
             resp = self.client.chat(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (httpx.HTTPError, ImportError, ConnectionError,
+                TimeoutError, ValueError) as e:
             raise _handle_ollama_error(e) from e
         return resp, resp
 
@@ -278,7 +282,8 @@ class OllamaProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as e:
+        except (httpx.HTTPError, ImportError, ConnectionError,
+                TimeoutError, ValueError) as e:
             converted = _handle_ollama_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

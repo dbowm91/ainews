@@ -282,7 +282,7 @@ def get_metrics() -> MetricsCollector:
         from extensions import get_redis
         try:
             redis_client = get_redis()
-        except Exception:
+        except (ImportError, redis.exceptions.RedisError):
             redis_client = None
         _metrics_instance = MetricsCollector(redis_client=redis_client)
     return _metrics_instance

@@ -57,7 +57,8 @@ class DuckDuckGoSearchProvider(BaseSearchProvider):
             logger.warning("DuckDuckGo search timed out for '%s'", query)
             record_search_failure(self.provider_id)
             return []
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             logger.warning("DuckDuckGo search failed for '%s': %s", query, type(e).__name__)
             record_search_failure(self.provider_id)
             return []
@@ -69,5 +70,6 @@ class DuckDuckGoSearchProvider(BaseSearchProvider):
             with DDGS(timeout=15) as ddgs:
                 list(ddgs.text("test", max_results=1))
             return {"provider": self.provider_id, "status": "ok"}
-        except Exception as e:
+        except (ImportError, ConnectionError, TimeoutError,
+                ValueError, AttributeError) as e:
             return {"provider": self.provider_id, "status": f"error: {e}"}

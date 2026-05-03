@@ -5,10 +5,13 @@ Provides both lightweight heuristic signals and LLM-based quality assessment.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,9 @@ class LLMQualityAssessor(QualityAssessor):
                 max_tokens=512,
             )
             return self._parse_response(response.text)
-        except Exception as e:
+        except (ImportError, json.JSONDecodeError,
+                AuthError, ProviderServerError, ProviderTimeoutError,
+                ConnectionError) as e:
             logger.warning("LLM quality assessment failed: %s", e)
             return QualityScore(
                 groundedness=0.5,

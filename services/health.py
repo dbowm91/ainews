@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import redis.exceptions
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def check_database() -> tuple[str, Any]:
         if pool_stats:
             result["pool"] = pool_stats
         return "database", result
-    except Exception:
+    except (SQLAlchemyError, ImportError, AttributeError):
         logger.exception("Health check: database ping failed")
         return "database", {"status": "error"}
 
@@ -97,7 +98,7 @@ def check_celery() -> tuple[str, Any]:
         if ping_response and any(ping_response.values()):
             return "celery", "ok"
         return "celery", "no_workers"
-    except Exception:
+    except (ImportError, AttributeError, ConnectionError):
         logger.exception("Health check: Celery inspect failed")
         return "celery", "error"
 
@@ -112,7 +113,7 @@ def check_limiter() -> tuple[str, Any]:
 
         ok = get_limiter().is_healthy()
         return "limiter", "ok" if ok else "degraded"
-    except Exception:
+    except (ImportError, redis.exceptions.RedisError, AttributeError):
         logger.exception("Health check: limiter check failed")
         return "limiter", "error"
 
@@ -181,7 +182,7 @@ def get_version_info() -> dict[str, str]:
                     version_info["commit"] = ref_file.read_text().strip()[:12]
             else:
                 version_info["commit"] = content[:12]
-    except Exception as e:
+    except (OSError, IOError, ValueError, AttributeError) as e:
         logger.debug("Failed to read git version info: %s", e)
 
     build_time = os.environ.get("BUILD_TIME")

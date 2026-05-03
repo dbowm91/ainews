@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 from concurrent.futures import TimeoutError
 from typing import Any
+
+from pydantic import ValidationError
 
 from services.llm.errors import ProviderTimeoutError
 
@@ -150,7 +153,9 @@ def run_subagent_chain(
                 "synthesis": f"[Fallback: {e}]",
                 "used_fallback": True,
                 }
-        except Exception as e:
+        except (ImportError, TimeoutError, ProviderTimeoutError,
+                ValidationError, json.JSONDecodeError,
+                ValueError, AttributeError) as e:
             logger.error(
                 "Chain %s step %d unexpected error: %s",
                 chain_name,

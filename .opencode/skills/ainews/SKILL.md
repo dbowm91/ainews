@@ -515,6 +515,26 @@ All Waves 1-5 improvement items have been fully implemented:
 - CSS @layer: Organization in `style.css` with layered `@import` statements
 - Token-aware truncation: `count_tokens()` and `max_tokens_for_model()` support
 
+## Code Quality Workflow
+
+### Ruff Linting
+Fix errors in waves per priority:
+1. **BLE001**: Replace blind `except Exception` with specific types (SQLAlchemyError, ValueError, etc.)
+2. **E402**: Move imports to top of file (add `# noqa: E402` for circular import cases)
+3. **F401**: Remove unused imports (add `# noqa: F401` for side-effect re-exports)
+4. **S311**: Add `# noqa: S311` for non-cryptographic random use (jitter)
+5. **C901**: Add `# noqa: C901` for justified complex core functions
+
+Auto-fixable errors can be fixed with:
+```bash
+.venv/bin/ruff check . --exclude .venv --fix
+```
+
+### Testing
+- Run before committing: `.venv/bin/python -m pytest tests/ -x -q`
+- Test isolation: Reset singletons (metrics, circuit breakers) in fixtures
+- Mocking: Patch the module where the object is *used*, not where it's defined (e.g., patch `tasks.pipeline.Article` not `models.Article`)
+
 ## Testing Conventions
 
 ### Shared Singleton Isolation

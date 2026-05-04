@@ -59,7 +59,7 @@ def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
     cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", str(timeout))
     try:
         return trafilatura.fetch_url(url, config=cfg)
-    except (urllib3.exceptions.HTTPError, ValueError, Exception):
+    except (urllib3.exceptions.HTTPError, ValueError, Exception):  # noqa: BLE001 - trafilatura raises diverse HTTP/network exceptions beyond HTTPError, fallback requires broad catch
         logger.warning("Content fetch failed for %s", url)
         return None
 

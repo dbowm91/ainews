@@ -22,7 +22,7 @@ Use `constants.py:VALID_TRANSITIONS` for atomic state changes. NEVER assign `art
 
 ## Pipeline & Tasks
 
-- **Write Status Transition Fix:** `tasks/write.py` has been fixed to prevent premature status transitions; it now correctly ensures an article is in the `RESEARCHED` state before moving to `WRITING`, and `WRITTEN` after completion.
+- **Write Status Transition:** `tasks/write.py` ensures an article is in the `RESEARCHED` state before moving to `WRITING`, and `WRITTEN` after completion.
 - **Dead Letter Queue:** Managed via `/admin/dead-letters` UI.
 - **E2E Latency Tracking:** `pipeline.e2e_duration_seconds` histogram records total pipeline latency from crawl to finalization.
 - **Redis TTL Refresh:** L1 cache hits refresh Redis TTL via `self._redis.expire()` in `ResponseCache.get()`.

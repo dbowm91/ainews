@@ -94,7 +94,7 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 ## Code Quality
 
-As of 2026-05-04, the following ruff lint errors have been resolved:
+The following ruff lint errors have been resolved:
 
 - **BLE001 (Blind Exception Catch)**: 1 intentional remaining. `services/content_extractor.py:_fetch_with_timeout` uses broad `Exception` catch with `# noqa: BLE001` because trafilatura raises diverse network exceptions. All other BLE001 caught with specific types (`SQLAlchemyError`, `RedisError`, `ValueError`, `RuntimeError`, etc.) or `# noqa: BLE001` with justification comments.
 - **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/admin/__init__.py` and `routes/public/__init__.py`. Use `# noqa: E402`.

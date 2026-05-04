@@ -1,6 +1,6 @@
 # Subagent Branch Management
 
-> **Note:** The comprehensive improvement plan (plans/plan.md) has been completed as of 2026-05-04. This skill is retained for reference on branch management patterns.
+Conventions for managing subagent work and parallel development in this codebase.
 
 ## Branch Management Rules
 
@@ -15,15 +15,3 @@ Before merging subagent work:
 - Run tests: `.venv/bin/python -m pytest tests/ -x -q`
 - Review diff for unintended changes
 - Ensure only task-related files are modified
-
-## Historical: Wave-Based Implementation (Completed 2026-05-04)
-
-The implementation plan used a wave structure:
-- **Wave 1:** Security & Core Stability
-- **Wave 2:** Pipeline Performance & Efficiency
-- **Wave 3:** Quality & Maintainability (BLE001 lint fixes)
-- **Wave 4:** Documentation & Observability
-
-This structure has been superseded by the completed plan status.
-
-(End of file - 28 lines)

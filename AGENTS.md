@@ -96,11 +96,11 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 As of 2026-05-04, the following ruff lint errors have been resolved:
 
-- **BLE001 (Blind Exception Catch)**: 0 remaining. All fixed with specific exception handling (`SQLAlchemyError`, `RedisError`, `ValueError`, etc.) or `# noqa: BLE001` with justification comments.
-- **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/public/__init__.py`. Add `# noqa: E402`.
-- **F401 (Unused Import)**: 0 remaining. All fixed with explicit re-exports.
-- **S311 (Non-Cryptographic Random)**: 0 remaining. All justified for jitter in retries/delays with `# noqa: S311`.
-- **C901 (Complex Function)**: 0 remaining. Complex functions have `# noqa: C901` with justification comments.
+- **BLE001 (Blind Exception Catch)**: 1 intentional remaining. `services/content_extractor.py:_fetch_with_timeout` uses broad `Exception` catch with `# noqa: BLE001` because trafilatura raises diverse network exceptions. All other BLE001 caught with specific types (`SQLAlchemyError`, `RedisError`, `ValueError`, `RuntimeError`, etc.) or `# noqa: BLE001` with justification comments.
+- **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/admin/__init__.py` and `routes/public/__init__.py`. Use `# noqa: E402`.
+- **F401 (Unused Import)**: 0 remaining (all fixed with explicit re-exports via `# noqa: F401 - registers provider plugin`).
+- **S311 (Non-Cryptographic Random)**: 0 remaining (all justified for jitter in retries/delays with `# noqa: S311`).
+- **C901 (Complex Function)**: 1 intentional remaining. `services/subagent/runner.py:run_subagent` has `# noqa: C901` with justification comment.
 
 ### Pre-Commit Checks
 Always run before committing:
@@ -166,7 +166,7 @@ if not self._redis.set(lock_key, "1", nx=True, ex=ttl):
 
 1. **Preserve Fallback Layers:** The codebase has good fallback patterns (e.g., ResponseCache has multiple fallback strategies, Redis-backed metrics with in-memory fallback). Preserve these when making changes.
 2. **Configuration-Driven:** Features support configuration via `pipeline.yaml` or environment variables. Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders.
-3. **Exception Handling:** When catching exceptions, prefer specific types (`SQLAlchemyError`, `ValueError`, `KeyError`, `AttributeError`) over broad `Exception` to preserve error context for debugging.
+3. **Exception Handling:** When catching exceptions, prefer specific types (`SQLAlchemyError`, `ValueError`, `KeyError`, `AttributeError`) over broad `Exception` to preserve error context for debugging. However, when narrowing exceptions causes tests to fail (because external libraries like trafilatura or Flask's `current_app` raise diverse exception types), add `RuntimeError` or use `Exception` with `# noqa: BLE001` and a justification comment.
 4. **Code Evolution:** Always verify line numbers and code patterns against the current codebase before making changes, as code evolves over time.
 5. **Subagent System:** `ToolSelector` protocol in `services/tool_selection.py` provides stage-aware tool selection. Integrated into `run_subagent()` path via `StageAwareToolSelector`.
 6. **Dead Code Removal:** Periodically check for and remove dead code (functions defined but never called). Confirm zero callers via grep before removal.

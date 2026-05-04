@@ -99,7 +99,7 @@ class Article(db.Model):
     )
     external_id = db.Column(db.String(128), index=True)
     original_url = db.Column(db.String(2048))
-    original_title = db.Column(db.String(512))
+    original_title = db.Column(db.String(512), index=True)
     original_author = db.Column(db.String(128))
     original_published_at = db.Column(db.DateTime)
     extracted_text = db.Column(db.Text)
@@ -155,7 +155,6 @@ class Article(db.Model):
         db.Index("ix_articles_impact", "impact_score"),
         db.Index("ix_articles_category_status", "category", "pipeline_status"),
         db.Index("ix_articles_total_retries", "total_retries"),
-        db.Index("ix_articles_pipeline_status", "pipeline_status"),
         db.Index("ix_articles_retry_count", "retry_count"),
         db.Index("ix_articles_degradation_count", "degradation_count"),
     )

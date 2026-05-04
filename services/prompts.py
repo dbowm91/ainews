@@ -87,6 +87,7 @@ def esc_xml_attr(text: str) -> str:
     )
 
 
+@lru_cache(maxsize=128)
 def load_prompt_file(name: str) -> str | None:
     """Load a prompt from prompts/{name}.txt. Returns None if not found."""
     path = _PROMPTS_DIR / f"{name}.txt"

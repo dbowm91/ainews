@@ -59,7 +59,10 @@ def send_single_email(
             logger.error("Permanent SMTP error sending to %s: %s", validated.email, e)
             return {"email": validated.email, "sent": False, "error": str(e)}
         raise
-    except Exception as e:
+    except smtplib.SMTPException as e:
+        logger.error("Failed to send to %s: %s", validated.email, e)
+        return {"email": validated.email, "sent": False, "error": str(e)}
+    except Exception as e:  # noqa: BLE001 - fallback for unexpected errors in email sending
         logger.error("Failed to send to %s: %s", validated.email, e)
         return {"email": validated.email, "sent": False, "error": str(e)}
 
@@ -158,7 +161,7 @@ def _generate_topic_newsletter_impl(
                 topic_key,
                 result["fallback_stages"],
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - exec summary failure is logged but we continue with empty summary
         logger.error("%s exec summary failed: %s", topic_key, e)
 
     if topic_key == "main":
@@ -200,7 +203,7 @@ def _generate_topic_newsletter_impl(
             send_newsletter_email(dry_run_email, subject, html, unsub_url)
             sent = 1
             logger.info("Dry run: sent main newsletter to %s", dry_run_email)
-        except Exception as e:
+        except smtplib.SMTPException as e:
             logger.error("Dry run failed for %s: %s", dry_run_email, e)
             email_error = str(e)
     else:
@@ -230,7 +233,7 @@ def _generate_topic_newsletter_impl(
                 "newsletter_type": topic_key,
                 "error": str(email_error),
             })
-        except Exception as wh_exc:
+        except Exception as wh_exc:  # noqa: BLE001 - webhook failure is non-critical
             logger.warning("Failed to trigger newsletter.failed webhook: %s", wh_exc)
         return {"type": topic_key, "articles": count, "sent": 0, "error": email_error}
 
@@ -276,7 +279,7 @@ def _generate_topic_newsletter_impl(
             },
             idempotency_key=f"newsletter.sent:{topic_key}:{datetime.now(timezone.utc).date().isoformat()}",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - webhook failure is non-critical, newsletter was already sent successfully
         logger.warning(
             "Newsletter webhook trigger failed for %s, continuing",
             topic_key,
@@ -568,7 +571,7 @@ def retry_failed_newsletter_deliveries(self):
                 "retry_failed_newsletter_deliveries exceeded soft time limit",
             )
             raise
-        except Exception as e:
+        except SQLAlchemyError as e:
             db.session.rollback()
             failed_count += 1
             logger.error("Failed to retry newsletter %s: %s", nl.id, e)

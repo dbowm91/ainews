@@ -195,7 +195,7 @@ def _perform_quality_assessment(article, brief):
                 quality_score.completeness,
                 quality_score.safety,
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - shadow quality assessment is non-critical
         logger.warning(
             "Quality assessment failed for article %s: %s", article.id, e
         )

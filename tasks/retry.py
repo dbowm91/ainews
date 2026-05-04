@@ -37,7 +37,7 @@ def _process_dead_letter(article):
         from tasks.pipeline import _dead_letter
         _dead_letter(article)
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - dead-letter failures are logged and don't propagate
         logger.error("Failed to dead-letter article %s", article.id)
         return False
 
@@ -221,7 +221,7 @@ def _dead_letter(article):
         create_article_version(
             article, change_reason="dead_letter", changed_by="retry_stuck",
         )
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.warning("Failed to create article version for dead-letter: %s", e)
 
     _apply_fallback(article)

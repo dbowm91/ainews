@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from celery.utils.log import get_task_logger
+import redis.exceptions
 from services.task_security import verify_task
 
 logger = get_task_logger(__name__)
@@ -212,7 +213,7 @@ def recalculate_impact_scores(self):
                 cache.invalidate_prefix("pub:index:")
                 cache.invalidate_prefix("pub:article_detail:")
                 cache.invalidate_prefix("pub:related:")
-            except Exception as e:
+            except redis.exceptions.RedisError as e:
                 logger.warning("Failed to invalidate cache: %s", e)
         else:
             logger.info("Recalculate impact scores: no articles needed updating")

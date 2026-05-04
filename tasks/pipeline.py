@@ -426,7 +426,7 @@ def run_stage(
         raise
     except CircuitOpenError as ce:
         return _handle_circuit_open_module(ce, stage, run_id, t0, article_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - stage exceptions are handled by _handle_stage_exception which logs and returns error dict
         return _handle_stage_exception(e, stage, article_id, run_id, t0, provider_id, model)
     finally:
         if limiter is not None:

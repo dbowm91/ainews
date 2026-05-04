@@ -245,7 +245,7 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
             }
         from services.trend_memory import propose_trend_memory
         propose_trend_memory(article, engagement_data=engagement_data)
-    except Exception:
+    except SQLAlchemyError:
         logger.warning(
             "propose_trend_memory failed for article %s, continuing",
             article.id,
@@ -268,7 +268,7 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
         )
     except json.JSONDecodeError as e:
         logger.warning("Malformed final_article JSON in webhook for article %s: %s", article.id, e)
-    except Exception:
+    except Exception:  # noqa: BLE001 - webhook failures are non-critical, we continue processing
         logger.warning(
             "Webhook trigger failed for article %s, continuing",
             article.id,
@@ -356,7 +356,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
                 quality_score.completeness,
                 quality_score.safety,
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - shadow quality assessment is non-critical
         logger.warning(
             "Quality assessment failed for article %s: %s", article.id, e
         )

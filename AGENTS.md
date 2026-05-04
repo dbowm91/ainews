@@ -92,13 +92,27 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 ---
 
-## Current Quality Status
+## Code Quality
 
-**Note:** The codebase still contains approximately 100+ BLE001 errors (blind `except Exception:`). Addressing these by replacing them with specific exception types is a high priority for improving error handling and observability.
+As of 2026-05-04, the following ruff lint errors are partially resolved:
+
+- **BLE001 (Blind Exception Catch)**: 89 remaining. Replace with specific types (SQLAlchemyError, ValueError, etc.) following AGENTS.md conventions. Focus on `tasks/` and `routes/admin/api/` first.
+- **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/public/__init__.py`. Add `# noqa: E402`.
+- **F401 (Unused Import)**: 10 remaining. Side-effect imports need `as` alias or `# noqa: F401`.
+- **S311 (Non-Cryptographic Random)**: 3 remaining. Justified for jitter in retries/delays. Add `# noqa: S311`.
+- **C901 (Complex Function)**: 1 remaining. `run_subagent()` justified as core logic. Add `# noqa: C901`.
+
+### Pre-Commit Checks
+Always run before committing:
+```bash
+.venv/bin/ruff check . --exclude .venv
+.venv/bin/ruff check . --exclude .venv --select BLE001,E402,F401,S311,C901 --statistics
+.venv/bin/python -m pytest tests/ -x -q
+```
 
 ## Implementation Plan
 
-The `plan.md` (Implementation Plan) in the project root is the source of truth for upcoming tasks, architectural shifts, and the long-term roadmap. Always consult it before starting significant new work.
+The `plans/plan.md` (Implementation Plan) is the source of truth for upcoming tasks, architectural shifts, and the long-term roadmap. Always consult it before starting significant new work.
 
 ---
 
@@ -157,5 +171,6 @@ if not self._redis.set(lock_key, "1", nx=True, ex=ttl):
 5. **Subagent System:** `ToolSelector` protocol in `services/tool_selection.py` provides stage-aware tool selection. Integrated into `run_subagent()` path via `StageAwareToolSelector`.
 6. **Dead Code Removal:** Periodically check for and remove dead code (functions defined but never called). Confirm zero callers via grep before removal.
 7. **Parallelization:** Many improvements can be implemented in parallel by separate agents working on different functional areas (e.g., tasks, services, routes, CSS).
+8. **Documentation Sync:** When fixing lint errors or changing code referenced in `AGENTS.md`, update the relevant section immediately in the same PR. Run the targeted ruff check above to verify code quality claims before committing.
 
 

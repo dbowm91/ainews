@@ -402,11 +402,28 @@ def semantic_search_trends(query: str, limit: int = 10) -> list[dict]:
     if not query_embedding:
         return []
 
+    memory_count = db.session.query(TrendMemory).filter(
+        TrendMemory.embedding.isnot(None),
+        TrendMemory.embedding != "",
+    ).count()
+
+    if memory_count == 0:
+        return []
+
+    _SEMANTIC_SEARCH_LIMIT = 500
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+
     memories = (
         db.session.execute(
             select(TrendMemory)
             .where(TrendMemory.embedding.isnot(None))
             .where(TrendMemory.embedding != "")
+            .where(
+                (TrendMemory.expires_at.is_(None))
+                | (TrendMemory.expires_at > datetime.now(timezone.utc))
+            )
+            .order_by(TrendMemory.importance.desc(), TrendMemory.created_at.desc())
+            .limit(_SEMANTIC_SEARCH_LIMIT)
         )
         .scalars()
         .all()

@@ -465,71 +465,20 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 - `aria-current="page"` for current page indicator
 - `role="navigation"` on nav element
 
-## Recent Improvements (Completed)
+## Implementation History
 
-All Waves 1-5 improvement items have been fully implemented:
+The implementation plan (plans/plan.md) was completed in 2026-05. Key features implemented include:
+- LLM batching, semantic search optimization, prompt caching
+- Database indexes, inline Lua login lockout, request_id in error responses
+- Security hardening (lxml upgrade, file permissions, password docs)
+- Documentation (ab-experiments.md, key_rotation.md, openapi.yaml)
 
-**Wave 1 - Critical Fixes (COMPLETED):**
-- Celery task decorators: All tasks now have `acks_late=True` and `task_reject_on_worker_lost=True`
-- Cache stampede protection: Redis pub/sub pattern replaces polling in `ResponseCache.get_or_set()`
-- Environment variables: `resolve_env_var()` now supports `required=True` parameter
-- CSS consolidation: `critical.css` imports `variables.css`, duplicates removed, build script created
-- L1 cache TTL refresh: Redis TTL refreshed on L1 cache hits
-
-**Wave 2 - High Priority (COMPLETED):**
-- SMTP connection pooling: `SMTPConnectionPool` class with health checks in `services/email.py`
-- Dashboard query consolidation: Caching (60s TTL) and consolidated queries
-- Bulk article N+1 fix: `joinedload(Article.source, Article.tags)` added
-- Webhook async dispatch: Moved to Celery task `dispatch_webhook_task`
-- HMAC task signing: All 10+ scheduled tasks verify HMAC signatures
-- Audit logging: `log_admin_action()` added to all mutation endpoints
-- Cache invalidation: Applied after all admin mutations
-- Redis-backed cache stats: With in-memory fallback
-
-**Wave 3 - Medium Priority (COMPLETED):**
-- Article input validation: MAX_ constants and `_sanitize_field()` in `routes/admin/articles.py`
-- Database indexes: Added to `Webhook.active`, `Source.active`, `Source.source_type`, `Subscriber.newsletter_type`, `PipelineRun.run_type`, composite `(run_type, status)`
-- OpenTelemetry: Real `OTLPSpanExporter` used when endpoint is set
-- Exception handling: Tool functions catch `(SQLAlchemyError, KeyError, AttributeError)` before falling back to `Exception`
-- Template escaping: `|e` filter removed from bleach-sanitized content in templates
-- Admin API schemas: `schemas/admin.py` with Pydantic models
-- OTel tracing: `traced_llm_call` wraps subagent LLM invocations
-- Newsletter rollbacks: `db.session.rollback()` added to all exception handlers
-
-**Wave 4 - LLM Pipeline (COMPLETED):**
-- Memory summarization: `smart_truncate_context()` with LLM-based summarization for overflow
-- Quality assessment: `services/quality.py` with `QualityScore`, `QualityAssessor`, `LLMQualityAssessor`
-- Tool selection: `services/tool_selection.py` with `ToolSelector` protocol and `StageAwareToolSelector`
-- Streaming support: `chat_streaming()` implemented in all LLM adapters (OpenAI, Anthropic, Ollama, Gemini)
-- Redis circuit breaker: `RedisCircuitBreaker` class with in-memory fallback
-
-**Wave 5 - Additional Features (COMPLETED):**
-- API response standardization: `api_response()` helper with consistent JSON envelope
-- PATCH support: Added to sources and webhooks API
-- API versioning: `/api/v1/` prefix on all API routes
-- API token support: `ApiToken` model, token management UI, Bearer auth
-- Redis-backed metrics: Counters/gauges/histograms with in-memory fallback
-- Importance-weighted truncation: `importance_weighted_truncate()` in `services/prompts.py`
-- FTS5 search: `articles_fts` and `articles_admin_fts` virtual tables with ILIKE fallback
-- Container queries: `container-type: inline-size` in `articles.css` with `@supports` fallback
-- CSS @layer: Organization in `style.css` with layered `@import` statements
-- Token-aware truncation: `count_tokens()` and `max_tokens_for_model()` support
-
-**Wave 6 - Plan Implementation (2026-05-04):**
-- LLM batching: `chat_structured_batch()` in `services/llm/base.py` with ThreadPoolExecutor
-- Semantic search optimization: `semantic_search_trends()` with 500 record limit, expires_at pre-filter
-- Prompt caching: `@lru_cache(maxsize=128)` on `load_prompt_file()`
-- Index cleanup: `original_title` index added, redundant `ix_articles_pipeline_status` removed
-- BLE001 Priority 1&2: Fixed in `tasks/` and `routes/admin/api/` (41 remain in non-critical routes)
-- Inline Lua script: Login lockout script inlined in `routes/admin/__init__.py`
-- 500 error request_id: JSON responses now include `request_id` for debugging
-- Documentation: `docs/ab-experiments.md`, `docs/key_rotation.md`, `openapi.yaml` created
-- Security hardening: lxml upgrade to `>=6.1.0,<7`, file permissions fixed, password docs updated
+All planned improvements are complete. Deferred items are tracked in plans/plan.md.
 
 ## Code Quality Workflow
 
 ### Ruff Linting
-Fix errors in waves per priority:
+Order by priority:
 1. **BLE001**: Replace blind `except Exception` with specific types (SQLAlchemyError, ValueError, etc.)
 2. **E402**: Move imports to top of file (add `# noqa: E402` for circular import cases)
 3. **F401**: Remove unused imports (add `# noqa: F401` for side-effect re-exports)

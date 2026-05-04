@@ -134,7 +134,7 @@ def _get_smtp_pool() -> SMTPConnectionPool:
             try:
                 from flask import current_app
                 pool_size = current_app.config.get("SMTP_POOL_SIZE", 5)
-            except smtplib.SMTPException:
+            except (smtplib.SMTPException, RuntimeError):
                 import os
                 pool_size = int(os.environ.get("SMTP_POOL_SIZE", "5"))
             _smtp_pool = SMTPConnectionPool(pool_size)
@@ -169,7 +169,7 @@ def get_smtp_config():
             "from_addr": current_app.config.get("SMTP_FROM", "noreply@ainews.dev"),
         "use_tls": current_app.config.get("SMTP_USE_TLS", True),
     }
-    except (ImportError, KeyError, ValueError, AttributeError):
+    except (ImportError, KeyError, ValueError, AttributeError, RuntimeError):
         import os
 
         return {

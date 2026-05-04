@@ -1,6 +1,7 @@
 import logging
 
 from flask import Response
+from pydantic import ValidationError
 
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
@@ -35,7 +36,7 @@ def health() -> Response:
 
     try:
         status["cache"] = get_response_cache().get_stats()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 non-critical monitoring
         logger.warning("Health check: cache stats failed: %s", e)
         status["cache"] = "error"
 
@@ -43,7 +44,7 @@ def health() -> Response:
         from services.url import _get_dns_cache
 
         status["dns_cache"] = _get_dns_cache().get_stats()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 non-critical monitoring
         logger.warning("Health check: DNS cache stats failed: %s", e)
         status["dns_cache"] = "error"
 
@@ -90,7 +91,7 @@ def workers_health() -> Response:
             for w, s in stats.items()
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 non-critical monitoring
         logger.debug("Celery inspect failed: %s", e)
         result["status"] = "error"
         result["error"] = str(e)
@@ -104,7 +105,7 @@ def task_status(task_id: str) -> Response:
     try:
         validated = TaskStatusParams(task_id=task_id)
         task_id = validated.task_id
-    except Exception as e:
+    except ValidationError as e:
         return api_response(error=str(e), status=400)
 
     from celery.result import AsyncResult

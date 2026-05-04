@@ -9,6 +9,7 @@ from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 from routes.decorators import commit, validate_csrf_json
 from services.audit import log_admin_action
+from services.url import UnsafeURLError
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def _get_webhook_secret(webhook) -> str:
             from services.webhooks import _decrypt_secret
 
             return _decrypt_secret(secret[4:])
-        except Exception:
+        except Exception:  # noqa: BLE001 non-critical fallback
             logger.warning(
                 "Failed to decrypt webhook secret %s, using fallback", webhook.id,
             )
@@ -110,7 +111,7 @@ def create_webhook() -> tuple[Response, int] | Response:
         from services.url import validate_url_safe
 
         validate_url_safe(url)
-    except Exception as e:
+    except (UnsafeURLError, ValueError) as e:
         logger.debug("Invalid webhook URL: %s", e)
         return api_response(error=f"Invalid URL: {e}", status=400)
     if not events or not isinstance(events, list):
@@ -143,7 +144,7 @@ def create_webhook() -> tuple[Response, int] | Response:
             },
             category="webhook",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for webhook_create")
 
     return api_response(
@@ -226,7 +227,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
             from services.url import validate_url_safe
 
             validate_url_safe(new_url)
-        except Exception as e:
+        except (UnsafeURLError, ValueError) as e:
             logger.debug("Invalid webhook URL update: %s", e)
             return api_response(error=f"Invalid URL: {e}", status=400)
         webhook.url = new_url
@@ -259,7 +260,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
             },
             category="webhook",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for webhook_update")
 
     return api_response(meta={"message": "Webhook updated"})
@@ -287,7 +288,7 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
             details={"name": webhook.name},
             category="webhook",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for webhook_delete")
 
     return api_response(meta={"message": "Webhook deleted"})
@@ -381,7 +382,7 @@ def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
         try:
             stored = json.loads(event.payload)
             event_data = stored.get("data", {})
-        except Exception as e:
+        except json.JSONDecodeError as e:
             logger.debug("Failed to parse webhook event payload: %s", e)
 
     dispatch_webhook_task.delay(

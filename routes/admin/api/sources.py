@@ -1,12 +1,14 @@
 import logging
 
 from flask import Response, request
+from pydantic import ValidationError
 
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 from routes.decorators import commit, validate_csrf_json
 from schemas.admin import CreateSourceRequest, UpdateSourceRequest
 from services.audit import log_admin_action
+from services.url import UnsafeURLError
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ def create_source() -> tuple[Response, int] | Response:
 
     try:
         validated = CreateSourceRequest(**data)
-    except Exception as e:
+    except ValidationError as e:
         return api_response(error=str(e), status=400)
 
     existing = Source.query.filter_by(source_key=validated.source_key).first()
@@ -69,7 +71,7 @@ def create_source() -> tuple[Response, int] | Response:
             from services.url import validate_url_safe
 
             validate_url_safe(validated.url)
-        except Exception as e:
+        except (UnsafeURLError, ValueError) as e:
             logger.debug("Invalid source URL: %s", e)
             return api_response(error=f"Invalid URL: {e}", status=400)
 
@@ -100,7 +102,7 @@ def create_source() -> tuple[Response, int] | Response:
             },
             category="config",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for source_create")
 
     return api_response(
@@ -164,7 +166,7 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
 
     try:
         validated = UpdateSourceRequest(**data)
-    except Exception as e:
+    except ValidationError as e:
         return api_response(error=str(e), status=400)
 
     if validated.source_key is not None:
@@ -185,7 +187,7 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
                 from services.url import validate_url_safe
 
                 validate_url_safe(validated.url)
-            except Exception as e:
+            except (UnsafeURLError, ValueError) as e:
                 logger.debug("Invalid source URL update: %s", e)
                 return api_response(error=f"Invalid URL: {e}", status=400)
         source.url = validated.url or None
@@ -214,7 +216,7 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
             },
             category="config",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for source_update")
 
     return api_response(meta={"message": "Source updated"})
@@ -252,7 +254,7 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
             try:
                 from services.url import validate_url_safe
                 validate_url_safe(new_url)
-            except Exception as e:
+            except (UnsafeURLError, ValueError) as e:
                 logger.debug("Invalid source URL in PATCH: %s", e)
                 return api_response(error=f"Invalid URL: {e}", status=400)
         source.url = new_url or None
@@ -284,7 +286,7 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
             },
             category="config",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for source_update_partial")
 
     return api_response(
@@ -331,7 +333,7 @@ def delete_source(source_id: int) -> tuple[Response, int] | Response:
             details={"source_key": source.source_key},
             category="config",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
         logger.warning("Audit logging failed for source_delete")
 
     return api_response(meta={"message": "Source deleted"})

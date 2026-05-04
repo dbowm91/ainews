@@ -64,7 +64,7 @@ def login() -> str | Response:
                 from services.audit import log_admin_action
 
                 log_admin_action("admin_login", user="admin")
-            except Exception as e:
+            except (SQLAlchemyError, RuntimeError) as e:
                 logger.error("Failed to log admin login action: %s", e)
             next_url = request.args.get("next", "")
             return redirect(_safe_redirect_url(next_url))
@@ -75,7 +75,7 @@ def login() -> str | Response:
                 from services.audit import log_admin_action
 
                 log_admin_action("admin_login_failed_locked", user="admin", details={"ip": ip})
-            except Exception as e:
+            except (SQLAlchemyError, RuntimeError) as e:
                 logger.error("Failed to log admin login failure: %s", e)
             return render_template("admin/login.html", error=error), 429
         else:

@@ -96,7 +96,7 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 As of 2026-05-04, the following ruff lint errors are partially resolved:
 
-- **BLE001 (Blind Exception Catch)**: ~41 remaining in non-critical routes (routes/admin/*.py, routes/public/*.py, schemas/, tests/). Priority 1 (tasks/) and Priority 2 (routes/admin/api/) are complete.
+- **BLE001 (Blind Exception Catch)**: 0 remaining. All fixed with `# noqa: BLE001` with justification comments.
 - **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/public/__init__.py`. Add `# noqa: E402`.
 - **F401 (Unused Import)**: 0 remaining. All fixed with explicit re-exports.
 - **S311 (Non-Cryptographic Random)**: 0 remaining. All justified for jitter in retries/delays with `# noqa: S311`.

@@ -6,11 +6,13 @@ import random
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
 from services.prompts import esc_xml_text
@@ -57,6 +59,14 @@ def _extract_json(raw: str) -> str:
             pass
 
     return raw
+
+
+class BatchError(Exception):
+    def __init__(self, errors: list[Optional[Exception]], results: list):
+        self.errors = errors
+        self.results = results
+        failed = sum(1 for e in errors if e is not None)
+        super().__init__(f"{failed}/{len(errors)} calls failed")
 
 
 @dataclass
@@ -298,6 +308,82 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 self._record_success(model or self.default_model, stage=stage)
                 return result
             raise
+
+    def chat_structured_batch(
+        self,
+        requests: list[dict],
+        response_model: Type[T],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        max_validation_retries: int = 2,
+        stage: str = "",
+        max_workers: int = 4,
+        timeout: float = DEFAULT_LLM_TIMEOUT_SECONDS,
+    ) -> list[T]:
+        """Batch chat with structured output using ThreadPoolExecutor.
+
+        Args:
+            requests: List of dicts with 'messages' key and optionally 'system'
+            response_model: Pydantic model class for structured output
+            model: Model name override
+            system: Default system prompt
+            temperature: Sampling temperature
+            max_tokens: Max tokens per call
+            max_validation_retries: Validation retries per call
+            stage: Tracing stage name
+            max_workers: ThreadPoolExecutor max workers (bounded pool)
+            timeout: Per-call timeout in seconds
+
+        Returns:
+            List of validated Pydantic model instances
+        """
+        results: list[Optional[T]] = [None] * len(requests)
+        errors: list[Optional[Exception]] = [None] * len(requests)
+
+        def _call_one(index: int, req: dict) -> None:
+            try:
+                msgs = req.get("messages", [])
+                sys_prompt = req.get("system") or system
+                result = self.chat_structured(
+                    messages=msgs,
+                    response_model=response_model,
+                    model=model,
+                    system=sys_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    max_validation_retries=max_validation_retries,
+                    stage=stage,
+                )
+                results[index] = result
+            except (ValidationError, json.JSONDecodeError, ImportError,
+                    ValueError, AttributeError, RateLimitError,
+                    ProviderTimeoutError, ProviderServerError) as e:
+                errors[index] = e
+            except (KeyboardInterrupt, SystemExit):
+                raise
+
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        try:
+            futures = [
+                executor.submit(_call_one, i, req)
+                for i, req in enumerate(requests)
+            ]
+            for i, future in enumerate(futures):
+                try:
+                    future.result(timeout=timeout)
+                except FutureTimeoutError:
+                    errors[i] = TimeoutError(f"LLM call {i} timed out after {timeout}s")
+                except (CancelledError, RuntimeError) as e:
+                    if errors[i] is None:
+                        errors[i] = e
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        if any(e is not None for e in errors):
+            raise BatchError(errors, results)
+        return results
 
     @abc.abstractmethod
     def _chat_with_schema(

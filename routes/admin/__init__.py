@@ -1,5 +1,4 @@
 import logging
-import os
 import threading
 import time
 from functools import wraps
@@ -138,12 +137,10 @@ def _cleanup_stale_entries() -> None:
         for ip in stale_keys:
             del _login_attempts_memory[ip]
 
-        # If still too many entries, remove oldest
         if len(_login_attempts_memory) > _MAX_MEMORY_ENTRIES:
-            # Sort by first_time and keep newest
             sorted_entries = sorted(
                 _login_attempts_memory.items(),
-                key=lambda x: x[1][1],  # first_time
+                key=lambda x: x[1][1],
                 reverse=True,
             )
             _login_attempts_memory.clear()
@@ -151,20 +148,16 @@ def _cleanup_stale_entries() -> None:
                 _login_attempts_memory[ip] = entry
 
 
-# Load Lua script for atomic login lockout
-_LUA_SCRIPT = None
+_LOCKOUT_LUA_SCRIPT = """
+local count = redis.call('HINCRBY', KEYS[1], 'count', 1)
+redis.call('HSETNX', KEYS[1], 'first_attempt', ARGV[1])
+redis.call('EXPIRE', KEYS[1], ARGV[2])
 
-
-def _get_lockout_lua_script():
-    """Load the login lockout Lua script (cached after first load)."""
-    global _LUA_SCRIPT
-    if _LUA_SCRIPT is None:
-        script_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "services", "login_lockout.lua",
-        )
-        with open(script_path) as f:
-            _LUA_SCRIPT = f.read()
-    return _LUA_SCRIPT
+if count >= tonumber(ARGV[3]) then
+    return 1
+end
+return 0
+"""
 
 
 def _get_redis():
@@ -242,7 +235,7 @@ def _check_and_record_attempt(ip: str) -> bool:
         r = _get_redis()
         key = f"{_LOGIN_ATTEMPT_PREFIX}{ip}"
         result = r.eval(
-            _get_lockout_lua_script(),
+            _LOCKOUT_LUA_SCRIPT,
             1,
             key,
             str(time.time()),
@@ -252,7 +245,6 @@ def _check_and_record_attempt(ip: str) -> bool:
         return result == 1
     except redis.exceptions.RedisError as e:
         logger.warning("Redis error in check_and_record for %s: %s", ip, e)
-        # Fallback: record in memory and check
         _record_failed_attempt_memory(ip)
         return _is_locked_out_memory(ip)
 

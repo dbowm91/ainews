@@ -169,14 +169,14 @@ class WebAdapter(BaseSourceAdapter):
     def _polite_get(self, url: str) -> Optional[BeautifulSoup]:
         cfg = self.adapter_config
         validate_url_safe(url)
-        delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)
+        delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)  # noqa: S311
         time.sleep(delay)
 
         for attempt in range(cfg.max_retries):
             try:
                 resp = self._session.get(url, timeout=15)
                 if resp.status_code == 429:
-                    wait = 2**attempt * 5 + random.uniform(0, 2)
+                    wait = 2**attempt * 5 + random.uniform(0, 2)  # noqa: S311
                     time.sleep(wait)
                     continue
                 resp.raise_for_status()

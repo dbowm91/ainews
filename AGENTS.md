@@ -94,13 +94,13 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 ## Code Quality
 
-As of 2026-05-04, the following ruff lint errors are partially resolved:
+As of 2026-05-04, the following ruff lint errors have been resolved:
 
-- **BLE001 (Blind Exception Catch)**: 0 remaining. All fixed with `# noqa: BLE001` with justification comments.
+- **BLE001 (Blind Exception Catch)**: 0 remaining. All fixed with specific exception handling (`SQLAlchemyError`, `RedisError`, `ValueError`, etc.) or `# noqa: BLE001` with justification comments.
 - **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/public/__init__.py`. Add `# noqa: E402`.
 - **F401 (Unused Import)**: 0 remaining. All fixed with explicit re-exports.
 - **S311 (Non-Cryptographic Random)**: 0 remaining. All justified for jitter in retries/delays with `# noqa: S311`.
-- **C901 (Complex Function)**: 0 remaining. `run_subagent()` has `# noqa: C901`.
+- **C901 (Complex Function)**: 0 remaining. Complex functions have `# noqa: C901` with justification comments.
 
 ### Pre-Commit Checks
 Always run before committing:

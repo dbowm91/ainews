@@ -1,26 +1,29 @@
 # Subagent Branch Management
 
-## Rules
-1. **Separate Branches:** Each subagent task MUST use a dedicated branch to avoid merge conflicts
-2. **Branch Naming:** `feat/wX-Y-description` where X is wave number, Y is item ID
-3. **Base Branch:** All task branches should be based on the main working branch (e.g., `feat/implement-remaining-plan-items`)
-4. **Merge Strategy:** Use `git merge --no-ff` to preserve task branch history
-5. **Conflict Resolution:** If conflicts arise, resolve in favor of the main working branch
+> **Note:** The comprehensive improvement plan (plans/plan.md) has been completed as of 2026-05-04. This skill is retained for reference on branch management patterns.
 
-## Example Workflow
-```bash
-# Create task branch
-git checkout -b feat/w1-s1-fix-env-permissions
+## Branch Management Rules
 
-# Subagent completes work, commits
-
-# Merge back
-git checkout feat/implement-remaining-plan-items
-git merge feat/w1-s1-fix-env-permissions --no-ff -m "Merge W1-S1: Fix .env permissions"
-```
+1. **Separate Branches:** Each subagent task should use a dedicated branch to avoid merge conflicts
+2. **Branch Naming:** `feat/description` where description is concise
+3. **Merge Strategy:** Use `git merge --no-ff` to preserve task branch history when merging into integration branches
 
 ## Verification
-Always verify subagent work before merging:
-- Run linter and tests
+
+Before merging subagent work:
+- Run linter: `.venv/bin/ruff check . --exclude .venv`
+- Run tests: `.venv/bin/python -m pytest tests/ -x -q`
 - Review diff for unintended changes
 - Ensure only task-related files are modified
+
+## Historical: Wave-Based Implementation (Completed 2026-05-04)
+
+The implementation plan used a wave structure:
+- **Wave 1:** Security & Core Stability
+- **Wave 2:** Pipeline Performance & Efficiency
+- **Wave 3:** Quality & Maintainability (BLE001 lint fixes)
+- **Wave 4:** Documentation & Observability
+
+This structure has been superseded by the completed plan status.
+
+(End of file - 28 lines)

@@ -67,7 +67,7 @@ python scripts/hash_password.py
 
 Add the hash to `.env`:
 ```
-ADMIN_PASSWORD=pbkdf2:sha256:600000$<hash>
+ADMIN_PASSWORD=scrypt:sha256:<hash>
 ```
 
 ### Docker Secrets
@@ -96,13 +96,13 @@ secrets:
 ### Hashing Algorithm
 
 Uses werkzeug's `check_password_hash()` which supports:
-- PBKDF2 with SHA256 (default)
-- Scrypt
+- Scrypt (default, OWASP 2024-2026 compliant)
+- PBKDF2 with SHA256
 - Argon2
 
 ### Password Requirements
 
-- Minimum 8 characters
+- Minimum 12 characters
 - No maximum (uses secure comparison)
 - Case sensitive
 

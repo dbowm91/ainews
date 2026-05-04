@@ -75,9 +75,9 @@ def topic_notes_create():
         try:
             cache = get_response_cache()
             cache.invalidate_prefix("topic_note")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Failed to invalidate topic_note cache: %s", e)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         flash(f"Error creating note: {e}", "error")
 
     return redirect(url_for("admin.topic_notes_list"))
@@ -131,9 +131,9 @@ def topic_notes_edit():
         try:
             cache = get_response_cache()
             cache.invalidate_prefix("topic_note")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Failed to invalidate topic_note cache: %s", e)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         db.session.rollback()
         flash(f"Error updating note: {e}", "error")
 
@@ -159,11 +159,11 @@ def topic_notes_delete():
             try:
                 cache = get_response_cache()
                 cache.invalidate_prefix("topic_note")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to invalidate topic_note cache: %s", e)
         else:
             flash("Note not found", "error")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         flash(f"Error deleting note: {e}", "error")
 
     return redirect(url_for("admin.topic_notes_list"))

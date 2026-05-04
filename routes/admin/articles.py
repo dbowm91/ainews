@@ -345,7 +345,7 @@ def _invalidate_article_caches(article_id):
         cache.invalidate_prefix("pub:topic")
         cache.invalidate_prefix("pub:rss_feed")
         cache.invalidate(f"pub:article_detail:{article_id}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate article cache: %s", e)
 
 

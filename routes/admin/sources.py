@@ -93,7 +93,7 @@ def add_source() -> str:
         cache.invalidate_prefix("pub:topic")
         cache.invalidate_prefix("pub:rss_feed")
         cache.invalidate_prefix("pub:related")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate cache after source creation: %s", e)
 
     from services.audit import log_admin_action
@@ -133,7 +133,7 @@ def enable_source(source_id: int) -> tuple[Response, int]:
         cache.invalidate_prefix("pub:topic")
         cache.invalidate_prefix("pub:rss_feed")
         cache.invalidate_prefix("pub:related")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate source cache: %s", e)
 
     return jsonify({"message": f"Source {source.name} enabled"}), 200
@@ -169,7 +169,7 @@ def disable_source(source_id: int) -> tuple[Response, int]:
         cache.invalidate_prefix("pub:topic")
         cache.invalidate_prefix("pub:rss_feed")
         cache.invalidate_prefix("pub:related")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate source cache: %s", e)
 
     return jsonify({"message": f"Source {source.name} disabled"}), 200

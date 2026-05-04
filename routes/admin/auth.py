@@ -84,7 +84,7 @@ def login() -> str | Response:
                 from services.audit import log_admin_action
 
                 log_admin_action("admin_login_failed", user="admin", details={"ip": ip})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error("Failed to log admin login failure: %s", e)
     return render_template("admin/login.html", error=error)
 
@@ -111,7 +111,7 @@ def verify_2fa() -> str | Response:
                 from services.audit import log_admin_action
 
                 log_admin_action("admin_login_2fa", user="admin")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error("Failed to log admin 2FA login: %s", e)
             return redirect(url_for("admin.dashboard"))
         error = "Invalid 2FA token"
@@ -139,7 +139,7 @@ def setup_2fa() -> str | Response:
                 from services.audit import log_admin_action
 
                 log_admin_action("admin_2fa_enabled", user="admin")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error("Failed to log 2FA enable: %s", e)
             return redirect(url_for("admin.dashboard"))
         error = "Invalid 2FA token"
@@ -160,7 +160,7 @@ def logout() -> Response:
         from services.audit import log_admin_action
 
         log_admin_action("admin_logout", user="admin")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error("Failed to log admin logout action: %s", e)
     session.pop("admin", None)
     return redirect("/")

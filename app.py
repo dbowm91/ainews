@@ -213,14 +213,19 @@ def _register_error_handlers(app):
 
     @app.errorhandler(500)
     def internal_error(e):
+        from flask import g
         logger.error(
             "500 Internal Server Error: %s %s",
             request.method,
             request.path,
             exc_info=True,
         )
+        request_id = getattr(g, "request_id", None)
         if _wants_json():
-            return jsonify({"error": "Internal server error"}), 500
+            resp = {"error": "Internal server error"}
+            if request_id:
+                resp["request_id"] = request_id
+            return jsonify(resp), 500
         return render_template("errors/500.html"), 500
 
     @app.errorhandler(429)

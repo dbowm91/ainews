@@ -1,0 +1,292 @@
+openapi: 3.0.3
+info:
+  title: ainews Admin API v1
+  description: Admin API for managing ainews sources, articles, webhooks, and pipeline.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Admin API v1
+paths:
+  /admin/health:
+    get:
+      summary: Health check
+      tags: [Health]
+      responses:
+        '200':
+          description: Service health status
+  /admin/sources:
+    get:
+      summary: List sources
+      tags: [Sources]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Paginated source list
+    post:
+      summary: Create source
+      tags: [Sources]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSourceRequest'
+      responses:
+        '201':
+          description: Source created
+  /admin/sources/{id}:
+    patch:
+      summary: Update source
+      tags: [Sources]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSourceRequest'
+      responses:
+        '200':
+          description: Source updated
+    delete:
+      summary: Delete source
+      tags: [Sources]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Source deleted
+  /admin/articles:
+    get:
+      summary: List articles
+      tags: [Articles]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated article list
+  /admin/articles/bulk:
+    post:
+      summary: Bulk article operations
+      tags: [Articles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [set_status, set_category, delete, reprocess, add_tags]
+                ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Bulk operation result
+  /admin/webhooks:
+    get:
+      summary: List webhooks
+      tags: [Webhooks]
+      responses:
+        '200':
+          description: Webhook list
+    post:
+      summary: Create webhook
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: Webhook created
+  /admin/webhooks/{id}:
+    patch:
+      summary: Update webhook
+      tags: [Webhooks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Webhook updated
+    delete:
+      summary: Delete webhook
+      tags: [Webhooks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Webhook deleted
+  /admin/pipeline/sla:
+    get:
+      summary: Pipeline SLA metrics
+      tags: [Pipeline]
+      responses:
+        '200':
+          description: SLA metrics (avg, p50, p95 processing times)
+  /admin/pipeline/dead-letter/stats:
+    get:
+      summary: Dead letter queue stats
+      tags: [Pipeline]
+      responses:
+        '200':
+          description: Dead letter statistics
+  /admin/newsletters/stats:
+    get:
+      summary: Newsletter delivery stats
+      tags: [Newsletter]
+      responses:
+        '200':
+          description: Aggregate delivery statistics
+  /admin/search/analytics:
+    get:
+      summary: Search analytics
+      tags: [Search]
+      responses:
+        '200':
+          description: Top queries and zero-result queries
+  /admin/audit-logs:
+    get:
+      summary: Audit logs
+      tags: [Audit]
+      parameters:
+        - in: query
+          name: action
+          schema:
+            type: string
+        - in: query
+          name: target_type
+          schema:
+            type: string
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 7
+      responses:
+        '200':
+          description: Audit log entries
+components:
+  schemas:
+    CreateSourceRequest:
+      type: object
+      required:
+        - name
+        - url
+        - source_type
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+        source_type:
+          type: string
+          enum: [rss, api, scrape]
+        topics:
+          type: array
+          items:
+            type: string
+    UpdateSourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+        topics:
+          type: array
+          items:
+            type: string
+    CreateWebhookRequest:
+      type: object
+      required:
+        - name
+        - url
+        - events
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: [article.published, article.failed, newsletter.sent, newsletter.failed, article.selected]
+        secret:
+          type: string
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: integer
+        user:
+          type: string
+        ip_address:
+          type: string
+        details:
+          type: object
+        created_at:
+          type: string
+          format: date-time

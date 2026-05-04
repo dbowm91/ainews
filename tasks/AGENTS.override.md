@@ -32,3 +32,11 @@ Use `constants.py:VALID_TRANSITIONS` for atomic state changes. NEVER assign `art
 ## Newsletter Tasks
 
 - **Newsletter Webhooks:** `newsletter.py` fires `newsletter.failed` webhook on delivery failure, `newsletter.sent` webhook with correct `newsletter.id` (ORM model) in payload.
+
+## Error Handling
+
+- **Specific Exceptions:** Actively replace `except Exception:` with specific exception types (e.g., `SQLAlchemyError`, `RedisError`, `ValueError`) to improve error diagnostic quality and prevent suppressing unexpected system failures.
+
+## LLM Performance
+
+- **Async & Batching:** When implementing LLM-dependent tasks, consider using async providers or batching requests where supported to maximize throughput and reduce worker idle time.

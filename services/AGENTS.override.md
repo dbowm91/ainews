@@ -63,3 +63,6 @@ Per-Stage Circuit Breaker: Circuit breakers are keyed by `provider:model:stage` 
 - **Retry Logic Refactor:** Retry logic with exponential backoff + jitter has been refactored into the `_execute_with_retry()` helper in `subagent.py` to eliminate triple duplication.
 - **ModelLimiter Stampede Protection:** `ModelLimiter` uses a Redis pub/sub pattern for stampede protection, ensuring only one worker attempts to refresh model quotas/limits while others wait for the result.
 - **Thread Cancellation Limitation:** `future.cancel()` only requests cancellation - it doesn't guarantee thread termination. For robust cancellation, consider `ProcessPoolExecutor` or `executor.shutdown(wait=False)` with SIGTERM handling.
+- **Audit Logging Context:** `log_admin_action` often requires an active Flask app context or careful handling of `db.session` (especially when called from background threads or Celery tasks) to ensure the audit log is correctly persisted.
+- **Non-Blocking ModelLimiter:** New implementations of `ModelLimiter` or related throttling logic should prioritize non-blocking patterns to avoid bottlenecking the worker fleet.
+- **SSRF Protection & IP Normalization:** `url.py` must perform IP normalization (e.g., resolving hostnames and checking against CIDR ranges) to effectively prevent SSRF attacks. Ensure `validate_url_safe()` is used for all external requests.

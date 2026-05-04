@@ -22,3 +22,4 @@ On successful admin login, ALWAYS call `session.clear()` before setting authenti
 - **Admin API Schemas:** Pydantic models in `schemas/admin.py` for request validation (`ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`).
 - **Audit Logging:** `log_admin_action()` added to all mutation endpoints (review approve/reject, sources CRUD, topic notes CRUD, trend memory delete, articles edit/delete/reprocess/rollback, pipelines trigger, newsletters trigger).
 - **API Versioning:** All API routes use `/api/v1/` prefix (admin: `admin_api_bp`, public: updated routes).
+- **BLE001 Resolution:** Prioritize resolving BLE001 (`except Exception:`) lint errors in admin API routes by catching specific exceptions related to the operation (e.g., `SQLAlchemyError` for database queries, `KeyError` for dictionary access).

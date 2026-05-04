@@ -96,11 +96,11 @@ Truncation respects model token limits via `count_tokens()` and `max_tokens_for_
 
 As of 2026-05-04, the following ruff lint errors are partially resolved:
 
-- **BLE001 (Blind Exception Catch)**: 89 remaining. Replace with specific types (SQLAlchemyError, ValueError, etc.) following AGENTS.md conventions. Focus on `tasks/` and `routes/admin/api/` first.
+- **BLE001 (Blind Exception Catch)**: ~41 remaining in non-critical routes (routes/admin/*.py, routes/public/*.py, schemas/, tests/). Priority 1 (tasks/) and Priority 2 (routes/admin/api/) are complete.
 - **E402 (Module Import Not at Top)**: 3 remaining. Justified for circular import avoidance in `routes/public/__init__.py`. Add `# noqa: E402`.
-- **F401 (Unused Import)**: 10 remaining. Side-effect imports need `as` alias or `# noqa: F401`.
-- **S311 (Non-Cryptographic Random)**: 3 remaining. Justified for jitter in retries/delays. Add `# noqa: S311`.
-- **C901 (Complex Function)**: 1 remaining. `run_subagent()` justified as core logic. Add `# noqa: C901`.
+- **F401 (Unused Import)**: 0 remaining. All fixed with explicit re-exports.
+- **S311 (Non-Cryptographic Random)**: 0 remaining. All justified for jitter in retries/delays with `# noqa: S311`.
+- **C901 (Complex Function)**: 0 remaining. `run_subagent()` has `# noqa: C901`.
 
 ### Pre-Commit Checks
 Always run before committing:

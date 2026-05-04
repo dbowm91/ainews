@@ -515,6 +515,17 @@ All Waves 1-5 improvement items have been fully implemented:
 - CSS @layer: Organization in `style.css` with layered `@import` statements
 - Token-aware truncation: `count_tokens()` and `max_tokens_for_model()` support
 
+**Wave 6 - Plan Implementation (2026-05-04):**
+- LLM batching: `chat_structured_batch()` in `services/llm/base.py` with ThreadPoolExecutor
+- Semantic search optimization: `semantic_search_trends()` with 500 record limit, expires_at pre-filter
+- Prompt caching: `@lru_cache(maxsize=128)` on `load_prompt_file()`
+- Index cleanup: `original_title` index added, redundant `ix_articles_pipeline_status` removed
+- BLE001 Priority 1&2: Fixed in `tasks/` and `routes/admin/api/` (41 remain in non-critical routes)
+- Inline Lua script: Login lockout script inlined in `routes/admin/__init__.py`
+- 500 error request_id: JSON responses now include `request_id` for debugging
+- Documentation: `docs/ab-experiments.md`, `docs/key_rotation.md`, `openapi.yaml` created
+- Security hardening: lxml upgrade to `>=6.1.0,<7`, file permissions fixed, password docs updated
+
 ## Code Quality Workflow
 
 ### Ruff Linting

@@ -87,7 +87,7 @@ class AnthropicProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
@@ -142,7 +142,7 @@ class AnthropicProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_anthropic_error(e) from e
 
     @circuit_protected("llm_anthropic")
@@ -171,7 +171,7 @@ class AnthropicProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
@@ -223,7 +223,7 @@ class AnthropicProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
@@ -304,7 +304,7 @@ class AnthropicProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:  # noqa: BLE001 - APIError is base for all Anthropic SDK errors
             converted = _handle_anthropic_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

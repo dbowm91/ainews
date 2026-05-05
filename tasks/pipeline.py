@@ -412,6 +412,8 @@ def run_stage(
     
     limiter, redis_client, lock_acquired = _acquire_stage_resources(rc, task_self, retry_countdown, retry_max, lock_key, task_id)
     if not lock_acquired:
+        if limiter is not None:
+            limiter.release(rc.provider, None, rc.timeout_seconds)
         logger.info("TraceID=%s: Stage %s already running for article %s, skipping", trace_id, stage, article_id)
         return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
     

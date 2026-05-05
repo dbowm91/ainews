@@ -91,7 +91,7 @@ class OpenAIProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
@@ -145,7 +145,7 @@ class OpenAIProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_openai_error(e) from e
 
     @circuit_protected("llm_openai")
@@ -179,7 +179,7 @@ class OpenAIProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
@@ -240,7 +240,7 @@ class OpenAIProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
@@ -317,7 +317,7 @@ class OpenAIProvider(BaseLLMProvider):
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
-                TimeoutError, ValueError) as e:
+                TimeoutError, ValueError, Exception) as e:  # noqa: BLE001 - APIError is base for all OpenAI SDK errors
             converted = _handle_openai_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

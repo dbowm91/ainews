@@ -3,31 +3,16 @@ from __future__ import annotations
 import abc
 import hashlib
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, ClassVar, Optional
 
+from schemas.item import RawItem
 from schemas.source import SourceConfig
-from services.url import normalize_url
+from utils.url import normalize_url
 
 logger = logging.getLogger(__name__)
 
 MAX_TEXT_LENGTH = 3000
 MATCH_TEXT_PREVIEW_LENGTH = 500
-
-
-@dataclass
-class RawItem:
-    source_id: str
-    external_id: str
-    title: str
-    url: Optional[str] = None
-    author: Optional[str] = None
-    published_at: Optional[datetime] = None
-    text_content: Optional[str] = None
-    raw_score: float = 0.0
-    raw_metadata: dict[str, Any] = field(default_factory=dict)
-    topics: list[str] = field(default_factory=list)
 
 
 _ADAPTER_REGISTRY: dict[str, type[BaseSourceAdapter]] = {}

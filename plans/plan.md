@@ -82,7 +82,7 @@ This plan consolidates all previous draft plans (Plan 2-5) into a single, phased
 ### Task 3.2: Refactor Large Files ✅
 - **M-6: Refactor test_subagent.py** (1964 lines) -> Split into 7 domain-specific files. ✅
 - **L-1: Refactor models.py** (541 lines) -> Convert to `models/` package. ✅
-- **L-2: Refactor runner.py** (629 lines) -> Extract prompt management and helpers. (Note: not completed by subagent - may need follow-up)
+- **L-2: Refactor runner.py** (568 lines) -> Extract prompt management and helpers. ✅ (501 lines after refactoring, removed dead code)
 - **L-3: Refactor llm/base.py** (585 lines) -> Extract types and JSON utilities. ✅
 
 ### Task 3.3: Optimize Pipeline Throughput ✅
@@ -126,9 +126,9 @@ This plan consolidates all previous draft plans (Plan 2-5) into a single, phased
 
 2. **L2.2 Mypy Deferred**: Complex Mypy errors in `models.py`, `services/llm/*.py`, `services/metrics.py`, etc. require deeper refactoring and are not critical to functionality.
 
-3. **L-2 runner.py Not Refactored**: The runner.py refactoring was not completed by the subagent. This remains as a large file (629 lines).
+3. **Fernet Encryption Skipped**: 2FA TOTP secrets are not encrypted at rest - would require additional `TOTP_SECRET_KEY` environment variable.
 
-4. **Fernet Encryption Skipped**: 2FA TOTP secrets are not encrypted at rest - would require additional `TOTP_SECRET_KEY` environment variable.
+4. **runner.py Refactoring (2026-05-05)**: Extracted `_format_subagent_prompt()` and `_is_task_revoked()` to `utils.py`. Removed dead code `_handle_subagent_error()` and broken `_call_with_timeout_module()`. Fixed `run_subagent_with_tools()` to use inline closure. Reduced from 568 to 501 lines.
 
 ---
 

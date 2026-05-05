@@ -30,7 +30,7 @@ class TrendMemory(db.Model):
     __tablename__ = 'trend_memory'
 
     id = db.Column(db.Integer, primary_key=True)
-    topic = db.Column(db.String(255), nullable=False, index=True)
+    topic = db.Column(db.String(128), nullable=False, index=True)
     signal = db.Column(db.Text, nullable=False)
     importance = db.Column(db.Integer, nullable=False)  # 1=LOW, 2=MEDIUM, 3=HIGH
     source_article_id = db.Column(db.Integer, db.ForeignKey('articles.id', ondelete='CASCADE'))

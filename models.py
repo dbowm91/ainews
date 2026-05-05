@@ -8,7 +8,7 @@ warnings.warn(
     stacklevel=2,
 )
 
-from models import (
+from models import (  # noqa: E402
     AdminUser,
     ApiToken,
     Article,

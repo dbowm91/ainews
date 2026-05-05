@@ -1,11 +1,11 @@
 # BLE001 Exception Handling Guide
 
 > **Status:** Active skill - documents lessons learned from BLE001 narrowing in Wave 3.
+> **Updated:** 2026-05-05 - Approach validated during Wave 1 H-2 fix.
 
 ## The Problem
 
-When BLE001 (blind exception catch) was narrowed to specific exception types, some tests failed
-because the narrowed lists didn't cover all exceptions that could be raised in practice.
+When BLE001 (blind exception catch) was narrowed to specific exception types, some tests failed because the narrowed lists didn't cover all exceptions that could be raised in practice.
 
 ## Key Lessons Learned
 
@@ -21,8 +21,7 @@ def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
         return None
 ```
 
-**Lesson:** External libraries like trafilatura can raise generic `Exception` from their
-network operations. Tests using plain `Exception("message")` will fail if you narrow too much.
+**Lesson:** External libraries like trafilatura can raise generic `Exception` from their network operations. Tests using plain `Exception("message")` will fail if you narrow too much.
 
 ### 2. Flask current_app Raises RuntimeError Outside Context
 
@@ -35,8 +34,7 @@ except (smtplib.SMTPException, RuntimeError):  # noqa: BLE001
     pool_size = int(os.environ.get("SMTP_POOL_SIZE", "5"))
 ```
 
-**Lesson:** `current_app` raises `RuntimeError: Working outside of application context` when
-accessed outside a request. Always include `RuntimeError` when catching Flask config access.
+**Lesson:** `current_app` raises `RuntimeError: Working outside of application context` when accessed outside a request. Always include `RuntimeError` when catching Flask config access.
 
 ### 3. Metrics Subsystem Can Raise RuntimeError
 
@@ -48,18 +46,35 @@ except (RedisError, ImportError, AttributeError, ValueError, RuntimeError):
     logger.debug("Failed to emit metric")
 ```
 
-**Lesson:** The metrics subsystem (`services/metrics.py`) can raise `RuntimeError` when its
-internal state is invalid or when Redis operations fail in unexpected ways.
+**Lesson:** The metrics subsystem (`services/metrics.py`) can raise `RuntimeError` when its internal state is invalid or when Redis operations fail in unexpected ways.
 
-### 4. Always Add noqa Comments for Intentional Broad Catches
+### 4. LLM SDKs Can Raise APIError Base Classes
+
+OpenAI and Anthropic SDKs raise exception hierarchies where `APITimeoutError` inherits from `APIConnectionError` which inherits from `APIError`. These base classes are NOT subclasses of `httpx.HTTPError`, `ConnectionError`, or `TimeoutError`:
+
+```python
+# anthropic.APITimeoutError MRO:
+# APITimeoutError -> APIConnectionError -> APIError -> AnthropicError -> Exception
+
+# openai.APITimeoutError MRO:
+# APITimeoutError -> APIConnectionError -> APIError -> OpenAIError -> Exception
+
+# Neither is a subclass of httpx.HTTPError, ConnectionError, or TimeoutError!
+```
+
+**Solution:** Always include `Exception` in catch tuples when dealing with external SDK exceptions:
+```python
+except (ImportError, httpx.HTTPError, ConnectionError, TimeoutError, ValueError, Exception) as e:  # noqa: BLE001
+```
+
+### 5. Always Add noqa Comments for Intentional Broad Catches
 
 ```python
 except Exception:  # noqa: BLE001 - trafilatura raises diverse network exceptions
 except Exception:  # noqa: BLE001 - Flask current_app raises RuntimeError outside context
 ```
 
-**Lesson:** When keeping a broad `Exception` catch, always document WHY it's intentional
-with a noqa comment. This prevents Ruff from flagging it and documents the rationale.
+**Lesson:** When keeping a broad `Exception` catch, always document WHY it's intentional with a noqa comment. This prevents Ruff from flagging it and documents the rationale.
 
 ## When to Narrow vs. Keep Broad
 
@@ -87,5 +102,4 @@ When writing tests that mock external libraries:
 ```
 
 ---
-
-*This skill was created after fixing BLE001 narrowing issues in 2026-05-04.*
+*This skill was created after fixing BLE001 narrowing issues in 2026-05-04 and updated 2026-05-05.*

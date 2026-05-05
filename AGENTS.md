@@ -16,26 +16,27 @@ This document provides instructions and context for agents working on the AI New
 ## Project Structure
 
 *   `app.py`: Application factory and configuration.
-*   `models.py`: Database models (SQLAlchemy). Being refactored into `models/` package.
+*   `models/`: Database models package (SQLAlchemy). Contains `source.py`, `article.py`, `tag.py`, `newsletter.py`, `pipeline.py`, etc.
 *   `services/`: Business logic, LLM interaction, third-party service wrappers.
-*   `adapters/`: Infrastructure-specific code (RSS, Web, API).
+*   `adapters/`: Infrastructure-specific code (RSS, Web, API). Should NOT import from `services/`.
 *   `tasks/`: Celery tasks for the newsletter pipeline.
 *   `routes/`: Flask blueprints for public and admin interfaces.
 *   `schemas/`: Pydantic models for validation and serialization.
-*   `utils/`: General-purpose utility functions.
+*   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
 
 ## Implementation Roadmap
 
-Refer to the root `plan.md` for the current active waves and prioritized tasks.
+All waves of `plans/plan.md` have been completed (2026-05-05).
 
 ## Known Issues & Gotchas
 
 *   **Database Setup:** Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
-*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks.
-*   **Context Window:** LLM prompts can grow large. Use the token budgeting and truncation utilities in `services/prompts.py`.
-*   **Linting:** We use `ruff` for linting. Run `ruff check .` before committing.
-*   **Mypy:** We are currently in the process of resolving type errors. See `plans/plan.md` Wave 2.
-*   **Refactoring:** `models.py` is being refactored into a `models/` package. See `plans/plan.md` Wave 3.
+*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function releases the limiter before early returns when stage lock is not acquired.
+*   **Context Window:** LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
+*   **Linting:** We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
+*   **Mypy:** Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
+*   **2FA Backup Codes:** Admin users with 2FA enabled have 8 backup codes stored as JSON. Use `verify_backup_code()` and `consume_backup_code()` from `services/totp.py`.
+*   **MagicMock in Tests:** Some pipeline tests fail due to MagicMock objects being JSON serialized - this is a test infrastructure issue, not a code bug.
 
 ## Shared Context
 

@@ -12,7 +12,14 @@ from routes.admin import (
     _verify_password,
     admin_bp,
 )
-from services.totp import generate_secret, get_provisioning_uri, verify_token
+from services.totp import (
+    consume_backup_code,
+    generate_backup_codes,
+    generate_secret,
+    get_provisioning_uri,
+    verify_backup_code,
+    verify_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +32,9 @@ def _safe_redirect_url(next_url: str) -> str:
     """
     if not next_url:
         return url_for("admin.dashboard")
-    # Parse and validate: only allow path-only URLs (no scheme, no netloc)
     parsed = urlparse(next_url)
     if parsed.scheme or parsed.netloc:
         return url_for("admin.dashboard")
-    # Must start with / but not //
     if not next_url.startswith("/") or next_url.startswith("//"):
         return url_for("admin.dashboard")
     return next_url
@@ -99,9 +104,12 @@ def verify_2fa() -> str | Response:
         return redirect(url_for("admin.login"))
 
     error = None
+    admin_user = AdminUser.query.filter_by(username="admin").first()
+
     if request.method == "POST":
         token = request.form.get("token", "")
-        admin_user = AdminUser.query.filter_by(username="admin").first()
+        backup_code = request.form.get("backup_code", "")
+
         if admin_user and admin_user.totp_secret and verify_token(admin_user.totp_secret, token):
             session.clear()
             session["admin"] = True
@@ -114,6 +122,28 @@ def verify_2fa() -> str | Response:
             except Exception as e:  # noqa: BLE001
                 logger.error("Failed to log admin 2FA login: %s", e)
             return redirect(url_for("admin.dashboard"))
+
+        if admin_user and admin_user.backup_codes and backup_code:
+            if verify_backup_code(admin_user.backup_codes, backup_code):
+                new_codes = consume_backup_code(admin_user.backup_codes, backup_code)
+                if new_codes is not None:
+                    admin_user.backup_codes = new_codes
+                    from extensions import db
+
+                    db.session.commit()
+                session.clear()
+                session["admin"] = True
+                session["ip"] = session.get("ip")
+                session["user_agent"] = session.get("user_agent")
+                try:
+                    from services.audit import log_admin_action
+
+                    log_admin_action("admin_login_backup_code", user="admin")
+                except Exception as e:  # noqa: BLE001
+                    logger.error("Failed to log admin backup code login: %s", e)
+                return redirect(url_for("admin.dashboard"))
+            error = "Invalid backup code"
+
         error = "Invalid 2FA token"
     return render_template("admin/verify_2fa.html", error=error)
 
@@ -132,6 +162,7 @@ def setup_2fa() -> str | Response:
         token = request.form.get("token", "")
         if admin_user.totp_secret and verify_token(admin_user.totp_secret, token):
             admin_user.totp_enabled = True
+            admin_user.backup_codes = generate_backup_codes()
             from extensions import db
 
             db.session.commit()

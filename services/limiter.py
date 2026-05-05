@@ -49,37 +49,40 @@ class ModelLimiter:
         deadline = time.monotonic() + timeout
         poll_interval = 0.05
 
-        while time.monotonic() < deadline:
+        pubsub = None
+        try:
+            pubsub = self._redis.pubsub()
+            pubsub.subscribe(channel)
             try:
-                result = self._acquire_script(
-                    keys=[key], args=[max_concurrent, timeout],
-                )
-                if result:
-                    return True
-            except redis.exceptions.RedisError as e:
-                logger.error(
-                    "Limiter acquire failed for %s/%s: %s",
-                    provider_id,
-                    model,
-                    e,
-                )
-                return False
+                while time.monotonic() < deadline:
+                    try:
+                        result = self._acquire_script(
+                            keys=[key], args=[max_concurrent, timeout],
+                        )
+                        if result:
+                            return True
+                    except redis.exceptions.RedisError as e:
+                        logger.error(
+                            "Limiter acquire failed for %s/%s: %s",
+                            provider_id,
+                            model,
+                            e,
+                        )
+                        return False
 
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
 
-            try:
-                pubsub = self._redis.pubsub()
-                pubsub.subscribe(channel)
-                try:
                     pubsub.get_message(timeout=min(remaining, poll_interval))
-                finally:
-                    pubsub.unsubscribe(channel)
-            except redis.exceptions.RedisError:
-                pass
-            time.sleep(min(poll_interval, remaining))
-            poll_interval = min(poll_interval * 1.5, 0.5)
+                    time.sleep(min(poll_interval, remaining))
+                    poll_interval = min(poll_interval * 1.5, 0.5)
+
+            finally:
+                pubsub.unsubscribe(channel)
+        finally:
+            if pubsub:
+                pubsub.close()
 
         logger.warning(
             "Limiter acquire timed out for %s/%s after %ss",

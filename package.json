@@ -1,0 +1,19 @@
+{
+  "name": "ainews",
+  "version": "1.0.0",
+  "description": "AI-powered news aggregation and newsletter platform. Automatically discovers, summarizes, and curates news articles from configurable RSS sources using large language models.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  }
+}

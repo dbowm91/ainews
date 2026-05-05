@@ -34,7 +34,8 @@ Refer to the root `plan.md` for the current active waves and prioritized tasks.
 *   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks.
 *   **Context Window:** LLM prompts can grow large. Use the token budgeting and truncation utilities in `services/prompts.py`.
 *   **Linting:** We use `ruff` for linting. Run `ruff check .` before committing.
-*   **Mypy:** We are currently in the process of resolving type errors. See `plan.md` Wave 5.
+*   **Mypy:** We are currently in the process of resolving type errors. See `plans/plan.md` Wave 2.
+*   **Refactoring:** `models.py` is being refactored into a `models/` package. See `plans/plan.md` Wave 3.
 
 ## Shared Context
 

@@ -8,10 +8,10 @@
 
 ## Concurrency & Locking
 - Use `run_stage` wrapper for pipeline tasks.
-- Ensure limiter slots are released even on early returns or failures.
+- **CRITICAL:** Ensure limiter slots are released even on early returns (e.g., when a lock is already held). See `tasks/pipeline.py` for known leak.
 - Be careful with `soft_time_limit` in Celery; ensure cleanup logic handles it.
 
 ## Error Handling
 - Use specific exception types.
 - Avoid broad `except Exception:` unless using `# noqa: BLE001` and logging appropriately.
-- Extraction tasks should have robust fallbacks for parsing failures.
+- **Extraction:** `tasks/extract.py` needs to catch generic `Exception` to support certain test cases and handle unexpected parsing failures gracefully.

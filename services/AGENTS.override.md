@@ -11,6 +11,7 @@
 - Implement token budgeting for subagent loops to prevent context overflow.
 
 ## Specific Service Notes
-- **Limiter:** Uses Redis pub/sub for waiting. Do not use `time.sleep()`.
+- **Limiter:** Uses Redis pub/sub for waiting. Do not use `time.sleep()`. Ensure `pubsub` objects are reused or properly closed to avoid Redis connection bloat.
+- **Logging:** `services/logging_utils.py` contains implicit `Optional` parameters that trigger Mypy errors. Use `Optional[Type] = None` explicitly.
 - **Audit:** Harden against database connection issues; logging an action should not crash the request.
 - **Prompts:** Use `@lru_cache` for prompt file loading and truncation summaries.

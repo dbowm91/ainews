@@ -95,24 +95,24 @@ def _eval_node(
         return _eval_node(node, allowed_ops, allowed_names, context)
 
     node_type = type(node)
-    if node_type is ast.Expression:
+    if isinstance(node, ast.Expression):
         return _eval_handle_expression(node, _eval)
-    elif node_type is ast.BoolOp:
+    elif isinstance(node, ast.BoolOp):
         return _eval_handle_bool_op(node, _eval, allowed_ops)
-    elif node_type is ast.UnaryOp:
+    elif isinstance(node, ast.UnaryOp):
         if isinstance(node.op, ast.Not):
             return _eval_handle_unary_not(node, _eval)
         else:
             raise ValueError("Unary operations not allowed in conditions")
-    elif node_type is ast.Compare:
+    elif isinstance(node, ast.Compare):
         return _eval_handle_compare(node, _eval, allowed_ops)
-    elif node_type is ast.Name:
+    elif isinstance(node, ast.Name):
         return _eval_handle_name(node, allowed_names, context)
-    elif node_type is ast.Constant:
+    elif isinstance(node, ast.Constant):
         return _eval_handle_constant(node)
-    elif node_type is ast.Attribute:
+    elif isinstance(node, ast.Attribute):
         return _eval_handle_attribute(node, _eval, context)
-    elif node_type is ast.Subscript:
+    elif isinstance(node, ast.Subscript):
         return _eval_handle_subscript(node, _eval)
     elif node_type in (ast.Call, ast.Lambda, ast.BinOp):
         disallowed_msgs = {

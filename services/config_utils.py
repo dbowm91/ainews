@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,6 @@ def get_config_with_default(
                 )
                 return default
 
-        return value
+        return cast(T, value)
     except RuntimeError:
         return default

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, cast
 
 import yaml
 from pydantic import BaseModel, Field
@@ -72,9 +72,9 @@ def cached_config(key: str, loader_fn: Callable[[], T], ttl: int = 300) -> T:
     try:
         from services.config_cache import get_config_cache
 
-        return get_config_cache().get(key=key, loader_fn=loader_fn, ttl=ttl)
+        return cast(T, get_config_cache().get(key=key, loader_fn=loader_fn, ttl=ttl))
     except Exception:  # noqa: BLE001
-        return loader_fn()
+        return cast(T, loader_fn())
 
 
 def cached_config_with_mtime(
@@ -88,6 +88,6 @@ def cached_config_with_mtime(
         cache.invalidate_if_stale(key, config_path)
         result = cache.get(key=key, loader_fn=loader_fn, ttl=ttl)
         cache._record_mtime(key, config_path)
-        return result
+        return cast(T, result)
     except Exception:  # noqa: BLE001
-        return loader_fn()
+        return cast(T, loader_fn())

@@ -1,5 +1,7 @@
 """Vector embedding generation for articles."""
 
+from typing import cast
+
 import json
 import logging
 
@@ -40,7 +42,7 @@ def generate_embedding(text: str, fallback_dim: int = 384) -> list[float] | None
         try:
             model = _get_model()
             embedding = model.encode(text, show_progress_bar=False)
-            return embedding.tolist()
+            return cast(list[float], embedding.tolist())
         except (RuntimeError, ValueError, ImportError) as e:
             logger.warning("Embedding generation failed: %s", e)
             return None
@@ -59,6 +61,6 @@ def deserialize_embedding(embedding_str: str) -> list[float] | None:
     if not embedding_str:
         return None
     try:
-        return json.loads(embedding_str)
+        return cast(list[float], json.loads(embedding_str))
     except (json.JSONDecodeError, TypeError):
         return None

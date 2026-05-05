@@ -100,7 +100,7 @@ def log_pipeline_event(
         level: Log level (debug, info, warning, error)
         **extra: Additional context fields
     """
-    ctx = {"stage": stage, "event": event}
+    ctx: dict[str, Any] = {"stage": stage, "event": event}
     if article_id is not None:
         ctx["article_id"] = article_id
     if run_id is not None:
@@ -162,8 +162,8 @@ class PipelineLogger:
     def __init__(
         self,
         stage: str,
-        base_logger: logging.Logger = None,
-        task_id: str = None,
+        base_logger: Optional[logging.Logger] = None,
+        task_id: Optional[str] = None,
     ):
         self.stage = stage
         self.logger = base_logger or logger
@@ -193,8 +193,8 @@ class PipelineLogger:
 
 def get_pipeline_logger(
     stage: str,
-    base_logger: logging.Logger = None,
-    task_id: str = None,
+    base_logger: Optional[logging.Logger] = None,
+    task_id: Optional[str] = None,
 ) -> PipelineLogger:
     """Get a structured logger for a pipeline stage.
 

@@ -53,7 +53,7 @@ pipeline:
     model: qwen3:8b
     max_tokens: 4096
     temperature: 0.3
-    concurrency: 1
+    concurrency: 2
     timeout_seconds: 180
     max_key_points: 5
     system_prompt: |

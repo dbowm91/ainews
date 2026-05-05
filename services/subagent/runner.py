@@ -22,7 +22,7 @@ from .middleware import (
     apply_middleware,
 )
 from .prompt_templates import SUBAGENT_TASK_TEMPLATES, load_prompt_template
-from .utils import _retry_with_backoff
+from .utils import _retry_with_backoff, _is_task_revoked, _format_subagent_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _get_task_template(task_type: str, stage_config: SubagentStageConfig) -> str
     return SUBAGENT_TASK_TEMPLATES.get(task_type, "")
 
 
-def run_subagent(  # noqa: C901
+def run_subagent(
     task_type: str,
     stage: str,
     prompt_data: dict,
@@ -109,16 +109,6 @@ def run_subagent(  # noqa: C901
     if stage_config.tools:
         selector = StageAwareToolSelector(tool_names=stage_config.tools)
         tools = initialize_tool_registry(selector=selector, context={"stage": stage})
-
-    def _is_task_revoked():
-        try:
-            from celery import current_task
-
-            if current_task and not current_task.request.called_directly:
-                return current_task.request.is_effectively_revoked()
-        except ImportError:
-            pass
-        return False
 
     def _call_with_timeout():
         from . import traced_llm_call
@@ -284,39 +274,6 @@ def run_subagent(  # noqa: C901
     )
 
 
-def _handle_subagent_error(e, stage, task_type, stage_config, last_exc, used_fallback, fallback_stages):
-    if isinstance(e, (ProviderTimeoutError, TimeoutError, ConnectionError)):
-        last_exc = e
-        logger.error(
-            "Subagent %s/%s failed after %d attempts: %s",
-            stage,
-            task_type,
-            stage_config.max_retries + 1,
-            e,
-        )
-    elif isinstance(e, (AuthError, ProviderServerError)):
-        last_exc = e
-        logger.warning(
-            "Subagent %s/%s failed with non-retryable error: %s",
-            stage,
-            task_type,
-            e,
-        )
-        used_fallback = True
-        fallback_stages = [stage]
-    else:
-        last_exc = e
-        logger.error(
-            "Subagent %s/%s unexpected error: %s — using fallback",
-            stage,
-            task_type,
-            e,
-        )
-        used_fallback = True
-        fallback_stages = [stage]
-    return last_exc, used_fallback, fallback_stages
-
-
 def _finalize_subagent_result(
     result, used_fallback, fallback_stages, last_exc,
     stage, task_type, article_id, stage_config
@@ -369,46 +326,6 @@ def _finalize_subagent_result(
         used_fallback=used_fallback,
         fallback_stages=fallback_stages,
     )
-
-
-def _format_subagent_prompt(template, prompt_data, stage, task_type):
-    try:
-        prompt_data_escaped = escape_prompt_data(prompt_data)
-        return template.format(**prompt_data_escaped)
-    except KeyError as e:
-        logger.warning(
-            "Subagent %s/%s template missing key: %s",
-            stage,
-            task_type,
-            e,
-        )
-        return None
-
-
-def _is_task_revoked():
-    try:
-        from celery import current_task
-        if current_task and not current_task.request.called_directly:
-            return current_task.request.is_effectively_revoked()
-    except ImportError:
-        pass
-    return False
-
-
-def _call_with_timeout_module(provider, model, system_prompt, temperature, max_tokens, max_iterations, stage):
-    """Call LLM with tools and timeout."""
-    from . import traced_llm_call
-    with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
-        return provider.chat_with_tools(
-            messages=[{"role": "user", "content": prompt}],
-            tools=tools,
-            tool_choice=None,
-            model=model,
-            system=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_iterations=max_iterations,
-        )
 
 
 def run_subagent_with_tools(
@@ -465,6 +382,7 @@ def run_subagent_with_tools(
             tool.fn = apply_middleware(tool.fn, middleware_chain)
 
     messages = [{"role": "user", "content": prompt}]
+    max_iterations = getattr(stage_config, 'max_iterations', 5)
 
     result = None
     used_fallback = False
@@ -472,6 +390,21 @@ def run_subagent_with_tools(
     last_exc: BaseException | None = None
     self_corrected = False
     future = None
+
+    def _call_with_timeout():
+        from . import traced_llm_call
+
+        with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
+            return provider.chat_with_tools(
+                messages=messages,
+                tools=tools,
+                tool_choice=None,
+                model=model,
+                system=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                max_iterations=max_iterations,
+            )
 
     def _attempt():
         nonlocal self_corrected, future
@@ -485,7 +418,7 @@ def run_subagent_with_tools(
             "subagent.duration_seconds",
             labels={"stage": stage, "task_type": task_type},
         ):
-            future = _subagent_executor.submit(_call_with_timeout_module, provider, model, system_prompt, temperature, max_tokens, stage_config.max_iterations, stage)
+            future = _subagent_executor.submit(_call_with_timeout)
             try:
                 tc_resp = future.result(timeout=stage_config.timeout_seconds)
                 try:

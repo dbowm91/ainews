@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import TimeoutError
-from typing import Any, Type
+from typing import Type
 
 import json
 
 from pydantic import BaseModel, ValidationError
 
 from schemas.llm_responses import SubagentResponse
-from schemas.pipeline import BASE_DIR, SubagentStageConfig
+from schemas.pipeline import SubagentStageConfig
 from services.llm.base import ToolDefinition
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
-from utils.text import esc_xml_text
+from utils.text import escape_prompt_data
 
 from .config import _subagent_executor
 from .middleware import (
@@ -21,79 +21,18 @@ from .middleware import (
     TimingMiddleware,
     apply_middleware,
 )
+from .prompt_templates import SUBAGENT_TASK_TEMPLATES, load_prompt_template
 from .utils import _retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
-_SUBAGENT_TASK_TEMPLATES = {
-    "research_synthesis": """<source_article>
-  <title>{title}</title>
-  <body>{body}</body>
-</source_article>
-
-<web_results>
-{web_results}
-</web_results>
-
-Synthesize the external sources into a coherent summary that supplements the source article.
-Focus on facts, context, and perspectives not already covered in the source article.
-Return your synthesis as a concise paragraph.""",
-    "edit_contextualization": """<draft_article>
-{draft}
-</draft_article>
-
-<research_brief>
-{brief}
-</research_brief>
-
-<topic_notes>
-{topic_notes}
-</topic_notes>
-
-<related_articles>
-{related_articles}
-</related_articles>
-
-<trend_memory>
-{trend_memory}
-</trend_memory>
-
-Review the draft in light of the research brief, topic notes, related articles, and trend memory.
-Identify gaps in context, missing attribution, or claims that need additional support.
-Return a concise contextualization that addresses what the editor should know.""",
-}
-
-
-def _load_prompt_template(path: str) -> str | None:
-    p = BASE_DIR / path
-    if p.exists():
-        return p.read_text()
-    return None
-
-
-def _escape_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
-    """Escape all string values in prompt_data for safe XML embedding."""
-    result = {}
-    for key, value in data.items():
-        if isinstance(value, str):
-            result[key] = esc_xml_text(value)
-        elif isinstance(value, dict):
-            result[key] = _escape_prompt_data(value)
-        elif isinstance(value, list):
-            result[key] = [
-                esc_xml_text(str(v)) if isinstance(v, str) else v for v in value
-            ]
-        else:
-            result[key] = value
-    return result
-
 
 def _get_task_template(task_type: str, stage_config: SubagentStageConfig) -> str:
     if stage_config.task_template:
-        loaded = _load_prompt_template(stage_config.task_template)
+        loaded = load_prompt_template(stage_config.task_template)
         if loaded:
             return loaded
-    return _SUBAGENT_TASK_TEMPLATES.get(task_type, "")
+    return SUBAGENT_TASK_TEMPLATES.get(task_type, "")
 
 
 def run_subagent(  # noqa: C901
@@ -124,7 +63,7 @@ def run_subagent(  # noqa: C901
 
     template = _get_task_template(task_type, stage_config)
     try:
-        prompt_data_escaped = _escape_prompt_data(prompt_data)
+        prompt_data_escaped = escape_prompt_data(prompt_data)
         prompt = template.format(**prompt_data_escaped)
     except KeyError as e:
         logger.warning(
@@ -434,7 +373,7 @@ def _finalize_subagent_result(
 
 def _format_subagent_prompt(template, prompt_data, stage, task_type):
     try:
-        prompt_data_escaped = _escape_prompt_data(prompt_data)
+        prompt_data_escaped = escape_prompt_data(prompt_data)
         return template.format(**prompt_data_escaped)
     except KeyError as e:
         logger.warning(

@@ -4,6 +4,7 @@ from __future__ import annotations
 from .chain import run_subagent_chain, _resolve_template_variables
 from .conditions import _evaluate_condition
 from .config import _get_subagent_provider_and_config
+from .prompt_templates import SUBAGENT_TASK_TEMPLATES, load_prompt_template
 from .registry import (
     _TOOL_REGISTRY,
     _get_all_tools_cached,
@@ -12,10 +13,7 @@ from .registry import (
     register_tool,
 )
 from .runner import (
-    _SUBAGENT_TASK_TEMPLATES,
-    _escape_prompt_data,
     _get_task_template,
-    _load_prompt_template,
     run_subagent,
     run_subagent_with_tools,
 )
@@ -32,6 +30,7 @@ from .tools import (
     _get_search_provider,
     _search_web,
 )
+from .utils import _retry_with_backoff
 
 # Backward-compat re-exports from schemas
 from schemas.llm_responses import (
@@ -46,6 +45,14 @@ from services.logging_utils import log_pipeline_event, traced_llm_call
 from services.metrics import get_metrics, time_histogram
 from services.llm.base import ToolDefinition
 from services.llm import get_provider_for_role, get_provider_by_id
+
+# Re-export escape_prompt_data for backward compatibility
+from utils.text import escape_prompt_data
+
+# Backward-compat aliases (must be after all imports)
+_SUBAGENT_TASK_TEMPLATES = SUBAGENT_TASK_TEMPLATES
+_escape_prompt_data = escape_prompt_data
+_load_prompt_template = load_prompt_template
 
 
 __all__ = [
@@ -75,6 +82,7 @@ __all__ = [
     "_context_tool_get_source_health",
     "_search_web",
     "_get_search_provider",
+    "_retry_with_backoff",
     "_SUBAGENT_TASK_TEMPLATES",
     "_get_task_template",
     "_escape_prompt_data",

@@ -152,7 +152,7 @@ def _setup_middleware(app):
 
 def _setup_database(app, config_name):
     """Initialize database, run migrations, and seed data."""
-    # Import models to register them with SQLAlchemy before create_all()
+    import models  # noqa: F401 - register all models with SQLAlchemy before create_all()
 
     with app.app_context():
         if db.engine.url.drivername == "sqlite":

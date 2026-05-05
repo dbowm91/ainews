@@ -66,8 +66,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         _log_pipeline(failed_stage, article.id, run_id, "degraded_to_edit")
     elif failed_stage == "edit":
         # Final degradation: finalize with fallback
-        from services.pipeline_degradation import finalize_article
-        finalize_article(article, run_id)
+        _finalize(article.id)
     else:
         logger.error(f"Unknown stage for degradation: {failed_stage}")
 

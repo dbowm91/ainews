@@ -25,7 +25,7 @@ def _extract_content_if_needed(url: str, text_content: str | None, min_content_l
             extraction = extract_article(url)
             if extraction and extraction.text and len(extraction.text) >= min_content_length:
                 extracted_text = extraction.text
-        except (ConnectionError, TimeoutError, ValueError) as exc:
+        except (ConnectionError, TimeoutError, ValueError, Exception) as exc:  # noqa: BLE001 - trafilatura raises diverse exceptions
             logger.warning("Extraction failed for %s: %s", url, exc)
 
     return extracted_text, extraction

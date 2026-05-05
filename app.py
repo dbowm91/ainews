@@ -75,11 +75,14 @@ def _validate_config(app, config_name):
     env_path = os.path.join(app.root_path, ".env")
     if os.path.exists(env_path):
         mode = oct(os.stat(env_path).st_mode)[-3:]
-        if mode != "600":
-            logger.warning(
-                ".env file permissions are %s, should be 600 (owner read/write only)",
-                mode,
+        if mode not in ("600", "640"):
+            msg = (
+                f".env file permissions are {mode}, should be 600 or 640 "
+                "(owner read/write only, group read for 640)"
             )
+            if config_name == "production":
+                raise RuntimeError(f"Fail-closed security: {msg}")
+            logger.warning(msg)
     else:
         logger.warning(".env file not found at %s", env_path)
 

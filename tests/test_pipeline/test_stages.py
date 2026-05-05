@@ -16,7 +16,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "select")
 
         assert article.pipeline_status == "researching"
@@ -36,7 +36,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "research")
 
         assert article.pipeline_status == "writing"
@@ -57,7 +57,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "write")
 
         assert article.pipeline_status == "editing"
@@ -94,7 +94,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "researching")
 
         assert article.pipeline_status == "writing"
@@ -115,7 +115,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "writing")
 
         assert article.pipeline_status == "editing"

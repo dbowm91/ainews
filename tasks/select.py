@@ -76,7 +76,8 @@ def select_article(self, article_id: int, run_id=None):
         from models import PipelineRun
         from schemas.llm_responses import SelectionResult
         from schemas.pipeline import get_role_config
-        from services.prompts import esc_xml_text, get_system_prompt
+        from utils.text import esc_xml_text
+        from services.prompts import get_system_prompt
         from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status
 
         rc = get_role_config("selector")

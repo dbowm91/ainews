@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
-from services.prompts import esc_xml_text
+from utils.text import esc_xml_text
 from services.provider_base import BaseProvider, ProviderManager
 from services.tracing import get_current_trace_id
 

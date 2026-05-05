@@ -42,7 +42,7 @@ def get_newsletter_editor_system_prompt() -> str:
 
 
 def build_reader_prompt(articles, topic_context: str) -> str:
-    from services.prompts import esc_xml_text
+    from utils.text import esc_xml_text
     from services.utils import parse_article_headline
 
     parts = [f"TOPIC CONTEXT: {topic_context}", "", "TODAY'S ARTICLES:"]
@@ -60,7 +60,7 @@ def build_reader_prompt(articles, topic_context: str) -> str:
 
 
 def build_writer_prompt(brief_json: str, topic_context: str) -> str:
-    from services.prompts import esc_xml_text
+    from utils.text import esc_xml_text
 
     return (
         f"TOPIC CONTEXT: {topic_context}\n\n"
@@ -72,7 +72,7 @@ def build_writer_prompt(brief_json: str, topic_context: str) -> str:
 
 
 def build_editor_prompt(summary_json: str) -> str:
-    from services.prompts import esc_xml_text
+    from utils.text import esc_xml_text
 
     return (
         f"DRAFT EXECUTIVE SUMMARY:\n{esc_xml_text(summary_json)}\n\n"

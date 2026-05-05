@@ -1,7 +1,7 @@
 import logging
 
 # Backward-compat re-exports (canonical definitions in schemas.llm_responses)
-from services.prompts import esc_xml_text
+from utils.text import esc_xml_text
 
 logger = logging.getLogger(__name__)
 

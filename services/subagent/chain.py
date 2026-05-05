@@ -96,7 +96,7 @@ def run_subagent_chain(
             prompt_data = _resolve_template_variables(
                 template, initial_prompt_data, results,
             )
-            from services.prompts import esc_xml_text
+            from utils.text import esc_xml_text
 
             prompt_data_escaped = {}
             for key, value in prompt_data.items():

@@ -15,7 +15,7 @@ from schemas.llm_responses import SubagentResponse
 from services.embeddings import deserialize_embedding, generate_embedding, serialize_embedding
 from services.llm import get_provider_for_role
 from services.metrics import get_metrics
-from services.prompts import esc_xml_text
+from utils.text import esc_xml_text
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:

@@ -5,7 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from constants import PipelineStatus, truncate_for_log, CELERY_TASK_MAX_RETRIES
 from schemas.llm_responses import ResearchBrief
 from services.llm.errors import ProviderServerError
-from services.prompts import esc_xml_text
+from utils.text import esc_xml_text
 
 logger = get_task_logger(__name__)
 

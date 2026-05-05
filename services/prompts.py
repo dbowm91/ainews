@@ -9,7 +9,7 @@ from pathlib import Path
 from functools import lru_cache
 
 from pydantic import ValidationError
-
+from utils.text import esc_xml_attr, esc_xml_text  # noqa: F401 - re-exported for backward compatibility
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
 from services.tracing import get_current_trace_id
 
@@ -79,23 +79,6 @@ def max_tokens_for_model(model: str | None) -> int:
 
 # Truncation warning injected when content is truncated
 TRUNCATION_WARNING = "[Warning: The preceding context was truncated due to length limits. A summary may have been generated to preserve key information.]"
-
-
-def esc_xml_text(text: str) -> str:
-    """Escape text content for safe embedding in XML tags within LLM prompts."""
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-def esc_xml_attr(text: str) -> str:
-    """Escape a value for safe embedding in XML attributes within LLM prompts."""
-    return (
-        str(text)
-        .replace("&", "&amp;")
-        .replace("'", "&apos;")
-        .replace('"', "&quot;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
 
 
 @lru_cache(maxsize=128)

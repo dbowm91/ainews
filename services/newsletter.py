@@ -187,7 +187,7 @@ def _generate_subject_line(articles, topic_context: str = "") -> str:
     """
     from services.limiter import get_limiter
     from services.llm import get_provider_for_role
-    from services.prompts import esc_xml_text
+    from utils.text import esc_xml_text
 
     headlines = []
     for article in articles[:10]:
@@ -225,7 +225,7 @@ def _generate_subject_line(articles, topic_context: str = "") -> str:
                 limiter.release(provider_id, model, 120)
     except (ImportError, redis.exceptions.RedisError,
             AuthError, ProviderServerError, ProviderTimeoutError,
-            ConnectionError) as e:
+            ConnectionError, ValueError) as e:
         logger.warning("LLM subject line generation failed: %s", e)
 
     return "Top Stories"

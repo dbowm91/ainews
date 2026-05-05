@@ -12,7 +12,7 @@ from schemas.llm_responses import SubagentResponse
 from schemas.pipeline import BASE_DIR, SubagentStageConfig
 from services.llm.base import ToolDefinition
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
-from services.prompts import esc_xml_text
+from utils.text import esc_xml_text
 
 from .config import _subagent_executor
 from .middleware import (

@@ -26,7 +26,7 @@ def esc_xml_attr(text: str) -> str:
 
 def escape_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
     """Escape all string values in prompt_data for safe XML embedding."""
-    result = {}
+    result: dict[str, Any] = {}
     for key, value in data.items():
         if isinstance(value, str):
             result[key] = esc_xml_text(value)

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import abc
+import json
 import logging
 import random
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import CancelledError, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional, Type, TypeVar
 

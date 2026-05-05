@@ -162,8 +162,8 @@ def run_subagent(  # noqa: C901
 
     result = None
     used_fallback = False
-    fallback_stages = []
-    last_exc = None
+    fallback_stages: list[str] = []
+    last_exc: BaseException | None = None
     future = None
 
     def _attempt():
@@ -468,8 +468,8 @@ def run_subagent_with_tools(
 
     result = None
     used_fallback = False
-    fallback_stages = []
-    last_exc = None
+    fallback_stages: list[str] = []
+    last_exc: BaseException | None = None
     self_corrected = False
     future = None
 

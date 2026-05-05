@@ -1,7 +1,10 @@
 """Prompt utilities: system prompt loading, safe text escaping, and context truncation for LLM input."""
 
+import hashlib
 import json
 import logging
+import re
+import time
 from pathlib import Path
 from functools import lru_cache
 
@@ -17,6 +20,14 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 # Approximate chars per token for English text (used when tiktoken unavailable)
 _CHARS_PER_TOKEN = 4
+
+# In-memory cache for summarize_context results (avoid redundant LLM calls)
+_summarize_cache: dict[str, tuple[float, str]] = {}
+_SUMMARIZE_CACHE_TTL = 600  # 10 minutes
+
+# Precompiled regex for fast substring search in importance_weighted_truncate
+# Compiled once at module load, reused across calls
+_regex_cache: dict[str, re.Pattern] = {}
 
 
 @lru_cache(maxsize=128)
@@ -191,11 +202,17 @@ def importance_weighted_truncate(
     # Normalize key topics to lowercase for case-insensitive matching
     key_topics = [kt.lower() for kt in key_topics or []]
 
+    # Compile regex patterns once and cache them for fast substring search
+    compiled_patterns = []
+    for kt in key_topics:
+        if kt not in _regex_cache:
+            _regex_cache[kt] = re.compile(re.escape(kt), re.IGNORECASE)
+        compiled_patterns.append(_regex_cache[kt])
+
     # Score segments: count how many key topics are present in the segment
     scored_segments = []
     for idx, seg in enumerate(segments):
-        seg_lower = seg.lower()
-        score = sum(1 for kt in key_topics if kt in seg_lower)
+        score = sum(1 for pat in compiled_patterns if pat.search(seg))
         scored_segments.append((-score, idx, seg))  # Negative score for descending sort
 
     # Sort segments by score descending (highest first), then original index ascending
@@ -226,8 +243,38 @@ def importance_weighted_truncate(
     return sep.join(seg for _, seg in selected)
 
 
+def _budget_tokens(text: str, model: str, max_output_tokens: int = 512) -> str:
+    """Check prompt against model context limit and truncate if needed.
+
+    Args:
+        text: The prompt text to check
+        model: Model name for context limit lookup
+        max_output_tokens: Tokens to reserve for output (default 512)
+
+    Returns:
+        Original text if within budget, otherwise truncated version
+    """
+    try:
+        tokens = count_tokens(text, model)
+        model_max = max_tokens_for_model(model)
+        available = model_max - max_output_tokens
+        if tokens <= available:
+            return text
+
+        char_budget = available * _CHARS_PER_TOKEN
+        logger.debug(
+            "Token budget exceeded for %s: %d tokens, limit %d, truncating to %d chars",
+            model, tokens, available, char_budget,
+        )
+        return sliding_window_truncate(text, char_budget, model=None)
+    except (ImportError, ValueError, AttributeError):
+        return text
+
+
 def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, temperature: float = 0.0) -> str:
     """Summarize text using LLM to preserve key information.
+
+    Results are cached for 10 minutes to avoid redundant LLM calls.
 
     Args:
         text: The text to summarize
@@ -238,10 +285,21 @@ def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, tempe
     Returns:
         Summarized text, or empty string on failure
     """
-    from services.llm import get_provider_for_role
+    global _summarize_cache
 
     if not text:
         return ""
+
+    cache_key = hashlib.sha256(f"{text[:500]}:{max_tokens}:{temperature}".encode()).hexdigest()
+    now = time.monotonic()
+    if cache_key in _summarize_cache:
+        expires_at, result = _summarize_cache[cache_key]
+        if now < expires_at:
+            logger.debug("summarize_context cache hit")
+            return result
+        del _summarize_cache[cache_key]
+
+    from services.llm import get_provider_for_role
 
     try:
         if llm_provider is None:
@@ -262,7 +320,9 @@ def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, tempe
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return response.text.strip() if response and response.text else ""
+        result = response.text.strip() if response and response.text else ""
+        _summarize_cache[cache_key] = (now + _SUMMARIZE_CACHE_TTL, result)
+        return result
     except (ImportError, json.JSONDecodeError, ValidationError,
             AuthError, ProviderServerError, ProviderTimeoutError,
             ConnectionError, ValueError, AttributeError) as e:

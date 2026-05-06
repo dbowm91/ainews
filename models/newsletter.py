@@ -5,6 +5,24 @@ from datetime import datetime, timezone
 from extensions import db
 
 
+newsletter_articles = db.Table(
+    "newsletter_articles",
+    db.Column("newsletter_id", db.Integer, db.ForeignKey("newsletters.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("article_id", db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("position", db.Integer, nullable=False, default=0),
+    db.Column("created_at", db.DateTime, default=lambda: datetime.now(timezone.utc)),
+)
+
+newsletter_subscribers = db.Table(
+    "newsletter_subscribers",
+    db.Column("newsletter_id", db.Integer, db.ForeignKey("newsletters.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("subscriber_id", db.Integer, db.ForeignKey("subscribers.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("sent_at", db.DateTime, nullable=True),
+    db.Column("opened_at", db.DateTime, nullable=True),
+    db.Column("clicked_at", db.DateTime, nullable=True),
+)
+
+
 class Newsletter(db.Model):
     __tablename__ = "newsletters"
 
@@ -18,6 +36,12 @@ class Newsletter(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     generated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     sent_at = db.Column(db.DateTime, index=True)
+
+    articles = db.relationship(
+        "Article",
+        secondary="newsletter_articles",
+        backref=db.backref("newsletters", lazy="dynamic"),
+    )
 
     def __repr__(self):
         return f"<Newsletter {self.newsletter_type} {self.generated_at}>"
@@ -66,6 +90,12 @@ class Subscriber(db.Model):
     def get_active(cls):
         """Return query for active, non-deleted subscribers."""
         return cls.query.filter(cls.deleted_at.is_(None), cls.active.is_(True))
+
+    newsletters = db.relationship(
+        "Newsletter",
+        secondary="newsletter_subscribers",
+        backref=db.backref("subscribers", lazy="dynamic"),
+    )
 
 
 class ArticleMetric(db.Model):

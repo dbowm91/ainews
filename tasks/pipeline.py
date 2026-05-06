@@ -57,13 +57,13 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
         article.retry_count = 0
         article.last_error = None
         db.session.commit()
-        _log_pipeline(failed_stage, article.id, run_id, "degraded_to_research")
+        _log_pipeline(run_id, failed_stage, "info", "degraded_to_research", article_id=article.id)
     elif failed_stage == "research":
         degrade_stage(article, "writing")
-        _log_pipeline(failed_stage, article.id, run_id, "degraded_to_write")
+        _log_pipeline(run_id, failed_stage, "info", "degraded_to_write", article_id=article.id)
     elif failed_stage == "write":
         degrade_stage(article, "editing")
-        _log_pipeline(failed_stage, article.id, run_id, "degraded_to_edit")
+        _log_pipeline(run_id, failed_stage, "info", "degraded_to_edit", article_id=article.id)
     elif failed_stage == "edit":
         # Final degradation: finalize with fallback
         _finalize(article.id)
@@ -413,7 +413,7 @@ def run_stage(
     limiter, redis_client, lock_acquired = _acquire_stage_resources(rc, task_self, retry_countdown, retry_max, lock_key, task_id)
     if not lock_acquired:
         if limiter is not None:
-            limiter.release(rc.provider, None, rc.timeout_seconds)
+            limiter.release(rc.provider, rc.model, rc.timeout_seconds)
         logger.info("TraceID=%s: Stage %s already running for article %s, skipping", trace_id, stage, article_id)
         return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
     

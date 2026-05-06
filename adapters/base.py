@@ -17,6 +17,8 @@ MATCH_TEXT_PREVIEW_LENGTH = 500
 
 _ADAPTER_REGISTRY: dict[str, type[BaseSourceAdapter]] = {}
 
+SOURCE_ADAPTERS = _ADAPTER_REGISTRY
+
 
 def register_adapter(source_type: str):
     def decorator(cls):
@@ -77,10 +79,8 @@ class BaseSourceAdapter(abc.ABC):
         pass
 
     def match_topics(self, item: RawItem) -> RawItem:
-        from services.trend_detector import classify
-
         text = self._get_match_text(item)
-        matched = classify(text)
+        matched = _classify_topics(text)
         included = [
             t for t in matched if t in self.topic_config.include or t == "other"
         ]
@@ -104,3 +104,44 @@ class BaseSourceAdapter(abc.ABC):
     def _truncate(text: Optional[str], limit: int = MAX_TEXT_LENGTH) -> Optional[str]:
         """Truncate text to limit, returning None for empty input."""
         return text[:limit] if text else None
+
+
+def _classify_topics(title: str, text: str = "") -> list[str]:
+    """Classify topics from title/text using regex patterns.
+
+    This is a pure function with no external dependencies, defined here
+    to avoid layering violations (adapters should not import from services).
+    """
+    import re
+
+    _PATTERNS = {
+        "ai": [
+            r"\bai\b", r"\bartificial intelligence\b", r"\bmachine learning\b",
+            r"\bllm\b", r"\bgpt\b", r"\bclaude\b", r"\bgemini\b", r"\bopenai\b",
+            r"\bdeep learning\b", r"\bneural net", r"\btransformer", r"\blanguage model\b",
+            r"\bdeepseek\b", r"\bllama\b", r"\bmistral\b", r"\bembedding\b", r"\bfine.?tun",
+        ],
+        "privacy": [
+            r"\bprivacy\b", r"\bsurveillance\b", r"\bencrypt", r"\bgdpr\b",
+            r"\btracking\b", r"\bdata breach\b", r"\btor\b", r"\bvpn\b",
+        ],
+        "security": [
+            r"\bcve-\d", r"\bvulnerabilit", r"\bexploit\b", r"\bmalware\b",
+            r"\bransomware\b", r"\bzero.?day\b", r"\bcybersec",
+        ],
+        "programming": [
+            r"\brust\b", r"\bpython\b", r"\bgolang\b", r"\bjavascript\b",
+            r"\btypescript\b", r"\bc\+\+\b", r"\bopen.?source\b", r"\bgithub\b",
+        ],
+        "hardware": [
+            r"\bgpu\b", r"\bchip\b", r"\bsemiconductor\b", r"\bnvidia\b",
+            r"\bamd\b", r"\bapple\b",
+        ],
+    }
+    compiled = {k: [re.compile(p, re.I) for p in pats] for k, pats in _PATTERNS.items()}
+    combined = f"{title} {text}".lower()
+    matched = [
+        topic for topic, pats in compiled.items()
+        if any(p.search(combined) for p in pats)
+    ]
+    return matched or ["other"]

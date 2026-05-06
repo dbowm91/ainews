@@ -1,5 +1,5 @@
 import logging
-import random
+import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -14,6 +14,8 @@ from schemas.source import WebConfig
 from services.url import UnsafeURLError, validate_url_safe
 
 logger = logging.getLogger(__name__)
+
+MIN_CONTENT_LENGTH = 200
 
 # User-Agent strings - intentionally long for authenticity
 USER_AGENTS = [
@@ -31,10 +33,10 @@ class WebAdapter(BaseSourceAdapter):
         super().__init__(*args, **kwargs)
         self._session = get_crawl_session()
         ua = self.adapter_config.user_agent
-        index = secrets.randbelow(len(USER_AGENTS))
-        self._session.headers["User-Agent"] = (
-            u/a if u/a != "AINewsBot/1.0" else USER_AGENTS[index]
-        )
+        if ua == "AINwsBot/1.0":
+            self._session.headers["User-Agent"] = USER_AGENTS[secrets.randbelow(len(USER_AGENTS))]
+        else:
+            self._session.headers["User-Agent"] = ua
         self._session.headers.update(
             {
                 "Accept": "text/html,application/xhtml+xml",
@@ -105,9 +107,6 @@ class WebAdapter(BaseSourceAdapter):
             body_el = soup.select_one(acfg.body_selector)
             if body_el:
                 body = body_el.get_text(separator=" ", strip=True)
-        # Fallback: use trafilatura on the full HTML
-        from services.config_unified import MIN_CONTENT_LENGTH
-
         if not body or len(body) < MIN_CONTENT_LENGTH:
             try:
                 import trafilatura
@@ -169,14 +168,14 @@ class WebAdapter(BaseSourceAdapter):
     def _polite_get(self, url: str) -> Optional[BeautifulSoup]:
         cfg = self.adapter_config
         validate_url_safe(url)
-        delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)  # noqa: S311
+        delay = random.uniform(cfg.request_delay_min, cfg.request_delay_max)
         time.sleep(delay)
 
         for attempt in range(cfg.max_retries):
             try:
                 resp = self._session.get(url, timeout=15)
                 if resp.status_code == 429:
-                    wait = 2**attempt * 5 + random.uniform(0, 2)  # noqa: S311
+                    wait = 2**attempt * 5 + random.uniform(0, 2)
                     time.sleep(wait)
                     continue
                 resp.raise_for_status()

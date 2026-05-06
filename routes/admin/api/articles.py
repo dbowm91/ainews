@@ -522,3 +522,182 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
             error="Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags",
             status=400,
         )
+
+
+@admin_api_bp.route("/articles/<int:article_id>/pipeline", methods=["POST"])
+@require_auth
+@validate_csrf_json
+def trigger_article_pipeline(article_id: int) -> tuple[Response, int] | Response:
+    """Trigger a pipeline stage for a specific article."""
+    from models import Article
+
+    from extensions import db
+
+    article = db.get_or_404(Article, article_id)
+    data = request.get_json(silent=True) or {}
+    stage = data.get("stage")
+
+    stage_to_task = {
+        "select": ("tasks.select", "select_article"),
+        "research": ("tasks.research", "research_article"),
+        "write": ("tasks.write", "write_article"),
+        "edit": ("tasks.edit", "edit_article"),
+    }
+
+    if stage and stage not in stage_to_task:
+        return api_response(
+            error=f"Invalid stage. Must be one of: {', '.join(stage_to_task.keys())}",
+            status=400,
+        )
+
+    target_stage = stage or article.pipeline_status
+    if target_stage not in stage_to_task:
+        return api_response(
+            error=f"Cannot trigger pipeline for article in status: {target_stage}",
+            status=400,
+        )
+
+    module_path, task_name = stage_to_task[target_stage]
+    task_fn = getattr(__import__(module_path, fromlist=[task_name]), task_name)
+
+    from routes.admin.api.webhooks import get_request_id
+
+    headers = {}
+    request_id = get_request_id()
+    if request_id:
+        headers["request_id"] = request_id
+
+    try:
+        signed_kwargs = get_signed_kwargs(task_name, (article_id,), {"run_id": None})
+    except Exception:  # noqa: BLE001 - use unsigned if security not configured
+        signed_kwargs = {"article_id": article_id, "run_id": None}
+
+    task_fn.apply_async(args=[article_id], kwargs={"run_id": None}, headers=headers)
+
+    try:
+        from services.audit import log_admin_action
+
+        log_admin_action(
+            "article_pipeline_trigger",
+            target_type="article",
+            target_id=article_id,
+            details={"stage": target_stage},
+            category="pipeline",
+        )
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
+        logger.warning("Audit logging failed for article_pipeline_trigger")
+
+    return api_response(
+        data={"article_id": article_id, "stage": target_stage, "status": "triggered"},
+        meta={"message": f"Pipeline stage '{target_stage}' triggered"},
+    )
+
+
+@admin_api_bp.route("/articles/<int:article_id>", methods=["GET"])
+@require_auth
+def get_article(article_id: int) -> tuple[Response, int] | Response:
+    """Get a single article by ID."""
+    from models import Article
+
+    from extensions import db
+
+    article = db.get_or_404(Article, article_id)
+    return api_response(
+        data={
+            "id": article.id,
+            "title": article.title,
+            "pipeline_status": article.pipeline_status,
+            "source_id": article.source_id,
+            "impact_score": article.impact_score,
+            "created_at": article.created_at.isoformat() if article.created_at else None,
+            "published_at": article.published_at.isoformat() if article.published_at else None,
+            "final_article": article.final_article,
+        }
+    )
+
+
+@admin_api_bp.route("/articles/<int:article_id>", methods=["PUT"])
+@require_auth
+@validate_csrf_json
+def update_article(article_id: int) -> tuple[Response, int] | Response:
+    """Update an article."""
+    from models import Article
+
+    from extensions import db
+
+    article = db.get_or_404(Article, article_id)
+    data = request.get_json(silent=True)
+    if not data:
+        return api_response(error="Invalid JSON body", status=400)
+
+    if "title" in data:
+        article.title = data["title"]
+    if "impact_score" in data:
+        article.impact_score = data["impact_score"]
+    if "pipeline_status" in data:
+        new_status = data["pipeline_status"]
+        if new_status in VALID_PIPELINE_STATUSES:
+            article.pipeline_status = new_status
+
+    try:
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return api_response(error=str(e), status=500)
+
+    try:
+        from services.audit import log_admin_action
+
+        log_admin_action(
+            "article_update",
+            target_type="article",
+            target_id=article_id,
+            details={"title": article.title, "pipeline_status": article.pipeline_status},
+            category="article",
+        )
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
+        logger.warning("Audit logging failed for article_update")
+
+    return api_response(
+        data={
+            "id": article.id,
+            "title": article.title,
+            "pipeline_status": article.pipeline_status,
+            "impact_score": article.impact_score,
+        },
+        meta={"message": "Article updated"},
+    )
+
+
+@admin_api_bp.route("/articles/<int:article_id>", methods=["DELETE"])
+@require_auth
+@validate_csrf_json
+def delete_article(article_id: int) -> tuple[Response, int] | Response:
+    """Delete an article."""
+    from models import Article
+
+    from extensions import db
+
+    article = db.get_or_404(Article, article_id)
+    db.session.delete(article)
+
+    try:
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return api_response(error=str(e), status=500)
+
+    try:
+        from services.audit import log_admin_action
+
+        log_admin_action(
+            "article_delete",
+            target_type="article",
+            target_id=article_id,
+            details={},
+            category="article",
+        )
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
+        logger.warning("Audit logging failed for article_delete")
+
+    return api_response(meta={"message": "Article deleted"})

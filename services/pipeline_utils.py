@@ -15,6 +15,7 @@ _STAGE_TASKS = {
     "writing": ("tasks.write", "write_article"),
     "written": ("tasks.edit", "edit_article"),
     "editing": ("tasks.edit", "edit_article"),
+    "review": ("tasks.edit", "edit_article"),
 }
 
 _task_fn_cache: dict[str, tuple] = {}

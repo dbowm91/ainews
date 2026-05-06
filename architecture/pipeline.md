@@ -1,0 +1,234 @@
+# Newsletter Pipeline
+
+The pipeline is the core workflow that transforms raw articles into polished newsletter content.
+
+## Pipeline Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Article Processing                                 │
+│                                                                             │
+│  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐      │
+│  │  RSS/   │──→│ select  │──→│research │──→│  write  │──→│  edit   │      │
+│  │  API    │   │ (LLM)   │   │ (LLM)   │   │ (LLM)   │   │ (LLM)   │      │
+│  └─────────┘   └─────────┘   └─────────┘   └─────────┘   └─────────┘      │
+│       │              │             │            │             │             │
+│       ▼              ▼             ▼            ▼             ▼             │
+│  ┌─────────┐   ┌─────────┐   ┌─────────┐  ┌─────────┐   ┌─────────┐         │
+│  │process_ │   │ score   │   │research │  │ Smart   │   │finalize │         │
+│  │ item    │   │   1-10  │   │  brief  │  │ Brevity │   │+tags    │         │
+│  └─────────┘   └─────────┘   └─────────┘  └─────────┘   └─────────┘         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Newsletter Generation                              │
+│                                                                             │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐  │
+│  │  Fetch DONE  │──→│ Exec Summary │──→│Build HTML    │──→│Send (batched)│  │
+│  │  articles    │   │ (3-stage LLM)│   │newsletter    │   │ 500/batch    │  │
+│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Article Pipeline Stages
+
+### 1. Select
+
+**Purpose**: Score article newsworthiness 1-10
+
+**Process**:
+- LLM evaluates article against newsworthiness criteria
+- Returns `{score, confidence, reasoning, key_topics}`
+
+**Thresholds**:
+- Score >= 6 with medium/high confidence → proceed to research
+- Score < 6 or low confidence → mark as `review` or `discard`
+
+### 2. Research
+
+**Purpose**: Build comprehensive research brief
+
+**Process**:
+- LLM analyzes article content
+- Subagent performs web search for context
+- Fetches related trend memory entries
+- Produces `{key_findings, context, citations, related_trends}`
+
+**Degradation**: If disabled, skips to `review`
+
+### 3. Write
+
+**Purpose**: Create condensed article in Smart Brevity format
+
+**Process**:
+- LLM writes 200-400 word article
+- Format: hook → context → key points → implications
+- Target: 3-5 key points, actionable insights
+
+**Validation**: If body < 500 chars, marks for `review`
+
+### 4. Edit
+
+**Purpose**: Polish and contextualize article
+
+**Process**:
+- Subagent contextualizes with related articles, trends
+- LLM edits for clarity, flow, accuracy
+- Tags assigned via topic classifier
+- Validation: schema validation + quality checks
+- Post-finalize: trend memory update, webhook dispatch
+
+**Degradation**: If disabled, marks for `review`
+
+### 5. Finalize
+
+**Purpose**: Mark article complete, trigger downstream actions
+
+**Process**:
+- Update `finalized_at` timestamp
+- Update `pipeline_status` to `done`
+- Trigger webhooks for `article.published`
+- Update trend memory with new observations
+
+## Newsletter Generation
+
+### Daily Newsletter Flow
+
+```
+8:00 AM ET: generate_daily_newsletters
+    │
+    ├── _fetch_articles_for_newsletter()
+    │   # Status=DONE, published within 24h, impact_score > 0
+    │
+    ├── generate_executive_summary()
+    │   # 3-stage LLM: reader → writer → editor
+    │   # Theme identification + overview + highlights
+    │
+    ├── generate_main_newsletter()
+    │   # HTML email with preamble + articles
+    │
+    └── _send_emails_parallel()
+        # Batch size: 500
+        # Retry: 3 attempts
+```
+
+### Executive Summary (3-Stage)
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   reader   │───→│   writer    │───→│   editor    │
+│ (extract)  │    │  (generate) │    │  (polish)   │
+└─────────────┘    └─────────────┘    └─────────────┘
+```
+
+**Reader**: Extracts key themes and developments from articles
+**Writer**: Generates first-draft summary from reader output
+**Editor**: Polishes for clarity, consistency, impact
+
+### Topic Newsletters
+
+Per-topic newsletters generated similarly:
+1. Fetch articles for topic (DONE status, matching topic tag)
+2. Generate executive summary (smaller scope)
+3. Build topic newsletter HTML
+4. Send to topic subscribers
+
+## Pipeline Configuration
+
+From `pipeline.yaml`:
+
+```yaml
+stages:
+  selector:
+    enabled: true
+    model: "ollama-local"
+    temperature: 0.3
+    prompt_variant: "default"
+
+  researcher:
+    enabled: true
+    model: "ollama-local"
+    temperature: 0.4
+    max_tokens: 2000
+
+  writer:
+    enabled: true
+    model: "ollama-local"
+    temperature: 0.5
+    max_tokens: 1500
+
+  editor:
+    enabled: true
+    model: "ollama-local"
+    temperature: 0.3
+    max_tokens: 2000
+
+newsletter:
+  daily_send_time: "08:00"
+  enable_topic_newsletters: true
+  batch_size: 500
+```
+
+## Degradation Behavior
+
+When stages are disabled, articles follow degradation path:
+
+| Full Pipeline | Degraded Pipeline |
+|---------------|-------------------|
+| select → research → write → edit | select → review |
+| (select disabled) | research → write → edit → review |
+| (research disabled) | write → edit → review |
+| (write disabled) | edit → review |
+| (edit disabled) | review |
+
+Articles in `review` status require manual intervention.
+
+## Monitoring
+
+### Pipeline Monitor (`services/pipeline_monitor.py`)
+
+Tracks pipeline health:
+- Stage durations (avg, p95, p99)
+- Failure rates per stage
+- Queue depth per stage
+- Source health correlation
+
+### Pipeline Logs
+
+Each stage writes to `PipelineLog`:
+```python
+class PipelineLog(Base):
+    run_id: int
+    stage: str
+    article_id: int
+    started_at: DateTime
+    completed_at: DateTime
+    status: str  # started, completed, failed
+    error: str | None
+    metadata: JSON
+```
+
+## Failure Handling
+
+### Automatic Retry
+
+- Max retries: 3 per stage
+- Backoff: exponential (30s, 60s, 120s)
+- On max retries exceeded: `pipeline_status = failed`
+
+### Circuit Breaker
+
+LLM providers have circuit breakers:
+- Closed: Normal operation
+- Open: After 5 failures in 1 minute
+- Half-open: After 30 seconds, test with 1 request
+
+### Fallback Chain
+
+```
+ollama-local → openai → anthropic → gemini → deepseek
+```
+
+If primary fails, falls through to next provider.

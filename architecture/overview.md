@@ -1,0 +1,197 @@
+# Architecture Overview
+
+ainews is an autonomous AI-powered tech news aggregation and newsletter system. It crawls multiple news sources, uses LLMs to research and write condensed articles, and delivers personalized newsletters to subscribers.
+
+## System Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              External Systems                               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
+│  │  RSS Feeds  │  │  REST APIs  │  │  Web Pages  │  │  SMTP Mail  │       │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘       │
+└─────────┼────────────────┼────────────────┼────────────────┼──────────────┘
+          │                │                │                │
+          ▼                ▼                ▼                │
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                               Adapters Layer                                 │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐           │
+│  │    RSSAdapter    │  │    APIAdapter    │  │    WebAdapter    │           │
+│  │   (feedparser)   │  │   (JSONPath)     │  │  (BeautifulSoup) │           │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘           │
+└───────────┼────────────────────┼────────────────────┼───────────────────────┘
+            │                    │                    │
+            ▼                    ▼                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Services Layer                                    │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │  Researcher  │  │    Writer    │  │    Editor    │  │   Subagent   │     │
+│  │  (research)  │  │   (write)    │  │   (edit)     │  │   (tools)    │     │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
+│         │                 │                 │                 │             │
+│         └─────────────────┴────────┬────────┴─────────────────┘             │
+│                                    │                                        │
+│         ┌──────────────────────────┼──────────────────────────┐              │
+│         │                          ▼                          │              │
+│         │              Newsletter Pipeline                     │              │
+│         │   (select → research → write → edit → finalize)     │              │
+│         └──────────────────────────┬──────────────────────────┘              │
+│                                    │                                        │
+│  ┌─────────────────────────────────┼─────────────────────────────────┐       │
+│  │                                 │                                 │       │
+│  ▼                                 ▼                                 ▼       │
+│ ┌──────────┐               ┌──────────────┐                ┌────────────┐   │
+│ │  Models  │               │    Routes    │                │   Tasks    │   │
+│ │   (DB)   │               │   (Flask)    │                │  (Celery)  │   │
+│ └──────────┘               └──────────────┘                └────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌─────────────────────────────────┐
+                    │       Infrastructure Layer        │
+                    │  ┌─────────┐  ┌─────────────┐    │
+                    │  │  Redis  │  │   SQLite    │    │
+                    │  │(broker) │  │    (DB)     │    │
+                    │  └─────────┘  └─────────────┘    │
+                    └─────────────────────────────────┘
+```
+
+## Module Index
+
+| Module | Description | Deep Dive |
+|--------|-------------|-----------|
+| [Models](models.md) | SQLAlchemy database models for all entities | [models.md](models.md) |
+| [Services](services.md) | Business logic, LLM providers, pipeline orchestration | [services.md](services.md) |
+| [Adapters](adapters.md) | Source fetchers (RSS, API, Web) following adapter pattern | [adapters.md](adapters.md) |
+| [Routes](routes.md) | Flask blueprints for public and admin interfaces | [routes.md](routes.md) |
+| [Tasks](tasks.md) | Celery tasks implementing the newsletter pipeline | [tasks.md](tasks.md) |
+| [Schemas](schemas.md) | Pydantic validation models for configuration and responses | [schemas.md](schemas.md) |
+| [Utils](utils.md) | Pure utility functions with minimal dependencies | [utils.md](utils.md) |
+| [Subagent](subagent.md) | Tool-enabled LLM agents for contextualization | [subagent.md](subagent.md) |
+| [Pipeline](pipeline.md) | Newsletter generation and article processing flow | [pipeline.md](pipeline.md) |
+
+## Data Flow Summary
+
+### 1. Source Ingestion
+
+```
+Sources (RSS/API/Web)
+    │
+    ▼
+Adapters.fetch_and_parse()
+    │
+    ▼
+process_item task
+    │
+    ├── extract_content()     # trafilatura/readability
+    ├── deduplicate()         # URL + title matching
+    └── create Article record
+    │
+    ▼
+dispatch to select_article
+```
+
+### 2. Article Processing Pipeline
+
+```
+select_article
+    │  LLM scores 1-10
+    ▼
+research_article
+    │  LLM builds research brief with web search + context
+    ▼
+write_article
+    │  LLM writes condensed article (Smart Brevity format)
+    ▼
+edit_article
+    │  LLM edits + contextualization via subagent tools
+    │  Tag assignment + validation
+    ▼
+finalize_article
+    │  Trend memory update + webhook dispatch
+    ▼
+done
+```
+
+### 3. Newsletter Generation
+
+```
+generate_daily_newsletters (scheduled 8:00 AM ET)
+    │
+    ├── fetch_articles()      # DONE status, last 24h, impact_score > 0
+    │
+    ├── executive_summary     # reader → writer → editor (3-stage)
+    │
+    ├── main_newsletter       # built from articles
+    │
+    └── topic_newsletters     # per-topic groupings
+        │
+        └── email_dispatch    # batched (500/retry)
+```
+
+## Key Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `pipeline.yaml` | Pipeline stage configs, newsletter settings, subagent configs, schedules |
+| `providers.yaml` | LLM provider definitions (ollama, openai, anthropic, etc.) |
+| `sources.yaml` | News source definitions with adapter types and URLs |
+| `topics.yaml` | Topic definitions for article classification |
+| `config.py` | Flask configuration classes (Development, Production, Testing) |
+
+## Infrastructure
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Web Server | Granian (ASGI) | High-performance Python HTTP server |
+| Task Queue | Celery + Redis | Async task processing and scheduling |
+| Database | SQLite (WAL) | Primary data store with WAL mode |
+| Cache | Redis | Rate limiting, distributed locks, caching |
+| Email | SMTP | Newsletter delivery with connection pooling |
+
+## External Integrations
+
+### LLM Providers (via `providers.yaml`)
+
+- **ollama-local** (default, enabled) - Local Ollama instance
+- **openai**, **anthropic**, **gemini**, **deepseek**, **groq**, **openrouter** (disabled)
+
+### Search Providers
+
+- **duckduckgo** (default, enabled) - Web search
+- **google** (disabled) - Google Custom Search
+- **searxng** (disabled) - Self-hosted SearxNG
+
+## Security Architecture
+
+- **Fail-Closed**: Production startup validates all required secrets
+- **TOTP 2FA**: Admin users with 8 backup codes
+- **Session Binding**: IP + User-Agent validation
+- **HMAC Webhooks**: Timestamp replay protection
+- **SSRF Protection**: URL allowlist validation
+- **Encrypted Secrets**: Webhook secrets encrypted at rest
+- **Login Lockout**: Redis-based with in-memory fallback
+
+## Directory Structure
+
+```
+ainews/
+├── app.py                  # Flask application factory
+├── config.py               # Configuration classes
+├── extensions.py           # Flask extensions (db, limiter, redis)
+├── constants.py            # Pipeline status values, shared constants
+├── celery_app.py           # Celery application setup
+├── pipeline.yaml           # Pipeline stage configuration
+├── providers.yaml          # LLM/search provider definitions
+├── sources.yaml            # News source definitions
+├── models/                 # SQLAlchemy models
+├── services/               # Business logic (NO adapter imports)
+├── adapters/               # Source adapters (NO service imports)
+├── routes/                 # Flask blueprints
+├── tasks/                  # Celery tasks
+├── schemas/                # Pydantic models
+├── utils/                  # Pure utilities
+├── prompts/                # LLM prompt templates
+└── tests/                  # Test suite
+```

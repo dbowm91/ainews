@@ -337,3 +337,47 @@ def delete_source(source_id: int) -> tuple[Response, int] | Response:
         logger.warning("Audit logging failed for source_delete")
 
     return api_response(meta={"message": "Source deleted"})
+
+
+@admin_api_bp.route("/sources/<int:source_id>/refresh", methods=["POST"])
+@require_auth
+@validate_csrf_json
+def refresh_source(source_id: int) -> tuple[Response, int] | Response:
+    """Trigger an immediate crawl of a specific source."""
+    from tasks.crawl import crawl_source
+
+    from extensions import db
+    from models import Source
+    from services.config_unified import get_source_config
+    from routes.admin.api.webhooks import get_request_id
+
+    source = db.get_or_404(Source, source_id)
+    source_config = get_source_config(source)
+
+    headers = {}
+    request_id = get_request_id()
+    if request_id:
+        headers["request_id"] = request_id
+
+    try:
+        signed_kwargs = (
+            __import__("services.task_security", fromlist=["get_signed_kwargs"])
+            .get_signed_kwargs("crawl_source", (source_config, None), {})
+        )
+    except Exception:  # noqa: BLE001 - use unsigned if security not configured
+        signed_kwargs = {"source_config": source_config, "run_id": None}
+
+    crawl_source.apply_async(kwargs=signed_kwargs, headers=headers)
+
+    try:
+        log_admin_action(
+            "source_refresh",
+            target_type="source",
+            target_id=source_id,
+            details={"source_key": source.source_key},
+            category="config",
+        )
+    except Exception:  # noqa: BLE001 fail-closed for audit logging
+        logger.warning("Audit logging failed for source_refresh")
+
+    return api_response(meta={"message": "Source refresh triggered", "source_id": source_id})

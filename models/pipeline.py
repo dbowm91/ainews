@@ -50,6 +50,11 @@ class PipelineLog(db.Model):
     level = db.Column(db.String(8), default="info")
     message = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(16), nullable=True)
+    error = db.Column(db.Text, nullable=True)
+    meta = db.Column(db.JSON, nullable=True)
 
     def __repr__(self):
         return f"<PipelineLog {self.stage} {self.level}>"

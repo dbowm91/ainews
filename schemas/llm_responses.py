@@ -18,6 +18,8 @@ class SelectionResult(BaseModel):
     score: int = Field(ge=1, le=10)
     reason: str
     confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
+    key_topics: list[str] = Field(default_factory=list, description="Identified topics from the article")
+    impact_summary: Optional[str] = Field(default=None, description="Brief summary of why this article matters")
 
 
 # ── Researcher stage ────────────────────────────────────────────────────────
@@ -128,6 +130,13 @@ class CondensedArticle(BaseModel):
 
 
 # ── Newsletter pipeline ─────────────────────────────────────────────────────
+
+
+class NewsletterArticle(BaseModel):
+    headline: str = Field(description="Article headline within the newsletter")
+    summary: str = Field(description="Brief summary of the article")
+    url: Optional[str] = Field(default=None, description="URL to the article")
+    tags: list[str] = Field(default_factory=list, description="Topics/tags for this article")
 
 
 class NewsletterBrief(BaseModel):

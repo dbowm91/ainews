@@ -43,3 +43,20 @@ git stash
 .venv/bin/python -m pytest tests/ -x -q  # see if tests pass without your changes
 git stash pop
 ```
+
+### Lessons Learned (2026-05-06)
+
+**Critical Bugs Fixed:**
+- `adapters/web.py` line 35-37 had syntax corruption (`u/a`) - fixed with proper conditional
+- `adapters/base.py` imported from `services.trend_detector` violating layering - moved to local `_classify_topics()` function
+- `adapters/web.py` imported `MIN_CONTENT_LENGTH` from `services.config_unified` - added constant to adapter
+
+**SQLAlchemy Reserved Names:**
+- `metadata` is reserved by SQLAlchemy - use `meta` instead for JSON fields
+
+**Limiter Release Fix:**
+- Early return in `run_stage()` released limiter with `model=None` creating wrong Redis key
+- Should use `rc.model` from config since it's available at that point
+
+**Log Call Argument Order:**
+- `_log_pipeline(run_id, stage, level, message, *args, article_id=None)` - verify correct order when calling

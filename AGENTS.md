@@ -27,6 +27,7 @@ This document provides instructions and context for agents working on the AI New
 ## Implementation Roadmap
 
 All waves of `plans/plan.md` have been completed (2026-05-05).
+Architecture review findings from `plans/00_overview.md` through `plans/09_utils.md` have been addressed (2026-05-06).
 
 ## Known Issues & Gotchas
 
@@ -37,6 +38,10 @@ All waves of `plans/plan.md` have been completed (2026-05-05).
 *   **Mypy:** Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
 *   **2FA Backup Codes:** Admin users with 2FA enabled have 8 backup codes stored as JSON. Use `verify_backup_code()` and `consume_backup_code()` from `services/totp.py`.
 *   **MagicMock in Tests:** Some pipeline tests fail due to MagicMock objects being JSON serialized - this is a test infrastructure issue, not a code bug.
+*   **PipelineLog meta field:** The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
+*   **Article API:** Individual article CRUD endpoints exist at `/admin/api/articles/<id>` with GET, PUT, DELETE methods. Pipeline trigger at `/admin/api/articles/<id>/pipeline` with POST.
+*   **Source Refresh:** Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
+*   **Newsletter Associations:** `newsletter_articles` and `newsletter_subscribers` association tables exist in `models/newsletter.py` with many-to-many relationships.
 
 ## Shared Context
 

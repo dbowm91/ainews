@@ -25,12 +25,7 @@ class PipelineRootConfig(BaseModel):
     memory: MemoryConfig
 
 class StageConfig(BaseModel):
-    enabled: bool = True
-    model: str | None = None
-    prompt_variant: str | None = None
-    temperature: float = 0.7
-    max_tokens: int | None = None
-    timeout: float = 120.0
+    tools: list[str]
 
 class NewsletterConfig(BaseModel):
     daily_send_time: str = "08:00"
@@ -103,7 +98,7 @@ class SelectionResult(BaseModel):
 ```python
 class ResearchBrief(BaseModel):
     article_id: int
-    key_findings: list[str]
+    key_claims: list[str]
     context: str
     citations: list[Citation]
     related_trends: list[str]
@@ -121,12 +116,12 @@ class Citation(BaseModel):
 ```python
 class CondensedArticle(BaseModel):
     article_id: int
-    title: str
-    summary: str  # 2-3 sentences
-    key_points: list[str]  # 3-5 bullet points
+    headline: str
+    tldr: str
+    body: str
+    key_points: list[str]
     implications: str | None = None
     hook: str | None = None
-    word_count: int = Field(ge=100, le=600)
 ```
 
 ### Executive Summary
@@ -145,8 +140,9 @@ class ExecutiveSummary(BaseModel):
 
 ```python
 class NewsletterBrief(BaseModel):
-    newsletter_id: int
-    subject: str
+    themes: str
+    highlights: list[str]
+    connections: str
     preamble: str
     articles: list[NewsletterArticle]
     footer: str | None = None

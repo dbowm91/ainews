@@ -164,7 +164,7 @@ Celery Beat schedule (from `pipeline.yaml`):
 | `generate_daily_newsletters` | 8:00 AM ET | Generate newsletters |
 | `publish_scheduled_articles` | Every 5 min | Check scheduled publishes |
 | `cleanup_old_logs` | Daily 3 AM | Clean old pipeline logs |
-| `backfill_embeddings` | Weekly | Update embeddings |
+| `backfill_embeddings` | Daily 2 AM | Update embeddings |
 
 ## Rate Limiting
 

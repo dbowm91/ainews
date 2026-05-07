@@ -80,12 +80,12 @@ class Source(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(200))
-    type = Column(String(50))  # rss, api, web
+    source_type = Column(String(50))  # rss, api, web
 
     # Health tracking
     consecutive_failures = Column(Integer, default=0)
     consecutive_successes = Column(Integer, default=0)
-    last_fetch_at = Column(DateTime)
+    last_crawled = Column(DateTime)
     last_success_at = Column(DateTime)
 
     # Configuration
@@ -109,8 +109,7 @@ class AdminUser(Base):
     backup_codes = Column(JSON)  # 8 backup codes as JSON array
 
     # Session security
-    ip_binding = Column(String(45))  # IPv4/IPv6
-    user_agent_hash = Column(String(64))
+    # Note: ip_binding and user_agent_hash not implemented
 ```
 
 ## TrendMemory
@@ -123,10 +122,10 @@ class TrendMemory(Base):
 
     id = Column(Integer, primary_key=True)
     topic = Column(String(200))
-    observation = Column(Text)
+    signal = Column(Text)
 
     # Embeddings for semantic search
-    embedding = Column(Vector(1536))  # OpenAI ada-002 dimensions
+    embedding = Column(Text)  # Stored as text, not vector type
 
     # Metadata
     source_articles = Column(JSON)  # Related article IDs

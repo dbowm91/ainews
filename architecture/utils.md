@@ -6,30 +6,24 @@ The `utils/` package contains pure utility functions with minimal dependencies.
 
 | File | Functions | Purpose |
 |------|-----------|---------|
-| `url.py` | `normalize_url`, `is_valid_url`, `get_domain` | URL normalization and validation |
-| `text.py` | `truncate`, `sanitize_html`, `extract_hashtags` | Text processing utilities |
+| `url.py` | `validate_url_safe`, `UnsafeURLError` | URL validation with SSRF protection |
+| `text.py` | `truncate`, `sanitize_html`, `extract_hashtags`, `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data` | Text processing and XML escaping |
 | `datetime.py` | `parse_date`, `format_date`, `time_ago` | Date/time parsing and formatting |
 | `hash.py` | `generate_hash`, `verify_hash` | Hashing utilities |
 | `html.py` | `strip_tags`, `linkify`, `extract_text` | HTML processing |
-| `security.py` | `generate_token`, `verify_token`, `constant_time_compare` | Security utilities |
-| `ipc.py` | Redis pub/sub helpers | Inter-process communication |
+| `security.py` | `generate_token`, `constant_time_compare` | Security utilities |
 
 ## URL Utilities (`url.py`)
 
 ```python
-def normalize_url(url: str) -> str:
-    """Normalize URL: trailing slash, lowercase scheme, sort query params"""
-    # Removes fragment, sorts query params, lowers scheme
-
-def is_valid_url(url: str) -> bool:
-    """Check if URL is valid and allowed (SSRF protection)"""
+def validate_url_safe(url: str) -> bool:
+    """Check if URL is safe for fetching (SSRF protection)"""
+    # Raises UnsafeURLError if blocked
     # Blocks internal IPs, private hostnames
     # Validates scheme (http/https only)
 
-def get_domain(url: str) -> str:
-    """Extract domain from URL"""
-    # Returns domain without subdomain
-    # example.com from www.example.com
+class UnsafeURLError(Exception):
+    """Raised when URL fails SSRF checks"""
 ```
 
 ## Text Utilities (`text.py`)
@@ -43,6 +37,15 @@ def sanitize_html(html: str) -> str:
 
 def extract_hashtags(text: str) -> list[str]:
     """Extract #hashtags from text"""
+
+def esc_xml_text(text: str) -> str:
+    """Escape text for XML element content"""
+
+def esc_xml_attr(text: str) -> str:
+    """Escape text for XML attribute value"""
+
+def escape_prompt_data(data: dict) -> dict:
+    """Escape dict values for prompt injection prevention"""
 ```
 
 ## DateTime Utilities (`datetime.py`)
@@ -68,12 +71,6 @@ def generate_token(length: int = 32) -> str:
 
 def constant_time_compare(a: str, b: str) -> bool:
     """Constant-time string comparison (timing attack prevention)"""
-
-def hash_password(password: str) -> str:
-    """Hash password with salt"""
-
-def verify_password(password: str, hash: str) -> bool:
-    """Verify password against hash"""
 ```
 
 ## HTML Utilities (`html.py`)

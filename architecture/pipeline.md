@@ -157,7 +157,7 @@ stages:
     enabled: true
     model: "ollama-local"
     temperature: 0.5
-    max_tokens: 1500
+    max_tokens: 4096
 
   editor:
     enabled: true
@@ -207,7 +207,7 @@ class PipelineLog(Base):
     completed_at: DateTime
     status: str  # started, completed, failed
     error: str | None
-    metadata: JSON
+    meta: JSON
 ```
 
 ## Failure Handling
@@ -222,8 +222,8 @@ class PipelineLog(Base):
 
 LLM providers have circuit breakers:
 - Closed: Normal operation
-- Open: After 5 failures in 1 minute
-- Half-open: After 30 seconds, test with 1 request
+- Open: After 5 failures in 2 minutes
+- Half-open: After 60 seconds, test with 1 request
 
 ### Fallback Chain
 

@@ -24,22 +24,10 @@ This document provides instructions and context for agents working on the AI New
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
 
-## Implementation Roadmap
-
-**Original plan completed (2026-05-05):** Waves 1-4 addressed critical fixes, security, architecture, and optimization.
-
-**New work identified (2026-05-07):** Architecture reviews identified remaining issues in `plans/plan.md`:
-- Wave 5: Critical Bug Fixes (P0 runtime failures)
-- Wave 6: Layering & Architecture Corrections
-- Wave 7: Implementation Gaps (missing utils, DeepSeek provider)
-- Wave 8: Documentation Alignment (schema/model drift)
-
-See `plans/plan.md` for detailed task list with status tracking.
-
 ## Known Issues & Gotchas
 
 *   **Database Setup:** Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
-*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function releases the limiter before early returns when stage lock is not acquired. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing.
+*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function releases the limiter before early returns when stage lock is not acquired. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing. **Note:** There is a known bug where early return releases with `model=None` instead of the actual model - this is being tracked in `plans/plan.md`.
 *   **Limiter Model Mismatch:** The `model` returned by `_run_stage_core` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, not the actual model used if fallback occurred in `_try_stage_work`. Use `provider_id` from `_try_stage_work` but be aware `model` may be incorrect.
 *   **Context Window:** LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
 *   **Linting:** We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
@@ -54,6 +42,34 @@ See `plans/plan.md` for detailed task list with status tracking.
 *   **Newsletter Idempotency:** The `idempotency_key` for newsletter generation is defined locally in `_generate_daily_newsletters_core()` before use.
 *   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig`.
 *   **Utils Drift:** Several utils modules have wrong contents or are missing: `utils/text.py` has XML escaping, not the documented `truncate`/`sanitize_html`/`extract_hashtags`. `utils/datetime.py` is missing entirely (date utils are in `services/date_utils.py`).
+
+## Architecture Conventions
+
+### Type Checking Pattern
+When a service needs to reference adapter types for type hints only (not runtime), use the `TYPE_CHECKING` block pattern:
+```python
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from adapters.base import RawItem
+```
+This allows static type analysis without creating runtime imports between services and adapters.
+
+### Subagent Function Signatures
+The actual `run_subagent` signature is:
+```python
+def run_subagent(task_type: str, stage: str, prompt_data: dict, response_model: Type[BaseModel], article_id: int | None = None) -> SubagentResponse
+```
+Not the documented `run_subagent(task, context, tools, model)`.
+
+### Pipeline Stage Status Values
+Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`. The `review` status is handled by `tasks.edit.edit_article`.
+
+### Model Field Naming
+- `Source.type` is actually `source_type` in the model
+- `Source.last_fetch_at` is actually `last_crawled`
+- `Article.finalized_at` doesn't exist - use `published_at`
+- `TrendMemory.observation` is actually `signal`
+- `TrendMemory.embedding` is `db.Text` (not a vector type)
 
 ## Shared Context
 

@@ -1,144 +1,249 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** COMPLETED
-**Last Updated:** 2026-05-05
-**Goal:** Address critical blockers, security gaps, architectural debt, and performance bottlenecks identified in deep-dive reviews.
+**Status:** IN PROGRESS (Review findings from 2026-05-07)
+**Last Updated:** 2026-05-07
+**Goal:** Address critical bugs, documentation drift, and remaining architecture issues identified in architecture reviews.
 
 ---
 
 ## Executive Summary
 
-This plan consolidates all previous draft plans (Plan 2-5) into a single, phased roadmap. It prioritizes stability and security in the first wave, followed by structural improvements and finally optimization.
+All waves of the original plan (2026-05-05) have been completed. This document adds new work identified during architecture reviews on 2026-05-07.
 
-**Waves Overview:**
-- **Wave 1: Critical Fixes & Security Hardening** (Immediate priority) ✅ COMPLETED
-- **Wave 2: Architecture & Foundation** (Structural integrity) ✅ COMPLETED
-- **Wave 3: Quality & Throughput** (Scaling and maintenance) ✅ COMPLETED
-- **Wave 4: Optimization & Polishing** (UX and efficiency) ✅ COMPLETED
-
----
-
-## Wave 1: Critical Fixes & Security Hardening
-
-### Task 1.1: Fix Blocking Test Failures ✅
-- **H-1: Fix share_configs Table Missing Error** ✅
-  - **Issue:** `app.py:_setup_database()` calls `db.create_all()` before models are imported, leading to missing tables in fresh environments.
-  - **Action:** Add `import models` before `db.create_all()` in `app.py`.
-  - **Verification:** Tests pass without sqlite3.OperationalError on share_configs
-- **H-2: Fix test_extraction_failure_uses_fallback** ✅
-  - **Issue:** `tasks/extract.py` only catches specific exceptions, but the test raises a generic `Exception`.
-  - **Action:** Update `tasks/extract.py` to catch `Exception` (with `noqa: BLE001`) since trafilatura raises diverse exceptions.
-  - **Verification:** Test passes with generic Exception from mock
-
-### Task 1.2: Fix Resource Leaks & Limiter Stability ✅
-- **P1.1: Fix Limiter Slot Leak in Pipeline** ✅
-  - **Issue:** `tasks/pipeline.py:run_stage` returns early if a lock is not acquired, bypassing the `finally` block that releases the limiter slot.
-  - **Action:** Ensure `limiter.release()` is called before early returns.
-  - **Verification:** Test `test_skips_when_stage_locked` now passes
-- **P1.2: Fix Thread-Blocking Polling in Rate Limiter** ✅
-  - **Issue:** `services/limiter.py` uses `time.sleep()` and creates/destroys pubsub objects repeatedly.
-  - **Action:** Refactor `acquire()` to use a single persistent pubsub object and wait using `get_message(timeout=...)`.
-  - **Verification:** All limiter tests pass, pubsub properly cleaned up in finally block
-
-### Task 1.3: Enforce Fail-Closed Security Policies ✅
-- **P1-1: Enforce .env File Permissions** ✅
-  - **Issue:** Current check in `app.py` only warns about insecure permissions.
-  - **Action:** Raise `RuntimeError` in production if `.env` permissions are not 600 or 640.
-- **P1-2: Fix Redis CVE-2025-49844** ✅
-  - **Action:** Update `redis` package to `>=6.4.2` in `pyproject.toml`.
-- **P1-3: Add Session Regeneration** ✅
-  - **Action:** `session.clear()` already called before `session["admin"] = True` in login route.
+**New Waves Overview:**
+- **Wave 5: Critical Bug Fixes** (P0 runtime failures) - Immediate priority
+- **Wave 6: Layering & Architecture Corrections** (HIGH priority violations)
+- **Wave 7: Implementation Gaps** (Missing features)
+- **Wave 8: Documentation Alignment** (Schema/model drift)
 
 ---
 
-## Wave 2: Architecture & Foundation
+## Wave 5: Critical Bug Fixes (P0 Runtime Failures)
 
-### Task 2.1: Resolve Layer Violations ✅
-- **Action:** Create `utils/url.py` and move URL-related logic from `services/url.py`. ✅
-- **Action:** Update all imports to ensure `adapters` do not import from `services`. ✅
-- **Action:** Move `RawItem` from `adapters/base.py` to `schemas/item.py`. ✅
-- **Diversion:** RawItem converted from dataclass to Pydantic model since it's a data schema.
+### Task 5.1: Fix P0 Runtime Bugs
 
-### Task 2.2: Resolve High-Impact Mypy Errors ✅
-- **Action:** Fix implicit `Optional` parameters in `services/logging_utils.py`. ✅
-- **Action:** Address `isinstance()` vs `type()` checks in `services/subagent/conditions.py`. ✅
-- **Action:** Add `cast()` or type widening for `no-any-return` errors in 5+ files. ✅
-- **Note:** Some complex Mypy errors remain (models.py, LLM providers) requiring deeper refactoring.
+**BUG-5.1.1: Limiter Slot Leak with Wrong Provider/Model**
+- **Issue:** `tasks/pipeline.py:417` on early return releases with `rc.provider` (configured primary) and `rc.model` instead of the actual provider/model that was acquired. The limiter key is `ainews:llm:{provider}:{model}` so releasing with wrong keys leaves the actual slot leaking until TTL.
+- **Root Cause:** `_check_stage_limiter` acquires a slot on `rc.provider:rc.model` but early return releases on potentially different provider chain.
+- **Action:** On early return (line 415-419), release on the same provider/model that was actually acquired by `_check_stage_limiter`. The limiter was acquired with `rc.provider` and `rc.model`, so line 417 SHOULD use those same values (which it does), but the issue is the limiter slot was acquired for the CHAIN, not just the primary. Actually - the limiter only tracks one slot per primary provider, so this is actually correct for the early return case.
+- **Better Analysis:** The more serious issue is at line 435 in the `finally` block - `model` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, but if fallback occurred in `_try_stage_work`, the actual model used could be different. `provider_id` is correct (from `_try_stage_work`), but `model` could be wrong.
+- **Verification:** Run `test_skips_when_stage_locked` and verify limiter release is called with correct key pattern
 
-### Task 2.3: Complete 2FA Implementation ✅
-- **Action:** Add `backup_codes` (JSON) field to `AdminUser` model in `models.py`. ✅
-- **Action:** Implement backup code generation and verification in `services/totp.py`. ✅
-- **Action:** Add rate limiting for 2FA attempts in `routes/admin/auth.py`. ✅
-- **Diversion:** Fernet encryption skipped - existing `WEBHOOK_SECRET_KEY` doesn't encrypt TOTP secrets.
+**BUG-5.1.2: `_log_pipeline` Argument Order Wrong**
+- **Issue:** `tasks/pipeline.py:60,63,66` passes arguments in wrong order
+- **Current:** `_log_pipeline(failed_stage, article.id, run_id, "degraded_to_research")`
+- **Expected:** `_log_pipeline(run_id, failed_stage, "info", "degraded_to_research", article_id=article.id)`
+- **Action:** Fix argument order in all calls
+- **Verification:** Check pipeline logs show correct field values
 
 ---
 
-## Wave 3: Quality & Throughput
+## Wave 6: Layering & Architecture Corrections
 
-### Task 3.1: Improve Test Coverage (Target 80%) ✅
-- **Target Modules:** `tasks/newsletter.py`, `tasks/edit.py`, `routes/admin/api/webhooks.py`, `routes/admin/articles.py`. ✅
-- **Result:** 108 tests added covering all target modules.
+### Task 6.1: Verify SSRF Layering Fix
 
-### Task 3.2: Refactor Large Files ✅
-- **M-6: Refactor test_subagent.py** (1964 lines) -> Split into 7 domain-specific files. ✅
-- **L-1: Refactor models.py** (541 lines) -> Convert to `models/` package. ✅
-- **L-2: Refactor runner.py** (568 lines) -> Extract prompt management and helpers. ✅ (501 lines after refactoring, removed dead code)
-- **L-3: Refactor llm/base.py** (585 lines) -> Extract types and JSON utilities. ✅
+The existing plan.md claims Wave 2.1 completed SSRF move to `utils/url.py`. Verify:
+- [ ] `utils/url.py` contains `validate_url_safe` and `UnsafeURLError`
+- [ ] All adapters import from `utils/url.py` NOT `services/url.py`
+- [ ] `services/url.py` re-exports from utils for backward compatibility
 
-### Task 3.3: Optimize Pipeline Throughput ✅
-- **Action:** Increase `concurrency` for `writer` stage in `pipeline.yaml`. ✅ (1 → 2)
-- **Action:** Enable `CELERY_CONCURRENCY` override in `docker-compose.yml`. ✅ (4)
+**If not complete, fix:**
+- Move core SSRF logic to `utils/url.py`
+- Update adapters: `rss.py:12`, `api.py:11`, `web.py:15`, `session.py:8`
+- Ensure `services/url.py` re-exports for backward compat
 
----
+### Task 6.2: Fix Services↔Adapters Layering
 
-## Wave 4: Optimization & Polishing
+**Issue:** `services/crawling.py:13` imports `RawItem` from `adapters.base`
 
-### Task 4.1: Asset Bundling & Performance ✅
-- **P2.2: CSS Bundling:** Bundle `@import` files into `style.bundled.css`. ✅
-- **P3.1: JS Minification:** Minify and bundle JS files using `esbuild`. ✅
+**Action Options:**
+1. Move `RawItem` to `schemas/item.py` (per original plan) - RECOMMENDED
+2. Create a shared schema that both import from
 
-### Task 4.2: LLM Efficiency Improvements ✅
-- **P2.3: Token Budgeting:** Add pre-flight token checks for subagent prompts. ✅
-- **P2.4: Truncation Caching:** Cache results of LLM-based context summarization. ✅
-- **P3.2: Regex Search:** Optimize substring search in truncation using precompiled regex. ✅
+### Task 6.3: Verify `review` in `_STAGE_TASKS`
 
-### Task 4.3: Documentation & Spec Alignment ✅
-- **Task 5.1: Update openapi.yaml** to match actual implementation (prefixes, missing endpoints). ✅
-- **Task 5.2: Sync Trend Memory Docs** with model definitions and UI behavior. ✅
+The existing plan.md claims this was fixed. Verify in `services/pipeline_utils.py`:
+```python
+_STAGE_TASKS = {
+    ...
+    "review": ("tasks.edit", "edit_article"),
+}
+```
 
----
-
-## Success Metrics
-
-| Metric | Baseline | Target | Achieved |
-|--------|----------|--------|----------|
-| Failing Tests | 1-2 | 0 | ~1 (pre-existing MagicMock issues in LLM adapter tests) |
-| Mypy Errors | 22+ | 0 | ~20 (complex ones deferred) |
-| Test Coverage | 61.4% | 80% | ~80% (after Wave 3.1 additions) |
-| .env Enforcement | Warning | Error (Prod) | ✅ Error in production |
-| Large Files (>500 lines) | 6 | 0 | 0 |
+**If missing, add:**
+- Without this, articles in `review` status cannot be re-dispatched and are stuck forever
 
 ---
 
-## Known Issues & Diversions
+## Wave 7: Implementation Gaps
 
-1. **MagicMock Serialization Issues**: Some pipeline tests fail due to MagicMock objects being passed through code paths that serialize to JSON (e.g., `json.dumps MagicMock`). These are pre-existing test infrastructure issues.
+### Task 7.1: `StageConfig` is Empty Stub
 
-2. **L2.2 Mypy Deferred**: Complex Mypy errors in `models.py`, `services/llm/*.py`, `services/metrics.py`, etc. require deeper refactoring and are not critical to functionality.
+**Issue:** `schemas/pipeline.py:140-141` `StageConfig` only has `tools: list[str]`
+**Documentation claims:** 7 fields (`enabled`, `model`, `prompt_variant`, `temperature`, `max_tokens`, `timeout`)
 
-3. **Fernet Encryption Skipped**: 2FA TOTP secrets are not encrypted at rest - would require additional `TOTP_SECRET_KEY` environment variable.
+**Action:** Either:
+- A) Implement missing fields if StageConfig is actually used
+- B) Document that `SubagentStageConfig` is the actual used class
 
-4. **runner.py Refactoring (2026-05-05)**: Extracted `_format_subagent_prompt()` and `_is_task_revoked()` to `utils.py`. Removed dead code `_handle_subagent_error()` and broken `_call_with_timeout_module()`. Fixed `run_subagent_with_tools()` to use inline closure. Reduced from 568 to 501 lines.
+### Task 7.2: Missing Utils Implementations
+
+Based on `architecture/utils.md` vs actual:
+
+| File | Status | Needed Functions |
+|------|--------|------------------|
+| `utils/text.py` | Exists but wrong | `truncate()`, `sanitize_html()`, `extract_hashtags()` |
+| `utils/datetime.py` | Missing | Move from `services/date_utils.py` |
+| `utils/hash.py` | Missing | `generate_hash()`, `verify_hash()` |
+| `utils/html.py` | Missing | `strip_tags()`, `linkify()`, `extract_text()` |
+| `utils/security.py` | Missing | `generate_token()`, `constant_time_compare()`, `hash_password()`, `verify_password()` |
+
+### Task 7.3: DeepSeek Provider Missing
+
+**Issue:** `architecture/services.md` references `services/llm/deepseek.py` but file doesn't exist
+**Also:** `cost_tracker.py` references `deepseek/deepseek-chat`
+
+**Action:** Either implement DeepSeek provider or remove references
+
+### Task 7.4: RSS Adapter Gaps
+
+**Missing implementations:**
+- Malformed feed fallback (BeautifulSoup)
+- Feed validation
+- Auth header injection (APIAdapter)
 
 ---
 
-## Future Agents Note
+## Wave 8: Documentation Alignment
 
-This plan was executed in waves. Key learnings:
+### Task 8.1: Pipeline Documentation Drift
 
-- **Wave 1** must be completed sequentially to establish stable foundation
-- **Wave 2 & 3** can be parallelized using subagents once Wave 1 is stabilized
-- **MagicMock issues** in tests are often pre-existing and related to test infrastructure, not code bugs
-- Always commit after each wave to preserve working state
+| Document Says | Actual |
+|--------------|--------|
+| `metadata` (PipelineLog) | `meta` |
+| Circuit breaker: 5 failures/1min, half-open 30s | 5 failures/2min, half-open 60s |
+| `backfill_embeddings`: Weekly | Daily at 2 AM |
+| Write stage `max_tokens`: 1500 | 4096 |
 
-(End of file - total 186 lines)
+**Action:** Update `architecture/pipeline.md`
+
+### Task 8.2: Subagent Documentation Drift
+
+| Document Says | Actual |
+|--------------|--------|
+| `run_subagent(task, context, tools, model)` | `run_subagent(task_type, stage, prompt_data, response_model, article_id)` |
+| Tool classes with `execute()` | Module-level functions |
+| Async middleware `on_request/on_response` | Sync `wrap()` |
+| Return `SubagentResult` | Return `SubagentResponse` |
+
+**Action:** Update `architecture/subagent.md`
+
+### Task 8.3: Schemas Documentation Drift
+
+| Document Says | Actual |
+|--------------|--------|
+| `StageConfig` with 7 fields | Only `tools` field |
+| `ResearchBrief.key_findings` | `key_claims` |
+| `CondensedArticle.title/summary/word_count` | `headline/tldr/body` |
+| `NewsletterBrief.newsletter_id, subject` | `themes, highlights, connections` |
+
+### Task 8.4: Models Documentation Drift
+
+| Document Says | Actual |
+|--------------|--------|
+| `embedding = Column(Vector(1536))` | `embedding = db.Text` (not vector) |
+| `ip_binding`, `user_agent_hash` on AdminUser | NOT IMPLEMENTED |
+| `TrendMemory.observation` | `signal` |
+| `Source.type` | `source_type` |
+| `Source.last_fetch_at` | `last_crawled` |
+| Article `finalized_at` | `published_at` |
+
+### Task 8.5: Routes Documentation Drift
+
+| Document Says | Actual |
+|--------------|--------|
+| `/api/articles` | `/api/v1/articles` |
+| `/share/<platform>/<article_id>` | NOT FOUND |
+| `/click/<tracking_id>` | `/track/newsletter-click/<int:article_id>` |
+| Nested template dirs | Flat structure |
+
+### Task 8.6: Utils Documentation (P0)
+
+**Issue:** `architecture/utils.md` is ~70% inaccurate - describes modules that don't exist
+
+**Action:** Update to reflect actual state, or implement missing modules
+
+---
+
+## Wave Parallelization Guide
+
+### Can Run in Parallel (Subagents)
+
+**Wave 6 Tasks (Layering):**
+- Task 6.1 (SSRF verification) and Task 6.2 (services↔adapters) can run concurrently
+- Task 6.3 (review stage) is quick fix, can run with others
+
+**Wave 7 Tasks (Implementation Gaps):**
+- Task 7.2 (utils) can be split: one agent for datetime, one for text, one for security/hash/html
+- Task 7.3 (DeepSeek) is independent
+- Task 7.4 (RSS) is independent
+
+**Wave 8 Tasks (Documentation):**
+- All documentation updates can run in parallel by module
+- No code changes, just doc updates
+
+### Sequential Dependencies
+
+- Wave 5 must complete before Wave 6 (Wave 5 bugs are blocking)
+- Wave 6.1 (SSRF) must complete before adapter import verification passes
+- Wave 8 can run concurrently with Wave 6/7 after bugs fixed
+
+---
+
+## Suggested Agent Assignments
+
+**Agent A:** Wave 5 (Critical Bugs) - Must fix P0 issues first
+**Agent B:** Wave 6.1 (SSRF) - Layering fix
+**Agent C:** Wave 6.2 (crawling import) - Layering fix
+**Agent D:** Wave 7.2 (Utils) - Can parallelize by file
+**Agent E:** Wave 7.3 (DeepSeek) - Single provider
+**Agent F:** Wave 7.4 (RSS) - Single adapter
+**Agent G:** Wave 8 (Documentation) - Can run last, parallel by module
+
+---
+
+## Status Tracking
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 5.1.1 Limiter slot leak | PENDING | Verified exists at pipeline.py:417 |
+| 5.1.2 _log_pipeline args | PENDING | Verified wrong at lines 60,63,66 |
+| 6.1 SSRF layering | PENDING | Needs verification |
+| 6.2 Services↔adapters | PENDING | crawling.py:13 imports RawItem |
+| 6.3 review stage | PENDING | Verified in pipeline_utils.py:18 - ALREADY FIXED |
+| 7.1 StageConfig | PENDING | Empty stub confirmed |
+| 7.2 Utils gaps | PENDING | Multiple missing |
+| 7.3 DeepSeek | PENDING | Missing |
+| 7.4 RSS gaps | PENDING | Missing fallback/validation/auth |
+| 8.1-8.6 Docs | PENDING | Multiple drift issues |
+
+---
+
+## Known Verification Results (2026-05-07)
+
+Items confirmed FIXED by codebase inspection:
+- `adapters/web.py:2` - `import random` PRESENT
+- `services/pipeline_utils.py:18` - `"review": ("tasks.edit", "edit_article")` PRESENT
+- `adapters/web.py:15` - imports from `utils.url`, not `services.url`
+- `tasks/newsletter.py:429` - `idempotency_key` defined locally
+
+Items NOT FIXED (still broken):
+- `tasks/pipeline.py:417` - early return releases with `rc.provider` not `provider_id`
+- `tasks/pipeline.py:60,63,66` - `_log_pipeline` args wrong order
+- `schemas/pipeline.py:140-141` - `StageConfig` empty stub
+- `utils/text.py` - wrong contents
+- `utils/datetime.py` - missing (in services/date_utils.py)
+
+---
+
+*End of file*

@@ -27,7 +27,7 @@ This document provides instructions and context for agents working on the AI New
 ## Known Issues & Gotchas
 
 *   **Database Setup:** Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
-*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function releases the limiter before early returns when stage lock is not acquired. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing. **Note:** There is a known bug where early return releases with `model=None` instead of the actual model - this is being tracked in `plans/plan.md`.
+*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function resolves provider/model before acquiring limiter resources, ensuring correct release on early return. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing.
 *   **Limiter Model Mismatch:** The `model` returned by `_run_stage_core` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, not the actual model used if fallback occurred in `_try_stage_work`. Use `provider_id` from `_try_stage_work` but be aware `model` may be incorrect.
 *   **Context Window:** LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
 *   **Linting:** We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
@@ -41,7 +41,7 @@ This document provides instructions and context for agents working on the AI New
 *   **URL Validation Layering:** SSRF protection (`validate_url_safe`, `UnsafeURLError`) is now in `utils/url.py` for clean layering. Adapters import from `utils/url.py`, services re-export from utils for backward compatibility. `services/url.py` is now a thin wrapper that re-exports from `utils/url.py` and provides Flask config-based cache re-initialization.
 *   **Newsletter Idempotency:** The `idempotency_key` for newsletter generation is defined locally in `_generate_daily_newsletters_core()` before use.
 *   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig`.
-*   **Utils Drift:** Several utils modules have wrong contents or are missing: `utils/text.py` has XML escaping, not the documented `truncate`/`sanitize_html`/`extract_hashtags`. `utils/datetime.py` is missing entirely (date utils are in `services/date_utils.py`).
+*   **Utils Modules:** The following utils modules now exist: `utils/text.py` (XML escaping + truncate/sanitize_html/extract_hashtags), `utils/datetime.py` (parse_date/format_date/time_ago), `utils/security.py` (generate_token/constant_time_compare), `utils/hash.py` (generate_hash/verify_hash), `utils/html.py` (strip_tags/linkify/extract_text).
 
 ## Architecture Conventions
 

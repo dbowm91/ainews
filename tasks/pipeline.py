@@ -409,7 +409,9 @@ def run_stage(
     lock_key = f"ainews:stage_lock:{article_id}:{stage}"
     task_id = task_self.request.id or "manual"
     t0 = time.monotonic()
-    
+
+    provider_info = _get_provider_for_stage(stage)
+    rc.provider, rc.model = provider_info[0], provider_info[1]
     limiter, redis_client, lock_acquired = _acquire_stage_resources(rc, task_self, retry_countdown, retry_max, lock_key, task_id)
     if not lock_acquired:
         if limiter is not None:

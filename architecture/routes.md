@@ -63,16 +63,13 @@ def unsubscribe(token): ...  # One-click unsubscribe
 Article routing and tracking:
 
 ```python
-links_bp = Blueprint('links', __name__)
+public_bp = Blueprint('links', __name__)
 
-@links_bp.route('/a/<short_id>')
+@public_bp.route('/a/<short_id>')
 def article_short(short_id): ...  # Short URL redirect
 
-@links_bp.route('/share/<platform>/<article_id>')
-def share_tracking(platform, article_id): ...  # Share link tracking
-
-@links_bp.route('/click/<tracking_id>')
-def track_click(tracking_id): ...  # Click analytics
+@public_bp.route("/track/newsletter-click/<int:article_id>")
+def track_newsletter_click(article_id): ...  # Newsletter click tracking
 ```
 
 ## Admin Routes
@@ -107,37 +104,38 @@ def logout(): ...
 
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
-| `/api/articles` | GET, POST | List/create articles |
-| `/api/articles/<id>` | GET, PUT, DELETE | Article CRUD |
-| `/api/articles/<id>/pipeline` | POST | Trigger pipeline stage |
-| `/api/sources` | GET, POST | List/create sources |
-| `/api/sources/<id>` | GET, PUT, DELETE | Source CRUD |
-| `/api/sources/<id>/refresh` | POST | Force source refresh |
-| `/api/pipeline/runs` | GET | List pipeline runs |
-| `/api/pipeline/runs/<id>` | GET | Run details + logs |
-| `/api/pipeline/trigger` | POST | Manual pipeline trigger |
-| `/api/webhooks` | GET, POST | List/create webhooks |
-| `/api/webhooks/<id>/test` | POST | Test webhook delivery |
-| `/api/config` | GET, PUT | Runtime configuration |
-| `/api/audit` | GET | Audit log entries |
+| `/api/v1/articles` | GET, POST | List/create articles |
+| `/api/v1/articles/<id>` | GET, PUT, DELETE | Article CRUD |
+| `/api/v1/articles/<id>/pipeline` | POST | Trigger pipeline stage |
+| `/api/v1/sources` | GET, POST | List/create sources |
+| `/api/v1/sources/<id>` | GET, PUT, DELETE | Source CRUD |
+| `/api/v1/sources/<id>/refresh` | POST | Force source refresh |
+| `/api/v1/pipeline/stats` | GET | Pipeline statistics |
+| `/api/v1/pipeline/backlog` | GET | Pipeline backlog |
+| `/api/v1/webhooks` | GET, POST | List/create webhooks |
+| `/api/v1/webhooks/<id>/test` | POST | Test webhook delivery |
+| `/api/v1/config/reload` | POST | Reload configuration |
+| `/api/v1/audit-logs` | GET | Audit log entries |
 
 ## Template Structure
 
-Admin templates follow consistent patterns:
+Templates use a flat directory structure under `templates/`:
 
 ```
-templates/admin/
-├── base.html              # Base template with nav
-├── dashboard.html         # Main dashboard
-├── articles/
-│   ├── list.html          # Article table with filters
-│   └── edit.html          # Article editor
-├── sources/
-│   ├── list.html          # Source table with health
-│   └── edit.html          # Source editor
-└── newsletters/
-    ├── list.html          # Newsletter history
-    └── view.html          # Newsletter preview
+templates/
+├── admin/                 # Admin templates (flat)
+│   ├── dashboard.html     # Main dashboard
+│   ├── articles.html      # Article list
+│   ├── article_edit.html  # Article editor
+│   ├── sources.html       # Source management
+│   ├── newsletters.html   # Newsletter history
+│   └── partials/          # Admin partial templates
+├── partials/              # Public partial templates
+├── errors/                # Error pages (404, 500, 429)
+├── macros/                # Jinja macros
+├── article.html           # Article detail page
+├── index.html             # Home page
+└── share_redirect.html    # Share redirect page
 ```
 
 ## Security

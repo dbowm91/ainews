@@ -42,38 +42,39 @@ class ToolDefinition(BaseModel):
 
 ## Tool Implementations (`tools.py`)
 
+Tools are module-level functions registered in `_TOOL_REGISTRY`:
+
 ```python
-class ContextNotesTool(Tool):
-    name = "context_notes"
-    description = "Get editor notes for a topic"
+def _context_tool_get_topic_note(topic: str, source: str | None = None) -> str:
+    """Returns note content or 'No note found for this topic.'"""
 
-    async def execute(self, topic: str) -> dict:
-        # Queries TopicNote model
-        # Returns {notes: [...], topic: str}
+def _context_tool_get_topic_notes_for_topics(topics: list[str]) -> str:
+    """Returns formatted string of topic->notes mappings"""
 
-class RelatedArticlesTool(Tool):
-    name = "related_articles"
-    description = "Find related articles by topics"
+def _context_tool_get_related_articles(
+    topics: list[str], exclude_id: int, limit: int = 5,
+) -> str:
+    """Returns formatted list of related articles"""
 
-    async def execute(self, topics: list[str], limit: int = 5) -> dict:
-        # Uses RelatedService
-        # Returns {articles: [...]}
+def _context_tool_get_trend_memory(
+    topics: list[str], min_importance: int = 1, max_age_days: int | None = None,
+) -> str:
+    """Returns formatted trend memory entries"""
 
-class TrendMemoryTool(Tool):
-    name = "trend_memory"
-    description = "Retrieve trend memory entries"
+def _context_tool_get_article_by_id(article_id: int) -> str:
+    """Returns JSON string of article metadata"""
 
-    async def execute(self, topic: str, limit: int = 5) -> dict:
-        # Queries TrendMemory
-        # Returns {entries: [...]}
+def _context_tool_search_articles(query: str, limit: int = 5) -> str:
+    """Returns JSON array of matching articles"""
 
-class WebSearchTool(Tool):
-    name = "web_search"
-    description = "Search the web for information"
+def _context_tool_get_source_health() -> str:
+    """Returns JSON array of source health summaries"""
 
-    async def execute(self, query: str, limit: int = 5) -> dict:
-        # Uses DuckDuckGo by default
-        # Returns {results: [...]}
+def _context_tool_search_web(query: str, max_results: int = 5) -> str:
+    """Returns formatted web search results"""
+
+def _context_tool_get_search_provider(provider_id: str | None = None) -> str:
+    """Returns name of search provider in use"""
 ```
 
 ## Subagent Runner (`runner.py`)
@@ -81,20 +82,22 @@ class WebSearchTool(Tool):
 ### Main Entry Points
 
 ```python
-async def run_subagent(
-    task: str,
-    context: dict | None = None,
-    tools: list[str] | None = None,
-    model: str | None = None,
-) -> SubagentResult:
+def run_subagent(
+    task_type: str,
+    stage: str,
+    prompt_data: dict,
+    response_model: Type[BaseModel],
+    article_id: int | None = None,
+) -> SubagentResponse:
     """Run a single-step subagent with optional tools"""
 
-async def run_subagent_with_tools(
-    task: str,
-    context: dict | None = None,
-    tools: list[str] | None = None,
+def run_subagent_with_tools(
+    stage: str,
+    task_type: str,
+    prompt_data: dict,
+    response_model: Type[BaseModel],
     max_iterations: int = 5,
-) -> SubagentResult:
+) -> SubagentResponse:
     """Run a multi-step subagent with tool calling loop"""
 ```
 
@@ -154,20 +157,41 @@ chains:
 
 ## Middleware (`middleware.py`)
 
-Request/response middleware for logging and error handling:
+Middleware uses a sync `wrap()` pattern to intercept tool execution:
 
 ```python
-class LoggingMiddleware:
-    async def on_request(self, task: str, context: dict): ...
-    async def on_response(self, result: SubagentResult): ...
-    async def on_error(self, error: Exception): ...
+class ToolMiddleware:
+    """Base class for tool execution middleware."""
+    def wrap(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        """Wrap a tool function with middleware behavior."""
 
-class TimingMiddleware:
-    async def on_request(self, task: str, context: dict):
-        self.start_time = time.time()
-    async def on_response(self, result: SubagentResult):
-        duration = time.time() - self.start_time
-        logger.info(f"Subagent took {duration:.2f}s")
+class LoggingMiddleware(ToolMiddleware):
+    def wrap(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            self.logger.info("Tool %s called", func.__name__)
+            try:
+                result = func(*args, **kwargs)
+                self.logger.info("Tool %s completed", func.__name__)
+                return result
+            except Exception as e:
+                self.logger.error("Tool %s failed: %s", func.__name__, e)
+                raise
+        return wrapped
+
+class TimingMiddleware(ToolMiddleware):
+    def wrap(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            start = time.perf_counter()
+            try:
+                result = func(*args, **kwargs)
+                elapsed = time.perf_counter() - start
+                self.logger.debug("Tool %s executed in %.3fs", func.__name__, elapsed)
+                return result
+            except Exception as e:
+                elapsed = time.perf_counter() - start
+                self.logger.debug("Tool %s failed after %.3fs: %s", func.__name__, elapsed, e)
+                raise
+        return wrapped
 ```
 
 ## Configuration

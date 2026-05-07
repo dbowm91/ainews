@@ -1,6 +1,6 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** IN PROGRESS
+**Status:** COMPLETED - ALL WAVES FINISHED
 **Last Updated:** 2026-05-07
 **Goal:** Address critical bugs, documentation drift, and remaining architecture issues identified in architecture reviews.
 
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-All waves of the original plan (2026-05-05) have been completed. This document consolidates findings from architecture reviews conducted on 2026-05-07.
+All waves from the original plan (2026-05-05) and this architecture review (2026-05-07) have been completed.
 
 **New Waves Overview:**
 - **Wave 5: Critical Bug Fixes** (P0 runtime failures) - Immediate priority
@@ -304,16 +304,21 @@ class StageConfig(BaseModel):
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 5.1.1 Limiter slot leak | PENDING | Bug confirmed at pipeline.py:417 |
+| 5.1.1 Limiter slot leak | COMPLETED | Fixed by resolving provider/model before limiter acquire |
 | 5.1.2 _log_pipeline args | COMPLETED | Already fixed in code |
 | 6.1 SSRF layering | COMPLETED | Adapters correctly import from utils.url |
 | 6.2 Services↔adapters | COMPLETED | TYPE_CHECKING import is acceptable |
 | 6.3 review stage | COMPLETED | Already present in pipeline_utils.py |
-| 7.1 StageConfig | PENDING | Empty stub confirmed |
-| 7.2 Utils gaps | PENDING | 5 files missing or wrong |
-| 7.3 DeepSeek | PENDING | Missing provider |
-| 7.4 RSS gaps | PENDING | Missing fallback/validation/auth |
-| 8.1-8.6 Docs | PENDING | Multiple drift issues |
+| 7.1 StageConfig | COMPLETED | StageConfig is stub, SubagentStageConfig is actual |
+| 7.2 Utils gaps | COMPLETED | All utils modules implemented |
+| 7.3 DeepSeek | COMPLETED | Removed references (not implemented) |
+| 7.4 RSS gaps | COMPLETED | Added validation, fallback, auth headers |
+| 8.1 Pipeline docs | COMPLETED | metadata->meta, circuit breaker timing, max_tokens |
+| 8.2 Subagent docs | COMPLETED | run_subagent signature, tools, middleware, return type |
+| 8.3 Schemas docs | COMPLETED | StageConfig, ResearchBrief, CondensedArticle, NewsletterBrief |
+| 8.4 Models docs | COMPLETED | embedding, AdminUser, TrendMemory, Source fields |
+| 8.5 Routes docs | COMPLETED | /api/v1 prefix, /share removed, /track/newsletter-click |
+| 8.6 Utils docs | COMPLETED | Document actual implemented functions |
 
 ---
 
@@ -325,16 +330,13 @@ class StageConfig(BaseModel):
 - `adapters/web.py:15` - imports from `utils.url`, not `services.url`
 - `tasks/newsletter.py:429` - `idempotency_key` defined locally
 - `_log_pipeline` argument order - FIXED (correct order now used)
-
-### Items PENDING (Need Fixing):
-- `tasks/pipeline.py:417` - early return releases with `rc.model` which is `None`
-- `schemas/pipeline.py:140-141` - `StageConfig` empty stub
-- `utils/text.py` - wrong contents (XML escaping, not text utilities)
-- `utils/datetime.py` - missing
-- `utils/hash.py` - missing
-- `utils/html.py` - missing
-- `utils/security.py` - missing
-- `services/llm/deepseek.py` - missing
+- `tasks/pipeline.py:417` - FIXED (provider/model resolved before limiter acquire)
+- `utils/text.py` - FIXED (now has truncate, sanitize_html, extract_hashtags + XML escaping)
+- `utils/datetime.py` - FIXED (created with parse_date, format_date, time_ago)
+- `utils/hash.py` - FIXED (created with generate_hash, verify_hash)
+- `utils/html.py` - FIXED (created with strip_tags, linkify, extract_text)
+- `utils/security.py` - FIXED (created with generate_token, constant_time_compare)
+- `services/llm/deepseek.py` - FIXED (references removed)
 
 ---
 

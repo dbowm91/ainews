@@ -21,7 +21,6 @@ _DEFAULT_RATES = {
     "anthropic/claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
     "anthropic/claude-haiku-20241022": {"input": 0.25, "output": 1.25},
     "anthropic/claude-opus-4-20250514": {"input": 15.00, "output": 75.00},
-    "deepseek/deepseek-chat": {"input": 0.27, "output": 0.42},
     "minimax/MiniMax-M2.5": {"input": 0.20, "output": 1.10},
     "gemini/gemini-2.0-flash": {"input": 0.10, "output": 0.40},
     "groq/llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},

@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import re
+from html.parser import HTMLParser
 from typing import Any
 
-__all__ = ["esc_xml_text", "esc_xml_attr", "escape_prompt_data"]
+__all__ = [
+    "esc_xml_text",
+    "esc_xml_attr",
+    "escape_prompt_data",
+    "truncate",
+    "sanitize_html",
+    "extract_hashtags",
+]
 
 
 def esc_xml_text(text: str) -> str:
@@ -39,3 +48,65 @@ def escape_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
         else:
             result[key] = value
     return result
+
+
+def truncate(text: str, length: int, suffix: str = "...") -> str:
+    """Truncate text to length, breaking on word boundaries."""
+    if not text:
+        return ""
+    if len(text) <= length:
+        return text
+    if length <= len(suffix):
+        return suffix[:length]
+    truncated = text[: length - len(suffix)]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        truncated = truncated[:last_space]
+    return truncated + suffix
+
+
+_DANGEROUS_TAGS = {
+    "script", "style", "iframe", "noscript", "object", "embed", "form",
+    "input", "button", "select", "textarea", "link", "meta", "base",
+}
+_DANGEROUS_ATTRS = {
+    "onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur",
+    "onchange", "onsubmit", "onkeydown", "onkeyup", "onkeypress",
+    "javascript:", "vbscript:", "data:", "href", "src",
+}
+
+
+class _TagStripper(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.result: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.result.append(data)
+
+    def handle_comment(self, data: str) -> None:
+        pass
+
+    def unknown_decl(self, data: str) -> None:
+        pass
+
+
+def sanitize_html(html: str) -> str:
+    """Remove dangerous HTML tags and attributes."""
+    if not html:
+        return ""
+
+    parser = _TagStripper()
+    try:
+        parser.feed(html)
+    except Exception:  # noqa: BLE001 - return original on any parse error
+        return html
+    return "".join(parser.result)
+
+
+def extract_hashtags(text: str) -> list[str]:
+    """Extract #hashtags from text."""
+    if not text:
+        return []
+    pattern = r"#[a-zA-Z][a-zA-Z0-9_]*"
+    return re.findall(pattern, text)

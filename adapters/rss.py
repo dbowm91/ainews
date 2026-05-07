@@ -14,6 +14,30 @@ from services.url import validate_url_safe
 from .session import SSRFSafeRedirectHandler
 
 
+def _validate_feed(feed: Any) -> bool:
+    """Check feed has required elements."""
+    if not feed or not feed.get("entries"):
+        return False
+    return True
+
+
+def _scrape_feed_fallback(url: str, session: requests.Session, timeout: int = 15) -> list[dict[str, Any]]:
+    """Extract items from HTML page using BeautifulSoup when feed parsing fails."""
+    resp = session.get(url, timeout=timeout)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.content, "html.parser")
+    items = []
+    for item in soup.select("item, entry, article"):
+        title_el = item.select_one("title")
+        link_el = item.select_one("link")
+        if title_el and link_el:
+            items.append({
+                "title": title_el.get_text(strip=True),
+                "link": link_el.get("href", link_el.get_text(strip=True)),
+            })
+    return items
+
+
 @register_adapter("rss")
 class RSSAdapter(BaseSourceAdapter):
     config_class = RSSConfig
@@ -42,6 +66,8 @@ class RSSAdapter(BaseSourceAdapter):
         )
         resp.raise_for_status()
         feed = feedparser.parse(resp.content)
+        if not _validate_feed(feed):
+            return _scrape_feed_fallback(cfg.feed_url, self._session, cfg.request_timeout)
         return feed.entries[: cfg.max_items]
 
     def parse_item(self, raw: Any) -> Optional[RawItem]:

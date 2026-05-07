@@ -126,7 +126,13 @@ class APIAdapter(BaseSourceAdapter):
         try:
             url = cfg.item_url.format(id=item_id)
             validate_url_safe(url)
-            resp = self._session.get(url, timeout=cfg.request_timeout)
+            headers = {}
+            if cfg.api_key:
+                if cfg.auth_header:
+                    headers[cfg.auth_header] = f"Bearer {cfg.api_key}"
+                else:
+                    headers["Authorization"] = f"Bearer {cfg.api_key}"
+            resp = self._session.get(url, headers=headers, timeout=cfg.request_timeout)
             if resp.ok:
                 return resp.json()
         except requests.RequestException as e:

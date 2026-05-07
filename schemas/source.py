@@ -42,15 +42,17 @@ class RSSConfig(BaseModel):
 class APIConfig(BaseModel):
     list_url: str = Field(..., min_length=1)
     list_method: str = "json_array"
-    list_items_path: Optional[str] = None  # JSONPath to items array
+    list_items_path: Optional[str] = None
     max_items: int = Field(default=30, ge=1, le=200)
-    item_url: Optional[str] = None  # {id} placeholder
+    item_url: Optional[str] = None
     item_method: str = "json_object"
     fields: dict[str, str] = Field(default_factory=dict)
     filters: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
     request_timeout: int = 15
     user_agent: str = "AINewsBot/1.0"
+    api_key: Optional[str] = None
+    auth_header: Optional[str] = None
 
 
 class PaginationConfig(BaseModel):

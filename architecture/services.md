@@ -12,7 +12,6 @@ services/
 │   ├── openai.py           # OpenAI-compatible provider
 │   ├── gemini.py           # Google Gemini provider
 │   ├── ollama.py           # Ollama local provider
-│   └── deepseek.py         # DeepSeek provider
 ├── subagent/               # Tool-enabled LLM agents
 ├── search/                 # Search provider implementations
 ├── article_parser.py       # Article content parsing

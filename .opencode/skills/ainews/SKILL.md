@@ -473,6 +473,12 @@ The implementation plan (plans/plan.md) was completed in 2026-05. Key features i
 - Security hardening (lxml upgrade, file permissions, password docs)
 - Documentation (ab-experiments.md, key_rotation.md, openapi.yaml)
 
+**2026-05-07 Architecture Review Completions:**
+- Wave 5: Fixed limiter slot leak bug (provider/model resolved before limiter acquire)
+- Wave 7: Implemented missing utils modules (datetime, text, security, hash, html)
+- Wave 7: Removed DeepSeek references (not implemented), filled RSS adapter gaps
+- Wave 8: Fixed documentation drift across pipeline, subagent, schemas, models, routes, utils
+
 All planned improvements are complete. Deferred items are tracked in plans/plan.md.
 
 ## Code Quality Workflow

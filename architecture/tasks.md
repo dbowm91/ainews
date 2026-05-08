@@ -156,15 +156,24 @@ Articles skip select/research and go directly to `review` for manual processing.
 
 ## Scheduler
 
-Celery Beat schedule (from `pipeline.yaml`):
+Celery Beat schedule (from `config.py:get_beat_schedule()`):
 
 | Task | Schedule | Description |
 |------|----------|-------------|
-| `run_all_sources` | Every 30 min | Crawl all sources |
-| `generate_daily_newsletters` | 8:00 AM ET | Generate newsletters |
-| `publish_scheduled_articles` | Every 5 min | Check scheduled publishes |
-| `cleanup_old_logs` | Daily 3 AM | Clean old pipeline logs |
-| `backfill_embeddings` | Daily 2 AM | Update embeddings |
+| `run-all-sources` | Every 30 min | Crawl all sources |
+| `retry-stuck-articles` | Every 60 min | Retry/dead-letter stuck articles |
+| `generate-newsletters` | 8:00 AM ET | Generate newsletters |
+| `cleanup-old-logs` | Daily 3 AM | Clean old pipeline logs |
+| `consolidate-trend-memory` | Daily 3:30 AM | Consolidate trend memory entries |
+| `purge-trend-memory` | Daily 3:45 AM | Purge expired trend memory |
+| `cleanup-old-versions` | Daily 3:45 AM | Clean old article versions |
+| `cleanup-expired-verifications` | Every 15 min | Clean expired email verifications |
+| `publish-scheduled-articles` | Every 5 min | Check scheduled publishes |
+| `cleanup-stale-limiter-slots` | Every 5 min | Clean stale rate limiter slots |
+| `retry-failed-newsletter-deliveries` | Every 2 hours | Retry failed email deliveries |
+| `recalculate-impact-scores` | Daily 4:00 AM | Recalculate article impact scores |
+| `cleanup-inactive-subscribers` | Daily 1:00 AM | Flag inactive subscribers |
+| `backfill-embeddings` | Daily 2:00 AM | Generate missing embeddings |
 
 ## Rate Limiting
 

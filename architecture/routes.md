@@ -66,11 +66,13 @@ Article routing and tracking:
 public_bp = Blueprint('links', __name__)
 
 @public_bp.route('/a/<short_id>')
-def article_short(short_id): ...  # Short URL redirect
+def article_short(short_id): ...  # Short URL redirect (also /s/<short_id>)
 
 @public_bp.route("/track/newsletter-click/<int:article_id>")
 def track_newsletter_click(article_id): ...  # Newsletter click tracking
 ```
+
+**Note:** `/share/<platform>/<article_id>` is not implemented as a server endpoint. Social sharing is handled client-side via JavaScript.
 
 ## Admin Routes
 
@@ -102,20 +104,27 @@ def logout(): ...
 
 ### API Endpoints (`admin/api/`)
 
+Note: Endpoints are registered at root level (e.g., `/articles`, not `/api/v1/articles`).
+
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
-| `/api/v1/articles` | GET, POST | List/create articles |
-| `/api/v1/articles/<id>` | GET, PUT, DELETE | Article CRUD |
-| `/api/v1/articles/<id>/pipeline` | POST | Trigger pipeline stage |
-| `/api/v1/sources` | GET, POST | List/create sources |
-| `/api/v1/sources/<id>` | GET, PUT, DELETE | Source CRUD |
-| `/api/v1/sources/<id>/refresh` | POST | Force source refresh |
-| `/api/v1/pipeline/stats` | GET | Pipeline statistics |
-| `/api/v1/pipeline/backlog` | GET | Pipeline backlog |
-| `/api/v1/webhooks` | GET, POST | List/create webhooks |
-| `/api/v1/webhooks/<id>/test` | POST | Test webhook delivery |
-| `/api/v1/config/reload` | POST | Reload configuration |
-| `/api/v1/audit-logs` | GET | Audit log entries |
+| `/articles` | GET, POST | List/create articles |
+| `/articles/<id>` | GET, PUT, DELETE | Article CRUD |
+| `/articles/<id>/pipeline` | POST | Trigger pipeline stage |
+| `/articles/bulk` | POST | Bulk article operations |
+| `/sources` | GET, POST | List/create sources |
+| `/sources/<id>` | GET, PUT, PATCH, DELETE | Source CRUD |
+| `/sources/<id>/refresh` | POST | Force source refresh |
+| `/pipeline/stats` | GET | Pipeline statistics |
+| `/pipeline/backlog` | GET | Pipeline backlog |
+| `/pipeline/dead-letter/stats` | GET | Dead letter queue stats |
+| `/pipeline/sla` | GET | SLA metrics |
+| `/webhooks` | GET, POST | List/create webhooks |
+| `/webhooks/<id>/test` | POST | Test webhook delivery |
+| `/webhooks/<id>/events` | GET | Webhook delivery events |
+| `/config/reload` | POST | Reload configuration |
+| `/audit-logs` | GET | Audit log entries |
+| `/metrics` | GET | Prometheus metrics |
 
 ## Template Structure
 

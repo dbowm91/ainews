@@ -135,6 +135,20 @@ Per-topic newsletters generated similarly:
 3. Build topic newsletter HTML
 4. Send to topic subscribers
 
+### Scheduled Tasks
+
+The pipeline uses Celery Beat for scheduled task orchestration:
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| `run-all-sources` | Every 30 min | Crawl all RSS/API sources |
+| `generate-newsletters` | Daily 8 AM ET | Generate and send newsletters |
+| `backfill-embeddings` | Daily 2 AM | Generate missing article embeddings |
+| `publish-scheduled-articles` | Every 5 min | Publish articles at scheduled time |
+| `cleanup-old-logs` | Daily 3 AM | Clean old pipeline logs |
+| `consolidate-trend-memory` | Daily 3:30 AM | Consolidate trend memory |
+| `purge-trend-memory` | Daily 3:45 AM | Purge expired trend memory |
+
 ## Pipeline Configuration
 
 From `pipeline.yaml`:
@@ -236,8 +250,6 @@ LLM providers have circuit breakers:
 
 ### Fallback Chain
 
-```
-ollama-local → openai → anthropic → gemini → deepseek
-```
+The fallback chain is **dynamic** - determined by enabled providers in `providers.yaml` configuration order. The `get_provider_chain()` function iterates through enabled providers and filters out those with open circuits.
 
-If primary fails, falls through to next provider.
+If primary fails, falls through to next provider until one succeeds.

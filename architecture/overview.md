@@ -156,6 +156,9 @@ generate_daily_newsletters (scheduled 8:00 AM ET)
 
 - **ollama-local** (default, enabled) - Local Ollama instance
 - **openai**, **anthropic**, **gemini**, **deepseek**, **groq**, **openrouter** (disabled)
+- **xai**, **togetherai**, **fireworks**, **cerebras**, **zai**, **minimax**, **opencode** (disabled)
+
+Note: `services/subagent/` contains the subagent system (not at top level).
 
 ### Search Providers
 
@@ -175,6 +178,27 @@ generate_daily_newsletters (scheduled 8:00 AM ET)
 
 ## Directory Structure
 
+```
+ainews/
+├── app.py                  # Flask application factory
+├── config.py               # Configuration classes
+├── extensions.py           # Flask extensions (db, limiter, redis)
+├── constants.py            # Pipeline status values, shared constants
+├── celery_app.py           # Celery application setup
+├── pipeline.yaml           # Pipeline stage configuration
+├── providers.yaml          # LLM/search provider definitions (14 providers)
+├── sources.yaml            # News source definitions
+├── models/                 # SQLAlchemy models
+├── services/               # Business logic (NO adapter imports)
+│   ├── subagent/            # Tool-enabled LLM agents (NOT at top level)
+│   └── llm/                 # LLM provider implementations
+├── adapters/               # Source adapters (NO service imports)
+├── routes/                 # Flask blueprints
+├── tasks/                  # Celery tasks
+├── schemas/                # Pydantic models
+├── utils/                  # Pure utilities
+├── prompts/                # LLM prompt templates
+└── tests/                  # Test suite
 ```
 ainews/
 ├── app.py                  # Flask application factory

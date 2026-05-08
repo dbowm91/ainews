@@ -119,17 +119,20 @@ Features:
 `session.py` provides safe redirect handling:
 
 ```python
-class SSRFSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+class SSRFSafeRedirectHandler:
+    """Custom redirect handler (not based on urllib HTTPRedirectHandler)"""
     def redirect_request(self, req, fp, code, msg, hdrs, newurl):
         # Validates newurl against allowlist
         # Blocks javascript:, data:, and internal IP ranges
         # Logs blocked redirects
 ```
 
+Blocklist patterns include internal IP ranges and the `javascript:` and `data:` URL schemes are blocked via scheme validation.
+
 Blocked patterns:
-- `javascript:`, `data:` URLs
 - Internal IP ranges (10.x, 172.16-31.x, 192.168.x)
-- Private hostnames
+- Private hostnames and DNS rebinding attacks
+- Non-http/https schemes (javascript:, data:, etc.) via scheme validation
 
 ## Source Configuration
 

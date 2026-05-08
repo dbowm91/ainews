@@ -1,6 +1,6 @@
-# Subagent Branch Management
+# Wave Implementation & Documentation Fixes
 
-Conventions for managing subagent work and parallel development in this codebase.
+Conventions for managing multi-wave implementations, parallel subagent work, and documentation alignment in this codebase.
 
 ## Branch Management Rules
 
@@ -92,3 +92,18 @@ git stash pop
 3. Fix critical bugs immediately (e.g., missing imports)
 4. Update documentation to match implementation
 5. Commit each wave separately to enable easy rollback
+
+### Wave 8 Completion (2026-05-08)
+
+All documentation drift items from Waves 5-8 have been completed:
+
+| Item | Fix Applied |
+|------|-------------|
+| `pipeline.md` hardcoded fallback chain (lines 239-241) | Replaced with dynamic chain explanation |
+| `pipeline.md` backfill_embeddings | Added Scheduled Tasks section with backfill-embeddings (2 AM) |
+| `models.md` finalized_at (line 61) | Removed from Article model example |
+
+**Commits:**
+- `docs/pipeline-wave8-fix`: docs(pipeline): fix hardcoded fallback chain diagram, add backfill schedule
+- `docs/models-wave8-fix`: docs(models): remove finalized_at from Article model example
+- Merged to `dev/unified-implimentation` via octopus merge

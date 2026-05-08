@@ -38,7 +38,7 @@ This document provides instructions and context for agents working on the AI New
 *   **Article API:** Individual article CRUD endpoints exist at `/admin/api/articles/<id>` with GET, PUT, DELETE methods. Pipeline trigger at `/admin/api/articles/<id>/pipeline` with POST.
 *   **Source Refresh:** Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
 *   **Newsletter Associations:** `newsletter_articles` and `newsletter_subscribers` association tables exist in `models/newsletter.py` with many-to-many relationships.
-*   **URL Validation Layering:** SSRF protection (`validate_url_safe`, `UnsafeURLError`) is now in `utils/url.py` for clean layering. Adapters import from `utils/url.py`, services re-export from utils for backward compatibility. `services/url.py` is now a thin wrapper that re-exports from `utils/url.py` and provides Flask config-based cache re-initialization.
+*   **URL Validation Layering:** SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Adapters import from `utils/url.py` for clean layering. `services/url.py` has duplicate implementations and should not be imported by adapters.
 *   **Newsletter Idempotency:** The `idempotency_key` for newsletter generation is defined locally in `_generate_daily_newsletters_core()` before use.
 *   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 *   **Utils Modules:** The following utils modules now exist: `utils/text.py` (XML escaping + truncate/sanitize_html/extract_hashtags), `utils/datetime.py` (parse_date/format_date/time_ago), `utils/security.py` (generate_token/constant_time_compare), `utils/hash.py` (generate_hash/verify_hash), `utils/html.py` (strip_tags/linkify/extract_text).
@@ -72,6 +72,22 @@ Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `s
 - `Article.finalized_at` doesn't exist - use `published_at`
 - `TrendMemory.observation` is actually `signal`
 - `TrendMemory.embedding` is `db.Text` (not a vector type)
+- `Source.adapter_config` doesn't exist (documented but never implemented)
+
+### Fallback Chain Behavior
+The LLM provider fallback chain is **dynamic** - determined by enabled providers in `providers.yaml` configuration order, not hardcoded. The `get_provider_chain()` function in `services/llm/__init__.py` iterates through enabled providers and filters out those with open circuits.
+
+### Celery Beat Schedule
+Key scheduled tasks:
+- `run-all-sources`: Every 30 minutes (crawl_interval)
+- `generate-newsletters`: Daily at newsletters_hour (default 8 AM ET)
+- `backfill-embeddings`: Daily at 2 AM
+- `cleanup-old-logs`: Daily at cleanup_logs_hour (default 3 AM)
+- `publish-scheduled-articles`: Every 5 minutes (publish_interval)
+- `retry-stuck-articles`: Every 60 minutes
+- `consolidate-trend-memory`: Daily at 3:30 AM
+- `purge-trend-memory`: Daily at 3:45 AM
+- `cleanup-old-versions`: Daily at 3:45 AM
 
 ## Shared Context
 

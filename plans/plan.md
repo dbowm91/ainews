@@ -1,70 +1,55 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** COMPLETED - ALL WAVES FINISHED
-**Last Updated:** 2026-05-07
-**Goal:** Address critical bugs, documentation drift, and remaining architecture issues identified in architecture reviews.
+**Status:** IN PROGRESS - Documentation Alignment Remaining
+**Last Updated:** 2026-05-08
+**Goal:** Address documentation drift identified in architecture reviews. All code-level fixes are complete; documentation updates remain.
 
 ---
 
 ## Executive Summary
 
-All waves from the original plan (2026-05-05) and this architecture review (2026-05-07) have been completed.
+All code-level items (Waves 5, 6, 7) have been completed. Wave 8 (Documentation Alignment) requires completion.
 
-**New Waves Overview:**
-- **Wave 5: Critical Bug Fixes** (P0 runtime failures) - Immediate priority
-- **Wave 6: Layering & Architecture Corrections** (HIGH priority violations)
-- **Wave 7: Implementation Gaps** (Missing features)
-- **Wave 8: Documentation Alignment** (Schema/model drift)
+**Wave Status:**
+| Wave | Status | Notes |
+|------|--------|-------|
+| Wave 5: Critical Bug Fixes | COMPLETED | Limiter slot leak fixed |
+| Wave 6: Layering & Architecture | COMPLETED | SSRF, services↔adapters, review stage verified |
+| Wave 7: Implementation Gaps | COMPLETED | Utils modules, DeepSeek, RSS gaps all addressed |
+| Wave 8: Documentation Alignment | IN PROGRESS | Models.md has finalized_at drift; pipeline.md has hardcoded chain contradiction |
 
 ---
 
-## Wave 5: Critical Bug Fixes (P0 Runtime Failures)
+## Wave 5: Critical Bug Fixes (P0 Runtime Failures) - COMPLETED
 
 ### Task 5.1: Fix P0 Runtime Bugs
 
-#### BUG-5.1.1: Limiter Slot Leak with `model=None` on Early Return
+#### BUG-5.1.1: Limiter Slot Leak with `model=None` on Early Return - FIXED
 
-**Location:** `tasks/pipeline.py:414-419`
+**Location:** `tasks/pipeline.py:413-420`
 
-**Issue:** When stage lock cannot be acquired, the limiter slot is released with `rc.model` which is `None` at that point (before `_run_stage_core` executes). The limiter key is `ainews:llm:{provider}:{model}`, so releasing with `model=None` creates a different key than the actual slot acquired.
+**Issue:** When stage lock cannot be acquired, the limiter slot was released with `rc.model` which was `None` at that point (before `_run_stage_core` executes). The limiter key is `ainews:llm:{provider}:{model}`, so releasing with `model=None` created a different key than the actual slot acquired.
 
-**Code at lines 414-419:**
-```python
-limiter, redis_client, lock_acquired = _acquire_stage_resources(rc, task_self, retry_countdown, retry_max, lock_key, task_id)
-if not lock_acquired:
-    if limiter is not None:
-        limiter.release(rc.provider, rc.model, rc.timeout_seconds)  # BUG: model is None here
-    logger.info("TraceID=%s: Stage %s already running for article %s, skipping", trace_id, stage, article_id)
-    return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
-```
+**Fix Applied:** Provider and model are now resolved BEFORE `_acquire_stage_resources()` is called. The early return at line 418 now uses the resolved values.
 
-**Impact:** Slot leak until TTL expires (default 300 seconds). Could cause artificial rate limiting under high load.
-
-**Fix Options:**
-1. Store the acquired model before the lock check and use it for release
-2. Restructure early return to happen after model is known
-3. Only release the limiter if we have the actual model, otherwise let TTL handle it
-
-**Verification:** Run `test_skips_when_stage_locked` and verify limiter release is called with correct key pattern.
+**Verification:** Code at lines 413-414 resolves provider/model before line 415's `_acquire_stage_resources()`. Early return uses resolved values.
 
 ---
 
-#### BUG-5.1.2: `_log_pipeline` Argument Order
+#### BUG-5.1.2: `_log_pipeline` Argument Order - FIXED
 
 **Location:** `tasks/pipeline.py:60-67`
 
-**Status:** VERIFIED FIXED - The code at lines 61, 64, 67 now uses correct argument order:
+**Status:** VERIFIED FIXED - The code now uses correct argument order:
 ```python
 _log_pipeline(run_id, failed_stage, "info", "degraded_to_research", article_id=article.id)
 ```
 
 The `_log_pipeline` signature is `_log_pipeline(run_id, stage, level, message, *args, article_id=None)`.
 
-**No action needed for this bug.**
-
 ---
 
-## Wave 6: Layering & Architecture Corrections
+## Wave 6: Layering & Architecture Corrections - COMPLETED
 
 ### Task 6.1: SSRF Layering - VERIFIED CORRECT
 
@@ -81,7 +66,7 @@ Verified that:
 
 ---
 
-### Task 6.2: Services↔Adapters Layering
+### Task 6.2: Services↔Adapters Layering - ACCEPTABLE
 
 **Location:** `services/crawling.py:13`
 
@@ -93,7 +78,7 @@ Verified that:
 
 ---
 
-### Task 6.3: `review` Stage in `_STAGE_TASKS`
+### Task 6.3: `review` Stage in `_STAGE_TASKS` - VERIFIED
 
 **Location:** `services/pipeline_utils.py:18`
 
@@ -109,144 +94,142 @@ _STAGE_TASKS = {
 
 ---
 
-## Wave 7: Implementation Gaps
+## Wave 7: Implementation Gaps - COMPLETED
 
-### Task 7.1: `StageConfig` is Empty Stub
+### Task 7.1: `StageConfig` is Empty Stub - DOCUMENTED
 
 **Location:** `schemas/pipeline.py:140-141`
 
-**Issue:** `StageConfig` only has `tools: list[str]` but documentation claims 7 fields (`enabled`, `model`, `prompt_variant`, `temperature`, `max_tokens`, `timeout`).
+**Status:** ACKNOWLEDGED - `StageConfig` only has `tools: list[str]` field. The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig` which have the full set of fields (enabled, provider, model, max_tokens, temperature, etc.).
 
-**Current code:**
-```python
-class StageConfig(BaseModel):
-    tools: list[str] = Field(default_factory=list)
-```
-
-**Analysis:** The `StageConfig` in the schema is different from `SubagentStageConfig` which handles actual stage configuration. The schema `StageConfig` appears to be a placeholder or used differently than documented.
-
-**Action Required:** Either:
-- (A) Implement missing fields if StageConfig is actually used
-- (B) Document that `SubagentStageConfig` is the actual used class for stage configuration
+**Documentation updated in `architecture/schemas.md`** to clarify this distinction.
 
 ---
 
-### Task 7.2: Missing Utils Implementations
+### Task 7.2: Missing Utils Implementations - COMPLETED
 
-**Status:** CONFIRMED - Implementation gaps exist.
+All utils modules are now implemented:
 
-| File | Current State | Documented Functions | Action |
-|------|---------------|----------------------|--------|
-| `utils/text.py` | XML escaping (`esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`) | `truncate()`, `sanitize_html()`, `extract_hashtags()` | Add missing functions |
-| `utils/datetime.py` | MISSING | `parse_date()`, `format_date()`, `time_ago()` | Create module, move from `services/date_utils.py` |
-| `utils/hash.py` | MISSING | `generate_hash()`, `verify_hash()` | Create module |
-| `utils/html.py` | MISSING | `strip_tags()`, `linkify()`, `extract_text()` | Create module |
-| `utils/security.py` | MISSING | `generate_token()`, `constant_time_compare()`, `hash_password()`, `verify_password()` | Create module |
-
-**Implementation Order (can parallelize):**
-1. Create `utils/datetime.py` - move from `services/date_utils.py`
-2. Add missing functions to `utils/text.py` (truncate, sanitize_html, extract_hashtags)
-3. Create `utils/security.py`
-4. Create `utils/hash.py`
-5. Create `utils/html.py`
+| File | Functions | Status |
+|------|-----------|--------|
+| `utils/text.py` | `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags` | VERIFIED PRESENT |
+| `utils/datetime.py` | `parse_date`, `format_date`, `time_ago` | VERIFIED PRESENT |
+| `utils/hash.py` | `generate_hash`, `verify_hash` | VERIFIED PRESENT |
+| `utils/html.py` | `strip_tags`, `linkify`, `extract_text` | VERIFIED PRESENT |
+| `utils/security.py` | `generate_token`, `constant_time_compare` | VERIFIED PRESENT |
 
 ---
 
-### Task 7.3: DeepSeek Provider Missing
+### Task 7.3: DeepSeek Provider Missing - REFERENCES REMOVED
 
-**Location:** `services/llm/` - no `deepseek.py`
-
-**Issue:** `architecture/services.md` references `services/llm/deepseek.py` but file doesn't exist. Also `cost_tracker.py` references `deepseek/deepseek-chat`.
-
-**Current LLM providers:** `openai.py`, `anthropic.py`, `gemini.py`, `ollama.py`, `base.py`
-
-**Action Required:** Either:
-- (A) Implement DeepSeek provider following the `BaseLLMProvider` pattern
-- (B) Remove references from `cost_tracker.py` and documentation
+**Status:** References to DeepSeek provider removed from `cost_tracker.py` and documentation. The provider is not implemented and no consumer code references it.
 
 ---
 
-### Task 7.4: RSS Adapter Gaps
+### Task 7.4: RSS Adapter Gaps - COMPLETED
 
-**Missing implementations in `adapters/rss.py`:**
-- Malformed feed fallback (BeautifulSoup) - document claims it exists but doesn't
-- Feed validation - document claims it exists but doesn't
-- Auth header injection - document claims Bearer/API key but not implemented in `adapters/api.py`
+**Status:** All gaps addressed:
 
-**Action Required:**
-1. Implement `_scrape_feed()` fallback method for malformed feeds OR update documentation
-2. Add feed validation OR update documentation
-3. Add auth header support to APIAdapter OR update documentation
+1. **`_validate_feed()`** - Implemented at `adapters/rss.py:17-21`
+2. **`_scrape_feed_fallback()`** - Implemented at `adapters/rss.py:24-38` (BeautifulSoup fallback)
+3. **Auth header support** - Implemented at `adapters/api.py:129-134` (Bearer token + custom auth_header)
 
 ---
 
-## Wave 8: Documentation Alignment
+## Wave 8: Documentation Alignment - IN PROGRESS
 
-### Task 8.1: Pipeline Documentation Drift
+### Task 8.1: Pipeline Documentation Drift - PARTIAL
 
-| Document Says | Actual | Action |
-|----------------|--------|--------|
-| `metadata` (PipelineLog) | `meta` | Update `architecture/pipeline.md` |
-| Circuit breaker: 5 failures/1min, half-open 30s | 5 failures/2min, half-open 60s | Update doc or code |
-| `backfill_embeddings`: Weekly | Daily at 2 AM | Update doc |
-| Write stage `max_tokens`: 1500 | 4096 | Update doc |
+**Status:** Mostly accurate, two issues remain:
 
----
+| Document Says | Actual | Action Needed |
+|---------------|--------|---------------|
+| PipelineLog uses `meta` | `meta` in model | CORRECT - documentation accurate |
+| Circuit breaker: 5 failures/2min, half-open 60s | Same | CORRECT - documentation accurate |
+| backfill_embeddings schedule in docs | 2 AM in config.py | **ADD to documentation** |
+| Fallback chain hardcoded in diagram | Dynamic from providers.yaml | **FIX CONTRADICTION** (see below) |
 
-### Task 8.2: Subagent Documentation Drift
+**Contradiction in `architecture/pipeline.md`:**
+- Line 181 says: "The fallback chain is dynamically determined from enabled providers in `providers.yaml`"
+- Lines 239-241 show hardcoded chain: `ollama-local → openai → anthropic → gemini → deepseek`
 
-| Document Says | Actual | Action |
-|----------------|--------|--------|
-| `run_subagent(task, context, tools, model)` | `run_subagent(task_type, stage, prompt_data, response_model, article_id)` | Update doc |
-| Tool classes with `execute()` | Module-level functions | Update doc |
-| Async middleware `on_request/on_response` | Sync `wrap()` pattern | Update doc |
-| Return `SubagentResult` | Return `SubagentResponse` | Update doc |
+**Fix Required:** Update lines 239-241 to clarify the fallback chain is dynamic, or remove the hardcoded chain diagram.
 
 ---
 
-### Task 8.3: Schemas Documentation Drift
+### Task 8.2: Subagent Documentation Drift - ACCURATE
 
-| Document Says | Actual | Action |
-|----------------|--------|--------|
-| `StageConfig` with 7 fields | Only `tools` field | Update doc or implement |
-| `ResearchBrief.key_findings` | `key_claims` | Update doc |
-| `CondensedArticle.title/summary/word_count` | `headline/tldr/body` | Update doc |
-| `NewsletterBrief.newsletter_id, subject` | `themes, highlights, connections` | Update doc |
+**Status:** `architecture/subagent.md` has been updated and is now accurate for:
+- `run_subagent` signature: `(task_type, stage, prompt_data, response_model, article_id)`
+- Return type: `SubagentResponse` (not `SubagentResult`)
+- Module-level functions for tools
+- Sync `wrap()` pattern for middleware
+- `SubagentChainStep` and `SubagentChainConfig` schemas
 
----
-
-### Task 8.4: Models Documentation Drift
-
-| Document Says | Actual | Action |
-|----------------|--------|--------|
-| `embedding = Column(Vector(1536))` | `embedding = db.Text` | Update doc |
-| `ip_binding`, `user_agent_hash` on AdminUser | NOT IMPLEMENTED | Update doc |
-| `TrendMemory.observation` | `signal` | Update doc |
-| `Source.type` | `source_type` | Update doc |
-| `Source.last_fetch_at` | `last_crawled` | Update doc |
-| Article `finalized_at` | `published_at` | Update doc |
+**No action needed.**
 
 ---
 
-### Task 8.5: Routes Documentation Drift
+### Task 8.3: Schemas Documentation Drift - ACCURATE
 
-| Document Says | Actual | Action |
-|----------------|--------|--------|
-| `/api/articles` | `/api/v1/articles` | Update doc |
-| `/share/<platform>/<article_id>` | NOT FOUND | Implement or remove from doc |
-| `/click/<tracking_id>` | `/track/newsletter-click/<int:article_id>` | Update doc |
-| Nested template dirs | Flat structure | Update doc |
+**Status:** `architecture/schemas.md` has been updated and is now accurate for:
+- `StageConfig` is a stub, `SubagentStageConfig` is actual
+- `ResearchBrief` structure with nested types
+- `CondensedArticle` has `headline/tldr/body`
+- `NewsletterBrief` has `themes/highlights/connections` (list[str])
+- `SelectionResult` has `reason` not `reasoning`
+
+**No action needed.**
 
 ---
 
-### Task 8.6: Utils Documentation (P0)
+### Task 8.4: Models Documentation Drift - PARTIAL FIX NEEDED
 
-**Issue:** `architecture/utils.md` is ~70% inaccurate - describes modules that don't exist.
+**Status:** `architecture/models.md` has some drift remaining:
 
-**Action:** Update to reflect actual state:
-1. Document actual `utils/url.py` (SSRF protection, URL normalization)
-2. Document actual `utils/text.py` (XML escaping for LLM prompts)
-3. Mark missing modules as "not implemented" or implement them
+| Document Says | Actual | Action Needed |
+|---------------|--------|---------------|
+| `TrendMemory.observation` | `signal` | CORRECT - documentation accurate |
+| `Source.type` | `source_type` | CORRECT - documentation accurate |
+| `Article.finalized_at` | Does NOT exist (use `published_at`) | **FIX: Remove finalized_at from docs** |
+| `embedding = Column(Vector(1536))` | `embedding = db.Text` | CORRECT - documentation shows `Column(Text)` |
+| GIN index on embedding for vector search | No GIN index | CORRECT - documentation shows `Column(Text)` |
+| `adapter_config` on Source | Does NOT exist | Documented correctly as comment not actual field |
+
+**Fix Required:** Remove `finalized_at = Column(DateTime)` from the Article model example in `architecture/models.md` line 61. The actual Article model only has `published_at`.
+
+---
+
+### Task 8.5: Routes Documentation Drift - ACCURATE
+
+**Status:** `architecture/routes.md` has been updated and is now accurate for:
+- Admin API endpoints at root level (`/articles`, `/sources`) not `/api/v1/...`
+- `/track/newsletter-click/<int:article_id>` endpoint
+- `/share/<platform>/<article_id>` correctly noted as not implemented
+- Template structure flat with partials subdirectory
+
+**No action needed.**
+
+---
+
+### Task 8.6: Utils Documentation - ACCURATE
+
+**Status:** `architecture/utils.md` has been updated and is now accurate for:
+- `format_date` has no format parameter (returns relative time)
+- `validate_url_safe` returns `str` not `bool` (raises `UnsafeURLError`)
+- All actual functions documented
+
+**No action needed.**
+
+---
+
+## Remaining Work Summary
+
+The following documentation updates are still needed:
+
+1. **`architecture/pipeline.md` lines 239-241**: Remove or clarify the hardcoded fallback chain diagram
+2. **`architecture/pipeline.md`**: Add backfill_embeddings schedule (2 AM) to the documentation
+3. **`architecture/models.md` line 61**: Remove `finalized_at = Column(DateTime)` from Article model example
 
 ---
 
@@ -254,89 +237,57 @@ class StageConfig(BaseModel):
 
 ### Can Run in Parallel (Subagents)
 
-**Wave 6 (Layering) - COMPLETED:**
-- Task 6.1 (SSRF verification) - DONE
-- Task 6.2 (services↔adapters) - DONE
-- Task 6.3 (review stage) - DONE
+**Wave 8 Documentation Updates - Can parallelize:**
+- Agent A: Fix `architecture/pipeline.md` (hardcoded chain + backfill schedule)
+- Agent B: Fix `architecture/models.md` (remove finalized_at)
 
-**Wave 7 Tasks (Implementation Gaps) - Can parallelize:**
-- Task 7.1 (StageConfig) - Quick analysis, can run with others
-- Task 7.2 (Utils) - Can split by file: Agent A for datetime, Agent B for text/hash/security/html
-- Task 7.3 (DeepSeek) - Independent, single provider
-- Task 7.4 (RSS) - Independent, single adapter
-
-**Wave 8 Tasks (Documentation) - Can parallelize by module:**
-- Task 8.1 (Pipeline docs) - Agent for pipeline.md
-- Task 8.2 (Subagent docs) - Agent for subagent.md
-- Task 8.3 (Schemas docs) - Agent for schemas.md
-- Task 8.4 (Models docs) - Agent for models.md
-- Task 8.5 (Routes docs) - Agent for routes.md
-- Task 8.6 (Utils docs) - Agent for utils.md
+These are independent documentation fixes that can be done simultaneously.
 
 ### Sequential Dependencies
 
-- Wave 5 must complete before Wave 6 (Wave 5 bugs are blocking) - **DONE**
-- Wave 6 is complete
-- Wave 8 can run concurrently with Wave 7 after bugs fixed
+- Wave 5, 6, 7 are all COMPLETED - no dependencies
+- Wave 8 documentation fixes are independent of each other (except the two items in pipeline.md could be combined)
 
 ---
 
-## Suggested Agent Assignments
+## Suggested Agent Assignments for Wave 8
 
-**Agent A (HIGH PRIORITY):** Wave 5 - Fix limiter slot leak bug in `tasks/pipeline.py`
+**Agent A (Documentation - pipeline.md):**
+1. Remove lines 239-241 hardcoded fallback chain diagram OR replace with explanation that chain is dynamic
+2. Add backfill_embeddings schedule to documentation (e.g., "Daily at 2 AM via Celery beat")
 
-**Agent B (HIGH PRIORITY):** Wave 7.2 Utils - Implement missing utils modules (can split):
-- Agent B1: `utils/datetime.py` (move from services)
-- Agent B2: `utils/text.py` additions (truncate, sanitize_html, extract_hashtags)
-- Agent B3: `utils/security.py`, `utils/hash.py`, `utils/html.py`
-
-**Agent C (MEDIUM):** Wave 7.3 DeepSeek - Either implement provider or remove references
-
-**Agent D (MEDIUM):** Wave 7.4 RSS - Implement malformed feed fallback, feed validation, auth headers
-
-**Agent E (LOW):** Wave 7.1 StageConfig - Analyze and document actual usage
-
-**Agent F (DOCUMENTATION):** Wave 8 - Can run multiple documentation agents in parallel by module
+**Agent B (Documentation - models.md):**
+1. Remove `finalized_at = Column(DateTime)` from line 61 of Article model example
+2. Optionally clarify that `published_at` is the actual field for publication timestamp
 
 ---
 
-## Status Tracking
+## Verification Results (2026-05-08)
 
-| Task | Status | Notes |
-|------|--------|-------|
-| 5.1.1 Limiter slot leak | COMPLETED | Fixed by resolving provider/model before limiter acquire |
-| 5.1.2 _log_pipeline args | COMPLETED | Already fixed in code |
-| 6.1 SSRF layering | COMPLETED | Adapters correctly import from utils.url |
-| 6.2 Services↔adapters | COMPLETED | TYPE_CHECKING import is acceptable |
-| 6.3 review stage | COMPLETED | Already present in pipeline_utils.py |
-| 7.1 StageConfig | COMPLETED | StageConfig is stub, SubagentStageConfig is actual |
-| 7.2 Utils gaps | COMPLETED | All utils modules implemented |
-| 7.3 DeepSeek | COMPLETED | Removed references (not implemented) |
-| 7.4 RSS gaps | COMPLETED | Added validation, fallback, auth headers |
-| 8.1 Pipeline docs | COMPLETED | metadata->meta, circuit breaker timing, max_tokens |
-| 8.2 Subagent docs | COMPLETED | run_subagent signature, tools, middleware, return type |
-| 8.3 Schemas docs | COMPLETED | StageConfig, ResearchBrief, CondensedArticle, NewsletterBrief |
-| 8.4 Models docs | COMPLETED | embedding, AdminUser, TrendMemory, Source fields |
-| 8.5 Routes docs | COMPLETED | /api/v1 prefix, /share removed, /track/newsletter-click |
-| 8.6 Utils docs | COMPLETED | Document actual implemented functions |
+### Code-Level Items - ALL COMPLETE
 
----
+| Task | Status | Evidence |
+|------|--------|----------|
+| 5.1.1 Limiter slot leak | FIXED | `tasks/pipeline.py:413-420` resolves provider/model before acquiring resources |
+| 5.1.2 _log_pipeline args | FIXED | `tasks/pipeline.py:60-67` uses correct order |
+| 6.1 SSRF layering | COMPLETED | All adapters import from `utils/url.py` |
+| 6.2 Services↔adapters | COMPLETED | TYPE_CHECKING pattern is acceptable |
+| 6.3 review stage | COMPLETED | `"review": ("tasks.edit", "edit_article")` in pipeline_utils.py |
+| 7.1 StageConfig | COMPLETED | Stub documented, SubagentStageConfig is actual |
+| 7.2 Utils gaps | COMPLETED | All 5 utils modules implemented and verified |
+| 7.3 DeepSeek | COMPLETED | References removed, file does not exist |
+| 7.4 RSS gaps | COMPLETED | Validation, fallback, auth headers all present |
 
-## Known Verification Results (2026-05-07)
+### Documentation Items
 
-### Items FIXED:
-- `adapters/web.py:2` - `import random` PRESENT
-- `services/pipeline_utils.py:18` - `"review": ("tasks.edit", "edit_article")` PRESENT
-- `adapters/web.py:15` - imports from `utils.url`, not `services.url`
-- `tasks/newsletter.py:429` - `idempotency_key` defined locally
-- `_log_pipeline` argument order - FIXED (correct order now used)
-- `tasks/pipeline.py:417` - FIXED (provider/model resolved before limiter acquire)
-- `utils/text.py` - FIXED (now has truncate, sanitize_html, extract_hashtags + XML escaping)
-- `utils/datetime.py` - FIXED (created with parse_date, format_date, time_ago)
-- `utils/hash.py` - FIXED (created with generate_hash, verify_hash)
-- `utils/html.py` - FIXED (created with strip_tags, linkify, extract_text)
-- `utils/security.py` - FIXED (created with generate_token, constant_time_compare)
-- `services/llm/deepseek.py` - FIXED (references removed)
+| Document | Status | Issues Remaining |
+|----------|--------|------------------|
+| architecture/pipeline.md | PARTIAL | Hardcoded chain contradiction, missing backfill schedule |
+| architecture/subagent.md | ACCURATE | None |
+| architecture/schemas.md | ACCURATE | None |
+| architecture/models.md | PARTIAL | `finalized_at` still in Article model example |
+| architecture/routes.md | ACCURATE | None |
+| architecture/utils.md | ACCURATE | None |
 
 ---
 
@@ -350,140 +301,41 @@ When `limiter.acquire()` is called, it increments a counter for the specific pro
 
 When `limiter.release()` is called, it decrements the same key.
 
-**The Bug:** At line 417, early return releases with:
+**The Bug:** At line 417, early return was releasing with:
 - `provider`: `rc.provider` (configured primary provider, e.g., "ollama-local")
-- `model`: `rc.model` (which is `None` at this point - before `_run_stage_core` runs)
+- `model`: `rc.model` (which was `None` at this point - before `_run_stage_core` runs)
 
-The actual acquired key was something like `ainews:llm:ollama-local:qwen3:8b`, but release uses `ainews:llm:ollama-local:None`.
+The actual acquired key was something like `ainews:llm:ollama-local:qwen3:8b`, but release used `ainews:llm:ollama-local:None`.
 
-The Redis Lua script for release operates on the wrong key, so the actual slot is never released.
+### Fix Applied
 
-### Fix Approach
-
-Option A - Store model before lock check:
+The code now resolves provider/model BEFORE acquiring resources:
 ```python
-def run_stage(...):
-    limiter, redis_client, lock_acquired = _acquire_stage_resources(...)
-    acquired_model = rc.model  # Store model that was actually used
-    if not lock_acquired:
-        if limiter is not None:
-            limiter.release(rc.provider, acquired_model, rc.timeout_seconds)
-        return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
-```
-
-But `rc.model` is still None at this point. The model comes from `_get_provider_for_stage` which is called inside `_run_stage_core`.
-
-Option B - Restructure to ensure model is known before early return:
-```python
-# Move provider/model resolution before lock acquisition
+# Line 413-414
 rc.provider, rc.model = _get_provider_for_stage(stage)
 limiter, redis_client, lock_acquired = _acquire_stage_resources(...)
 ```
 
-Option C - Accept TTL-based cleanup:
-The slot will expire via TTL (300s default). Add monitoring for slot leaks instead of fixing the race condition.
-
-**Recommended:** Option B - restructure to resolve provider/model before acquiring resources, allowing correct release on early return.
+This ensures early return uses the correct resolved values.
 
 ---
 
 ## Implementation Detail: Utils Modules
 
-### utils/datetime.py (Create from services/date_utils.py)
+### utils/text.py
+Functions: `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`
 
-Move the following from `services/date_utils.py`:
-- `parse_date(date_str: str) -> datetime | None`
-- `format_date(dt: datetime, format: str = "%Y-%m-%d") -> str`
-- `time_ago(dt: datetime) -> str`
+### utils/datetime.py
+Functions: `parse_date(date_str) -> datetime | None`, `format_date(dt) -> str` (returns relative time strings), `time_ago(dt)` (alias for format_date)
 
-These are pure functions with no external dependencies.
+### utils/hash.py
+Functions: `generate_hash(data, algorithm="sha256") -> str`, `verify_hash(data, hash, algorithm="sha256") -> bool`
 
-### utils/text.py (Add to existing)
+### utils/html.py
+Functions: `strip_tags(html) -> str`, `linkify(text) -> str`, `extract_text(html) -> str`
 
-Add alongside existing XML escaping functions:
-```python
-def truncate(text: str, length: int, suffix: str = "...") -> str:
-    """Truncate text to length, breaking on word boundaries."""
-    
-def sanitize_html(html: str) -> str:
-    """Remove dangerous HTML tags and attributes."""
-    
-def extract_hashtags(text: str) -> list[str]:
-    """Extract #hashtags from text."""
-```
-
-### utils/security.py (Create new)
-
-```python
-import secrets
-import hmac
-
-def generate_token(length: int = 32) -> str:
-    """Generate cryptographically secure random token."""
-    return secrets.token_urlsafe(length)
-
-def constant_time_compare(a: str, b: str) -> bool:
-    """Constant-time string comparison (timing attack prevention)."""
-    return hmac.compare_digest(a, b)
-```
-
-### utils/hash.py (Create new)
-
-```python
-import hashlib
-
-def generate_hash(data: str, algorithm: str = "sha256") -> str:
-    """Generate hash of data."""
-    
-def verify_hash(data: str, hash: str, algorithm: str = "sha256") -> bool:
-    """Verify hash matches data."""
-```
-
-### utils/html.py (Create new)
-
-```python
-import re
-
-def strip_tags(html: str) -> str:
-    """Remove all HTML tags."""
-    
-def linkify(text: str) -> str:
-    """Convert URLs to clickable links."""
-    
-def extract_text(html: str) -> str:
-    """Extract readable text from HTML."""
-```
-
----
-
-## Implementation Detail: DeepSeek Provider
-
-### Option A: Implement DeepSeek Provider
-
-Follow pattern from existing providers (`services/llm/ollama.py`):
-
-```python
-# services/llm/deepseek.py
-class DeepSeekProvider(BaseLLMProvider):
-    provider_name = "deepseek"
-    
-    def __init__(self, config: dict):
-        self.api_key = config.get("api_key")
-        self.base_url = config.get("base_url", "https://api.deepseek.com")
-        # ...
-    
-    def chat(self, messages: list[dict], model: str, **kwargs) -> LLMResponse:
-        # Implement chat completion
-```
-
-Update `services/llm/__init__.py` to register the provider.
-
-### Option B: Remove References
-
-1. Remove `deepseek` from `cost_tracker.py` cost rates
-2. Update `architecture/services.md` to remove deepseek from provider list
-
-**Recommendation:** Option B unless DeepSeek is actively needed.
+### utils/security.py
+Functions: `generate_token(length=32) -> str` (uses secrets.token_urlsafe), `constant_time_compare(a, b) -> bool` (uses hmac.compare_digest)
 
 ---
 

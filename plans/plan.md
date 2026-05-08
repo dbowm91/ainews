@@ -1,14 +1,14 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** IN PROGRESS - Documentation Alignment Remaining
+**Status:** COMPLETED - All Waves Complete
 **Last Updated:** 2026-05-08
-**Goal:** Address documentation drift identified in architecture reviews. All code-level fixes are complete; documentation updates remain.
+**Goal:** Address documentation drift identified in architecture reviews. All code-level fixes and documentation updates are complete.
 
 ---
 
 ## Executive Summary
 
-All code-level items (Waves 5, 6, 7) have been completed. Wave 8 (Documentation Alignment) requires completion.
+All waves (5, 6, 7, 8) have been completed.
 
 **Wave Status:**
 | Wave | Status | Notes |
@@ -16,7 +16,7 @@ All code-level items (Waves 5, 6, 7) have been completed. Wave 8 (Documentation 
 | Wave 5: Critical Bug Fixes | COMPLETED | Limiter slot leak fixed |
 | Wave 6: Layering & Architecture | COMPLETED | SSRF, services↔adapters, review stage verified |
 | Wave 7: Implementation Gaps | COMPLETED | Utils modules, DeepSeek, RSS gaps all addressed |
-| Wave 8: Documentation Alignment | IN PROGRESS | Models.md has finalized_at drift; pipeline.md has hardcoded chain contradiction |
+| Wave 8: Documentation Alignment | COMPLETED | pipeline.md and models.md fixes applied |
 
 ---
 
@@ -225,40 +225,19 @@ All utils modules are now implemented:
 
 ## Remaining Work Summary
 
-The following documentation updates are still needed:
+All items are now COMPLETED.
 
-1. **`architecture/pipeline.md` lines 239-241**: Remove or clarify the hardcoded fallback chain diagram
-2. **`architecture/pipeline.md`**: Add backfill_embeddings schedule (2 AM) to the documentation
-3. **`architecture/models.md` line 61**: Remove `finalized_at = Column(DateTime)` from Article model example
+| Item | Status | Evidence |
+|------|--------|----------|
+| `pipeline.md` hardcoded fallback chain | FIXED | Replaced with dynamic chain explanation |
+| `pipeline.md` backfill_embeddings schedule | FIXED | Added Scheduled Tasks section with backfill-embeddings (2 AM) |
+| `models.md` finalized_at | FIXED | Removed from Article model example |
 
 ---
 
 ## Wave Parallelization Guide
 
-### Can Run in Parallel (Subagents)
-
-**Wave 8 Documentation Updates - Can parallelize:**
-- Agent A: Fix `architecture/pipeline.md` (hardcoded chain + backfill schedule)
-- Agent B: Fix `architecture/models.md` (remove finalized_at)
-
-These are independent documentation fixes that can be done simultaneously.
-
-### Sequential Dependencies
-
-- Wave 5, 6, 7 are all COMPLETED - no dependencies
-- Wave 8 documentation fixes are independent of each other (except the two items in pipeline.md could be combined)
-
----
-
-## Suggested Agent Assignments for Wave 8
-
-**Agent A (Documentation - pipeline.md):**
-1. Remove lines 239-241 hardcoded fallback chain diagram OR replace with explanation that chain is dynamic
-2. Add backfill_embeddings schedule to documentation (e.g., "Daily at 2 AM via Celery beat")
-
-**Agent B (Documentation - models.md):**
-1. Remove `finalized_at = Column(DateTime)` from line 61 of Article model example
-2. Optionally clarify that `published_at` is the actual field for publication timestamp
+All waves complete. No further work needed.
 
 ---
 
@@ -282,10 +261,10 @@ These are independent documentation fixes that can be done simultaneously.
 
 | Document | Status | Issues Remaining |
 |----------|--------|------------------|
-| architecture/pipeline.md | PARTIAL | Hardcoded chain contradiction, missing backfill schedule |
+| architecture/pipeline.md | ACCURATE | None |
 | architecture/subagent.md | ACCURATE | None |
 | architecture/schemas.md | ACCURATE | None |
-| architecture/models.md | PARTIAL | `finalized_at` still in Article model example |
+| architecture/models.md | ACCURATE | None |
 | architecture/routes.md | ACCURATE | None |
 | architecture/utils.md | ACCURATE | None |
 
@@ -336,6 +315,28 @@ Functions: `strip_tags(html) -> str`, `linkify(text) -> str`, `extract_text(html
 
 ### utils/security.py
 Functions: `generate_token(length=32) -> str` (uses secrets.token_urlsafe), `constant_time_compare(a, b) -> bool` (uses hmac.compare_digest)
+
+---
+
+## Wave 8 Completion Details
+
+### Task 8.1: Pipeline Documentation Drift - FIXED
+
+Changes applied:
+1. **Fallback Chain (lines 251-255):** Replaced hardcoded `ollama-local → openai → anthropic → gemini → deepseek` chain diagram with dynamic chain explanation referencing `providers.yaml` and `get_provider_chain()` function.
+2. **Scheduled Tasks (new section):** Added "Scheduled Tasks" subsection in Topic Newsletters section documenting key Celery Beat tasks including `backfill-embeddings` (Daily 2 AM).
+
+### Task 8.4: Models Documentation Drift - FIXED
+
+Changes applied:
+- **Article model example (line 61):** Removed `finalized_at = Column(DateTime)` from the Article model example. The model only has `published_at` for publication timestamp.
+
+### Commits Made
+
+| Branch | Commit | Description |
+|--------|--------|-------------|
+| `docs/pipeline-wave8-fix` | a825270 | docs(pipeline): fix hardcoded fallback chain diagram, add backfill schedule |
+| `docs/models-wave8-fix` | 139dcc6 | docs(models): remove finalized_at from Article model example |
 
 ---
 

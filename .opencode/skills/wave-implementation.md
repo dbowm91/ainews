@@ -60,3 +60,35 @@ git stash pop
 
 **Log Call Argument Order:**
 - `_log_pipeline(run_id, stage, level, message, *args, article_id=None)` - verify correct order when calling
+
+### Lessons Learned (2026-05-08)
+
+**Architecture Review Process:**
+- All 10 architecture docs reviewed with subagents
+- Generated detailed review plans in `plans/review_*.md`
+- Fixed critical bug: missing `import random` in `adapters/web.py`
+
+**Documentation Fixes Applied:**
+- overview.md: Fixed subagent location (services/subagent/), added all 14 LLM providers
+- adapters.md: Fixed SSRFSafeRedirectHandler inheritance, clarified javascript:/data: blocking
+- pipeline.md: Fixed editor/researcher max_tokens, added complete selector config, clarified dynamic fallback chain
+- subagent.md: Fixed run_subagent_with_tools signature, replaced non-existent Chain classes, fixed usage example
+- routes.md: Removed /api/v1 prefix (endpoints at root), added missing endpoints, added /share note
+- tasks.md: Added all 14 Celery Beat tasks with accurate schedules
+- utils.md: Fixed format_date (relative time), validate_url_safe (str return, raises UnsafeURLError)
+- schemas.md: Fixed PipelineRootConfig, ResearchBrief, CondensedArticle, NewsletterBrief, task schemas
+
+**Key Findings from Review:**
+- Subagent location: `services/subagent/` not top-level `subagent/`
+- API endpoints: Root-level (`/articles`) not prefixed (`/api/v1/articles`)
+- StageConfig: Only has `tools` field, actual config in `RoleConfig`/`SubagentStageConfig`
+- ResearchBrief: Much more complex structure with nested models not simple fields
+- ExecutiveSummary: Only has `summary` field, not the 6 documented fields
+- Celery Beat: 14 tasks exist, only 5 were documented
+
+**How to run architecture review:**
+1. Run 10 subagents in parallel, each reviewing one module
+2. Each subagent writes detailed findings to `plans/review_*.md`
+3. Fix critical bugs immediately (e.g., missing imports)
+4. Update documentation to match implementation
+5. Commit each wave separately to enable easy rollback

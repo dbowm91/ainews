@@ -40,8 +40,10 @@ This document provides instructions and context for agents working on the AI New
 *   **Newsletter Associations:** `newsletter_articles` and `newsletter_subscribers` association tables exist in `models/newsletter.py` with many-to-many relationships.
 *   **URL Validation Layering:** SSRF protection (`validate_url_safe`, `UnsafeURLError`) is now in `utils/url.py` for clean layering. Adapters import from `utils/url.py`, services re-export from utils for backward compatibility. `services/url.py` is now a thin wrapper that re-exports from `utils/url.py` and provides Flask config-based cache re-initialization.
 *   **Newsletter Idempotency:** The `idempotency_key` for newsletter generation is defined locally in `_generate_daily_newsletters_core()` before use.
-*   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig`.
+*   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 *   **Utils Modules:** The following utils modules now exist: `utils/text.py` (XML escaping + truncate/sanitize_html/extract_hashtags), `utils/datetime.py` (parse_date/format_date/time_ago), `utils/security.py` (generate_token/constant_time_compare), `utils/hash.py` (generate_hash/verify_hash), `utils/html.py` (strip_tags/linkify/extract_text).
+*   **API Endpoint Paths:** Admin API endpoints are at root level (`/articles`, `/sources`, `/pipeline`) not `/api/v1/...` prefix.
+*   **Subagent Location:** The subagent module is at `services/subagent/` not top-level `subagent/`.
 
 ## Architecture Conventions
 

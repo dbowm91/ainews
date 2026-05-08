@@ -58,7 +58,6 @@ class Article(Base):
     # Timestamps
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
-    finalized_at = Column(DateTime)
 ```
 
 ### Pipeline Status Flow

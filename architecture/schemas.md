@@ -16,34 +16,60 @@ The `schemas/` package contains Pydantic models for validation and serialization
 
 ## Pipeline Configuration (`pipeline.py`)
 
+**Note:** `StageConfig` is a stub with only `tools: list[str]`. Actual stage configuration is handled by `RoleConfig` within `PipelineConfig`.
+
 ```python
 class PipelineRootConfig(BaseModel):
     version: str = "1.0"
-    stages: dict[str, StageConfig]
+    pipeline: PipelineConfig           # Stage role configurations (selector, researcher, writer, editor)
     newsletter: NewsletterConfig
-    subagent: SubagentConfig
+    newsletter_pipeline: NewsletterPipelineConfig  # 3-stage LLM pipeline for newsletter generation
+    subagent: SubagentConfig            # Subagent tool and chain configuration
     memory: MemoryConfig
+    stages: dict[str, StageConfig]     # Stub - only has tools field
+    schedule: dict                      # Beat schedule overrides
 
 class StageConfig(BaseModel):
-    tools: list[str]
+    tools: list[str] = Field(default_factory=list)  # Stub - actual config in RoleConfig
 
 class NewsletterConfig(BaseModel):
-    daily_send_time: str = "08:00"
+    max_articles: int = 20
+    send_time: str = "08:00"
+    timezone: str = "America/New_York"
+    site_url: str
+    prep_minutes: int = 15
     enable_topic_newsletters: bool = True
     batch_size: int = 500
-    retry_attempts: int = 3
+
+class NewsletterPipelineConfig(BaseModel):
+    reader: RoleConfig
+    writer: RoleConfig
+    editor: RoleConfig
 
 class SubagentConfig(BaseModel):
     enabled: bool = True
-    max_iterations: int = 5
-    tool_timeout: float = 30.0
-    tools: list[str]
+    default: SubagentStageConfig
+    research: SubagentStageConfig
+    edit: SubagentStageConfig
+    chains: dict[str, SubagentChainConfig]  # Chain configurations
+
+class SubagentChainConfig(BaseModel):
+    enabled: bool = False
+    max_length: int = Field(default=5, ge=1, le=10)
+    steps: list[SubagentChainStep]
+
+class SubagentChainStep(BaseModel):
+    task_type: str
+    prompt_data_template: str
+    response_model: Optional[str] = None
+    condition: Optional[str] = None
 
 class MemoryConfig(BaseModel):
     enabled: bool = True
     consolidate_interval_hours: int = 24
     max_entries_per_topic: int = 100
     embedding_model: str = "text-embedding-ada-002"
+    ttl_days: int = 365
 ```
 
 ## Source Configuration (`source.py`)
@@ -88,26 +114,42 @@ class PaginationConfig(BaseModel):
 class SelectionResult(BaseModel):
     score: int = Field(ge=1, le=10)
     confidence: Literal["low", "medium", "high"]
-    reasoning: str
+    reason: str                              # Note: field is 'reason' not 'reasoning'
     key_topics: list[str]
     impact_summary: str | None = None
+    selected: bool | None = None             # Undocumented field
 ```
 
 ### Research Brief
 
 ```python
 class ResearchBrief(BaseModel):
-    article_id: int
-    key_claims: list[str]
-    context: str
-    citations: list[Citation]
-    related_trends: list[str]
-    background: str | None = None
+    source_summary: str
+    key_claims: list[KeyClaim]               # Note: list[KeyClaim] not list[str]
+    direct_quotes: list[DirectQuote]
+    external_sources: list[ExternalSource]
+    related_articles: list[RelatedArticle]
+    context_notes: str                       # Note: 'context_notes' not 'context'
+    newsworthiness: str
+    impact_score: int
 
-class Citation(BaseModel):
+class KeyClaim(BaseModel):
+    claim: str
+    source: str
+    confidence: str
+
+class DirectQuote(BaseModel):
+    text: str
+    source: str
+
+class ExternalSource(BaseModel):
     url: str
     title: str
-    source: str
+    reliability: str
+
+class RelatedArticle(BaseModel):
+    article_id: int
+    title: str
     relevance: str
 ```
 
@@ -115,34 +157,31 @@ class Citation(BaseModel):
 
 ```python
 class CondensedArticle(BaseModel):
-    article_id: int
     headline: str
     tldr: str
     body: str
+    why_it_matters: str                      # Additional fields not in doc
     key_points: list[str]
-    implications: str | None = None
-    hook: str | None = None
+    what_to_watch: str
+    citations: list[CitationItem]
+    original_attribution: OriginalAttribution
+    tags: list[str]
 ```
 
 ### Executive Summary
 
 ```python
 class ExecutiveSummary(BaseModel):
-    date: date
-    theme: str
-    overview: str  # 2-4 sentences
-    highlights: list[str]  # 3-5 key developments
-    outlook: str | None = None
-    article_count: int
+    summary: str                             # Note: single 'summary' field (not 6 fields)
 ```
 
 ### Newsletter Brief
 
 ```python
 class NewsletterBrief(BaseModel):
-    themes: str
+    themes: list[str]                        # Note: list[str] not str
     highlights: list[str]
-    connections: str
+    connections: list[str]                    # Note: list[str] not str
     preamble: str
     articles: list[NewsletterArticle]
     footer: str | None = None
@@ -159,23 +198,25 @@ class NewsletterArticle(BaseModel):
 ## Task Validation (`tasks.py`)
 
 ```python
-class ProcessItemInput(BaseModel):
+class SelectArticleTask(BaseModel):
+    article_id: int = Field(..., ge=1)
+
+class ProcessItemTask(BaseModel):
     source_id: int
     item_data: dict
+    topics: list[str] = Field(default_factory=list)
 
-class SelectArticleInput(BaseModel):
-    article_id: int
+class GenerateNewsletterTask(BaseModel):
+    date: Optional[date] = None
+    email: Optional[str] = None
 
-class ResearchArticleInput(BaseModel):
-    article_id: int
+class SendEmailTask(BaseModel):
+    email: str = Field(..., pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    subject: str
+    body: str
 
-class WriteArticleInput(BaseModel):
-    article_id: int
-    research_brief_id: int | None = None
-
-class EditArticleInput(BaseModel):
-    article_id: int
-    context: dict | None = None
+class CleanupArticleVersionsTask(BaseModel):
+    days: int = Field(1, ge=1, le=365)
 ```
 
 ## Usage Patterns

@@ -53,14 +53,16 @@ def escape_prompt_data(data: dict) -> dict:
 ```python
 def parse_date(date_str: str) -> datetime | None:
     """Parse various date formats"""
-    # RFC 2822, ISO 8601, common formats
 
-def format_date(dt: datetime, format: str = "%Y-%m-%d") -> str:
-    """Format datetime to string"""
+def format_date(dt: datetime) -> str:
+    """Format datetime as human-readable relative or absolute date.
+
+    Returns 'just now', 'X minutes ago', 'X hours ago', 'yesterday',
+    'X days ago', '%b %d' (same year), or '%b %d, %Y' (different year).
+    """
 
 def time_ago(dt: datetime) -> str:
-    """Return human-readable time difference"""
-    # "2 hours ago", "3 days ago"
+    """Alias for format_date() - return human-readable time difference"""
 ```
 
 ## Security Utilities (`security.py`)
@@ -83,8 +85,7 @@ def linkify(text: str) -> str:
     """Convert URLs to clickable links"""
 
 def extract_text(html: str) -> str:
-    """Extract readable text from HTML"""
-    # Uses trafilatura fallback
+    """Extract readable text from HTML (uses trafilatura fallback)"""
 ```
 
 ## Hash Utilities (`hash.py`)
@@ -95,6 +96,33 @@ def generate_hash(data: str, algorithm: str = "sha256") -> str:
 
 def verify_hash(data: str, hash: str, algorithm: str = "sha256") -> bool:
     """Verify hash matches data"""
+```
+
+## URL Utilities (`url.py`)
+
+```python
+def validate_url_safe(url: str) -> str:
+    """Validate URL has http/https scheme and no private IP addresses.
+
+    Performs DNS resolution to check for SSRF attempts via DNS rebinding.
+    Returns the validated URL string.
+    Raises UnsafeURLError if URL is invalid or unsafe.
+    """
+
+def normalize_url(url: str) -> str:
+    """Normalize URL for deduplication (strip tracking params, lowercase)"""
+
+def normalize_title(title: str) -> str:
+    """Normalize title for fuzzy matching"""
+
+TRACKING_PARAMS: set[str]
+    """Set of tracking parameter names to strip from URLs"""
+
+def clear_dns_cache() -> None:
+    """Clear the DNS resolution cache"""
+
+class UnsafeURLError(ValueError):
+    """Raised when URL fails SSRF checks"""
 ```
 
 ## Design Principles

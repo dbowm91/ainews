@@ -92,13 +92,25 @@ def run_subagent(
     """Run a single-step subagent with optional tools"""
 
 def run_subagent_with_tools(
-    stage: str,
     task_type: str,
+    stage: str,
     prompt_data: dict,
     response_model: Type[BaseModel],
-    max_iterations: int = 5,
+    tools: list[ToolDefinition],
+    article_id: int | None = None,
 ) -> SubagentResponse:
     """Run a multi-step subagent with tool calling loop"""
+
+class SubagentChainStep(BaseModel):
+    task_type: str
+    prompt_data_template: str
+    response_model: Optional[str] = None
+    condition: Optional[str] = None
+
+class SubagentChainConfig(BaseModel):
+    enabled: bool = False
+    max_length: int = Field(default=5, ge=1, le=10)
+    steps: list[SubagentChainStep] = Field(default_factory=list)
 ```
 
 ### Features
@@ -125,35 +137,24 @@ def run_subagent_with_tools(
 Multi-step chains with conditional branching:
 
 ```python
-class ChainStep(BaseModel):
-    name: str
-    task: str
-    tools: list[str] | None = None
-    next_step: str | None = None
-    condition: str | None = None  # "result.contains_key('needs_research')"
+### Chain Configuration
 
-class Chain(BaseModel):
-    name: str
-    steps: list[ChainStep]
-    final_step: str
-```
-
-### Chain Example
+Chains are configured via `SubagentChainConfig` in `schemas/pipeline.py`:
 
 ```yaml
-chains:
+subagent_chains:
   contextualize_article:
+    enabled: true
+    max_length: 5
     steps:
-      - name: research
-        task: "Research {article_title}"
-        tools: ["web_search", "trend_memory"]
-        next_step: synthesize
+      - task_type: "research"
+        prompt_data_template: "Research {article_title}"
         condition: "result.has_new_findings"
-
-      - name: synthesize
-        task: "Synthesize findings into context"
-        next_step: null  # Ends chain
+      - task_type: "synthesize"
+        prompt_data_template: "Synthesize findings into context"
 ```
+
+**Note:** Steps are identified by index, not name. Conditions use AST-based evaluation from `services/subagent/conditions.py`.
 
 ## Middleware (`middleware.py`)
 
@@ -217,17 +218,24 @@ subagent:
 
 The editor service uses subagent for contextualization:
 
+## Usage Example
+
 ```python
-async def _contextualize(self, article: Article, context: dict) -> str:
+from services.subagent import run_subagent_with_tools
+from services.llm.base import ToolDefinition
+
+def contextualize_article(article: Article, context: dict) -> str:
     """Use subagent to contextualize article"""
-    return await run_subagent_with_tools(
-        task=f"Contextualize this article for readers: {article.title}",
-        context={
+    return run_subagent_with_tools(
+        task_type="contextualize",
+        stage="edit",
+        prompt_data={
             "article": article,
             "related": context.get("related_articles", []),
             "trends": context.get("trend_memory", []),
         },
-        tools=["related_articles", "trend_memory", "web_search"],
+        response_model=ContextualizedResult,
+        tools=[tool_definition for tool_definition in _TOOL_REGISTRY.values()],
     )
 ```
 

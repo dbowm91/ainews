@@ -143,33 +143,42 @@ From `pipeline.yaml`:
 stages:
   selector:
     enabled: true
-    model: "ollama-local"
-    temperature: 0.3
-    prompt_variant: "default"
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 1024
+    temperature: 0.2
+    concurrency: 4
+    timeout_seconds: 60
+    min_score: 6
 
   researcher:
     enabled: true
-    model: "ollama-local"
+    provider: ollama-local
+    model: qwen3:8b
     temperature: 0.4
-    max_tokens: 2000
+    max_tokens: 8192
 
   writer:
     enabled: true
-    model: "ollama-local"
+    provider: ollama-local
+    model: qwen3:8b
     temperature: 0.5
     max_tokens: 4096
 
   editor:
     enabled: true
-    model: "ollama-local"
+    provider: ollama-local
+    model: qwen3:8b
     temperature: 0.3
-    max_tokens: 2000
+    max_tokens: 4096
 
 newsletter:
   daily_send_time: "08:00"
   enable_topic_newsletters: true
   batch_size: 500
 ```
+
+**Note:** The fallback chain is dynamically determined from enabled providers in `providers.yaml` configuration order, not a hardcoded order.
 
 ## Degradation Behavior
 

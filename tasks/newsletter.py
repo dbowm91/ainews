@@ -425,6 +425,9 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
     else:
         logger.debug("Acquired new newsletter lock")
 
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    idempotency_key = f"idempotency:newsletter:{today}"
+
     try:
         result = _generate_newsletters_impl(task_id, dry_run_email, run_id)
         redis_client.setex(idempotency_key, 86400 * 2, "1")

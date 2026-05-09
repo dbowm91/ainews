@@ -29,6 +29,14 @@ This document provides instructions and context for agents working on the AI New
 *   **Database Setup:** Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
 *   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function resolves provider/model before acquiring limiter resources, ensuring correct release on early return. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing.
 *   **Limiter Model Mismatch:** The `model` returned by `_run_stage_core` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, not the actual model used if fallback occurred in `_try_stage_work`. Use `provider_id` from `_try_stage_work` but be aware `model` may be incorrect.
+*   **SSRFSafeRedirectHandler Bug:** The redirect counter in `adapters/session.py` is reset after EACH successful redirect validation (line 41). This means a redirect chain like A→B→C→... where all targets are valid would never hit the redirect limit because the counter constantly resets. The counter should only reset when beginning a new redirect chain.
+*   **WebAdapter Date Parsing:** `_parse_date()` silently returns `None` on failure with no logging. Consider adding a warning log for parse failures.
+*   **WebAdapter trafilatura ImportError:** The `except (ImportError, ValueError, AttributeError)` block catches ValueError and AttributeError too broadly, potentially masking real bugs. Only `ImportError` is expected for missing trafilatura.
+*   **URL Validation Duplication:** `utils/url.py` and `services/url.py` have duplicate SSRF protection implementations. `services/url.py` does NOT re-export from `utils/url.py` - it redefines everything locally with its own config support. Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
+*   **utils/url.py Not Pure:** Despite docstring claims, `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Don't assume pure function behavior.
+*   **api_tokens_bp Not Registered:** The `api_tokens_bp` blueprint is defined in `routes/admin/api_tokens.py` but never registered in `app.py`. All `/api-tokens` routes return 404.
+*   **Duplicate Import:** `services/llm/__init__.py` imports `load_providers_config` twice (lines 11-12). The first import is immediately shadowed.
+*   **VALID_TRANSITIONS Missing Statuses:** `constants.py` defines `VALID_TRANSITIONS` but does NOT include `selecting` or `selected` status values. These statuses exist in `PipelineStatus` but aren't valid transition targets.
 *   **Context Window:** LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
 *   **Linting:** We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
 *   **Mypy:** Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
@@ -42,8 +50,9 @@ This document provides instructions and context for agents working on the AI New
 *   **Newsletter Idempotency:** The `idempotency_key` for newsletter generation is defined locally in `_generate_daily_newsletters_core()` before use.
 *   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 *   **Utils Modules:** The following utils modules now exist: `utils/text.py` (XML escaping + truncate/sanitize_html/extract_hashtags), `utils/datetime.py` (parse_date/format_date/time_ago), `utils/security.py` (generate_token/constant_time_compare), `utils/hash.py` (generate_hash/verify_hash), `utils/html.py` (strip_tags/linkify/extract_text).
-*   **API Endpoint Paths:** Admin API endpoints are at root level (`/articles`, `/sources`, `/pipeline`) not `/api/v1/...` prefix.
+*   **API Endpoint Paths:** Admin API endpoints are at `/api/v1/` prefix (e.g., `/api/v1/articles`, `/api/v1/sources`). The `admin_api_bp` blueprint is registered with `url_prefix="/api/v1"`. The `admin_bp` provides HTML pages at `/admin`. Public routes are at root level.
 *   **Subagent Location:** The subagent module is at `services/subagent/` not top-level `subagent/`.
+*   **Tasks→Services Layer:** Tasks layer IS allowed to import from services layer. This is not a layer violation - tasks are orchestrators that use business logic. The layer restriction is: Adapters cannot import from Services.
 
 ## Architecture Conventions
 

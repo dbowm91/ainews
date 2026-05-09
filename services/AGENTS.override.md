@@ -18,10 +18,13 @@
 - **Prompts:** Use `@lru_cache` for prompt file loading and truncation summaries.
 
 ## Provider Notes
-- **DeepSeek Provider Missing:** `services/llm/deepseek.py` does not exist but is referenced in `cost_tracker.py` and architecture docs. Either implement it or remove references.
 - **SubagentStageConfig vs StageConfig:** The actual stage configuration class is `SubagentStageConfig` in `schemas/pipeline.py`, NOT `StageConfig` which is an empty stub with only `tools` field.
+- **DeepSeek Provider:** Not implemented. References in `cost_tracker.py` and documentation have been removed.
 
 ## Utils Notes
-- **Date Utils:** `services/date_utils.py` contains pure date formatting functions that should be moved to `utils/datetime.py` per architecture (planned).
-- **Security Utils:** No `utils/security.py` exists. Token generation is inline using `secrets.token_urlsafe(32)`. Consider creating utils/security.py for consistency.
-- **Text Utils:** `utils/text.py` contains XML escaping functions (`esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`) not the documented `truncate`/`sanitize_html`/`extract_hashtags`. This is intentional - XML escaping is the actual purpose of that module.
+- **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags` - these functions all exist.
+- **utils/datetime.py:** Contains `parse_date`, `format_date`, `time_ago` (alias for format_date).
+- **utils/security.py:** Contains `generate_token` (using `secrets.token_urlsafe`), `constant_time_compare` (using `hmac.compare_digest`).
+- **utils/hash.py:** Contains `generate_hash`, `verify_hash`.
+- **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`.
+- **Duplicate Import:** `services/llm/__init__.py` imports `load_providers_config` twice (lines 11-12). The first import is immediately shadowed.

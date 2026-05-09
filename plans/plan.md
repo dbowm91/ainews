@@ -1,8 +1,8 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** IN PROGRESS
+**Status:** COMPLETED
 **Last Updated:** 2026-05-09
-**Goal:** Consolidate all pending action items from architecture reviews into a single actionable plan.
+**Goal:** All items from architecture review completed.
 
 ---
 
@@ -1043,39 +1043,46 @@ Waves B-F can start as soon as Wave A bugs are understood, but some tasks depend
 
 | Item | Status | Completed Date | Notes |
 |------|--------|----------------|-------|
-| BUG-1.1 | PENDING | | |
-| BUG-1.3 | PENDING | | |
-| BUG-1.5 | PENDING | | |
-| BUG-1.6 | PENDING | | Code may already handle correctly |
-| BUG-1.7 | PENDING | | |
-| BUG-1.8 | PENDING | | |
-| BUG-1.9 | PENDING | | |
-| BUG-1.10 | PENDING | | |
-| BUG-1.11 | PENDING | | |
-| BUG-1.13 | PENDING | | |
-| TASK-2.2 | PENDING | | |
-| TASK-2.3 | PENDING | | |
-| TASK-2.4 | PENDING | | |
-| TASK-2.5 | PENDING | | |
-| TASK-2.6 | PENDING | | |
-| TASK-2.8 | PENDING | | |
-| TASK-2.9 | PENDING | | |
-| TASK-2.10 | PENDING | | |
-| TASK-2.11 | PENDING | | |
-| TASK-2.12 | PENDING | | |
-| TASK-2.13 | PENDING | | |
-| TASK-2.14 | PENDING | | Decision needed |
-| TASK-2.15 | PENDING | | Decision needed |
-| TASK-2.16 | PENDING | | Decision needed |
-| TASK-2.17 | PENDING | | |
-| TASK-2.18 | PENDING | | Decision needed |
-| TASK-2.19 | PENDING | | |
-| TASK-2.20 | PENDING | | |
-| TASK-2.21 | PENDING | | |
-| TASK-2.22 | PENDING | | |
-| TASK-2.23 | PENDING | | |
-| TASK-3.x | PENDING | | |
-| TASK-4.x | PENDING | | |
+| BUG-1.1 | COMPLETED | 2026-05-09 | Fixed in tasks/newsletter.py - idempotency_key defined in scope |
+| BUG-1.3 | COMPLETED | 2026-05-09 | Added SELECTING, SELECTED, WRITTEN to PipelineStatus and VALID_TRANSITIONS |
+| BUG-1.5 | COMPLETED | 2026-05-09 | _try_stage_work now returns actual model used; limiter.release uses provider_id |
+| BUG-1.6 | COMPLETED | 2026-05-09 | Code already handled correctly with 'if provider_id:' guard |
+| BUG-1.7 | COMPLETED | 2026-05-09 | Removed redirect counter reset on success in SSRFSafeRedirectHandler |
+| BUG-1.8 | COMPLETED | 2026-05-09 | Added logger.warning for date parsing failures in WebAdapter |
+| BUG-1.9 | COMPLETED | 2026-05-09 | Split trafilatura exception handling - ImportError separate from ValueError/AttributeError |
+| BUG-1.10 | COMPLETED | 2026-05-09 | Added api_tokens_bp registration in app.py |
+| BUG-1.11 | COMPLETED | 2026-05-09 | require_auth now returns JSON 401 for /api* routes |
+| BUG-1.13 | COMPLETED | 2026-05-09 | Removed duplicate import of load_providers_config |
+| TASK-2.2 | COMPLETED | 2026-05-09 | Documented missing endpoints in architecture/routes.md |
+| TASK-2.3 | COMPLETED | 2026-05-09 | MemoryConfig documentation updated to match actual code |
+| TASK-2.4 | COMPLETED | 2026-05-09 | NewsletterConfig documentation updated - no enable_topic_newsletters or batch_size |
+| TASK-2.5 | COMPLETED | 2026-05-09 | SourceConfig adapter_config → config: dict[str, Any] |
+| TASK-2.6 | COMPLETED | 2026-05-09 | Removed non-existent version field from documentation |
+| TASK-2.8 | COMPLETED | 2026-05-09 | SelectionResult confidence - documented as str with pattern |
+| TASK-2.9 | COMPLETED | 2026-05-09 | RelatedArticle/ExternalSource field names corrected |
+| TASK-2.10 | COMPLETED | 2026-05-09 | DirectQuote: quote vs text, attribution vs source - docs updated |
+| TASK-2.11 | COMPLETED | 2026-05-09 | NewsletterArticle: headline vs title, tags vs key_points - docs updated |
+| TASK-2.12 | COMPLETED | 2026-05-09 | Cleaned up __all__ exports in utils/url.py |
+| TASK-2.13 | COMPLETED | 2026-05-09 | Global mutable DNS cache documented in AGENTS.md |
+| TASK-2.14 | N/A | - | adapter_config on Source model never implemented - removed from docs |
+| TASK-2.15 | COMPLETED | 2026-05-09 | Decision: No GIN index - embedding stored as text for caching |
+| TASK-2.16 | COMPLETED | 2026-05-09 | Decision: IP/User-Agent binding IS implemented in require_auth decorator |
+| TASK-2.17 | COMPLETED | 2026-05-09 | Pipeline status values updated in documentation |
+| TASK-2.18 | N/A | - | API adapter lacks pagination - documented in adapters.md |
+| TASK-2.19 | COMPLETED | 2026-05-09 | WebAdapter uses listing_url (singular) - docs updated |
+| TASK-2.20 | COMPLETED | 2026-05-09 | BaseLLMProvider interface updated to match actual code |
+| TASK-2.21 | COMPLETED | 2026-05-09 | limiter.release uses provider_id (actual) not rc.provider (configured) |
+| TASK-2.22 | COMPLETED | 2026-05-09 | Subagent tool mapping table updated with actual canonical names |
+| TASK-2.23 | COMPLETED | 2026-05-09 | Chain config from pipeline.yaml documented with SubagentChainConfig schema |
+| TASK-3.1 | COMPLETED | 2026-05-09 | Stage vs Status glossary added to pipeline.md |
+| TASK-3.2 | COMPLETED | 2026-05-09 | Actual stage flow documented (selection integrated into research) |
+| TASK-3.7 | COMPLETED | 2026-05-09 | Blueprint structure documented (admin_bp vs admin_api_bp) |
+| TASK-3.15 | COMPLETED | 2026-05-09 | Two-tier retry system documented |
+| TASK-3.16 | COMPLETED | 2026-05-09 | Degradation behavior for disabled stages documented |
+| TASK-4.2 | COMPLETED | 2026-05-09 | __all__ exports cleaned up in utils/url.py |
+| TASK-4.4 | COMPLETED | 2026-05-09 | YAML config examples updated to use listing_url |
+| TASK-4.8 | N/A | - | _finalize_subagent_result IS used (called at runner.py:498) - not dead code |
+| TASK-4.10 | N/A | - | tasks→services import is allowed (tasks are orchestrators) - acceptable |
 
 ---
 

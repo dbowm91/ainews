@@ -69,6 +69,8 @@ def require_auth(f):
                 return jsonify({"error": "Invalid API token"}), 401
 
         if not session.get("admin"):
+            if request.path.startswith("/api"):
+                return jsonify({"error": "Unauthorized", "message": "Authentication required"}), 401
             return redirect(url_for("admin.login"))
         stored_ip = session.get("ip")
         stored_user_agent = session.get("user_agent")

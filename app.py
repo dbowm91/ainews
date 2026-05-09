@@ -188,11 +188,13 @@ def _setup_database(app, config_name):
 def _register_blueprints(app):
     """Register Flask blueprints."""
     from routes.admin import admin_bp, admin_api_bp
+    from routes.admin.api_tokens import api_tokens_bp
     from routes.public import public_bp
 
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_api_bp)
+    app.register_blueprint(api_tokens_bp)
 
 
 def _wants_json() -> bool:

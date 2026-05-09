@@ -9,7 +9,6 @@ import services.llm.gemini
 import services.llm.ollama
 import services.llm.openai  # noqa: F401 - registers provider plugin
 from schemas.llm import load_providers_config
-from schemas.llm import load_providers_config
 from schemas.pipeline import get_role_config
 from services.circuit_breaker import CircuitOpenError, get_breaker
 from services.llm.base import BaseLLMProvider, _manager

@@ -104,27 +104,35 @@ def logout(): ...
 
 ### API Endpoints (`admin/api/`)
 
-Note: Endpoints are registered at root level (e.g., `/articles`, not `/api/v1/articles`).
+Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, not `/articles`).
 
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
 | `/articles` | GET, POST | List/create articles |
+| `/articles/ids` | GET | Batch article ID lookup with filters |
+| `/articles/counts-by-status` | GET | Article count by pipeline status |
 | `/articles/<id>` | GET, PUT, DELETE | Article CRUD |
 | `/articles/<id>/pipeline` | POST | Trigger pipeline stage |
 | `/articles/bulk` | POST | Bulk article operations |
 | `/sources` | GET, POST | List/create sources |
 | `/sources/<id>` | GET, PUT, PATCH, DELETE | Source CRUD |
 | `/sources/<id>/refresh` | POST | Force source refresh |
-| `/pipeline/stats` | GET | Pipeline statistics |
+| `/sources/health` | GET | Source health status |
+| `/pipeline/stats` | GET | Pipeline stage statistics |
 | `/pipeline/backlog` | GET | Pipeline backlog |
 | `/pipeline/dead-letter/stats` | GET | Dead letter queue stats |
 | `/pipeline/sla` | GET | SLA metrics |
+| `/costs` | GET | LLM cost summary |
 | `/webhooks` | GET, POST | List/create webhooks |
+| `/webhooks/<id>` | GET, PUT, PATCH, DELETE | Webhook CRUD |
 | `/webhooks/<id>/test` | POST | Test webhook delivery |
 | `/webhooks/<id>/events` | GET | Webhook delivery events |
+| `/webhooks/events/<id>/resend` | POST | Resend webhook event |
+| `/search/analytics` | GET | Search analytics |
 | `/config/reload` | POST | Reload configuration |
+| `/metrics` | GET | Application metrics |
+| `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
-| `/metrics` | GET | Prometheus metrics |
 
 ## Template Structure
 

@@ -34,6 +34,31 @@ The pipeline is the core workflow that transforms raw articles into polished new
 
 ## Article Pipeline Stages
 
+Pipeline stages use these statuses (defined in `constants.py`):
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Article awaiting processing |
+| `selecting` | Selector stage in progress |
+| `selected` | Article selected for processing |
+| `researching` | Research stage in progress |
+| `writing` | Writing stage in progress |
+| `written` | Draft article written |
+| `editing` | Editing stage in progress |
+| `review` | Awaiting manual review |
+| `done` | Processing complete |
+| `skipped` | Stage skipped |
+| `failed` | Stage failed (can be retried) |
+
+Valid transitions:
+- `pending` → `researching`, `review`
+- `researching` → `writing`, `failed`
+- `writing` → `editing`, `failed`
+- `editing` → `review`, `done`, `failed`
+- `review` → `done`, `failed`
+- `done`/`skipped` → (terminal)
+- `failed` → `pending` (reprocess)
+
 ### 1. Select
 
 **Purpose**: Score article newsworthiness 1-10

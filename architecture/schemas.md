@@ -142,8 +142,9 @@ class KeyClaim(BaseModel):
     confidence: str
 
 class DirectQuote(BaseModel):
-    text: str
-    source: str
+    quote: str                              # Verbatim quote text
+    attribution: str                        # Who said it
+    source_url: Optional[str] = None        # Source URL of the quote
 
 class ExternalSource(BaseModel):
     title: str
@@ -191,12 +192,10 @@ class NewsletterBrief(BaseModel):
     footer: str | None = None
 
 class NewsletterArticle(BaseModel):
-    article_id: int
-    title: str
-    summary: str
-    key_points: list[str]
-    source_name: str
-    url: str
+    headline: str = Field(description="Article headline within the newsletter")
+    summary: str = Field(description="Brief summary of the article")
+    url: Optional[str] = Field(default=None, description="URL to the article")
+    tags: list[str] = Field(default_factory=list, description="Topics/tags for this article")
 ```
 
 ## Task Validation (`tasks.py`)

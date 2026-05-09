@@ -41,24 +41,97 @@ services/
 
 ## LLM Provider System
 
-### Provider Base (`llm/provider_base.py`)
+### Provider Base (`llm/base.py`)
 
 Abstract base class defining the interface:
 
 ```python
 class BaseLLMProvider(ABC):
+    default_model: str = ""
+
     @property
-    @abstractmethod
-    def provider_name(self) -> str: ...
+    def client(self): ...  # Lazy-loaded provider-specific client
 
-    @abstractmethod
-    async def complete(self, prompt: str, **kwargs) -> LLMResponse: ...
+    @abc.abstractmethod
+    def _create_client(self) -> Any: ...
 
-    @abstractmethod
-    async def chat(self, messages: list[ChatMessage], **kwargs) -> LLMResponse: ...
+    @abc.abstractmethod
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        **kwargs,
+    ) -> LLMResponse: ...
 
-    @abstractmethod
-    async def embed(self, text: str) -> list[float]: ...
+    @abc.abstractmethod
+    def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs,
+    ) -> Iterator[str]: ...
+
+    def chat_structured(
+        self,
+        messages: list[dict[str, str]],
+        response_model: Type[BaseModel],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        **kwargs,
+    ) -> BaseModel: ...
+
+    def chat_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        max_iterations: int = 5,
+    ) -> ToolCallingResponse: ...
+
+    @abc.abstractmethod
+    def _chat_with_schema(
+        self,
+        messages: list[dict[str, str]],
+        response_model: Type[T],
+        model: Optional[str],
+        system: Optional[str],
+        temperature: float,
+        max_tokens: int,
+        schema: dict,
+    ) -> str: ...
+
+    @abc.abstractmethod
+    def _call_api_with_tools(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_choice: Optional[str],
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Any, Any]: ...
+
+    @abc.abstractmethod
+    def _extract_text_and_tool_calls(
+        self, response: Any,
+    ) -> tuple[str, list[ToolCall]]: ...
+
+    @abc.abstractmethod
+    def _format_tool_result(
+        self, tool_call: ToolCall, result_content: str,
+    ) -> dict: ...
 ```
 
 ### Circuit Breaker Pattern

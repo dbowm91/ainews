@@ -28,15 +28,15 @@ This document provides instructions and context for agents working on the AI New
 
 *   **Database Setup:** Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
 *   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function resolves provider/model before acquiring limiter resources, ensuring correct release on early return. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing.
-*   **Limiter Model Mismatch:** The `model` returned by `_run_stage_core` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, not the actual model used if fallback occurred in `_try_stage_work`. Use `provider_id` from `_try_stage_work` but be aware `model` may be incorrect.
-*   **SSRFSafeRedirectHandler Bug:** The redirect counter in `adapters/session.py` is reset after EACH successful redirect validation (line 41). This means a redirect chain like A→B→C→... where all targets are valid would never hit the redirect limit because the counter constantly resets. The counter should only reset when beginning a new redirect chain.
-*   **WebAdapter Date Parsing:** `_parse_date()` silently returns `None` on failure with no logging. Consider adding a warning log for parse failures.
-*   **WebAdapter trafilatura ImportError:** The `except (ImportError, ValueError, AttributeError)` block catches ValueError and AttributeError too broadly, potentially masking real bugs. Only `ImportError` is expected for missing trafilatura.
+*   **Limiter Model Mismatch:** FIXED - The `model` returned by `_run_stage_core` is now the actual model used (returned from `_try_stage_work`). Use `provider_id` from `_try_stage_work` - the model is now correct.
+*   **SSRFSafeRedirectHandler Bug:** FIXED - The redirect counter in `adapters/session.py` is no longer reset after each successful redirect validation. The counter now correctly accumulates across the redirect chain.
+*   **WebAdapter Date Parsing:** FIXED - `_parse_date()` now logs a warning when date parsing fails.
+*   **WebAdapter trafilatura ImportError:** FIXED - The exception handling is now split: `ImportError` for missing trafilatura, `(ValueError, AttributeError)` re-logged and re-raised for unexpected errors.
 *   **URL Validation Duplication:** `utils/url.py` and `services/url.py` have duplicate SSRF protection implementations. `services/url.py` does NOT re-export from `utils/url.py` - it redefines everything locally with its own config support. Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
 *   **utils/url.py Not Pure:** Despite docstring claims, `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Don't assume pure function behavior.
-*   **api_tokens_bp Not Registered:** The `api_tokens_bp` blueprint is defined in `routes/admin/api_tokens.py` but never registered in `app.py`. All `/api-tokens` routes return 404.
-*   **Duplicate Import:** `services/llm/__init__.py` imports `load_providers_config` twice (lines 11-12). The first import is immediately shadowed.
-*   **VALID_TRANSITIONS Missing Statuses:** `constants.py` defines `VALID_TRANSITIONS` but does NOT include `selecting` or `selected` status values. These statuses exist in `PipelineStatus` but aren't valid transition targets.
+*   **api_tokens_bp Not Registered:** FIXED - The `api_tokens_bp` blueprint is now registered in `app.py`.
+*   **Duplicate Import:** FIXED - `services/llm/__init__.py` removed duplicate import of `load_providers_config`.
+*   **VALID_TRANSITIONS Missing Statuses:** FIXED - `constants.py` now includes `selecting` and `selected` in `VALID_TRANSITIONS`. Added `SELECTING`, `SELECTED`, `WRITTEN` to `PipelineStatus` class.
 *   **Context Window:** LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
 *   **Linting:** We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
 *   **Mypy:** Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
@@ -47,8 +47,8 @@ This document provides instructions and context for agents working on the AI New
 *   **Source Refresh:** Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
 *   **Newsletter Associations:** `newsletter_articles` and `newsletter_subscribers` association tables exist in `models/newsletter.py` with many-to-many relationships.
 *   **URL Validation Layering:** SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Adapters import from `utils/url.py` for clean layering. `services/url.py` has duplicate implementations and should not be imported by adapters.
-*   **Newsletter Idempotency Key Bug:** The `idempotency_key` in `_generate_daily_newsletters_core()` at line 430 references a variable defined in `_check_newsletter_lock()` (line 381), causing a `NameError`. The key must be defined in `_generate_daily_newsletters_core()` scope, not inside `_check_newsletter_lock()`.
-*   **api_tokens_bp Auth Redirect:** The `require_auth` decorator redirects to HTML login (line 72 in `routes/admin/__init__.py`) when no Authorization header is present. For `/api-tokens` routes, this should return JSON 401 instead.
+*   **Newsletter Idempotency Key Bug:** FIXED - The `idempotency_key` is now defined in `_generate_daily_newsletters_core()` scope before use.
+*   **api_tokens_bp Auth Redirect:** FIXED - The `require_auth` decorator now returns JSON 401 for `/api*` routes when no Authorization header is present.
 *   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 *   **Utils Modules:** The following utils modules now exist: `utils/text.py` (XML escaping + truncate/sanitize_html/extract_hashtags), `utils/datetime.py` (parse_date/format_date/time_ago), `utils/security.py` (generate_token/constant_time_compare), `utils/hash.py` (generate_hash/verify_hash), `utils/html.py` (strip_tags/linkify/extract_text).
 *   **API Endpoint Paths:** Admin API endpoints are at `/api/v1/` prefix (e.g., `/api/v1/articles`, `/api/v1/sources`). The `admin_api_bp` blueprint is registered with `url_prefix="/api/v1"`. The `admin_bp` provides HTML pages at `/admin`. Public routes are at root level.

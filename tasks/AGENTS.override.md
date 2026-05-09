@@ -17,6 +17,5 @@
 - **Extraction:** `tasks/extract.py` needs to catch generic `Exception` to support certain test cases and handle unexpected parsing failures gracefully.
 
 ## Known Issues
-- **Limiter model mismatch:** `_run_stage_core` returns `model` from `_get_provider_for_stage` which only gets the PRIMARY provider's model, not the actual model used if fallback occurred in `_try_stage_work`. Use `provider_id` for tracking but be aware `model` may be incorrect.
 - **`_STAGE_TASKS`:** Contains `review` status mapping to `tasks.edit.edit_article` - verified present as of 2026-05-07.
 - **PipelineLog meta field:** The model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.

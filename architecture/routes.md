@@ -13,7 +13,7 @@ routes/
 └── admin/                  # Admin interface
     ├── __init__.py        # Dashboard, articles, sources, subscribers, newsletters
     ├── auth.py            # Login with TOTP support
-    ├── api_tokens.py      # API token management
+    ├── api_tokens.py      # API token management (not registered)
     └── api/               # Admin API endpoints
         ├── articles.py    # Article CRUD and pipeline control
         ├── sources.py     # Source management
@@ -23,6 +23,38 @@ routes/
         ├── config.py      # Configuration management
         └── audit.py       # Audit log access
 ```
+
+## Blueprint Structure
+
+The application uses two distinct blueprint types with separate URL namespaces:
+
+| Blueprint | URL Prefix | Content Type | Auth Method |
+|-----------|------------|--------------|-------------|
+| `public_bp` | `/` | HTML pages | None |
+| `admin_bp` | `/admin` | HTML pages | Session-based |
+| `admin_api_bp` | `/api/v1` | JSON API | Session or Bearer token |
+
+### Admin Blueprint (`admin_bp`)
+
+Serves HTML admin pages at `/admin/*`:
+- `/admin/login` - Admin login page
+- `/admin/` - Main dashboard
+- `/admin/articles` - Article management UI
+- `/admin/sources` - Source management UI
+- `/admin/subscribers` - Subscriber management UI
+- `/admin/newsletters` - Newsletter history UI
+
+### Admin API Blueprint (`admin_api_bp`)
+
+Serves JSON REST API at `/api/v1/*`:
+- `/api/v1/articles` - Article CRUD
+- `/api/v1/sources` - Source CRUD
+- `/api/v1/pipeline/stats` - Pipeline statistics
+- `/api/v1/webhooks` - Webhook management
+- `/api/v1/metrics` - Prometheus metrics
+- `/api/v1/costs` - Cost tracking
+
+**Note:** The `api_tokens_bp` blueprint exists in `routes/admin/api_tokens.py` but is NOT registered in `app.py`. All `/api-tokens` routes return 404.
 
 ## Public Routes
 

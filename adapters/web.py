@@ -116,7 +116,9 @@ class WebAdapter(BaseSourceAdapter):
                 extracted = trafilatura.extract(html_str)
                 if extracted and len(extracted) >= MIN_CONTENT_LENGTH:
                     body = extracted
-            except (ImportError, ValueError, AttributeError) as e: 
+            except ImportError:
+                logger.warning("trafilatura not installed, content extraction unavailable for %s", url)
+            except (ValueError, AttributeError) as e:
                 logger.warning("Content extraction failed for %s: %s", url, e)
 
         ext_id = self._hash_ext_id(url, title)
@@ -218,4 +220,5 @@ class WebAdapter(BaseSourceAdapter):
                 return dt
             except ValueError:
                 continue
+        logger.warning("Failed to parse date: %s", dt_str)
         return None

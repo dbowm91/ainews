@@ -20,7 +20,6 @@ The `schemas/` package contains Pydantic models for validation and serialization
 
 ```python
 class PipelineRootConfig(BaseModel):
-    version: str = "1.0"
     pipeline: PipelineConfig           # Stage role configurations (selector, researcher, writer, editor)
     newsletter: NewsletterConfig
     newsletter_pipeline: NewsletterPipelineConfig  # 3-stage LLM pipeline for newsletter generation
@@ -33,13 +32,11 @@ class StageConfig(BaseModel):
     tools: list[str] = Field(default_factory=list)  # Stub - actual config in RoleConfig
 
 class NewsletterConfig(BaseModel):
-    max_articles: int = 20
+    max_articles: int = Field(default=10, ge=1, le=50)
     send_time: str = "08:00"
     timezone: str = "America/New_York"
-    site_url: str
-    prep_minutes: int = 15
-    enable_topic_newsletters: bool = True
-    batch_size: int = 500
+    site_url: str = "https://ainews.dev"
+    prep_minutes: int = Field(default=15, ge=5, le=60)
 
 class NewsletterPipelineConfig(BaseModel):
     reader: RoleConfig
@@ -65,23 +62,29 @@ class SubagentChainStep(BaseModel):
     condition: Optional[str] = None
 
 class MemoryConfig(BaseModel):
-    enabled: bool = True
-    consolidate_interval_hours: int = 24
-    max_entries_per_topic: int = 100
-    embedding_model: str = "text-embedding-ada-002"
-    ttl_days: int = 365
+    ttl_days_low: int = 7
+    ttl_days_medium: int = 30
+    ttl_days_high: int = 0
+    consolidation_cooldown_hours: int = 24
+    max_entries_per_propose: int = 3
+    consolidation_merge_window_hours: int = 72
+    truncation_llm_enabled: bool = True
+    truncation_llm_threshold: int = 2000
+    truncation_llm_max_tokens: int = 512
+    truncation_llm_temperature: float = 0.0
 ```
 
 ## Source Configuration (`source.py`)
 
 ```python
 class SourceConfig(BaseModel):
+    id: str = Field(..., pattern=r"^[a-z0-9_]+$")
     name: str
-    type: Literal["rss", "api", "web"]
-    url: str
-    adapter_config: RSSConfig | APIConfig | WebConfig
+    type: str                          # "rss", "api", or "web"
     enabled: bool = True
-    crawl_interval_minutes: int = 30
+    schedule_minutes: int = Field(default=30, ge=5, le=1440)
+    config: dict[str, Any]             # Adapter-specific configuration
+    topics: TopicMatchConfig = Field(default_factory=TopicMatchConfig)
 
 class RSSConfig(BaseModel):
     item_path: str = "entries"
@@ -112,12 +115,12 @@ class PaginationConfig(BaseModel):
 
 ```python
 class SelectionResult(BaseModel):
+    selected: bool
     score: int = Field(ge=1, le=10)
-    confidence: Literal["low", "medium", "high"]
-    reason: str                              # Note: field is 'reason' not 'reasoning'
-    key_topics: list[str]
-    impact_summary: str | None = None
-    selected: bool | None = None             # Undocumented field
+    reason: str
+    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
+    key_topics: list[str] = Field(default_factory=list)
+    impact_summary: Optional[str] = None
 ```
 
 ### Research Brief
@@ -143,14 +146,15 @@ class DirectQuote(BaseModel):
     source: str
 
 class ExternalSource(BaseModel):
-    url: str
     title: str
-    reliability: str
+    url: str
+    snippet: str
 
 class RelatedArticle(BaseModel):
-    article_id: int
     title: str
-    relevance: str
+    category: str
+    summary_snippet: str
+    created_at: str
 ```
 
 ### Condensed Article

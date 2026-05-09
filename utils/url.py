@@ -19,12 +19,8 @@ __all__ = [
     "normalize_title",
     "TRACKING_PARAMS",
     "UnsafeURLError",
-    "_BLOCKED_NETWORKS",
-    "_is_ipv4_mapped",
     "validate_url_safe",
     "clear_dns_cache",
-    "_get_dns_cache",
-    "_TTLCache",
 ]
 
 _NORMALIZE_WHITESPACE_RE = re.compile(r"\s+")

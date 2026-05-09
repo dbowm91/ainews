@@ -78,17 +78,19 @@ class APIAdapter(BaseSourceAdapter):
         self.field_mappings = config.get('field_mappings', {})
 
     def fetch(self) -> list[dict]:
-        # Supports pagination (cursor, offset, page)
+        # Fetches from list_url
         # Handles authentication (Bearer, API key headers)
         # Rate limiting compliance
         return self._fetch_page() or []
 ```
 
+**Note:** The API adapter does NOT have built-in pagination. It fetches a list from `list_url` once and applies `max_items` limiting. If `item_url` is configured, it fetches each item individually.
+
 Features:
 - JSONPath field extraction (`$.items[*]`, `$.data[*].title`)
-- Pagination support (cursor, offset, page-based)
 - Auth header injection (Bearer token, API key)
 - Field mapping configuration
+- Individual item fetching via `item_url` (but no pagination)
 
 ## Web Adapter (`web.py`)
 

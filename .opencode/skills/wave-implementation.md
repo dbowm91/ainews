@@ -107,3 +107,28 @@ All documentation drift items from Waves 5-8 have been completed:
 - `docs/pipeline-wave8-fix`: docs(pipeline): fix hardcoded fallback chain diagram, add backfill schedule
 - `docs/models-wave8-fix`: docs(models): remove finalized_at from Article model example
 - Merged to `dev/unified-implimentation` via octopus merge
+
+### Wave Review Session (2026-05-09)
+
+**Issue Found and Fixed: SSRF Import Layering Violation**
+
+Adapters were incorrectly importing from `services.url` instead of `utils.url`:
+
+| File | Before | After |
+|------|--------|-------|
+| `adapters/rss.py:12` | `from services.url import` | `from utils.url import` |
+| `adapters/api.py:11` | `from services.url import` | `from utils.url import` |
+| `adapters/web.py:15` | `from services.url import` | `from utils.url import` |
+| `adapters/session.py:8` | `from services.url import` | `from utils.url import` |
+
+**Why this matters:** Per architecture layering rules, adapters (infrastructure) should NOT import from services (business logic). Both `services/url.py` and `utils/url.py` have `validate_url_safe` and `UnsafeURLError`, but only `utils/url.py` is the correct import for adapters.
+
+**Documentation Fix: utils.md return type**
+
+Changed `architecture/utils.md:19` from `def validate_url_safe(url: str) -> bool:` to `def validate_url_safe(url: str) -> str:` with note that it returns the validated URL string. The function raises `UnsafeURLError` on invalid URLs, so the return type should be `str` (the validated URL).
+
+**Verification Complete:**
+- Wave 5: Both bugs (limiter slot leak, _log_pipeline args) verified fixed
+- Wave 6: SSRF layering fix applied, TYPE_CHECKING pattern and review stage verified
+- Wave 7: All 4 tasks verified (StageConfig, utils modules, no DeepSeek, RSS gaps)
+- Wave 8: All 6 documentation items verified correct (minor return type fix in utils.md)

@@ -16,11 +16,12 @@ The `utils/` package contains pure utility functions with minimal dependencies.
 ## URL Utilities (`url.py`)
 
 ```python
-def validate_url_safe(url: str) -> bool:
+def validate_url_safe(url: str) -> str:
     """Check if URL is safe for fetching (SSRF protection)"""
     # Raises UnsafeURLError if blocked
     # Blocks internal IPs, private hostnames
     # Validates scheme (http/https only)
+    # Returns the validated URL string
 
 class UnsafeURLError(Exception):
     """Raised when URL fails SSRF checks"""

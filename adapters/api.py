@@ -8,7 +8,7 @@ import requests
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from adapters.session import get_crawl_session
 from schemas.source import APIConfig
-from services.url import validate_url_safe
+from utils.url import validate_url_safe
 
 logger = logging.getLogger(__name__)
 

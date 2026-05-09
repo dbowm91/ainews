@@ -5,7 +5,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from services.url import UnsafeURLError, validate_url_safe
+from utils.url import UnsafeURLError, validate_url_safe
 
 _CRAWL_SESSION: requests.Session | None = None
 _CRAWL_SESSION_LOCK = threading.Lock()

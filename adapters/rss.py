@@ -9,7 +9,7 @@ from urllib3.util.retry import Retry
 
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import RSSConfig
-from services.url import validate_url_safe
+from utils.url import validate_url_safe
 
 from .session import SSRFSafeRedirectHandler
 

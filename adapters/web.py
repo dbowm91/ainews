@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from adapters.session import get_crawl_session
 from schemas.source import WebConfig
-from services.url import UnsafeURLError, validate_url_safe
+from utils.url import UnsafeURLError, validate_url_safe
 
 logger = logging.getLogger(__name__)
 

@@ -132,3 +132,48 @@ Changed `architecture/utils.md:19` from `def validate_url_safe(url: str) -> bool
 - Wave 6: SSRF layering fix applied, TYPE_CHECKING pattern and review stage verified
 - Wave 7: All 4 tasks verified (StageConfig, utils modules, no DeepSeek, RSS gaps)
 - Wave 8: All 6 documentation items verified correct (minor return type fix in utils.md)
+
+### Wave 9 Completion (2026-05-09)
+
+All items from plans/plan.md completed. Summary of changes:
+
+**Wave A - Bug Fixes (10 bugs):**
+| Bug | Fix |
+|-----|-----|
+| BUG-1.1 | Defined `idempotency_key` in `_generate_daily_newsletters_core()` scope |
+| BUG-1.3 | Added `SELECTING`, `SELECTED`, `WRITTEN` to `PipelineStatus` and `VALID_TRANSITIONS` |
+| BUG-1.5 | `_try_stage_work` returns actual model used; `limiter.release` uses `provider_id` |
+| BUG-1.6 | Already handled correctly with `if provider_id:` guard |
+| BUG-1.7 | Removed redirect counter reset on success in `SSRFSafeRedirectHandler` |
+| BUG-1.8 | Added `logger.warning` for date parsing failures in `WebAdapter._parse_date()` |
+| BUG-1.9 | Split trafilatura exception handling - `ImportError` separate from `ValueError/AttributeError` |
+| BUG-1.10 | Added `api_tokens_bp` registration in `app.py` |
+| BUG-1.11 | `require_auth` now returns JSON 401 for `/api*` routes |
+| BUG-1.13 | Removed duplicate import of `load_providers_config` |
+
+**Wave B-D - Documentation & Implementation Fixes:**
+- TASK-2.3 through TASK-2.23: All schema, routes, and architecture documentation updated
+- TASK-2.14, 2.15, 2.16, 2.18: Decisions documented (feature not implemented → docs removed, or feature exists → documented)
+
+**Wave E - Medium Priority Documentation:**
+- TASK-3.1, 3.2, 3.7, 3.15, 3.16: Stage vs status glossary, blueprint structure, retry system, degradation behavior
+
+**Wave F - Cleanup:**
+- TASK-4.2, 4.4: `__all__` exports cleaned, YAML config examples updated
+- TASK-4.8, 4.10: Verified as not issues (dead code was live, tasks→services allowed)
+
+**Key Branches Created:**
+- `fix/bug-1-1-newsletter-lock-nameerror`
+- `fix/bug-1-3-missing-selecting-selected`
+- `fix/bug-1-5-1-6-pipeline-limiter`
+- `fix/bug-1-7-ssrf-redirect-bug`
+- `fix/bug-1-8-1-9-webadapter`
+- `fix/bug-1-10-1-11-api-tokens`
+- `fix/bug-1-13-duplicate-import`
+- Subagent branches for Wave B, C, E, F
+
+**Commits:**
+- All bug fixes committed to separate branches
+- Documentation fixes committed via subagents
+- `plans/plan.md` marked COMPLETED
+- `AGENTS.md` updated to mark all bugs as FIXED

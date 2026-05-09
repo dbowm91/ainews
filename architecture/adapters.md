@@ -97,19 +97,19 @@ Scrapes listing pages with CSS selectors:
 ```python
 class WebAdapter(BaseSourceAdapter):
     def __init__(self, config: dict):
-        self.start_urls = config['start_urls']
+        self.listing_url = config['listing_url']
         self.item_css = config['item_css']
         self.field_selectors = config['field_selectors']
 
     def fetch(self) -> list[dict]:
-        # Fetches start URLs
+        # Fetches listing URL
         # Optionally follows pagination links
         # Extracts items via CSS selectors
         return self._scrape_page(url)
 ```
 
 Features:
-- Multiple start URLs
+- Listing URL scraping
 - CSS selector-based extraction
 - Pagination link following
 - Link URL discovery

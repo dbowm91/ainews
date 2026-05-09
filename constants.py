@@ -31,8 +31,11 @@ class PipelineStatus:
     """Pipeline status constants to avoid typos."""
 
     PENDING = "pending"
+    SELECTING = "selecting"
+    SELECTED = "selected"
     RESEARCHING = "researching"
     WRITING = "writing"
+    WRITTEN = "written"
     EDITING = "editing"
     REVIEW = "review"
     DONE = "done"
@@ -47,9 +50,12 @@ PIPELINE_STAGES = ("crawl", "select", "research", "write", "edit")
 # Valid pipeline status transitions
 # Each status maps to the set of statuses it can transition to
 VALID_TRANSITIONS: dict[str, frozenset] = {
-    PipelineStatus.PENDING: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
+    PipelineStatus.PENDING: frozenset([PipelineStatus.SELECTING, PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
+    PipelineStatus.SELECTING: frozenset([PipelineStatus.SELECTED, PipelineStatus.FAILED]),
+    PipelineStatus.SELECTED: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.FAILED]),
     PipelineStatus.RESEARCHING: frozenset([PipelineStatus.WRITING, PipelineStatus.FAILED]),
     PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
+    PipelineStatus.WRITTEN: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
     PipelineStatus.EDITING: frozenset([PipelineStatus.REVIEW, PipelineStatus.DONE, PipelineStatus.FAILED]),
     PipelineStatus.REVIEW: frozenset([PipelineStatus.DONE, PipelineStatus.FAILED]),
     PipelineStatus.DONE: frozenset(),  # Terminal state
@@ -71,6 +77,7 @@ def get_valid_next_statuses(current_status: str) -> frozenset:
 
 STAGE_STATUS_MAP = {
     "pending": "select",
+    "selecting": "select",
     "selected": "research",
     "researching": "research",
     "writing": "write",

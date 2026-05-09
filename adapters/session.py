@@ -38,7 +38,6 @@ class SSRFSafeRedirectHandler:
                 parsed = urlparse(location)
                 if not parsed.scheme or not parsed.netloc:
                     raise requests.exceptions.InvalidURL(f"Invalid redirect location: {location}") from e
-            self._redirect_count = 0
             return request
         return None
 

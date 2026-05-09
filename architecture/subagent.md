@@ -32,13 +32,15 @@ class ToolDefinition(BaseModel):
 
 | Tool | Name | Purpose |
 |------|------|---------|
-| `context_notes` | `get_topic_note` | Fetch editor notes for a topic |
+| `get_topic_note` | `get_topic_note` | Fetch editor note for a topic |
+| `context_notes` | `context_notes` | Get topic notes for multiple topics |
 | `related_articles` | `related_articles` | Find related articles by topics |
-| `trend_memory` | `get_trend_memory` | Retrieve trend memory entries |
-| `article_lookup` | `get_article_by_id` | Fetch article by ID |
-| `article_search` | `search_articles` | Search articles by query |
-| `source_health` | `get_source_health` | Get source status summary |
+| `get_trend_memory` | `get_trend_memory` | Retrieve trend memory entries |
+| `get_article_by_id` | `get_article_by_id` | Fetch article by ID |
+| `search_articles` | `search_articles` | Search articles by query |
+| `get_source_health` | `get_source_health` | Get source status summary |
 | `web_search` | `web_search` | External web search |
+| `get_search_provider` | `get_search_provider` | Get configured search provider |
 
 ## Tool Implementations (`tools.py`)
 
@@ -137,21 +139,32 @@ class SubagentChainConfig(BaseModel):
 Multi-step chains with conditional branching:
 
 ```python
-### Chain Configuration
+class SubagentChainStep(BaseModel):
+    task_type: str
+    prompt_data_template: str
+    response_model: Optional[str] = None
+    condition: Optional[str] = None
 
-Chains are configured via `SubagentChainConfig` in `schemas/pipeline.py`:
+class SubagentChainConfig(BaseModel):
+    enabled: bool = False
+    max_length: int = Field(default=5, ge=1, le=10)
+    steps: list[SubagentChainStep] = Field(default_factory=list)
+```
+
+Chain configuration is loaded from `pipeline.yaml` under the `subagent.chains` section:
 
 ```yaml
-subagent_chains:
-  contextualize_article:
-    enabled: true
-    max_length: 5
-    steps:
-      - task_type: "research"
-        prompt_data_template: "Research {article_title}"
-        condition: "result.has_new_findings"
-      - task_type: "synthesize"
-        prompt_data_template: "Synthesize findings into context"
+subagent:
+  chains:
+    contextualize_article:
+      enabled: true
+      max_length: 5
+      steps:
+        - task_type: "research"
+          prompt_data_template: "Research {article_title}"
+          condition: "result.has_new_findings"
+        - task_type: "synthesize"
+          prompt_data_template: "Synthesize findings into context"
 ```
 
 **Note:** Steps are identified by index, not name. Conditions use AST-based evaluation from `services/subagent/conditions.py`.

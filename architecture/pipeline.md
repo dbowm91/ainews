@@ -34,6 +34,31 @@ The pipeline is the core workflow that transforms raw articles into polished new
 
 ## Article Pipeline Stages
 
+Pipeline stages use these statuses (defined in `constants.py`):
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Article awaiting processing |
+| `selecting` | Selector stage in progress |
+| `selected` | Article selected for processing |
+| `researching` | Research stage in progress |
+| `writing` | Writing stage in progress |
+| `written` | Draft article written |
+| `editing` | Editing stage in progress |
+| `review` | Awaiting manual review |
+| `done` | Processing complete |
+| `skipped` | Stage skipped |
+| `failed` | Stage failed (can be retried) |
+
+Valid transitions:
+- `pending` → `researching`, `review`
+- `researching` → `writing`, `failed`
+- `writing` → `editing`, `failed`
+- `editing` → `review`, `done`, `failed`
+- `review` → `done`, `failed`
+- `done`/`skipped` → (terminal)
+- `failed` → `pending` (reprocess)
+
 ### 1. Select
 
 **Purpose**: Score article newsworthiness 1-10
@@ -196,15 +221,28 @@ newsletter:
 
 ## Degradation Behavior
 
-When stages are disabled, articles follow degradation path:
+When stages are disabled via `pipeline.yaml`, articles bypass that stage and advance directly to the next status:
 
-| Full Pipeline | Degraded Pipeline |
-|---------------|-------------------|
-| select → research → write → edit | select → review |
-| (select disabled) | research → write → edit → review |
-| (research disabled) | write → edit → review |
-| (write disabled) | edit → review |
-| (edit disabled) | review |
+| Stage Disabled | Behavior |
+|----------------|----------|
+| select | Article goes directly to `researching` (selection skipped) |
+| research | Article goes directly to `writing` |
+| write | Article goes directly to `editing` |
+| edit | Article finalizes immediately (no editing) |
+
+When stages fail persistently (after max retries), articles degrade to the next stage:
+
+| Stage Fails | Degraded To |
+|-------------|-------------|
+| select | Auto-select with score 6, advance to research |
+| research | Uses source text only (impact_score=30), advance to write |
+| write | Minimal draft from extracted text, advance to edit |
+| edit | Finalize immediately with fallback |
+
+**Retry Limits:**
+- Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)
+- Per-stage failure limit: 3 consecutive failures at same stage → article marked failed
+- Total retries: 10 (configurable via `MAX_TOTAL_RETRIES`)
 
 Articles in `review` status require manual intervention.
 
@@ -235,11 +273,20 @@ class PipelineLog(Base):
 
 ## Failure Handling
 
-### Automatic Retry
+### Two-Tier Retry System
 
-- Max retries: 3 per stage
+The pipeline has two independent retry mechanisms:
+
+**1. Celery Task Retry** (for transient errors)
+- Max retries: 3 per task
 - Backoff: exponential (30s, 60s, 120s)
-- On max retries exceeded: `pipeline_status = failed`
+- Triggered by: network timeouts, rate limits, temporary provider failures
+
+**2. Stage Failure Retry** (for persistent failures)
+- Per-stage retry limit: 3 (`MAX_STAGE_RETRIES`)
+- After 3 per-stage retries: article degrades to next stage
+- Per-stage failure limit: 3 consecutive failures at same stage → article marked failed
+- Total retry budget: 10 across all stages (`MAX_TOTAL_RETRIES`)
 
 ### Circuit Breaker
 

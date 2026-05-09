@@ -215,7 +215,7 @@ def _try_stage_work(stage: str, work_fn, article):
 
     Iterates through all providers in the chain, trying each one
     until success or exhausts all providers.
-    Returns tuple of (result, provider_id_used).
+    Returns tuple of (result, provider_id_used, model_used).
     """
     providers = list(get_provider_chain(stage))
     if not providers:
@@ -224,7 +224,7 @@ def _try_stage_work(stage: str, work_fn, article):
     last_error = None
     for provider, model, max_tokens, provider_id in providers:
         try:
-            return work_fn(article, provider, model, max_tokens), provider_id
+            return work_fn(article, provider, model, max_tokens), provider_id, model
         except AuthError as auth_err:
             logger.error(
                 "Provider %s non-retryable authentication error (%s), abandoning stage",
@@ -371,7 +371,7 @@ def _run_stage_core(stage, article_id, work_fn, rc, t0, run_id):
     
     with TraceContext(generate_trace_id()):
         with traced_stage(stage, "work"):
-            result, provider_id = _try_stage_work(stage, work_fn, article)
+            result, provider_id, model = _try_stage_work(stage, work_fn, article)
     
     article.retry_count = 0
     article.last_error = None
@@ -433,7 +433,7 @@ def run_stage(
         return _handle_stage_exception(e, stage, article_id, run_id, t0, provider_id, model)
     finally:
         if limiter is not None:
-            limiter.release(rc.provider, model if model is not None else None, rc.timeout_seconds)
+            limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
         if redis_client is not None:
             try:
                 from services.redis_utils import release_lock

@@ -139,4 +139,4 @@ Key indexes for query performance:
 - `Article`: `pipeline_status`, `source_id`, `published_at`, `created_at`
 - `Source`: `name`, `type`
 - `PipelineRun`: `status`, `created_at`
-- `TrendMemory`: `topic` (GIN index on embedding for vector search)
+- `TrendMemory`: `topic` (no GIN index - embedding is stored as text for caching, not used for vector search)

@@ -1,5 +1,24 @@
 # Pipeline Architecture
 
+## Stage vs Status Naming
+
+The pipeline uses two distinct concepts that are important to distinguish:
+
+| Concept | Values | Purpose |
+|---------|--------|---------|
+| **Stages** | `select`, `research`, `write`, `edit` | Logical phases of article processing |
+| **Statuses** | `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`, `done`, `failed`, `skipped` | State machine values for tracking article state |
+
+**Stage names** are task/action identifiers used in task functions like `select_article`, `research_article`, etc.
+
+**Status values** are stored in `Article.pipeline_status` and drive the state machine transitions in `VALID_TRANSITIONS`.
+
+The mapping between stages and statuses:
+- `select` stage → `selecting`/`selected` status (or directly to `researching` if selection is integrated)
+- `research` stage → `researching` status
+- `write` stage → `writing` status
+- `edit` stage → `editing` status
+
 ## State Machine
 
 Articles flow through defined pipeline stages. Each stage transitions the article to a new status or degrades gracefully on failure.
@@ -10,19 +29,19 @@ pending → researching → writing → editing → (review) → done
    skipped    failed   failed    failed
 ```
 
-Note: `PipelineStatus.SELECTING` is deprecated and removed. Articles transition from `pending` to `researching` (selection logic is integrated into the research phase).
+Note: `selecting` and `selected` statuses exist in the code but selection logic is integrated into the research phase.
 
 ### Valid Transitions
 
 | From | To | Notes |
 |------|----|-------|
-| pending | researching | After selection |
+| pending | researching | After selection (selection integrated into research) |
+| pending | review | Quality gate |
 | pending | skipped | Below min_score |
+| pending | failed | Can be reprocessed |
 | researching | writing | Research complete |
-| researching | review | Quality gate |
 | researching | failed | After retries |
 | writing | editing | Draft complete |
-| writing | review | Quality gate |
 | writing | failed | After retries |
 | editing | review | Validation |
 | editing | done | Finalized |
@@ -30,6 +49,8 @@ Note: `PipelineStatus.SELECTING` is deprecated and removed. Articles transition 
 | review | done | Manual publish |
 | review | failed | Marked failed |
 | review | researching | Reprocess |
+
+Note: `selecting` and `selected` statuses exist but are handled within the research stage. Articles transition from `pending` directly to `researching`.
 
 ### Pipeline Statuses
 
@@ -41,20 +62,21 @@ Note: `PipelineStatus.SELECTING` is deprecated and removed. Articles transition 
 | editing | LLM reviewing/polishing |
 | review | Needs manual review |
 | done | Published |
-| failed | Permanently failed |
+| failed | Permanently failed (can be reprocessed) |
 | skipped | Not selected |
 
 ## Degradation System
 
-When a pipeline stage fails, the article may degrade gracefully instead of failing entirely.
+When a pipeline stage fails persistently, the article degrades gracefully instead of failing entirely.
 
 ### Stage Degradation
 
 Each stage has a degradation handler that attempts partial completion:
 
-- **Research**: Uses source text only, sets impact_score to 30
-- **Write**: Generates minimal draft from extracted text
-- **Edit**: Routes to review status
+- **Select failure**: Auto-select with score 6, advance to research
+- **Research failure**: Uses source text only, sets impact_score to 30, advance to write
+- **Write failure**: Generates minimal draft from extracted text, advance to edit
+- **Edit failure**: Routes to review status for manual intervention
 
 ### Degradation Tracking
 

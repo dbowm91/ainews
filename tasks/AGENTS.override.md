@@ -8,7 +8,7 @@
 
 ## Concurrency & Locking
 - Use `run_stage` wrapper for pipeline tasks.
-- **CRITICAL:** Ensure limiter slots are released even on early returns (e.g., when a lock is already held). See `tasks/pipeline.py:417` - early return releases with `model=None` instead of actual model, causing slot leak. This is being tracked in `plans/plan.md`.
+- **CRITICAL:** Ensure limiter slots are released even on early returns. Always use `provider_id` (actual provider used) not `rc.provider` (configured provider) when releasing limiter slots.
 - Be careful with `soft_time_limit` in Celery; ensure cleanup logic handles it.
 
 ## Error Handling

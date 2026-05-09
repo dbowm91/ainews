@@ -14,299 +14,335 @@ This plan consolidates action items from 9 architecture review documents. Items 
 
 | Priority | Count | Items |
 |----------|-------|-------|
-| HIGH | 18 | Critical bugs, documentation fixes, missing functionality |
-| MEDIUM | 21 | Documentation alignment, improvements |
-| LOW | 17 | Cleanup, minor documentation fixes |
+| HIGH | 10 | Critical bugs that affect functionality |
+| MEDIUM | 18 | Documentation fixes, improvements |
+| LOW | 14 | Cleanup, minor documentation fixes |
 
-### Phase Overview
-
-| Phase | Focus | Parallelizable |
-|-------|-------|----------------|
-| Phase 1 | Critical Bug Fixes | Yes - multiple independent bugs |
-| Phase 2 | Documentation Alignment | Partial - some sequential dependencies |
-| Phase 3 | Feature Completions | Partial - some modules independent |
-| Phase 4 | Cleanup & Polish | Yes - independent items |
+### Verified Non-Bugs (Plan Corrections)
+The following items in the original plan were INCORRECTLY marked as bugs:
+- **BUG-1.2**: `redis_client` IS accessible in finally block - NOT A BUG
+- **BUG-1.12**: Slot leak pattern is correct - NOT A BUG (already noted in plan)
+- **TASK-2.1**: API path prefix is correctly documented in AGENTS.md - NO FIX NEEDED
+- **TASK-2.7**: `impact_summary` field EXISTS in SelectionResult - NO FIX NEEDED
 
 ---
 
 ## Phase 1: Critical Bug Fixes
 
-### BUG-1.1: Newsletter Lock NameError
+### BUG-1.1: Newsletter Lock NameError **[HIGH]**
 
 **Location:** `tasks/newsletter.py:430`
 
 **Issue:** `NameError` - `idempotency_key` reference error in newsletter generation lock.
 
+**Verification:** `idempotency_key` is defined at line 381 inside `_check_newsletter_lock()` function. Line 430 is inside `_generate_daily_newsletters_core()` function. Since `idempotency_key` is a local variable in `_check_newsletter_lock`, it is OUT OF SCOPE at line 430. This will cause a `NameError`.
+
 **Fix Required:**
-1. Locate the lock acquisition block around line 420-430
-2. Ensure `idempotency_key` is defined before use in the lock key construction
-3. Verify the Lua script for newsletter lock uses correct variable names
+1. Move `idempotency_key` definition to `_generate_daily_newsletters_core()` scope, OR
+2. Pass `idempotency_key` as a return value from `_check_newsletter_lock()`, OR
+3. Define `idempotency_key` at line 417 alongside `redis_client`
+
+**Implementation Detail:**
+```python
+# Current (broken) - line 417-430 in _generate_daily_newsletters_core:
+redis_client = get_redis()
+# ... later at line 430:
+redis_client.setex(idempotency_key, 86400 * 2, "1")  # NameError! idempotency_key undefined
+
+# Fix: Define idempotency_key locally:
+idempotency_key = f"idempotency:newsletter:{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+redis_client.setex(idempotency_key, 86400 * 2, "1")
+```
 
 **Verification:** Check that `idempotency_key` is defined locally in `_generate_daily_newsletters_core()` before the lock is acquired.
 
 ---
 
-### BUG-1.2: Redis Client Lock Key Not Accessible in Finally Block
+### BUG-1.3: Missing Stage Status in VALID_TRANSITIONS **[HIGH]**
 
-**Location:** `tasks/newsletter.py` - newsletter generation
-
-**Issue:** `redis_client` or `lock_key` not accessible in `finally` block scope, causing lock leak on early returns.
-
-**Fix Required:**
-1. Ensure `redis_client` and `lock_key` are defined in a scope accessible by the finally block
-2. Verify the finally block properly releases the lock
-3. Add logging for lock acquisition and release for debugging
-
----
-
-### BUG-1.3: Missing Stage Status in VALID_TRANSITIONS
-
-**Location:** `services/pipeline_utils.py` or similar
+**Location:** `constants.py:49-58` (VALID_TRANSITIONS dict)
 
 **Issue:** `selecting` and `selected` status values are not included in `VALID_TRANSITIONS` dict.
 
-**Fix Required:**
-1. Find the `VALID_TRANSITIONS` definition
-2. Add entries for `selecting` and `selected` status transitions
-3. Verify all valid stage transitions are covered
+**Verification:**
+- `VALID_TRANSITIONS` keys: `pending`, `researching`, `writing`, `editing`, `review`, `done`, `skipped`, `failed`
+- Missing: `selected` (used in STAGE_STATUS_MAP line 74), `selecting`
+- This creates inconsistency where `selected` can be set as a status but transitioning TO it would not be considered valid
 
-**Expected transitions for selecting/selected:**
+**Fix Required:**
+1. Add `selecting` and `selected` to `VALID_TRANSITIONS`:
+```python
+PipelineStatus.SELECTING: frozenset([PipelineStatus.SELECTED, PipelineStatus.FAILED]),
+PipelineStatus.SELECTED: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.FAILED]),
+```
+
+**Expected transitions:**
 - `pending` → `selecting` (article enters selection)
 - `selecting` → `selected` (article selected for research)
 - `selected` → `researching` (research begins)
 
 ---
 
-### BUG-1.4: _handle_disabled Dispatches to Wrong Status
+### BUG-1.5: Limiter Model Mismatch After Fallback **[HIGH]**
 
-**Location:** `tasks/pipeline.py` or `services/pipeline_utils.py`
+**Location:** `tasks/pipeline.py:369, 374, 386, 436`
 
-**Issue:** When `edit` stage is disabled, `_handle_disabled` dispatches to wrong status.
+**Issue:** The `model` returned by `_run_stage_core` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, not the actual model used if fallback occurred in `_try_stage_work`.
 
-**Fix Required:**
-1. Find `_handle_disabled` function
-2. Check the dispatch logic for disabled stages
-3. Ensure it dispatches to correct fallback status (should be `review` or `written` not `editing`)
-
----
-
-### BUG-1.5: Limiter Model Mismatch After Fallback
-
-**Location:** `tasks/pipeline.py:436`
-
-**Issue:** The `model` returned by `_run_stage_core` comes from `_get_provider_for_stage` which only returns the PRIMARY provider's model, not the actual model used if fallback occurred.
+**Verification:** Confirmed - `provider_id` from `_try_stage_work` (line 374) is the ACTUAL provider used, but `model` from `_get_provider_for_stage` (line 369) is only the PRIMARY provider's model. Line 386 returns `model` which may be wrong. Line 436 releases with wrong model.
 
 **Fix Required:**
-1. After `_try_stage_work` returns with `provider_id`, use that actual provider_id to look up the correct model
-2. Or pass the actual model through from `_try_stage_work`
+1. Option A: After `_try_stage_work` returns with `provider_id`, use that actual provider_id to look up the correct model
+2. Option B: Pass the actual model through from `_try_stage_work`
+3. Use `provider_id` (actual) not `rc.provider` (configured) when releasing limiter
 
-**Note:** This is related to but separate from BUG-5.1.1 which was fixed (limiter slot leak on early return). This bug is about the return value being wrong, not about slot release.
-
----
-
-### BUG-1.6: provider_id May Be None in Exception Handler
-
-**Location:** `tasks/pipeline.py:269`
-
-**Issue:** `provider_id` may be `None` when recorded in exception handler.
-
-**Fix Required:**
-1. Check exception handler around line 269
-2. Ensure provider_id is captured before potential None assignment
-3. Add fallback value or skip recording if provider_id is None
-
----
-
-### BUG-1.7: SSRFSafeRedirectHandler Reset Bug
-
-**Location:** `adapters/web.py` or `adapters/session.py`
-
-**Issue:** `_redirect_count` reset could allow redirect bypass - SSRF protection bypass via redirect counting reset.
-
-**Fix Required:**
-1. Find SSRFSafeRedirectHandler class
-2. Check `_redirect_count` initialization and reset logic
-3. Ensure redirect count is properly bounded and cannot be reset mid-redirect-chain
-4. Add test for redirect chain limit
-
----
-
-### BUG-1.8: WebAdapter Date Parsing Silently Returns None
-
-**Location:** `adapters/web.py`
-
-**Issue:** Date parsing failures silently return `None` with no logging.
-
-**Fix Required:**
-1. Find date parsing logic in WebAdapter
-2. Add logging for parsing failures (warn level)
-3. Consider adding a metric for parsing failures
-
----
-
-### BUG-1.9: WebAdapter Trafilatura ImportError Caught Too Broadly
-
-**Location:** `adapters/web.py`
-
-**Issue:** `ImportError` is caught too broadly, potentially masking other import issues.
-
-**Fix Required:**
-1. Find the try/except block for trafilatura import
-2. Split into specific exception handling:
-   - `ImportError` for missing module (expected)
-   - `Exception` for unexpected errors (re-raise)
-
----
-
-### BUG-1.10: api_tokens_bp Blueprint Never Registered
-
-**Location:** `app.py`
-
-**Issue:** `api_tokens_bp` blueprint is defined but never registered in `app.py`, causing all token auth routes to return 404.
-
-**Fix Required:**
-1. Find `api_tokens_bp` definition
-2. Add registration in `app.py`:
-   ```python
-   app.register_blueprint(api_tokens_bp, url_prefix='/api/v1/auth')
-   ```
-3. Verify token auth endpoints work
-
----
-
-### BUG-1.11: API Token Auth Uses Wrong Auth Mechanism
-
-**Location:** `routes/api_tokens.py` or similar
-
-**Issue:** API token auth redirects to HTML login instead of returning JSON 401.
-
-**Fix Required:**
-1. Find the auth decorator or auth check logic for token endpoints
-2. Change redirect behavior to return `jsonify({"error": "Unauthorized"})` with 401 status
-3. Test with `Authorization: Bearer <token>` header
-
----
-
-### BUG-1.12: Services/Newsletter Pipeline Limiter Slot Leak on Fallback - VERIFIED NOT A BUG
-
-**Location:** `services/newsletter_pipeline.py:122-124`
-
-**Issue:** Originally suspected slot leak on fallback - but code review shows correct pattern.
-
-**Verified Behavior:**
+**Code location for fix (line 436):**
 ```python
-if limiter.acquire(provider, model, ...):
-    try:
-        result = llm_call(provider, model, max_tokens)
-        return result, True
-    finally:
-        limiter.release(provider, model, ...)
-else:
-    # fallback_stages.append(role) - correctly does NOT release
-    return None, False
+# Current (may be wrong):
+limiter.release(rc.provider, model if model is not None else None, rc.timeout_seconds)
+
+# Fix - use provider_id which is actual provider:
+limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
 ```
 
-**Analysis:** When `acquire()` returns `False`, the slot was never acquired (limiter rejected it). Release is only called in `finally` for successfully acquired slots. This is correct.
-
-**No Fix Required.**
+**Note:** This is separate from slot leak on early return (BUG-5.1.1 which was fixed). This bug is about the return value being wrong, not about slot release.
 
 ---
 
-### BUG-1.13: Duplicate Import load_providers_config
+### BUG-1.6: provider_id May Be None in Exception Handler **[MEDIUM]**
+
+**Location:** `tasks/pipeline.py:264-270`
+
+**Issue:** `_handle_stage_exception` receives `provider_id` which could be `None` if `_run_stage_core` failed before any provider was tried.
+
+**Verification:** Line 423 initializes `provider_id = None`. The exception handler at line 269-270 checks `if provider_id:` before recording, so this is already guarded. However, the guard uses the `provider_id` parameter (which could be None), not the result from `_try_stage_work`.
+
+**Fix Required:**
+1. Verify if the guard `if provider_id:` at line 269 is sufficient
+2. Consider if model could also be None and needs similar guarding
+3. The current code at line 269 seems correct (checks provider_id before recording)
+
+**Status:** Code appears to handle this correctly with the `if provider_id:` guard. Verify during implementation that this is sufficient.
+
+---
+
+### BUG-1.7: SSRFSafeRedirectHandler Reset Bug **[HIGH]**
+
+**Location:** `adapters/session.py:23, 30-31, 41`
+
+**Issue:** `_redirect_count` is reset to 0 after *every* successful redirect validation, not when beginning a new redirect chain. For a redirect chain A→B→C→D (all valid), the counter resets after each validation and never accumulates beyond 1, so the 30-redirect limit is never enforceable.
+
+**Verification:** Confirmed at line 41: `self._redirect_count = 0` after successful validation. An attacker could chain unlimited redirects to bypass SSRF protection.
+
+**Fix Required:**
+1. Move `self._redirect_count = 0` to `__init__` only (beginning of redirect chain)
+2. OR use a different tracking mechanism that persists across redirects in a chain
+3. Add test for redirect chain limit
+
+**Implementation Detail:**
+```python
+# Current (broken):
+def __init__(self, ...):
+    self._redirect_count = 0  # Line 23
+
+def __call__(self, ...):
+    # ... redirect handling ...
+    self._redirect_count += 1  # Line 30
+    if self._redirect_count > self._max_redirects:  # Line 31
+        raise UnsafeURLError(...)
+    # ... validation ...
+    self._redirect_count = 0  # Line 41 - BUG: resets after EACH success
+
+# Fix: Only reset in __init__, not after each validation
+```
+
+---
+
+### BUG-1.8: WebAdapter Date Parsing Silently Returns None **[MEDIUM]**
+
+**Location:** `adapters/web.py:206-221`
+
+**Issue:** `_parse_date()` silently returns `None` for unparseable dates with no logging.
+
+**Verification:** Line 221 returns `None` with no logging when all date formats fail.
+
+**Fix Required:**
+1. Add logging for parsing failures:
+```python
+logger.warning("Failed to parse date: %s", dt_str)
+```
+2. Consider adding a metric for parsing failures
+
+---
+
+### BUG-1.9: WebAdapter trafilatura ImportError Caught Too Broadly **[MEDIUM]**
+
+**Location:** `adapters/web.py:112-120`
+
+**Issue:** `except (ImportError, ValueError, AttributeError)` catches ValueError and AttributeError too broadly, potentially masking real bugs.
+
+**Verification:** Only `ImportError` is expected for missing trafilatura. Catching ValueError and AttributeError could mask library usage errors.
+
+**Fix Required:**
+1. Split into specific exception handling:
+```python
+try:
+    import trafilatura
+    # ... trafilatura usage ...
+except ImportError:
+    logger.warning("trafilatura not installed, content extraction unavailable")
+    return None  # or fallback behavior
+except (ValueError, AttributeError) as e:
+    logger.warning("Content extraction failed for %s: %s", url, e)
+    raise  # Re-raise unexpected errors
+```
+
+---
+
+### BUG-1.10: api_tokens_bp Blueprint Never Registered **[HIGH]**
+
+**Location:** `app.py` - `_register_blueprints()` function
+
+**Issue:** `api_tokens_bp` blueprint is defined in `routes/admin/api_tokens.py:9` but never registered in `app.py`, causing all `/api-tokens` routes to return 404.
+
+**Verification:** Confirmed - only `public_bp`, `admin_bp`, and `admin_api_bp` are registered in `_register_blueprints()`.
+
+**Fix Required:**
+1. Add registration in `app.py:_register_blueprints()`:
+```python
+from routes.admin.api_tokens import api_tokens_bp
+app.register_blueprint(api_tokens_bp)  # Uses url_prefix=None, so routes are absolute like /api-tokens
+```
+
+**Alternative:** If token management should be under `/api/v1/auth/api-tokens`, modify the blueprint definition and registration accordingly.
+
+---
+
+### BUG-1.11: API Token Auth Redirects to HTML Login Instead of JSON 401 **[HIGH]**
+
+**Location:** `routes/admin/__init__.py:72`
+
+**Issue:** `require_auth` decorator redirects to HTML login when no Authorization header is present. This is appropriate for browser-based admin but inappropriate for API token management routes.
+
+**Verification:** Confirmed - line 72 redirects to HTML login, but `/api-tokens` routes should return JSON 401.
+
+**Fix Required:**
+1. Option A: Create a separate `@require_api_auth` decorator for API-only routes that returns JSON 401
+2. Option B: Check if request expects JSON and return appropriate response
+3. Ensure `api_tokens_bp` routes use the correct auth decorator
+
+**Implementation Detail:**
+```python
+# In require_auth decorator, add JSON handling for API routes:
+if request.path.startswith('/api') or request.headers.get('Accept') == 'application/json':
+    return jsonify({"error": "Unauthorized"}), 401
+# Otherwise redirect to HTML login
+return redirect(url_for("admin.login"))
+```
+
+---
+
+### BUG-1.13: Duplicate Import load_providers_config **[LOW]**
 
 **Location:** `services/llm/__init__.py:11-12`
 
-**Issue:** `load_providers_config` is imported twice.
+**Issue:** `load_providers_config` is imported twice - the first import is immediately shadowed.
 
 **Fix Required:**
-1. Remove duplicate import
-2. Ensure only one import statement for `load_providers_config`
+1. Remove line 11 (keep line 12)
+2. Or combine into single import
 
 ---
 
 ## Phase 2: High Priority Documentation & Implementation Fixes
 
-### TASK-2.1: API Path Prefix Documentation vs Reality - CONFIRMED BUG
+### TASK-2.2: Document All Actual API Endpoints **[MEDIUM]**
 
-**Issue:** Documentation and AGENTS.md incorrectly claim admin API endpoints are at root level (`/articles`) but actual is `/api/v1/articles`.
+**Issue:** Several endpoints exist but are not documented in `architecture/routes.md`.
 
-**Verified Actual State:**
-- `admin_api_bp` registered with `url_prefix="/api/v1"`
-- Admin API routes are at: `/api/v1/articles`, `/api/v1/sources`, `/api/v1/pipeline`
-- `admin_bp` (HTML pages) is at `/admin`
-
-**Fix Required:**
-1. Update `architecture/routes.md` to show `/api/v1/` prefix for admin API
-2. Update AGENTS.md line 45 to show correct paths
-
-**Note:** This is not just documentation drift - AGENTS.md (used by agents) has the wrong info.
-
----
-
-### TASK-2.2: Document All Actual API Endpoints
-
-**Missing endpoints identified:**
-- `/costs` - cost tracking endpoint
-- `/sources/health` - source health check
-- `/metrics/prometheus` - Prometheus metrics endpoint
-- `/articles/ids` - batch article ID lookup
-- `/articles/counts-by-status` - article count by status
-- `/search/analytics` - search analytics
-- `/webhooks/events/<id>/resend` - webhook resend
+**Missing endpoints:**
+- `/costs` - cost tracking endpoint (pipeline.py:135)
+- `/sources/health` - source health check (pipeline.py:161)
+- `/metrics/prometheus` - Prometheus metrics endpoint (config.py:60-62)
+- `/articles/ids` - batch article ID lookup (articles.py:151)
+- `/articles/counts-by-status` - article count by status (articles.py:170)
+- `/search/analytics` - search analytics (search.py:9)
+- `/webhooks/events/<id>/resend` - webhook resend (webhooks.py:363)
 
 **Fix Required:**
 1. Audit all route files to find actual endpoints
 2. Document in `architecture/routes.md`
-3. Add any missing to AGENTS.md
+3. Update AGENTS.md if needed
 
 ---
 
-### TASK-2.3: MemoryConfig Documentation 0% Match
+### TASK-2.3: MemoryConfig Documentation 0% Match **[HIGH]**
 
-**Location:** `schemas/config.py` or `schemas/memory.py`
+**Location:** `schemas/pipeline.py:127-137` vs `architecture/schemas.md:67-73`
 
 **Issue:** `MemoryConfig` in documentation completely different from actual code.
 
-**Fix Required:**
-1. Read actual `MemoryConfig` schema in code
-2. Update `architecture/schemas.md` to match
-3. Verify all fields match between docs and code
+**Actual MemoryConfig (schemas/pipeline.py:127-137):**
+```python
+class MemoryConfig(BaseModel):
+    ttl_days_low: int = 7
+    ttl_days_medium: int = 30
+    ttl_days_high: int = 0
+    consolidation_cooldown_hours: int = 24
+    max_entries_per_propose: int = 3
+    consolidation_merge_window_hours: int = 72
+    truncation_llm_enabled: bool = True
+    truncation_llm_threshold: int = 2000
+    truncation_llm_max_tokens: int = 512
+    truncation_llm_temperature: float = 0.0
+```
+
+**Documented MemoryConfig (wrong):**
+```python
+enabled: bool = True
+consolidate_interval_hours: int = 24
+max_entries_per_topic: int = 100
+embedding_model: str = "text-embedding-ada-002"
+ttl_days: int = 365
+```
+
+**Fix Required:** Update `architecture/schemas.md` to match actual code.
 
 ---
 
-### TASK-2.4: NewsletterConfig Documentation Gaps
+### TASK-2.4: NewsletterConfig Documentation Gaps **[HIGH]**
 
-**Issue:** Documentation missing `enable_topic_newsletters`, `batch_size`; possibly wrong `max_articles` default.
+**Issue:** Documentation shows `enable_topic_newsletters`, `batch_size` which don't exist; wrong `max_articles` default.
 
-**Verified Actual Schema (schemas/pipeline.py:51):**
+**Actual NewsletterConfig (schemas/pipeline.py:51-56):**
 ```python
 class NewsletterConfig(BaseModel):
-    max_articles: int = Field(default=10, ge=1, le=50)
+    max_articles: int = Field(default=10, ge=1, le=50)  # Default is 10, not 20
     send_time: str = "08:00"
     timezone: str = "America/New_York"
-    site_url: str = "https://ainews.dev"
+    site_url: str = "https://ainews.dev"  # Has default
     prep_minutes: int = Field(default=15, ge=5, le=60)
+    # Note: NO enable_topic_newsletters or batch_size fields
 ```
-
-**Note:** No `enable_topic_newsletters` or `batch_size` fields exist in actual schema.
 
 **Fix Required:**
 1. Update documentation to match actual schema (no enable_topic_newsletters, no batch_size)
-2. Default max_articles is 10 (not 20)
+2. Correct max_articles default to 10
+3. Add default for site_url
 
 ---
 
-### TASK-2.5: SourceConfig adapter_config Field Doesn't Exist
+### TASK-2.5: SourceConfig adapter_config Field Doesn't Exist **[HIGH]**
 
 **Issue:** Docs show `adapter_config: RSSConfig | APIConfig | WebConfig` but actual is `config: dict[str, Any]`.
 
 **Fix Required:**
 1. Update documentation to show correct `config: dict[str, Any]` type
-2. Document what keys are expected in the config dict
+2. Document what keys are expected in the config dict for each adapter type
 
 ---
 
-### TASK-2.6: PipelineRootConfig Missing version Field
+### TASK-2.6: PipelineRootConfig Missing version Field **[MEDIUM]**
 
 **Issue:** `version` field documented but not present in code.
 
@@ -317,68 +353,74 @@ class NewsletterConfig(BaseModel):
 
 ---
 
-### TASK-2.7: SelectionResult impact_summary Field - CORRECTED
-
-**Issue:** Originally said `impact_summary` field documented but not implemented.
-
-**Verified Actual Schema (schemas/llm_responses.py:16):**
-```python
-class SelectionResult(BaseModel):
-    selected: bool
-    score: int = Field(ge=1, le=10)
-    reason: str
-    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
-    key_topics: list[str] = Field(default_factory=list)
-    impact_summary: Optional[str] = Field(default=None)  # EXISTS
-```
-
-**Status:** `impact_summary` field EXISTS. No code fix needed. Update documentation if it says otherwise.
-
-**Fix Required:** Verify documentation shows `impact_summary: Optional[str]`
-
----
-
-### TASK-2.8: SelectionResult confidence Type
+### TASK-2.8: SelectionResult confidence Type **[MEDIUM]**
 
 **Issue:** Documentation shows `str` with pattern, actual should be `Literal["low", "medium", "high"]`.
 
 **Fix Required:**
-1. Update schema to use `Literal["low", "medium", "high"]`
+1. Update schema to use `Literal["low", "medium", "high"]` for stricter type safety
 2. Update documentation
 
 ---
 
-### TASK-2.9: RelatedArticle/ExternalSource Field Names Different
+### TASK-2.9: RelatedArticle/ExternalSource Field Names Different **[MEDIUM]**
 
 **Issue:** Documentation field names completely different from actual schema.
 
+**Actual RelatedArticle (llm_responses.py:46-50):**
+```python
+title: str
+category: str
+summary_snippet: str
+created_at: str
+```
+
+**Documented (wrong):**
+```python
+article_id: int
+title: str
+relevance: str
+```
+
 **Fix Required:**
-1. Read actual `RelatedArticle` and `ExternalSource` schemas
-2. Update documentation to match
+1. Update documentation to match actual field names
 
 ---
 
-### TASK-2.10: DirectQuote Field Names Misaligned
+### TASK-2.10: DirectQuote Field Names Misaligned **[LOW]**
 
 **Issue:** `quote` vs `text`, `attribution` vs `source`.
 
+**Actual DirectQuote (llm_responses.py:40-43):**
+```python
+quote: str
+attribution: str
+source_url: Optional[str] = None
+```
+
 **Fix Required:**
-1. Verify actual field names in `DirectQuote` schema
-2. Update documentation or code to align
+1. Update documentation or align code (code seems correct, docs wrong)
 
 ---
 
-### TASK-2.11: NewsletterArticle Field Names Misaligned
+### TASK-2.11: NewsletterArticle Field Names Misaligned **[LOW]**
 
 **Issue:** `headline` vs `title`, `tags` vs `key_points`.
 
+**Actual NewsletterArticle (llm_responses.py:135-139):**
+```python
+headline: str  # Not title
+summary: str
+url: Optional[str]
+tags: list[str]  # Not key_points
+```
+
 **Fix Required:**
-1. Verify actual field names in `NewsletterArticle` schema
-2. Update documentation or code to align
+1. Update documentation to match actual field names
 
 ---
 
-### TASK-2.12: Consolidate URL Validation
+### TASK-2.12: Consolidate URL Validation **[HIGH]**
 
 **Issue:** `services/url.py` and `utils/url.py` have duplicate implementations causing confusion.
 
@@ -391,7 +433,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.13: Global Mutable DNS Cache Contradicts Pure Functions
+### TASK-2.13: Global Mutable DNS Cache Contradicts Pure Functions **[MEDIUM]**
 
 **Location:** `utils/url.py`
 
@@ -404,7 +446,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.14: adapter_config Field on Source Model
+### TASK-2.14: adapter_config Field on Source Model **[DECISION]**
 
 **Issue:** Documented but never implemented.
 
@@ -416,7 +458,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.15: GIN Index on TrendMemory.embedding
+### TASK-2.15: GIN Index on TrendMemory.embedding **[DECISION]**
 
 **Issue:** Documentation claims GIN index for vector search but no GIN index exists.
 
@@ -428,7 +470,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.16: IP/User-Agent Binding for AdminUser Session
+### TASK-2.16: IP/User-Agent Binding for AdminUser Session **[DECISION]**
 
 **Issue:** Documentation says "not implemented" but should either implement or remove note.
 
@@ -440,7 +482,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.17: Update Pipeline Status Values in Documentation
+### TASK-2.17: Update Pipeline Status Values in Documentation **[MEDIUM]**
 
 **Issue:** Documentation shows different status values than actual code.
 
@@ -452,11 +494,11 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.18: Document API Adapter Pagination
+### TASK-2.18: API Adapter Pagination **[DECISION]**
 
 **Issue:** Documentation shows API adapter has cursor/offset/page pagination but actual doesn't.
 
-**Fix Required:**
+**Options:**
 1. Update architecture docs to reflect API adapter lacks pagination
 2. OR add pagination support to API adapter
 
@@ -464,7 +506,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.19: WebAdapter Documentation Fix
+### TASK-2.19: WebAdapter Documentation Fix **[LOW]**
 
 **Issue:** Uses `listing_url` (singular), not `start_urls`.
 
@@ -474,18 +516,18 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.20: BaseLLMProvider Interface Documentation
+### TASK-2.20: BaseLLMProvider Interface Documentation **[MEDIUM]**
 
 **Issue:** Architecture docs don't match actual `BaseLLMProvider` interface.
 
 **Fix Required:**
-1. Read actual `BaseLLMProvider` interface in `services/llm/base.py` or `services/llm/provider_base.py`
-2. Update documentation to match
+1. Read actual `BaseLLMProvider` interface in `services/llm/base.py`
+2. Update documentation to match actual methods (chat, chat_streaming, etc. not complete/embed)
 3. Consider renaming file to `provider_base.py` to match docs
 
 ---
 
-### TASK-2.21: Limiter Provider Tracking Bug
+### TASK-2.21: Limiter Provider Tracking Bug **[HIGH]**
 
 **Issue:** Uses `stage_config.provider` instead of actual `provider_id` for tracking.
 
@@ -495,9 +537,11 @@ class SelectionResult(BaseModel):
 1. Find where `stage_config.provider` is used for limiter tracking
 2. Replace with actual `provider_id` used during the call
 
+**Note:** Related to BUG-1.5 - same root cause.
+
 ---
 
-### TASK-2.22: Subagent Tool Mapping Table Outdated
+### TASK-2.22: Subagent Tool Mapping Table Outdated **[MEDIUM]**
 
 **Issue:** Architecture doc tool mapping table doesn't match actual tool names.
 
@@ -507,7 +551,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-2.23: Chain Configuration Source Documentation
+### TASK-2.23: Chain Configuration Source Documentation **[MEDIUM]**
 
 **Issue:** Documentation shows inline YAML but actual comes from `pipeline.yaml` via `SubagentChainConfig`.
 
@@ -519,7 +563,7 @@ class SelectionResult(BaseModel):
 
 ## Phase 3: Medium Priority Items
 
-### TASK-3.1: Document Stage vs Status Naming Convention
+### TASK-3.1: Document Stage vs Status Naming Convention **[MEDIUM]**
 
 **Issue:** "select/research/write/edit" stages vs "pending/researching/writing/editing" status constants cause confusion.
 
@@ -531,7 +575,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.2: Document Actual Stage Flow
+### TASK-3.2: Document Actual Stage Flow **[MEDIUM]**
 
 **Issue:** Architecture doc shows `pending → select` but code uses `pending → researching` directly.
 
@@ -542,7 +586,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.3: Use Chord with Callback for Newsletter
+### TASK-3.3: Use Chord with Callback for Newsletter **[MEDIUM]**
 
 **Issue:** `group()` used for parallel topic newsletter generation but `chord()` would provide proper synchronization.
 
@@ -553,7 +597,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.4: Document Missing Tasks
+### TASK-3.4: Document Missing Tasks **[MEDIUM]**
 
 **Issue:** `cleanup-inactive-subscribers` exists in beat schedule but not documented.
 
@@ -563,7 +607,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.5: Document aggregate_crawl_results
+### TASK-3.5: Document aggregate_crawl_results **[LOW]**
 
 **Issue:** Chord callback at `crawl.py:215` needs documentation.
 
@@ -574,7 +618,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.6: Document retry_failed_newsletter_deliveries
+### TASK-3.6: Document retry_failed_newsletter_deliveries **[LOW]**
 
 **Issue:** Task exists in beat schedule but not in architecture.
 
@@ -584,7 +628,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.7: Document Blueprint Structure
+### TASK-3.7: Document Blueprint Structure **[MEDIUM]**
 
 **Issue:** Need section explaining `admin_bp` at `/admin` for HTML vs `admin_api_bp` at `/api/v1` for JSON.
 
@@ -594,7 +638,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.8: Document @require_auth Behavior
+### TASK-3.8: Document @require_auth Behavior **[LOW]**
 
 **Issue:** Need to note it supports both session-based and token-based auth.
 
@@ -605,7 +649,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.9: Subagent Tool Function Naming Convention
+### TASK-3.9: Subagent Tool Function Naming Convention **[LOW]**
 
 **Issue:** Need to document `_context_tool_*` or `_search_*` prefix convention.
 
@@ -615,7 +659,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.10: Add conditions.py to Architecture Overview
+### TASK-3.10: Add conditions.py to Architecture Overview **[LOW]**
 
 **Issue:** AST-based condition evaluation module not documented.
 
@@ -626,7 +670,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.11: Document utils.py Contents
+### TASK-3.11: Document utils.py Contents **[LOW]**
 
 **Issue:** `_retry_with_backoff`, `_is_task_revoked`, `_format_subagent_prompt` not documented.
 
@@ -637,7 +681,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.12: Add ErrorHandlingMiddleware to run_subagent()
+### TASK-3.12: Add ErrorHandlingMiddleware to run_subagent() **[LOW]**
 
 **Issue:** `run_subagent()` doesn't apply middleware but `run_subagent_with_tools()` does.
 
@@ -647,7 +691,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.13: Subagent Public API Documentation
+### TASK-3.13: Subagent Public API Documentation **[LOW]**
 
 **Issue:** Need to clarify which `__init__.py` exports are public API vs internal.
 
@@ -658,17 +702,19 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.14: ToolDefinition Missing cached Field
+### TASK-3.14: ToolDefinition Missing cached Field **[DECISION]**
 
 **Issue:** Architecture documents `cached: bool` on `ToolDefinition` but it's not in schema.
 
-**Fix Required:**
-1. Check if `cached` field should be added to `ToolDefinition`
-2. Add to schema or remove from documentation
+**Options:**
+1. Add `cached` field to ToolDefinition schema
+2. OR remove from documentation
+
+**Decision Required**
 
 ---
 
-### TASK-3.15: Document Two-Tier Retry System
+### TASK-3.15: Document Two-Tier Retry System **[MEDIUM]**
 
 **Issue:** Celery task-level vs stage failure level retry system not documented.
 
@@ -679,7 +725,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.16: Clarify Degradation Behavior for Disabled Stages
+### TASK-3.16: Clarify Degradation Behavior for Disabled Stages **[MEDIUM]**
 
 **Issue:** What happens when a stage is disabled needs documentation.
 
@@ -690,7 +736,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.17: Document _should_route_to_review Logic
+### TASK-3.17: Document _should_route_to_review Logic **[MEDIUM]**
 
 **Issue:** `auto_publish_threshold` config and routing logic not documented.
 
@@ -701,7 +747,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.18: Add Circuit Breaker Architecture Diagram
+### TASK-3.18: Add Circuit Breaker Architecture Diagram **[LOW]**
 
 **Issue:** Circuit breaker documented but no diagram.
 
@@ -714,7 +760,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.19: Document meta vs metadata on PipelineLog
+### TASK-3.19: Document meta vs metadata on PipelineLog **[LOW]**
 
 **Issue:** Need to explain why `meta` is used instead of `metadata`.
 
@@ -724,7 +770,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.20: Clarify Newsletter Lock Mechanism
+### TASK-3.20: Clarify Newsletter Lock Mechanism **[LOW]**
 
 **Issue:** Lua script for newsletter lock not documented.
 
@@ -735,12 +781,12 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-3.21: Document 3-Stage Newsletter Pipeline Flow
+### TASK-3.21: Document 3-Stage Newsletter Pipeline Flow **[LOW]**
 
 **Issue:** 3-stage newsletter pipeline flow needs more precise documentation.
 
 **Fix Required:**
-1. Identify the 3 stages (likely: collect → generate → deliver)
+1. Identify the 3 stages (likely: reader → writer → editor)
 2. Document each stage's inputs/outputs
 3. Add flow diagram
 
@@ -748,7 +794,7 @@ class SelectionResult(BaseModel):
 
 ## Phase 4: Cleanup & Low Priority Items
 
-### TASK-4.1: Add Dedicated Unit Tests for Utils
+### TASK-4.1: Add Dedicated Unit Tests for Utils **[MEDIUM]**
 
 **Issue:** Tests go through `services/url.py`; need direct tests for `utils/` functions.
 
@@ -759,7 +805,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.2: Clean Up __all__ Exports in utils/url.py
+### TASK-4.2: Clean Up __all__ Exports in utils/url.py **[LOW]**
 
 **Issue:** Internal items exposed in public API (`_BLOCKED_NETWORKS`, `_TTLCache`, `_dns_executor`).
 
@@ -770,7 +816,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.3: Document Return Type Mismatch in Adapters
+### TASK-4.3: Document Return Type Mismatch in Adapters **[LOW]**
 
 **Issue:** `list[Any]` vs `list[dict]` return type mismatch.
 
@@ -781,7 +827,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.4: Update YAML Config Examples
+### TASK-4.4: Update YAML Config Examples **[LOW]**
 
 **Issue:** Config examples use wrong field names (`start_urls` vs `feed_url`, `list_url`, `listing_url`).
 
@@ -791,7 +837,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.5: Clarify Rate Limiting Responsibility
+### TASK-4.5: Clarify Rate Limiting Responsibility **[LOW]**
 
 **Issue:** Need to document LLM services handle Retry-After, not adapters.
 
@@ -802,7 +848,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.6: Clarify Source Health Tracking
+### TASK-4.6: Clarify Source Health Tracking **[LOW]**
 
 **Issue:** Documentation says adapters track source health but actual is `services/crawling.py`.
 
@@ -812,7 +858,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.7: Add embed() Method to BaseLLMProvider
+### TASK-4.7: Add embed() Method to BaseLLMProvider **[DECISION]**
 
 **Issue:** Documented but not present in interface.
 
@@ -824,9 +870,9 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.8: Dead Code Removal
+### TASK-4.8: Dead Code Removal **[LOW]**
 
-**Issue:** `_finalize_subagent_result()` is never called.
+**Issue:** `_finalize_subagent_result()` is never called in `runner.py:277-328`.
 
 **Fix Required:**
 1. Verify it's truly dead code
@@ -834,30 +880,18 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.9: Layer Violation Cleanup - tasks/pipeline.py - VERIFIED INTENTIONAL
+### TASK-4.10: Layer Violation Cleanup - tasks/extract.py **[LOW]**
 
-**Issue:** `tasks/pipeline.py` imports from `services.pipeline_degradation` and `services.pipeline_failure`.
-
-**Analysis:** Tasks layer IS allowed to import from services layer. This is not a layer violation. The architecture layers are:
-- Adapters → cannot import Services
-- Services → cannot import Adapters  
-- Tasks → can import Services (tasks are orchestrators that use business logic)
-
-**No Fix Required.** Document this in AGENTS.md if not already clear.
-
----
-
-### TASK-4.10: Layer Violation Cleanup - tasks/extract.py
-
-**Issue:** `tasks/extract.py` imports from `services.article` for deduplication logic.
+**Issue:** `tasks/extract.py:121` imports from `services.article` for deduplication logic.
 
 **Fix Required:**
 1. Verify if this is acceptable or needs refactor
 2. Move deduplication logic to avoid services import from tasks
+3. Note: Per AGENTS.md, tasks→services is allowed (tasks are orchestrators). This may not be a violation.
 
 ---
 
-### TASK-4.11: Services/Newsletter Pipeline Redis Access
+### TASK-4.11: Services/Newsletter Pipeline Redis Access **[LOW]**
 
 **Issue:** `services/newsletter_pipeline.py` directly accesses Redis instead of using limiter abstraction.
 
@@ -867,7 +901,7 @@ class SelectionResult(BaseModel):
 
 ---
 
-### TASK-4.12: Schema Imports Should Use TYPE_CHECKING
+### TASK-4.12: Schema Imports Should Use TYPE_CHECKING **[LOW]**
 
 **Issue:** Schema imports at top-level instead of TYPE_CHECKING pattern.
 
@@ -879,35 +913,82 @@ class SelectionResult(BaseModel):
 
 ## Wave Organization for Parallelization
 
-### Wave A: Bug Fixes (Independent)
-Can be done in parallel by multiple agents:
+### Wave A: Bug Fixes (Can run in parallel)
+Each bug is independent - multiple agents can work on different bugs simultaneously.
 
-| Bug | Location | Dependencies |
-|-----|----------|--------------|
-| BUG-1.1 | tasks/newsletter.py:430 | None |
-| BUG-1.2 | tasks/newsletter.py | None |
-| BUG-1.3 | pipeline_utils.py | None |
-| BUG-1.4 | tasks/pipeline.py | None |
-| BUG-1.5 | tasks/pipeline.py:436 | None |
-| BUG-1.6 | tasks/pipeline.py:269 | None |
-| BUG-1.7 | adapters/web.py | None |
-| BUG-1.8 | adapters/web.py | None |
-| BUG-1.9 | adapters/web.py | None |
-| BUG-1.10 | app.py | None |
-| BUG-1.11 | routes/api_tokens.py | None |
-| BUG-1.12 | services/newsletter_pipeline.py:122-124 | None |
-| BUG-1.13 | services/llm/__init__.py:11-12 | None |
+| Bug | Location | Issue | Verification Status |
+|-----|----------|-------|---------------------|
+| BUG-1.1 | tasks/newsletter.py:430 | idempotency_key NameError | CONFIRMED |
+| BUG-1.3 | constants.py:49-58 | VALID_TRANSITIONS missing selecting/selected | CONFIRMED |
+| BUG-1.5 | tasks/pipeline.py:436 | Limiter model mismatch after fallback | CONFIRMED |
+| BUG-1.6 | tasks/pipeline.py:269 | provider_id may be None in exception | CODE CHECK |
+| BUG-1.7 | adapters/session.py:41 | SSRF redirect counter reset bug | CONFIRMED |
+| BUG-1.8 | adapters/web.py:221 | Date parsing silently returns None | CONFIRMED |
+| BUG-1.9 | adapters/web.py:119 | ImportError caught too broadly | CONFIRMED |
+| BUG-1.10 | app.py | api_tokens_bp not registered | CONFIRMED |
+| BUG-1.11 | routes/admin/__init__.py:72 | Token auth redirects to HTML | CONFIRMED |
+| BUG-1.13 | services/llm/__init__.py:11-12 | Duplicate import | CONFIRMED |
 
-### Wave B: Documentation Fixes (Some Sequential)
-- 2.1-2.11: Documentation alignment (can parallelize by doc file)
-- 2.12-2.23: Implementation/documentation fixes
+### Wave B: Documentation Fixes - Group 1 (Schemas)
+Can parallelize by schema file:
 
-### Wave C: Feature Completions (Independent)
-- 2.14, 2.15, 2.16: Decision items (implement or remove)
-- 2.18, 2.19: Adapter updates
+| Task | Location | Issue |
+|------|----------|-------|
+| TASK-2.3 | architecture/schemas.md vs pipeline.py:127-137 | MemoryConfig 0% match |
+| TASK-2.4 | architecture/schemas.md vs pipeline.py:51-56 | NewsletterConfig wrong |
+| TASK-2.5 | SourceConfig adapter_config | Wrong type |
+| TASK-2.6 | PipelineRootConfig | Missing version field |
+| TASK-2.8 | SelectionResult confidence | Should be Literal type |
+| TASK-2.9 | RelatedArticle/ExternalSource | Wrong field names |
 
-### Wave D: Cleanup (Independent)
-- 4.1-4.12: Can parallelize
+### Wave C: Documentation Fixes - Group 2 (Routes & Architecture)
+| Task | Location | Issue |
+|------|----------|-------|
+| TASK-2.2 | architecture/routes.md | Missing endpoints |
+| TASK-2.7 | SelectionResult impact_summary | Already correct - no action |
+| TASK-2.10 | DirectQuote field names | quote vs text |
+| TASK-2.11 | NewsletterArticle field names | headline vs title |
+| TASK-2.17 | Pipeline status values | Doc shows different values |
+| TASK-2.19 | WebAdapter docs | listing_url not start_urls |
+| TASK-2.20 | BaseLLMProvider interface | Doc doesn't match code |
+
+### Wave D: Implementation Fixes (Some decisions needed)
+| Task | Location | Issue | Decision |
+|------|----------|-------|----------|
+| TASK-2.12 | utils/url.py + services/url.py | URL validation duplication | Pick canonical |
+| TASK-2.14 | Source model | adapter_config field | Implement or remove |
+| TASK-2.15 | TrendMemory | GIN index for vector search | Implement or remove |
+| TASK-2.16 | AdminUser session | IP/User-Agent binding | Implement or document |
+| TASK-2.18 | API adapter | Pagination missing | Add or update docs |
+| TASK-2.21 | Limiter tracking | Uses wrong provider | Fix to use provider_id |
+| TASK-2.22 | Subagent tools | Tool mapping table outdated | Update docs |
+| TASK-2.23 | Chain config | YAML vs pipeline.yaml | Update docs |
+
+### Wave E: Medium Priority Documentation
+| Task | Location | Issue |
+|------|----------|-------|
+| TASK-3.1 | Stage vs Status naming | Clarify terminology |
+| TASK-3.2 | Stage flow | Doc shows different flow |
+| TASK-3.3 | Newsletter chord | group vs chord |
+| TASK-3.4-3.6 | Missing tasks | Document missing tasks |
+| TASK-3.7-3.11 | Blueprint, auth, naming | Document structure |
+| TASK-3.15-3.17 | Retry, degradation, routing | Document behavior |
+| TASK-3.18-3.21 | Diagrams, lock mechanism | Add documentation |
+
+### Wave F: Cleanup
+| Task | Location | Issue |
+|------|----------|-------|
+| TASK-4.1 | tests/utils/ | Add unit tests |
+| TASK-4.2 | utils/url.py __all__ | Clean exports |
+| TASK-4.3 | Adapter return types | Standardize |
+| TASK-4.4 | YAML config examples | Fix field names |
+| TASK-4.5 | Rate limiting | Document responsibility |
+| TASK-4.6 | Source health | Update docs |
+| TASK-4.7 | embed() method | Add or remove |
+| TASK-4.8 | _finalize_subagent_result | Dead code |
+| TASK-4.10 | tasks/extract.py | Verify if violation |
+| TASK-4.11 | newsletter_pipeline.py | Redis abstraction |
+| TASK-4.12 | Schema imports | TYPE_CHECKING pattern |
 
 ---
 
@@ -916,7 +997,7 @@ Can be done in parallel by multiple agents:
 ### Starting Point
 When picking up work from this plan:
 
-1. **Read the relevant bug/task section fully**
+1. **Read the relevant bug/task section fully** - each section has implementation details
 2. **Check the current state** in the codebase before implementing
 3. **Verify fix with tests** if applicable
 4. **Update this plan** with completion status and any new findings
@@ -934,13 +1015,27 @@ mypy module_path
 ```
 
 ### Key Files for Reference
-- `tasks/pipeline.py` - Pipeline orchestration, stage execution
-- `tasks/newsletter.py` - Newsletter generation, locking
-- `services/pipeline_utils.py` - Stage task mappings, VALID_TRANSITIONS
-- `adapters/` - RSS, API, Web adapter implementations
-- `services/subagent/` - Subagent system, tool registry
-- `schemas/` - Pydantic models for validation
+- `tasks/pipeline.py` - Pipeline orchestration, stage execution, limiter release
+- `tasks/newsletter.py` - Newsletter generation, locking, idempotency
+- `constants.py` - VALID_TRANSITIONS, PipelineStatus enum
+- `adapters/session.py` - SSRFSafeRedirectHandler
+- `adapters/web.py` - WebAdapter, date parsing, trafilatura
+- `routes/admin/__init__.py` - require_auth decorator
+- `routes/admin/api_tokens.py` - api_tokens_bp (not registered)
+- `services/llm/__init__.py` - Provider config, duplicate import
+- `schemas/pipeline.py` - Config schemas
 - `architecture/` - Architecture documentation
+
+### Wave Execution Recommendation
+For fastest execution, assign agents to waves as follows:
+- **Agent 1**: Wave A (all bug fixes - independent)
+- **Agent 2**: Wave B (schema documentation)
+- **Agent 3**: Wave C (routes/architecture docs)
+- **Agent 4**: Wave D (implementation fixes with decisions)
+- **Agent 5**: Wave E (medium priority docs)
+- **Agent 6**: Wave F (cleanup)
+
+Waves B-F can start as soon as Wave A bugs are understood, but some tasks depend on decisions (Wave D).
 
 ---
 
@@ -949,20 +1044,38 @@ mypy module_path
 | Item | Status | Completed Date | Notes |
 |------|--------|----------------|-------|
 | BUG-1.1 | PENDING | | |
-| BUG-1.2 | PENDING | | |
 | BUG-1.3 | PENDING | | |
-| BUG-1.4 | PENDING | | |
 | BUG-1.5 | PENDING | | |
-| BUG-1.6 | PENDING | | |
+| BUG-1.6 | PENDING | | Code may already handle correctly |
 | BUG-1.7 | PENDING | | |
 | BUG-1.8 | PENDING | | |
 | BUG-1.9 | PENDING | | |
 | BUG-1.10 | PENDING | | |
 | BUG-1.11 | PENDING | | |
-| BUG-1.12 | PENDING | | |
 | BUG-1.13 | PENDING | | |
-| TASK-2.1 | PENDING | | |
-| ... | ... | | |
+| TASK-2.2 | PENDING | | |
+| TASK-2.3 | PENDING | | |
+| TASK-2.4 | PENDING | | |
+| TASK-2.5 | PENDING | | |
+| TASK-2.6 | PENDING | | |
+| TASK-2.8 | PENDING | | |
+| TASK-2.9 | PENDING | | |
+| TASK-2.10 | PENDING | | |
+| TASK-2.11 | PENDING | | |
+| TASK-2.12 | PENDING | | |
+| TASK-2.13 | PENDING | | |
+| TASK-2.14 | PENDING | | Decision needed |
+| TASK-2.15 | PENDING | | Decision needed |
+| TASK-2.16 | PENDING | | Decision needed |
+| TASK-2.17 | PENDING | | |
+| TASK-2.18 | PENDING | | Decision needed |
+| TASK-2.19 | PENDING | | |
+| TASK-2.20 | PENDING | | |
+| TASK-2.21 | PENDING | | |
+| TASK-2.22 | PENDING | | |
+| TASK-2.23 | PENDING | | |
+| TASK-3.x | PENDING | | |
+| TASK-4.x | PENDING | | |
 
 ---
 

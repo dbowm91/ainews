@@ -72,6 +72,34 @@ Some tests fail due to MagicMock objects being JSON serialized - this is a test 
 ### Complex Type Errors
 Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
 
+## Architecture Review Findings (2026-05-12)
+
+### Bugs Fixed from Architecture Review
+
+The following bugs were identified and fixed during architecture review:
+
+| Bug | Module | Fix | Files Modified |
+|-----|--------|-----|----------------|
+| Missing `urlparse` import | routes | Added `from urllib.parse import urlparse` | `routes/admin/api/articles.py` |
+| `retry_stuck` missing SELECTING status | tasks | Added `PipelineStatus.SELECTING` to filter | `tasks/retry.py` |
+| Limiter slot leak on LLM fallback | services | Use `provider_id` from `get_provider_for_role()` not `stage_config.provider` | `services/newsletter_pipeline.py` |
+| Tool registry race condition | subagent | Added `_TOOL_REGISTRY_LOCK` threading lock | `services/subagent/registry.py` |
+| Executor never shutdown | subagent | Added `atexit.register(shutdown_executor)` | `services/subagent/config.py` |
+
+### Subagent System Thread Safety
+
+The subagent system uses module-level singletons that require thread-safe initialization:
+
+1. **Tool Registry**: `_TOOL_REGISTRY` dict with `_TOOL_REGISTRY_LOCK` for thread-safe initialization via `initialize_tool_registry()`
+2. **ThreadPoolExecutor**: `_subagent_executor` should be shutdown via `atexit.register(shutdown_executor)` on application exit
+
+### Limiter Pattern Verification
+
+When acquiring and releasing rate limiter slots:
+- Always use `provider_id` (the actual provider used, returned from `get_provider_for_role()` or `_try_stage_work()`) not `rc.provider` (the configured provider)
+- The configured provider may differ from actual provider when fallback occurs
+- This applies to both `limiter.acquire()` and `limiter.release()` calls
+
 ## Common Fix Patterns
 
 ### SSRF Protection Import

@@ -2,6 +2,8 @@
 
 This document outlines the review plan for architecture documentation modules.
 
+## Status: IN PROGRESS - Iterative Improvement
+
 ## Modules to Review
 
 | Module | Document | Assigned Subagent | Output Plan File |
@@ -117,3 +119,49 @@ Subagents will be launched in parallel for each module. Each subagent will:
 ## Verification
 
 After all subagents complete, review the plans in `plans/` directory and aggregate findings into a summary.
+
+---
+
+## Implementation Status (Iterative Improvement)
+
+This section tracks the status of improvements identified during architecture review.
+
+### Completed Fixes
+
+| Finding | Module | Fix Applied | Status |
+|---------|--------|-------------|--------|
+| Missing `urlparse` import | routes | Added `from urllib.parse import urlparse` to `routes/admin/api/articles.py` | ✅ Fixed |
+| `retry_stuck` missing SELECTING status | tasks | Added `PipelineStatus.SELECTING` to stuck article filter in `tasks/retry.py` | ✅ Fixed |
+| Limiter slot leak on fallback | services | Changed `stage_config.provider` to `provider_id` in `services/newsletter_pipeline.py:_run_pipeline_stage()` | ✅ Fixed |
+| Tool registry race condition | subagent | Added `_TOOL_REGISTRY_LOCK` threading lock in `services/subagent/registry.py` | ✅ Fixed |
+| Executor never shutdown | subagent | Added `atexit.register(shutdown_executor)` in `services/subagent/config.py` | ✅ Fixed |
+
+### Confirmed Already Fixed
+
+| Finding | Module | Verification |
+|---------|--------|--------------|
+| Limiter release uses correct provider_id | pipeline | `tasks/pipeline.py:run_stage()` already uses `provider_id` from `_run_stage_core()` return value | ✅ Verified |
+| SELECTING/SELECTED in VALID_TRANSITIONS | pipeline | `constants.py` already includes these statuses | ✅ Verified |
+| Newsletter idempotency_key scope | pipeline | `tasks/newsletter.py` already defines `idempotency_key` in correct scope | ✅ Verified |
+| SSRFSafeRedirectHandler redirect counter | adapters | Already fixed per AGENTS.md | ✅ Verified |
+
+### Known Issues (Not Fixed - By Design or Low Priority)
+
+| Issue | Module | Notes |
+|-------|--------|-------|
+| `utils/url.py` not pure | utils | Docstring claims pure but has global mutable state. Documented in AGENTS.md. |
+| URL validation duplication | services/utils | Duplication exists by design for config support. Documented in AGENTS.md. |
+| StageConfig is stub | schemas | Documented as stub, actual config via RoleConfig. |
+| `adapter_config` not implemented | models | Documented as not implemented in architecture. |
+
+### Documentation Discrepancies (To Update)
+
+| Document | Discrepancy | Priority |
+|----------|-------------|----------|
+| `schemas.md` | RSSConfig, APIConfig, WebConfig structures differ from actual code | Medium |
+| `schemas.md` | NewsletterBrief missing `preamble` and `footer` fields | Medium |
+| `schemas.md` | Task schemas differ significantly from documented | Medium |
+| `routes.md` | `api_tokens_bp` IS registered (doc says not) | Low |
+| `routes.md` | Missing several routes (health, topic-notes, etc.) | Low |
+| `pipeline.md` | Missing `WRITTEN` status documentation | Low |
+| `pipeline.md` | Missing `selecting` transition from pending | Low |

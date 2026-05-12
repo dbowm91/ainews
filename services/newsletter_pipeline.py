@@ -106,11 +106,11 @@ def _run_pipeline_stage(
     from services.llm import get_provider_for_role
 
     try:
-        provider, model, max_tokens, _ = get_provider_for_role(
+        provider, model, max_tokens, provider_id = get_provider_for_role(
             f"newsletter_pipeline.{role}",
         )
         if limiter.acquire(
-            stage_config.provider,
+            provider_id,
             model,
             stage_config.concurrency,
             stage_config.timeout_seconds,
@@ -120,7 +120,7 @@ def _run_pipeline_stage(
                 return result, True
             finally:
                 limiter.release(
-                    stage_config.provider, model, stage_config.timeout_seconds,
+                    provider_id, model, stage_config.timeout_seconds,
                 )
         else:
             metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})

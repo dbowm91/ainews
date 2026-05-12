@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import os
 from concurrent.futures import ThreadPoolExecutor
 
@@ -8,6 +9,16 @@ from services.llm import get_provider_for_role
 
 SUBAGENT_WORKERS = int(os.environ.get("SUBAGENT_WORKERS", "8"))
 _subagent_executor = ThreadPoolExecutor(max_workers=SUBAGENT_WORKERS, thread_name_prefix="subagent")
+
+
+def shutdown_executor():
+    """Shutdown the subagent executor gracefully."""
+    global _subagent_executor
+    if _subagent_executor:
+        _subagent_executor.shutdown(wait=False, cancel_futures=True)
+
+
+atexit.register(shutdown_executor)
 
 
 def _get_subagent_provider_and_config(

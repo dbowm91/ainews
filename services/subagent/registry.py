@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import threading
 from typing import Any
 
 from services.llm.base import ToolDefinition
@@ -12,6 +13,7 @@ from .tools import _build_context_tools, _build_search_tools
 logger = logging.getLogger(__name__)
 
 _TOOL_REGISTRY: dict[str, ToolDefinition] = {}
+_TOOL_REGISTRY_LOCK = threading.Lock()
 
 
 def register_tool(definition: ToolDefinition) -> None:
@@ -54,9 +56,10 @@ def initialize_tool_registry(
 
     all_tools = _get_all_tools_cached()
 
-    if not _TOOL_REGISTRY:
-        for tool in all_tools:
-            register_tool(tool)
+    with _TOOL_REGISTRY_LOCK:
+        if not _TOOL_REGISTRY:
+            for tool in all_tools:
+                register_tool(tool)
 
     if selector is not None:
         return selector.select_tools(all_tools, context)

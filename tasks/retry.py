@@ -119,10 +119,11 @@ def retry_stuck(self):
             Article.query.filter(
                 Article.pipeline_status.in_(
                     [
+                        PipelineStatus.PENDING,
+                        PipelineStatus.SELECTING,
                         PipelineStatus.RESEARCHING,
                         PipelineStatus.WRITING,
                         PipelineStatus.EDITING,
-                        PipelineStatus.PENDING,
                     ],
                 ),
                 Article.updated_at < soft_cutoff,

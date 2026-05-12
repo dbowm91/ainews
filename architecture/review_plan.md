@@ -6,7 +6,6 @@ This document outlines the review plan for architecture documentation modules.
 
 | Module | Document | Assigned Subagent | Output Plan File |
 |--------|----------|-------------------|------------------|
-| Overview | `overview.md` | - | - |
 | Models | `models.md` | `models-reviewer` | `plans/models_review.md` |
 | Adapters | `adapters.md` | `adapters-reviewer` | `plans/adapters_review.md` |
 | Services | `services.md` | `services-reviewer` | `plans/services_review.md` |
@@ -56,17 +55,20 @@ Each subagent should produce a plan with these sections:
 
 ### 1. Models (`models.md`)
 - **Focus**: Verify model relationships, field names, indexes, security implementation
-- **Known Issues**: `TrendMemory.embedding` is Text not vector; `Source.adapter_config` never implemented
+- **Key Files**: `models/article.py`, `models/source.py`, `models/newsletter.py`, `models/pipeline.py`, `models/context.py`, `models/auth.py`
+- **Known Issues from AGENTS.md**: `TrendMemory.embedding` is Text not vector; `Source.adapter_config` documented but never implemented; `Source.type` is actually `source_type`; `Source.last_fetch_at` is actually `last_crawled`; `Article.finalized_at` doesn't exist - use `published_at`; `TrendMemory.observation` is actually `signal`
 - **Output**: `plans/models_review.md`
 
 ### 2. Adapters (`adapters.md`)
 - **Focus**: Verify adapter pattern, SSRF protection, error handling, registry mechanism
 - **Key Files**: `adapters/base.py`, `adapters/rss.py`, `adapters/api.py`, `adapters/web.py`, `adapters/session.py`
+- **Known Issues from AGENTS.md**: URL validation duplication between `utils/url.py` and `services/url.py`; SSRFSafeRedirectHandler redirect counter bug (fixed but verify); trafilatura ImportError handling
 - **Output**: `plans/adapters_review.md`
 
 ### 3. Services (`services.md`)
 - **Focus**: Verify clean layering (no adapter imports), LLM provider system, circuit breaker, rate limiter
 - **Key Files**: `services/*.py` (excluding subagent/)
+- **Known Issues from AGENTS.md**: Rate limiter must release slots in `finally` block; `provider_id` vs `rc.provider` model mismatch (fixed but verify)
 - **Output**: `plans/services_review.md`
 
 ### 4. Schemas (`schemas.md`)
@@ -77,11 +79,13 @@ Each subagent should produce a plan with these sections:
 ### 5. Utils (`utils.md`)
 - **Focus**: Verify pure functions, minimal dependencies, SSRF protection in utils/url.py
 - **Key Files**: `utils/*.py`
+- **Known Issues from AGENTS.md**: `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`) despite docstring claims of pure functions
 - **Output**: `plans/utils_review.md`
 
 ### 6. Pipeline (`pipeline.md`)
 - **Focus**: Verify stage transitions, degradation behavior, monitoring, failure handling
 - **Key Files**: `services/newsletter_pipeline.py`, pipeline stages in `tasks/`
+- **Known Issues from AGENTS.md**: `VALID_TRANSITIONS` missing `selecting` and `selected` statuses (fixed but verify); Newsletter `idempotency_key` bug (fixed but verify)
 - **Output**: `plans/pipeline_review.md`
 
 ### 7. Tasks (`tasks.md`)
@@ -92,13 +96,24 @@ Each subagent should produce a plan with these sections:
 ### 8. Routes (`routes.md`)
 - **Focus**: Verify endpoints, security (TOTP, session binding, CSRF), rate limiting
 - **Key Files**: `routes/admin/`, `routes/public/`
+- **Known Issues from AGENTS.md**: `api_tokens_bp` auth redirect bug (fixed but verify)
 - **Output**: `plans/routes_review.md`
 
 ### 9. Subagent (`subagent.md`)
 - **Focus**: Verify tool registry, chain system, middleware, runner implementation
 - **Key Files**: `services/subagent/*.py`
+- **Known Issues from AGENTS.md**: Subagent is at `services/subagent/` not top-level `subagent/`
 - **Output**: `plans/subagent_review.md`
 
 ## Execution
 
-Subagents will be launched in parallel after this plan is committed.
+Subagents will be launched in parallel for each module. Each subagent will:
+1. Read the architecture document for their module
+2. Explore the corresponding code files
+3. Verify claims against implementation
+4. Document discrepancies, bugs, and improvement recommendations
+5. Write the improvement plan to the designated output file
+
+## Verification
+
+After all subagents complete, review the plans in `plans/` directory and aggregate findings into a summary.

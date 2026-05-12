@@ -59,17 +59,19 @@ ainews is an autonomous AI-powered tech news aggregation and newsletter system. 
 
 ## Module Index
 
-| Module | Description | Deep Dive |
-|--------|-------------|-----------|
-| [Models](models.md) | SQLAlchemy database models for all entities | [models.md](models.md) |
-| [Services](services.md) | Business logic, LLM providers, pipeline orchestration | [services.md](services.md) |
-| [Adapters](adapters.md) | Source fetchers (RSS, API, Web) following adapter pattern | [adapters.md](adapters.md) |
-| [Routes](routes.md) | Flask blueprints for public and admin interfaces | [routes.md](routes.md) |
-| [Tasks](tasks.md) | Celery tasks implementing the newsletter pipeline | [tasks.md](tasks.md) |
-| [Schemas](schemas.md) | Pydantic validation models for configuration and responses | [schemas.md](schemas.md) |
-| [Utils](utils.md) | Pure utility functions with minimal dependencies | [utils.md](utils.md) |
-| [Subagent](subagent.md) | Tool-enabled LLM agents for contextualization | [subagent.md](subagent.md) |
-| [Pipeline](pipeline.md) | Newsletter generation and article processing flow | [pipeline.md](pipeline.md) |
+This document provides a **birds-eye view** of the system. For detailed reviews of each module, see the corresponding deep-dive documents:
+
+| Module | Description | Deep Dive | Review Plan |
+|--------|-------------|-----------|-------------|
+| [Models](models.md) | SQLAlchemy database models for all entities | [models.md](models.md) | [models_review.md](../plans/models_review.md) |
+| [Services](services.md) | Business logic, LLM providers, pipeline orchestration | [services.md](services.md) | [services_review.md](../plans/services_review.md) |
+| [Adapters](adapters.md) | Source fetchers (RSS, API, Web) following adapter pattern | [adapters.md](adapters.md) | [adapters_review.md](../plans/adapters_review.md) |
+| [Routes](routes.md) | Flask blueprints for public and admin interfaces | [routes.md](routes.md) | [routes_review.md](../plans/routes_review.md) |
+| [Tasks](tasks.md) | Celery tasks implementing the newsletter pipeline | [tasks.md](tasks.md) | [tasks_review.md](../plans/tasks_review.md) |
+| [Schemas](schemas.md) | Pydantic validation models for configuration and responses | [schemas.md](schemas.md) | [schemas_review.md](../plans/schemas_review.md) |
+| [Utils](utils.md) | Pure utility functions with minimal dependencies | [utils.md](utils.md) | [utils_review.md](../plans/utils_review.md) |
+| [Subagent](subagent.md) | Tool-enabled LLM agents for contextualization | [subagent.md](subagent.md) | [subagent_review.md](../plans/subagent_review.md) |
+| [Pipeline](pipeline.md) | Newsletter generation and article processing flow | [pipeline.md](pipeline.md) | [pipeline_review.md](../plans/pipeline_review.md) |
 
 ## Data Flow Summary
 
@@ -188,34 +190,42 @@ ainews/
 ├── pipeline.yaml           # Pipeline stage configuration
 ├── providers.yaml          # LLM/search provider definitions (14 providers)
 ├── sources.yaml            # News source definitions
+├── topics.yaml             # Topic definitions for article classification
 ├── models/                 # SQLAlchemy models
 ├── services/               # Business logic (NO adapter imports)
 │   ├── subagent/            # Tool-enabled LLM agents (NOT at top level)
-│   └── llm/                 # LLM provider implementations
+│   ├── llm/                 # LLM provider implementations
+│   └── search/              # Search provider implementations
 ├── adapters/               # Source adapters (NO service imports)
 ├── routes/                 # Flask blueprints
+│   ├── admin/              # Admin interface + API
+│   └── public/             # Public-facing routes
 ├── tasks/                  # Celery tasks
 ├── schemas/                # Pydantic models
 ├── utils/                  # Pure utilities
 ├── prompts/                # LLM prompt templates
+├── scripts/                # Utility scripts
+├── templates/               # Jinja templates
 └── tests/                  # Test suite
 ```
-ainews/
-├── app.py                  # Flask application factory
-├── config.py               # Configuration classes
-├── extensions.py           # Flask extensions (db, limiter, redis)
-├── constants.py            # Pipeline status values, shared constants
-├── celery_app.py           # Celery application setup
-├── pipeline.yaml           # Pipeline stage configuration
-├── providers.yaml          # LLM/search provider definitions
-├── sources.yaml            # News source definitions
-├── models/                 # SQLAlchemy models
-├── services/               # Business logic (NO adapter imports)
-├── adapters/               # Source adapters (NO service imports)
-├── routes/                 # Flask blueprints
-├── tasks/                  # Celery tasks
-├── schemas/                # Pydantic models
-├── utils/                  # Pure utilities
-├── prompts/                # LLM prompt templates
-└── tests/                  # Test suite
-```
+
+## Review Plan
+
+Each module has a corresponding deep-dive review plan in the [`plans/`](../plans/) directory:
+
+- [Models Review Plan](../plans/models_review.md) - Database schema, relationships, indexes
+- [Adapters Review Plan](../plans/adapters_review.md) - Source fetching, SSRF protection, error handling
+- [Services Review Plan](../plans/services_review.md) - Business logic, LLM providers, circuit breakers
+- [Routes Review Plan](../plans/routes_review.md) - Endpoints, security, authentication
+- [Tasks Review Plan](../plans/tasks_review.md) - Celery tasks, stage transitions, rate limiting
+- [Schemas Review Plan](../plans/schemas_review.md) - Pydantic models, validation
+- [Utils Review Plan](../plans/utils_review.md) - Pure utilities, URL validation, security
+- [Subagent Review Plan](../plans/subagent_review.md) - Tool registry, chain system, runner
+- [Pipeline Review Plan](../plans/pipeline_review.md) - Newsletter generation, degradation
+
+Each review plan documents:
+- **Verified Claims**: Architecture claims confirmed by code
+- **Discrepancies**: Claims that don't match implementation
+- **Improvement Recommendations**: Specific improvements with priority
+- **Bugs Found**: Edge cases, race conditions, layer violations
+- **Layer Violations**: Clean layering violations (adapters importing services, etc.)

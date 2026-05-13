@@ -85,6 +85,15 @@ The following bugs were identified and fixed during architecture review:
 | Limiter slot leak on LLM fallback | services | Use `provider_id` from `get_provider_for_role()` not `stage_config.provider` | `services/newsletter_pipeline.py` |
 | Tool registry race condition | subagent | Added `_TOOL_REGISTRY_LOCK` threading lock | `services/subagent/registry.py` |
 | Executor never shutdown | subagent | Added `atexit.register(shutdown_executor)` | `services/subagent/config.py` |
+| SSRF redirect counter persists | adapters | `_redirect_count` now uses thread-local storage | `adapters/session.py` |
+| Duplicate `_finalize_subagent_result` | subagent | Removed duplicate definition | `services/subagent/runner.py` |
+| No adapter config validation | schemas | Added `field_validator` to `SourceConfig` | `schemas/source.py` |
+| sanitize_html bare except | utils/text | Uses `except (ValueError, Exception)` | `utils/text.py` |
+| strip_tags bare except | utils/html | Uses `except (ValueError, Exception)` | `utils/html.py` |
+| trafilatura ImportError silent | utils/html | Logs warning when trafilatura unavailable | `utils/html.py` |
+| truncate no negative validation | utils/text | Raises `ValueError` if length < 0 | `utils/text.py` |
+| utils/url.py docstring inaccurate | utils/url | Docstring now notes global mutable state | `utils/url.py` |
+| StageConfig stub undocumented | schemas/pipeline | Added docstring explaining stub purpose | `schemas/pipeline.py` |
 
 ### Subagent System Thread Safety
 

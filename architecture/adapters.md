@@ -86,7 +86,7 @@ class APIAdapter(BaseSourceAdapter):
 
 Features:
 - JSONPath field extraction (`$.items[*]`, `$.data[*].title`)
-- Pagination support (cursor, offset, page-based)
+- Pagination via `item_url` template + `list_items_path` for response data extraction
 - Auth header injection (Bearer token, API key)
 - Field mapping configuration
 
@@ -173,5 +173,5 @@ All adapters implement consistent error handling:
 
 1. **Network errors**: Log and return empty list
 2. **Parse errors**: Log and skip invalid items
-3. **Rate limiting**: Respect `Retry-After` headers
-4. **Source health**: Update `Source.consecutive_failures/successes`
+3. **Rate limiting**: Fixed exponential backoff (2^attempt * 5 + jitter), NOT reading Retry-After header
+4. **Source health**: Adapters do NOT update `Source.consecutive_failures/successes` — this is handled by `services/crawling.py` after adapter returns

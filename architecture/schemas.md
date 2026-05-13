@@ -184,12 +184,11 @@ class ExecutiveSummary(BaseModel):
 
 ```python
 class NewsletterBrief(BaseModel):
-    themes: list[str]                        # Note: list[str] not str
-    highlights: list[str]
-    connections: list[str]                    # Note: list[str] not str
-    preamble: str
-    articles: list[NewsletterArticle]
-    footer: str | None = None
+    themes: list[str]                        # Major themes across selected articles
+    highlights: list[str]                    # Most notable individual stories
+    connections: list[str]                    # Patterns connecting multiple articles
+    # Note: actual model does NOT have preamble, footer, or articles fields
+    # These were in older documentation but are not implemented
 
 class NewsletterArticle(BaseModel):
     headline: str = Field(description="Article headline within the newsletter")
@@ -202,24 +201,28 @@ class NewsletterArticle(BaseModel):
 
 ```python
 class SelectArticleTask(BaseModel):
-    article_id: int = Field(..., ge=1)
+    article_id: int = Field(..., gt=0, description="Article database ID")
+    run_id: Optional[int] = Field(default=None, ge=0, description="Pipeline run ID")
 
 class ProcessItemTask(BaseModel):
-    source_id: int
-    item_data: dict
-    topics: list[str] = Field(default_factory=list)
+    # Fields: source_key, source_name, source_type, external_id, title, url,
+    # author, published_at, text_content, raw_score, raw_metadata, topics,
+    # min_content_length, run_id
+    # Note: actual implementation differs from older documentation
 
 class GenerateNewsletterTask(BaseModel):
-    date: Optional[date] = None
-    email: Optional[str] = None
+    dry_run_email: Optional[str] = None
+    run_id: Optional[int] = None
 
 class SendEmailTask(BaseModel):
-    email: str = Field(..., pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-    subject: str
-    body: str
+    email: str = Field(..., description="Recipient email address")
+    subject: str = Field(..., min_length=1, max_length=500, description="Email subject")
+    html: str = Field(..., min_length=1, description="Email HTML body")
+    unsub_url: str = Field(..., min_length=1, description="Unsubscribe URL")
 
 class CleanupArticleVersionsTask(BaseModel):
-    days: int = Field(1, ge=1, le=365)
+    days_to_keep: int = Field(default=90, ge=1, le=365, description="Days of versions to retain")
+    dry_run: bool = Field(default=False, description="Preview without deleting")
 ```
 
 ## Usage Patterns

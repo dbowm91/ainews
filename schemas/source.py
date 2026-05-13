@@ -120,6 +120,15 @@ class SourceConfig(BaseModel):
             )
         return v
 
+    @field_validator("config")
+    @classmethod
+    def validate_adapter_config(cls, v, info):
+        source_type = info.data.get("type")
+        if source_type in ADAPTER_CONFIGS:
+            adapter_config = ADAPTER_CONFIGS[source_type]
+            return adapter_config.model_validate(v).model_dump()
+        return v
+
 
 def _load_sources_from_file(path: Path) -> list[SourceConfig]:
     if not path.exists():

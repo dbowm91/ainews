@@ -10,17 +10,29 @@ from utils.url import UnsafeURLError, validate_url_safe
 _CRAWL_SESSION: requests.Session | None = None
 _CRAWL_SESSION_LOCK = threading.Lock()
 
+_thread_local = threading.local()
+
 
 class SSRFSafeRedirectHandler:
     """Custom redirect handler that validates target URLs against SSRF protection.
 
     Prevents following redirects to private/reserved IPs by re-validating
     each redirect target before following it.
+
+    Uses thread-local storage for redirect counter to ensure counter is
+    scoped per-request, not across all requests in the session.
     """
 
     def __init__(self) -> None:
         self._max_redirects = 30
-        self._redirect_count = 0
+
+    @property
+    def _redirect_count(self) -> int:
+        return getattr(_thread_local, 'redirect_count', 0)
+
+    @_redirect_count.setter
+    def _redirect_count(self, value: int) -> None:
+        _thread_local.redirect_count = value
 
     def __call__(self, request: requests.Request, response: requests.Response, **kwargs) -> requests.PreparedRequest | None:
         if response.is_redirect:

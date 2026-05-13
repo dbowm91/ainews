@@ -52,6 +52,8 @@ def escape_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
 
 def truncate(text: str, length: int, suffix: str = "...") -> str:
     """Truncate text to length, breaking on word boundaries."""
+    if length < 0:
+        raise ValueError("length must be non-negative")
     if not text:
         return ""
     if len(text) <= length:
@@ -99,7 +101,9 @@ def sanitize_html(html: str) -> str:
     parser = _TagStripper()
     try:
         parser.feed(html)
-    except Exception:  # noqa: BLE001 - return original on any parse error
+    except ValueError:
+        return html
+    except Exception:  # noqa: BLE001 - return original on any other parse error
         return html
     return "".join(parser.result)
 

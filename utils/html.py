@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from html.parser import HTMLParser
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["strip_tags", "linkify", "extract_text"]
 
@@ -38,7 +41,9 @@ def strip_tags(html: str) -> str:
     parser = _HTMLTextExtractor()
     try:
         parser.feed(html)
-    except Exception:  # noqa: BLE001 - fallback to regex strip on parse error
+    except ValueError:
+        return re.sub(r"<[^>]+>", "", html)
+    except Exception:  # noqa: BLE001 - fallback to regex strip on any other error
         return re.sub(r"<[^>]+>", "", html)
     text = "".join(parser.result)
     return re.sub(r"\s+", " ", text).strip()
@@ -65,6 +70,6 @@ def extract_text(html: str) -> str:
         if downloaded:
             return downloaded.strip()
     except ImportError:
-        pass
+        logger.warning("trafilatura not available, using fallback text extraction")
 
     return text

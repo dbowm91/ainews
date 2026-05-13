@@ -21,10 +21,15 @@
 - **SubagentStageConfig vs StageConfig:** The actual stage configuration class is `SubagentStageConfig` in `schemas/pipeline.py`, NOT `StageConfig` which is an empty stub with only `tools` field.
 - **DeepSeek Provider:** Not implemented. References in `cost_tracker.py` and documentation have been removed.
 
+## Subagent Notes
+- **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls. The architecture doc suggesting multi-step message injection is outdated.
+- **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
+- **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
+
 ## Utils Notes
-- **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags` - these functions all exist.
+- **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. Note: `truncate()` does not validate negative length.
 - **utils/datetime.py:** Contains `parse_date`, `format_date`, `time_ago` (alias for format_date).
 - **utils/security.py:** Contains `generate_token` (using `secrets.token_urlsafe`), `constant_time_compare` (using `hmac.compare_digest`).
 - **utils/hash.py:** Contains `generate_hash`, `verify_hash`.
-- **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`.
-- **Duplicate Import:** `services/llm/__init__.py` imports `load_providers_config` twice (lines 11-12). The first import is immediately shadowed.
+- **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`. Note: `strip_tags` fallback uses bare `except Exception` with noqa: BLE001.
+- **utils/url.py:** Contains global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Do not assume pure function behavior.

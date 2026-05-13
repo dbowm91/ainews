@@ -26,37 +26,46 @@ This document provides instructions and context for agents working on the AI New
 
 ## Known Issues & Gotchas
 
-*   **Database Setup:** Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
-*   **Limiter Slots:** The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function resolves provider/model before acquiring limiter resources, ensuring correct release on early return. Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing.
-*   **Limiter Model Mismatch:** FIXED - The `model` returned by `_run_stage_core` is now the actual model used (returned from `_try_stage_work`). Use `provider_id` from `_try_stage_work` - the model is now correct.
-*   **SSRFSafeRedirectHandler Bug:** FIXED - The redirect counter in `adapters/session.py` is no longer reset after each successful redirect validation. The counter now correctly accumulates across the redirect chain.
-*   **WebAdapter Date Parsing:** FIXED - `_parse_date()` now logs a warning when date parsing fails.
-*   **WebAdapter trafilatura ImportError:** FIXED - The exception handling is now split: `ImportError` for missing trafilatura, `(ValueError, AttributeError)` re-logged and re-raised for unexpected errors.
-*   **URL Validation Duplication:** `utils/url.py` and `services/url.py` have duplicate SSRF protection implementations. `services/url.py` does NOT re-export from `utils/url.py` - it redefines everything locally with its own config support. Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
-*   **utils/url.py Not Pure:** Despite docstring claims, `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Don't assume pure function behavior.
-*   **api_tokens_bp Not Registered:** FIXED - The `api_tokens_bp` blueprint is now registered in `app.py`.
-*   **Duplicate Import:** FIXED - `services/llm/__init__.py` removed duplicate import of `load_providers_config`.
-*   **VALID_TRANSITIONS Missing Statuses:** FIXED - `constants.py` now includes `selecting` and `selected` in `VALID_TRANSITIONS`. Added `SELECTING`, `SELECTED`, `WRITTEN` to `PipelineStatus` class.
-*   **Context Window:** LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
-*   **Linting:** We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
-*   **Mypy:** Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
-*   **2FA Backup Codes:** Admin users with 2FA enabled have 8 backup codes stored as JSON. Use `verify_backup_code()` and `consume_backup_code()` from `services/totp.py`.
-*   **MagicMock in Tests:** Some pipeline tests fail due to MagicMock objects being JSON serialized - this is a test infrastructure issue, not a code bug.
-*   **PipelineLog meta field:** The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
-*   **Article API:** Individual article CRUD endpoints exist at `/admin/api/articles/<id>` with GET, PUT, DELETE methods. Pipeline trigger at `/admin/api/articles/<id>/pipeline` with POST.
-*   **Source Refresh:** Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
-*   **Newsletter Associations:** `newsletter_articles` and `newsletter_subscribers` association tables exist in `models/newsletter.py` with many-to-many relationships.
-*   **URL Validation Layering:** SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Adapters import from `utils/url.py` for clean layering. `services/url.py` has duplicate implementations and should not be imported by adapters.
-*   **Newsletter Idempotency Key Bug:** FIXED - The `idempotency_key` is now defined in `_generate_daily_newsletters_core()` scope before use.
-*   **api_tokens_bp Auth Redirect:** FIXED - The `require_auth` decorator now returns JSON 401 for `/api*` routes when no Authorization header is present.
-*   **Tool Registry Race Condition:** FIXED - `services/subagent/registry.py` now uses `_TOOL_REGISTRY_LOCK` to prevent race conditions during tool registration initialization.
-*   **Subagent Executor Shutdown:** FIXED - `services/subagent/config.py` now registers an `atexit` handler to properly shutdown the `_subagent_executor` ThreadPoolExecutor.
-*   **Limiter Slot Leak in newsletter_pipeline:** FIXED - `_run_pipeline_stage()` in `services/newsletter_pipeline.py` now uses `provider_id` from `get_provider_for_role()` for both `limiter.acquire()` and `limiter.release()` calls.
-*   **StageConfig:** The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
-*   **Utils Modules:** The following utils modules now exist: `utils/text.py` (XML escaping + truncate/sanitize_html/extract_hashtags), `utils/datetime.py` (parse_date/format_date/time_ago), `utils/security.py` (generate_token/constant_time_compare), `utils/hash.py` (generate_hash/verify_hash), `utils/html.py` (strip_tags/linkify/extract_text).
-*   **API Endpoint Paths:** Admin API endpoints are at `/api/v1/` prefix (e.g., `/api/v1/articles`, `/api/v1/sources`). The `admin_api_bp` blueprint is registered with `url_prefix="/api/v1"`. The `admin_bp` provides HTML pages at `/admin`. Public routes are at root level.
-*   **Subagent Location:** The subagent module is at `services/subagent/` not top-level `subagent/`.
-*   **Tasks→Services Layer:** Tasks layer IS allowed to import from services layer. This is not a layer violation - tasks are orchestrators that use business logic. The layer restriction is: Adapters cannot import from Services.
+### Database Setup
+Always ensure `import models` happens before `db.create_all()` in the app context to ensure all tables are created.
+
+### Rate Limiter Pattern
+The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function resolves provider/model before acquiring limiter resources, ensuring correct release on early return.
+- Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing
+- `_try_stage_work` returns the actual model used after fallback
+
+### URL Validation Layering
+SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Adapters import from `utils/url.py` for clean layering. `services/url.py` has duplicate implementations and should not be imported by adapters.
+
+### URL Validation Duplication
+`utils/url.py` and `services/url.py` have duplicate SSRF protection implementations. `services/url.py` does NOT re-export from `utils/url.py` - it redefines everything locally with its own config support. Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
+
+### utils/url.py Not Pure
+Despite docstring claims, `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Don't assume pure function behavior. `validate_url_safe()` performs actual DNS resolution with caching.
+
+### Context Window
+LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.
+
+### Linting
+We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
+
+### Mypy
+Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
+
+### 2FA Backup Codes
+Admin users with 2FA enabled have 8 backup codes stored as JSON. Use `verify_backup_code()` and `consume_backup_code()` from `services/totp.py`.
+
+### MagicMock in Tests
+Some pipeline tests fail due to MagicMock objects being JSON serialized - this is a test infrastructure issue, not a code bug. When patching functions, patch where they're looked up at runtime, not where they're defined.
+
+### PipelineLog meta field
+The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
+
+### Newsletter Associations
+`newsletter_articles` and `newsletter_subscribers` association tables exist in `models/newsletter.py` with many-to-many relationships.
+
+### Tasks→Services Layer
+Tasks layer IS allowed to import from services layer. This is not a layer violation - tasks are orchestrators that use business logic. The layer restriction is: Adapters cannot import from Services.
 
 ## Architecture Conventions
 
@@ -101,6 +110,37 @@ Key scheduled tasks:
 - `consolidate-trend-memory`: Daily at 3:30 AM
 - `purge-trend-memory`: Daily at 3:45 AM
 - `cleanup-old-versions`: Daily at 3:45 AM
+
+## API Reference
+
+### Admin API Endpoints
+Admin API endpoints are at `/api/v1/` prefix (e.g., `/api/v1/articles`, `/api/v1/sources`). The `admin_api_bp` blueprint is registered with `url_prefix="/api/v1"`. The `admin_bp` provides HTML pages at `/admin`. Public routes are at root level.
+
+### Article API
+Individual article CRUD endpoints exist at `/admin/api/articles/<id>` with GET, PUT, DELETE methods. Pipeline trigger at `/admin/api/articles/<id>/pipeline` with POST.
+
+### Source Refresh
+Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
+
+## Design Notes for Future Agents
+
+### SSRFSafeRedirectHandler Session Scope
+The `SSRFSafeRedirectHandler` in `adapters/session.py` is session-scoped (shared singleton). The `_redirect_count` persists across requests and is BY DESIGN - it tracks total redirects in a crawling session, not per-request. The counter only resets in `__init__`, not after each successful redirect validation.
+
+### Subagent Tool Execution
+The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
+
+### StageConfig is a Stub
+The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
+
+### ToolDefinition Schema
+The actual `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, and `fn`. It does NOT have a `cached` field as some documentation suggests. The architecture documentation may be outdated.
+
+### RSSAdapter Session Independence
+`RSSAdapter` creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`, while `APIAdapter` and `WebAdapter` share the global session from `get_crawl_session()`. This is BY DESIGN - different adapter types have different session management requirements.
+
+### Adapter Config Validation
+`SourceConfig.config` in `schemas/source.py` is typed as `dict[str, Any]` with no adapter-specific validation. An RSS source with API-config fields will pass validation silently and fail at runtime. Consider adding field validation if strict config typing is needed.
 
 ## Shared Context
 

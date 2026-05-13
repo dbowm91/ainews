@@ -125,32 +125,32 @@ Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST me
 
 ## Design Notes for Future Agents
 
-### SSRFSafeRedirectHandler Session Scope (BUG - CRIT-1)
-The `SSRFSafeRedirectHandler` in `adapters/session.py` is session-scoped (shared singleton). The `_redirect_count` persists across requests. After 30 total redirects (not per-request), subsequent redirects will incorrectly fail with `TooManyRedirects`. This is a BUG - see `plans/plan.md` CRIT-1.
+### SSRFSafeRedirectHandler Counter (FIXED - CRIT-1)
+The `SSRFSafeRedirectHandler` in `adapters/session.py` now uses thread-local storage for `_redirect_count`, so the counter resets per-request. Previously it persisted across ALL requests (shared singleton), causing failures after 30 total redirects.
 
 ### Subagent Tool Execution
 The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
 
-### Duplicate Function Definition in subagent/runner.py (BUG - CRIT-2)
-The function `_finalize_subagent_result()` is defined TWICE in `services/subagent/runner.py` - at lines 277-328 and 498-501. This is dead code - one definition should be removed.
+### Duplicate Function Definition in subagent/runner.py (FIXED - CRIT-2)
+The duplicate `_finalize_subagent_result()` definition has been removed. The function was defined twice - only the one at line 498 (called by `run_subagent_with_tools`) was kept.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 
 ### ToolDefinition Schema
-The actual `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, and `fn`. It does NOT have a `cached` field as some documentation suggests.
+The `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, and `fn`. It does NOT have a `cached` field as older documentation suggested.
 
 ### RSSAdapter Session Independence
 `RSSAdapter` creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`, while `APIAdapter` and `WebAdapter` share the global session from `get_crawl_session()`. This is BY DESIGN - different adapter types have different session management requirements.
 
-### Adapter Config Validation (BUG - CRIT-3)
-`SourceConfig.config` in `schemas/source.py` is typed as `dict[str, Any]` with no adapter-specific validation. An RSS source with API-config fields will pass validation silently and fail at runtime. A field_validator should be added to validate config against the appropriate adapter schema based on type. See `plans/plan.md` CRIT-3.
+### Adapter Config Validation (FIXED - CRIT-3)
+`SourceConfig.config` in `schemas/source.py` now has a `field_validator` that validates config against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on the source type.
 
-### schemas/common.py Layer Violation (MED-8)
-The `schemas/common.py` module imports from `services.config_cache`, which violates the layering principle that schemas should have minimal dependencies. This is a known issue requiring architectural decision.
+### schemas/common.py Layer Violation (DOCUMENTED - MED-8)
+The `schemas/common.py` module imports from `services.config_cache`. This is intentional - config caching requires services layer knowledge. Documented with a comment explaining the layer violation is necessary.
 
-### extract_text trafilatura ImportError (MED-3)
-The `extract_text()` function in `utils/html.py` silently swallows trafilatura `ImportError`. This could mask dependency installation issues. Consider logging a warning when trafilatura is not available.
+### extract_text trafilatura ImportError (FIXED - MED-3)
+The `extract_text()` function in `utils/html.py` now logs a warning when trafilatura is not available, rather than silently passing on the ImportError.
 
 ## Shared Context
 

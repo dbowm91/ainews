@@ -138,6 +138,11 @@ class MemoryConfig(BaseModel):
 
 
 class StageConfig(BaseModel):
+    """Pipeline stage configuration stub.
+
+    Currently only defines tools list. The actual stage configuration is handled
+    by SubagentStageConfig and RoleConfig. This stub exists for future extensibility.
+    """
     tools: list[str] = Field(default_factory=list)
 
 

@@ -1,4 +1,8 @@
-"""URL normalization and SSRF protection - pure functions and DNS resolution."""
+"""URL normalization and SSRF protection.
+
+Note: Most functions are pure, but validate_url_safe() and related DNS functions
+have side effects - they perform DNS resolution with caching using global state
+(_dns_cache, _dns_executor). See _TTLCache and _resolve_and_check()."""
 
 from __future__ import annotations
 

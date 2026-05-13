@@ -69,6 +69,8 @@ def load_yaml_file(path: str | Path) -> dict[str, Any]:
 
 def cached_config(key: str, loader_fn: Callable[[], T], ttl: int = 300) -> T:
     """Load a config object through the Redis cache with fallback to file."""
+    # Layer violation: schemas should not import from services.
+    # This is intentional - config caching requires services layer knowledge.
     try:
         from services.config_cache import get_config_cache
 
@@ -81,6 +83,8 @@ def cached_config_with_mtime(
     key: str, loader_fn: Callable[[], T], config_path: Path, ttl: int = 300
 ) -> T:
     """Load a config with automatic invalidation when the source file changes."""
+    # Layer violation: schemas should not import from services.
+    # This is intentional - config caching requires services layer knowledge.
     try:
         from services.config_cache import get_config_cache
 
@@ -89,5 +93,7 @@ def cached_config_with_mtime(
         result = cache.get(key=key, loader_fn=loader_fn, ttl=ttl)
         cache._record_mtime(key, config_path)
         return cast(T, result)
+    except Exception:  # noqa: BLE001
+        return cast(T, loader_fn())
     except Exception:  # noqa: BLE001
         return cast(T, loader_fn())

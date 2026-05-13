@@ -15,39 +15,48 @@ This plan consolidates action items from architecture reviews of: schemas, pipel
 | Priority | Count | Items |
 |----------|-------|-------|
 | HIGH | 3 | Critical bugs affecting functionality |
-| MEDIUM | 6 | Documentation fixes, implementation improvements |
-| LOW | 5 | Cleanup, minor documentation fixes |
-
-### Items Already Completed (VERIFIED AS FIXED)
-The following were marked as bugs but have been verified as FIXED:
-- **CRIT-3**: urlparse NameError - import already exists in `routes/admin/api/articles.py`
-- **CRIT-2**: newsletter_pipeline limiter slot leak - already uses `provider_id` from `get_provider_for_role()`
-- **MED-1**: ThreadPoolExecutor shutdown - `atexit.register(shutdown_executor)` already in `services/subagent/config.py`
-- **MED-2**: Tool registry race condition - `_TOOL_REGISTRY_LOCK` already protects initialization
-- **MED-4**: `retry_stuck` missing SELECTING status - `SELECTING` already in the filter list
-- **MED-9**: RSSAdapter session/handler - This is BY DESIGN (RSSAdapter needs its own session)
-- **HIGH-2**: Source adapter config docs - This is a DOCUMENTATION task, not a code bug
+| MEDIUM | 8 | Bugs and implementation improvements |
+| LOW | 5 | Documentation fixes |
 
 ---
 
-## Phase 1: Critical Bug Fixes (REMAINING ITEMS)
+## Items Already Completed (VERIFIED AS FIXED)
+
+The following were marked as bugs but have been verified as FIXED:
+- **CRIT-2 (newsletter_pipeline limiter slot leak)**: Already uses `provider_id` from `get_provider_for_role()` - verified at `services/newsletter_pipeline.py:109-123`
+- **MED-3 (ThreadPoolExecutor shutdown)**: `atexit.register(shutdown_executor)` already in `services/subagent/config.py:21`
+- **MED-4 (Tool registry race condition)**: `_TOOL_REGISTRY_LOCK` already protects initialization at `services/subagent/registry.py:59`
+- **MED-5 (retry_stuck missing SELECTING status)**: `SELECTING` already in the filter list at `tasks/retry.py:122-123`
+- **HIGH-2 (Source adapter config docs)**: This is a DOCUMENTATION task, not a code bug
+
+---
+
+## Phase 1: Critical Bug Fixes
 
 ### CRIT-1: SSRFSafeRedirectHandler Redirect Counter Accumulates Across Requests **[HIGH]**
 **Location:** `adapters/session.py:21-23, 30-32`
 **Issue:** The `_redirect_count` instance variable on `SSRFSafeRedirectHandler` persists across ALL requests when using the shared `get_crawl_session()` singleton. After 30 successful redirects across ANY requests, subsequent redirects will fail with `TooManyRedirects`.
-**Fix:** The counter should NOT be reset after each successful validation. Instead, it should only be reset at the start of a new redirect chain (i.e., in `__init__`). Remove the reset at line 41.
-**Verification:** Check that `_redirect_count` only resets in `__init__`, not after each redirect validation.
+**Fix:** The counter should only reset in `__init__`, not after each redirect validation. Currently there is NO reset between requests - this is the bug. After 30 total redirects across all requests, subsequent redirects fail incorrectly.
+**Verification:** Check that `_redirect_count` only resets in `__init__`, not after each redirect validation. The bug is that the counter is never reset between requests.
 
-### CRIT-2: Tool Results Not Re-injected in Tool Loop **[HIGH]**
-**Location:** `services/subagent/runner.py:384-407`
-**Issue:** The architecture doc states tool results should be added back to messages for follow-up LLM calls, but `run_subagent_with_tools()` only makes a single `chat_with_tools()` call. Tool results are not appended to `messages` before subsequent iterations.
-**Fix:** Either implement the documented multi-step message injection pattern, or update architecture to reflect actual single-call behavior. This is a design decision - document which behavior is correct.
-**Note:** This may be intentional (single-call tool execution). Verify with architecture docs.
+**Implementation Detail:**
+- The `SSRFSafeRedirectHandler` is created once per session (line 63) and persists for the lifetime of the application
+- `_redirect_count` accumulates across ALL requests using the shared session
+- After 30 total redirects (not per-request), subsequent redirects will falsely fail
+- To fix: Consider using thread-local storage for the counter, OR make the handler request-scoped, OR increase the threshold if 30 is too low for batch crawling
+
+### CRIT-2: Duplicate `_finalize_subagent_result()` Function Definition **[HIGH]**
+**Location:** `services/subagent/runner.py:277-328 and 498-501`
+**Issue:** The function `_finalize_subagent_result` is defined TWICE in the same file. This is dead code - one definition is never used (or both may be called in different contexts).
+**Fix:** Remove the duplicate definition. Keep the one that is actually used by `run_subagent_with_tools()`.
+
+**Verification:** Search for all references to `_finalize_subagent_result` to determine which one is called.
 
 ### CRIT-3: No Adapter-Specific Config Validation **[HIGH]**
-**Location:** `schemas/source.py:285-287`
+**Location:** `schemas/source.py:105-121`
 **Issue:** `SourceConfig.config` is typed as `dict[str, Any]` with no validation. An RSS source with API-config fields will pass validation silently and fail at runtime.
 **Fix:** Add a `field_validator` to `SourceConfig` that validates `config` against the appropriate adapter schema based on `type`.
+
 **Implementation:**
 ```python
 @field_validator("config")
@@ -62,28 +71,34 @@ def validate_adapter_config(cls, v, info):
         return WebConfig.model_validate(v).model_dump()
     return v
 ```
+Note: `ADAPTER_CONFIGS` dict already exists at line 98-102 mapping type to config class.
 
 ---
 
-## Phase 2: Medium Priority Items (REMAINING ITEMS)
+## Phase 2: Medium Priority Items
 
 ### MED-1: sanitize_html Uses Bare `except Exception` **[MEDIUM]**
-**Location:** `utils/text.py:102`
+**Location:** `utils/text.py:100-103`
 **Issue:** Catches ALL exceptions including `KeyboardInterrupt`, `SystemExit`. Should be more specific.
-**Fix:** Change to `except (ValueError, Exception)` for HTMLParseError or similar specific exception types.
+**Fix:** Change to `except (ValueError, Exception)` or use `html.parser.HTMLParseError` if available.
 ```python
-except Exception:
+except Exception:  # noqa: BLE001 - return original on any parse error
     return html
 ```
-Note: BLE001 noqa is present, suggesting this is a known issue. Consider using `html.parser.HTMLParseError` if available.
+Note: BLE001 noqa is present, suggesting this is a known issue.
 
 ### MED-2: strip_tags Fallback Uses Bare Exception **[MEDIUM]**
 **Location:** `utils/html.py:41`
 **Issue:** Same issue - catches too broad exceptions in fallback path.
 **Fix:** Change to specific exception types (e.g., `except (ValueError, Exception)`).
 
-### MED-3: No Input Validation for Negative Length in truncate **[MEDIUM]**
-**Location:** `utils/text.py:53`
+### MED-3: extract_text Silently Swallows trafilatura ImportError **[MEDIUM]**
+**Location:** `utils/html.py:62-68`
+**Issue:** `extract_text` silently passes on `ImportError` for trafilatura. This could mask installation issues or dependency problems.
+**Fix:** At minimum, log a warning when trafilatura is not available. Consider raising an error if trafilatura is required.
+
+### MED-4: truncate No Input Validation for Negative Length **[MEDIUM]**
+**Location:** `utils/text.py:53-65`
 **Issue:** If `length` is negative, `truncate("hello", -5)` returns `"..."` unexpectedly.
 **Fix:** Add validation at start of function:
 ```python
@@ -91,24 +106,29 @@ if length < 0:
     raise ValueError("length must be non-negative")
 ```
 
-### MED-4: utils/url.py Docstring Claims Pure But Has Global Mutable State **[MEDIUM]**
-**Location:** `utils/url.py:77` (docstring)
+### MED-5: utils/url.py Docstring Claims Pure But Has Global Mutable State **[MEDIUM]**
+**Location:** `utils/url.py` (docstring at line 77)
 **Issue:** Docstring claims "pure functions" but module has `_dns_executor`, `_dns_cache`, `_dns_cache_lock` global mutable state.
-**Fix:** Update docstring at line 77 to note that some functions have side effects (DNS caching).
+**Fix:** Update docstring to note that some functions have side effects (DNS caching with global state).
 
-### MED-5: StageConfig Serves No Purpose **[LOW]**
+### MED-6: StageConfig Serves No Purpose **[MEDIUM]**
 **Location:** `schemas/pipeline.py:140-141`
 **Issue:** `StageConfig` only has `tools: list[str]` - it's a stub with no actual stage configuration. `PipelineRootConfig.stages` appears unused.
 **Fix:** Either remove `StageConfig` and `stages` field from `PipelineRootConfig`, or expand it to contain meaningful configuration, or add a comment explaining why it's a stub.
 
-### MED-6: ToolDefinition Schema Mismatch with Architecture **[LOW]**
+### MED-7: ToolDefinition Schema Mismatch with Architecture **[MEDIUM]**
 **Location:** `services/llm/base.py:80-86` / `architecture/subagent.md`
 **Issue:** Architecture shows `cached: bool` field and `BaseModel`, but actual is a `@dataclass` with `required: list[str]` and `fn: Callable` fields. `cached` does not exist.
-**Fix:** Update architecture doc to match actual ToolDefinition implementation, or add `cached` field to ToolDefinition if needed.
+**Fix:** Update architecture doc to match actual ToolDefinition implementation.
+
+### MED-8: Layer Violation in schemas/common.py **[MEDIUM]**
+**Location:** `schemas/common.py`
+**Issue:** `cached_config` functions import from `services.config_cache`, violating the rule that utils should be minimal dependencies.
+**Fix:** This needs architectural decision - either move config caching to utils, or accept this as a necessary violation.
 
 ---
 
-## Phase 3: Low Priority / Documentation Items (REMAINING ITEMS)
+## Phase 3: Low Priority / Documentation Items
 
 ### LOW-1: NewsletterBrief Missing `preamble` and `footer` Fields **[LOW]**
 **Location:** `schemas/llm_responses.py:142-148` vs `architecture/schemas.md`
@@ -135,35 +155,43 @@ if length < 0:
 **Issue:** Docs claim "Pagination support (cursor, offset, page-based)" but APIAdapter uses `item_url`, `list_items_path`, `list_method` pattern.
 **Fix:** Update architecture docs to reflect actual APIAdapter implementation.
 
+### LOW-6: Architecture Doc References Non-Existent schemas/article.py **[LOW]**
+**Location:** `architecture/schemas.md`
+**Issue:** Architecture doc references `schemas/article.py` which does not exist.
+**Fix:** Update documentation to reference correct location or remove reference.
+
 ---
 
 ## Wave Organization for Parallelization
 
 ### Wave A: Critical Bugs (Can run in parallel)
-| ID | Location | Issue | Status |
-|----|----------|-------|--------|
-| CRIT-1 | adapters/session.py:21-23 | SSRFSafeRedirectHandler counter | PENDING |
-| CRIT-2 | services/subagent/runner.py:384-407 | Tool results not re-injected | DECISION |
-| CRIT-3 | schemas/source.py:285-287 | Adapter config validation | PENDING |
+| ID | Location | Issue | Implementation Notes |
+|----|----------|-------|---------------------|
+| CRIT-1 | adapters/session.py:21-32 | SSRFSafeRedirectHandler counter | Fix _redirect_count persistence across requests |
+| CRIT-2 | services/subagent/runner.py:277-328, 498-501 | Duplicate function definition | Remove duplicate `_finalize_subagent_result` |
+| CRIT-3 | schemas/source.py:105-121 | Adapter config validation | Add field_validator to SourceConfig |
 
 ### Wave B: Medium Priority Fixes (Parallelizable)
-| ID | Location | Issue | Status |
-|----|----------|-------|--------|
-| MED-1 | utils/text.py:102 | sanitize_html bare except | PENDING |
-| MED-2 | utils/html.py:41 | strip_tags bare except | PENDING |
-| MED-3 | utils/text.py:53 | truncate negative length | PENDING |
-| MED-4 | utils/url.py:77 | Docstring purity claim | PENDING |
-| MED-5 | schemas/pipeline.py:140-141 | StageConfig stub | PENDING |
-| MED-6 | services/llm/base.py:80-86 | ToolDefinition schema | PENDING |
+| ID | Location | Issue | Implementation Notes |
+|----|----------|-------|---------------------|
+| MED-1 | utils/text.py:100-103 | sanitize_html bare except | Use specific exception types |
+| MED-2 | utils/html.py:41 | strip_tags bare except | Use specific exception types |
+| MED-3 | utils/html.py:62-68 | extract_text ImportError | Log warning when trafilatura missing |
+| MED-4 | utils/text.py:53-65 | truncate negative length | Add validation for negative length |
+| MED-5 | utils/url.py (docstring) | Docstring purity claim | Update docstring to note side effects |
+| MED-6 | schemas/pipeline.py:140-141 | StageConfig stub | Remove or expand StageConfig |
+| MED-7 | services/llm/base.py:80-86 | ToolDefinition schema | Update architecture docs |
+| MED-8 | schemas/common.py | Layer violation | Architectural decision needed |
 
-### Wave C: Documentation Updates
-| ID | Location | Issue | Status |
-|----|----------|-------|--------|
-| LOW-1 | schemas/llm_responses.py:142-148 | NewsletterBrief fields | PENDING |
-| LOW-2 | schemas/tasks.py | Tasks schema | PENDING |
-| LOW-3 | architecture/adapters.md | Source health tracking | PENDING |
-| LOW-4 | adapters/web.py:180-182 | Retry-After header | BY DESIGN |
-| LOW-5 | adapters/api.py | Pagination | PENDING |
+### Wave C: Documentation Updates (Parallelizable)
+| ID | Location | Issue | Implementation Notes |
+|----|----------|-------|---------------------|
+| LOW-1 | schemas/llm_responses.py vs arch | NewsletterBrief fields | Update architecture docs |
+| LOW-2 | schemas/tasks.py vs arch | Tasks schema | Update architecture docs |
+| LOW-3 | architecture/adapters.md | Source health tracking | Clarify adapters vs crawling.py |
+| LOW-4 | adapters/web.py:180-182 | Retry-After header | Document BY DESIGN or implement |
+| LOW-5 | adapters/api.py vs arch | APIAdapter pagination | Update architecture docs |
+| LOW-6 | architecture/schemas.md | Non-existent article.py | Fix documentation reference |
 
 ---
 
@@ -215,21 +243,31 @@ mypy module_path
 ```
 
 ### Key Files for Reference
+
+**Critical Bug Fixes:**
 - `adapters/session.py` - SSRFSafeRedirectHandler (CRIT-1)
-- `services/subagent/runner.py` - Subagent execution (CRIT-2)
+- `services/subagent/runner.py` - Duplicate function, subagent execution (CRIT-2)
 - `schemas/source.py` - Source config schemas (CRIT-3)
-- `utils/text.py` - Text utilities (MED-1, MED-3)
-- `utils/html.py` - HTML utilities (MED-2)
-- `utils/url.py` - URL utilities (MED-4)
-- `schemas/pipeline.py` - Pipeline schemas (MED-5)
-- `services/llm/base.py` - ToolDefinition (MED-6)
-- `architecture/` - Architecture documentation (LOW-1 through LOW-5)
+
+**Medium Priority Fixes:**
+- `utils/text.py` - Text utilities sanitize_html, truncate (MED-1, MED-4)
+- `utils/html.py` - HTML utilities strip_tags, extract_text (MED-2, MED-3)
+- `utils/url.py` - URL utilities docstring (MED-5)
+- `schemas/pipeline.py` - StageConfig stub (MED-6)
+- `services/llm/base.py` - ToolDefinition (MED-7)
+- `schemas/common.py` - Layer violation (MED-8)
+
+**Documentation Updates:**
+- `architecture/schemas.md` - Schema documentation (LOW-1, LOW-2, LOW-6)
+- `architecture/adapters.md` - Adapter documentation (LOW-3)
+- `adapters/web.py` - WebAdapter retry behavior (LOW-4)
+- `adapters/api.py` - APIAdapter pagination (LOW-5)
 
 ### Wave Execution Recommendation
 For fastest execution, assign agents to waves as follows:
-- **Agent 1**: Wave A (CRIT-1, CRIT-2, CRIT-3)
-- **Agent 2**: Wave B (MED-1 through MED-6)
-- **Agent 3**: Wave C (LOW-1 through LOW-5)
+- **Agent 1**: Wave A (CRIT-1, CRIT-2, CRIT-3) - Critical bugs
+- **Agent 2**: Wave B (MED-1 through MED-8) - Medium priority fixes
+- **Agent 3**: Wave C (LOW-1 through LOW-6) - Documentation updates
 
 ---
 
@@ -237,20 +275,35 @@ For fastest execution, assign agents to waves as follows:
 
 | Item | Status | Completed Date | Notes |
 |------|--------|----------------|-------|
-| CRIT-1 | PENDING | - | SSRFSafeRedirectHandler counter |
-| CRIT-2 | DECISION | - | Tool results re-injection - decide if fix or docs |
+| CRIT-1 | PENDING | - | SSRFSafeRedirectHandler counter persists |
+| CRIT-2 | PENDING | - | Duplicate function definition |
 | CRIT-3 | PENDING | - | Adapter config validation |
 | MED-1 | PENDING | - | sanitize_html bare except |
 | MED-2 | PENDING | - | strip_tags bare except |
-| MED-3 | PENDING | - | truncate negative length |
-| MED-4 | PENDING | - | utils/url.py docstring |
-| MED-5 | PENDING | - | StageConfig stub |
-| MED-6 | PENDING | - | ToolDefinition schema |
+| MED-3 | PENDING | - | extract_text ImportError |
+| MED-4 | PENDING | - | truncate negative length |
+| MED-5 | PENDING | - | utils/url.py docstring |
+| MED-6 | PENDING | - | StageConfig stub |
+| MED-7 | PENDING | - | ToolDefinition schema |
+| MED-8 | PENDING | - | Layer violation in schemas/common |
 | LOW-1 | PENDING | - | NewsletterBrief docs |
 | LOW-2 | PENDING | - | Tasks schema docs |
 | LOW-3 | PENDING | - | Source health docs |
-| LOW-4 | BY DESIGN | - | Retry-After header |
+| LOW-4 | PENDING | - | Retry-After header |
 | LOW-5 | PENDING | - | APIAdapter pagination docs |
+| LOW-6 | PENDING | - | Non-existent schemas/article.py ref |
+
+---
+
+## New Findings for Future Agents
+
+The following issues were discovered during this review session and added to the plan:
+
+1. **CRIT-2 (NEW)**: Duplicate `_finalize_subagent_result()` function at lines 277-328 and 498-501 in `services/subagent/runner.py`. One is dead code.
+
+2. **MED-3 (NEW)**: `extract_text()` in `utils/html.py:62-68` silently swallows trafilatura ImportError - could mask dependency issues.
+
+3. **MED-8 (NEW)**: Layer violation - `schemas/common.py` imports from `services.config_cache`, which violates the principle that schemas/utils should have minimal dependencies.
 
 ---
 

@@ -7,7 +7,7 @@ This document provides instructions and context for agents working on the AI New
 1.  **Fail-Closed Security:** In production, any security check failure (e.g., insecure permissions, missing secrets) MUST prevent the application from starting.
 2.  **Clean Layering:**
     *   **Adapters** should NOT contain business logic or import from `services`.
-    *   **Services** should NOT import from `adapters` (use `schemas` or `models` for shared types).
+    *   **Services** should NOT import from `Adapters** (use `schemas` or `models` for shared types).
     *   **Utils** should contain pure helper functions with minimal dependencies.
 3.  **Test-Driven Correctness:** Every bug fix MUST include a reproduction test case. Every new feature MUST have unit tests targeting 80% coverage.
 4.  **Type Safety:** Aim for 0 Mypy errors. Use explicit typing and avoid `Any` where possible.
@@ -23,6 +23,7 @@ This document provides instructions and context for agents working on the AI New
 *   `routes/`: Flask blueprints for public and admin interfaces.
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
+*   `plans/`: Implementation plans consolidated from architecture reviews.
 
 ## Known Issues & Gotchas
 
@@ -86,7 +87,7 @@ def run_subagent(task_type: str, stage: str, prompt_data: dict, response_model: 
 Not the documented `run_subagent(task, context, tools, model)`.
 
 ### Pipeline Stage Status Values
-Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`. The `review` status is handled by `tasks.edit.edit_article`.
+Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`. The `review` status is handled by `tasks/edit.py`.
 
 ### Model Field Naming
 - `Source.type` is actually `source_type` in the model
@@ -124,24 +125,48 @@ Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST me
 
 ## Design Notes for Future Agents
 
-### SSRFSafeRedirectHandler Session Scope
-The `SSRFSafeRedirectHandler` in `adapters/session.py` is session-scoped (shared singleton). The `_redirect_count` persists across requests and is BY DESIGN - it tracks total redirects in a crawling session, not per-request. The counter only resets in `__init__`, not after each successful redirect validation.
+### SSRFSafeRedirectHandler Session Scope (BUG - CRIT-1)
+The `SSRFSafeRedirectHandler` in `adapters/session.py` is session-scoped (shared singleton). The `_redirect_count` persists across requests. After 30 total redirects (not per-request), subsequent redirects will incorrectly fail with `TooManyRedirects`. This is a BUG - see `plans/plan.md` CRIT-1.
 
 ### Subagent Tool Execution
 The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
+
+### Duplicate Function Definition in subagent/runner.py (BUG - CRIT-2)
+The function `_finalize_subagent_result()` is defined TWICE in `services/subagent/runner.py` - at lines 277-328 and 498-501. This is dead code - one definition should be removed.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 
 ### ToolDefinition Schema
-The actual `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, and `fn`. It does NOT have a `cached` field as some documentation suggests. The architecture documentation may be outdated.
+The actual `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, and `fn`. It does NOT have a `cached` field as some documentation suggests.
 
 ### RSSAdapter Session Independence
 `RSSAdapter` creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`, while `APIAdapter` and `WebAdapter` share the global session from `get_crawl_session()`. This is BY DESIGN - different adapter types have different session management requirements.
 
-### Adapter Config Validation
-`SourceConfig.config` in `schemas/source.py` is typed as `dict[str, Any]` with no adapter-specific validation. An RSS source with API-config fields will pass validation silently and fail at runtime. Consider adding field validation if strict config typing is needed.
+### Adapter Config Validation (BUG - CRIT-3)
+`SourceConfig.config` in `schemas/source.py` is typed as `dict[str, Any]` with no adapter-specific validation. An RSS source with API-config fields will pass validation silently and fail at runtime. A field_validator should be added to validate config against the appropriate adapter schema based on type. See `plans/plan.md` CRIT-3.
+
+### schemas/common.py Layer Violation (MED-8)
+The `schemas/common.py` module imports from `services.config_cache`, which violates the layering principle that schemas should have minimal dependencies. This is a known issue requiring architectural decision.
+
+### extract_text trafilatura ImportError (MED-3)
+The `extract_text()` function in `utils/html.py` silently swallows trafilatura `ImportError`. This could mask dependency installation issues. Consider logging a warning when trafilatura is not available.
 
 ## Shared Context
 
 Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules.
+
+### Implementation Plans
+When working on items from `plans/plan.md`, read the relevant section fully before implementing. Each section contains:
+- Exact file locations and line numbers
+- The specific bug or issue
+- Implementation details or code examples
+- Verification steps
+
+### Wave-Based Parallel Implementation
+The implementation plan organizes items into waves for parallel execution:
+- **Wave A**: Critical bugs (CRIT-1, CRIT-2, CRIT-3)
+- **Wave B**: Medium priority fixes (MED-1 through MED-8)
+- **Wave C**: Documentation updates (LOW-1 through LOW-6)
+
+Agents can work on different waves in parallel if multiple agents are available.

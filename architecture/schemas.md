@@ -96,13 +96,15 @@ class RSSConfig(BaseModel):
 
 class APIConfig(BaseModel):
     list_url: str = Field(..., min_length=1)
-    list_method: str = "json_array"    # or "json_object" for single items
+    list_method: str = "json_array"    # or "json_object_items" for nested items
     list_items_path: Optional[str] = None  # JSONPath to items array
     max_items: int = Field(default=30, ge=1, le=200)
     item_url: Optional[str] = None       # Template for individual item URLs
     item_method: str = "json_object"
     fields: dict[str, str] = Field(default_factory=dict)
     filters: list[dict[str, Any]] = Field(default_factory=list)  # equals, min, exists
+    metadata: dict[str, str] = Field(default_factory=dict)  # Additional fields to extract
+    pagination: PaginationConfig = Field(default_factory=PaginationConfig)  # next_link, query_param, none
     api_key: Optional[str] = None
     auth_header: Optional[str] = None    # e.g., "Authorization"
     request_timeout: int = 15

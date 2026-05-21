@@ -78,7 +78,7 @@ class APIAdapter(BaseSourceAdapter):
         self.field_mappings = config.get('field_mappings', {})
 
     def fetch(self) -> list[dict]:
-        # Supports pagination (cursor, offset, page)
+        # Pagination via item_url template + list_items_path for response data extraction
         # Handles authentication (Bearer, API key headers)
         # Rate limiting compliance
         return self._fetch_page() or []

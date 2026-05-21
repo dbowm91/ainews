@@ -125,14 +125,14 @@ Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST me
 
 ## Design Notes for Future Agents
 
-### SSRFSafeRedirectHandler Counter (FIXED - CRIT-1)
-The `SSRFSafeRedirectHandler` in `adapters/session.py` now uses thread-local storage for `_redirect_count`, so the counter resets per-request. Previously it persisted across ALL requests (shared singleton), causing failures after 30 total redirects.
+### SSRFSafeRedirectHandler Uses Thread-Local Counter
+The `SSRFSafeRedirectHandler` in `adapters/session.py` uses thread-local storage for `_redirect_count`, so the counter resets per-request. This prevents failures after 30 total redirects across requests.
 
 ### Subagent Tool Execution
 The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
 
-### Duplicate Function Definition in subagent/runner.py (FIXED - CRIT-2)
-The duplicate `_finalize_subagent_result()` definition has been removed. The function was defined twice - only the one at line 498 (called by `run_subagent_with_tools`) was kept.
+### _finalize_subagent_result Function
+The `_finalize_subagent_result()` function in `services/subagent/runner.py` handles result finalization for `run_subagent_with_tools()`. It logs metrics events and returns a `SubagentResponse`.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -143,14 +143,14 @@ The `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `n
 ### RSSAdapter Session Independence
 `RSSAdapter` creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`, while `APIAdapter` and `WebAdapter` share the global session from `get_crawl_session()`. This is BY DESIGN - different adapter types have different session management requirements.
 
-### Adapter Config Validation (FIXED - CRIT-3)
-`SourceConfig.config` in `schemas/source.py` now has a `field_validator` that validates config against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on the source type.
+### Adapter Config Validation
+`SourceConfig.config` in `schemas/source.py` has a `field_validator` that validates config against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on the source type.
 
 ### schemas/common.py Layer Violation (DOCUMENTED - MED-8)
 The `schemas/common.py` module imports from `services.config_cache`. This is intentional - config caching requires services layer knowledge. Documented with a comment explaining the layer violation is necessary.
 
-### extract_text trafilatura ImportError (FIXED - MED-3)
-The `extract_text()` function in `utils/html.py` now logs a warning when trafilatura is not available, rather than silently passing on the ImportError.
+### extract_text trafilatura Warning
+The `extract_text()` function in `utils/html.py` logs a warning when trafilatura is not available.
 
 ### Quality Gate Routing (DOCUMENTED - HIGH-B1)
 Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
@@ -159,8 +159,8 @@ Each pipeline stage has quality gates that can route articles to `review` for ma
 - `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
 - `edit`: Validation failure → `review`
 
-### backfill_embeddings max_retries (FIXED - MED-C9)
-The `backfill_embeddings` task in `tasks/embeddings.py` now has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
+### backfill_embeddings max_retries
+The `backfill_embeddings` task in `tasks/embeddings.py` has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
 
 ### TrendMemory last_accessed_at (ADDED - CRIT-A4)
 The `TrendMemory` model in `models/context.py` now has a `last_accessed_at` field for tracking when trend memory entries were last accessed.
@@ -170,22 +170,22 @@ The `TrendMemory` model in `models/context.py` now has a `last_accessed_at` fiel
 Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules.
 
 ### Implementation Plans
-When working on items from `plans/plan.md`, read the relevant section fully before implementing. Each section contains:
+Implementation plans in `plans/` contain actionable items from architecture reviews. Each section includes:
 - Exact file locations and line numbers
 - The specific bug or issue
 - Implementation details or code examples
 - Verification steps
 
-### Wave-Based Parallel Implementation
-The implementation plan organizes items into waves for parallel execution:
-- **Wave A**: Critical bugs (CRIT-1, CRIT-2, CRIT-3)
-- **Wave B**: Medium priority fixes (MED-1 through MED-8)
-- **Wave C**: Documentation updates (LOW-1 through LOW-6)
-- **Wave A4**: TrendMemory field (CRIT-A4) - ADDED last_accessed_at field
-- **Wave B1**: Quality gate routing documentation (HIGH-B1)
-- **Wave C9**: backfill_embeddings decorator (MED-C9)
-- **Wave D7**: Scheduled tasks documentation (LOW-D7)
+### Key Scheduled Tasks
+The following Celery Beat scheduled tasks are configured:
+- `run-all-sources`: Every 30 minutes
+- `generate-newsletters`: Daily at 8 AM ET
+- `backfill-embeddings`: Daily at 2 AM
+- `publish-scheduled-articles`: Every 5 minutes
+- `cleanup-old-logs`: Daily at 3 AM
+- `consolidate-trend-memory`: Daily at 3:30 AM
+- `purge-trend-memory`: Daily at 3:45 AM
+- `cleanup-old-versions`: Daily at 3:45 AM
+- `retry-stuck-articles`: Every 60 minutes
 
-All waves are now COMPLETED.
-
-Agents can work on different waves in parallel if multiple agents are available.
+For the complete list of 14 scheduled tasks, see `architecture/pipeline.md`.

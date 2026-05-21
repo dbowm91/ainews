@@ -165,4 +165,21 @@ All items from the consolidated implementation plan have been completed:
 - Wave C9 (MED-C9): backfill_embeddings decorator fixed
 - Wave D7 (LOW-D7): Scheduled tasks documentation completed
 
+Additional items completed on 2026-05-21:
+- HIGH-1: Article model documentation updated with all 30+ fields
+- HIGH-3: Index documentation updated with exact index names
+- MED-8: Missing admin routes added to documentation
+- MED-11: APIAdapter pagination implemented (next_link + query_param)
+- MED-16: PENDING→SKIPPED transition documented
+- MED-17: API token prefix detail (first 16 chars) documented
+- MED-18: Missing task files (retry.py, subscribers.py, webhook.py) added to docs
+- MED-19: pipeline_monitor functionality corrected in docs
+- LOW-1: cleanup.py tasks listed individually
+- LOW-2: Degradation path documented as pending→review
+- LOW-4: Duplicate URL Utilities section removed
+- MED-1: Edit stage degradation behavior corrected
+- MED-9: AuthError bypass documented
+- MED-10: Backoff max 300s documented
+- MED-12: Hybrid provider table corrected
+
 See `plans/plan.md` for full details.

@@ -65,12 +65,12 @@ from utils.url import (
 
 ## Design Principles
 
-1. **Most functions are pure**: No side effects, no global state
+1. **Most functions are pure**: No side effects, no global state (except `validate_url_safe()`)
 2. **Minimal dependencies**: Only standard library + very common packages
 3. **Comprehensive validation**: Input checking with clear errors
 4. **Type hints**: Full typing for better IDE support
 
-**Note:** `utils/url.py` has global mutable state for DNS caching (`_dns_cache`, `_dns_executor`). The `validate_url_safe()` function has side effects - it performs DNS resolution with caching.
+**Important:** `utils/url.py` contains global mutable state for DNS caching (`_dns_cache`, `_dns_executor`, `_TTLCache`). The `validate_url_safe()` function has side effects - it performs DNS resolution with caching. Do not assume pure function behavior.
 
 ## Migration Note
 

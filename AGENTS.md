@@ -152,6 +152,19 @@ The `schemas/common.py` module imports from `services.config_cache`. This is int
 ### extract_text trafilatura ImportError (FIXED - MED-3)
 The `extract_text()` function in `utils/html.py` now logs a warning when trafilatura is not available, rather than silently passing on the ImportError.
 
+### Quality Gate Routing (DOCUMENTED - HIGH-B1)
+Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
+- `select`: Low confidence (score OK but confidence="low") → `review`
+- `research`: Degenerate research brief (fails `_is_degenerate_research()`) → `review`
+- `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
+- `edit`: Validation failure → `review`
+
+### backfill_embeddings max_retries (FIXED - MED-C9)
+The `backfill_embeddings` task in `tasks/embeddings.py` now has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
+
+### TrendMemory last_accessed_at (ADDED - CRIT-A4)
+The `TrendMemory` model in `models/context.py` now has a `last_accessed_at` field for tracking when trend memory entries were last accessed.
+
 ## Shared Context
 
 Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules.
@@ -168,5 +181,11 @@ The implementation plan organizes items into waves for parallel execution:
 - **Wave A**: Critical bugs (CRIT-1, CRIT-2, CRIT-3)
 - **Wave B**: Medium priority fixes (MED-1 through MED-8)
 - **Wave C**: Documentation updates (LOW-1 through LOW-6)
+- **Wave A4**: TrendMemory field (CRIT-A4) - ADDED last_accessed_at field
+- **Wave B1**: Quality gate routing documentation (HIGH-B1)
+- **Wave C9**: backfill_embeddings decorator (MED-C9)
+- **Wave D7**: Scheduled tasks documentation (LOW-D7)
+
+All waves are now COMPLETED.
 
 Agents can work on different waves in parallel if multiple agents are available.

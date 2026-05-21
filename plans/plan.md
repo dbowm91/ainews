@@ -1,6 +1,6 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** ACTIVE
+**Status:** COMPLETED (2026-05-21)
 **Last Updated:** 2026-05-21
 **Goal:** Consolidated implementation plan from architecture review documents.
 
@@ -10,7 +10,7 @@
 
 This plan consolidates remaining action items from architecture reviews of: schemas, pipeline, routes, tasks, services, models, subagent, adapters, and utils modules.
 
-**All previously identified bugs have been fixed in code.** The remaining items are primarily documentation updates to align architecture documents with actual implementation, plus one code implementation item (pagination for APIAdapter).
+**All items have been completed.** The plan consisted of documentation updates to align architecture documents with actual implementation, plus one code implementation item (pagination for APIAdapter).
 
 ### Priority Summary
 
@@ -329,85 +329,16 @@ max_pages: int = 3
 
 ---
 
-## Implementation Notes for Future Agents
+## Implementation Branches
 
-### Code Items (Require Testing)
-Only ONE code implementation item remains:
+All items were implemented on separate branches to avoid conflicts:
 
-- **MED-11**: `adapters/api.py` - Implement pagination support for APIAdapter
-
-### Documentation Items (34 items)
-All other items are documentation-only changes to `architecture/*.md` files.
-
-### Verification Steps
-```bash
-# Run linting on any code changes
-ruff check . --exclude .venv
-
-# Run mypy on changed files
-mypy tasks/pipeline.py services/pipeline_degradation.py adapters/api.py
-
-# Test any code changes
-pytest tests/ -v
-```
-
-### Wave-Based Parallelization
-
-Items are organized into waves that can be executed in parallel by different agents:
-
-| Wave | Priority | Count | Items |
-|------|----------|-------|-------|
-| Wave A | CRIT | 2 | CRIT-1, CRIT-2 |
-| Wave B | HIGH | 7 | HIGH-1 through HIGH-7 |
-| Wave C | MED | 15 | MED-1, MED-5 through MED-19 |
-| Wave D | LOW | 11 | LOW-1 through LOW-11 |
-
----
-
-## Progress Tracking
-
-| Item | Status | Notes |
-|------|--------|-------|
-| CRIT-1 | PENDING | Source.adapter_config doesn't exist |
-| CRIT-2 | PENDING | utils/url.py global state not documented |
-| HIGH-1 | PENDING | Article model stub |
-| HIGH-2 | PENDING | Source model missing fields |
-| HIGH-3 | PENDING | Index documentation inaccurate |
-| HIGH-4 | PENDING | Pipeline status flow outdated |
-| HIGH-5 | PENDING | Adapter config schemas fictional |
-| HIGH-6 | PENDING | PaginationConfig schema wrong |
-| HIGH-7 | PENDING | item_path vs list_items_path |
-| MED-1 | PENDING | Degradation edit bypass |
-| MED-2 | VERIFIED | Already uses PipelineStatus.RESEARCHING |
-| MED-3 | VERIFIED | Already sets selector_result dict |
-| MED-4 | VERIFIED | Already sets writer_model = "fallback" |
-| MED-5 | PENDING | Degradation threshold wrong |
-| MED-6 | PENDING | api_tokens_bp note wrong |
-| MED-7 | PENDING | POST /articles not implemented |
-| MED-8 | PENDING | Missing routes |
-| MED-9 | PENDING | AuthError not documented |
-| MED-10 | PENDING | Backoff config incomplete |
-| MED-11 | PENDING | Pagination not implemented (CODE) |
-| MED-12 | PENDING | Search provider table error |
-| MED-13 | PENDING | Missing content_extractor.py |
-| MED-14 | PENDING | Missing services |
-| MED-15 | PENDING | feeds_bp vs public_bp |
-| MED-16 | PENDING | PENDING→SKIPPED missing |
-| MED-17 | PENDING | API token prefix detail |
-| MED-18 | PENDING | Missing tasks files |
-| MED-19 | PENDING | pipeline_monitor functionality mismatch |
-| LOW-1 | PENDING | cleanup.py tasks "Various" |
-| LOW-2 | PENDING | Degradation path conflates |
-| LOW-3 | PENDING | run_stage signature incomplete |
-| LOW-4 | PENDING | url.py section duplicated |
-| LOW-5 | PENDING | Newsletter batch size missing |
-| LOW-6 | PENDING | Field name cross-references wrong |
-| LOW-7 | PENDING | validate_url_safe return ambiguous |
-| LOW-8 | PENDING | pipeline.py helper undocumented |
-| LOW-9 | PENDING | AdminUser comment unclear |
-| LOW-10 | PENDING | API adapter filter operations |
-| LOW-11 | PENDING | APIAdapter authentication doc |
-
----
+| Branch | Content |
+|--------|---------|
+| `docs/wave-a-crit-fixes` | CRIT-1, CRIT-2 |
+| `docs/wave-b-model-fixes` | HIGH-1 through HIGH-4 |
+| `docs/wave-c-med-fixes` | MED-1, MED-5, MED-8, MED-10, MED-12, MED-16, MED-19 |
+| `docs/wave-d-low-fixes` | LOW-1 through LOW-5, LOW-7 through LOW-8 |
+| `feat/med11-api-pagination` | MED-11 (code implementation) |
 
 *End of file*

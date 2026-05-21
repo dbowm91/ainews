@@ -37,6 +37,12 @@ class TrendMemory(db.Model):
     expires_at = db.Column(db.DateTime, nullable=True)
     last_consolidated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    last_accessed_at = db.Column(
+        db.DateTime,
+        nullable=True,
+        index=True,
+        onupdate=datetime.utcnow
+    )
     embedding = db.Column(db.Text, nullable=True)
 
     __table_args__ = (

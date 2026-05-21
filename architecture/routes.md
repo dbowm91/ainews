@@ -43,6 +43,10 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/sources` - Source management UI
 - `/admin/subscribers` - Subscriber management UI
 - `/admin/newsletters` - Newsletter history UI
+- `/admin/verify-2fa` - 2FA verification page
+- `/admin/setup-2fa` - 2FA setup page
+- `/admin/dead-letters` - Dead letter queue UI
+- `/admin/metrics` - Application metrics UI
 
 ### Admin API Blueprint (`admin_api_bp`)
 

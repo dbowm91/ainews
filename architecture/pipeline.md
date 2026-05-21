@@ -51,7 +51,7 @@ Pipeline stages use these statuses (defined in `constants.py`):
 | `failed` | Stage failed (can be retried) |
 
 Valid transitions:
-- `pending` → `selecting`, `researching`, `review`
+- `pending` → `selecting`, `researching`, `skipped`, `review`
 - `selecting` → `selected`, `failed`
 - `selected` → `researching`, `failed`
 - `researching` → `writing`, `failed`
@@ -247,7 +247,7 @@ When stages fail persistently (after max retries), articles degrade to the next 
 | select | Auto-select with score 6, advance to research |
 | research | Uses source text only (impact_score=30), advance to write |
 | write | Minimal draft from extracted text, advance to edit |
-| edit | Finalize immediately with fallback |
+| edit | Routes to `review` if degradation_count >= 2, otherwise finalizes |
 
 **Retry Limits:**
 - Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)
@@ -260,11 +260,14 @@ Articles in `review` status require manual intervention.
 
 ### Pipeline Monitor (`services/pipeline_monitor.py`)
 
-Tracks pipeline health:
-- Stage durations (avg, p95, p99)
-- Failure rates per stage
-- Queue depth per stage
-- Source health correlation
+Tracks pipeline health via Redis minute-bucket counters:
+- Success/failure counts per stage
+- Throughput tracking (items per minute)
+- Failure reason breakdown (rate_limit, timeout, server_error, circuit_open)
+- Per-stage recording via `record_stage_result(stage, success, reason=)`
+- Throughput retrieval via `get_throughput_stats(stage, minutes=15)`
+
+Does NOT track: p95/p99 durations, queue depth per stage, source health correlation.
 
 ### Pipeline Logs
 
@@ -289,7 +292,7 @@ The pipeline has two independent retry mechanisms:
 
 **1. Celery Task Retry** (for transient errors)
 - Max retries: 3 per task
-- Backoff: exponential (30s, 60s, 120s)
+- Backoff: exponential (1s, 2s, 4s) capped at 30s max
 - Triggered by: network timeouts, rate limits, temporary provider failures
 
 **2. Stage Failure Retry** (for persistent failures)

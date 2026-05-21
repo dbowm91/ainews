@@ -49,6 +49,7 @@ class APIConfig(BaseModel):
     fields: dict[str, str] = Field(default_factory=dict)
     filters: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
+    pagination: PaginationConfig = Field(default_factory=PaginationConfig)
     request_timeout: int = 15
     user_agent: str = "AINewsBot/1.0"
     api_key: Optional[str] = None

@@ -2,7 +2,7 @@
 
 ## Adapter Types
 - **RSSAdapter:** Creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`. Independent session management.
-- **APIAdapter:** Uses shared global session from `get_crawl_session()`. Does NOT have pagination support yet.
+- **APIAdapter:** Uses shared global session from `get_crawl_session()`. Has pagination support via `PaginationConfig`.
 - **WebAdapter:** Uses shared global session from `get_crawl_session()`.
 
 ## SSRFSafeRedirectHandler
@@ -12,8 +12,12 @@
 
 ## APIAdapter Implementation Notes
 The `APIAdapter` in `adapters/api.py`:
-- Does NOT have pagination support - only makes single requests to `list_url`
-- Supports these filter operations: `equals`, `min`, `exists`
+- Has pagination support via `PaginationConfig` (added in MED-11):
+  - `next_link` type: extracts next URL from JSON response via JSONPath
+  - `query_param` type: increments page/offset query param
+  - `none` type: disables pagination
+  - Respects `max_pages` limit (default 3) and `max_items` limit across all pages
+- Supports filter operations: `equals`, `min`, `exists`
 - Does NOT support `contains` operation
 - Only supports Bearer token authentication (no API key header support)
 - Uses `list_items_path` and `list_method` (NOT `item_path`)

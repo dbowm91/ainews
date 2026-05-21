@@ -14,8 +14,11 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | `edit.py` | `edit_article` | `edit` | LLM edits with contextualization, assigns tags |
 | `newsletter.py` | `generate_daily_newsletters` | `newsletter` | Builds + sends newsletters with executive summary |
 | `scheduler.py` | `publish_scheduled_articles` | `publish` | Publishes articles at scheduled time |
-| `cleanup.py` | Various | - | Cleanup old logs, versions, expired data |
+| `cleanup.py` | Multiple: `cleanup_old_pipeline_logs`, `cleanup_expired_verifications`, `cleanup_stale_limiter_slots`, `consolidate_trend_memory`, `recalculate_impact_scores`, `purge_trend_memory`, `cleanup_old_article_versions` | - | Cleanup old logs, verifications, limiter slots, trend memory, impact scores, article versions |
 | `embeddings.py` | `backfill_embeddings` | `embeddings` | Generates embeddings for articles and trend memory |
+| `retry.py` | `retry_stuck_articles` | - | Retry/dead-letter stuck articles |
+| `subscribers.py` | `cleanup_inactive_subscribers` | - | Flag inactive subscribers |
+| `webhook.py` | `dispatch_webhook_task` | - | Dispatch webhook events |
 
 ## Pipeline Stages
 
@@ -157,13 +160,17 @@ def run_stage(task, article_id: int, stage: str, next_stage: str, task_func):
 
 ## Degradation Path
 
-When full pipeline is disabled, articles follow:
+When pipeline degradation occurs, articles can be routed directly to `review`:
 
 ```
-select → research → write → edit → review → done
+pending → review → done
 ```
 
-Articles skip select/research and go directly to `review` for manual processing.
+**Normal flow:** `pending → select → research → write → edit → review → done`
+
+**Degraded flow:** When stages fail persistently (degradation_count >= 2), articles bypass remaining stages and go directly to `review` for manual processing.
+
+See `services/pipeline_degradation.py:_degrade_and_advance()` for the actual logic.
 
 ## Scheduler
 

@@ -39,26 +39,62 @@ Newsletter
 
 ## Article Model
 
-The `Article` model is the central entity:
+The `Article` model is the central entity with 30+ fields:
 
 ```python
 class Article(Base):
     __tablename__ = 'articles'
 
+    # Identity & Source
     id = Column(Integer, primary_key=True)
-    title = Column(String(500))
-    url = Column(String(2000))
-    source_id = Column(Integer, ForeignKey('sources.id'))
-    content = Column(Text)
-    summary = Column(Text)
+    short_id = Column(String(12), unique=True, index=True)  # Public-facing ID
+    source_id = Column(Integer, ForeignKey('sources.id'), nullable=False, index=True)
+    external_id = Column(String(128), index=True)
 
-    pipeline_status = Column(String(50))  # pending, select, research, write, edit, review, done
+    # Original Content
+    original_url = Column(String(2048))
+    original_title = Column(String(512), index=True)
+    original_author = Column(String(128))
+    original_published_at = Column(DateTime)
+    extracted_text = Column(Text)
+
+    # Pipeline State
+    pipeline_status = Column(String(32), default="pending")
+    selector_result = Column(JSON)  # {"selected": bool, "score": int, "reason": str}
+    research_brief = Column(Text)  # LLM-generated research context
+    draft_article = Column(Text)  # Writer output before edit
+    final_article = Column(Text)  # Editor output (published)
+    original_ai_article = Column(Text)
+    writer_model = Column(String(128))  # Model used for writing
+
+    # Scoring & Categorization
     impact_score = Column(Integer, default=0)
+    summary = Column(Text)
+    category = Column(String(32), index=True)
+    topics = Column(JSON)  # List of topic tags
+    raw_metadata = Column(JSON)  # Source-specific metadata
+
+    # Processing Metadata
+    extraction_status = Column(String(32), default="pending")
+    retry_count = Column(Integer, default=0)
+    total_retries = Column(Integer, nullable=False, default=0)
+    degradation_count = Column(Integer, nullable=False, default=0)
+    pipeline_started_at = Column(DateTime)
+    last_error = Column(Text)
 
     # Timestamps
-    published_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-```
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    scheduled_publish_at = Column(DateTime, nullable=True, index=True)
+    crawled_at = Column(DateTime, nullable=True, index=True)
+    selected_at = Column(DateTime, nullable=True, index=True)
+    published_at = Column(DateTime, nullable=True, index=True)
+
+    # A/B Experiment
+    experiment_group = Column(String(32), nullable=True, index=True)  # control/variant_a/variant_b
+
+    # Embedding for semantic search
+    embedding = Column(Text)
 
 ### Pipeline Status Flow
 
@@ -146,7 +182,16 @@ class TrendMemory(Base):
 
 Key indexes for query performance:
 
-- `Article`: `pipeline_status`, `source_id` (FK), `published_at` (as `original_published_at`), `created_at`, plus `ix_articles_impact` on `impact_score`, `ix_articles_category_status` on `(category, pipeline_status)`, and retry/degradation indexes
-- `Source`: `name`, `source_type`, `consecutive_failures`, `disabled_at`, unique constraint on `source_key`
-- `PipelineRun`: `run_type`, `(run_type, status)` - no index on `created_at`
-- `TrendMemory`: `(topic, importance)`, `expires_at`, `last_accessed_at` - embedding stored as text for caching, not vector search
+- `Article`:
+  - `ix_articles_status_created` on `(pipeline_status, created_at)` - filtered article queries
+  - `ix_articles_published` on `original_published_at` - published article listings
+  - `ix_articles_impact` on `impact_score` - impact-based sorting
+  - `ix_articles_category_status` on `(category, pipeline_status)` - category filtering
+  - `ix_articles_total_retries` on `total_retries` - retry tracking
+  - `ix_articles_retry_count` on `retry_count` - per-stage retry tracking
+  - `ix_articles_degradation_count` on `degradation_count` - degradation tracking
+  - `uq_source_external_id` unique constraint on `(source_id, external_id)` - dedup
+  - Plus individual indexes on: `short_id`, `source_id` (FK), `original_title`, `external_id`, `category`, `experiment_group`, `updated_at`, `scheduled_publish_at`, `crawled_at`, `selected_at`, `published_at`
+- `Source`: unique constraint on `source_key`, index on `consecutive_failures`, index on `disabled_at`
+- `PipelineRun`: index on `run_type`, composite index on `(run_type, status)`
+- `TrendMemory`: indexes on `(topic, importance)`, `expires_at`, `last_accessed_at`

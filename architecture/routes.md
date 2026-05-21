@@ -43,6 +43,10 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/sources` - Source management UI
 - `/admin/subscribers` - Subscriber management UI
 - `/admin/newsletters` - Newsletter history UI
+- `/admin/dead-letters` - Dead letter queue UI
+- `/admin/metrics` - Metrics dashboard
+- `/admin/verify-2fa` - 2FA verification page
+- `/admin/setup-2fa` - 2FA setup page
 
 ### Admin API Blueprint (`admin_api_bp`)
 
@@ -205,6 +209,7 @@ Admin API supports token auth:
 ```python
 # Header: Authorization: Bearer <token>
 # Token stored as: prefix + hash (never plaintext)
+# Prefix is first 16 characters of the hash for lookup
 ```
 
 ### CSRF Protection

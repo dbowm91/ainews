@@ -51,7 +51,7 @@ Pipeline stages use these statuses (defined in `constants.py`):
 | `failed` | Stage failed (can be retried) |
 
 Valid transitions:
-- `pending` → `selecting`, `researching`, `review`
+- `pending` → `selecting`, `selected`, `researching`, `skipped`, `review`
 - `selecting` → `selected`, `failed`
 - `selected` → `researching`, `failed`
 - `researching` → `writing`, `failed`
@@ -247,7 +247,7 @@ When stages fail persistently (after max retries), articles degrade to the next 
 | select | Auto-select with score 6, advance to research |
 | research | Uses source text only (impact_score=30), advance to write |
 | write | Minimal draft from extracted text, advance to edit |
-| edit | Finalize immediately with fallback |
+| edit | Apply fallback → route to review (if degradation_count >= 2 or _should_route_to_review()) |
 
 **Retry Limits:**
 - Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)
@@ -261,10 +261,10 @@ Articles in `review` status require manual intervention.
 ### Pipeline Monitor (`services/pipeline_monitor.py`)
 
 Tracks pipeline health:
-- Stage durations (avg, p95, p99)
-- Failure rates per stage
-- Queue depth per stage
-- Source health correlation
+- Stage success/failure counts per stage
+- Throughput tracking (items per minute)
+- Failure reason breakdown (rate_limit, timeout, server_error, circuit_open)
+- Does NOT track: p95/p99 percentiles, queue depth per stage, source health correlation
 
 ### Pipeline Logs
 
@@ -289,7 +289,7 @@ The pipeline has two independent retry mechanisms:
 
 **1. Celery Task Retry** (for transient errors)
 - Max retries: 3 per task
-- Backoff: exponential (30s, 60s, 120s)
+- Backoff: exponential (30s, 60s, 120s, 240s, ... up to 300s max)
 - Triggered by: network timeouts, rate limits, temporary provider failures
 
 **2. Stage Failure Retry** (for persistent failures)
@@ -310,3 +310,7 @@ LLM providers have circuit breakers:
 The fallback chain is **dynamic** - determined by enabled providers in `providers.yaml` configuration order. The `get_provider_chain()` function iterates through enabled providers and filters out those with open circuits.
 
 If primary fails, falls through to next provider until one succeeds.
+
+**AuthError handling**: Authentication failures (`AuthError`) cause immediate failure without retry or fallback. This prevents infinite auth loops and is not retried.
+
+### Circuit Breaker

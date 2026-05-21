@@ -28,30 +28,64 @@ class APIAdapter(BaseSourceAdapter):
     def fetch(self) -> list[Any]:
         cfg = self.adapter_config
         validate_url_safe(cfg.list_url)
-        resp = self._session.get(cfg.list_url, timeout=cfg.request_timeout)
-        resp.raise_for_status()
-        data = resp.json()
 
-        if cfg.list_method == "json_array":
-            items = data if isinstance(data, list) else []
-        elif cfg.list_method == "json_object_items" and cfg.list_items_path:
-            items = self._resolve_path(data, cfg.list_items_path) or []
-        else:
-            items = data if isinstance(data, list) else []
+        all_items = []
+        next_url = cfg.list_url
+        pages_fetched = 0
 
-        items = items[: cfg.max_items]
+        while next_url and pages_fetched < cfg.pagination.max_pages:
+            resp = self._session.get(next_url, timeout=cfg.request_timeout)
+            resp.raise_for_status()
+            data = resp.json()
 
-        # If item_url is set, fetch each item individually
-        if cfg.item_url:
+            if cfg.list_method == "json_array":
+                items = data if isinstance(data, list) else []
+            elif cfg.list_method == "json_object_items" and cfg.list_items_path:
+                items = self._resolve_path(data, cfg.list_items_path) or []
+            else:
+                items = data if isinstance(data, list) else []
+
+            for item in items:
+                if len(all_items) >= cfg.max_items:
+                    break
+                if self._passes_filters(item, cfg.filters):
+                    all_items.append(item)
+
+            if len(all_items) >= cfg.max_items:
+                break
+
+            next_url = self._get_next_url(data, cfg.pagination)
+            pages_fetched += 1
+
+            if cfg.pagination.type == "query_param" and next_url:
+                next_url = self._increment_query_param(next_url, pages_fetched)
+
+        if cfg.item_url and all_items:
             fetched = []
-            for item_id in items[: cfg.max_items]:
+            for item_id in all_items[: cfg.max_items]:
                 item = self._fetch_item(item_id)
-                if item and self._passes_filters(item, cfg.filters):
+                if item:
                     fetched.append(item)
             return fetched
 
-        # Items are already full objects
-        return [i for i in items if self._passes_filters(i, cfg.filters)]
+        return all_items
+
+    def _get_next_url(self, data: Any, pagination: Any) -> Optional[str]:
+        if pagination.type == "next_link" and pagination.next_link_selector:
+            return self._resolve_path(data, pagination.next_link_selector)
+        return None
+
+    def _increment_query_param(self, url: str, page: int) -> str:
+        from urllib.parse import parse_qs, urlparse, urlencode
+
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+
+        page_param = "page" if "page" in qs else "offset"
+        qs[page_param] = [str(page + 1)]
+
+        new_query = urlencode(qs, doseq=True)
+        return parsed._replace(query=new_query).geturl()
 
     def parse_item(self, raw: Any) -> Optional[RawItem]:
         cfg = self.adapter_config

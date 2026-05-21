@@ -257,4 +257,5 @@ Located in `services/search/`:
 | DuckDuckGo | `duckduckgo.py` | Default, enabled |
 | Google | `google.py` | Disabled (requires API key) |
 | SearxNG | `searxng.py` | Disabled (self-hosted) |
-| Hybrid | `sqlite_fts.py` | Internal article search |
+| Hybrid | `hybrid.py` | Enabled (FTS5 + vector similarity) |
+| SQLite FTS | `sqlite_fts.py` | Internal article search |

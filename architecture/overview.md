@@ -221,3 +221,73 @@ The codebase follows strict layering to maintain separation of concerns:
 | Routes | `models/`, `schemas/`, `services/` | `adapters/` |
 
 See individual module docs for details and known layering violations.
+
+---
+
+## Deep Dive Documents
+
+Each module listed above has a dedicated deep-dive document. Use these links to explore in detail:
+
+### [models.md](models.md)
+- Complete file inventory and model relationships
+- Article model with pipeline_status flow
+- Source health tracking model
+- TrendMemory embedding-based semantic tracking
+- Index definitions for query performance
+
+### [services.md](services.md)
+- LLM provider system architecture
+- Circuit breaker pattern implementation
+- Pipeline services (researcher, writer, editor)
+- Rate limiter with Redis pub/sub
+- Email and webhook infrastructure
+- Trend memory and content extraction
+
+### [adapters.md](adapters.md)
+- Adapter pattern with registry decorator
+- RSS, API, and Web adapter implementations
+- SSRF protection via SSRFSafeRedirectHandler
+- Source configuration from sources.yaml
+- Error handling conventions
+
+### [routes.md](routes.md)
+- Blueprint structure (public_bp, admin_bp, admin_api_bp)
+- Public routes for feeds, subscription, links
+- Admin interface and API endpoints
+- Authentication with TOTP 2FA
+- Template structure
+
+### [tasks.md](tasks.md)
+- Complete task inventory by stage
+- Stage transitions and quality gates
+- Core tasks (crawl, extract, select, research, write, edit)
+- run_stage helper for standard lifecycle
+- Celery Beat schedule details
+
+### [schemas.md](schemas.md)
+- Pipeline configuration schema
+- Source adapter configuration (RSS, API, Web)
+- LLM response schemas (SelectionResult, ResearchBrief, CondensedArticle)
+- Task validation schemas
+
+### [utils.md](utils.md)
+- URL utilities with SSRF protection
+- Text processing and XML escaping
+- DateTime parsing and formatting
+- Security and hash utilities
+- HTML processing
+
+### [subagent.md](subagent.md)
+- Tool registry with built-in context tools
+- Tool implementations for articles, trends, search
+- Subagent runner with retry and revocation checking
+- Chain system with conditional branching
+- Middleware for logging and timing
+
+### [pipeline.md](pipeline.md)
+- Complete pipeline stage details
+- Newsletter generation flow (3-stage LLM)
+- Scheduled tasks (14 tasks)
+- Degradation behavior
+- Two-tier retry system
+- Circuit breaker and fallback chain

@@ -25,7 +25,7 @@
 - **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls. The architecture doc suggesting multi-step message injection is outdated.
 - **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
-- **Duplicate Function (BUG - CRIT-2):** `_finalize_subagent_result()` is defined TWICE in `services/subagent/runner.py` - at lines 277-328 and 498-501. One is dead code and should be removed.
+- **_finalize_subagent_result():** This function was previously defined twice (CRIT-2). The duplicate definition was removed; single definition remains at line 498+ in `services/subagent/runner.py`.
 
 ## Utils Notes
 - **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. Note: `truncate()` does not validate negative length (see MED-4 in plan).

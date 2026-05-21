@@ -186,24 +186,26 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Verification steps
 
 ### Wave-Based Implementation (plans/plan.md)
-The implementation plan organizes items into waves for parallel execution:
-- **Wave A**: Critical bugs (CRIT-1, CRIT-2, CRIT-3)
-- **Wave B**: Medium priority fixes (MED-1 through MED-8)
-- **Wave C**: Documentation updates (LOW-1 through LOW-6)
-- **Wave A4**: TrendMemory field (CRIT-A4) - ADDED last_accessed_at field
-- **Wave B1**: Quality gate routing documentation (HIGH-B1)
-- **Wave C9**: backfill_embeddings decorator (MED-C9)
-- **Wave D7**: Scheduled tasks documentation (LOW-D7)
+The implementation plan (`plans/plan.md`) organizes items into waves for parallel execution. **Previous waves (A, B, C, A4, B1, C9, D7) are COMPLETED.** The plan has been updated with new remaining items:
 
-All waves from plans/plan.md are COMPLETED.
+- **Wave A**: Critical documentation fixes (CRIT-1: Source.adapter_config doc, CRIT-2: utils/url.py global state doc)
+- **Wave B**: High priority model documentation (HIGH-1 through HIGH-7)
+- **Wave C**: Medium priority (MED-1 through MED-18) - mostly documentation, includes 4 code items (MED-2, MED-3, MED-4, MED-11)
+- **Wave D**: Low priority documentation consistency (LOW-1 through LOW-9)
+
+### Code Items Requiring Implementation
+The new plan contains one code change (everything else is documentation):
+- **MED-11** (`adapters/api.py`): Implement pagination support for APIAdapter
+
+Note: MED-2, MED-3, MED-4 were code items but were verified as ALREADY CORRECT in the codebase during this review session.
 
 ### Architecture Review (architecture/review_plan.md)
-The architecture review plan (`architecture/review_plan.md`) verifies all architecture documents against actual code. Review findings are organized by module in `plans/*_review.md`. Key fixes from review:
+The architecture review plan (`architecture/review_plan.md`) verified all architecture documents against actual code. Key fixes identified:
 
 - **ARCH-1**: Added missing `_finalize_subagent_result()` function to runner.py
 - **ARCH-2**: Fixed limiter slot leak using `rc.provider`/`rc.model` fallbacks
 - **ARCH-3**: Added missing `import json` in trend_memory.py
 
-Documentation discrepancies were also fixed in `architecture/adapters.md`, `routes.md`, `schemas.md`, `models.md`, `pipeline.md`, and `subagent.md`.
+Review findings are organized by module in `plans/*_review.md`.
 
 Agents can work on different waves in parallel if multiple agents are available.

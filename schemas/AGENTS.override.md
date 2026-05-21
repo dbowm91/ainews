@@ -18,5 +18,5 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
   - `NewsletterBrief` uses `themes`, `highlights`, `connections` (not `newsletter_id`, `subject`)
 - **PipelineLog meta field:** Uses `meta` (not `metadata`) due to SQLAlchemy reserved name restriction.
 
-## Adapter Config Validation (BUG - CRIT-3)
-`SourceConfig.config` in `schemas/source.py` is typed as `dict[str, Any]` with no adapter-specific validation. An RSS source with API-config fields will pass validation silently and fail at runtime. A `field_validator` should be added to validate `config` against the appropriate adapter schema based on `type`. The `ADAPTER_CONFIGS` dict already exists at line 98-102 mapping type to config class (RSSConfig, APIConfig, WebConfig).
+## Adapter Config Validation (FIXED - CRIT-3)
+`SourceConfig.config` in `schemas/source.py` now has a `field_validator` that validates `config` against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on `type`. The `ADAPTER_CONFIGS` dict at line 98-102 maps type to config class.

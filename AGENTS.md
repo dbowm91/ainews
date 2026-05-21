@@ -230,8 +230,4 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Implementation details or code examples
 - Verification steps
 
-### Remaining Code Implementation Item
-Only ONE code change remains in the implementation plan:
-- **MED-11**: `adapters/api.py` - Implement pagination support for APIAdapter
-
-All other items are documentation updates to `architecture/*.md` files.
+All items from plans/plan.md have been completed. See plans/plan.md for the implementation branches used.

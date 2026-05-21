@@ -165,6 +165,15 @@ The `backfill_embeddings` task in `tasks/embeddings.py` now has `max_retries=CEL
 ### TrendMemory last_accessed_at (ADDED - CRIT-A4)
 The `TrendMemory` model in `models/context.py` now has a `last_accessed_at` field for tracking when trend memory entries were last accessed.
 
+### Subagent _finalize_subagent_result (FIXED - ARCH-1)
+The `_finalize_subagent_result()` function in `services/subagent/runner.py` was called but never defined. It has been added to handle fallback logic and metrics consistently with the `run_subagent()` function.
+
+### Limiter Slot Leak Fix (FIXED - ARCH-2)
+In `tasks/pipeline.py:run_stage()`, the limiter release now uses `provider_id or rc.provider` and `model or rc.model` as fallbacks to prevent slot leaks when `_run_stage_core` raises before returning provider info.
+
+### Missing json Import (FIXED - ARCH-3)
+The `services/trend_memory.py` was missing `import json` which caused `json.JSONDecodeError` to be a `NameError` at runtime if JSON parsing failed.
+
 ## Shared Context
 
 Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules.
@@ -176,7 +185,7 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Implementation details or code examples
 - Verification steps
 
-### Wave-Based Parallel Implementation
+### Wave-Based Implementation (plans/plan.md)
 The implementation plan organizes items into waves for parallel execution:
 - **Wave A**: Critical bugs (CRIT-1, CRIT-2, CRIT-3)
 - **Wave B**: Medium priority fixes (MED-1 through MED-8)
@@ -186,6 +195,15 @@ The implementation plan organizes items into waves for parallel execution:
 - **Wave C9**: backfill_embeddings decorator (MED-C9)
 - **Wave D7**: Scheduled tasks documentation (LOW-D7)
 
-All waves are now COMPLETED.
+All waves from plans/plan.md are COMPLETED.
+
+### Architecture Review (architecture/review_plan.md)
+The architecture review plan (`architecture/review_plan.md`) verifies all architecture documents against actual code. Review findings are organized by module in `plans/*_review.md`. Key fixes from review:
+
+- **ARCH-1**: Added missing `_finalize_subagent_result()` function to runner.py
+- **ARCH-2**: Fixed limiter slot leak using `rc.provider`/`rc.model` fallbacks
+- **ARCH-3**: Added missing `import json` in trend_memory.py
+
+Documentation discrepancies were also fixed in `architecture/adapters.md`, `routes.md`, `schemas.md`, `models.md`, `pipeline.md`, and `subagent.md`.
 
 Agents can work on different waves in parallel if multiple agents are available.

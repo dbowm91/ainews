@@ -173,6 +173,13 @@ The pipeline uses Celery Beat for scheduled task orchestration:
 | `cleanup-old-logs` | Daily 3 AM | Clean old pipeline logs |
 | `consolidate-trend-memory` | Daily 3:30 AM | Consolidate trend memory |
 | `purge-trend-memory` | Daily 3:45 AM | Purge expired trend memory |
+| `cleanup-old-versions` | Daily 3:45 AM | Clean up old article versions |
+| `cleanup-expired-verifications` | Every 15 min | Clean expired email verification tokens |
+| `cleanup-stale-limiter-slots` | Every 5 min | Clean stale rate limiter slots |
+| `retry-failed-newsletter-deliveries` | Every 2 hours | Retry failed newsletter email deliveries |
+| `recalculate-impact-scores` | Daily 4 AM | Recalculate article impact scores |
+| `cleanup-inactive-subscribers` | Daily 1 AM | Clean up inactive newsletter subscribers |
+| `retry-stuck-articles` | Every 60 min | Retry articles stuck in pipeline |
 
 ## Pipeline Configuration
 

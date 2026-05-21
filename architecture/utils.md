@@ -13,20 +13,6 @@ The `utils/` package contains pure utility functions with minimal dependencies.
 | `html.py` | `strip_tags`, `linkify`, `extract_text` | HTML processing |
 | `security.py` | `generate_token`, `constant_time_compare` | Security utilities |
 
-## URL Utilities (`url.py`)
-
-```python
-def validate_url_safe(url: str) -> str:
-    """Check if URL is safe for fetching (SSRF protection)"""
-    # Raises UnsafeURLError if blocked
-    # Blocks internal IPs, private hostnames
-    # Validates scheme (http/https only)
-    # Returns the validated URL string
-
-class UnsafeURLError(Exception):
-    """Raised when URL fails SSRF checks"""
-```
-
 ## Text Utilities (`text.py`)
 
 ```python
@@ -128,8 +114,9 @@ class UnsafeURLError(ValueError):
 
 ## Design Principles
 
-1. **Pure functions**: No side effects, no global state
-2. **Minimal dependencies**: Only standard library + very common packages
-3. **Comprehensive validation**: Input checking with clear errors
-4. **Type hints**: Full typing for better IDE support
-5. **Testable**: Easy to unit test without mocking complex systems
+1. **Minimal dependencies**: Only standard library + very common packages
+2. **Comprehensive validation**: Input checking with clear errors
+3. **Type hints**: Full typing for better IDE support
+4. **Testable**: Easy to unit test without mocking complex systems
+
+**Note:** `validate_url_safe()` in `url.py` performs DNS resolution with caching and is therefore NOT a pure function. It has global mutable state (`_dns_cache`, `_dns_executor`). This is documented in the function's docstring.

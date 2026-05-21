@@ -1,6 +1,6 @@
 # Tasks Module
 
-The `tasks/` package contains Celery tasks implementing the newsletter pipeline. Tasks use the `run_stage()` helper for standard lifecycle management.
+The `tasks/` package contains Celery tasks implementing the newsletter pipeline. Shared helpers in `tasks/pipeline.py` (like `run_stage()`) are used across multiple pipeline stages.
 
 ## File Inventory
 
@@ -12,10 +12,25 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | `research.py` | `research_article` | `research` | LLM builds research brief with web search + context |
 | `write.py` | `write_article` | `write` | LLM writes condensed article (Smart Brevity) |
 | `edit.py` | `edit_article` | `edit` | LLM edits with contextualization, assigns tags |
-| `newsletter.py` | `generate_daily_newsletters` | `newsletter` | Builds + sends newsletters with executive summary |
+| `newsletter.py` | `generate_daily_newsletters` | `newsletter` | Builds + sends newsletters with executive summary (batches of 500) |
 | `scheduler.py` | `publish_scheduled_articles` | `publish` | Publishes articles at scheduled time |
-| `cleanup.py` | Various | - | Cleanup old logs, versions, expired data |
+| `cleanup.py` | Various | - | See cleanup tasks below |
+| `retry.py` | `retry_stuck` | - | Retry/dead-letter stuck articles |
+| `subscribers.py` | `cleanup_inactive_subscribers` | - | Flag inactive subscribers |
+| `webhook.py` | `dispatch_webhook_task` | - | Async webhook dispatch |
 | `embeddings.py` | `backfill_embeddings` | `embeddings` | Generates embeddings for articles and trend memory |
+
+### Cleanup Tasks (`cleanup.py`)
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| `cleanup_old_pipeline_logs` | Daily 3 AM | Clean old pipeline logs |
+| `cleanup_expired_verifications` | Every 15 min | Clean expired email verifications |
+| `cleanup_stale_limiter_slots` | Every 5 min | Clean stale rate limiter slots |
+| `consolidate_trend_memory` | Daily 3:30 AM | Consolidate trend memory entries |
+| `recalculate_impact_scores` | Daily 4:00 AM | Recalculate article impact scores |
+| `purge_trend_memory` | Daily 3:45 AM | Purge expired trend memory |
+| `cleanup_old_article_versions` | Daily 3:45 AM | Clean old article versions |
 
 ## Pipeline Stages
 
@@ -23,13 +38,13 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
 │ pending │───→│ select  │───→│research │───→│  write  │───→│  edit   │
 └─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
-                                                      │
-                                                      ▼
-                                               ┌──────────┐
-                                               │   done   │
-                                               └──────────┘
-                                                      ▲
-                                                      │
+                                                       │
+                                                       ▼
+                                                ┌──────────┐
+                                                │   done   │
+                                                └──────────┘
+                                                       ▲
+                                                       │
 ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
 │  fail   │←───│  fail   │←───│  fail   │←───│  fail   │←───│ review  │
 │         │    │         │    │         │    │         │    │(manual) │
@@ -142,28 +157,41 @@ def generate_daily_newsletters(self):
 
 ## run_stage Helper
 
-Standard task lifecycle via `pipeline_utils.run_stage()`:
+Standard task lifecycle via `tasks/pipeline.run_stage()`:
 
 ```python
-def run_stage(task, article_id: int, stage: str, next_stage: str, task_func):
-    """Standard stage runner with locking and error handling"""
-    # 1. Acquire stage lock (prevents duplicate processing)
-    # 2. Update article status to stage
-    # 3. Execute task_func
-    # 4. On success: transition to next_stage
-    # 5. On failure: handle_retry() or mark_failed()
-    # 6. Release stage lock in finally block
+def run_stage(
+    stage: str,
+    article_id: int,
+    work_fn,
+    task_self,
+    run_id=None,
+    skip_next: str = "finalize",
+    retry_countdown: int = 30,
+    retry_max: int = 15,
+):
+    """Execute a pipeline stage with standard lifecycle management."""
+    # 1. Check if stage is disabled (skip if so)
+    # 2. Acquire stage lock (prevents duplicate processing)
+    # 3. Get provider for stage (with circuit breaker fallback)
+    # 4. Acquire rate limiter slot
+    # 5. Execute work_fn
+    # 6. On success: transition to next_stage
+    # 7. On failure: handle_retry() or mark_failed()
+    # 8. Release stage lock and rate limiter slot in finally block
 ```
+
+**Note:** `tasks/pipeline.py` contains shared helper functions (`run_stage()`, `_run_stage_core()`, `_handle_stage_exception()`, `_handle_disabled()`, etc.) used across all stage tasks.
 
 ## Degradation Path
 
-When full pipeline is disabled, articles follow:
+When full pipeline is disabled via `pipeline.yaml`, articles bypass normal stage flow and go directly to `review`:
 
 ```
-select → research → write → edit → review → done
+pending → review → done
 ```
 
-Articles skip select/research and go directly to `review` for manual processing.
+Articles skip select, research, write, and edit stages for manual processing.
 
 ## Scheduler
 

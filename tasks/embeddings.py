@@ -5,12 +5,14 @@ import time
 from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import CELERY_TASK_MAX_RETRIES
 from services.task_security import verify_task
 
 logger = get_task_logger(__name__)
 
 
 @shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True,
+    max_retries=CELERY_TASK_MAX_RETRIES,
     soft_time_limit=600, time_limit=660,
     autoretry_for=(ConnectionError, TimeoutError),
     retry_backoff=True,

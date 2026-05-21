@@ -2,6 +2,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests
 
@@ -25,33 +26,60 @@ class APIAdapter(BaseSourceAdapter):
     def close(self):
         self._session.close()
 
-    def fetch(self) -> list[Any]:
+    def fetch(self) -> list[Any]:  # noqa: C901
         cfg = self.adapter_config
-        validate_url_safe(cfg.list_url)
-        resp = self._session.get(cfg.list_url, timeout=cfg.request_timeout)
-        resp.raise_for_status()
-        data = resp.json()
+        pag = cfg.pagination
 
-        if cfg.list_method == "json_array":
-            items = data if isinstance(data, list) else []
-        elif cfg.list_method == "json_object_items" and cfg.list_items_path:
-            items = self._resolve_path(data, cfg.list_items_path) or []
-        else:
-            items = data if isinstance(data, list) else []
+        all_items = []
+        page_count = 0
+        current_url = cfg.list_url
 
-        items = items[: cfg.max_items]
+        while page_count < pag.max_pages:
+            validate_url_safe(current_url)
+            resp = self._session.get(current_url, timeout=cfg.request_timeout)
+            resp.raise_for_status()
+            data = resp.json()
 
-        # If item_url is set, fetch each item individually
-        if cfg.item_url:
-            fetched = []
-            for item_id in items[: cfg.max_items]:
-                item = self._fetch_item(item_id)
-                if item and self._passes_filters(item, cfg.filters):
-                    fetched.append(item)
-            return fetched
+            if cfg.list_method == "json_array":
+                items = data if isinstance(data, list) else []
+            elif cfg.list_method == "json_object_items" and cfg.list_items_path:
+                items = self._resolve_path(data, cfg.list_items_path) or []
+            else:
+                items = data if isinstance(data, list) else []
 
-        # Items are already full objects
-        return [i for i in items if self._passes_filters(i, cfg.filters)]
+            if not items:
+                break
+
+            if cfg.item_url:
+                for item_id in items[: cfg.max_items]:
+                    item = self._fetch_item(item_id)
+                    if item and self._passes_filters(item, cfg.filters):
+                        all_items.append(item)
+                        if len(all_items) >= cfg.max_items:
+                            return all_items[: cfg.max_items]
+            else:
+                for item in items:
+                    if self._passes_filters(item, cfg.filters):
+                        all_items.append(item)
+                        if len(all_items) >= cfg.max_items:
+                            return all_items[: cfg.max_items]
+
+            page_count += 1
+
+            if not pag.enabled or pag.type == "none":
+                break
+
+            if pag.type == "next_link" and pag.next_link_selector:
+                next_url = self._get_next_link(data, pag.next_link_selector)
+                if not next_url:
+                    break
+                current_url = next_url
+            elif pag.type == "query_param":
+                current_url = self._increment_page_param(current_url, page_count)
+            else:
+                break
+
+        return all_items[: cfg.max_items]
 
     def parse_item(self, raw: Any) -> Optional[RawItem]:
         cfg = self.adapter_config
@@ -64,7 +92,6 @@ class APIAdapter(BaseSourceAdapter):
         if not title:
             return None
 
-        # Published_at handling
         published = None
         pub_raw = self._resolve_path(raw, cfg.fields.get("published_at", "$.time"))
         if pub_raw:
@@ -81,21 +108,18 @@ class APIAdapter(BaseSourceAdapter):
                 except (ValueError, TypeError):
                     pass
 
-        # Score
         score_raw = self._resolve_path(raw, cfg.fields.get("raw_score", "$.score"))
         try:
             score = float(score_raw) if score_raw is not None else 0.0
         except (ValueError, TypeError):
             score = 0.0
 
-        # Metadata
         raw_meta = {}
         for meta_key, meta_path in (cfg.metadata or {}).items():
             val = self._resolve_path(raw, meta_path)
             if val is not None:
                 raw_meta[meta_key] = val
 
-        # Velocity calculation for time-based scoring
         if published and score > 0:
             age_hours = max(
                 (datetime.now(timezone.utc) - published).total_seconds() / 3600, 0.1
@@ -139,11 +163,48 @@ class APIAdapter(BaseSourceAdapter):
             logger.warning("Failed to fetch item from API: %s", type(e).__name__)
         return None
 
+    def _get_next_link(self, data: Any, next_link_selector: str) -> Optional[str]:
+        if not isinstance(data, dict):
+            return None
+        parts = next_link_selector.lstrip("$..").split(".")
+        current = data
+        for part in parts:
+            if current is None:
+                return None
+            if isinstance(current, dict):
+                current = current.get(part)
+            elif isinstance(current, list):
+                try:
+                    idx = int(part)
+                    current = current[idx] if idx < len(current) else None
+                except ValueError:
+                    return None
+            else:
+                return None
+        return str(current) if current else None
+
+    def _increment_page_param(self, url: str, page_num: int) -> str:
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        existing_page = qs.get("page", ["1"])[0]
+        if existing_page.isdigit():
+            qs["page"] = [str(page_num + 1)]
+        else:
+            qs["offset"] = [str(page_num * 20)]
+        return urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlencode(qs, doseq=True),
+            parsed.fragment
+        ))
+
     @staticmethod
     def _resolve_path(data: Any, path: str) -> Any:
         if not path or not path.startswith("$"):
             return data
-        parts = path.lstrip("$.").split(".")
+        parts = path.lstrip("$..").split(".")
         current = data
         for part in parts:
             if current is None:

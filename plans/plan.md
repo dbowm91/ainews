@@ -1,8 +1,8 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** COMPLETED
-**Last Updated:** 2026-05-13
-**Goal:** Consolidate findings from 9 architecture review documents into actionable items.
+**Status:** ALL WAVES COMPLETED
+**Last Updated:** 2026-05-21
+**Goal:** Consolidate all findings from architecture review documents into actionable items for future agents.
 
 ---
 
@@ -333,6 +333,23 @@ For fastest execution, assign agents to waves as follows:
 | LOW-4 | COMPLETED | 2026-05-13 | Retry-After header behavior documented as BY DESIGN |
 | LOW-5 | COMPLETED | 2026-05-13 | APIAdapter pagination docs updated |
 | LOW-6 | N/A | - | No schemas/article.py reference found in current docs |
+| CRIT-A4 | COMPLETED | 2026-05-21 | Added last_accessed_at field to TrendMemory model |
+| HIGH-B1 | COMPLETED | 2026-05-21 | Documented quality gate routing in architecture/tasks.md |
+| MED-C9 | COMPLETED | 2026-05-21 | Added max_retries=CELERY_TASK_MAX_RETRIES to backfill_embeddings |
+| LOW-D7 | COMPLETED | 2026-05-21 | Documented all 14 scheduled tasks in architecture/pipeline.md |
+
+---
+
+## Remaining Waves Completion (2026-05-21)
+
+The following remaining wave items were completed on 2026-05-21:
+
+| Item | Status | Date Completed | Notes |
+|------|--------|----------------|-------|
+| CRIT-A4 | COMPLETED | 2026-05-21 | Added `last_accessed_at` field to TrendMemory model for tracking access times |
+| HIGH-B1 | COMPLETED | 2026-05-21 | Documented quality gate routing in `architecture/tasks.md` |
+| MED-C9 | COMPLETED | 2026-05-21 | Added `max_retries=CELERY_TASK_MAX_RETRIES` to backfill_embeddings decorator |
+| LOW-D7 | COMPLETED | 2026-05-21 | Documented all 14 scheduled tasks in `architecture/pipeline.md` |
 
 ---
 
@@ -345,6 +362,21 @@ The following issues were discovered during this review session and have been ad
 2. ~~**MED-3 (NEW)**: `extract_text()` silently swallows trafilatura ImportError~~ FIXED - now logs warning
 
 3. ~~**MED-8 (NEW)**: Layer violation in `schemas/common.py`~~ DOCUMENTED AS INTENTIONAL
+
+---
+
+## All Plan Items Completed
+
+**Status: ALL WAVES COMPLETED** as of 2026-05-21
+
+All items from the consolidated implementation plan have been completed:
+- Wave A (CRIT-1, CRIT-2, CRIT-3): Critical bugs fixed
+- Wave B (MED-1 through MED-8): Medium priority fixes completed
+- Wave C (LOW-1 through LOW-6): Documentation updates completed
+- Wave A4 (CRIT-A4): TrendMemory field added
+- Wave B1 (HIGH-B1): Quality gate documentation added
+- Wave C9 (MED-C9): backfill_embeddings decorator fixed
+- Wave D7 (LOW-D7): Scheduled tasks documentation completed
 
 ---
 

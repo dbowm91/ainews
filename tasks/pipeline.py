@@ -433,7 +433,7 @@ def run_stage(
         return _handle_stage_exception(e, stage, article_id, run_id, t0, provider_id, model)
     finally:
         if limiter is not None:
-            limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
+            limiter.release(provider_id or rc.provider, model or rc.model, rc.timeout_seconds)
         if redis_client is not None:
             try:
                 from services.redis_utils import release_lock

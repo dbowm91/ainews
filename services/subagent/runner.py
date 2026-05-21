@@ -274,6 +274,67 @@ def run_subagent(
     )
 
 
+def _finalize_subagent_result(
+    result: BaseModel | None,
+    used_fallback: bool,
+    fallback_stages: list[str],
+    last_exc: BaseException | None,
+    stage: str,
+    task_type: str,
+    article_id: int | None,
+    stage_config: SubagentStageConfig,
+) -> SubagentResponse:
+    """Finalize subagent result, handling fallback logic and metrics."""
+    if result is None:
+        used_fallback = True
+        fallback_stages = [stage]
+        from . import get_metrics, log_pipeline_event
+
+        get_metrics().counter_inc(
+            "subagent.failure",
+            labels={"stage": stage, "task_type": task_type},
+        )
+        log_pipeline_event(
+            stage="subagent",
+            event="subagent.failure",
+            article_id=article_id,
+            task_type=task_type,
+            stage_name=stage,
+            error=str(last_exc) if last_exc else None,
+        )
+    else:
+        from . import get_metrics, log_pipeline_event
+
+        get_metrics().counter_inc(
+            "subagent.success",
+            labels={"stage": stage, "task_type": task_type},
+        )
+        log_pipeline_event(
+            stage="subagent",
+            event="subagent.complete",
+            article_id=article_id,
+            task_type=task_type,
+            stage_name=stage,
+        )
+
+    from . import get_metrics
+
+    get_metrics().counter_inc(
+        "subagent.calls",
+        labels={
+            "stage": stage,
+            "task_type": task_type,
+            "status": "failure" if used_fallback else "success",
+        },
+    )
+
+    return SubagentResponse(
+        synthesis=result.synthesis if result else "",
+        used_fallback=used_fallback,
+        fallback_stages=fallback_stages,
+    )
+
+
 def run_subagent_with_tools(
     task_type: str,
     stage: str,

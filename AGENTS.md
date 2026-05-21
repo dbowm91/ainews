@@ -174,7 +174,11 @@ The `services/trend_memory.py` has `import json` which is needed for `json.JSOND
 ## APIAdapter Specific Notes
 
 ### Pagination
-The `APIAdapter` in `adapters/api.py` does NOT have pagination support yet - it only makes single requests to `list_url`. Implementation is needed (see plans/plan.md MED-11).
+The `APIAdapter` in `adapters/api.py` has pagination support via `PaginationConfig`:
+- `next_link` type: extracts next URL from JSON response via JSONPath selector
+- `query_param` type: increments page/offset query parameter
+- `none` type: disables pagination
+- Respects `max_pages` limit (default 3) and `max_items` limit across all pages
 
 ### Filter Operations
 APIAdapter supports these filter operations in `adapters/api.py:_passes_filters()`:

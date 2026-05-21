@@ -94,6 +94,8 @@ The following bugs were identified and fixed during architecture review:
 | truncate no negative validation | utils/text | Raises `ValueError` if length < 0 | `utils/text.py` |
 | utils/url.py docstring inaccurate | utils/url | Docstring now notes global mutable state | `utils/url.py` |
 | StageConfig stub undocumented | schemas/pipeline | Added docstring explaining stub purpose | `schemas/pipeline.py` |
+| backfill_embeddings no max_retries | tasks/embeddings | Added `max_retries=CELERY_TASK_MAX_RETRIES` | `tasks/embeddings.py` |
+| TrendMemory missing last_accessed_at | models/context | Added `last_accessed_at` field | `models/context.py` |
 
 ### Subagent System Thread Safety
 
@@ -108,6 +110,15 @@ When acquiring and releasing rate limiter slots:
 - Always use `provider_id` (the actual provider used, returned from `get_provider_for_role()` or `_try_stage_work()`) not `rc.provider` (the configured provider)
 - The configured provider may differ from actual provider when fallback occurs
 - This applies to both `limiter.acquire()` and `limiter.release()` calls
+
+### Quality Gates
+Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
+- `select`: Low confidence (score OK but confidence="low") → `review`
+- `research`: Degenerate research brief (fails `_is_degenerate_research()`) → `review`
+- `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
+- `edit`: Validation failure → `review`
+
+See `architecture/tasks.md` for full documentation.
 
 ## Common Fix Patterns
 
@@ -140,3 +151,18 @@ git stash
 .venv/bin/python -m pytest tests/ -x -q
 git stash pop
 ```
+
+## All Plan Items Completed
+
+**Status: ALL WAVES COMPLETED** as of 2026-05-21
+
+All items from the consolidated implementation plan have been completed:
+- Wave A (CRIT-1, CRIT-2, CRIT-3): Critical bugs fixed
+- Wave B (MED-1 through MED-8): Medium priority fixes completed
+- Wave C (LOW-1 through LOW-6): Documentation updates completed
+- Wave A4 (CRIT-A4): TrendMemory field added
+- Wave B1 (HIGH-B1): Quality gate documentation added
+- Wave C9 (MED-C9): backfill_embeddings decorator fixed
+- Wave D7 (LOW-D7): Scheduled tasks documentation completed
+
+See `plans/plan.md` for full details.

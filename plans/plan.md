@@ -1,16 +1,16 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** ACTIVE - Remaining items from architecture review
+**Status:** ACTIVE
 **Last Updated:** 2026-05-21
-**Goal:** Consolidate all remaining action items from architecture review documents into actionable items for future agents.
+**Goal:** Consolidated implementation plan from architecture review documents.
 
 ---
 
 ## Executive Summary
 
-This plan consolidates remaining action items discovered during the architecture review of: schemas, pipeline, routes, tasks, services, models, subagent, adapters, and utils modules.
+This plan consolidates remaining action items from architecture reviews of: schemas, pipeline, routes, tasks, services, models, subagent, adapters, and utils modules.
 
-**All previously identified bugs have been fixed.** The remaining items are primarily documentation updates to align architecture documents with actual implementation.
+**All previously identified bugs have been fixed in code.** The remaining items are primarily documentation updates to align architecture documents with actual implementation, plus one code implementation item (pagination for APIAdapter).
 
 ### Priority Summary
 
@@ -18,47 +18,48 @@ This plan consolidates remaining action items discovered during the architecture
 |----------|-------|------|
 | CRIT | 2 | Documentation (alignment with code) |
 | HIGH | 7 | Documentation (model accuracy) |
-| MED | 18 | Documentation + 1 Implementation |
-| LOW | 9 | Documentation consistency |
-| **Total** | **36 items** | - |
+| MED | 15 | Documentation + 1 Implementation |
+| LOW | 11 | Documentation consistency |
+| **Total** | **35 items** | - |
+
+### Verified Items Requiring NO Action
+
+The following items were investigated and found to be ALREADY CORRECT in the codebase:
+
+| ID | Location | Issue | Verification |
+|----|----------|-------|--------------|
+| MED-2 | tasks/pipeline.py:56 | Uses PipelineStatus.RESEARCHING | VERIFIED |
+| MED-3 | tasks/pipeline.py:50-60 | Sets selector_result dict | VERIFIED |
+| MED-4 | services/pipeline_degradation.py:52 | Sets writer_model="fallback" | VERIFIED |
+| ARCH-1 | services/subagent/runner.py | _finalize_subagent_result exists at line 277 | VERIFIED |
+| ARCH-2 | tasks/pipeline.py:436 | Limiter uses rc.provider/model fallbacks | VERIFIED |
+| ARCH-3 | services/trend_memory.py | Has import json | VERIFIED |
+| CRIT-3 | schemas/source.py:123-130 | validate_adapter_config validator exists | VERIFIED |
 
 ---
 
-## Completed Work (Reference)
+## Wave A: Critical Documentation Fixes
 
-The following items from earlier waves have been completed:
-
-| Wave | Items | Status |
-|------|-------|--------|
-| Wave A | CRIT-1, CRIT-2, CRIT-3 (critical bugs) | COMPLETED |
-| Wave B | MED-1 through MED-8 (medium priority) | COMPLETED |
-| Wave C | LOW-1 through LOW-6 (documentation) | COMPLETED |
-| Wave A4 | CRIT-A4 (TrendMemory.last_accessed_at) | COMPLETED |
-| Wave B1 | HIGH-B1 (Quality gate routing) | COMPLETED |
-| Wave C9 | MED-C9 (backfill_embeddings decorator) | COMPLETED |
-| Wave D7 | LOW-D7 (Scheduled tasks documentation) | COMPLETED |
-
----
-
-## Phase 1: Critical Documentation Fixes
-
-These items fix critical mismatches between architecture documentation and actual code.
+CRIT-1 and CRIT-2 are CRITICAL because they document non-existent fields or incorrect behavior.
 
 ### CRIT-1: Source Model `adapter_config` Field Does Not Exist
 
 **Location:** `architecture/models.md:91`
 **Issue:** Documentation shows `adapter_config = Column(JSON)` on Source model, but this field does NOT exist. Adapter configuration is stored in `schemas/source.py` as `SourceConfig.config`.
 **Fix:** Remove `adapter_config` from Source model documentation. Add note explaining adapter config is stored externally in `schemas/source.py` and accessed by adapters via `source_config.config` at runtime.
+**Reference:** `adapters/base.py:46` loads config via `self.adapter_config = self.config_class(**source_config.config)`
 
 ### CRIT-2: utils/url.py Global Mutable State Not Documented
 
 **Location:** `architecture/utils.md:129-135` (Design Principles)
 **Issue:** Design principles claim "Pure functions: No side effects, no global state" but `utils/url.py` has extensive global mutable state (`_dns_executor`, `_dns_cache`, `_TTLCache`). The DNS resolution in `validate_url_safe()` is NOT a pure function.
-**Fix:** Update Design Principles section to note that `validate_url_safe()` in `url.py` performs DNS resolution with caching and is therefore NOT a pure function.
+**Fix:** Update Design Principles section to note that `validate_url_safe()` in `url.py` performs DNS resolution with caching and is therefore NOT a pure function. The function itself documents this in its docstring at lines 3-5.
 
 ---
 
-## Phase 2: High Priority Documentation (Model Accuracy)
+## Wave B: High Priority Documentation (Model Accuracy)
+
+These items update documentation to accurately reflect the actual implementation.
 
 ### HIGH-1: Article Model Documentation is a Stub
 
@@ -88,13 +89,56 @@ These items fix critical mismatches between architecture documentation and actua
 
 **Location:** `architecture/schemas.md:89-101`
 **Issue:** Document shows `RSSConfig`, `APIConfig`, `WebConfig` with generic fields (`item_path`, `field_mappings`, `item_css`) that don't exist. Actual implementation has detailed fields: `feed_url`, `list_url`, `listing_url`, etc.
-**Fix:** Update documentation to match actual schemas in `schemas/source.py`.
+**Fix:** Update documentation to match actual schemas in `schemas/source.py`. The actual fields are:
+
+**RSSConfig** (`schemas/source.py:29-39`):
+```python
+feed_url: str
+max_items: int = 50
+request_timeout: int = 15
+user_agent: str = "AINwsBot/1.0"
+min_content_length: int = 200
+```
+
+**APIConfig** (`schemas/source.py:91-103`):
+```python
+list_url: str
+list_method: str = "json_array"
+list_items_path: Optional[str] = None
+max_items: int = 30
+item_url: Optional[str] = None
+item_method: str = "json_object"
+fields: dict[str, str]
+filters: list[dict[str, Any]]
+metadata: dict[str, str]
+request_timeout: int = 15
+api_key: Optional[str] = None
+auth_header: Optional[str] = None
+```
+
+**WebConfig** (`schemas/source.py:105-113`):
+```python
+base_url: str
+listing_url: str
+listing: ListingConfig
+article: ArticleSelectors
+request_delay_min: float = 1.5
+request_delay_max: float = 4.0
+max_retries: int = 3
+user_agent: str = "AINwsBot/1.0"
+```
 
 ### HIGH-6: PaginationConfig Schema Inaccurate
 
 **Location:** `architecture/schemas.md:104-109`
 **Issue:** Document shows `Literal["cursor", "offset", "page"]` but actual uses `str` with values `"next_link"`, `"query_param"`, `"none"`. Also omits `enabled` and `max_pages` fields.
-**Fix:** Update to match `PaginationConfig` in `schemas/source.py:58-69`.
+**Fix:** Update to match `PaginationConfig` in `schemas/source.py:58-69`:
+```python
+enabled: bool = False
+type: str = "next_link"  # validator allows: "next_link", "query_param", "none"
+next_link_selector: Optional[str] = None
+max_pages: int = 3
+```
 
 ### HIGH-7: `item_path` vs `list_items_path` Naming Mismatch
 
@@ -104,34 +148,13 @@ These items fix critical mismatches between architecture documentation and actua
 
 ---
 
-## Phase 3: Medium Priority Items
+## Wave C: Medium Priority Items
 
 ### MED-1: Degradation Logic Bypasses `_STAGE_DEGRADE_MAP` for Edit Stage
 
 **Location:** `services/pipeline_degradation.py:129-179` vs `architecture/pipeline.md`
 **Issue:** `_degrade_edit_stage()` is completely separate from `_apply_degrade_config()` with its own `degradation_count >= 2` check. Documentation says edit "Finalizes immediately with fallback" but actual routes to `review` based on degradation count or `_should_route_to_review()`.
 **Fix:** Document this behavior difference, or consider unifying the code paths.
-
-### MED-2: `_degrade_and_advance` Uses String Literal Instead of Constant
-
-**Location:** `tasks/pipeline.py:56`
-**Issue:** `article.pipeline_status = "researching"` uses string literal instead of `PipelineStatus.RESEARCHING`.
-**Status:** Already uses `PipelineStatus.RESEARCHING` at line 56 - VERIFIED CORRECT
-**Fix:** N/A - Already correct
-
-### MED-3: `select` Stage Degradation Doesn't Set `selector_result`
-
-**Location:** `tasks/pipeline.py:50-60`
-**Issue:** When degrading select stage, code should set `selector_result` dict.
-**Status:** Already implemented at lines 51-55 - VERIFIED CORRECT
-**Fix:** N/A - Already correct
-
-### MED-4: `write` Stage Degradation Doesn't Set `writer_model`
-
-**Location:** `services/pipeline_degradation.py:52`
-**Issue:** Degradation should set `article.writer_model = "fallback"`.
-**Status:** Already implemented at line 53 - VERIFIED CORRECT
-**Fix:** N/A - Already correct
 
 ### MED-5: Degradation Threshold Documentation Wrong
 
@@ -143,7 +166,10 @@ These items fix critical mismatches between architecture documentation and actua
 
 **Location:** `architecture/routes.md:57`
 **Issue:** Documentation claims `api_tokens_bp` is NOT registered, but it IS registered in `app.py:197`.
-**Fix:** Update note to reflect that `api_tokens_bp` is registered and provides `/api-tokens` endpoints.
+**Fix:** Update note to reflect that `api_tokens_bp` IS registered and provides `/api-tokens` endpoints:
+- GET `/api-tokens` - list tokens
+- POST `/api-tokens` - create token
+- DELETE `/api-tokens/<id>` - delete token
 
 ### MED-7: `POST /articles` Documented But Not Implemented
 
@@ -169,17 +195,21 @@ These items fix critical mismatches between architecture documentation and actua
 **Issue:** Documents "(30s, 60s, 120s)" but actual is exponential with max 300s.
 **Fix:** Update to "exponential (30s, 60s, 120s, 240s, ... up to 300s max)".
 
-### MED-11: APIAdapter Missing Pagination Support
+### MED-11: APIAdapter Missing Pagination Support (CODE IMPLEMENTATION)
 
 **Location:** `adapters/api.py`
 **Issue:** APIAdapter has NO pagination support despite documentation claiming it. Only single requests to `list_url` are made.
-**Fix:** Implement pagination support (cursor, offset, or page-based) similar to WebAdapter's `ListingConfig.pagination`. **This is an implementation item, not just documentation.**
+**Fix:** Implement pagination support (cursor, offset, or page-based) similar to WebAdapter's `ListingConfig.pagination`. This is an implementation item, not just documentation.
 
 ### MED-12: Missing `hybrid.py` Search Provider in Architecture
 
 **Location:** `architecture/services.md`
-**Issue:** HybridSearchProvider exists but not listed among search providers.
-**Fix:** Add Hybrid provider to search provider table.
+**Issue:** HybridSearchProvider exists but not listed among search providers correctly - the table incorrectly shows `sqlite_fts.py` for Hybrid when Hybrid is actually `hybrid.py`.
+**Fix:** Add Hybrid provider to search provider table correctly:
+```
+| Hybrid | `hybrid.py` | Enabled (FTS5 + vector) |
+| SQLite FTS | `sqlite_fts.py` | Internal article search |
+```
 
 ### MED-13: Missing `content_extractor.py` in Architecture Tree
 
@@ -209,7 +239,7 @@ These items fix critical mismatches between architecture documentation and actua
 
 **Location:** `architecture/routes.md`
 **Issue:** Not documented that prefix uses first 16 characters of hash.
-**Fix:** Add detail about prefix matching implementation.
+**Fix:** Add detail about prefix matching implementation: `routes/admin/__init__.py:31-32` uses first 16 characters of hash as prefix.
 
 ### MED-18: Missing Tasks in File Inventory
 
@@ -217,9 +247,19 @@ These items fix critical mismatches between architecture documentation and actua
 **Issue:** Document lists 9 files but there are 15 Python files in `tasks/`. Missing: `retry.py` (`retry_stuck`), `subscribers.py` (`cleanup_inactive_subscribers`), `webhook.py` (`dispatch_webhook_task`).
 **Fix:** Add `retry.py`, `subscribers.py`, and `webhook.py` with their respective tasks to the file inventory.
 
+### MED-19: pipeline_monitor.py Functionality Mismatch
+
+**Location:** `architecture/pipeline.md:263-267` vs `services/pipeline_monitor.py`
+**Issue:** Documentation claims the monitor tracks "p95/p99 duration" and "queue depth per stage" but these are NOT implemented. The actual implementation tracks: stage success/failure counts, throughput, and failure reason breakdown.
+**Fix:** Update documentation to accurately reflect what `pipeline_monitor.py` actually does:
+- Success/failure counts per stage
+- Throughput tracking
+- Failure reason breakdown
+- Does NOT track: p95/p99 percentiles, queue depth
+
 ---
 
-## Phase 4: Low Priority Documentation Consistency
+## Wave D: Low Priority Documentation Consistency
 
 ### LOW-1: cleanup.py Tasks Listed as "Various"
 
@@ -261,7 +301,7 @@ These items fix critical mismatches between architecture documentation and actua
 
 **Location:** `architecture/utils.md`
 **Issue:** Function returns the original URL after validation but document is ambiguous.
-**Fix:** Clarify that `validate_url_safe()` returns the original URL string if valid (does not return normalized URL).
+**Fix:** Clarify that `validate_url_safe()` returns the original URL string if valid (does not return normalized URL). Reference `utils/url.py:262`.
 
 ### LOW-8: pipeline.py Helper Not Documented
 
@@ -275,79 +315,29 @@ These items fix critical mismatches between architecture documentation and actua
 **Issue:** Comment says "not implemented" for `ip_binding` and `user_agent_hash` which implies TODO, but these fields do not exist at all.
 **Fix:** Change "not implemented" comment to clearly state these fields do not exist in the model.
 
----
+### LOW-10: API Adapter Filter Operations Incomplete
 
-## Wave Organization for Parallelization
+**Location:** `architecture/adapters.md`
+**Issue:** Documentation doesn't specify what filter operations APIAdapter supports. Implementation only has: `equals`, `min`, `exists`. No `contains` operation.
+**Fix:** Document the actual filter operations supported by `APIAdapter._passes_filters()` at `adapters/api.py:160-175`.
 
-Items are organized into waves that can be executed in parallel by different agents.
+### LOW-11: APIAdapter Authentication Documentation Wrong
 
-### Wave A: Critical Documentation Fixes
-| ID | Location | Issue |
-|----|----------|-------|
-| CRIT-1 | architecture/models.md:91 | Source.adapter_config doesn't exist |
-| CRIT-2 | architecture/utils.md:129-135 | url.py global state not documented |
-
-### Wave B: High Priority Model Documentation
-| ID | Location | Issue |
-|----|----------|-------|
-| HIGH-1 | architecture/models.md:40-61 | Article model stub |
-| HIGH-2 | architecture/models.md:73-92 | Source model missing fields |
-| HIGH-3 | architecture/models.md:136-142 | Index documentation inaccurate |
-| HIGH-4 | architecture/models.md:63-70 | Pipeline status flow outdated |
-| HIGH-5 | architecture/schemas.md:89-101 | Adapter config schemas fictional |
-| HIGH-6 | architecture/schemas.md:104-109 | PaginationConfig schema wrong |
-| HIGH-7 | architecture/adapters.md | item_path vs list_items_path |
-
-### Wave C: Medium Priority Documentation + 1 Implementation
-| ID | Location | Issue | Type |
-|----|----------|-------|------|
-| MED-1 | architecture/pipeline.md | Degradation edit bypass | Doc |
-| ~~MED-2~~ | ~~tasks/pipeline.py:56~~ | ~~String literal for status~~ | **VERIFIED** |
-| ~~MED-3~~ | ~~tasks/pipeline.py:50-60~~ | ~~select degradation selector_result~~ | **VERIFIED** |
-| ~~MED-4~~ | ~~services/pipeline_degradation.py:52~~ | ~~write stage writer_model~~ | **VERIFIED** |
-| MED-5 | architecture/pipeline.md:250 | Degradation threshold wrong | Doc |
-| MED-6 | architecture/routes.md:57 | api_tokens_bp note wrong | Doc |
-| MED-7 | architecture/routes.md:143 | POST /articles not implemented | Doc |
-| MED-8 | architecture/routes.md | Missing routes | Doc |
-| MED-9 | architecture/pipeline.md | AuthError not documented | Doc |
-| MED-10 | architecture/pipeline.md:289 | Backoff config incomplete | Doc |
-| MED-11 | adapters/api.py | Pagination not implemented | **Code** |
-| MED-12 | architecture/services.md | Missing hybrid.py | Doc |
-| MED-13 | architecture/services.md | Missing content_extractor.py | Doc |
-| MED-14 | architecture/services.md | Missing services | Doc |
-| MED-15 | architecture/routes.md:64 | feeds_bp vs public_bp | Doc |
-| MED-16 | architecture/pipeline.md:54 | PENDING→SKIPPED missing | Doc |
-| MED-17 | architecture/routes.md | API token prefix detail | Doc |
-| MED-18 | architecture/tasks.md | Missing tasks files | Doc |
-
-### Wave D: Low Priority Documentation Consistency
-| ID | Location | Issue |
-|----|----------|-------|
-| LOW-1 | architecture/tasks.md | cleanup.py tasks "Various" |
-| LOW-2 | architecture/tasks.md | Degradation path conflates |
-| LOW-3 | architecture/tasks.md | run_stage signature incomplete |
-| LOW-4 | architecture/utils.md:16-28,102-127 | url.py section duplicated |
-| LOW-5 | architecture/tasks.md | Newsletter batch size missing |
-| LOW-6 | architecture/overview.md:233 | Field name cross-references wrong |
-| LOW-7 | architecture/utils.md | validate_url_safe return ambiguous |
-| LOW-8 | architecture/tasks.md | pipeline.py helper undocumented |
-| LOW-9 | architecture/models.md:111 | AdminUser comment unclear |
+**Location:** `architecture/adapters.md:83`
+**Issue:** Documentation says "Handles authentication (Bearer, API key headers)" but implementation only supports Bearer token. No API key header support.
+**Fix:** Update to clarify only Bearer token authentication is supported, or implement API key header support.
 
 ---
 
 ## Implementation Notes for Future Agents
 
 ### Code Items (Require Testing)
-- **MED-11**: `adapters/api.py` - Implement pagination support for APIAdapter (ONLY remaining code item)
+Only ONE code implementation item remains:
 
-### Documentation Items (32 items)
-All other items are documentation-only changes to `architecture/*.md` files. No code changes required.
+- **MED-11**: `adapters/api.py` - Implement pagination support for APIAdapter
 
-### Verified Items (Already Correct in Codebase)
-The following items were marked for fixing but VERIFIED CORRECT in codebase:
-- **MED-2**: `tasks/pipeline.py:56` - Already uses `PipelineStatus.RESEARCHING`
-- **MED-3**: `tasks/pipeline.py:50-60` - Already sets `selector_result` dict
-- **MED-4**: `services/pipeline_degradation.py:52` - Already sets `writer_model = "fallback"`
+### Documentation Items (34 items)
+All other items are documentation-only changes to `architecture/*.md` files.
 
 ### Verification Steps
 ```bash
@@ -358,8 +348,19 @@ ruff check . --exclude .venv
 mypy tasks/pipeline.py services/pipeline_degradation.py adapters/api.py
 
 # Test any code changes
-pytest tests/ -k "test_name" -v
+pytest tests/ -v
 ```
+
+### Wave-Based Parallelization
+
+Items are organized into waves that can be executed in parallel by different agents:
+
+| Wave | Priority | Count | Items |
+|------|----------|-------|-------|
+| Wave A | CRIT | 2 | CRIT-1, CRIT-2 |
+| Wave B | HIGH | 7 | HIGH-1 through HIGH-7 |
+| Wave C | MED | 15 | MED-1, MED-5 through MED-19 |
+| Wave D | LOW | 11 | LOW-1 through LOW-11 |
 
 ---
 
@@ -367,42 +368,45 @@ pytest tests/ -k "test_name" -v
 
 | Item | Status | Notes |
 |------|--------|-------|
-| CRIT-1 | PENDING | - |
-| CRIT-2 | PENDING | - |
-| HIGH-1 | PENDING | - |
-| HIGH-2 | PENDING | - |
-| HIGH-3 | PENDING | - |
-| HIGH-4 | PENDING | - |
-| HIGH-5 | PENDING | - |
-| HIGH-6 | PENDING | - |
-| HIGH-7 | PENDING | - |
-| MED-1 | PENDING | - |
+| CRIT-1 | PENDING | Source.adapter_config doesn't exist |
+| CRIT-2 | PENDING | utils/url.py global state not documented |
+| HIGH-1 | PENDING | Article model stub |
+| HIGH-2 | PENDING | Source model missing fields |
+| HIGH-3 | PENDING | Index documentation inaccurate |
+| HIGH-4 | PENDING | Pipeline status flow outdated |
+| HIGH-5 | PENDING | Adapter config schemas fictional |
+| HIGH-6 | PENDING | PaginationConfig schema wrong |
+| HIGH-7 | PENDING | item_path vs list_items_path |
+| MED-1 | PENDING | Degradation edit bypass |
 | MED-2 | VERIFIED | Already uses PipelineStatus.RESEARCHING |
 | MED-3 | VERIFIED | Already sets selector_result dict |
 | MED-4 | VERIFIED | Already sets writer_model = "fallback" |
-| MED-5 | PENDING | - |
-| MED-6 | PENDING | - |
-| MED-7 | PENDING | - |
-| MED-8 | PENDING | - |
-| MED-9 | PENDING | - |
-| MED-10 | PENDING | - |
-| MED-11 | PENDING | Code change |
-| MED-12 | PENDING | - |
-| MED-13 | PENDING | - |
-| MED-14 | PENDING | - |
-| MED-15 | PENDING | - |
-| MED-16 | PENDING | - |
-| MED-17 | PENDING | - |
-| MED-18 | PENDING | - |
-| LOW-1 | PENDING | - |
-| LOW-2 | PENDING | - |
-| LOW-3 | PENDING | - |
-| LOW-4 | PENDING | - |
-| LOW-5 | PENDING | - |
-| LOW-6 | PENDING | - |
-| LOW-7 | PENDING | - |
-| LOW-8 | PENDING | - |
-| LOW-9 | PENDING | - |
+| MED-5 | PENDING | Degradation threshold wrong |
+| MED-6 | PENDING | api_tokens_bp note wrong |
+| MED-7 | PENDING | POST /articles not implemented |
+| MED-8 | PENDING | Missing routes |
+| MED-9 | PENDING | AuthError not documented |
+| MED-10 | PENDING | Backoff config incomplete |
+| MED-11 | PENDING | Pagination not implemented (CODE) |
+| MED-12 | PENDING | Search provider table error |
+| MED-13 | PENDING | Missing content_extractor.py |
+| MED-14 | PENDING | Missing services |
+| MED-15 | PENDING | feeds_bp vs public_bp |
+| MED-16 | PENDING | PENDING→SKIPPED missing |
+| MED-17 | PENDING | API token prefix detail |
+| MED-18 | PENDING | Missing tasks files |
+| MED-19 | PENDING | pipeline_monitor functionality mismatch |
+| LOW-1 | PENDING | cleanup.py tasks "Various" |
+| LOW-2 | PENDING | Degradation path conflates |
+| LOW-3 | PENDING | run_stage signature incomplete |
+| LOW-4 | PENDING | url.py section duplicated |
+| LOW-5 | PENDING | Newsletter batch size missing |
+| LOW-6 | PENDING | Field name cross-references wrong |
+| LOW-7 | PENDING | validate_url_safe return ambiguous |
+| LOW-8 | PENDING | pipeline.py helper undocumented |
+| LOW-9 | PENDING | AdminUser comment unclear |
+| LOW-10 | PENDING | API adapter filter operations |
+| LOW-11 | PENDING | APIAdapter authentication doc |
 
 ---
 

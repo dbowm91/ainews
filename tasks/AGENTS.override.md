@@ -22,5 +22,27 @@
 - **Write stage degradation:** Sets `article.draft_article` but should also set `article.writer_model = "fallback"`.
 
 ## Known Issues
-- **`_STAGE_TASKS`:** Contains `review` status mapping to `tasks.edit.edit_article` - verified present as of 2026-05-07.
+- **`_STAGE_TASKS`:** Contains `review` status mapping to `tasks/edit.edit_article` - verified present as of 2026-05-07.
 - **PipelineLog meta field:** The model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
+
+## run_stage Signature
+The `run_stage()` function in `tasks/pipeline.py:389-442` has 8 parameters:
+```python
+def run_stage(
+    stage: str,
+    article_id: int,
+    work_fn,
+    task_self,
+    run_id=None,
+    skip_next: str = "finalize",
+    retry_countdown: int = 30,
+    retry_max: int = 15,
+):
+```
+
+## Quality Gate Routing
+Each pipeline stage has quality gates that route articles to `review` for manual inspection:
+- **select:** Low confidence (score OK but confidence="low") → `review`
+- **research:** Degenerate brief (fails `_is_degenerate_research()`) → `review`
+- **write:** Degenerate draft (fails `_is_degenerate_write()`) → `review`
+- **edit:** Validation failure OR `_should_route_to_review()` → `review`

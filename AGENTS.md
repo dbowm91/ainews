@@ -32,8 +32,8 @@ Always ensure `import models` happens before `db.create_all()` in the app contex
 
 ### Rate Limiter Pattern
 The rate limiter uses Redis slots. Always release slots in a `finally` block to avoid leaks. The `run_stage()` function resolves provider/model before acquiring limiter resources, ensuring correct release on early return.
-- Always use `provider_id` (the actual provider used) not `rc.provider` (configured provider) when releasing
-- `_try_stage_work` returns the actual model used after fallback
+- Always use `provider_id or rc.provider` (the actual provider used) as fallback when releasing
+- Always use `model or rc.model` (the actual model used) as fallback when releasing
 
 ### URL Validation Layering
 SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Adapters import from `utils/url.py` for clean layering. `services/url.py` has duplicate implementations and should not be imported by adapters.
@@ -95,7 +95,7 @@ Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `s
 - `Article.finalized_at` doesn't exist - use `published_at`
 - `TrendMemory.observation` is actually `signal`
 - `TrendMemory.embedding` is `db.Text` (not a vector type)
-- `Source.adapter_config` doesn't exist (documented but never implemented)
+- `Source.adapter_config` doesn't exist (documented but never implemented) - adapter config is in `schemas/source.py` as `SourceConfig.config`
 
 ### Fallback Chain Behavior
 The LLM provider fallback chain is **dynamic** - determined by enabled providers in `providers.yaml` configuration order, not hardcoded. The `get_provider_chain()` function in `services/llm/__init__.py` iterates through enabled providers and filters out those with open circuits.
@@ -131,8 +131,8 @@ The `SSRFSafeRedirectHandler` in `adapters/session.py` now uses thread-local sto
 ### Subagent Tool Execution
 The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
 
-### Duplicate Function Definition in subagent/runner.py (FIXED - CRIT-2)
-The duplicate `_finalize_subagent_result()` definition has been removed. The function was defined twice - only the one at line 498 (called by `run_subagent_with_tools`) was kept.
+### _finalize_subagent_result Exists
+The `_finalize_subagent_result()` function in `services/subagent/runner.py` is defined at line 277 and called by `run_subagent_with_tools()` at line 505. Previously there was a duplicate definition issue (CRIT-2), which has been resolved.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -143,69 +143,91 @@ The `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `n
 ### RSSAdapter Session Independence
 `RSSAdapter` creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`, while `APIAdapter` and `WebAdapter` share the global session from `get_crawl_session()`. This is BY DESIGN - different adapter types have different session management requirements.
 
-### Adapter Config Validation (FIXED - CRIT-3)
-`SourceConfig.config` in `schemas/source.py` now has a `field_validator` that validates config against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on the source type.
+### Adapter Config Validation
+`SourceConfig.config` in `schemas/source.py` has a `field_validator` that validates config against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on the source type.
 
-### schemas/common.py Layer Violation (DOCUMENTED - MED-8)
+### schemas/common.py Layer Violation
 The `schemas/common.py` module imports from `services.config_cache`. This is intentional - config caching requires services layer knowledge. Documented with a comment explaining the layer violation is necessary.
 
-### extract_text trafilatura ImportError (FIXED - MED-3)
-The `extract_text()` function in `utils/html.py` now logs a warning when trafilatura is not available, rather than silently passing on the ImportError.
+### extract_text trafilatura ImportError
+The `extract_text()` function in `utils/html.py` logs a warning when trafilatura is not available, rather than silently passing on the ImportError.
 
-### Quality Gate Routing (DOCUMENTED - HIGH-B1)
+### Quality Gate Routing
 Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
 - `select`: Low confidence (score OK but confidence="low") → `review`
 - `research`: Degenerate research brief (fails `_is_degenerate_research()`) → `review`
 - `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
 - `edit`: Validation failure → `review`
 
-### backfill_embeddings max_retries (FIXED - MED-C9)
-The `backfill_embeddings` task in `tasks/embeddings.py` now has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
+### backfill_embeddings max_retries
+The `backfill_embeddings` task in `tasks/embeddings.py` has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
 
-### TrendMemory last_accessed_at (ADDED - CRIT-A4)
-The `TrendMemory` model in `models/context.py` now has a `last_accessed_at` field for tracking when trend memory entries were last accessed.
+### TrendMemory last_accessed_at
+The `TrendMemory` model in `models/context.py` has a `last_accessed_at` field for tracking when trend memory entries were last accessed.
 
-### Subagent _finalize_subagent_result (FIXED - ARCH-1)
-The `_finalize_subagent_result()` function in `services/subagent/runner.py` was called but never defined. It has been added to handle fallback logic and metrics consistently with the `run_subagent()` function.
+### Limiter Slot Leak Fix
+In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.provider` and `model or rc.model` as fallbacks to prevent slot leaks when `_run_stage_core` raises before returning provider info.
 
-### Limiter Slot Leak Fix (FIXED - ARCH-2)
-In `tasks/pipeline.py:run_stage()`, the limiter release now uses `provider_id or rc.provider` and `model or rc.model` as fallbacks to prevent slot leaks when `_run_stage_core` raises before returning provider info.
+### Missing json Import Fixed
+The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
 
-### Missing json Import (FIXED - ARCH-3)
-The `services/trend_memory.py` was missing `import json` which caused `json.JSONDecodeError` to be a `NameError` at runtime if JSON parsing failed.
+## APIAdapter Specific Notes
+
+### Pagination
+The `APIAdapter` in `adapters/api.py` does NOT have pagination support yet - it only makes single requests to `list_url`. Implementation is needed (see plans/plan.md MED-11).
+
+### Filter Operations
+APIAdapter supports these filter operations in `adapters/api.py:_passes_filters()`:
+- `equals`: Exact match
+- `min`: Numeric minimum
+- `exists`: Field existence check
+- `contains`: NOT implemented
+
+### Authentication
+APIAdapter only supports Bearer token authentication. No API key header support (e.g., `X-Api-Key`) is implemented.
+
+### Configuration Fields
+APIAdapter uses these configuration fields (NOT `item_path`):
+- `list_url`: URL to fetch items from
+- `list_method`: `"json_array"` or `"json_object_items"`
+- `list_items_path`: JSONPath to items array (optional)
+
+## Search Provider Notes
+
+The search providers are:
+- `services/search/duckduckgo.py`: DuckDuckGo provider
+- `services/search/google.py`: Google provider (disabled, requires API key)
+- `services/search/searxng.py`: SearxNG provider (disabled, self-hosted)
+- `services/search/hybrid.py`: Hybrid provider (FTS5 + vector similarity) - ENABLED
+- `services/search/sqlite_fts.py`: SQLite FTS provider (internal article search)
+
+Note: The Hybrid provider is `hybrid.py`, NOT `sqlite_fts.py`. These are separate files.
 
 ## Shared Context
 
-Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules.
+Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules:
 
-### Implementation Plans
+- `services/AGENTS.override.md` - Services layer conventions
+- `adapters/AGENTS.override.md` - Adapters layer conventions
+- `tasks/AGENTS.override.md` - Celery task conventions
+- `schemas/AGENTS.override.md` - Schema conventions
+- `services/llm/AGENTS.override.md` - LLM provider conventions
+- `services/search/AGENTS.override.md` - Search provider conventions
+- `routes/AGENTS.override.md` - Route conventions
+- `routes/admin/AGENTS.override.md` - Admin route conventions
+- `tests/AGENTS.override.md` - Testing conventions
+- `templates/AGENTS.override.md` - Template conventions
+- `static/AGENTS.override.md` - Static file conventions
+
+### Implementation Plan Reference
 When working on items from `plans/plan.md`, read the relevant section fully before implementing. Each section contains:
 - Exact file locations and line numbers
 - The specific bug or issue
 - Implementation details or code examples
 - Verification steps
 
-### Wave-Based Implementation (plans/plan.md)
-The implementation plan (`plans/plan.md`) organizes items into waves for parallel execution. **Previous waves (A, B, C, A4, B1, C9, D7) are COMPLETED.** The plan has been updated with new remaining items:
+### Remaining Code Implementation Item
+Only ONE code change remains in the implementation plan:
+- **MED-11**: `adapters/api.py` - Implement pagination support for APIAdapter
 
-- **Wave A**: Critical documentation fixes (CRIT-1: Source.adapter_config doc, CRIT-2: utils/url.py global state doc)
-- **Wave B**: High priority model documentation (HIGH-1 through HIGH-7)
-- **Wave C**: Medium priority (MED-1 through MED-18) - mostly documentation, includes 4 code items (MED-2, MED-3, MED-4, MED-11)
-- **Wave D**: Low priority documentation consistency (LOW-1 through LOW-9)
-
-### Code Items Requiring Implementation
-The new plan contains one code change (everything else is documentation):
-- **MED-11** (`adapters/api.py`): Implement pagination support for APIAdapter
-
-Note: MED-2, MED-3, MED-4 were code items but were verified as ALREADY CORRECT in the codebase during this review session.
-
-### Architecture Review (architecture/review_plan.md)
-The architecture review plan (`architecture/review_plan.md`) verified all architecture documents against actual code. Key fixes identified:
-
-- **ARCH-1**: Added missing `_finalize_subagent_result()` function to runner.py
-- **ARCH-2**: Fixed limiter slot leak using `rc.provider`/`rc.model` fallbacks
-- **ARCH-3**: Added missing `import json` in trend_memory.py
-
-Review findings are organized by module in `plans/*_review.md`.
-
-Agents can work on different waves in parallel if multiple agents are available.
+All other items are documentation updates to `architecture/*.md` files.

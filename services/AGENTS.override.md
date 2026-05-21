@@ -25,15 +25,15 @@
 - **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls. The architecture doc suggesting multi-step message injection is outdated.
 - **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
-- **_finalize_subagent_result():** This function was previously defined twice (CRIT-2). The duplicate definition was removed; single definition remains at line 498+ in `services/subagent/runner.py`.
+- **_finalize_subagent_result():** Defined at line 277 in `services/subagent/runner.py`, called by `run_subagent_with_tools()` at line 505.
 
 ## Utils Notes
-- **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. Note: `truncate()` does not validate negative length (see MED-4 in plan).
+- **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`.
 - **utils/datetime.py:** Contains `parse_date`, `format_date`, `time_ago` (alias for format_date).
 - **utils/security.py:** Contains `generate_token` (using `secrets.token_urlsafe`), `constant_time_compare` (using `hmac.compare_digest`).
 - **utils/hash.py:** Contains `generate_hash`, `verify_hash`.
-- **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`. Note: `strip_tags` fallback uses bare `except Exception` with noqa: BLE001. Also `extract_text` silently swallows trafilatura ImportError (MED-3).
-- **utils/url.py:** Contains global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Do not assume pure function behavior. Docstring claims "pure functions" which is incorrect (MED-5).
+- **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`. Note: `strip_tags` fallback uses bare `except Exception` with noqa: BLE001. Also `extract_text` logs a warning when trafilatura is not available.
+- **utils/url.py:** Contains global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Do not assume pure function behavior. Docstring claims "pure functions" which is incorrect.
 
 ## Layer Violation Note
-- **schemas/common.py (MED-8):** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.
+- **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.

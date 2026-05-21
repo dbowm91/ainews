@@ -1,23 +1,46 @@
 # Architecture Review Plan
 
-**Status:** INCOMPLETE - Review findings being worked through
+**Status:** COMPLETED (2026-05-21)
 
 This plan orchestrates a comprehensive review of all architecture documents in the `architecture/` directory. Each module is assigned to a subagent that will verify claims against the actual codebase and produce an improvement plan.
 
-## Modules to Review
+## Modules Reviewed
 
-| # | Module | Document | Review Output |
-|---|--------|----------|---------------|
-| 1 | Adapters | `architecture/adapters.md` | `plans/adapters_review.md` |
-| 2 | Overview | `architecture/overview.md` | `plans/overview_review.md` |
-| 3 | Tasks | `architecture/tasks.md` | `plans/tasks_review.md` |
-| 4 | Pipeline | `architecture/pipeline.md` | `plans/pipeline_review.md` |
-| 5 | Utils | `architecture/utils.md` | `plans/utils_review.md` |
-| 6 | Services | `architecture/services.md` | `plans/services_review.md` |
-| 7 | Subagent | `architecture/subagent.md` | `plans/subagent_review.md` |
-| 8 | Routes | `architecture/routes.md` | `plans/routes_review.md` |
-| 9 | Schemas | `architecture/schemas.md` | `plans/schemas_review.md` |
-| 10 | Models | `architecture/models.md` | `plans/models_review.md` |
+| # | Module | Document | Review Output | Status |
+|---|--------|----------|---------------|--------|
+| 1 | Adapters | `architecture/adapters.md` | `plans/adapters_review.md` | ✅ Fixed |
+| 2 | Overview | `architecture/overview.md` | `plans/overview_review.md` | ✅ Verified |
+| 3 | Tasks | `architecture/tasks.md` | `plans/tasks_review.md` | ✅ Verified |
+| 4 | Pipeline | `architecture/pipeline.md` | `plans/pipeline_review.md` | ✅ Fixed |
+| 5 | Utils | `architecture/utils.md` | `plans/utils_review.md` | ✅ Verified |
+| 6 | Services | `architecture/services.md` | `plans/services_review.md` | ✅ Fixed |
+| 7 | Subagent | `architecture/subagent.md` | `plans/subagent_review.md` | ✅ Fixed |
+| 8 | Routes | `architecture/routes.md` | `plans/routes_review.md` | ✅ Fixed |
+| 9 | Schemas | `architecture/schemas.md` | `plans/schemas_review.md` | ✅ Fixed |
+| 10 | Models | `architecture/models.md` | `plans/models_review.md` | ✅ Fixed |
+
+## Fixes Applied
+
+### Code Bugs Fixed (CRIT/HIGH/MED)
+
+| Bug ID | Severity | File | Fix |
+|--------|----------|------|-----|
+| ARCH-1 | CRIT | `services/subagent/runner.py` | Added missing `_finalize_subagent_result()` function |
+| ARCH-2 | HIGH | `tasks/pipeline.py:436` | Fixed limiter slot leak using `rc.provider`/`rc.model` fallbacks |
+| ARCH-3 | MED | `services/trend_memory.py` | Added missing `import json` |
+| BUG-1 | MED | `tasks/pipeline.py:56` | Use `PipelineStatus.RESEARCHING` instead of string literal |
+| BUG-2 | MED | `services/pipeline_degradation.py:52` | Set `writer_model` during write stage degradation |
+
+### Documentation Fixed
+
+| Document | Issues Fixed |
+|----------|--------------|
+| `architecture/adapters.md` | API/Web adapter config fields, config vs adapter_config naming |
+| `architecture/routes.md` | api_tokens_bp registration, public_bp name, POST /articles removal |
+| `architecture/schemas.md` | RSSConfig, APIConfig, WebConfig, PaginationConfig schemas |
+| `architecture/models.md` | Source model, AdminUser fields, indexes, pipeline status flow |
+| `architecture/pipeline.md` | Valid transitions table |
+| `architecture/subagent.md` | ToolDefinition (no cached field), file inventory |
 
 ## Review Methodology
 

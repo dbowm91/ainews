@@ -46,6 +46,17 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | `write` | `edit` | `review` | `failed` |
 | `edit` | `done` | `review` | `failed` |
 
+### Quality Gates
+
+Beyond simple success/failure, each stage has quality gates that can route articles to `review` for manual inspection:
+
+| Stage | Quality Gate Condition | Action |
+|-------|----------------------|--------|
+| select | confidence="low" | Route to `review` |
+| research | `_is_degenerate_research(brief)` returns True | Route to `review` |
+| write | `_is_degenerate_write(draft)` returns True | Route to `review` |
+| edit | Validation fails | Route to `review` |
+
 ## Core Tasks
 
 ### Crawl Task (`crawl.py`)

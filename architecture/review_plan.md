@@ -1,167 +1,225 @@
 # Architecture Review Plan
 
-This document outlines the review plan for architecture documentation modules.
-
-## Status: IN PROGRESS - Iterative Improvement
-
-## Modules to Review
-
-| Module | Document | Assigned Subagent | Output Plan File |
-|--------|----------|-------------------|------------------|
-| Models | `models.md` | `models-reviewer` | `plans/models_review.md` |
-| Adapters | `adapters.md` | `adapters-reviewer` | `plans/adapters_review.md` |
-| Services | `services.md` | `services-reviewer` | `plans/services_review.md` |
-| Schemas | `schemas.md` | `schemas-reviewer` | `plans/schemas_review.md` |
-| Utils | `utils.md` | `utils-reviewer` | `plans/utils_review.md` |
-| Pipeline | `pipeline.md` | `pipeline-reviewer` | `plans/pipeline_review.md` |
-| Tasks | `tasks.md` | `tasks-reviewer` | `plans/tasks_review.md` |
-| Routes | `routes.md` | `routes-reviewer` | `plans/routes_review.md` |
-| Subagent | `subagent.md` | `subagent-reviewer` | `plans/subagent_review.md` |
-
-## Review Methodology
-
-For each module, subagents will:
-
-1. **Read Architecture Document**: Read the module's `.md` file in `architecture/`
-2. **Verify Claims Against Code**: Cross-reference claims with actual implementation in the codebase
-3. **Identify Improvements**: Document specific improvements (API consistency, error handling, performance, security)
-4. **Find Bugs**: Document bugs, edge cases, race conditions, or layer violations
-5. **Write Improvement Plan**: Output structured findings to `plans/<module>_review.md`
-
-## Subagent Instructions
-
-Each subagent should produce a plan with these sections:
-
-```markdown
-# <Module> Review Plan
-
-## Verified Claims
-- List claims from architecture doc that are confirmed by code
-
-## Discrepancies
-- List claims that don't match implementation
-
-## Improvement Recommendations
-1. [Priority] Description of improvement
-2. [Priority] Description of improvement
-
-## Bugs Found
-1. Bug description with location
-2. Bug description with location
-
-## Layer Violations
-- Any clean layering violations (adapters importing services, etc.)
-```
-
-## Module Review Details
-
-### 1. Models (`models.md`)
-- **Focus**: Verify model relationships, field names, indexes, security implementation
-- **Key Files**: `models/article.py`, `models/source.py`, `models/newsletter.py`, `models/pipeline.py`, `models/context.py`, `models/auth.py`
-- **Known Issues from AGENTS.md**: `TrendMemory.embedding` is Text not vector; `Source.adapter_config` documented but never implemented; `Source.type` is actually `source_type`; `Source.last_fetch_at` is actually `last_crawled`; `Article.finalized_at` doesn't exist - use `published_at`; `TrendMemory.observation` is actually `signal`
-- **Output**: `plans/models_review.md`
-
-### 2. Adapters (`adapters.md`)
-- **Focus**: Verify adapter pattern, SSRF protection, error handling, registry mechanism
-- **Key Files**: `adapters/base.py`, `adapters/rss.py`, `adapters/api.py`, `adapters/web.py`, `adapters/session.py`
-- **Known Issues from AGENTS.md**: URL validation duplication between `utils/url.py` and `services/url.py`; SSRFSafeRedirectHandler redirect counter bug (fixed but verify); trafilatura ImportError handling
-- **Output**: `plans/adapters_review.md`
-
-### 3. Services (`services.md`)
-- **Focus**: Verify clean layering (no adapter imports), LLM provider system, circuit breaker, rate limiter
-- **Key Files**: `services/*.py` (excluding subagent/)
-- **Known Issues from AGENTS.md**: Rate limiter must release slots in `finally` block; `provider_id` vs `rc.provider` model mismatch (fixed but verify)
-- **Output**: `plans/services_review.md`
-
-### 4. Schemas (`schemas.md`)
-- **Focus**: Verify Pydantic models match documented field names, StageConfig stub note
-- **Key Files**: `schemas/pipeline.py`, `schemas/llm_responses.py`, `schemas/source.py`
-- **Output**: `plans/schemas_review.md`
-
-### 5. Utils (`utils.md`)
-- **Focus**: Verify pure functions, minimal dependencies, SSRF protection in utils/url.py
-- **Key Files**: `utils/*.py`
-- **Known Issues from AGENTS.md**: `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`) despite docstring claims of pure functions
-- **Output**: `plans/utils_review.md`
-
-### 6. Pipeline (`pipeline.md`)
-- **Focus**: Verify stage transitions, degradation behavior, monitoring, failure handling
-- **Key Files**: `services/newsletter_pipeline.py`, pipeline stages in `tasks/`
-- **Known Issues from AGENTS.md**: `VALID_TRANSITIONS` missing `selecting` and `selected` statuses (fixed but verify); Newsletter `idempotency_key` bug (fixed but verify)
-- **Output**: `plans/pipeline_review.md`
-
-### 7. Tasks (`tasks.md`)
-- **Focus**: Verify Celery tasks, stage transitions, run_stage helper, rate limiting
-- **Key Files**: `tasks/*.py`
-- **Output**: `plans/tasks_review.md`
-
-### 8. Routes (`routes.md`)
-- **Focus**: Verify endpoints, security (TOTP, session binding, CSRF), rate limiting
-- **Key Files**: `routes/admin/`, `routes/public/`
-- **Known Issues from AGENTS.md**: `api_tokens_bp` auth redirect bug (fixed but verify)
-- **Output**: `plans/routes_review.md`
-
-### 9. Subagent (`subagent.md`)
-- **Focus**: Verify tool registry, chain system, middleware, runner implementation
-- **Key Files**: `services/subagent/*.py`
-- **Known Issues from AGENTS.md**: Subagent is at `services/subagent/` not top-level `subagent/`
-- **Output**: `plans/subagent_review.md`
-
-## Execution
-
-Subagents will be launched in parallel for each module. Each subagent will:
-1. Read the architecture document for their module
-2. Explore the corresponding code files
-3. Verify claims against implementation
-4. Document discrepancies, bugs, and improvement recommendations
-5. Write the improvement plan to the designated output file
-
-## Verification
-
-After all subagents complete, review the plans in `plans/` directory and aggregate findings into a summary.
+**Status:** IN PROGRESS
+**Created:** 2026-05-21
+**Goal:** Review each architecture document, verify claims in code, and identify improvements and bugs.
 
 ---
 
-## Implementation Status (Iterative Improvement)
+## Module Review Assignments
 
-This section tracks the status of improvements identified during architecture review.
+Each subagent will:
+1. Read the architecture document for their assigned module
+2. Verify claims against actual implementation in the codebase
+3. Interrogate the code for improvements, bugs, and inconsistencies
+4. Write an improvement plan to `plans/<module>_review.md`
 
-### Completed Fixes
+---
 
-| Finding | Module | Fix Applied | Status |
-|---------|--------|-------------|--------|
-| Missing `urlparse` import | routes | Added `from urllib.parse import urlparse` to `routes/admin/api/articles.py` | ✅ Fixed |
-| `retry_stuck` missing SELECTING status | tasks | Added `PipelineStatus.SELECTING` to stuck article filter in `tasks/retry.py` | ✅ Fixed |
-| Limiter slot leak on fallback | services | Changed `stage_config.provider` to `provider_id` in `services/newsletter_pipeline.py:_run_pipeline_stage()` | ✅ Fixed |
-| Tool registry race condition | subagent | Added `_TOOL_REGISTRY_LOCK` threading lock in `services/subagent/registry.py` | ✅ Fixed |
-| Executor never shutdown | subagent | Added `atexit.register(shutdown_executor)` in `services/subagent/config.py` | ✅ Fixed |
+## Review Tasks
 
-### Confirmed Already Fixed
+### 1. Overview Module
+**Document:** `architecture/overview.md`
+**Review Output:** `plans/overview_review.md`
+**Assigned To:** Subagent (explore agent)
 
-| Finding | Module | Verification |
-|---------|--------|--------------|
-| Limiter release uses correct provider_id | pipeline | `tasks/pipeline.py:run_stage()` already uses `provider_id` from `_run_stage_core()` return value | ✅ Verified |
-| SELECTING/SELECTED in VALID_TRANSITIONS | pipeline | `constants.py` already includes these statuses | ✅ Verified |
-| Newsletter idempotency_key scope | pipeline | `tasks/newsletter.py` already defines `idempotency_key` in correct scope | ✅ Verified |
-| SSRFSafeRedirectHandler redirect counter | adapters | Already fixed per AGENTS.md | ✅ Verified |
+**Focus Areas:**
+- System diagram accuracy
+- Module index completeness
+- Data flow descriptions
+- Configuration file inventory
+- Security architecture claims
+- Directory structure accuracy
+- Layering rules validation
 
-### Known Issues (Not Fixed - By Design or Low Priority)
+---
 
-| Issue | Module | Notes |
-|-------|--------|-------|
-| `utils/url.py` not pure | utils | Docstring claims pure but has global mutable state. Documented in AGENTS.md. |
-| URL validation duplication | services/utils | Duplication exists by design for config support. Documented in AGENTS.md. |
-| StageConfig is stub | schemas | Documented as stub, actual config via RoleConfig. |
-| `adapter_config` not implemented | models | Documented as not implemented in architecture. |
+### 2. Adapters Module
+**Document:** `architecture/adapters.md`
+**Review Output:** `plans/adapters_review.md`
+**Assigned To:** Subagent (explore agent)
 
-### Documentation Discrepancies (To Update)
+**Focus Areas:**
+- BaseSourceAdapter registry pattern correctness
+- RSSAdapter fetch/parse implementation
+- APIAdapter JSONPath/pagination claims
+- WebAdapter CSS selector extraction
+- SSRFSafeRedirectHandler blocklist patterns
+- Source configuration schema accuracy
+- Error handling claims (backoff behavior)
 
-| Document | Discrepancy | Priority |
-|----------|-------------|----------|
-| `schemas.md` | RSSConfig, APIConfig, WebConfig structures differ from actual code | Medium |
-| `schemas.md` | NewsletterBrief missing `preamble` and `footer` fields | Medium |
-| `schemas.md` | Task schemas differ significantly from documented | Medium |
-| `routes.md` | `api_tokens_bp` IS registered (doc says not) | Low |
-| `routes.md` | Missing several routes (health, topic-notes, etc.) | Low |
-| `pipeline.md` | Missing `WRITTEN` status documentation | Low |
-| `pipeline.md` | Missing `selecting` transition from pending | Low |
+---
+
+### 3. Schemas Module
+**Document:** `architecture/schemas.md`
+**Review Output:** `plans/schemas_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- StageConfig stub status
+- PipelineRootConfig completeness
+- SourceConfig.adapter_config field_validator
+- RSSConfig/APIConfig/WebConfig schema accuracy
+- LLM response schemas (SelectionResult, ResearchBrief, CondensedArticle, ExecutiveSummary, NewsletterBrief)
+- Task validation schemas
+- Schema field name accuracy vs documentation
+
+---
+
+### 4. Routes Module
+**Document:** `architecture/routes.md`
+**Review Output:** `plans/routes_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- Blueprint URL prefix accuracy
+- Admin API endpoint completeness
+- Public routes implementation
+- Authentication security features (TOTP, session binding, backup codes)
+- CSRF protection claims
+- Rate limiting configuration
+- api_tokens_bp registration status
+
+---
+
+### 5. Pipeline Module
+**Document:** `architecture/pipeline.md`
+**Review Output:** `plans/pipeline_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- Pipeline stage status values
+- Stage transition logic
+- Degradation behavior accuracy
+- Newsletter generation flow
+- Executive summary 3-stage LLM claims
+- Celery Beat schedule accuracy
+- Two-tier retry system implementation
+- Circuit breaker configuration
+- Fallback chain dynamic resolution
+
+---
+
+### 6. Models Module
+**Document:** `architecture/models.md`
+**Review Output:** `plans/models_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- Article model pipeline_status values
+- Source model health tracking fields
+- AdminUser TOTP/backup code fields
+- TrendMemory embedding storage (text vs vector)
+- Relationship accuracy (many-to-one, many-to-many)
+- Index definitions
+- Model field naming (type vs source_type, last_fetch_at vs last_crawled)
+
+---
+
+### 7. Services Module
+**Document:** `architecture/services.md`
+**Review Output:** `plans/services_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- LLM provider base interface completeness
+- Circuit breaker pattern implementation
+- Rate limiter slot management (finally block usage)
+- Newsletter pipeline 3-stage orchestration
+- Article processing stage responsibilities
+- Trend memory service operations
+- Search provider inventory
+- Layering compliance (no adapter imports)
+
+---
+
+### 8. Subagent Module
+**Document:** `architecture/subagent.md`
+**Review Output:** `plans/subagent_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- Tool registry completeness (9 tools listed)
+- ToolDefinition schema (dataclass fields vs documentation)
+- run_subagent/run_subagent_with_tools signatures
+- Chain system configuration
+- Middleware pattern (sync wrap)
+- Error handling (retry, revocation)
+- Tool timeout configuration
+
+---
+
+### 9. Utils Module
+**Document:** `architecture/utils.md`
+**Review Output:** `plans/utils_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- URL validation SSRF protection
+- Text utilities implementation
+- DateTime parsing accuracy
+- Security utilities (token generation, constant-time compare)
+- HTML processing (strip_tags, linkify, extract_text)
+- Hash utilities
+- Pure function claims vs actual global state
+- Module dependencies
+
+---
+
+### 10. Tasks Module
+**Document:** `architecture/tasks.md`
+**Review Output:** `plans/tasks_review.md`
+**Assigned To:** Subagent (explore agent)
+
+**Focus Areas:**
+- Task file to stage mapping accuracy
+- Stage transition table correctness
+- run_stage helper lifecycle
+- Degradation path claims
+- Celery Beat schedule accuracy
+- Rate limiting slot management
+- Max retries configuration
+
+---
+
+## Verification Checklist for Each Module
+
+For each module, verify:
+- [ ] Document claims match actual code implementation
+- [ ] File paths referenced exist
+- [ ] Class/function names are accurate
+- [ ] Field names match model definitions
+- [ ] Configuration structures are accurate
+- [ ] Error handling behavior is documented correctly
+- [ ] No missing or undocumented features
+- [ ] No dead code or deprecated patterns
+- [ ] Security claims are accurate
+
+## Output Format for Review Plans
+
+Each review plan should contain:
+
+```markdown
+# [Module] Architecture Review
+
+## Verified Correct
+- List of claims that are correct and verified
+
+## Discrepancies Found
+- List of issues where documentation doesn't match code
+
+## Bugs Identified
+- Actual bugs discovered in the implementation
+
+## Improvement Suggestions
+- Code improvements that don't match documentation
+
+## Questions for Architecture
+- Clarifications needed on design decisions
+```
+
+---
+
+## Execution
+
+Launch subagents in parallel for each module to maximize efficiency.

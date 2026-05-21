@@ -53,23 +53,24 @@ Serves JSON REST API at `/api/v1/*`:
 - `/api/v1/webhooks` - Webhook management
 - `/api/v1/metrics` - Prometheus metrics
 - `/api/v1/costs` - Cost tracking
+- `/api-tokens` - API token management (list, create, delete)
 
-**Note:** The `api_tokens_bp` blueprint exists in `routes/admin/api_tokens.py` but is NOT registered in `app.py`. All `/api-tokens` routes return 404.
+**Note:** The `api_tokens_bp` blueprint is registered in `app.py` and provides `/api-tokens` endpoints.
 
 ## Public Routes
 
 ### Feeds (`public/feeds.py`)
 
 ```python
-feeds_bp = Blueprint('feeds', __name__)
+public_bp = Blueprint('public', __name__)
 
-@feeds_bp.route('/sitemap.xml')
+@public_bp.route('/sitemap.xml')
 def sitemap(): ...
 
-@feeds_bp.route('/feed/<format>')
+@public_bp.route('/feed/<format>')
 def article_feed(format): ...  # atom, rss, json
 
-@feeds_bp.route('/articles')
+@public_bp.route('/articles')
 def article_list(): ...
 ```
 
@@ -140,7 +141,7 @@ Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, n
 
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
-| `/articles` | GET, POST | List/create articles |
+| `/articles` | GET | List articles |
 | `/articles/ids` | GET | Batch article ID lookup with filters |
 | `/articles/counts-by-status` | GET | Article count by pipeline status |
 | `/articles/<id>` | GET, PUT, DELETE | Article CRUD |

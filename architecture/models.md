@@ -63,11 +63,12 @@ class Article(Base):
 ### Pipeline Status Flow
 
 ```
-pending → select → research → writing → editing → done
-                    ↓          ↓         ↓
-                  review ←──────┴─────────┘
-                  (impact_score < threshold)
+pending → selecting → selected → researching → writing → written → editing → review → done
+                                                    ↓
+                                               failed (after retries)
 ```
+
+Actual statuses used in code: `pending`, `selecting`/`selected`, `researching`, `writing`/`written`, `editing`, `review`, `done`, `skipped`, `failed`
 
 ## Source Model
 
@@ -78,17 +79,23 @@ class Source(Base):
     __tablename__ = 'sources'
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(200))
-    source_type = Column(String(50))  # rss, api, web
+    source_key = Column(String(64), unique=True)  # Unique source identifier
+    name = Column(String(128))
+    url = Column(String(512))                     # Source website URL
+    feed_url = Column(String(512))                 # RSS/API feed URL
+    source_type = Column(String(32))              # rss, api, web
+    active = Column(Boolean, default=True)
 
     # Health tracking
     consecutive_failures = Column(Integer, default=0)
     consecutive_successes = Column(Integer, default=0)
     last_crawled = Column(DateTime)
     last_success_at = Column(DateTime)
+    last_error = Column(Text)
+    disabled_at = Column(DateTime)
 
-    # Configuration
-    adapter_config = Column(JSON)  # Source-specific adapter settings
+    # Configuration: adapter config is stored in SourceConfig.config (schemas/source.py)
+    # NOT in this model. Adapters access via source_config.config at runtime.
 ```
 
 ## AdminUser Security
@@ -100,15 +107,18 @@ class AdminUser(Base):
     __tablename__ = 'admin_users'
 
     id = Column(Integer, primary_key=True)
-    username = Column(String(100), unique=True)
-    password_hash = Column(String(255))
+    username = Column(String(64), unique=True)
+    password_hash = Column(String(128))
 
     # TOTP 2FA
-    totp_secret = Column(String(32))
+    totp_secret = Column(String(256))
+    totp_enabled = Column(Boolean, default=False)
     backup_codes = Column(JSON)  # 8 backup codes as JSON array
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
 
-    # Session security
-    # Note: ip_binding and user_agent_hash not implemented
+    # Session security fields (ip_binding, user_agent_hash) do NOT exist
+    # Session hijacking protection is handled in routes/admin/__init__.py
 ```
 
 ## TrendMemory
@@ -136,7 +146,7 @@ class TrendMemory(Base):
 
 Key indexes for query performance:
 
-- `Article`: `pipeline_status`, `source_id`, `published_at`, `created_at`
-- `Source`: `name`, `type`
-- `PipelineRun`: `status`, `created_at`
-- `TrendMemory`: `topic` (no GIN index - embedding is stored as text for caching, not used for vector search)
+- `Article`: `pipeline_status`, `source_id` (FK), `published_at` (as `original_published_at`), `created_at`, plus `ix_articles_impact` on `impact_score`, `ix_articles_category_status` on `(category, pipeline_status)`, and retry/degradation indexes
+- `Source`: `name`, `source_type`, `consecutive_failures`, `disabled_at`, unique constraint on `source_key`
+- `PipelineRun`: `run_type`, `(run_type, status)` - no index on `created_at`
+- `TrendMemory`: `(topic, importance)`, `expires_at`, `last_accessed_at` - embedding stored as text for caching, not vector search

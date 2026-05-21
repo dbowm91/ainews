@@ -73,22 +73,24 @@ Fetches from REST APIs with JSONPath field extraction:
 ```python
 class APIAdapter(BaseSourceAdapter):
     def __init__(self, config: dict):
-        self.url_template = config['url']
-        self.item_path = config.get('item_path', '$.items[*]')
-        self.field_mappings = config.get('field_mappings', {})
+        self.list_url = config['list_url']
+        self.list_items_path = config.get('list_items_path')
+        self.fields = config.get('fields', {})
 
     def fetch(self) -> list[dict]:
-        # Supports pagination (cursor, offset, page)
-        # Handles authentication (Bearer, API key headers)
+        # Handles authentication (Bearer token via auth_header or Authorization fallback)
         # Rate limiting compliance
         return self._fetch_page() or []
 ```
 
 Features:
-- JSONPath field extraction (`$.items[*]`, `$.data[*].title`)
-- Pagination via `item_url` template + `list_items_path` for response data extraction
-- Auth header injection (Bearer token, API key)
-- Field mapping configuration
+- JSONPath field extraction via `list_items_path` (e.g., `$.items[*]`, `$.data[*].title`)
+- Item URL template for individual item fetching via `item_url`
+- Auth header injection (Bearer token only — API key in custom headers NOT supported)
+- Field mapping via `fields` dict
+- Filter operations: `equals`, `min`, `exists` (no `contains`)
+
+**Note:** Pagination is NOT implemented for API adapter (only Web adapter has pagination support).
 
 ## Web Adapter (`web.py`)
 
@@ -98,21 +100,22 @@ Scrapes listing pages with CSS selectors:
 class WebAdapter(BaseSourceAdapter):
     def __init__(self, config: dict):
         self.listing_url = config['listing_url']
-        self.item_css = config['item_css']
-        self.field_selectors = config['field_selectors']
+        self.listing = ListingConfig(**config['listing'])
+        self.article = ArticleSelectors(**config['article'])
 
     def fetch(self) -> list[dict]:
         # Fetches listing URL
-        # Optionally follows pagination links
+        # Optionally follows pagination links via next_link_selector
         # Extracts items via CSS selectors
         return self._scrape_listing(url)
 ```
 
 Features:
 - Single listing URL (not multiple start_urls)
-- CSS selector-based extraction
-- Pagination link following
+- CSS selector-based extraction via `ListingConfig` and `ArticleSelectors`
+- Pagination link following via `PaginationConfig`
 - Link URL discovery
+- Trafilatura content extraction with fallback to CSS selectors
 
 ## SSRF Protection
 
@@ -143,29 +146,31 @@ sources:
   - name: "Hacker News"
     type: "rss"
     url: "https://hnrss.org/frontpage"
-    adapter_config:
-      item_path: "entries"
-      field_mappings:
-        title: "title"
-        url: "link"
-        published: "published"
+    config:
+      feed_url: "https://hnrss.org/frontpage"
+      max_items: 50
 
   - name: "TechCrunch"
     type: "api"
-    url: "https://api.techcrunch.com/v1/articles"
-    adapter_config:
-      item_path: "$.articles[*]"
-      auth_header: "Bearer token"
+    config:
+      list_url: "https://api.techcrunch.com/v1/articles"
+      list_items_path: "$.articles[*]"
+      api_key: "${TC_API_KEY}"
+      auth_header: "Authorization"
 
   - name: "Example Blog"
     type: "web"
-    url: "https://example.com/articles"
-    adapter_config:
-      item_css: "article.post"
-      field_selectors:
-        title: "h2.title"
-        url: "a::attr(href)"
+    config:
+      listing_url: "https://example.com/articles"
+      listing:
+        card_selector: "article.post"
+        link_selector: "a::attr(href)"
+      article:
+        title_selector: "h2.title"
+        body_selector: "div.content"
 ```
+
+**Note:** The `config` field name is used in `SourceConfig`, not `adapter_config`. The config is validated against `RSSConfig`, `APIConfig`, or `WebConfig` based on source type.
 
 ## Error Handling
 

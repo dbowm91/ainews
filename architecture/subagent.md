@@ -6,13 +6,19 @@ The `services/subagent/` package contains tool-enabled LLM agents that can searc
 
 ```
 services/subagent/
-├── registry.py          # _TOOL_REGISTRY with cached tool definitions
-├── tools.py             # Tool implementations
-├── runner.py            # run_subagent() and run_subagent_with_tools()
+├── __init__.py
 ├── chain.py             # Multi-step subagent chains with conditions
-├── prompt_templates.py  # Task prompt templates
-└── middleware.py        # Logging, timing, error handling middleware
+├── conditions.py       # AST-based condition evaluation
+├── config.py           # Executor setup, provider config
+├── middleware.py        # Logging, timing, error handling middleware
+├── prompt_templates.py # Task prompt templates
+├── registry.py         # _TOOL_REGISTRY with cached tool definitions
+├── runner.py           # run_subagent() and run_subagent_with_tools()
+├── tools.py            # Tool implementations
+└── utils.py            # Retry, task revocation helpers
 ```
+
+**Note:** File inventory differs from older documentation. Current structure includes `__init__.py`, `config.py`, `conditions.py`, and `utils.py`.
 
 ## Tool Registry (`registry.py`)
 
@@ -21,11 +27,14 @@ Tools are registered in `_TOOL_REGISTRY`:
 ```python
 _TOOL_REGISTRY: dict[str, ToolDefinition] = {}
 
-class ToolDefinition(BaseModel):
+@dataclass
+class ToolDefinition:
     name: str
     description: str
     parameters: dict  # JSON Schema for tool
-    cached: bool = True  # Cache tool definition?
+    required: list[str] = field(default_factory=list)
+    fn: Optional[Callable[..., Any]] = field(default=None, repr=False)
+    # Note: ToolDefinition does NOT have a `cached` field
 ```
 
 ### Built-in Tools

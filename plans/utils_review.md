@@ -1,245 +1,150 @@
 # Utils Module Architecture Review
 
-This document reviews the claims in `architecture/utils.md` against the actual implementation in `utils/` and `services/url.py`.
-
----
-
-## 1. Verified Correct
-
-### Text Utilities (`utils/text.py`)
-
-| Function | Status | Notes |
-|----------|--------|-------|
-| `esc_xml_text` | Verified | Correctly escapes &, <, > |
-| `esc_xml_attr` | Verified | Correctly escapes &, ', ", <, > |
-| `escape_prompt_data` | Verified | Recursively escapes dict/list/string values |
-| `truncate` | Verified | Word-boundary breaking, handles edge cases |
-| `sanitize_html` | Verified | Uses HTMLParser to strip dangerous tags/attrs |
-| `extract_hashtags` | Verified | Regex pattern #[a-zA-Z][a-zA-Z0-9_]* works correctly |
-
-### Security Utilities (`utils/security.py`)
-
-| Function | Status | Notes |
-|----------|--------|-------|
-| `generate_token` | Verified | Uses secrets.token_urlsafe() for cryptographic security |
-| `constant_time_compare` | Verified | Uses hmac.compare_digest() for timing-attack prevention |
-
-### Hash Utilities (`utils/hash.py`)
-
-| Function | Status | Notes |
-|----------|--------|-------|
-| `generate_hash` | Verified | Correctly uses hashlib with utf-8 encoding |
-| `verify_hash` | Verified | Uses hmac.compare_digest() for safe comparison |
-
-### DateTime Utilities (`utils/datetime.py`)
-
-| Function | Status | Notes |
-|----------|--------|-------|
-| `parse_date` | Verified | Supports RFC 2822, ISO 8601, and 12 common formats via email.utils fallback |
-| `format_date` | Verified | Returns correct relative/absolute strings ("just now", "X minutes ago", etc.) |
-| `time_ago` | Verified | Correctly aliases format_date() |
-
-### HTML Utilities (`utils/html.py`)
-
-| Function | Status | Notes |
-|----------|--------|-------|
-| `strip_tags` | Verified | Uses HTMLParser with fallback to regex |
-| `linkify` | Verified | Regex-based URL to anchor conversion |
-| `extract_text` | Verified | Has trafilatura import with logger warning fallback |
-
-### URL Utilities (`utils/url.py`)
-
-| Function | Status | Notes |
-|----------|--------|-------|
-| `normalize_url` | Verified | Correctly strips tracking params, lowercases, removes www |
-| `normalize_title` | Verified | Correctly normalizes for fuzzy matching |
-| `TRACKING_PARAMS` | Verified | 14 tracking params defined (utm_*, fbclid, gclid, etc.) |
-
----
-
-## 2. Discrepancies Found
-
-### CRITICAL: validate_url_safe is NOT in utils/url.py
-
-**Documentation claims:**
-> url.py: validate_url_safe, UnsafeURLError - URL validation with SSRF protection
-
-**Actual implementation:**
-- utils/url.py only contains normalize_url, normalize_title, TRACKING_PARAMS, and the UnsafeURLError **exception class only** (lines 124-125)
-- The **actual SSRF validation with DNS resolution** is in services/url.py (lines 178-192)
-- services/url.py imports and re-exports from utils/url.py (line 15)
-
-**Implication:** The architecture docs imply adapters can import SSRF validation from utils/url.py, but:
-- adapters/session.py, adapters/web.py correctly import from utils/url.py only UnsafeURLError and do NOT use validate_url_safe
-- adapters/api.py, adapters/rss.py import validate_url_safe from utils/url.py but utils/url.py does NOT export it!
-- All actual usage of validate_url_safe comes from services.url
-
-**This is a BUG:** adapters/api.py and adapters/rss.py import validate_url_safe from utils.url, but utils.url does not export this function. This would cause ImportError at runtime.
-
-### Documentation vs Code: Pure Functions Claim
-
-**Documentation claims (line 131):**
-> Pure functions: No side effects, no global state
-
-**Actual utils/url.py has global mutable state:**
-- Line 130: _dns_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns_resolver")
-- Lines 182-183: _dns_cache: _TTLCache | None = None and _dns_cache_lock = threading.Lock()
-- Lines 186-194: _get_dns_cache() lazily initializes global cache
-- Line 197-198: clear_dns_cache() calls _get_dns_cache().clear()
-
-**The module docstring acknowledges this (lines 3-5):**
-> Note: Most functions are pure, but validate_url_safe() and related DNS functions have side effects - they perform DNS resolution with caching using global state (_dns_cache, _dns_executor).
-
-However, validate_url_safe is NOT even in utils/url.py - it is in services/url.py. The global state in utils/url.py is only for the clear_dns_cache() function.
-
-### Documentation vs Code: URL Validation Layering
-
-**Documentation states (lines 102-127):**
-```python
-def validate_url_safe(url: str) -> str:
-    """Validate URL has http/https scheme and no private IP addresses.
-    Performs DNS resolution to check for SSRF attempts via DNS rebinding.
-    ...
-```
-
-**Actual:** This exact function with DNS resolution logic is in services/url.py, NOT utils/url.py. The utils/url.py has:
-- UnsafeURLError exception class only
-- normalize_url, normalize_title, TRACKING_PARAMS
-- clear_dns_cache() (which delegates to services via _get_dns_cache())
-
----
-
-## 3. Bugs Identified
-
-### BUG-1: Import Error in Adapters
-
-**Files affected:** adapters/api.py, adapters/rss.py
-
-```python
-# adapters/api.py line 11:
-from utils.url import validate_url_safe
-
-# adapters/rss.py line 12:
-from utils.url import validate_url_safe
-```
-
-But utils/url.py __all__ (lines 21-28) is:
-```python
-__all__ = [
-    "normalize_url",
-    "normalize_title",
-    "TRACKING_PARAMS",
-    "UnsafeURLError",
-    "validate_url_safe",  # <-- exported but not defined!
-    "clear_dns_cache",
-]
-```
-
-The function validate_url_safe is listed in __all__ but NOT defined in utils/url.py. It exists only in services/url.py. This would cause:
-```
-ImportError: cannot import name 'validate_url_safe' from 'utils.url'
-```
-
-**Note:** adapters/web.py and adapters/session.py correctly only import UnsafeURLError and validate_url_safe is not used in these adapters.
-
-### BUG-2: utils/url.py exports validate_url_safe but does not define it
-
-The __all__ in utils/url.py lists validate_url_safe but it is never defined in that file. This is misleading and would cause import errors if anyone actually tried to use the documented API.
-
-### BUG-3: clear_dns_cache in utils/url.py is misleading
-
-utils/url.py exports clear_dns_cache() (line 27) which calls _get_dns_cache().clear(). But _get_dns_cache() in utils/url.py (lines 186-194) creates a local _TTLCache with hardcoded values (TTL=5, MAX=1024), NOT the configured values from services/url.py.
-
-When called:
-1. utils.url.clear_dns_cache() calls _utils.url._get_dns_cache()
-2. This creates a NEW cache in utils/url.py module scope
-3. The actual DNS cache used by services/url.py is separate
-
-This means utils.url.clear_dns_cache() clears a different cache than the one actually used for SSRF validation.
-
----
-
-## 4. Improvement Suggestions
-
-### IMP-1: Remove false exports from utils/url.py
-
-utils/url.py should not advertise validate_url_safe in __all__ since it does not define it. Either:
-- Remove it from __all__, OR
-- Actually define it in utils/url.py (which would require moving the SSRF logic)
-
-### IMP-2: Add tests for utility functions
-
-Missing test coverage for:
-- utils/text.py: truncate, sanitize_html, extract_hashtags
-- utils/datetime.py: parse_date, format_date, time_ago
-- utils/html.py: strip_tags, linkify, extract_text
-- utils/hash.py: generate_hash, verify_hash
-- utils/security.py: generate_token, constant_time_compare
-
-### IMP-3: Document global state accurately
-
-If utils/url.py is documented as having "pure functions", the global state for DNS caching should either:
-- Be removed (have services/url.py handle all caching)
-- Or documentation should be updated to acknowledge the caching layer
-
-### IMP-4: Consider consolidating URL utilities
-
-There are two URL utility modules:
-- utils/url.py - normalization only
-- services/url.py - validation with SSRF protection
-
-The relationship is unclear. Consider:
-- Moving normalization to services/url.py and removing utils/url.py
-- Or having services/url.py only add the SSRF validation layer on top of utils/url.py
-
----
-
-## 5. Questions for Architecture
-
-### Q-1: Why is validate_url_safe in services/url.py not utils/url.py?
-
-The architecture doc describes utils/url.py as having SSRF protection functions, but the actual implementation is in services/url.py. This creates confusion about:
-- Which module adapters should import from
-- Why utils/url.py exports validate_url_safe in __all__ but does not define it
-
-### Q-2: What is the intended relationship between utils/url.py and services/url.py?
-
-Currently:
-- services/url.py imports from utils/url.py: TRACKING_PARAMS, normalize_title, normalize_url
-- utils/url.py appears to export but not define validate_url_safe
-- Both have their own _TTLCache implementation
-- Both have their own _dns_executor
-
-This duplication suggests unclear layering or copy-paste residue.
-
-### Q-3: Are the undocumented functions (truncate, sanitize_html, etc.) intentionally unused?
-
-Several functions are documented but never imported anywhere:
-- truncate, sanitize_html, extract_hashtags in utils/text.py
-- strip_tags, linkify, extract_text in utils/html.py
-- generate_hash, verify_hash in utils/hash.py
-- generate_token, constant_time_compare in utils/security.py
-- parse_date, format_date, time_ago in utils/datetime.py
-
-Are these:
-1. Reserved for future use?
-2. Legacy functions no longer used?
-3. Intended for external consumption only?
-
-### Q-4: Should utils/url.clear_dns_cache() synchronize with services/url.clear_dns_cache()?
-
-Currently they clear different cache instances. If clear_dns_cache() is meant to be a admin/debugging function, it should probably clear all caches.
-
----
-
 ## Summary
 
-| Category | Count |
-|----------|-------|
-| Verified correct implementations | 15 |
-| Discrepancies (docs vs code) | 3 |
-| Bugs identified | 3 |
-| Improvement suggestions | 4 |
-| Questions for architecture | 4 |
+This review verifies the claims in `architecture/utils.md` against the actual codebase in `utils/`. The document accurately describes the file inventory and function signatures for most files, but contains significant discrepancies and design principle violations in `url.py`.
 
-**Most Critical Issue:** The documentation implies utils/url.py contains validate_url_safe for SSRF protection, but the actual implementation is in services/url.py. Meanwhile, adapters/api.py and adapters/rss.py incorrectly try to import validate_url_safe from utils/url.py where it does not exist. This is a latent import error.
+---
+
+## Verified Claims
+
+### text.py ✅
+All 6 functions documented and match exactly:
+- `truncate(text: str, length: int, suffix: str = "...") -> str` ✅
+- `sanitize_html(html: str) -> str` ✅
+- `extract_hashtags(text: str) -> list[str]` ✅
+- `esc_xml_text(text: str) -> str` ✅
+- `esc_xml_attr(text: str) -> str` ✅
+- `escape_prompt_data(data: dict) -> dict` ✅ (uses `dict[str, Any]`)
+
+### datetime.py ✅
+All 3 functions documented and match:
+- `parse_date(date_str: str) -> datetime | None` ✅
+- `format_date(dt: datetime) -> str` ✅
+- `time_ago(dt: datetime) -> str` ✅ (alias for format_date)
+
+### hash.py ✅
+All 2 functions documented and match:
+- `generate_hash(data: str, algorithm: str = "sha256") -> str` ✅
+- `verify_hash(data: str, hash: str, algorithm: str = "sha256") -> bool` ✅
+
+### html.py ✅
+All 3 functions documented and match:
+- `strip_tags(html: str) -> str` ✅
+- `linkify(text: str) -> str` ✅
+- `extract_text(html: str) -> str` ✅ (uses trafilatura fallback)
+
+### security.py ✅
+All 2 functions documented and match:
+- `generate_token(length: int = 32) -> str` ✅
+- `constant_time_compare(a: str, b: str) -> bool` ✅
+
+---
+
+## Discrepancies and Issues Found
+
+### CRITICAL: url.py Global Mutable State (Design Principle Violation)
+
+**Location:** `utils/url.py:130-194`
+
+The document claims all utils are "pure functions with no side effects and no global state" (line 131), but `url.py` has extensive global mutable state:
+
+1. **`_dns_executor` (line 130):** Global `ThreadPoolExecutor` with 4 workers
+2. **`_dns_cache` (line 182):** Module-level cache variable
+3. **`_dns_cache_lock` (line 183):** Module-level lock
+4. **`_TTLCache` class (lines 136-179):** Mutable cache with internal state (`_hits`, `_misses`)
+
+**Issue:** `validate_url_safe()` is documented as a pure function but performs DNS resolution with caching - a side effect with global state.
+
+**Note:** The file itself acknowledges this in its docstring (lines 3-5):
+> "Most functions are pure, but validate_url_safe() and related DNS functions have side effects - they perform DNS resolution with caching using global state"
+
+However, the architecture document does NOT reflect this deviation from the pure function principle.
+
+### Issue 2: Document Duplication in url.py Section (lines 102-127)
+
+The document has two "URL Utilities (`url.py`)" sections:
+- Lines 16-28: Basic signature documentation
+- Lines 102-127: Extended documentation with additional functions
+
+The second section (102-127) documents `normalize_url`, `normalize_title`, `TRACKING_PARAMS`, and `clear_dns_cache()` which are correct and present, but the document structure is confusing with the duplicate sections.
+
+---
+
+## Specific Bugs
+
+### Bug 1: url.py Returns Unnormalized URL
+
+**Location:** `utils/url.py:243-262`
+
+```python
+def validate_url_safe(url: str) -> str:
+    # ... validation logic ...
+    return url  # line 262 - returns original URL, not normalized
+```
+
+The function validates the URL but returns the original input, not a normalized version. The document says "Returns the validated URL string" which is ambiguous - it could mean the validated original or the normalized form.
+
+**Recommendation:** Either:
+1. Return `url` (current behavior - returns original, just validated)
+2. Return `normalize_url(url)` if normalization is expected
+
+Currently it returns the original, so there's no bug, but the behavior could be clarified.
+
+### Bug 2: time_ago() Captures Global State
+
+**Location:** `utils/datetime.py:52-95`
+
+```python
+def format_date(dt: datetime) -> str:
+    now = datetime.now(timezone.utc)  # line 57 - captures current time
+```
+
+This function relies on `datetime.now()` which is technically non-deterministic (depends on when it's called). This is generally acceptable for utility functions but violates the "pure function" principle if "pure" is interpreted strictly (same input → same output, no external state).
+
+However, this is a common pattern for date formatting and likely acceptable.
+
+---
+
+## Improvement Recommendations
+
+### 1. Update architecture/utils.md
+
+The document should clearly note that `validate_url_safe()` in `url.py` is NOT a pure function due to DNS resolution side effects. The "Design Principles" section (line 129-135) should be updated to reflect this exception.
+
+**Proposed addition:**
+> Note: `validate_url_safe()` in `url.py` performs DNS resolution with caching and is therefore not a pure function. It modifies global state (`_dns_cache`) as a side effect.
+
+### 2. Consider Extracting DNS Resolution to Services Layer
+
+Currently `utils/url.py` has significant infrastructure code (ThreadPoolExecutor, TTLCache) that arguably belongs in the services layer. Consider:
+- Moving DNS resolution to `services/url.py` (which already has SSRF implementation per AGENTS.md)
+- Keeping only pure URL normalization in `utils/url.py`
+
+### 3. Clarify validate_url_safe Return Value
+
+The function returns the original URL after validation. Document this behavior clearly:
+> Returns the original URL string if valid (does not return normalized URL)
+
+### 4. Remove Duplicate url.py Section
+
+Lines 102-127 duplicate the url.py section. Remove the first section (lines 16-28) or restructure to avoid confusion.
+
+---
+
+## Files Reviewed
+
+| File | Status | Issues |
+|------|--------|--------|
+| `utils/url.py` | ⚠️ Partially Accurate | Global mutable state, document duplication |
+| `utils/text.py` | ✅ Accurate | None |
+| `utils/datetime.py` | ✅ Accurate | time_ago captures current time (acceptable) |
+| `utils/hash.py` | ✅ Accurate | None |
+| `utils/html.py` | ✅ Accurate | None |
+| `utils/security.py` | ✅ Accurate | None |
+
+---
+
+## Conclusion
+
+The architecture document is mostly accurate for the pure utility modules (text, hash, html, security, datetime). However, `url.py` has a significant design principle violation: it contains global mutable state (DNS cache, ThreadPoolExecutor) despite the document claiming all utils are pure functions. This should be documented explicitly.

@@ -1,6 +1,6 @@
 # Adapters Module Architecture Review
 
-**Review Date:** 2026-05-21  
+**Review Date:** 2026-05-21 (updated)  
 **Reviewed File:** `architecture/adapters.md`  
 **Code Source:** `adapters/` directory
 
@@ -36,7 +36,7 @@ The `SOURCE_ADAPTERS` alias points to the same registry. The `get_adapter_class(
 - **Malformed feed fallback**: `_scrape_feed_fallback()` uses BeautifulSoup to extract from HTML
 - **Validation**: `_validate_feed()` checks for `entries` existence
 - **Session management**: Creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`
-- **User-Agent**: Correctly set to `AINwsBot/1.0` (configurable)
+- **User-Agent**: Correctly set via config
 
 ### 3. APIAdapter Implementation (`api.py`)
 
@@ -211,6 +211,27 @@ However, the `min_content_length` config in `WebConfig` is used to decide whethe
 
 This is not a bug - it's a design choice to use a constant. But the documentation doesn't mention this.
 
+### BUG-4: Missing `adapter_config` Documentation for Source Schema
+
+**Severity:** Low  
+**Location:** `architecture/adapters.md` line 146
+
+The document shows `adapter_config` as a YAML key for source configuration, but in the actual `SourceConfig` schema (`schemas/source.py` lines 105-130), the field is just `config` (not `adapter_config`). The validator uses `info.data.get("type")` to determine which adapter config to validate against.
+
+This is a documentation inconsistency - the actual field name is `config`, not `adapter_config`. The example in the architecture document shows the correct structure but with wrong key name.
+
+### BUG-5: API Adapter Filters Missing `contains` Operation
+
+**Severity:** Low  
+**Location:** `adapters/api.py` lines 160-175
+
+The document does not specify what filter operations are supported. The implementation only supports:
+- `equals`: Exact match
+- `min`: Numeric minimum
+- `exists`: Field existence check
+
+Missing `contains` operation (substring match) which is commonly needed for filtering articles by category or tag.
+
 ---
 
 ## Improvement Suggestions
@@ -237,6 +258,10 @@ Consider blocking scheme-relative URLs (those starting with `//`) at the redirec
 ### IMP-5: Document Hard-Coded Constants
 
 The `MIN_CONTENT_LENGTH = 200` in `WebAdapter` and other constants should be documented or made configurable.
+
+### IMP-6: Add `contains` Filter Operation to APIAdapter
+
+Add substring matching support for filtering articles by category or tag.
 
 ---
 
@@ -269,5 +294,8 @@ The architecture document is generally accurate and well-organized. The main dis
 1. API adapter pagination not implemented (but documented)
 2. `list_items_path` vs `item_path` naming mismatch
 3. Authentication limited to Bearer tokens (but document suggests broader support)
+4. `adapter_config` vs `config` field name mismatch in examples
 
-The implementation is solid with proper layering, SSRF protection, and error handling. The identified bugs and suggestions are minor and don't indicate fundamental architectural issues.
+The implementation is solid with proper layering, SSRF protection, and error handling. The identified bugs are minor and don't indicate fundamental architectural issues.
+
+**Critical Security Note:** The SSRF protection in `utils/url.py` and `services/url.py` uses DNS resolution with caching. The duplicate implementations between `utils/url.py` and `services/url.py` should be consolidated - adapters correctly use `utils/url.py` (as documented), while services use `services/url.py` (which has config support). This is intentional for layering compliance.

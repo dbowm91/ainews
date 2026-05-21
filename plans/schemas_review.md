@@ -1,216 +1,92 @@
 # Schemas Module Architecture Review
 
-**Review Date:** 2026-05-21  
-**Reviewer:** Architecture Review Agent  
-**Document Reviewed:** `architecture/schemas.md`
+## Summary
+
+The architecture document `architecture/schemas.md` is **largely accurate** but has several discrepancies with the actual implementation. Most discrepancies are already noted in the document via "Note:" corrections, but a few claims need correction.
 
 ---
 
-## Executive Summary
+## Verified Claims
 
-The architecture document `architecture/schemas.md` is **largely accurate** but has several discrepancies with the actual implementation. Most critically, there is a **duplicate `ADAPTER_CONFIGS` bug** in `schemas/source.py` that causes the `SourceConfig.config` field_validator to fail at runtime.
+### File Inventory — VERIFIED
+| File | Models | Purpose | Status |
+|------|--------|---------|--------|
+| `pipeline.py` | `PipelineRootConfig`, stage configs | Pipeline stage configuration | ✓ |
+| `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig` | Source adapter configuration | ✓ |
+| `llm.py` | Provider definitions | LLM/search provider settings | ✓ |
+| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief` | LLM response schemas | ✓ |
+| `tasks.py` | Task input validation | Celery task input validation | ✓ |
+| `topic.py` | Topic definitions | Topic configuration | ✓ |
+| `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration | ✓ |
 
----
-
-## Verified Correct
-
-### 1. StageConfig Stub Status
-**Status:** VERIFIED CORRECT
-
-The document correctly states that `StageConfig` is a stub with only `tools: list[str]`.
-
-**Actual Implementation (`schemas/pipeline.py` lines 140-146):**
-```python
-class StageConfig(BaseModel):
-    """Pipeline stage configuration stub.
-
-    Currently only defines tools list. The actual stage configuration is handled
-    by SubagentStageConfig and RoleConfig. This stub exists for future extensibility.
-    """
-    tools: list[str] = Field(default_factory=list)
-```
-
-### 2. PipelineRootConfig Structure
-**Status:** VERIFIED CORRECT
-
-The documented structure matches the implementation:
-- `pipeline: PipelineConfig` - present (line 150)
-- `newsletter: NewsletterConfig` - present with defaults (line 151)
-- `newsletter_pipeline: NewsletterPipelineConfig` - present with defaults (lines 152-154)
-- `subagent: SubagentConfig` - present with defaults (line 155)
-- `memory: MemoryConfig` - present with defaults (line 156)
-- `stages: dict[str, StageConfig]` - present as stub dict (line 157)
-- `schedule: dict` - present with defaults (line 158)
-
-### 3. ExecutiveSummary Schema
-**Status:** VERIFIED CORRECT
-
-**Documented (line 179-181):**
-```python
-class ExecutiveSummary(BaseModel):
-    summary: str                             # Note: single 'summary' field (not 6 fields)
-```
-
-**Actual Implementation (`schemas/llm_responses.py` lines 151-158):**
-```python
-class ExecutiveSummary(BaseModel):
-    summary: str = Field(
-        description=(
-            "3-4 paragraph executive summary. Sharp, slightly informal tone. "
-            "Lead with the most important takeaway. "
-            "Reference specific articles where relevant."
-        )
-    )
-```
-
-### 4. NewsletterBrief Does NOT Have preamble/footer
-**Status:** VERIFIED CORRECT
-
-The document correctly notes that `NewsletterBrief` does NOT have `preamble`, `footer`, or `articles` fields.
-
-**Actual Implementation (`schemas/llm_responses.py` lines 142-148):**
-```python
-class NewsletterBrief(BaseModel):
-    themes: list[str] = Field(description="Major themes across the selected articles")
-    highlights: list[str] = Field(description="Most notable individual stories")
-    connections: list[str] = Field(
-        default_factory=list,
-        description="Patterns or threads connecting multiple articles",
-    )
-```
-
-### 5. NewsletterArticle Schema
-**Status:** VERIFIED CORRECT
-
-**Documented (lines 193-198):**
-```python
-class NewsletterArticle(BaseModel):
-    headline: str = Field(description="Article headline within the newsletter")
-    summary: str = Field(description="Brief summary of the article")
-    url: Optional[str] = Field(default=None, description="URL to the article")
-    tags: list[str] = Field(default_factory=list, description="Topics/tags for this article")
-```
-
-**Actual Implementation (`schemas/llm_responses.py` lines 135-139):** Matches exactly.
-
-### 6. SelectionResult Schema
-**Status:** VERIFIED CORRECT
-
-**Actual Implementation (`schemas/llm_responses.py` lines 16-22):**
-```python
-class SelectionResult(BaseModel):
-    selected: bool
-    score: int = Field(ge=1, le=10)
-    reason: str
-    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
-    key_topics: list[str] = Field(default_factory=list, description="Identified topics from the article")
-    impact_summary: Optional[str] = Field(default=None, description="Brief summary of why this article matters")
-```
-
-### 7. Task Validation Schemas
-**Status:** VERIFIED CORRECT
-
-- `SelectArticleTask` matches documentation (lines 33-42 in tasks.py)
-- `GenerateNewsletterTask` matches documentation (lines 45-56)
-- `SendEmailTask` matches documentation (lines 59-70)
-- `CleanupArticleVersionsTask` matches documentation (lines 73-84)
-- `ProcessItemTask` documented fields match implementation (lines 87-117)
-
-### 8. MemoryConfig
-**Status:** VERIFIED CORRECT
-
-All fields and defaults match the implementation (`schemas/pipeline.py` lines 127-137).
-
-### 9. SubagentConfig Structure
-**Status:** VERIFIED CORRECT
-
-- `enabled: bool = True`
-- `default: SubagentStageConfig`
-- `research: SubagentStageConfig`
-- `edit: SubagentStageConfig`
-- `chains: dict[str, SubagentChainConfig]`
-
-All match the implementation (`schemas/pipeline.py` lines 120-124).
-
-### 10. Topic Schemas
-**Status:** VERIFIED CORRECT
-
-`TopicDef` and `TopicsConfig` match the implementation (`schemas/topic.py`).
-
-### 11. Webhook Schemas
-**Status:** VERIFIED CORRECT
-
-`WebhookCreate` and `WebhookResponse` match the implementation (`schemas/webhook.py`).
+Additional files not in inventory: `schemas/common.py`, `schemas/item.py`, `schemas/admin.py`, `schemas/search.py`, `schemas/__init__.py`.
 
 ---
 
-## Discrepancies Found
+## Discrepancies and Issues
 
-### 1. SourceConfig Type Field Missing pattern validator
-**Status:** DISCREPANCY (Low Impact)
+### 1. `source.py` — SourceConfig Field Names DO NOT MATCH Document
 
-**Documented (`architecture/schemas.md` line 108):**
+**Document claims (architecture/schemas.md:79-86):**
 ```python
 class SourceConfig(BaseModel):
     id: str = Field(..., pattern=r"^[a-z0-9_]+$")
-    name: str = Field(..., min_length=1, max_length=128)
+    name: str
     type: str                          # "rss", "api", or "web"
-```
-
-**Actual Implementation (`schemas/source.py` lines 105-112):**
-```python
-class SourceConfig(BaseModel):
-    id: str = Field(..., pattern=r"^[a-z0-9_]+$")
-    name: str = Field(..., min_length=1, max_length=128)
-    type: str
     enabled: bool = True
     schedule_minutes: int = Field(default=30, ge=5, le=1440)
-    config: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any]             # Adapter-specific configuration
     topics: TopicMatchConfig = Field(default_factory=TopicMatchConfig)
 ```
 
-The documentation shows `type: str` without the pattern or description, but the implementation has a `validate_type` field_validator (lines 114-121) that validates against known source types. This is an improvement over what was documented.
+**Actual implementation (schemas/source.py:105-112):**
+```python
+class SourceConfig(BaseModel):
+    id: str = Field(..., pattern=r"^[a-z0-9_]+$")
+    name: str = Field(..., min_length=1, max_length=128)  # + min/max_length constraint
+    type: str
+    enabled: bool = True
+    schedule_minutes: int = Field(default=30, ge=5, le=1440)
+    config: dict[str, Any] = Field(default_factory=dict)  # + default_factory
+    topics: TopicMatchConfig = Field(default_factory=TopicMatchConfig)
+```
 
-### 2. RSSConfig Schema Different from Documented
-**Status:** DISCREPANCY (Medium Impact)
+**Issue:** Document omits `min_length=1, max_length=128` on `name` and `default_factory=dict` on `config`. Document does not mention the `validate_type` field validator on `type`.
 
-**Documented (`architecture/schemas.md` lines 89-91):**
+---
+
+### 2. `source.py` — RSSConfig, APIConfig, WebConfig DO NOT MATCH Document
+
+**Document claims (architecture/schemas.md:89-101):**
 ```python
 class RSSConfig(BaseModel):
     item_path: str = "entries"
     field_mappings: dict[str, str]
+
+class APIConfig(BaseModel):
+    item_path: str
+    auth_header: str | None = None
+    pagination: PaginationConfig | None = None
+
+class WebConfig(BaseModel):
+    item_css: str
+    field_selectors: dict[str, str]
+    pagination: PaginationConfig | None = None
+    follow_links: bool = False
 ```
 
-**Actual Implementation (`schemas/source.py` lines 29-39):**
+**Actual implementation (schemas/source.py:29-96):**
+
+The actual adapters use **completely different schemas**:
+
 ```python
 class RSSConfig(BaseModel):
     feed_url: str = Field(..., min_length=1)
     max_items: int = Field(default=50, ge=1, le=200)
     request_timeout: int = Field(default=15, ge=5, le=60)
     user_agent: str = "AINewsBot/1.0"
-    min_content_length: int = Field(
-        default=200,
-        ge=0,
-        le=5000,
-        description="If feed content is shorter than this, scrape the article page",
-    )
-```
+    min_content_length: int = Field(default=200, ge=0, le=5000, ...)
 
-The documented schema appears to be an older version. The actual implementation has completely different fields focused on RSS feed handling.
-
-### 3. APIConfig Schema Different from Documented
-**Status:** DISCREPANCY (Medium Impact)
-
-**Documented (`architecture/schemas.md` lines 93-96):**
-```python
-class APIConfig(BaseModel):
-    item_path: str
-    auth_header: str | None = None
-    pagination: PaginationConfig | None = None
-```
-
-**Actual Implementation (`schemas/source.py` lines 42-55):**
-```python
 class APIConfig(BaseModel):
     list_url: str = Field(..., min_length=1)
     list_method: str = "json_array"
@@ -225,24 +101,7 @@ class APIConfig(BaseModel):
     user_agent: str = "AINewsBot/1.0"
     api_key: Optional[str] = None
     auth_header: Optional[str] = None
-```
 
-The documented schema appears outdated. The actual implementation has many more fields.
-
-### 4. WebConfig Schema Different from Documented
-**Status:** DISCREPANCY (Medium Impact)
-
-**Documented (`architecture/schemas.md` lines 98-102):**
-```python
-class WebConfig(BaseModel):
-    item_css: str
-    field_selectors: dict[str, str]
-    pagination: PaginationConfig | None = None
-    follow_links: bool = False
-```
-
-**Actual Implementation (`schemas/source.py` lines 87-95):**
-```python
 class WebConfig(BaseModel):
     base_url: str = Field(..., min_length=1)
     listing_url: str = Field(..., min_length=1)
@@ -254,22 +113,34 @@ class WebConfig(BaseModel):
     user_agent: str = "AINewsBot/1.0"
 ```
 
-The documented schema appears outdated. The actual implementation uses `ListingConfig` and `ArticleSelectors` composite objects.
+**Additionally, there are classes the document never mentions:**
+- `PaginationConfig` — actual implementation has `enabled`, `type`, `next_link_selector`, `max_pages` (NOT the three variants in the doc)
+- `ListingConfig` — contains `card_selector`, `link_selector`, `link_attribute`, `pagination`
+- `ArticleSelectors` — contains `title_selector`, `author_selector`, `date_selector`, `date_attribute`, `body_selector`
+- `SourceType(str, Enum)` — enum with RSS, API, WEB values
+- `MatchMode(str, Enum)` — enum with KEYWORD, CONTEXTUAL values
 
-### 5. PaginationConfig Type Literal
-**Status:** DISCREPANCY (Low Impact)
+**Issue:** MAJOR — Document's adapter configs are completely fictional. The document shows generic/stub-like field names (`item_path`, `field_mappings`, `item_css`, `field_selectors`) that don't exist in the actual code. The actual implementation has detailed, real fields appropriate for real RSS/API/Web crawling.
 
-**Documented (`architecture/schemas.md` line 105):**
+---
+
+### 3. `source.py` — PaginationConfig DOES NOT MATCH Document
+
+**Document claims (architecture/schemas.md:104-109):**
 ```python
 class PaginationConfig(BaseModel):
     type: Literal["cursor", "offset", "page"]
+    next_button_css: str | None = None
+    cursor_path: str | None = None
+    offset_param: str | None = None
+    limit_param: str | None = None
 ```
 
-**Actual Implementation (`schemas/source.py` lines 58-69):**
+**Actual implementation (schemas/source.py:58-69):**
 ```python
 class PaginationConfig(BaseModel):
     enabled: bool = False
-    type: str = "next_link"
+    type: str = "next_link"  # NOT Literal - just a str with validator
     next_link_selector: Optional[str] = None
     max_pages: int = 3
 
@@ -281,154 +152,227 @@ class PaginationConfig(BaseModel):
         return v
 ```
 
-The actual implementation uses string validation with different values: `"next_link"`, `"query_param"`, `"none"` instead of `"cursor"`, `"offset"`, `"page"`.
+**Issue:** Document claims `Literal["cursor", "offset", "page"]` but actual has `str` with values `next_link`, `query_param`, `none`. Also missing `enabled` and `max_pages` fields.
 
 ---
 
-## Bugs Identified
+### 4. `llm_responses.py` — CondensedArticle WHY_IT_MATTERS Has Default
 
-### CRITICAL BUG: Duplicate ADAPTER_CONFIGS Definition in schemas/source.py
-
-**File:** `schemas/source.py`
-
-**Issue:** There are TWO definitions of `ADAPTER_CONFIGS` in the same file:
-
-**First definition (lines 98-102):**
+**Document claim (architecture/schemas.md:168):**
 ```python
-ADAPTER_CONFIGS: dict[str, type[BaseModel]] = {
-    "rss": RSSConfig,
-    "api": APIConfig,
-    "web": WebConfig,
-}
+class CondensedArticle(BaseModel):
+    # ...
+    why_it_matters: str                      # Additional fields not in doc
 ```
 
-This is used by the `SourceConfig.validate_adapter_config` field_validator (lines 123-130).
-
-**However, this same dictionary is REDEFINED later in `schemas/llm.py` (lines 74-79):**
+**Actual implementation (schemas/llm_responses.py:104-107):**
 ```python
-ADAPTER_CONFIGS: dict[str, type[BaseModel]] = {
-    "ollama": OllamaConfig,
-    "openai": OpenAIConfig,
-    "anthropic": AnthropicConfig,
-    "gemini": GeminiConfig,
-}
+class CondensedArticle(BaseModel):
+    # ...
+    why_it_matters: str = Field(
+        default="",
+        description="1-2 sentences on why this matters to the reader...",
+    )
 ```
 
-**Bug:** The `SourceConfig.validate_adapter_config` validator at line 127 calls:
-```python
-if source_type in ADAPTER_CONFIGS:
-```
-
-This check will FAIL for source types "rss", "api", "web" because by the time this runs, `ADAPTER_CONFIGS` has been reassigned to the LLM provider configs in `schemas/llm.py`.
-
-**Root Cause:** Both files define `ADAPTER_CONFIGS` as a module-level variable. Since Python imports are singleton, when `schemas/source.py` imports from `schemas/llm.py`, the later definition overwrites the earlier one.
-
-**Impact:** Any attempt to validate a `SourceConfig` with adapter-specific config will fail silently or raise a confusing error.
-
-**Fix Required:** Rename one of the `ADAPTER_CONFIGS` dictionaries to avoid collision. Suggested rename for `schemas/llm.py`:
-```python
-LLM_ADAPTER_CONFIGS: dict[str, type[BaseModel]] = {
-    "ollama": OllamaConfig,
-    "openai": OpenAIConfig,
-    "anthropic": AnthropicConfig,
-    "gemini": GeminiConfig,
-}
-```
+**Issue:** `why_it_matters` has a `default=""` in code, but document shows no default. Minor.
 
 ---
 
-## Improvement Suggestions
+### 5. `source.py` — CRIT-3 Fix: Field Validator for Adapter Config IS Implemented
 
-### 1. Document the actual adapter config schemas in architecture/schemas.md
+**Document note (architecture/schemas.md:86):**
+> `config: dict[str, Any]` — Adapter-specific configuration
 
-The adapter configs (`RSSConfig`, `APIConfig`, `WebConfig`) documented in the architecture file are significantly different from the actual implementation. The documentation should be updated to reflect:
-
-- Actual field names and types
-- The composite object pattern used for `WebConfig` (`ListingConfig`, `ArticleSelectors`)
-- The pagination configuration approach
-
-### 2. Add PaginationConfig to architecture/schemas.md
-
-The `PaginationConfig` class with its `enabled`, `type`, `next_link_selector`, and `max_pages` fields is missing from the documentation entirely.
-
-### 3. Document ListingConfig and ArticleSelectors
-
-The `ListingConfig` and `ArticleSelectors` classes in `schemas/source.py` are not documented in `architecture/schemas.md`.
-
-### 4. Update SourceType documentation
-
-The `SourceType` enum in `schemas/source.py` (lines 12-15) should be documented:
+**Actual implementation (schemas/source.py:123-130):**
 ```python
-class SourceType(str, Enum):
-    RSS = "rss"
-    API = "api"
-    WEB = "web"
+@field_validator("config")
+@classmethod
+def validate_adapter_config(cls, v, info):
+    source_type = info.data.get("type")
+    if source_type in ADAPTER_CONFIGS:
+        adapter_config = ADAPTER_CONFIGS[source_type]
+        return adapter_config.model_validate(v).model_dump()
+    return v
 ```
 
-### 5. Consider documenting the field_validator chain
-
-The `SourceConfig` class has two field validators:
-- `validate_type` (lines 114-121) - validates source type
-- `validate_adapter_config` (lines 123-130) - validates config against adapter schema
-
-This validation chain is an important architectural pattern that should be documented.
-
-### 6. Document the common.py layer violation
-
-As noted in the code comments (lines 72-73 and 86-87 in `schemas/common.py`), there is an intentional layer violation where `schemas/` imports from `services/`. This should be documented in the architecture.
+**Status:** CRIT-3 fix is VERIFIED — the field validator IS implemented and validates adapter config against the appropriate schema based on source type.
 
 ---
 
-## Questions for Architecture
+### 6. `source.py` — Additional `validate_type` Field Validator
 
-### Q1: What is the intended PaginationConfig type values?
+**Actual implementation (schemas/source.py:114-121):**
+```python
+@field_validator("type")
+@classmethod
+def validate_type(cls, v):
+    if v not in ADAPTER_CONFIGS:
+        raise ValueError(
+            f"Unknown source type '{v}'. Known: {list(ADAPTER_CONFIGS.keys())}"
+        )
+    return v
+```
 
-The implementation uses `"next_link"`, `"query_param"`, `"none"` but the old documentation shows `"cursor"`, `"offset"`, `"page"`. Which is correct for the current design?
-
-### Q2: Should we keep the duplicate ADAPTER_CONFIGS names?
-
-Given that `source.py` and `llm.py` both define `ADAPTER_CONFIGS` for different purposes, should we:
-- Rename both to be more specific (e.g., `SOURCE_ADAPTER_CONFIGS`, `LLM_ADAPTER_CONFIGS`)?
-- Keep as-is since they're in different modules (though the import issue remains)?
-
-### Q3: Are the old RSS/API/WebConfig schemas in the documentation remnants of a previous design?
-
-The significant differences between documented and actual adapter configs suggests either:
-- The documentation was never updated after a refactor
-- The actual implementation diverged from the documented design
-
-Which should be considered the source of truth?
+**Issue:** Document does not mention this validator. This is an additional validation layer beyond what the document describes.
 
 ---
 
-## Summary Table
+### 7. `llm_responses.py` — Additional Models Not in Document
 
-| Claim | Status | Notes |
-|-------|--------|-------|
-| StageConfig is stub with only `tools` field | VERIFIED | |
-| PipelineRootConfig structure complete | VERIFIED | |
-| SourceConfig has adapter_config validator | VERIFIED | But has bug with duplicate ADAPTER_CONFIGS |
-| RSSConfig schema accuracy | DISCREPANCY | Documented fields don't match actual |
-| APIConfig schema accuracy | DISCREPANCY | Documented fields don't match actual |
-| WebConfig schema accuracy | DISCREPANCY | Documented fields don't match actual |
-| PaginationConfig type values | DISCREPANCY | Different type values in doc vs code |
-| SelectionResult schema | VERIFIED | |
-| ResearchBrief schema | VERIFIED | |
-| CondensedArticle schema | VERIFIED | |
-| ExecutiveSummary schema | VERIFIED | |
-| NewsletterBrief no preamble/footer | VERIFIED | |
-| NewsletterArticle schema | VERIFIED | |
-| SelectArticleTask schema | VERIFIED | |
-| ProcessItemTask schema | VERIFIED | |
-| GenerateNewsletterTask schema | VERIFIED | |
-| SendEmailTask schema | VERIFIED | |
-| CleanupArticleVersionsTask schema | VERIFIED | |
+**Models not mentioned in document but present in code:**
+
+- `SubagentResponse` (llm_responses.py:164-173)
+- `ResearchSynthesisResponse` (llm_responses.py:176-178)
+- `EditContextualizationResponse` (llm_responses.py:180-183)
+- `ToolCall` (llm_responses.py:186-189)
+- `ToolResult` (llm_responses.py:192-195)
+- `ToolCallingResponse` (llm_responses.py:198-202)
 
 ---
 
-## Recommendations
+### 8. `tasks.py` — ProcessItemTask Has Validators
 
-1. **Immediate:** Fix the duplicate `ADAPTER_CONFIGS` bug by renaming the LLM provider configs dictionary
-2. **High Priority:** Update `architecture/schemas.md` to match actual adapter config implementations
-3. **Medium Priority:** Add missing schemas to documentation (PaginationConfig, ListingConfig, ArticleSelectors, SourceType enum)
-4. **Low Priority:** Document the intentional layer violation in common.py
+**Document note (architecture/schemas.md:211):**
+> Note: actual implementation differs from older documentation
+
+**Actual implementation (schemas/tasks.py:103-117):**
+```python
+@field_validator("source_type")
+@classmethod
+def validate_source_type(cls, v: str) -> str:
+    if v not in ("rss", "api", "web"):
+        raise ValueError(f"source_type must be rss, api, or web, got {v}")
+    return v
+
+@field_validator("topics")
+@classmethod
+def validate_topics(cls, v: Optional[list[str]]) -> list[str]:
+    if v is None:
+        return []
+    if len(v) > 20:
+        raise ValueError(f"topics list exceeds maximum of 20 items, got {len(v)}")
+    return v
+```
+
+**Issue:** Document correctly notes the discrepancy but doesn't detail these validators.
+
+---
+
+## Verified Correct Claims
+
+### StageConfig is a Stub — VERIFIED
+**Document claim (architecture/schemas.md:19, 28-32):**
+> **Note:** `StageConfig` is a stub with only `tools: list[str]`.
+
+**Actual implementation (schemas/pipeline.py:140-146):**
+```python
+class StageConfig(BaseModel):
+    """Pipeline stage configuration stub.
+
+    Currently only defines tools list. The actual stage configuration is handled
+    by SubagentStageConfig and RoleConfig. This stub exists for future extensibility.
+    """
+    tools: list[str] = Field(default_factory=list)
+```
+
+Confirmed — StageConfig is indeed just a stub.
+
+### NewsletterBrief Missing Fields — VERIFIED
+**Document claim (architecture/schemas.md:190-191):**
+> Note: actual model does NOT have preamble, footer, or articles fields
+> These were in older documentation but are not implemented
+
+**Actual implementation (schemas/llm_responses.py:142-148):**
+```python
+class NewsletterBrief(BaseModel):
+    themes: list[str]
+    highlights: list[str]
+    connections: list[str] = Field(default_factory=list)
+```
+
+Confirmed — NewsletterBrief only has `themes`, `highlights`, `connections`.
+
+### ExecutiveSummary Single Field — VERIFIED
+**Document claim (architecture/schemas.md:180):**
+> Note: single 'summary' field (not 6 fields)
+
+**Actual implementation (schemas/llm_responses.py:151-158):**
+```python
+class ExecutiveSummary(BaseModel):
+    summary: str = Field(description="3-4 paragraph executive summary...")
+```
+
+Confirmed — only `summary` field.
+
+### ResearchBrief Key Claims Type — VERIFIED
+**Document claim (architecture/schemas.md:131):**
+> Note: list[KeyClaim] not list[str]
+
+**Actual implementation (schemas/llm_responses.py:53-57):**
+```python
+class ResearchBrief(BaseModel):
+    key_claims: list[KeyClaim] = Field(description="Factual claims with source attribution")
+```
+
+Confirmed.
+
+### ResearchBrief Context Notes — VERIFIED
+**Document claim (architecture/schemas.md:135):**
+> Note: 'context_notes' not 'context'
+
+**Actual implementation (schemas/llm_responses.py:67-70):**
+```python
+class ResearchBrief(BaseModel):
+    context_notes: str = Field(default="", description="Additional context...")
+```
+
+Confirmed.
+
+---
+
+## Bug Reports
+
+### BUG-1: Document's Source Adapter Schemas Are Inaccurate
+- **Severity:** High
+- **File:** `architecture/schemas.md` lines 89-101
+- **Description:** The document shows `RSSConfig`, `APIConfig`, and `WebConfig` with generic field names (`item_path`, `field_mappings`, `item_css`, `field_selectors`, `pagination: PaginationConfig | None`) that **do not exist in the actual code**. The actual implementation has completely different, detailed fields appropriate for real RSS feed reading, API calling, and web scraping.
+- **Fix:** Update the document to match the actual schemas in `schemas/source.py`.
+
+### BUG-2: Document's PaginationConfig Is Inaccurate
+- **Severity:** High
+- **File:** `architecture/schemas.md` lines 104-109
+- **Description:** Document shows `Literal["cursor", "offset", "page"]` but actual is `str` with values `"next_link"`, `"query_param"`, `"none"`. Document also omits `enabled` and `max_pages` fields.
+- **Fix:** Update the document to match actual `PaginationConfig` in `schemas/source.py:58-69`.
+
+### BUG-3: Document Omits SourceConfig Field Validators
+- **Severity:** Medium
+- **File:** `architecture/schemas.md` lines 79-86
+- **Description:** Document shows `SourceConfig` without field validators, but the actual code has `validate_type` and `validate_adapter_config` validators.
+- **Fix:** Add documentation of the validators or at least note their existence.
+
+### BUG-4: Document's LLM Provider Schemas Section Is Empty
+- **Severity:** Medium
+- **File:** `architecture/schemas.md` line 11 (llm.py row) and lines not present
+- **Description:** The document lists `llm.py` with "Provider definitions" but provides no schema details. The file contains `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig` — none of which are documented.
+- **Fix:** Add schema details for LLM provider configurations.
+
+### BUG-5: Document's File Inventory Missing Several Files
+- **Severity:** Low
+- **File:** `architecture/schemas.md` line 5-16 (File Inventory table)
+- **Description:** Inventory misses `common.py`, `item.py`, `admin.py`, `search.py`, `__init__.py`
+- **Fix:** Add these to the inventory or note they contain supporting code.
+
+---
+
+## Improvement Recommendations
+
+1. **High Priority — Update adapter config schemas in the document** to match the actual `RSSConfig`, `APIConfig`, `WebConfig`, `PaginationConfig`, `ListingConfig`, `ArticleSelectors` implementations.
+
+2. **High Priority — Document field validators** for `SourceConfig` (`validate_type`, `validate_adapter_config`), as these are critical for understanding the validation behavior.
+
+3. **Medium Priority — Add LLM provider schemas** to document the provider configuration models in `llm.py`.
+
+4. **Low Priority — Add missing files to inventory** (`common.py`, `item.py`, `admin.py`, `search.py`).
+
+5. **Low Priority — Add subagent response schemas** to document `SubagentResponse`, `ResearchSynthesisResponse`, `EditContextualizationResponse`, `ToolCall`, `ToolResult`, `ToolCallingResponse`.

@@ -1,243 +1,268 @@
 # Pipeline Architecture Review
 
-**Date:** 2026-05-21
-**Reviewer:** Architecture Verification Agent
-**Document Reviewed:** `architecture/pipeline.md`
+## Summary
+
+The `architecture/pipeline.md` document is largely accurate and well-structured. Core pipeline stages, statuses, transitions, and scheduled tasks are correctly documented. However, several discrepancies and gaps were identified between the documented behavior and actual implementation.
 
 ---
 
-## Executive Summary
+## Verified Claims
 
-This review verifies the claims made in `architecture/pipeline.md` against the actual codebase implementation in `tasks/`, `services/`, and related files. The document is largely accurate, but several discrepancies and bugs were identified.
+### Stage Statuses and Transitions
+- **Verified**: Pipeline statuses in `constants.py` (lines 33-43) match the document exactly: `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`, `done`, `skipped`, `failed`.
+- **Verified**: `VALID_TRANSITIONS` dict in `constants.py` (lines 52-64) accurately reflects allowed transitions as documented.
+- **Verified**: `_STAGE_TASKS` in `services/pipeline_utils.py` (lines 10-19) correctly maps statuses to task modules.
+
+### Circuit Breaker Configuration
+- **Verified**: `services/circuit_breaker.py` implements the documented circuit breaker pattern with correct defaults:
+  - `failure_threshold=5` (line 43)
+  - `recovery_timeout=60.0` (line 44)
+  - `half_open_max_calls=1` (line 45)
+  - `window_seconds=120.0` (line 46)
+
+### Fallback Chain Implementation
+- **Verified**: `services/llm/__init__.py` `get_provider_chain()` (lines 57-97) correctly implements the dynamic fallback chain from `providers.yaml` configuration order.
+
+### Pipeline Stages
+- **Verified**: `tasks/select.py` - Select stage with score 1-10, confidence levels, routing to `review` on low confidence.
+- **Verified**: `tasks/research.py` - Research stage with `_is_degenerate_research()` quality gate (line 13-28).
+- **Verified**: `tasks/write.py` - Write stage with `_is_degenerate_write()` quality gate (lines 12-27).
+- **Verified**: `tasks/edit.py` - Edit stage with validation failure routing (lines 162-185) and `_should_route_to_review()` (lines 187-205).
+
+### Scheduled Tasks
+- **Verified**: All 13 scheduled tasks in `config.py` (lines 146-203) exist and match the document's table.
+
+### Degradation Behavior
+- **Verified**: `_STAGE_DEGRADE_MAP` in `services/pipeline_degradation.py` (lines 33-55) correctly maps stage failures to degraded next status.
+- **Verified**: `degrade_stage()` function at line 240 correctly advances articles to next stage with degraded quality.
 
 ---
 
-## Verified Correct
+## Discrepancies and Issues
 
-### 1. Pipeline Stage Status Values
-**Status values in `constants.py`** (lines 30-43) match the documented values exactly:
-- `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`, `done`, `skipped`, `failed`
+### 1. Valid Transitions: `PENDING` can transition to `SKIPPED` (not documented)
 
-### 2. Valid Transition Logic
-**`constants.py` VALID_TRANSITIONS** (lines 52-64) accurately defines transitions:
-- `pending` → `selecting`, `researching`, `review` ✓
-- `researching` → `writing`, `failed` ✓
-- `writing` → `editing`, `failed` ✓
-- `editing` → `review`, `done`, `failed` ✓
-- `review` → `done`, `failed` ✓
-- `failed` → `pending` (reprocess) ✓
+**File**: `constants.py:53`  
+**Issue**: `PENDING` → `SELECTING` is documented, but the transition `PENDING` → `SKIPPED` is missing from the documented valid transitions table.
 
-### 3. Stage Transition Logic
-**`_STAGE_TASKS` in `pipeline_utils.py`** (lines 10-19) correctly maps statuses to tasks:
-```python
-_PENDING → select, SELECTING → select, SELECTED → research,
-RESEARCHING → research, WRITING → write, WRITTEN → edit, EDITING → edit, REVIEW → edit
+**Document says**:
+```
+Valid transitions:
+- `pending` → `researching`, `review`
 ```
 
-### 4. Degradation Behavior
-**`pipeline_degradation.py`** implements the documented degradation:
-- Line 33-55: `_STAGE_DEGRADE_MAP` handles `select`, `research`, `write` degradation correctly
-- Line 129-179: `_degrade_edit_stage` handles edit degradation with fallback
-- **Degradation count >= 2** routes to review, otherwise advances to next stage ✓
-
-### 5. Newsletter Generation Flow
-**`newsletter_pipeline.py`** implements the 3-stage LLM pipeline:
-- Lines 166-301: `generate_executive_summary()` runs reader → writer → editor
-- Line 192-212: Reader stage extracts themes and highlights
-- Line 214-238: Writer stage generates draft summary
-- Line 247-300: Editor stage polishes the summary
-
-### 6. Executive Summary 3-Stage Claims
-The 3-stage LLM pipeline is correctly implemented:
-- **Reader** (lines 192-212): Extracts key themes using `NewsletterBrief` schema
-- **Writer** (lines 214-238): Generates draft summary using `ExecutiveSummary` schema  
-- **Editor** (lines 247-300): Polishes output for clarity and consistency
-
-### 7. Celery Beat Schedule
-**`config.py` `get_beat_schedule()`** (lines 146-203) matches documentation:
-| Task | Schedule | Verified |
-|------|----------|----------|
-| `run-all-sources` | Every 30 min | ✓ |
-| `generate-newsletters` | Daily 8 AM ET | ✓ |
-| `backfill-embeddings` | Daily 2 AM | ✓ |
-| `publish-scheduled-articles` | Every 5 min | ✓ |
-| `cleanup-old-logs` | Daily 3 AM | ✓ |
-| `consolidate-trend-memory` | Daily 3:30 AM | ✓ |
-| `purge-trend-memory` | Daily 3:45 AM | ✓ |
-| `cleanup-old-versions` | Daily 3:45 AM | ✓ |
-
-**Additional tasks not documented:**
-- `cleanup-expired-verifications`: Every 15 min
-- `cleanup-stale-limiter-slots`: Every 5 min
-- `retry-failed-newsletter-deliveries`: Every 2 hours
-- `recalculate-impact-scores`: Daily 4 AM
-- `cleanup-inactive-subscribers`: Daily 1 AM
-
-### 8. Two-Tier Retry System
-
-**Tier 1 - Celery Task Retry** (`tasks/select.py`, lines 46-58):
+**Actual** (`constants.py:53`):
 ```python
-max_retries=CELERY_TASK_MAX_RETRIES,  # 3
-autoretry_for=(ConnectionError, TimeoutError, ProviderServerError),
+PipelineStatus.PENDING: frozenset([PipelineStatus.SELECTING, PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
+```
+
+The document omits `SELECTING` in the table (line 54 shows it as separate from `PENDING`), and doesn't mention `SKIPPED` can happen from `PENDING` (when selector scores article < 6 and marks it skipped).
+
+### 2. `write` stage degradation uses wrong model field
+
+**File**: `services/pipeline_degradation.py:52`  
+**Issue**: The `write` stage degradation uses `article.draft_article` but doesn't set `article.writer_model`. This is inconsistent with `tasks/write.py` which sets `article.writer_model = model` (line 104).
+
+```python
+"write": {
+    "next_status": PipelineStatus.EDITING,
+    "log_message": "Degraded: minimal draft for %s",
+    "set_fields": lambda article: setattr(
+        article, "draft_article", _build_fallback_article(article),
+    ),
+},
+```
+
+Should also set `article.writer_model = "fallback"` or similar for traceability.
+
+### 3. `_degrade_and_advance` in `tasks/pipeline.py` has duplicate inline degradation logic
+
+**File**: `tasks/pipeline.py:36-72`  
+**Issue**: `_degrade_and_advance()` implements its own degradation logic for `select`, `research`, `write`, `edit` stages (lines 50-70) rather than delegating to `services/pipeline_degradation.py`. The inline logic for `select` (lines 50-60) directly sets `article.pipeline_status = "researching"` instead of using `PipelineStatus.RESEARCHING`.
+
+```python
+if failed_stage == "select":
+    article.pipeline_status = "researching"  # Should use PipelineStatus
+```
+
+Additionally, `select` stage degradation in `tasks/pipeline.py` (lines 50-60) does NOT set `selector_result` to indicate auto-selection, unlike what `pipeline_degradation.py` does in its `_STAGE_DEGRADE_MAP` (line 37-41).
+
+### 4. Documented degradation thresholds don't match implementation
+
+**Document says** (line 250):
+```
+- Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)
+```
+
+**Actual** (`services/pipeline_degradation.py:94`):
+```python
+if article.degradation_count >= 2:
+    article.pipeline_status = PipelineStatus.REVIEW
+```
+
+The document states "3 consecutive failures" but `degradation_count >= 2` routes to review, meaning only 2 degradations trigger review routing, not 3.
+
+### 5. Edit stage degradation bypasses `_STAGE_DEGRADE_MAP`
+
+**File**: `services/pipeline_degradation.py:129-179`  
+**Issue**: The `_degrade_edit_stage()` function is a completely separate code path from the rest of the degradation logic in `_apply_degrade_config()`. It has its own `degradation_count >= 2` check (line 144) and doesn't use `_STAGE_DEGRADE_MAP["edit"]`.
+
+The document says when `edit` fails, it "Finalizes immediately with fallback" (line 247), but the actual implementation (`_degrade_edit_stage`) has more complex logic including routing to `review` based on `degradation_count >= 2` or `_should_route_to_review(article)`.
+
+### 6. Document's degradation table doesn't mention `degradation_count` threshold
+
+**Document says** (line 244):
+```
+| Stage Fails | Degraded To |
+|-------------|-------------|
+| select | Auto-select with score 6, advance to research |
+```
+
+**Actual**: The document doesn't explain that articles with `degradation_count >= 2` get routed to `review` instead of advancing. This is a significant gap since it's a key quality gate.
+
+### 7. Backoff configuration mismatch
+
+**Document says** (line 289):
+```
+- Backoff: exponential (30s, 60s, 120s)
+```
+
+**Actual** (`tasks/select.py:51-56`):
+```python
+default_retry_delay=30,
 retry_backoff=True,
 retry_backoff_max=300,
+retry_jitter=True,
 ```
-Exponential backoff: 30s → 60s → 120s ✓
 
-**Tier 2 - Stage Failure Retry** (`services/pipeline_failure.py`, lines 46-159):
-- Per-stage retry limit: `MAX_STAGE_RETRIES` (3) → degrades article
-- Per-stage failure limit: `MAX_STAGE_FAILURES` (3) → marks article failed
-- Total retry budget: `MAX_TOTAL_RETRIES` (10) → marks article failed
+The actual backoff is exponential with base 2 (Celery default), starting at 30s, doubling to 60s, 120s, 240s... max 300s. The document lists the first three values but doesn't capture the full exponential growth pattern or the max cap.
 
-### 9. Circuit Breaker Configuration
-**`services/circuit_breaker.py`** and **`services/llm/__init__.py`**:
-- **Failure threshold:** 5 (from `_LLM_FAILURE_THRESHOLD`, line 20)
-- **Recovery timeout:** 60 seconds (line 21)
-- **Half-open:** After 60s, test with 1 request (line 45)
-- **Window:** 120 seconds (line 46)
+### 8. Newsletter batch size documented as 500, not visible in implementation
 
-The circuit breaker uses Redis-backed `RedisCircuitBreaker` with in-memory fallback (lines 183-380).
+**Document says** (line 138):
+```
+# Batch size: 500
+```
 
-### 10. Fallback Chain Dynamic Resolution
-**`services/llm/__init__.py` `get_provider_chain()`** (lines 57-97):
-- Iterates through enabled providers in `providers.yaml` configuration order
-- Filters out providers with open circuits via `breaker.can_execute()`
-- Yields primary provider first, then enabled fallback providers
+**Actual**: `services/newsletter.py` doesn't have a `batch_size` constant of 500. The newsletter generation uses `send_email` in batches but the batch size is not configurable via the same constant. Looking at `services/email.py` and `services/subscribers.py` would be needed to verify actual batch handling.
+
+### 9. Pipeline Monitor implementation partial
+
+**Document says** (line 258-264):
+```
+### Pipeline Monitor (`services/pipeline_monitor.py`)
+
+Tracks pipeline health:
+- Stage durations (avg, p95, p99)
+- Failure rates per stage
+- Queue depth per stage
+- Source health correlation
+```
+
+**Actual**: `services/pipeline_monitor.py` (lines 1-290) implements:
+- Stage duration histograms via `time_histogram` (in tasks, not here)
+- Failure rates per stage (yes - `record_stage_result`, `get_stage_stats`)
+- Queue depth per stage - **NOT IMPLEMENTED**
+- Source health correlation - **NOT IMPLEMENTED**
+
+### 10. Two-Tier Retry System document missing task-level max_retries detail
+
+**Document says** (line 287-296):
+```
+**1. Celery Task Retry** (for transient errors)
+- Max retries: 3 per task
+- Backoff: exponential (30s, 60s, 120s)
+
+**2. Stage Failure Retry** (for persistent failures)
+- Per-stage retry limit: 3 (`MAX_STAGE_RETRIES`)
+- After 3 per-stage retries: article degrades to next stage
+```
+
+**Gap**: The document doesn't mention that:
+- The `retry_stuck` task (every 60 min) handles articles stuck with `retry_count >= _get_max_stage_retries()` and degrades them.
+- Articles with `total_retries >= MAX_TOTAL_RETRIES (10)` are marked as `failed`.
+- Per-stage failure limit (`MAX_STAGE_FAILURES`) of 3 consecutive failures at the same stage also marks the article as `failed`.
 
 ---
 
-## Discrepancies Found
+## Specific Bugs
 
-### 1. Documentation Missing `written` Status in Valid Transitions
-**Document says** (line 53-58):
-- `pending` → `researching`, `review`
-- `writing` → `editing`, `failed`
-- `editing` → `review`, `done`, `failed`
+### BUG-1: `_degrade_and_advance` uses string literal instead of `PipelineStatus`
 
-**Actual code** (`constants.py` lines 52-64):
+**File**: `tasks/pipeline.py:56`  
 ```python
-VALID_TRANSITIONS: dict[str, frozenset] = {
-    PipelineStatus.PENDING: frozenset([PipelineStatus.SELECTING, PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
-    PipelineStatus.SELECTING: frozenset([PipelineStatus.SELECTED, PipelineStatus.FAILED]),
-    PipelineStatus.SELECTED: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.FAILED]),
-    PipelineStatus.RESEARCHING: frozenset([PipelineStatus.WRITING, PipelineStatus.FAILED]),
-    PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
-    PipelineStatus.WRITTEN: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),  # <-- Missing from docs
-    PipelineStatus.EDITING: frozenset([PipelineStatus.REVIEW, PipelineStatus.DONE, PipelineStatus.FAILED]),
-    PipelineStatus.REVIEW: frozenset([PipelineStatus.DONE, PipelineStatus.FAILED]),
-    PipelineStatus.DONE: frozenset(),
-    PipelineStatus.SKIPPED: frozenset(),
-    PipelineStatus.FAILED: frozenset([PipelineStatus.PENDING]),
-}
+article.pipeline_status = "researching"
 ```
+Should use `PipelineStatus.RESEARCHING`. While this works (string equality), it's inconsistent with the rest of the codebase and could cause issues if the constant values ever change.
 
-**Impact:** Low - The document doesn't explicitly list all transitions, but the `written` status is used in the pipeline and has a valid transition to `editing`.
+### BUG-2: `_try_stage_work` returns before recording provider failure for `AuthError`
 
-### 2. Documentation Lists 7 Scheduled Tasks, Code Has 14
-**Document says** (lines 167-176): 7 tasks listed
-**Actual code:** 14 tasks in `Config.get_beat_schedule()`
-
-**Impact:** Low - The document is incomplete but not incorrect. Additional tasks are infrastructure/maintenance related.
-
-### 3. Retry Backoff Documentation Slightly Inaccurate
-**Document says** (line 282): "Backoff: exponential (30s, 60s, 120s)"
-
-**Actual code:** `retry_backoff_max=300` means max backoff is 300s, not exactly 120s.
-
-**Impact:** Low - The actual behavior is correct, just the max is higher than implied.
-
----
-
-## Bugs Identified
-
-### BUG-1: Missing `finalize` Stage in `_STAGE_TASKS`
-**Location:** `services/pipeline_utils.py` lines 10-19
-
-**Issue:** The `_STAGE_TASKS` dict doesn't include a mapping for when an article should be finalized. The `finalize` status or endpoint doesn't appear in the stage task mapping, yet `finalize_article()` is called in degradation scenarios.
-
+**File**: `services/llm/__init__.py:228-235`  
 ```python
-_STAGE_TASKS = {
-    "pending": ("tasks.select", "select_article"),
-    "selecting": ("tasks.select", "select_article"),
-    "selected": ("tasks.research", "research_article"),
-    "researching": ("tasks.research", "research_article"),
-    "writing": ("tasks.write", "write_article"),
-    "written": ("tasks.edit", "edit_article"),
-    "editing": ("tasks.edit", "edit_article"),
-    "review": ("tasks.edit", "edit_article"),
-}
+except AuthError as auth_err:
+    logger.error(...)
+    record_provider_failure(provider_id, model, stage)
+    raise auth_err
 ```
 
-**Missing:** No entry for finalization. When edit is disabled and `skip_next="finalize"` is passed to `run_stage()`, it calls `_finalize(article_id)` directly instead of dispatching. This works but bypasses the standard dispatch mechanism.
+When `AuthError` is raised, `record_provider_failure` is called, but then the error is re-raised immediately without trying the fallback chain. The doc says fallback chain handles "RateLimitError, ProviderTimeoutError, ProviderServerError, ConnectionError" but `AuthError` is intentionally not retried. However, this means if the primary provider has an `AuthError`, the fallback providers are NOT tried. This may be intentional but is not documented.
 
-**Recommendation:** Document this exception in the architecture or refactor to use explicit dispatch for finalization.
+### BUG-3: Limiter release uses wrong provider_id in `run_stage` finally block
 
-### BUG-2: Degradation Count Threshold Inconsistency
-**Location:** `services/pipeline_degradation.py` lines 94, 99, 144, 147
+**File**: `tasks/pipeline.py:436`  
+```python
+limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
+```
 
-**Issue:** There are two different thresholds for routing to review:
-1. Line 99: `degradation_count >= 2` routes to review in `_apply_degrade_config()`
-2. Line 147: Same check in `_degrade_edit_stage()`
+When `_handle_circuit_open_module` returns early (line 341 raises), `provider_id` and `model` may be `None`. The code handles this by using `model if model is not None else None`, but `provider_id` is used directly. If `provider_id` is `None` at this point (e.g., circuit opened before any provider was used), the limiter release may fail or behave incorrectly.
 
-This is consistent in current code, but the logic is confusing because `degradation_count` represents how many times an article has been degraded, not the total number of stage failures. An article could be degraded once from select→research and once from research→write (count=2) and be routed to review even though it hasn't failed at any stage permanently.
+### BUG-4: Stage lock key uses string stage name but `STAGE_STATUS_MAP` isn't applied consistently
 
-**Impact:** Medium - Could cause premature routing to review for articles that are progressing normally but hitting one-time degradation at multiple stages.
+**File**: `tasks/pipeline.py:409`  
+```python
+lock_key = f"ainews:stage_lock:{article_id}:{stage}"
+```
 
-**Recommendation:** Add a comment explaining the degradation philosophy, or split degradation_count into cumulative_degradations vs consecutive_failures.
-
-### BUG-3: Pipeline Timeout Hard-Coded vs Configurable
-**Location:** `tasks/pipeline.py` line 356 and `services/pipeline_utils.py`
-
-**Issue:** The pipeline timeout check uses `_get_pipeline_timeout_seconds()` which reads from Flask config (line 355-367 in `_run_stage_core`), but `PIPELINE_TIMEOUT_SECONDS` is also defined in constants.py as a fallback. The interaction between config and constants is not clearly documented.
-
-**Impact:** Low - Works correctly but could be confusing during debugging.
+The `stage` parameter is the role name (e.g., "selector", "writer"), not the status. This is fine as long as each role maps to one stage, but `_degrade_and_advance` passes `failed_stage` which could be a status name like "writing" (from `STAGE_STATUS_MAP.get(failed_stage, failed_stage)` at line 44).
 
 ---
 
-## Improvement Suggestions
+## Improvement Recommendations
 
-### IMP-1: Add `written` Status to Documentation
-Update `architecture/pipeline.md` to explicitly include the `written` status and its transition to `editing`.
+### REC-1: Document the `degradation_count` threshold behavior
 
-### IMP-2: Update Scheduled Tasks Section
-Add the 7 additional tasks that exist in the code but not in the documentation. Either update the table or note that the list is non-exhaustive.
+Add to the degradation section (after line 251):
+```
+Articles with `degradation_count >= 2` are routed to `review` regardless of stage, preventing infinite degradation loops.
+```
 
-### IMP-3: Document Finalization Exception
-The `skip_next="finalize"` behavior in `run_stage()` bypasses normal dispatch. Document this special case.
+### REC-2: Unify degradation logic
 
-### IMP-4: Clarify Degradation Philosophy
-The degradation mechanism counts consecutive stage failures differently than total retries. Document the relationship between:
-- `retry_count`: Per-stage retry counter (resets on success)
-- `degradation_count`: Number of times article was degraded across all stages
-- `total_retries`: Global retry budget across all stages
+The inline `_degrade_and_advance` in `tasks/pipeline.py` duplicates logic from `services/pipeline_degradation.py`. Recommend refactoring to use a single `degrade_stage(article, failed_stage, run_id)` function that handles all stages uniformly.
 
-### IMP-5: Add Stage Configuration Validation
-The document mentions `pipeline.yaml` configuration but doesn't describe validation. Consider documenting the `SourceConfig.config` field validator (mentioned in AGENTS.md CRIT-3) and how it validates against adapter schemas.
+### REC-3: Add `writer_model` field during write stage degradation
 
----
+In `services/pipeline_degradation.py`, when degrading the `write` stage, also set `article.writer_model = "fallback"` to maintain traceability.
 
-## Questions for Architecture
+### REC-4: Fix string literal usage
 
-### Q1: What is the intended behavior when degradation_count >= 2 but article is progressing normally?
-Currently, degradation_count=2 routes to review immediately, even if the article successfully passed through multiple stages with one degradation each. Is this the intended "two strikes you're out" rule, or should we differentiate between consecutive vs cumulative degradations?
+Replace `article.pipeline_status = "researching"` with `article.pipeline_status = PipelineStatus.RESEARCHING` in `tasks/pipeline.py:56`.
 
-### Q2: Should the `finalize` stage be a first-class pipeline stage with explicit dispatch?
-Currently finalization happens inline in `_handle_disabled()` and `_degrade_edit_stage()`. Should there be a `finalize_article` task in `_STAGE_TASKS` for consistency?
+### REC-5: Document `AuthError` behavior in fallback chain
 
-### Q3: The document mentions `max_score` threshold for selection (line 71), but this is configured per-stage. Should the architecture document reference the configuration layer rather than hardcoded values?
+The current fallback chain in `services/llm/__init__.py` only retries on `RateLimitError, ProviderTimeoutError, ProviderServerError, ConnectionError`. `AuthError` is not retried and causes immediate failure. Document this behavior.
 
-### Q4: For the circuit breaker, the document says "After 60 seconds, test with 1 request" but doesn't mention that this is configurable. Should we document the configuration options?
+### REC-6: Update Pipeline Monitor documentation
 
----
+The document claims "Queue depth per stage" and "Source health correlation" are tracked, but these are not implemented in `services/pipeline_monitor.py`. Either implement them or remove from the documentation.
 
-## Summary Statistics
+### REC-7: Add `select` stage's `selector_result` to degradation in `tasks/pipeline.py`
 
-| Category | Count |
-|----------|-------|
-| Verified Correct | 10 |
-| Discrepancies | 3 |
-| Bugs Identified | 3 |
-| Improvement Suggestions | 5 |
-| Questions for Architecture | 4 |
+When `_degrade_and_advance` handles `select` stage (lines 50-60), it should set `article.selector_result = {"selected": True, "score": 6, "reason": "auto-selected after failure"}` to match the documented behavior.
 
-**Overall Assessment:** The architecture document is largely accurate and reflects the implementation well. The main gaps are around incomplete documentation of additional tasks and edge cases in the degradation mechanism.
+### REC-8: Clarify Celery task retry backoff in documentation
+
+The backoff description "(30s, 60s, 120s)" implies it stops at 120s. Clarify that it's exponential with max of 300s:
+```
+Backoff: exponential (30s, 60s, 120s, 240s, ... up to 300s max)
+```

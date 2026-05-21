@@ -4,7 +4,7 @@ Review of `architecture/services.md` against actual implementation in `services/
 
 ---
 
-## Verified Correct
+## Verified Correct Claims
 
 ### 1. LLM Provider Base Interface (`services/llm/base.py`)
 The `BaseLLMProvider` abstract class contains ALL documented abstract methods:
@@ -51,44 +51,97 @@ Confirmed implementations:
 - **Google** (`google.py`): `@register_search_provider("google")` - line 58
 - **SearxNG** (`searxng.py`): `@register_search_provider("searxng")` - line 58
 - **SQLite FTS** (`sqlite_fts.py`): `@register_db_search_provider("sqlite_fts")` - line 52
+- **Hybrid** (`hybrid.py`): `@register_search_provider("hybrid")` - provides FTS5 + vector similarity
 
 ### 7. Rate Limiter Pattern
 - `services/limiter.py` implements `ModelLimiter` class with `acquire()` and `release()` methods
 - `newsletter_pipeline.py` `_run_pipeline_stage()` (lines 108-135) uses `try`/`finally` pattern correctly for slot release
 - **NOTE**: `limiter.acquire()` returns boolean, not the slot key - slots released via `limiter.release(provider_id, model, timeout)`
 
+### 8. Content Extraction Cascade (`services/content_extractor.py`)
+- Primary: `trafilatura` for main content extraction (line 95)
+- Fallback: `readability` for article parsing (lines 106-118)
+- Final fallback: Returns `ExtractionStatus.EMPTY` (line 123)
+- trafilatura fetch with configurable timeout (lines 57-64)
+
+### 9. Webhooks Security Features (`services/webhooks.py`)
+- HMAC-SHA256 signatures with timestamp replay protection (lines 101-122)
+- Encrypted secrets at rest via Fernet (lines 69-98)
+- Retry logic with exponential backoff (lines 155-189)
+- Event tracking via `WebhookEvent` model (lines 271-280)
+
+### 10. Cost Tracking (`services/cost_tracker.py`)
+- Tracks tokens used (prompt/completion) via metrics counters
+- Cost per model via configurable rates (lines 17-37 default rates, lines 63-74 env override)
+- Daily/monthly budget tracking via `get_cost_summary()` function
+- Uses blended rate (60% input, 40% output) since metrics don't distinguish token types
+
 ---
 
 ## Discrepancies Found
 
-### 1. Missing `hybrid.py` Search Provider in Documentation
-The architecture document lists 4 search providers (DuckDuckGo, Google, SearxNG, SQLite FTS), but `services/search/hybrid.py` implements `HybridSearchProvider` combining FTS5 + vector similarity. This is a documented provider but missing from the architecture document.
+### 1. Missing `hybrid.py` Search Provider in Architecture Document
+**Severity**: Low (documentation gap)
+
+The architecture document lists 4 search providers (DuckDuckGo, Google, SearxNG, SQLite FTS), but `services/search/hybrid.py` implements `HybridSearchProvider` combining FTS5 + vector similarity. This provider exists and is enabled but is missing from the documentation.
+
+**File**: `services/search/hybrid.py`
+**Fix**: Add Hybrid provider to the search provider table in `architecture/services.md`
 
 ### 2. Missing `content_extractor.py` in Architecture Tree
-The architecture tree doesn't list `content_extractor.py` even though it exists at `services/content_extractor.py`.
+**Severity**: Low (documentation gap)
 
-### 3. Missing `pipeline_utils.py` and `pipeline_monitor.py` Descriptions
-`pipeline_utils.py` exists and provides `_dispatch_next()`, `_dispatch_for_status()`, and `_log_pipeline()` functions. `pipeline_monitor.py` exists for health monitoring. Both are listed in the architecture tree but not described.
+The architecture tree at lines 7-39 doesn't list `content_extractor.py` even though it exists at `services/content_extractor.py`. The document mentions content extraction at lines 245-249 but doesn't include it in the file inventory.
 
-### 4. `services/article_parser.py` vs `article_validation.py`
-Both exist in `services/` but the architecture document only shows `article_parser.py` in the tree. `article_validation.py` is mentioned in the architecture doc but not shown in the tree.
+**File**: `services/content_extractor.py`
+**Fix**: Add `content_extractor.py` to the file inventory tree
+
+### 3. Missing `pipeline_utils.py` and Related Pipeline Services in Architecture Tree
+**Severity**: Low (documentation gap)
+
+Several pipeline-related services exist but are missing from the architecture tree:
+- `pipeline_utils.py` - provides `_dispatch_next()`, `_dispatch_for_status()`, `_log_pipeline()`
+- `pipeline_monitor.py` - pipeline health monitoring
+- `pipeline_degradation.py` - graceful degradation logic
+- `pipeline_failure.py` - failure handling
+
+**Fix**: Add these to the file inventory or remove from tree if intentionally undocumented
+
+### 4. Missing `article_fallback.py` in Architecture Tree
+**Severity**: Low (documentation gap)
+
+`services/article_fallback.py` exists but is not listed in the architecture tree.
+
+---
+
+## Layering Violations
+
+### 1. `services/crawling.py` Imports from Adapters (Line 12-13) - DOCUMENTED
+**Severity**: Low (known exception)
+
+```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from adapters.base import RawItem
+```
+
+This is a documented exception in `services/AGENTS.override.md`:
+> **Exception:** `TYPE_CHECKING` blocks are acceptable for type hints only.
+
+**Impact**: Low - only used for type hints in function signatures, no runtime import occurs.
+
+**Files**: `services/crawling.py:12-13`
 
 ---
 
 ## Bugs Identified
 
-### 1. LAYER VIOLATION: `services/crawling.py` Imports from Adapters (Line 13)
-```python
-if TYPE_CHECKING:
-    from adapters.base import RawItem
-```
-While wrapped in `TYPE_CHECKING`, this is still an import from `adapters.base` in the services layer. Per AGENTS.md, "Services should NOT import from adapters" (clean layering). However, AGENTS.md also documents this as intentional for type hints.
+### 1. RATE LIMITER SLOT LEAK: `provider_id` and `model` Can Be None in Finally Block
+**Severity**: High
+**File**: `tasks/pipeline.py:422-436`
 
-**Impact**: Low - only used for type hints in function signatures, no runtime import.
-
-### 2. RATE LIMITER SLOT LEAK RISK: `provider_id` Can Be None in Finally Block (`tasks/pipeline.py`)
-
-In `run_stage()` function (lines 389-442):
+In `run_stage()` function, `provider_id` and `model` are set to `None` at lines 422-423 before the try block:
 
 ```python
 model = None
@@ -107,28 +160,42 @@ finally:
         limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
 ```
 
-**Problem**: If `_run_stage_core` raises an exception before line 369 (`provider, model, max_tokens, provider_id = _get_provider_for_stage(stage)`) completes successfully, `provider_id` and `model` remain `None`. The `finally` block would call:
+**Problem**: If `_run_stage_core` raises an exception before it returns (e.g., `CircuitOpenError` from `_get_provider_for_stage()` at line 369), `provider_id` and `model` remain `None`. The `finally` block releases with `(None, None, timeout)` which silently fails, causing a slot leak until TTL expires.
+
+Note that `rc.provider` and `rc.model` are set at line 414 BEFORE the try block, but the finally block doesn't use them as fallbacks.
+
+**Affected Code Path**: Any exception in `_run_stage_core` before it successfully returns.
+
+**Fix**: Change line 436 from:
 ```python
-limiter.release(None, None, rc.timeout_seconds)
+limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
+```
+To:
+```python
+limiter.release(provider_id or rc.provider, model or rc.model, rc.timeout_seconds)
 ```
 
-**Impact**: This would fail silently (as seen in `limiter.py` lines 101-130), causing slot leak until TTL expires.
+### 2. `trend_memory.py` Missing `json` Import (Line 240)
+**Severity**: Medium
+**File**: `services/trend_memory.py:240`
 
-**Affected Code Path**: When `_get_provider_for_stage()` raises `CircuitOpenError` before provider is assigned, or any exception in `_run_stage_core` before line 369.
+```python
+except (ImportError, json.JSONDecodeError, ValidationError,
+        SQLAlchemyError, ValueError, AttributeError) as e:
+```
 
-**Fix Needed**: Use `rc.provider` and `rc.model` as fallback when `provider_id`/`model` are `None`, OR set `provider_id` and `model` from `rc` before the try block.
+The `json` module is used at line 240 for `json.JSONDecodeError` but is never imported. This would cause a `NameError` at runtime if a JSON decode error occurs.
+
+**Fix**: Add `import json` at the top of the file.
 
 ---
 
 ## Questions for Architecture
 
-### 1. Layering Exception for Type Hints
-`services/crawling.py` uses `TYPE_CHECKING` block to import `RawItem` from `adapters.base`. Is this intentional exception documented anywhere? The AGENTS.md mentions "Documented - MED-8" but doesn't explain the pattern.
-
-### 2. `hybrid.py` Search Provider Status
+### 1. `hybrid.py` Search Provider Status
 Should `services/search/hybrid.py` (`HybridSearchProvider`) be added to the architecture document as a 5th search provider? It provides FTS5 + vector similarity hybrid search.
 
-### 3. Missing Services in Architecture Tree
+### 2. Missing Services in Architecture Tree
 Several services exist but are missing from the tree:
 - `content_extractor.py`
 - `article_fallback.py`
@@ -142,14 +209,17 @@ Several services exist but are missing from the tree:
 - `email.py`
 - `webhooks.py`
 
-Should these be added, or is there a reason they're undocumented?
+Should these be added to the architecture document, or is there a reason they're undocumented?
+
+### 3. `limiter.py` Return Value Inconsistency
+The Rate Limiter documentation says `acquire()` returns `True` if slot acquired, `False` on timeout. However, the actual implementation at line 62 returns `True` when `result` is truthy. The Lua script returns the incremented count (1, 2, 3...) or 0 on failure. This is correct behavior - just needs clarification in docs.
 
 ---
 
-## Improvement Suggestions
+## Improvement Recommendations
 
 ### 1. Add `hybrid` to Search Provider Documentation
-Add `Hybrid` (hybrid.py) to the search provider table in `architecture/services.md`:
+Add `services/search/hybrid.py` to the search provider table in `architecture/services.md`:
 
 | Provider | File | Status |
 |----------|------|--------|
@@ -159,8 +229,10 @@ Add `Hybrid` (hybrid.py) to the search provider table in `architecture/services.
 | Hybrid | `hybrid.py` | Enabled (FTS5 + vector) |
 | SQLite FTS | `sqlite_fts.py` | Internal article search |
 
-### 2. Fix Rate Limiter Slot Leak in `tasks/pipeline.py`
-Change line 436 from:
+### 2. Fix Rate Limiter Slot Leak Bug in `tasks/pipeline.py`
+**HIGH PRIORITY** - This causes resource leaks in production.
+
+Change `tasks/pipeline.py:436` from:
 ```python
 limiter.release(provider_id, model if model is not None else None, rc.timeout_seconds)
 ```
@@ -169,13 +241,26 @@ To:
 limiter.release(provider_id or rc.provider, model or rc.model, rc.timeout_seconds)
 ```
 
-Or set `provider_id` and `model` from `rc` before the try block as a fallback.
+### 3. Add Missing `json` Import to `services/trend_memory.py`
+Add `import json` after existing imports (around line 11).
 
-### 3. Document `content_extractor.py` Approach
-The architecture document mentions "Primary: trafilatura, Fallback: readability, Final fallback: Raw HTML" but doesn't describe how `content_extractor.py` handles this cascading.
+### 4. Document `content_extractor.py` in Architecture Tree
+Add `content_extractor.py` to the file inventory at line 23 (between `crawling.py` and `trend_detector.py`).
 
-### 4. Add `pipeline_utils.py` Description
-This module provides critical pipeline utilities (`_dispatch_next`, `_log_pipeline`) that should be documented.
+### 5. Add Missing Services to Architecture Tree or Document Why They're Undocumented
+Services missing from architecture tree that exist in `services/`:
+- `article_fallback.py`
+- `pipeline_utils.py`
+- `pipeline_monitor.py`
+- `pipeline_degradation.py`
+- `pipeline_failure.py`
+- `context_service.py`
+- `cache.py`
+- `cost_tracker.py`
+- `email.py`
+- `webhooks.py`
+
+Either add them to the architecture document or create a section explaining which services are internal/implementation details.
 
 ---
 
@@ -183,13 +268,17 @@ This module provides critical pipeline utilities (`_dispatch_next`, `_log_pipeli
 
 | Category | Count |
 |----------|-------|
-| Verified Correct | 7 |
-| Discrepancies Found | 4 |
+| Verified Correct | 10 |
+| Discrepancies (Documentation) | 4 |
+| Layering Violations (Documented) | 1 |
 | Bugs Identified | 2 |
-| Questions for Architecture | 4 |
-| Improvement Suggestions | 4 |
+| Questions for Architecture | 3 |
+| Improvement Recommendations | 5 |
 
 **Overall Assessment**: The architecture document is mostly accurate. The main concerns are:
-1. Missing `hybrid.py` search provider
-2. Potential slot leak in `tasks/pipeline.py` when `provider_id` is `None`
-3. Layering exception for TYPE_CHECKING imports from adapters
+
+1. **[HIGH]** Rate limiter slot leak bug in `tasks/pipeline.py:436` - `provider_id` and `model` can be `None` in finally block
+2. **[MED]** Missing `json` import in `services/trend_memory.py:240`
+3. **[LOW]** Missing `hybrid.py` search provider in architecture document
+4. **[LOW]** Multiple services missing from architecture tree
+5. **[LOW]** Layering violation in `services/crawling.py` (but documented as acceptable exception)

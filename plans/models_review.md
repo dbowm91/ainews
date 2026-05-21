@@ -1,306 +1,316 @@
-# Models Architecture Review
+# Models Module Architecture Review
 
-**Date:** 2026-05-21  
-**Reviewer:** Architecture Verification Agent  
-**Document Reviewed:** `architecture/models.md`
+## Summary
 
----
-
-## Executive Summary
-
-The architecture document `architecture/models.md` provides a high-level overview of the models package but contains several discrepancies with the actual implementation. Most critically, the pipeline status values, field names, and some relationship definitions do not match the actual code.
+The `architecture/models.md` document makes several claims that are **inaccurate** or **outdated**. This review verified all claims against the actual codebase in `models/` directory.
 
 ---
 
-## Verified Correct
+## Verified Claims
 
-### File Inventory (lines 7-19)
-All files listed exist and contain the expected models:
-- `article.py`: Article, Citation - VERIFIED
-- `source.py`: Source - VERIFIED
-- `newsletter.py`: Newsletter, Subscriber, ArticleMetric - VERIFIED
-- `pipeline.py`: PipelineRun, PipelineLog, ArticleVersion - VERIFIED
-- `context.py`: TopicNote, TrendMemory - VERIFIED
-- `webhook.py`: Webhook, WebhookEvent - VERIFIED
-- `auth.py`: ApiToken, AdminUser - VERIFIED
-- `tag.py`: Tag, article_tags - VERIFIED
-- `search.py`: SearchQuery - VERIFIED
-- `audit.py`: AuditLog - VERIFIED
-- `share.py`: ShareConfig - VERIFIED
+### File Inventory (Lines 6-19)
+| Documented | Actual | Status |
+|------------|--------|--------|
+| `article.py` → `Article`, `Citation` | `Article`, `Citation` | ✅ VERIFIED |
+| `source.py` → `Source` | `Source` | ✅ VERIFIED |
+| `newsletter.py` → `Newsletter`, `Subscriber`, `ArticleMetric` | `Newsletter`, `Subscriber`, `ArticleMetric` | ✅ VERIFIED |
+| `pipeline.py` → `PipelineRun`, `PipelineLog`, `ArticleVersion` | `PipelineRun`, `PipelineLog`, `ArticleVersion` | ✅ VERIFIED |
+| `context.py` → `TopicNote`, `TrendMemory` | `TopicNote`, `TrendMemory` | ✅ VERIFIED |
+| `webhook.py` → `Webhook`, `WebhookEvent` | `Webhook`, `WebhookEvent` | ✅ VERIFIED |
+| `auth.py` → `ApiToken`, `AdminUser` | `ApiToken`, `AdminUser` | ✅ VERIFIED |
+| `tag.py` → `Tag`, `article_tags` | `Tag`, `article_tags` | ✅ VERIFIED |
+| `search.py` → `SearchQuery` | `SearchQuery` | ✅ VERIFIED |
+| `audit.py` → `AuditLog` | `AuditLog` | ✅ VERIFIED |
+| `share.py` → `ShareConfig` | `ShareConfig` | ✅ VERIFIED |
 
-### Source Model Core Fields (lines 74-92)
-- `source_type` field exists as `db.Column(db.String(32), nullable=False, index=True)` - VERIFIED (matches AGENTS.md note that type is actually source_type)
-- `consecutive_failures` and `consecutive_successes` exist - VERIFIED
-- `last_crawled` exists - VERIFIED (matches AGENTS.md note that last_fetch_at is actually last_crawled)
-- `last_success_at` exists - VERIFIED
+### Key Relationships Diagram (Lines 21-38)
+All relationships documented are accurate. ✅
 
-### AdminUser TOTP Fields (lines 94-112)
-- `totp_secret` exists as `db.Column(db.String(256))` - VERIFIED
-- `backup_codes` exists as `db.Column(db.JSON, nullable=True)` - VERIFIED
+### TrendMemory.embedding (Line 127)
+Document states: `embedding = Column(Text)  # Stored as text, not vector type`
+Actual code (`models/context.py:46`): `embedding = db.Column(db.Text, nullable=True)`
+**✅ VERIFIED** - Correctly documented as Text.
 
-### TrendMemory Embedding Storage (lines 114-133)
-- `embedding` is `db.Column(db.Text, nullable=True)` - VERIFIED (matches AGENTS.md note that embedding is db.Text, not vector type)
-
-### Key Relationships (lines 21-38)
-- Article -> Source (many-to-one) via `source_id` - VERIFIED
-- Article -> Tag (many-to-many via article_tags) - VERIFIED
-- Article -> Citation (one-to-many) - VERIFIED
-- Article -> ArticleMetric (one-to-one via `uselist=False`) - VERIFIED
-- Article -> ArticleVersion (one-to-many via `versions` backref) - VERIFIED
-- PipelineRun -> PipelineLog (one-to-many) - VERIFIED
-- Newsletter -> Article (many-to-many) - VERIFIED
-- Newsletter -> Subscriber (many-to-many) - VERIFIED
-
-### Newsletter Association Tables
-- `newsletter_articles` table exists with proper FKs - VERIFIED
-- `newsletter_subscribers` table exists with proper FKs - VERIFIED
-
----
-
-## Discrepancies Found
-
-### 1. Article Model Field Names (lines 44-61)
-
-**Documentation shows:**
+### TrendMemory.last_accessed_at (Line 132)
+Document states: `last_accessed_at = Column(DateTime)`
+Actual code (`models/context.py:40-45`):
 ```python
-title = Column(String(500))
-url = Column(String(2000))
-content = Column(Text)
+last_accessed_at = db.Column(
+    db.DateTime,
+    nullable=True,
+    index=True,
+    onupdate=datetime.utcnow
+)
 ```
-
-**Actual Implementation (`models/article.py` lines 13-60):**
-- `title` field does NOT exist; uses `original_title` instead
-- `url` field does NOT exist; uses `original_url` instead  
-- `content` field does NOT exist; uses `extracted_text`, `final_article`, `draft_article` instead
-- `summary` field does NOT exist as a standalone column
-
-**Impact:** Low - The documentation is simplified but the actual fields provide more granular data.
+**✅ VERIFIED** - Field exists with index.
 
 ---
 
-### 2. Article Pipeline Status Values (lines 55, 63-70)
+## Discrepancies and Issues
 
-**Documentation claims (line 55):**
-```
-pipeline_status = Column(String(50))  # pending, select, research, write, edit, review, done
-```
+### CRIT-1: Source.adapter_config Does Not Exist (Line 91)
 
-**Status flow diagram (lines 65-69):**
-```
-pending → select → research → writing → editing → done
-                    ↓          ↓         ↓
-                  review ←──────┴─────────┘
-```
-
-**Actual Implementation (`services/pipeline_utils.py` lines 10-19):**
-```python
-_STAGE_TASKS = {
-    "pending": ("tasks.select", "select_article"),
-    "selecting": ("tasks.select", "select_article"),
-    "selected": ("tasks.research", "research_article"),
-    "researching": ("tasks.research", "research_article"),
-    "writing": ("tasks.write", "write_article"),
-    "written": ("tasks.edit", "edit_article"),
-    "editing": ("tasks.edit", "edit_article"),
-    "review": ("tasks.edit", "edit_article"),
-}
-```
-
-**Discrepancies:**
-| Documentation | Actual Implementation |
-|---------------|----------------------|
-| `select` | `selecting`, `selected` |
-| `research` | `researching` |
-| `write` | `writing` |
-| `edit` | `editing`, `written` |
-| No `failed` status | `failed` used in tests |
-| No `skipped` status | `skipped` used in tests |
-| No `published` status | `published` used in tests |
-
-**Impact:** Medium - Documentation is significantly simplified and doesn't reflect actual status values used in the pipeline.
-
----
-
-### 3. Source Model Missing `adapter_config` (line 91)
-
-**Documentation claims:**
+**Document claims:**
 ```python
 adapter_config = Column(JSON)  # Source-specific adapter settings
 ```
 
-**Actual Implementation (`models/source.py`):**
-- `adapter_config` field does NOT exist
-- The `Source` model has: `source_key`, `name`, `url`, `feed_url`, `source_type`, `active`, `last_crawled`, `created_at`, `consecutive_failures`, `consecutive_successes`, `last_success_at`, `last_error`, `disabled_at`
-
-**Impact:** Medium - Documentation shows a field that was never implemented (per AGENTS.md: "Source.adapter_config doesn't exist (documented but never implemented)").
-
----
-
-### 4. TrendMemory `source_articles` Field (line 130)
-
-**Documentation claims:**
+**Actual code (`models/source.py`):**
 ```python
-source_articles = Column(JSON)  # Related article IDs
+class Source(db.Model):
+    __tablename__ = "sources"
+    id = db.Column(db.Integer, primary_key=True)
+    source_key = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(128), nullable=False, index=True)
+    url = db.Column(db.String(512))
+    feed_url = db.Column(db.String(512))
+    source_type = db.Column(db.String(32), nullable=False, index=True)
+    active = db.Column(db.Boolean, default=True, index=True)
+    last_crawled = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, ...)
+    consecutive_failures = db.Column(db.Integer, ...)
+    consecutive_successes = db.Column(db.Integer, ...)
+    last_success_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    disabled_at = db.Column(db.DateTime, nullable=True, index=True)
+    # NO adapter_config field
 ```
 
-**Actual Implementation (`models/context.py` lines 27-48):**
-- `source_articles` field does NOT exist
-- Instead has: `source_article_id = db.Column(db.Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True)`
+**Reality:** Adapter configuration is stored externally in `schemas/source.py` as `SourceConfig.config` (JSON), validated against adapter schemas (RSSConfig, APIConfig, WebConfig). Adapters access it via `source_config.config` at runtime.
 
-**Impact:** Medium - The relationship is inverted (single FK vs JSON array of IDs).
+**Reference:** `adapters/base.py:46` loads config from source's config dict.
 
 ---
 
-### 5. TrendMemory `last_accessed_at` Field (line 132)
+### CRIT-2: AdminUser Missing ip_binding and user_agent_hash (Line 111)
 
-**Documentation claims:**
+**Document states:** `# Note: ip_binding and user_agent_hash not implemented`
+
+**Actual code (`models/auth.py:31-48`):**
 ```python
-last_accessed_at = Column(DateTime)
+class AdminUser(db.Model):
+    __tablename__ = "admin_users"
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(128), nullable=False)
+    totp_secret = db.Column(db.String(256))
+    totp_enabled = db.Column(db.Boolean, default=False)
+    backup_codes = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, ...)
+    updated_at = db.Column(db.DateTime, ...)
 ```
 
-**Actual Implementation:**
-- `last_accessed_at` field does NOT exist
-- Has `last_consolidated_at` instead (not documented)
-
-**Impact:** Low - Field not used/incomplete documentation.
+**Status:** No `ip_binding` or `user_agent_hash` fields exist. This is correctly noted as "not implemented" in the document, but the comment should be clarified to indicate these fields **do not exist** rather than just "not implemented" (which implies a TODO).
 
 ---
 
-### 6. Source Index `type` vs `source_type` (line 140)
+### MED-1: Article Model Documented Inaccurately (Lines 40-70)
 
-**Documentation claims:**
-```markdown
-Source: `name`, `type`
+**Document shows:**
+```python
+class Article(Base):
+    id = Column(Integer, primary_key=True)
+    title = Column(String(500))
+    url = Column(String(2000))
+    source_id = Column(Integer, ForeignKey('sources.id'))
+    content = Column(Text)
+    summary = Column(Text)
+    pipeline_status = Column(String(50))
+    impact_score = Column(Integer, default=0)
+    published_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
 ```
 
-**Actual Implementation (`models/source.py`):**
-- `name` has `index=True`
-- `source_type` has `index=True`
-- No field called simply `type`
+**Actual code (`models/article.py:10-75`):**
+The actual Article model is significantly different:
 
-**Impact:** Low - Minor naming clarification issue (likely meant `source_type`).
+| Documented Field | Actual Field | Status |
+|------------------|--------------|--------|
+| `title` | `original_title` | ❌ DIFFERENT |
+| `url` | `original_url` | ❌ DIFFERENT |
+| `content` | `extracted_text` | ❌ DIFFERENT |
+| (not documented) | `short_id` | ❌ MISSING |
+| (not documented) | `external_id` | ❌ MISSING |
+| (not documented) | `pipeline_status` exists | ✅ |
+| (not documented) | `selector_result` | ❌ MISSING |
+| (not documented) | `research_brief` | ❌ MISSING |
+| (not documented) | `draft_article` | ❌ MISSING |
+| (not documented) | `final_article` | ❌ MISSING |
+| (not documented) | `original_ai_article` | ❌ MISSING |
+| (not documented) | `writer_model` | ❌ MISSING |
+| (not documented) | `category` | ❌ MISSING |
+| (not documented) | `topics` | ❌ MISSING |
+| (not documented) | `raw_metadata` | ❌ MISSING |
+| (not documented) | `extraction_status` | ❌ MISSING |
+| (not documented) | `retry_count`, `total_retries`, `degradation_count` | ❌ MISSING |
+| (not documented) | `pipeline_started_at` | ❌ MISSING |
+| (not documented) | `last_error` | ❌ MISSING |
+| (not documented) | `updated_at` | ❌ MISSING |
+| (not documented) | `scheduled_publish_at` | ❌ MISSING |
+| (not documented) | `crawled_at`, `selected_at` | ❌ MISSING |
+| (not documented) | `experiment_group` | ❌ MISSING |
+| (not documented) | `embedding` (article-level) | ❌ MISSING |
+| `published_at` | `published_at` (nullable) | ✅ EXISTS |
+
+**Issue:** The Article model in the architecture document is a **stub/oversimplification** and does not reflect the actual implementation.
 
 ---
 
-### 7. PipelineRun Index `status` (line 141)
+### MED-2: Source Model Has source_key Instead of adapter_config
 
-**Documentation claims:**
-```markdown
-PipelineRun: `status`, `created_at`
+**Document shows:**
+```python
+class Source(Base):
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200))
+    source_type = Column(String(50))  # rss, api, web
+    # Health tracking
+    consecutive_failures = Column(Integer, default=0)
+    consecutive_successes = Column(Integer, default=0)
+    last_crawled = Column(DateTime)
+    last_success_at = Column(DateTime)
+    # Configuration
+    adapter_config = Column(JSON)  # Source-specific adapter settings
 ```
 
-**Actual Implementation (`models/pipeline.py`):**
-- `status` does NOT have an index
-- `finished_at` has `index=True`
-- `run_type` has index via `ix_pipeline_runs_run_type`
-- Composite index `ix_pipeline_runs_run_type_status` exists
+**Actual (`models/source.py:6-30`):**
+- `source_key` (Line 10) exists but is NOT documented
+- `adapter_config` does NOT exist
+- `url` and `feed_url` are NOT documented
+- `active` is NOT documented
+- `last_error` is NOT documented
+- `disabled_at` is NOT documented
 
-**Impact:** Low - Documentation lists indexes that don't match implementation.
+---
+
+### MED-3: Index Documentation Incomplete (Lines 136-142)
+
+**Document claims:**
+```
+- `Article`: `pipeline_status`, `source_id`, `published_at`, `created_at`
+- `Source`: `name`, `type`
+- `PipelineRun`: `status`, `created_at`
+- `TrendMemory`: `topic` (no GIN index)
+```
+
+**Actual Indexes:**
+
+**Article (`models/article.py:66-75`):**
+```python
+__table_args__ = (
+    db.UniqueConstraint("source_id", "external_id", name="uq_source_external_id"),
+    db.Index("ix_articles_status_created", "pipeline_status", "created_at"),
+    db.Index("ix_articles_published", "original_published_at"),
+    db.Index("ix_articles_impact", "impact_score"),
+    db.Index("ix_articles_category_status", "category", "pipeline_status"),
+    db.Index("ix_articles_total_retries", "total_retries"),
+    db.Index("ix_articles_retry_count", "retry_count"),
+    db.Index("ix_articles_degradation_count", "degradation_count"),
+)
+```
+
+Actual: `pipeline_status`, `source_id` (FK), `published_at` (as `original_published_at`), `created_at`, plus many more.
+
+**Source (`models/source.py`):**
+- Indexes on `name` (line 11)
+- Indexes on `source_type` (line 14)
+- Index on `consecutive_failures` (line 19)
+- Index on `disabled_at` (line 23)
+- Unique constraint on `source_key` (line 10)
+
+**PipelineRun (`models/pipeline.py:27-30`):**
+```python
+__table_args__ = (
+    db.Index("ix_pipeline_runs_run_type", "run_type"),
+    db.Index("ix_pipeline_runs_run_type_status", "run_type", "status"),
+)
+```
+No index on `created_at`.
+
+**TrendMemory (`models/context.py:48-51`):**
+```python
+__table_args__ = (
+    db.Index("ix_trend_memory_topic_importance", "topic", "importance"),
+    db.Index("ix_trend_memory_expires_at", "expires_at"),
+)
+```
+`last_accessed_at` has an index (line 43) but is not documented.
+
+---
+
+### MED-4: Pipeline Status Flow Outdated (Lines 63-70)
+
+**Document shows:**
+```
+pending → select → research → writing → editing → done
+```
+
+**Actual Statuses (from `models/article.py:25`):**
+```python
+pipeline_status = db.Column(db.String(32), default="pending")
+```
+
+The documented flow `pending → select → research → writing → editing → done` does not match the actual pipeline implementation. Actual stages (from `tasks/` and `services/pipeline/`) include:
+- `pending`
+- `select` / `selecting` / `selected`
+- `research` / `researching`
+- `write` / `writing` / `written`
+- `edit` / `editing`
+- `review`
+- `done`
+
+The architecture doc shows "writing" and "editing" but actual models use `write` and `edit` as base statuses.
+
+---
+
+### MED-5: Newsletter Relationship Missing `newsletter_articles` and `newsletter_subscribers` Tables
+
+**Document shows:**
+```
+Newsletter
+├── Subscriber (many-to-many via newsletter_subscribers)
+└── Article (many-to-many via newsletter_articles)
+```
+
+**Actual (`models/newsletter.py:8-23`):**
+Tables exist and are correctly documented, but the document does not explicitly show these as association tables.
+
+---
+
+## Recommendations
+
+1. **Update Article Model Documentation**
+   - Replace the stub example with accurate field list
+   - Document all JSON columns (`topics`, `raw_metadata`, `selector_result`)
+   - Document `short_id` as the public-facing identifier
+   - Document `experiment_group` for A/B testing
+
+2. **Remove `adapter_config` from Source Model**
+   - Document that adapter configuration is stored in `schemas/source.py` as `SourceConfig.config`
+   - Reference where adapters access it (`adapters/base.py`)
+
+3. **Clarify AdminUser Session Security**
+   - Change "not implemented" comment to clearly state these fields do not exist
+
+4. **Update Index Documentation**
+   - Document actual index names and column sets
+   - Add `last_accessed_at` index for TrendMemory
+
+5. **Fix Pipeline Status Flow**
+   - Update to reflect actual statuses used in code
+
+6. **Document Association Tables**
+   - Add explicit entries for `newsletter_articles` and `newsletter_subscribers` in file inventory
 
 ---
 
 ## Bugs Identified
 
-### 1. TrendMemory Missing `last_accessed_at` Field
-
-The `TrendMemory` model has `created_at` but no `last_accessed_at` field as documented. If this field is needed for cache invalidation or access tracking, it should be added.
-
-**Location:** `models/context.py`  
-**Suggested Fix:** Add `last_accessed_at = db.Column(db.DateTime, nullable=True)` to TrendMemory model.
-
----
-
-## Improvement Suggestions
-
-### 1. Update Pipeline Status Documentation
-
-The architecture document's pipeline status section should be updated to reflect actual values:
-
-**Current (incorrect):**
-```
-pending → select → research → writing → editing → done
-```
-
-**Should be:**
-```
-pending → selecting → selected → researching → writing → written → editing → review → done
-                                        ↓           ↓
-                                      review ←──────┴── (quality gate failure)
-```
-
-Additionally, these statuses exist but aren't documented: `failed`, `skipped`, `published`.
-
----
-
-### 2. Document All Article Fields
-
-The Article model has many more fields than documented. Consider adding a complete field listing or referring to the actual model definition.
-
----
-
-### 3. Remove `adapter_config` from Documentation
-
-Since `Source.adapter_config` was never implemented (per AGENTS.md), remove it from the architecture document or mark it as "not implemented".
-
----
-
-### 4. Document ArticleMetric Relationship Direction
-
-The documentation says "ArticleMetric (one-to-one)" but should clarify: **Article has one-to-one with ArticleMetric** (via `metrics` relationship with `uselist=False`).
-
----
-
-### 5. Document Association Table Extra Fields
-
-The `newsletter_subscribers` association table has additional fields beyond simple FKs:
-- `sent_at`, `opened_at`, `clicked_at`
-
-These should be documented.
-
----
-
-## Questions for Architecture
-
-### Q1: What is the intended future of `adapter_config`?
-
-The `Source.adapter_config` field is documented but never implemented. Should it be:
-- (a) Removed from documentation
-- (b) Implemented in a future iteration
-- (c) Replaced with a different configuration mechanism
-
-### Q2: What is the relationship between `source_articles` and `source_article_id`?
-
-The documentation shows `TrendMemory.source_articles` as a JSON array, but the implementation uses `source_article_id` as a single FK. Should TrendMemory track:
-- (a) A single related article (current implementation)
-- (b) Multiple related articles (documentation suggests)
-
-### Q3: Is `last_accessed_at` on TrendMemory still needed?
-
-If TrendMemory is used for semantic search caching, `last_accessed_at` could be valuable for cache invalidation. Is this field still needed or should it be removed from documentation?
-
-### Q4: Pipeline Status Simplification
-
-The actual pipeline has many more status values than documented. Should the architecture document:
-- (a) Be updated to match actual implementation exactly
-- (b) Continue showing simplified overview
-- (c) Show the full state machine diagram
-
----
-
-## Summary Table
-
-| Item | Documentation | Actual | Status |
-|------|--------------|--------|--------|
-| Article.title | exists | `original_title` | DISCREPANCY |
-| Article.url | exists | `original_url` | DISCREPANCY |
-| Article.content | exists | `extracted_text` etc | DISCREPANCY |
-| Article.pipeline_status values | select, research, write, edit | selecting, selected, researching, writing, written, editing | DISCREPANCY |
-| Source.adapter_config | JSON field | doesn't exist | BUG/DOC |
-| TrendMemory.source_articles | JSON field | `source_article_id` FK | DISCREPANCY |
-| TrendMemory.last_accessed_at | exists | doesn't exist | MISSING |
-| Source index `type` | exists | `source_type` index | DISCREPANCY |
-| PipelineRun index `status` | exists | doesn't exist | DISCREPANCY |
-
----
-
-*End of Review*
+| ID | Severity | Location | Issue |
+|----|----------|----------|-------|
+| CRIT-1 | Critical | `architecture/models.md:91` | `adapter_config` documented but does not exist in Source model |
+| MED-1 | Medium | `architecture/models.md:40-61` | Article model example is a stub, missing most fields |
+| MED-2 | Medium | `architecture/models.md:73-92` | Source model missing `source_key`, `url`, `feed_url`, `active`, `last_error`, `disabled_at` |
+| MED-3 | Medium | `architecture/models.md:136-142` | Index documentation incomplete and inaccurate |
+| MED-4 | Medium | `architecture/models.md:63-70` | Pipeline status flow outdated |
+| MED-5 | Medium | `architecture/models.md:21-38` | Association tables not explicitly documented |

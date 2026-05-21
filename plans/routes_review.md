@@ -7,225 +7,314 @@ This document reviews the claims in `architecture/routes.md` against the actual 
 ## Verified Correct
 
 ### Blueprint URL Prefixes
-- **admin_bp** at `/admin` - **CORRECT** (`routes/admin/__init__.py` line 14)
-- **admin_api_bp** at `/api/v1` - **CORRECT** (`routes/admin/__init__.py` line 15)
-- **public_bp** at `/` - **CORRECT** (`routes/public/__init__.py` line 26)
+- **admin_bp** at `/admin` - **CORRECT** (`routes/admin/__init__.py:14`)
+- **admin_api_bp** at `/api/v1` - **CORRECT** (`routes/admin/__init__.py:15`)
+- **public_bp** at `/` - **CORRECT** (`routes/public/__init__.py:26`)
+
+### Blueprint Registration (app.py:188-197)
+All four blueprints are registered:
+```python
+app.register_blueprint(public_bp)
+app.register_blueprint(admin_bp)
+app.register_blueprint(admin_api_bp)
+app.register_blueprint(api_tokens_bp)  # <-- NOW REGISTERED
+```
 
 ### Admin API Endpoints - Verified Present
-All documented API endpoints exist in the codebase:
-
 | Endpoint | File | Methods | Verified |
 |----------|------|---------|----------|
-| `/articles/ids` | `routes/admin/api/articles.py` | GET | ✓ |
-| `/articles/counts-by-status` | `routes/admin/api/articles.py` | GET | ✓ |
-| `/articles/bulk` | `routes/admin/api/articles.py` | POST | ✓ |
-| `/articles/<id>/pipeline` | `routes/admin/api/articles.py` | POST | ✓ |
-| `/articles/<id>` | `routes/admin/api/articles.py` | GET, PUT, DELETE | ✓ |
-| `/sources` | `routes/admin/api/sources.py` | GET, POST | ✓ |
-| `/sources/<id>` | `routes/admin/api/sources.py` | GET, PUT, PATCH, DELETE | ✓ |
-| `/sources/<id>/refresh` | `routes/admin/api/sources.py` | POST | ✓ |
-| `/sources/health` | `routes/admin/api/pipeline.py` | GET | ✓ |
-| `/pipeline/stats` | `routes/admin/api/pipeline.py` | GET | ✓ |
-| `/pipeline/backlog` | `routes/admin/api/pipeline.py` | GET | ✓ |
-| `/pipeline/dead-letter/stats` | `routes/admin/api/pipeline.py` | GET | ✓ |
-| `/pipeline/sla` | `routes/admin/api/pipeline.py` | GET | ✓ |
-| `/costs` | `routes/admin/api/pipeline.py` | GET | ✓ |
-| `/webhooks` | `routes/admin/api/webhooks.py` | GET, POST | ✓ |
-| `/webhooks/<id>` | `routes/admin/api/webhooks.py` | GET, PUT, PATCH, DELETE | ✓ |
-| `/webhooks/<id>/test` | `routes/admin/api/webhooks.py` | POST | ✓ |
-| `/webhooks/<id>/events` | `routes/admin/api/webhooks.py` | GET | ✓ |
-| `/webhooks/events/<id>/resend` | `routes/admin/api/webhooks.py` | POST | ✓ |
-| `/search/analytics` | `routes/admin/api/search.py` | GET | ✓ |
-| `/config/reload` | `routes/admin/api/config.py` | POST | ✓ |
-| `/metrics` | `routes/admin/api/config.py` | GET | ✓ |
-| `/metrics/prometheus` | `routes/admin/api/config.py` | GET | ✓ |
-| `/audit-logs` | `routes/admin/api/audit.py` | GET | ✓ |
-| `/health` | `routes/admin/api/health.py` | GET | ✓ |
-| `/workers/health` | `routes/admin/api/health.py` | GET | ✓ |
-| `/task/<task_id>` | `routes/admin/api/health.py` | GET | ✓ |
+| `/articles/ids` | `routes/admin/api/articles.py:152` | GET | ✓ |
+| `/articles/counts-by-status` | `routes/admin/api/articles.py:171` | GET | ✓ |
+| `/articles/bulk` | `routes/admin/api/articles.py:470` | POST | ✓ |
+| `/articles/<id>/pipeline` | `routes/admin/api/articles.py:528` | POST | ✓ |
+| `/articles/<id>` | `routes/admin/api/articles.py:597,620,673` | GET, PUT, DELETE | ✓ |
+| `/sources` | `routes/admin/api/sources.py:16,48` | GET, POST | ✓ |
+| `/sources/<id>` | `routes/admin/api/sources.py:123,154,225,314` | GET, PUT, PATCH, DELETE | ✓ |
+| `/sources/<id>/refresh` | `routes/admin/api/sources.py:342` | POST | ✓ |
+| `/sources/health` | `routes/admin/api/pipeline.py:161` | GET | ✓ |
+| `/pipeline/stats` | `routes/admin/api/pipeline.py:13` | GET | ✓ |
+| `/pipeline/backlog` | `routes/admin/api/pipeline.py:87` | GET | ✓ |
+| `/pipeline/dead-letter/stats` | `routes/admin/api/pipeline.py:48` | GET | ✓ |
+| `/pipeline/sla` | `routes/admin/api/pipeline.py:187` | GET | ✓ |
+| `/costs` | `routes/admin/api/pipeline.py:135` | GET | ✓ |
+| `/webhooks` | `routes/admin/api/webhooks.py:56,90` | GET, POST | ✓ |
+| `/webhooks/<id>` | `routes/admin/api/webhooks.py:165,209,269` | GET, PUT/PATCH, DELETE | ✓ |
+| `/webhooks/<id>/test` | `routes/admin/api/webhooks.py:297` | POST | ✓ |
+| `/webhooks/<id>/events` | `routes/admin/api/webhooks.py:321` | GET | ✓ |
+| `/webhooks/events/<id>/resend` | `routes/admin/api/webhooks.py:363` | POST | ✓ |
+| `/search/analytics` | `routes/admin/api/search.py:9` | GET | ✓ |
+| `/config/reload` | `routes/admin/api/config.py:13` | POST | ✓ |
+| `/metrics` | `routes/admin/api/config.py:52` | GET | ✓ |
+| `/metrics/prometheus` | `routes/admin/api/config.py:60` | GET | ✓ |
+| `/audit-logs` | `routes/admin/api/audit.py:11` | GET | ✓ |
+| `/health` | `routes/admin/api/health.py:17` | GET | ✓ |
+| `/workers/health` | `routes/admin/api/health.py:54` | GET | ✓ |
+| `/task/<task_id>` | `routes/admin/api/health.py:102` | GET | ✓ |
 
 ### Public Routes - Verified Present
 | Route | File | Verified |
 |-------|------|----------|
-| `/` (index) | `routes/public/feeds.py` | ✓ |
-| `/topic/<category>` | `routes/public/feeds.py` | ✓ |
-| `/tag/<slug>` | `routes/public/feeds.py` | ✓ |
-| `/feed` | `routes/public/feeds.py` | ✓ |
-| `/feed/<category>` | `routes/public/feeds.py` | ✓ |
-| `/sitemap.xml` | `routes/public/feeds.py` | ✓ |
-| `/subscribe` | `routes/public/subscribe.py` | ✓ POST only |
-| `/verify/<token>` | `routes/public/subscribe.py` | ✓ |
-| `/unsubscribe/<token>` | `routes/public/subscribe.py` | ✓ GET+POST |
-| `/article/<int:article_id>` | `routes/public/links.py` | ✓ |
-| `/s/<short_id>` | `routes/public/links.py` | ✓ |
-| `/a/<short_id>` | `routes/public/links.py` | ✓ |
-| `/track/newsletter-click/<int:article_id>` | `routes/public/links.py` | ✓ |
-| `/api/v1/track/share-click/<int:article_id>` | `routes/public/links.py` | ✓ POST |
-| `/health` | `routes/public/__init__.py` | ✓ |
+| `/` (index) | `routes/public/feeds.py:73` | ✓ |
+| `/topic/<category>` | `routes/public/feeds.py:122` | ✓ |
+| `/tag/<slug>` | `routes/public/feeds.py:171` | ✓ |
+| `/feed` | `routes/public/feeds.py:222` | ✓ |
+| `/feed/<category>` | `routes/public/feeds.py:259` | ✓ |
+| `/sitemap.xml` | `routes/public/feeds.py:308` | ✓ |
+| `/subscribe` (POST only) | `routes/public/subscribe.py:31` | ✓ |
+| `/verify/<token>` | `routes/public/subscribe.py:183` | ✓ |
+| `/unsubscribe/<token>` | `routes/public/subscribe.py:137,153` | ✓ GET+POST |
+| `/article/<int:article_id>` | `routes/public/links.py:24` | ✓ |
+| `/s/<short_id>` | `routes/public/links.py:94` | ✓ |
+| `/a/<short_id>` | `routes/public/links.py:103` | ✓ |
+| `/track/newsletter-click/<int:article_id>` | `routes/public/links.py:130` | ✓ |
+| `/api/v1/track/share-click/<int:article_id>` | `routes/public/links.py:123` | ✓ POST |
+| `/health` | `routes/public/__init__.py:111` | ✓ |
 
-### Authentication Security Features
-- **TOTP 2FA support** - **CORRECT** (`routes/admin/auth.py` - `verify_token()` from `services/totp.py`)
-- **8 backup codes** - **CORRECT** (`routes/admin/auth.py` line 126 - `verify_backup_code()` and `consume_backup_code()`)
-- **Session hijacking protection (IP + User-Agent binding)** - **CORRECT** (`routes/admin/__init__.py` lines 75-86)
-- **Login lockout via Redis (with in-memory fallback)** - **CORRECT** (`routes/admin/__init__.py` lines 104-303)
+### Authentication Security Features (Verified)
+- **TOTP 2FA support** - `routes/admin/auth.py` - `verify_token()` from `services/totp.py`
+- **8 backup codes** - `routes/admin/auth.py:126` - `verify_backup_code()` and `consume_backup_code()`
+- **Session hijacking protection (IP + User-Agent binding)** - `routes/admin/__init__.py:75-86`
+- **Login lockout via Redis (with in-memory fallback)** - `routes/admin/__init__.py:104-303`
+- **Login rate limit** - `routes/admin/auth.py:44` - `@limiter.limit("10 per minute")`
 
-### CSRF Protection
-- **Flask-WTF tokens** - **CORRECT** - `validate_csrf_json` decorator in `routes/decorators.py` validates CSRF for JSON endpoints via `X-CSRFToken` header
+### CSRF Protection (Verified)
+- **Flask-WTF tokens** - `validate_csrf_json` decorator in `routes/decorators.py`
 - All state-changing API routes use `@validate_csrf_json` decorator
+- Public form submissions use Flask-WTF form tokens
 
-### Admin HTML Pages
-| Page | Route | Verified |
-|------|-------|----------|
-| Login | `/admin/login` | ✓ |
-| Dashboard | `/admin/` | ✓ |
-| Articles | `/admin/articles` | ✓ |
-| Sources | `/admin/sources` | ✓ |
-| Subscribers | `/admin/subscribers` | ✓ (via HTML, not separately listed) |
-| Newsletters | `/admin/newsletters` | ✓ |
-| Webhooks | `/admin/webhooks` | ✓ |
-| Dead Letters | `/admin/dead-letters` | ✓ |
+### Admin HTML Pages (Verified)
+| Page | Route | File |
+|------|-------|------|
+| Login | `/admin/login` | `routes/admin/auth.py:43` |
+| Dashboard | `/admin/` | `routes/admin/dashboard.py:192` |
+| Articles | `/admin/articles` | `routes/admin/articles.py:221` |
+| Sources | `/admin/sources` | `routes/admin/sources.py:26` |
+| Subscribers | `/admin/subscribers` | `routes/admin/subscribers.py:7` |
+| Newsletters | `/admin/newsletters` | (via `routes/admin/__init__.py` import) |
+| Webhooks | `/admin/webhooks` | (via `routes/admin/__init__.py` import) |
+| Dead Letters | `/admin/dead-letters` | `routes/admin/dashboard.py:13` |
+| Metrics | `/admin/metrics` | `routes/admin/metrics.py:10` |
+| Article Edit | `/admin/articles/<id>/edit` | `routes/admin/articles.py:385` |
+| Article Versions | `/admin/articles/<id>/versions` | `routes/admin/articles.py:440` |
+| Verify 2FA | `/admin/verify-2fa` | `routes/admin/auth.py:97` |
+| Setup 2FA | `/admin/setup-2fa` | `routes/admin/auth.py:151` |
+| Pipeline Logs | `/admin/pipeline-logs` | (imported in `__init__.py`) |
+| Review | `/admin/review` | (imported in `__init__.py`) |
+| Shares | `/admin/shares` | (imported in `__init__.py`) |
+| Topic Notes | `/admin/topic-notes` | (imported in `__init__.py`) |
+| Trend Memory | `/admin/trend-memory` | (imported in `__init__.py`) |
 
-### Feeds Functionality
-- `feeds_bp` used for feeds as documented (but actual name is `public_bp` imported from `routes.public`)
-- `/sitemap.xml`, `/feed`, `/feed/<category>` all present and functioning
+### Template Structure (Verified)
+```
+templates/
+├── admin/
+│   ├── dashboard.html
+│   ├── articles.html
+│   ├── article_edit.html
+│   ├── sources.html
+│   ├── newsletters.html
+│   ├── subscribers.html
+│   ├── webhooks.html
+│   ├── metrics.html
+│   ├── dead_letters.html
+│   ├── verify_2fa.html
+│   ├── setup_2fa.html
+│   ├── shares.html
+│   ├── topic_notes.html
+│   ├── trend_memory.html
+│   ├── pipeline_logs.html
+│   ├── review.html
+│   ├── article_versions.html
+│   └── partials/
+├── partials/
+├── errors/
+├── macros/
+├── article.html
+├── index.html
+├── topic.html
+├── tag.html
+├── share_redirect.html
+├── unsubscribe.html
+└── verify.html
+```
 
 ---
 
-## Discrepancies Found
+## Discrepancies and Documentation Bugs
 
-### 1. `api_tokens_bp` Registration Status - **CRITICAL DISCREPANCY**
+### 1. `api_tokens_bp` Registration - **OUTDATED DOCUMENTATION**
 
 **Document says (line 57):**
 > **Note:** The `api_tokens_bp` blueprint exists in `routes/admin/api_tokens.py` but is NOT registered in `app.py`. All `/api-tokens` routes return 404.
 
-**Actual code (`app.py` lines 188-197):**
-```python
-def _register_blueprints(app):
-    """Register Flask blueprints."""
-    from routes.admin import admin_bp, admin_api_bp
-    from routes.admin.api_tokens import api_tokens_bp  # <-- IMPORTED
-    from routes.public import public_bp
+**Actual code (`app.py:188-197`):**
+The `api_tokens_bp` IS registered. The `/api-tokens` routes work.
 
-    app.register_blueprint(public_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(admin_api_bp)
-    app.register_blueprint(api_tokens_bp)  # <-- REGISTERED!
-```
+**Fix needed:** Remove the "not registered" note from the documentation.
 
-**The `api_tokens_bp` IS registered**, contradicting the documentation. The `/api-tokens` routes are functional, not 404.
-
-### 2. `feeds_bp` vs `public_bp` Naming
+### 2. Blueprint Naming - `feeds_bp` vs `public_bp`
 
 **Document says (line 64):**
 ```python
 feeds_bp = Blueprint('feeds', __name__)
 ```
 
-**Actual code (`routes/public/__init__.py` line 26):**
+**Actual code (`routes/public/__init__.py:26`):**
 ```python
 public_bp = Blueprint("public", __name__)
 ```
 
-The blueprint is named `public_bp`, not `feeds_bp`. This is a minor naming discrepancy but the structure remains functionally equivalent.
+The blueprint is `public_bp`. Minor naming discrepancy.
 
 ### 3. Missing `POST /articles` Endpoint
 
-The documentation shows `/articles` with `GET, POST` methods (line 143):
+**Document says (line 143):**
 > | `/articles` | GET, POST | List/create articles |
 
-**Actual code:** There is NO `POST /api/v1/articles` endpoint in `routes/admin/api/articles.py`. There is only:
-- `GET /articles/ids` (line 152)
-- `GET /articles/counts-by-status` (line 171)
-- `POST /articles/bulk` (line 470)
-- `GET/PUT/DELETE /articles/<id>` (lines 597, 620, 673)
+**Actual code:** There is NO `POST /api/v1/articles` endpoint. Article creation is through the pipeline only.
 
-Article creation is handled through the pipeline, not a direct POST endpoint.
+### 4. Additional 2FA Routes Not Documented
 
-### 4. Share Endpoint Note Inconsistent
+**Document only shows:**
+- `/admin/login`
+- `/admin/logout`
+
+**Actual code has additional routes:**
+- `/admin/verify-2fa` (`routes/admin/auth.py:97`) - POST for 2FA verification
+- `/admin/setup-2fa` (`routes/admin/auth.py:151`) - GET/POST for 2FA setup
+
+### 5. Additional Admin Routes Not Documented
+
+**Document lists:**
+- `/admin/` - Dashboard
+- `/admin/articles` - Article management
+- `/admin/sources` - Source management
+- `/admin/subscribers` - Subscriber management
+- `/admin/newsletters` - Newsletter history
+
+**Additional routes in code:**
+- `/admin/dead-letters` (`routes/admin/dashboard.py:13`)
+- `/admin/metrics` (`routes/admin/metrics.py:10`)
+- `/admin/articles/<id>/edit` (`routes/admin/articles.py:385`)
+- `/admin/articles/<id>/versions` (`routes/admin/articles.py:440`)
+- `/admin/articles/<id>/original` (`routes/admin/articles.py:426`)
+- `/admin/articles/<id>/delete` (`routes/admin/articles.py:505`)
+- `/admin/articles/<id>/reprocess` (`routes/admin/articles.py:534`)
+- `/admin/sources/add` (`routes/admin/sources.py:39`)
+- `/admin/sources/<id>/enable` (`routes/admin/sources.py:106`)
+- `/admin/sources/<id>/disable` (`routes/admin/sources.py:142`)
+- `/admin/subscribers/export` (`routes/admin/subscribers.py:51`)
+
+### 6. Share Endpoint Note
 
 **Document says (line 107):**
-> **Note:** `/share/<platform>/<article_id>` is not implemented as a server endpoint. Social sharing is handled client-side via JavaScript.
+> **Note:** `/share/<platform>/<article_id>` is not implemented as a server endpoint.
 
-**Actual code:** There is no `/share/` route anywhere in the codebase. The `shares.py` file (`routes/admin/shares.py`) exists but only serves HTML management UI, not public share routes. The documentation accurately notes that share functionality is client-side, but the note implies there's an intentional design decision documented somewhere - this is correct as implemented.
+**Actual code:** The `routes/admin/shares.py` exists but only manages share configurations in admin UI. There is no public `/share/` route. This note is accurate.
 
-### 5. Template Structure
+### 7. API Token Format Documentation
 
-**Document shows (lines 173-188):** Flat structure under `templates/` with admin partials at `templates/admin/partials/`.
+**Document says (line 206):**
+> Token stored as: prefix + hash (never plaintext)
 
-**Actual structure:** Template directories verified:
-- `templates/admin/partials/` exists
-- `templates/partials/` exists for public
-- `templates/errors/` exists
-- `templates/macros/` exists
+**Actual code (`routes/admin/api_tokens.py:37-45`):**
+```python
+plain_token = secrets.token_urlsafe(32)
+token_hash = secrets.token_hex(32)
+api_token = ApiToken(
+    token_hash=generate_password_hash(token_hash),
+    raw_token_hash=token_hash,  # <-- Stores raw hash, not plaintext
+    name=name,
+)
+```
 
-This matches the documentation.
+The format is `plain_token.token_hash` returned to user on creation, but `token_hash` is stored in DB (not plaintext token). This is essentially correct but the storage is the hash of a hash.
 
----
+### 8. API Token Prefix Matching
 
-## Bugs Identified
+**Document doesn't specify prefix length:**
+**Actual code (`routes/admin/__init__.py:31-32`):**
+```python
+provided_hash = parts[1]
+prefix = provided_hash[:16]  # Uses first 16 chars of hash as prefix
+```
 
-### Bug 1: Inconsistent Route Documentation for Article Creation
-
-The architecture document shows `POST /articles` as an endpoint but this doesn't exist. This is a documentation bug, not an implementation bug. The actual article creation flow is through the pipeline (`POST /articles/<id>/pipeline`).
-
-### Bug 2: `api_tokens_bp` Blueprint Registered Despite Documentation Claim
-
-The documentation explicitly states `api_tokens_bp` is "NOT registered" but it IS registered in `app.py`. This is a documentation bug that should be corrected to avoid confusion during debugging.
-
----
-
-## Improvement Suggestions
-
-### 1. Update Documentation to Reflect `api_tokens_bp` Registration
-
-The note on line 57 of `routes.md` should be updated:
-- **Current:** "The `api_tokens_bp` blueprint exists in `routes/admin/api_tokens.py` but is NOT registered in `app.py`."
-- **Should be:** The blueprint is registered and functional at `/api-tokens`.
-
-### 2. Add `POST /articles` Endpoint or Remove from Documentation
-
-Either:
-- Add a proper article creation endpoint to `routes/admin/api/articles.py`, OR
-- Remove `POST /articles` from the API table and document that articles are created via the pipeline
-
-### 3. Clarify "Shares" Route in Documentation
-
-The `routes/admin/shares.py` file exists but doesn't implement public share routes. Consider either:
-- Documenting the admin-only nature of shares management
-- Or removing the "Note" about `/share/<platform>/<article_id>` if it's causing confusion
-
-### 4. Update Blueprint Naming in Documentation
-
-The `feeds_bp` reference in the Feeds section (line 64) should be updated to `public_bp` to match the actual implementation.
+Then queries `ApiToken.token_prefix == prefix`. This is an implementation detail not documented.
 
 ---
 
-## Questions for Architecture
+## Specific Bugs Identified
 
-### Q1: Was `api_tokens_bp` intended to be unregistered?
+### Bug 1: Documentation Outdated - api_tokens_bp Registration
 
-The documentation explicitly states it's NOT registered as a design decision. But the code shows it IS registered. Should it be:
-- Left registered (documentation error)
-- Removed from `app.py` registration (code error)
-- Or was this changed at some point and documentation wasn't updated?
+**File:** `architecture/routes.md:57`
+**Issue:** Documentation claims `api_tokens_bp` is NOT registered, but it IS registered in `app.py:197`
+**Severity:** Medium - could cause debugging confusion
 
-### Q2: Should there be a `POST /api/v1/articles` endpoint?
+### Bug 2: Documentation Missing Routes
 
-The documentation shows article creation via POST, but the implementation doesn't have this. Is this:
-- An intentional design choice (articles created via pipeline only)?
-- A missing feature that should be implemented?
-- Or just a documentation error?
+**File:** `architecture/routes.md`
+**Issue:** Missing documentation for:
+- `/admin/verify-2fa` (2FA verification flow)
+- `/admin/setup-2fa` (2FA setup flow)
+- `/admin/dead-letters` (Dead letter queue UI)
+- `/admin/metrics` (Metrics dashboard)
+- `/articles/bulk` operations
+**Severity:** Low - documentation completeness
 
-### Q3: What is the intended scope of `routes/admin/shares.py`?
+### Bug 3: POST /articles Claimed But Not Implemented
 
-The file `routes/admin/shares.py` exists and is imported in `routes/admin/__init__.py`, but it only contains admin UI for share configuration. Is there intent to add public share tracking endpoints, or should this file be documented as admin-only?
+**File:** `architecture/routes.md:143`
+**Issue:** Table shows `POST /articles` for article creation, but this endpoint doesn't exist
+**Severity:** Medium - API documentation error
 
-### Q4: Rate Limiting Details
+---
 
-The documentation mentions "Admin routes have stricter rate limits via `extensions.limiter`" but doesn't specify exact limits. Should specific rate limits be documented for:
-- Login endpoints
-- API endpoints
-- Public endpoints
+## Improvement Recommendations
+
+### 1. Update `api_tokens_bp` Registration Note (HIGH)
+
+**Location:** `architecture/routes.md:57`
+**Change from:**
+> **Note:** The `api_tokens_bp` blueprint exists in `routes/admin/api_tokens.py` but is NOT registered in `app.py`. All `/api-tokens` routes return 404.
+
+**Change to:**
+> The `api_tokens_bp` blueprint is registered in `app.py` and provides `/api-tokens` endpoints for API token management (list, create, delete).
+
+### 2. Fix Feeds Blueprint Name (LOW)
+
+**Location:** `architecture/routes.md:64`
+**Change from:**
+```python
+feeds_bp = Blueprint('feeds', __name__)
+```
+**Change to:**
+```python
+public_bp = Blueprint("public", __name__)
+```
+
+### 3. Add Missing Routes to Documentation (MEDIUM)
+
+Add to Admin Blueprint section:
+- `/admin/verify-2fa` - 2FA verification
+- `/admin/setup-2fa` - 2FA setup
+- `/admin/dead-letters` - Dead letter queue
+- `/admin/metrics` - Metrics dashboard
+
+Add to API Endpoints table:
+- `/articles/bulk` with POST method for bulk operations
+
+### 4. Remove or Fix POST /articles (MEDIUM)
+
+**Location:** `architecture/routes.md:143`
+**Option A:** Remove `POST /articles` if articles are only created via pipeline
+**Option B:** Implement `POST /api/v1/articles` endpoint
+
+### 5. Document API Token Prefix Matching (LOW)
+
+Add detail about prefix matching:
+- Uses first 16 characters of the hash portion as prefix
+- Tokens queried by prefix, then verified with full hash
 
 ---
 
@@ -233,10 +322,10 @@ The documentation mentions "Admin routes have stricter rate limits via `extensio
 
 | Category | Count |
 |----------|-------|
-| Verified Correct Claims | ~45 |
-| Discrepancies (Documentation vs Code) | 4 |
-| Bugs (Implementation Issues) | 0 |
-| Documentation Errors | 2 |
-| Questions for Architecture | 4 |
+| Verified Correct Claims | ~60 |
+| Discrepancies (Documentation vs Code) | 8 |
+| Documentation Errors | 3 |
+| Missing Route Documentation | 12+ |
+| Implementation Bugs | 0 |
 
-**Overall Assessment:** The architecture documentation is largely accurate. The primary issue is the `api_tokens_bp` registration status contradiction, which is a documentation bug (the code is correct, docs are wrong). The missing `POST /articles` endpoint and `feeds_bp` naming are minor issues that should be clarified.
+**Overall Assessment:** The implementation is correct and consistent. The issues are primarily documentation bugs where the documentation has not been updated to reflect current code. The `api_tokens_bp` registration note is the most significant issue as it incorrectly claims a feature is non-functional.

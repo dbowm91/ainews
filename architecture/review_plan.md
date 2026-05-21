@@ -1,54 +1,32 @@
 # Architecture Review Plan
 
-**Status:** COMPLETED (2026-05-21)
+**Status:** IN PROGRESS
+**Created:** 2026-05-21
 
-This plan orchestrates a comprehensive review of all architecture documents in the `architecture/` directory. Each module is assigned to a subagent that will verify claims against the actual codebase and produce an improvement plan.
+This plan orchestrates a comprehensive review of all architecture documents in the `architecture/` directory. Each module is assigned to a subagent that will verify claims against the actual codebase and produce an improvement plan stored in the `plans/` directory.
 
-## Modules Reviewed
+## Modules to Review
 
-| # | Module | Document | Review Output | Status |
-|---|--------|----------|---------------|--------|
-| 1 | Adapters | `architecture/adapters.md` | `plans/adapters_review.md` | ✅ Fixed |
-| 2 | Overview | `architecture/overview.md` | `plans/overview_review.md` | ✅ Verified |
-| 3 | Tasks | `architecture/tasks.md` | `plans/tasks_review.md` | ✅ Verified |
-| 4 | Pipeline | `architecture/pipeline.md` | `plans/pipeline_review.md` | ✅ Fixed |
-| 5 | Utils | `architecture/utils.md` | `plans/utils_review.md` | ✅ Verified |
-| 6 | Services | `architecture/services.md` | `plans/services_review.md` | ✅ Fixed |
-| 7 | Subagent | `architecture/subagent.md` | `plans/subagent_review.md` | ✅ Fixed |
-| 8 | Routes | `architecture/routes.md` | `plans/routes_review.md` | ✅ Fixed |
-| 9 | Schemas | `architecture/schemas.md` | `plans/schemas_review.md` | ✅ Fixed |
-| 10 | Models | `architecture/models.md` | `plans/models_review.md` | ✅ Fixed |
-
-## Fixes Applied
-
-### Code Bugs Fixed (CRIT/HIGH/MED)
-
-| Bug ID | Severity | File | Fix |
-|--------|----------|------|-----|
-| ARCH-1 | CRIT | `services/subagent/runner.py` | Added missing `_finalize_subagent_result()` function |
-| ARCH-2 | HIGH | `tasks/pipeline.py:436` | Fixed limiter slot leak using `rc.provider`/`rc.model` fallbacks |
-| ARCH-3 | MED | `services/trend_memory.py` | Added missing `import json` |
-| BUG-1 | MED | `tasks/pipeline.py:56` | Use `PipelineStatus.RESEARCHING` instead of string literal |
-| BUG-2 | MED | `services/pipeline_degradation.py:52` | Set `writer_model` during write stage degradation |
-
-### Documentation Fixed
-
-| Document | Issues Fixed |
-|----------|--------------|
-| `architecture/adapters.md` | API/Web adapter config fields, config vs adapter_config naming |
-| `architecture/routes.md` | api_tokens_bp registration, public_bp name, POST /articles removal |
-| `architecture/schemas.md` | RSSConfig, APIConfig, WebConfig, PaginationConfig schemas |
-| `architecture/models.md` | Source model, AdminUser fields, indexes, pipeline status flow |
-| `architecture/pipeline.md` | Valid transitions table |
-| `architecture/subagent.md` | ToolDefinition (no cached field), file inventory |
+| # | Module | Document | Output Plan | Assigned Subagent |
+|---|--------|----------|-------------|-------------------|
+| 1 | Adapters | `architecture/adapters.md` | `plans/adapters_review.md` | subagent-adapters |
+| 2 | Models | `architecture/models.md` | `plans/models_review.md` | subagent-models |
+| 3 | Overview | `architecture/overview.md` | `plans/overview_review.md` | subagent-overview |
+| 4 | Pipeline | `architecture/pipeline.md` | `plans/pipeline_review.md` | subagent-pipeline |
+| 5 | Routes | `architecture/routes.md` | `plans/routes_review.md` | subagent-routes |
+| 6 | Schemas | `architecture/schemas.md` | `plans/schemas_review.md` | subagent-schemas |
+| 7 | Services | `architecture/services.md` | `plans/services_review.md` | subagent-services |
+| 8 | Subagent | `architecture/subagent.md` | `plans/subagent_review.md` | subagent-subagent |
+| 9 | Tasks | `architecture/tasks.md` | `plans/tasks_review.md` | subagent-tasks |
+| 10 | Utils | `architecture/utils.md` | `plans/utils_review.md` | subagent-utils |
 
 ## Review Methodology
 
-Each subagent will:
+Each subagent will perform the following tasks for their assigned module:
 
-1. **Read the architecture document** for their assigned module
+1. **Read the architecture document** thoroughly
 2. **Verify claims in code** by:
-   - Locating the actual implementation files
+   - Locating actual implementation files referenced in the document
    - Comparing documented patterns against actual code
    - Checking that file inventories match reality
    - Verifying function signatures, class definitions, and behavior
@@ -57,23 +35,27 @@ Each subagent will:
    - Deprecated patterns that don't match documentation
    - Missing implementations that are documented
    - Security concerns or SSRF protection gaps
-4. **Propose improvements**:
+   - Performance concerns
+4. **Interrogate code for improvements**:
    - Code quality issues
-   - Performance optimizations
-   - Missing tests
-   - Documentation corrections
+   - Missing error handling
+   - Potential bugs or race conditions
+   - API design improvements
+5. **Write improvement plan** to `plans/<module>_review.md` with:
+   - Summary of verified claims
+   - List of discrepancies and issues found
+   - Specific bugs identified (with file:line references)
+   - Improvement recommendations with priority (CRIT/HIGH/MED/LOW)
 
-## Subagent Prompts
-
-Each subagent receives this base prompt, customized for their module:
+## Subagent Prompt Template
 
 ```
-Review the architecture document at `architecture/<module>.md` and verify all claims against the actual codebase.
+Review the architecture document at `architecture/<MODULE>.md` and verify all claims against the actual codebase.
 
-Your specific module: <module>
+Your assigned module: <MODULE>
 
 Tasks:
-1. Read `architecture/<module>.md` thoroughly
+1. Read `architecture/<MODULE>.md` thoroughly
 2. For each claim, pattern, and file inventory item in the document:
    - Locate the actual code in the codebase
    - Verify the claim is accurate
@@ -84,31 +66,78 @@ Tasks:
    - Missing implementations
    - Security issues
    - Performance concerns
-4. Write a detailed improvement plan to `plans/<module>_review.md` with:
+   - Bugs in implementation
+4. Write a detailed improvement plan to `plans/<MODULE>_review.md` with:
    - Summary of verified claims
    - List of discrepancies and issues found
    - Specific bugs identified (with file:line references)
-   - Improvement recommendations
+   - Improvement recommendations with priority levels
 
 Report back only the path to your written plan when complete.
 ```
 
-## Execution Order
+## Module-Specific Focus Areas
 
-Subagents may run in parallel since they review independent modules. However, some modules reference each other (e.g., services.md references subagent.md, pipeline.md references tasks.md). Subagents should note cross-module references but focus on their assigned module.
+### Adapters (adapters.md)
+- Verify RSSAdapter, APIAdapter, WebAdapter implementations
+- Check config field naming (config vs adapter_config)
+- Verify pagination and filter implementations
+- Check SSRF protection in session handling
+
+### Models (models.md)
+- Verify Source, Article, Tag, Newsletter, PipelineLog models
+- Check field naming (type vs source_type, last_fetch_at vs last_crawled)
+- Verify relationship definitions and indexes
+- Check PipelineStatus state machine
+
+### Overview (overview.md)
+- Verify overall project structure
+- Check layer boundaries are respected
+- Verify directory structure matches documented layout
+
+### Pipeline (pipeline.md)
+- Verify stage transitions (select→research→write→edit)
+- Check quality gates routing to review status
+- Verify rate limiter slot management
+- Check provider fallback chain behavior
+
+### Routes (routes.md)
+- Verify blueprint registration and URL prefixes
+- Check admin API endpoints at /api/v1/
+- Verify public vs admin route separation
+
+### Schemas (schemas.md)
+- Verify RSSConfig, APIConfig, WebConfig schemas
+- Check PaginationConfig implementation
+- Verify SourceConfig validation logic
+
+### Services (services.md)
+- Check service layer doesn't import from adapters
+- Verify LLM provider fallback chain
+- Check subagent orchestration
+
+### Subagent (subagent.md)
+- Verify ToolDefinition dataclass fields
+- Check run_subagent_with_tools implementation
+- Verify _finalize_subagent_result exists and is called
+
+### Tasks (tasks.md)
+- Verify Celery task definitions
+- Check rate limiter usage patterns
+- Verify stage task routing
+
+### Utils (utils.md)
+- Verify URL validation (SSRF protection)
+- Check dns_cache behavior
+- Verify helper functions are pure
+
+## Execution
+
+Subagents may run in parallel since they review independent modules. Cross-module references should be noted but each subagent focuses on their assigned module only.
 
 ## Output Files
 
-Each subagent writes their improvement plan to `plans/<module>_review.md`. These files will contain:
-
-- **Verified Claims**: What matched between documentation and code
-- **Discrepancies**: What was documented but not found (or vice versa)
-- **Bugs**: Specific issues with file:line references
-- **Improvements**: Actionable recommendations
-
-## Review Completion
-
-After all subagents complete, aggregate findings will be used to:
+Each subagent writes their improvement plan to `plans/<module>_review.md`. These files will be used to:
 1. Fix critical bugs identified
 2. Update documentation to match reality
 3. Add missing tests

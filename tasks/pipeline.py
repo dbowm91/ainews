@@ -53,7 +53,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
             "score": 6,
             "reason": "auto-selected after failure",
         }
-        article.pipeline_status = "researching"
+        article.pipeline_status = PipelineStatus.RESEARCHING
         article.retry_count = 0
         article.last_error = None
         db.session.commit()

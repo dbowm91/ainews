@@ -48,9 +48,10 @@ _STAGE_DEGRADE_MAP = {
     "write": {
         "next_status": PipelineStatus.EDITING,
         "log_message": "Degraded: minimal draft for %s",
-        "set_fields": lambda article: setattr(
-            article, "draft_article", _build_fallback_article(article),
-        ),
+        "set_fields": lambda article: (
+            setattr(article, "draft_article", _build_fallback_article(article)),
+            setattr(article, "writer_model", "fallback"),
+        )[-1],
     },
 }
 

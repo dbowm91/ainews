@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from schemas.common import BASE_DIR, ProviderDef, cached_config, load_yaml_file
+from schemas.common import BASE_DIR, ProviderDef, cached_config_with_mtime, load_yaml_file
 
 
 class SearchConfig(BaseModel):
@@ -28,7 +28,9 @@ def _load_search_config_from_file(path: str | Path) -> SearchConfig:
 def load_search_config(
     path: str | Path = BASE_DIR / "providers.yaml",
 ) -> SearchConfig:
-    return cached_config(
+    config_path = BASE_DIR / "providers.yaml"
+    return cached_config_with_mtime(
         key="search_config",
         loader_fn=lambda: _load_search_config_from_file(path),
+        config_path=config_path,
     )

@@ -131,18 +131,14 @@ The `SSRFSafeRedirectHandler` in `adapters/session.py` now uses thread-local sto
 ### Subagent Tool Execution
 The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
 
-### _finalize_subagent_result Has Recursive Bug
-The `_finalize_subagent_result()` function in `services/subagent/runner.py:277-297` is broken - it recursively calls itself at line 288 instead of finalizing the result. `run_subagent()` manually constructs the response at lines 270-274. `run_subagent_with_tools()` at line 467 would hit infinite recursion if it actually called this function.
+### _finalize_subagent_result Has Recursive Bug (FIXED)
+The `_finalize_subagent_result()` function in `services/subagent/runner.py:277-297` previously recursively called itself with no base case. This has been fixed to properly construct SubagentResponse.
 
-### Error Dicts From _run_stage_core Not Properly Handled
-The `_run_stage_core()` function in `tasks/pipeline.py:346-387` returns error dicts like `{"article_id": article_id, "error": "pipeline_timeout"}` at lines 351 and 368. These are returned directly without proper error handling - they're treated as success results instead of failures.
+### Error Dicts From _run_stage_core (FIXED)
+The `_run_stage_core()` function in `tasks/pipeline.py:346-387` returns error dicts like `{"article_id": article_id, "error": "pipeline_timeout"}`. These are now properly checked in `run_stage()` and returned early when the "error" key is present.
 
-### Duplicate _degrade_and_advance Definition
-Two separate definitions of `_degrade_and_advance` exist:
-- `tasks/pipeline.py:36` - local version used by `retry.py`
-- `services/pipeline_degradation.py:183` - public API version
-
-The `tasks/__init__.py` exports the services version, but `retry.py` imports from `tasks.pipeline` which has the local version. This creates confusing duplication.
+### Duplicate _degrade_and_advance Definition (FIXED)
+The local definition in `tasks/pipeline.py` has been removed. `retry.py` now imports `_degrade_and_advance` from `services.pipeline_degradation` directly, which is the single source of truth.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -181,8 +177,8 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 ### Missing json Import Fixed
 The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
 
-### sanitize_html XSS Vulnerability
-The `sanitize_html()` function in `utils/text.py:70-108` only strips dangerous **tags** via `_TagStripper` but doesn't filter **attributes**. XSS vectors like `<img onerror=alert(1)>` pass through. The code uses `_DANGEROUS_TAGS` constant (not `_DANGEROUS_ATTRS` which doesn't exist). Event handlers like `onerror`, `onclick`, etc. are not stripped.
+### sanitize_html XSS Vulnerability (FIXED)
+The `sanitize_html()` function in `utils/text.py` now strips event handler attributes (onerror, onclick, etc.) and javascript: URIs from HTML content. The fix uses an HTMLParser-based approach that strips dangerous attributes while preserving safe tags and attributes.
 
 ## APIAdapter Specific Notes
 

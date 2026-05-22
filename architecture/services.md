@@ -183,30 +183,32 @@ See [subagent.md](subagent.md) for detailed documentation.
 Redis-based concurrency limiter using pub/sub:
 
 ```python
-class RateLimiter:
+class ModelLimiter:  # Note: class is named ModelLimiter, not RateLimiter
     def acquire(self, slots: int = 1, timeout: float = 30) -> bool:
         """Acquire rate limiter slots"""
 
     def release(self, slots: int = 1) -> None:
         """Release rate limiter slots"""
 
-    def is_available(self, slots: int = 1) -> bool:
-        """Check if slots are available"""
+    def get_active(self) -> int:  # Note: method is get_active, not is_available
+        """Get count of active slots"""
 ```
 
 **Important**: Always release slots in a `finally` block to avoid leaks.
 
 ### Email (`email.py`)
 
-SMTP pool for newsletter delivery:
+Module-level functions (not a class):
 
 ```python
-class EmailService:
-    def send_newsletter(self, newsletter: Newsletter, subscribers: list[Subscriber]):
-        """Send newsletter with connection pooling"""
+def send_newsletter_email(newsletter, subscribers) -> bool:
+    """Send newsletter with connection pooling"""
 
-    def send_verification(self, subscriber: Subscriber, token: str):
-        """Send subscription verification email"""
+def send_verification_email(subscriber, token) -> bool:
+    """Send subscription verification email"""
+
+def send_welcome_email(subscriber, token) -> bool:
+    """Send welcome email"""
 ```
 
 ### Webhooks (`webhooks.py`)
@@ -222,18 +224,20 @@ Event notifications with security features:
 
 ### Trend Memory (`trend_memory.py`)
 
-Embedding-based semantic trend tracking:
+Embedding-based semantic trend tracking. **Note**: This module uses module-level functions, not a class:
 
 ```python
-class TrendMemoryService:
-    def propose(self, article: Article) -> list[TrendMemory]:
-        """Propose new trend entries from article"""
+def propose_trend_memory(article, engagement_data) -> list[TrendMemory]:
+    """Post-finalization LLM extraction of high-signal entries"""
 
-    def consolidate(self, timeframe_days: int = 7):
-        """Consolidate similar trend entries"""
+def get_memory_for_topics(topics, min_importance=2, max_age_days=30) -> list[TrendMemory]:
+    """Retrieve valid memory entries filtered by topic and tier"""
 
-    def search(self, query: str, limit: int = 5) -> list[TrendMemory]:
-        """Semantic search for trend entries"""
+def consolidate_all_topics() -> int:
+    """Run consolidation across all topics with high-importance entries"""
+
+def purge_expired() -> int:
+    """Delete all expired trend memory entries"""
 ```
 
 ### Related Articles (`related.py`)

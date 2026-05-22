@@ -115,7 +115,7 @@ Valid transitions:
 **Purpose**: Mark article complete, trigger downstream actions
 
 **Process**:
-- Update `finalized_at` timestamp
+- Update `published_at` timestamp
 - Update `pipeline_status` to `done`
 - Trigger webhooks for `article.published`
 - Update trend memory with new observations
@@ -251,6 +251,7 @@ When stages fail persistently (after max retries), articles degrade to the next 
 
 **Retry Limits:**
 - Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)
+  - **Exception**: Selector stage uses `retry_max=20` with `retry_countdown=15` for more aggressive selection attempts
 - Per-stage failure limit: 3 consecutive failures at same stage → article marked failed
 - Total retries: 10 (configurable via `MAX_TOTAL_RETRIES`)
 

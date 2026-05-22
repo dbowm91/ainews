@@ -170,7 +170,8 @@ pending → review → done
 
 **Degraded flow:** When stages fail persistently (degradation_count >= 2), articles bypass remaining stages and go directly to `review` for manual processing.
 
-See `services/pipeline_degradation.py:_degrade_and_advance()` for the actual logic.
+See `services/pipeline_degradation.py:_degrade_and_advance()` for the public degradation API.
+Note: `tasks/pipeline.py` has a local `_degrade_and_advance` for use by `retry.py` (task-layer only).
 
 ## Scheduler
 

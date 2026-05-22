@@ -96,14 +96,9 @@ def run_subagent_chain(
             prompt_data = _resolve_template_variables(
                 template, initial_prompt_data, results,
             )
-            from utils.text import esc_xml_text
+            from utils.text import escape_prompt_data
 
-            prompt_data_escaped = {}
-            for key, value in prompt_data.items():
-                if isinstance(value, str):
-                    prompt_data_escaped[key] = esc_xml_text(value)
-                else:
-                    prompt_data_escaped[key] = value
+            prompt_data_escaped = escape_prompt_data(prompt_data)
             prompt = template.format(**prompt_data_escaped)
         except (KeyError, ValueError, AttributeError) as e:
             logger.error(

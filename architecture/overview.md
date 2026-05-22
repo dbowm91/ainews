@@ -2,6 +2,27 @@
 
 ainews is an autonomous AI-powered tech news aggregation and newsletter system. It crawls multiple news sources, uses LLMs to research and write condensed articles, and delivers personalized newsletters to subscribers.
 
+---
+
+## Module Index
+
+This document provides a **birds-eye view** of the system architecture. Each module below links to its detailed deep-dive document.
+
+| Module | File | Description |
+|--------|------|-------------|
+| [Overview](overview.md) | This file | System architecture index |
+| [Models](models.md) | `models/` | SQLAlchemy database models |
+| [Adapters](adapters.md) | `adapters/` | Source fetchers (RSS, API, Web) |
+| [Services](services.md) | `services/` | Business logic and LLM providers |
+| [Tasks](tasks.md) | `tasks/` | Celery tasks for pipeline |
+| [Routes](routes.md) | `routes/` | Flask blueprints |
+| [Schemas](schemas.md) | `schemas/` | Pydantic validation models |
+| [Pipeline](pipeline.md) | — | Newsletter generation flow |
+| [Subagent](subagent.md) | `services/subagent/` | Tool-enabled LLM agents |
+| [Utils](utils.md) | `utils/` | Pure utility functions |
+
+---
+
 ## System Diagram
 
 ```
@@ -17,7 +38,6 @@ ainews is an autonomous AI-powered tech news aggregation and newsletter system. 
 │                               Adapters Layer                                 │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐           │
 │  │    RSSAdapter    │  │    APIAdapter    │  │    WebAdapter    │           │
-│  │   (feedparser)   │  │   (JSONPath)     │  │  (BeautifulSoup) │           │
 │  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘           │
 └───────────┼────────────────────┼────────────────────┼───────────────────────┘
             │                    │                    │
@@ -44,8 +64,7 @@ ainews is an autonomous AI-powered tech news aggregation and newsletter system. 
 │ │  Models  │               │    Routes    │                │   Tasks    │   │
 │ │   (DB)   │               │   (Flask)    │                │  (Celery)  │   │
 │ └──────────┘               └──────────────┘                └────────────┘   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
                     ┌─────────────────────────────────┐
@@ -56,22 +75,6 @@ ainews is an autonomous AI-powered tech news aggregation and newsletter system. 
                     │  └─────────┘  └─────────────┘    │
                     └─────────────────────────────────┘
 ```
-
-## Module Index
-
-This document provides a **birds-eye view** of the system. Each module has a corresponding deep-dive document.
-
-| Module | Description | Deep Dive |
-|--------|-------------|-----------|
-| [Models](models.md) | SQLAlchemy database models for all entities | [models.md](models.md) |
-| [Adapters](adapters.md) | Source fetchers (RSS, API, Web) following adapter pattern | [adapters.md](adapters.md) |
-| [Services](services.md) | Business logic, LLM providers, pipeline orchestration | [services.md](services.md) |
-| [Tasks](tasks.md) | Celery tasks implementing the newsletter pipeline | [tasks.md](tasks.md) |
-| [Routes](routes.md) | Flask blueprints for public and admin interfaces | [routes.md](routes.md) |
-| [Schemas](schemas.md) | Pydantic validation models for configuration and responses | [schemas.md](schemas.md) |
-| [Pipeline](pipeline.md) | Newsletter generation and article processing flow | [pipeline.md](pipeline.md) |
-| [Subagent](subagent.md) | Tool-enabled LLM agents for contextualization | [subagent.md](subagent.md) |
-| [Utils](utils.md) | Pure utility functions with minimal dependencies | [utils.md](utils.md) |
 
 ---
 
@@ -238,7 +241,7 @@ generate_daily_newsletters (scheduled 8:00 AM ET)
 
 ## Deep Dive Documents
 
-Each module listed above has a dedicated deep-dive document. Use these links to explore in detail:
+Each module has a dedicated deep-dive document. Click any link below to explore that component in detail.
 
 ### [models.md](models.md)
 - Complete file inventory and model relationships
@@ -246,6 +249,13 @@ Each module listed above has a dedicated deep-dive document. Use these links to 
 - Source health tracking model
 - TrendMemory embedding-based semantic tracking
 - Index definitions for query performance
+
+### [adapters.md](adapters.md)
+- Adapter pattern with registry decorator
+- RSS, API, and Web adapter implementations
+- SSRF protection via SSRFSafeRedirectHandler
+- Source configuration from sources.yaml
+- Error handling conventions
 
 ### [services.md](services.md)
 - LLM provider system architecture (base class, implementations)
@@ -255,12 +265,12 @@ Each module listed above has a dedicated deep-dive document. Use these links to 
 - Email and webhook infrastructure
 - Trend memory and content extraction
 
-### [adapters.md](adapters.md)
-- Adapter pattern with registry decorator
-- RSS, API, and Web adapter implementations
-- SSRF protection via SSRFSafeRedirectHandler
-- Source configuration from sources.yaml
-- Error handling conventions
+### [tasks.md](tasks.md)
+- Complete task inventory by stage
+- Stage transitions and quality gates
+- Core tasks (crawl, extract, select, research, write, edit)
+- run_stage helper for standard lifecycle
+- Celery Beat schedule (14 scheduled tasks)
 
 ### [routes.md](routes.md)
 - Blueprint structure (public_bp, admin_bp, admin_api_bp)
@@ -269,33 +279,12 @@ Each module listed above has a dedicated deep-dive document. Use these links to 
 - Authentication with TOTP 2FA
 - Template structure
 
-### [tasks.md](tasks.md)
-- Complete task inventory by stage
-- Stage transitions and quality gates
-- Core tasks (crawl, extract, select, research, write, edit)
-- run_stage helper for standard lifecycle
-- Celery Beat schedule (14 scheduled tasks)
-
 ### [schemas.md](schemas.md)
 - Pipeline configuration schema (PipelineRootConfig)
 - Source adapter configuration (RSSConfig, APIConfig, WebConfig)
 - LLM response schemas (SelectionResult, ResearchBrief, CondensedArticle)
 - Task validation schemas
 - NewsletterBrief clarification (no preamble/footer/articles fields)
-
-### [utils.md](utils.md)
-- URL utilities with SSRF protection and DNS caching
-- Text processing and XML escaping
-- DateTime parsing and formatting
-- Security and hash utilities
-- HTML processing with trafilatura fallback
-
-### [subagent.md](subagent.md)
-- Tool registry with built-in context tools
-- Tool implementations for articles, trends, search
-- Subagent runner with retry and revocation checking
-- Chain system with conditional branching
-- Middleware for logging and timing
 
 ### [pipeline.md](pipeline.md)
 - Complete pipeline stage details
@@ -304,6 +293,20 @@ Each module listed above has a dedicated deep-dive document. Use these links to 
 - Degradation behavior
 - Two-tier retry system (Celery task retry + stage failure retry)
 - Circuit breaker and dynamic fallback chain
+
+### [subagent.md](subagent.md)
+- Tool registry with built-in context tools
+- Tool implementations for articles, trends, search
+- Subagent runner with retry and revocation checking
+- Chain system with conditional branching
+- Middleware for logging and timing
+
+### [utils.md](utils.md)
+- URL utilities with SSRF protection and DNS caching
+- Text processing and XML escaping
+- DateTime parsing and formatting
+- Security and hash utilities
+- HTML processing with trafilatura fallback
 
 ---
 

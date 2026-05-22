@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from concurrent.futures import TimeoutError
 from typing import Type
@@ -344,7 +345,7 @@ def run_subagent_with_tools(
     ]
     for tool in tools:
         if tool.fn:
-            tool.fn = apply_middleware(tool.fn, middleware_chain)
+            tool.fn = apply_middleware(copy.deepcopy(tool.fn), middleware_chain)
 
     messages = [{"role": "user", "content": prompt}]
     max_iterations = getattr(stage_config, 'max_iterations', 5)

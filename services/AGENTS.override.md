@@ -42,8 +42,8 @@
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.
 
-## Known Bugs
-- **SearchConfig caching bug:** `load_search_config()` in `schemas/search.py:31` uses `config_path = BASE_DIR / "providers.yaml"` instead of `config_path = Path(path)`. This prevents proper mtime-based cache invalidation when a custom path is passed. Fix: change line 31 to `config_path = Path(path)`.
+## Known Bugs (RESOLVED)
+- **SearchConfig caching bug:** FIXED - `load_search_config()` in `schemas/search.py:31` now uses `config_path = Path(path)` for proper mtime-based cache invalidation when custom paths are passed.
 
 ## Fixed Bug Patterns
 

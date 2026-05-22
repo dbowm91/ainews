@@ -249,7 +249,7 @@ From `pipeline.yaml`:
 ```yaml
 subagent:
   max_iterations: 5
-  tool_timeout: 30.0
+  tool_timeout: 30.0  # Timeout for individual tool execution (seconds)
   default_model: "ollama-local"
   default:
     enabled: true

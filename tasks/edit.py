@@ -156,7 +156,7 @@ def _handle_validation_and_routing(
 
     from constants import PipelineStatus, truncate_for_log
     from services.article_validation import ValidationError, validate_and_raise
-    from tasks.pipeline import _log_pipeline, _transition_article_status
+    from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status
 
     try:
         validate_and_raise(article.final_article)
@@ -182,10 +182,10 @@ def _handle_validation_and_routing(
                 truncate_for_log(article.original_title),
                 article_id=article.id,
             )
-        _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+        _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
         return {"article_id": article.id, "status": "review"}
 
-    from tasks.pipeline import _should_route_to_review, _transition_article_status
+    from tasks.pipeline import _dispatch_next, _should_route_to_review, _transition_article_status
 
     if _should_route_to_review(article):
         _transition_article_status(article, PipelineStatus.REVIEW)
@@ -203,7 +203,7 @@ def _handle_validation_and_routing(
                 truncate_for_log(article.original_title),
                 article_id=article.id,
             )
-        _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+        _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
         return {"article_id": article.id, "status": "review"}
 
     return None

@@ -208,4 +208,6 @@ class APIAdapter(BaseSourceAdapter):
                     return False
             if "exists" in f and f["exists"] and current is None:
                 return False
+            if "contains" in f and f["contains"] not in str(current):
+                return False
         return True

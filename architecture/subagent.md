@@ -124,6 +124,8 @@ class SubagentChainConfig(BaseModel):
     steps: list[SubagentChainStep] = Field(default_factory=list)
 ```
 
+**Location**: These schemas are defined in `schemas/pipeline.py`, not in `runner.py` or `chain.py`.
+
 ### Features
 
 - **Retry with exponential backoff**: Handles transient failures
@@ -135,13 +137,14 @@ class SubagentChainConfig(BaseModel):
 
 ```
 1. Build messages with system prompt + context
-2. Call LLM with tool definitions
+2. Call LLM with tool definitions via chat_with_tools()
 3. If tool_calls:
-   a. Execute tools in parallel
-   b. Add results to messages
-   c. Goto 2 (max iterations)
+   a. Execute tools in the LLM provider (not re-injected into messages)
+   b. Return final response
 4. Return final response
 ```
+
+**Note**: Tool iteration happens inside `BaseLLMProvider.chat_with_tools()`, not in a loop in `run_subagent_with_tools()`. Tool results are NOT re-injected into messages for subsequent LLM calls.
 
 ## Chain System (`chain.py`)
 
@@ -265,5 +268,5 @@ def contextualize_article(article: Article, context: dict) -> str:
 
 - **Validation failure**: Self-corrects by retrying with adjusted prompt
 - **Tool timeout**: Skips tool, continues with available context
-- **LLM error**: Retries with exponential backoff (max 3 attempts)
+- **LLM error**: Retries with exponential backoff (`stage_config.max_retries + 1` attempts, default 2)
 - **Revocation**: Checks `current_task.request.id` and stops if revoked

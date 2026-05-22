@@ -50,61 +50,83 @@ The application uses two distinct blueprint types with separate URL namespaces:
 ### Admin Blueprint (`admin_bp`)
 
 Serves HTML admin pages at `/admin/*`:
-- `/admin/login` - Admin login page
-- `/admin/` - Main dashboard (redirects to articles)
-- `/admin/articles` - Article management UI
-- `/admin/articles/<id>/edit` - Article edit page
-- `/admin/articles/<id>/original` - Original article view
-- `/admin/articles/<id>/versions` - Article version history
-- `/admin/articles/<id>/versions/<version_id>/rollback` - Rollback article to version
-- `/admin/articles/<id>/delete` - Article delete action
-- `/admin/articles/<id>/reprocess` - Article reprocess action
-- `/admin/sources` - Source management UI
-- `/admin/sources/<id>/enable` - Enable source action
-- `/admin/sources/<id>/disable` - Disable source action
-- `/admin/subscribers` - Subscriber management UI
-- `/admin/subscribers/export` - Export subscribers
-- `/admin/newsletters` - Newsletter history UI
-- `/admin/newsletters/<id>` - Newsletter detail view
-- `/admin/newsletters/generate` - Trigger newsletter generation
-- `/admin/newsletters/dry-run` - Newsletter dry run
-- `/admin/dead-letters` - Dead letter queue UI
-- `/admin/pipelines` - Pipeline run history
-- `/admin/pipelines/<run_id>/logs` - Pipeline run logs
-- `/admin/pipelines/trigger-crawl` - Manual crawl trigger
-- `/admin/review` - Article review queue
-- `/admin/review/<id>/approve` - Approve article action
-- `/admin/review/<id>/reject` - Reject article action
-- `/admin/topic-notes` - Topic notes management
-- `/admin/topic-notes/create` - Create topic note
-- `/admin/topic-notes/edit` - Edit topic note
-- `/admin/topic-notes/delete` - Delete topic note
-- `/admin/topic-notes/row/<topic>` - Topic note row
-- `/admin/webhooks` - Webhook management UI
-- `/admin/shares` - Share config management
-- `/admin/shares/<id>/edit-form` - Edit share config form
-- `/admin/shares/<id>/row` - Share config row
-- `/admin/shares/add` - Add share config
-- `/admin/shares/<id>/edit` - Edit share config
-- `/admin/shares/<id>/delete` - Delete share config
-- `/admin/shares/<id>/toggle` - Toggle share config
-- `/admin/metrics` - Metrics dashboard
-- `/admin/verify-2fa` - 2FA verification page
-- `/admin/setup-2fa` - 2FA setup page
-- `/admin/logout` - Logout action (POST only)
+- `/admin/login` [GET/POST] - Admin login page
+- `/admin/` [GET] - Main dashboard (redirects to articles)
+- `/admin/articles` [GET] - Article management UI
+- `/admin/articles/<id>/edit` [GET/POST] - Article edit page
+- `/admin/articles/<id>/original` [GET] - Original article view
+- `/admin/articles/<id>/versions` [GET] - Article version history
+- `/admin/articles/<id>/versions/<version_id>/rollback` [POST] - Rollback article to version
+- `/admin/articles/<id>/delete` [POST] - Article delete action
+- `/admin/articles/<id>/reprocess` [POST] - Article reprocess action
+- `/admin/sources` [GET] - Source management UI
+- `/admin/sources/<id>/enable` [POST] - Enable source action
+- `/admin/sources/<id>/disable` [POST] - Disable source action
+- `/admin/subscribers` [GET] - Subscriber management UI
+- `/admin/subscribers/export` [GET] - Export subscribers
+- `/admin/newsletters` [GET] - Newsletter history UI
+- `/admin/newsletters/<id>` [GET] - Newsletter detail view
+- `/admin/newsletters/generate` [POST] - Trigger newsletter generation
+- `/admin/newsletters/dry-run` [POST] - Newsletter dry run
+- `/admin/dead-letters` [GET] - Dead letter queue UI
+- `/admin/pipelines` [GET] - Pipeline run history
+- `/admin/pipelines/<run_id>/logs` [GET] - Pipeline run logs
+- `/admin/pipelines/trigger-crawl` [POST] - Manual crawl trigger
+- `/admin/review` [GET] - Article review queue
+- `/admin/review/<id>/approve` [POST] - Approve article action
+- `/admin/review/<id>/reject` [POST] - Reject article action
+- `/admin/topic-notes` [GET] - Topic notes management
+- `/admin/topic-notes/create` [POST] - Create topic note
+- `/admin/topic-notes/edit` [POST] - Edit topic note
+- `/admin/topic-notes/delete` [POST] - Delete topic note
+- `/admin/topic-notes/row/<topic>` [GET] - Topic note row
+- `/admin/webhooks` [GET] - Webhook management UI
+- `/admin/shares` [GET] - Share config management
+- `/admin/shares/<id>/edit-form` [GET] - Edit share config form
+- `/admin/shares/<id>/row` [GET] - Share config row
+- `/admin/shares/add` [POST] - Add share config
+- `/admin/shares/<id>/edit` [POST] - Edit share config
+- `/admin/shares/<id>/delete` [POST] - Delete share config
+- `/admin/shares/<id>/toggle` [POST] - Toggle share config
+- `/admin/metrics` [GET] - Metrics dashboard
+- `/admin/verify-2fa` [GET/POST] - 2FA verification page
+- `/admin/setup-2fa` [GET/POST] - 2FA setup page
+- `/admin/logout` [POST] - Logout action (POST only)
 
 ### Admin API Blueprint (`admin_api_bp`)
 
-Serves JSON REST API at `/api/v1/*`:
-- `/api/v1/articles` - Article CRUD
-- `/api/v1/sources` - Source CRUD
-- `/api/v1/pipeline/stats` - Pipeline statistics
-- `/api/v1/webhooks` - Webhook management
-- `/api/v1/metrics` - Prometheus metrics
-- `/api/v1/costs` - Cost tracking
-- `/api-tokens` - API token management (list, create, delete)
+Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 
-**Note:** The `api_tokens_bp` blueprint is registered in `app.py` and provides `/api-tokens` endpoints.
+| Endpoint | Methods | Purpose |
+|----------|---------|---------|
+| `/articles` | GET | List articles |
+| `/articles/ids` | GET | Batch article ID lookup with filters |
+| `/articles/counts-by-status` | GET | Article count by pipeline status |
+| `/articles/<id>` | GET, PUT, DELETE | Article CRUD |
+| `/articles/<id>/pipeline` | POST | Trigger pipeline stage |
+| `/articles/bulk` | POST | Bulk article operations |
+| `/sources` | GET, POST | List/create sources |
+| `/sources/<id>` | GET, PUT, PATCH, DELETE | Source CRUD |
+| `/sources/<id>/refresh` | POST | Force source refresh |
+| `/sources/health` | GET | Source health status |
+| `/pipeline/stats` | GET | Pipeline stage statistics |
+| `/pipeline/backlog` | GET | Pipeline backlog |
+| `/pipeline/dead-letter/stats` | GET | Dead letter queue stats |
+| `/pipeline/sla` | GET | SLA metrics |
+| `/costs` | GET | LLM cost summary |
+| `/webhooks` | GET, POST | List/create webhooks |
+| `/webhooks/<id>` | GET, PUT, PATCH, DELETE | Webhook CRUD |
+| `/webhooks/<id>/test` | POST | Test webhook delivery |
+| `/webhooks/<id>/events` | GET | Webhook delivery events |
+| `/webhooks/events/<id>/resend` | POST | Resend webhook event |
+| `/search/analytics` | GET | Search analytics |
+| `/config/reload` | POST | Reload configuration |
+| `/metrics` | GET | Application metrics |
+| `/metrics/prometheus` | GET | Prometheus-formatted metrics |
+| `/audit-logs` | GET | Audit log entries |
+| `/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
+
+**Note:** The `api_tokens_bp` blueprint is registered in `app.py` with `url_prefix="/api-tokens"`.
 
 ## Public Routes
 

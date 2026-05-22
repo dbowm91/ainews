@@ -53,7 +53,7 @@ class APIConfig(BaseModel):
     request_timeout: int = 15
     user_agent: str = "AINewsBot/1.0"
     api_key: Optional[str] = None
-    auth_header: Optional[str] = None
+    auth_header: Optional[str] = None  # Header name for Bearer auth token (e.g., "Authorization")
 
 
 class PaginationConfig(BaseModel):

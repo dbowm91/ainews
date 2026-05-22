@@ -289,6 +289,7 @@ Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, n
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
+| `/trend-memory/semantic-search` | GET | Semantic search in trend memory |
 
 ## Template Structure
 

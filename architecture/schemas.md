@@ -251,20 +251,36 @@ class SelectArticleTask(BaseModel):
     run_id: Optional[int] = Field(default=None, ge=0, description="Pipeline run ID")
 
 class ProcessItemTask(BaseModel):
-    source_key: str                      # Source identifier key
-    source_name: str                     # Source display name
-    source_type: str                     # rss, api, or web
-    external_id: Optional[str] = None    # External article ID
-    title: str                            # Article title
-    url: Optional[str] = None            # Article URL
-    author: Optional[str] = None         # Article author
-    published_at: Optional[str] = None   # Publication date ISO string
-    text_content: Optional[str] = None   # Article text content
-    raw_score: Optional[float] = None    # Relevance score 0-1
-    raw_metadata: Optional[dict] = None  # Raw metadata dict
-    topics: list[str] = Field(default_factory=list)  # Article topics (max 20)
-    min_content_length: Optional[int] = None  # Min content length
-    run_id: Optional[int] = None         # Pipeline run ID
+    source_key: str = Field(..., min_length=1, description="Source identifier key")
+    source_name: str = Field(..., min_length=1, max_length=255, description="Source display name")
+    source_type: str = Field(..., description="Source type: rss, api, or web")
+    external_id: Optional[str] = Field(default=None, max_length=500, description="External article ID")
+    title: str = Field(..., min_length=1, max_length=1000, description="Article title")
+    url: Optional[str] = Field(default=None, max_length=2000, description="Article URL")
+    author: Optional[str] = Field(default=None, max_length=255, description="Article author")
+    published_at: Optional[str] = Field(default=None, description="Publication date ISO string")
+    text_content: Optional[str] = Field(default=None, description="Article text content")
+    raw_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Relevance score 0-1")
+    raw_metadata: Optional[dict] = Field(default=None, description="Raw metadata dict")
+    topics: Optional[list[str]] = Field(default_factory=list, description="Article topics (max 20)")
+    min_content_length: Optional[int] = Field(default=None, ge=0, le=10000, description="Min content length")
+    run_id: Optional[int] = Field(default=None, ge=0, description="Pipeline run ID")
+
+    @field_validator("source_type")
+    @classmethod
+    def validate_source_type(cls, v: str) -> str:
+        if v not in ("rss", "api", "web"):
+            raise ValueError(f"source_type must be rss, api, or web, got {v}")
+        return v
+
+    @field_validator("topics")
+    @classmethod
+    def validate_topics(cls, v: Optional[list[str]]) -> list[str]:
+        if v is None:
+            return []
+        if len(v) > 20:
+            raise ValueError(f"topics list exceeds maximum of 20 items, got {len(v)}")
+        return v
 
 class GenerateNewsletterTask(BaseModel):
     dry_run_email: Optional[str] = None

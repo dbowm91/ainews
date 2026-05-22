@@ -353,3 +353,49 @@ Before marking items complete, verify:
 
 *Plan consolidated: 2026-05-22*
 *Last verification: 2026-05-22*
+
+---
+
+## Completion Status (2026-05-22)
+
+### Wave A (Documentation Fixes) - COMPLETED ✓
+- ✓ 2.7: Fix task name `retry_stuck` in `docs/dead_letter.md`
+- ✓ 2.6: Fix logout to specify POST method in `architecture/routes.md`
+- ✓ 2.4: Document session binding validates IP and User-Agent in `architecture/routes.md`
+- ✓ 6.5: Clarify auto_publish_threshold comes from `pipeline.yaml` in `architecture/pipeline.md`
+- ✓ 6.2: Clarify tool_timeout applies to tool execution in `architecture/subagent.md`
+- ✓ 2.3: Fix provider count in `architecture/overview.md` (16 total, 2 enabled)
+
+### Wave B (Missing Documentation) - COMPLETED ✓
+- ✓ 4.7: Document missing schemas (SubagentResponse, ToolCall, ToolResult, etc.) in `architecture/schemas.md`
+- ✓ 5.6: Document Subscriber model fields (preferences, bounce_count, etc.) in `architecture/models.md`
+- ✓ 5.7: Add Newsletter model detail code block in `architecture/models.md`
+- ✓ 5.9: Document Source.active index in `architecture/models.md`
+
+### Wave C (Code Changes) - COMPLETED ✓
+- ✓ 1.1: Fix SearchConfig caching bug - `schemas/search.py:31` now uses `Path(path)`
+
+### Wave D (Low Priority) - COMPLETED ✓
+- ✓ 7.3: Document TRACKING_PARAMS (14 params) in `architecture/utils.md`
+
+### Remaining Items (Low Priority / Deferred)
+- 2.8: Make SELECTOR_RETRY_MAX=20 configurable OR document as hardcoded with justification
+- 2.10: Fix/remove dangling Circuit Breaker section in `architecture/pipeline.md`
+- 1.3: Consider RSSAdapter redirect handler refactor (low priority)
+- 6.7: Add configuration example with all fields (nice to have - see docs/configuration.md)
+
+### Items Already Correct in Code
+- ✓ 2.1: RawItem type name - already correct in documentation
+- ✓ 2.2: contains filter - already implemented in `adapters/api.py:220-221`
+- ✓ 2.9: degradation_count - field DOES exist in Article model (index documented)
+- ✓ 3.2: api_tokens IS registered (already documented correctly)
+- ✓ 4.3: SubagentConfig.enabled removal - already correct (note in schemas.md)
+- ✓ 4.5: APIAdapter AuthHeader comment - already documented as Bearer only
+- ✓ 4.6: Admin schemas description - already correct (request not response)
+- ✓ 5.1: DeepSeek NOT a search provider - already documented in services.md
+- ✓ 5.4: TrendMemory function defaults - already correct (min_importance=1, max_age_days=None)
+- ✓ 6.1: ErrorHandlingMiddleware - already documented in subagent.md
+- ✓ 6.3: Middleware chain order - already documented in subagent.md
+- ✓ 6.4: Self-correction behavior - already documented in subagent.md
+- ✓ 7.1: format_date() uses correct singular forms - already correct
+- ✓ 7.2: parse_date() falls back to email.utils - already documented in utils.md

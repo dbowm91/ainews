@@ -166,7 +166,6 @@ def health(): ...
 JSON REST API at `/api/v1/*`:
 
 #### Articles
-- `GET /api/v1/articles` - List articles with full details (supports status filter)
 - `GET /api/v1/articles/ids` - Get article IDs by status (returns `{ids: [...], count: n}`)
 - `GET /api/v1/articles/counts-by-status` - Get article counts by status
 - `POST /api/v1/articles/bulk` - Bulk article operations
@@ -288,7 +287,7 @@ Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, n
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
-| `/admin/trend-memory/semantic-search` | GET | Semantic search in trend memory |
+| `/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
 
 ## Template Structure
 

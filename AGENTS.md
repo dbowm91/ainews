@@ -236,6 +236,7 @@ The following issues were identified and fixed during architecture review:
 - **Missing `_should_route_to_review` export**: `tasks/pipeline.py` re-exports `_should_route_to_review` from `services.pipeline_degradation` so `tasks/edit.py` can import it
 - **Duplicate unreachable except block**: `schemas/common.py` had a second `except Exception` that could never execute
 - **Invalid `pending→skipped` transition**: `architecture/pipeline.md` corrected - `skipped` is not a valid transition from `pending`
+- **APIAdapter item_url bug FIXED**: `adapters/api.py` now correctly extracts external_id from item objects before calling `_fetch_item`. When `list_method` is `json_array`, full item objects were being passed to `_fetch_item()` instead of IDs.
 
 ### HIGH Fixes Applied
 - **Selector retry_max=20 documented**: `architecture/pipeline.md` documents the selector's aggressive retry behavior (20 retries vs standard 3)
@@ -247,7 +248,25 @@ The following issues were identified and fixed during architecture review:
 - **track_share_click returns JSON**: `routes/public/links.py` now returns `{"success": true}` instead of bare string
 - **URL validation layering documented**: `architecture/utils.md` explains that `services/url.py` is config-aware and `utils/url.py` is for adapters
 
-### Layering Notes
+### Wave 2 Review Findings (2026-05-22) - Deferred
+The following issues were documented during the 2026-05-22 architecture review but deferred for future implementation:
+
+| Priority | Module | Issue | Notes |
+|----------|--------|-------|-------|
+| HIGH | Adapters | SSRFSafeRedirectHandler interface mismatch | Verified works with requests library |
+| HIGH | Adapters | APIAdapter pagination off-by-one | Documentation issue, not critical |
+| HIGH | Models | TrendMemory.topic is String(128) not 200 | Documentation vs code mismatch |
+| MED | Adapters | Missing `contains` filter | Not implemented, documented correctly |
+| MED | Models | TrendMemory.importance/expires_at undocumented | Fields exist, just undocumented |
+| MED | Schemas | APIConfig request_timeout missing from doc | Documentation fix only |
+| MED | Services | DeepSeek search provider missing from doc | Provider exists, just not documented |
+| MED | Services | circuit_breaker.py not in file inventory | File exists, just not listed |
+
+### Known Intentional Layering Violations
 - `services/crawling.py` imports from `adapters.base` via `TYPE_CHECKING` block for type hints only
 - `services/subagent/tools.py` imports directly from `models` and `extensions` - this is a known layering issue
 - `schemas/common.py` intentionally imports from `services.config_cache` (documented with comment)
+- `tasks/crawl.py` imports directly from `adapters.base` - documented in AGENTS.md
+
+### Subagent Self-Correction Behavior (Documented)
+The `run_subagent_with_tools()` function in `services/subagent/runner.py` has a self-correction mechanism where validation errors trigger a retry with an error message appended to messages. However, the raised `ValidationError` is caught by the outer exception handler at line 449, which sets `used_fallback = True` and returns early. The self-correction only executes if the retry loop is entered, which doesn't happen for `ValidationError` since it's not in `retryable_exceptions`. This is intentional behavior - validation failures use fallback stages rather than self-correcting.

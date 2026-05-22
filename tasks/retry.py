@@ -44,7 +44,7 @@ def _process_dead_letter(article):
 
 def _process_degrade(article):
     """Process a single article for degradation."""
-    from tasks.pipeline import _degrade_and_advance
+    from services.pipeline_degradation import degrade_stage as _degrade_and_advance
     _degrade_and_advance(article, article.pipeline_status)
     logger.warning("Degraded stuck article %s from %s", article.id, article.pipeline_status)
     return True

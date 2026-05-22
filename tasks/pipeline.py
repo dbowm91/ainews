@@ -34,43 +34,6 @@ from services.logging_utils import traced_stage
 from services.tracing import TraceContext, generate_trace_id, get_current_trace_id
 
 
-def _degrade_and_advance(article, failed_stage: str, run_id=None):
-    """Advance article to next stage with degraded quality on persistent failure."""
-    from extensions import db
-    from services.pipeline_degradation import degrade_stage
-    from services.pipeline_utils import _log_pipeline
-
-    # Normalize: accept both action names ("write") and status names ("writing")
-    from constants import STAGE_STATUS_MAP
-    failed_stage = STAGE_STATUS_MAP.get(failed_stage, failed_stage)
-
-    logger.warning(
-        f"Degrading article {article.id} from stage '{failed_stage}' (retry_count={article.retry_count})"
-    )
-
-    if failed_stage == "select":
-        article.selector_result = {
-            "selected": True,
-            "score": 6,
-            "reason": "auto-selected after failure",
-        }
-        article.pipeline_status = PipelineStatus.RESEARCHING
-        article.retry_count = 0
-        article.last_error = None
-        db.session.commit()
-        _log_pipeline(run_id, failed_stage, "info", "degraded_to_research", article_id=article.id)
-    elif failed_stage == "research":
-        degrade_stage(article, "writing")
-        _log_pipeline(run_id, failed_stage, "info", "degraded_to_write", article_id=article.id)
-    elif failed_stage == "write":
-        degrade_stage(article, "editing")
-        _log_pipeline(run_id, failed_stage, "info", "degraded_to_edit", article_id=article.id)
-    elif failed_stage == "edit":
-        # Final degradation: finalize with fallback
-        _finalize(article.id)
-    else:
-        logger.error(f"Unknown stage for degradation: {failed_stage}")
-
 logger = get_task_logger(__name__)
 
 
@@ -424,6 +387,8 @@ def run_stage(
     provider_id = None
     try:
         result, provider_id, model = _run_stage_core(stage, article_id, work_fn, rc, t0, run_id)
+        if isinstance(result, dict) and "error" in result:
+            return result
         return result
     except SoftTimeLimitExceeded:
         _handle_soft_timeout_module(stage, run_id, t0, article_id)

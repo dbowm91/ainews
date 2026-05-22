@@ -137,6 +137,22 @@ Blocked patterns:
 - Private hostnames and DNS rebinding attacks
 - Non-http/https schemes (javascript:, data:, etc.) via scheme validation
 
+## Session Ownership
+
+Each adapter type manages HTTP sessions differently based on its requirements:
+
+| Adapter | Session Type | Redirect Handler |
+|---------|-------------|------------------|
+| `RSSAdapter` | Own `requests.Session` | Own `SSRFSafeRedirectHandler` instance |
+| `APIAdapter` | Shared global session | Shared global `SSRFSafeRedirectHandler` |
+| `WebAdapter` | Shared global session | Shared global `SSRFSafeRedirectHandler` |
+
+**RSSAdapter** creates its own `requests.Session` with its own `SSRFSafeRedirectHandler` instance. This is intentional — RSS feeds have different session requirements (longer-lived connections, specific user agents) from API/Web adapters.
+
+**APIAdapter** and **WebAdapter** share the global session from `get_crawl_session()` in `adapters/session.py`. They use the same `SSRFSafeRedirectHandler` instance for redirect counting across all requests.
+
+The global session handler shares state per-request (via thread-local storage for redirect counting). This means redirect counting is reset per-request but the handler instance is shared across all adapter types.
+
 ## Source Configuration
 
 Sources are defined in `sources.yaml`:

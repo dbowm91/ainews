@@ -143,4 +143,9 @@ search_providers:
     config:
       host: "http://localhost:8888"
 
+  - id: hybrid
+    type: hybrid
+    enabled: true
+    config: {}
+
 default_search_provider: duckduckgo

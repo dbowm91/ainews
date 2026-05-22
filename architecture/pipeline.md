@@ -255,7 +255,7 @@ When stages fail persistently (after max retries), articles degrade to the next 
 - Per-stage failure limit: 3 consecutive failures at same stage → article marked failed
 - Total retries: 10 (configurable via `MAX_TOTAL_RETRIES`)
 
-Articles in `review` status require manual intervention.
+Articles in `review` status require manual intervention. Articles with `impact_score >= auto_publish_threshold` (default: 80) bypass review and auto-publish.
 
 ## Monitoring
 

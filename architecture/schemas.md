@@ -86,6 +86,7 @@ class SourceConfig(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)  # Adapter-specific configuration
     topics: TopicMatchConfig = Field(default_factory=TopicMatchConfig)
     # Note: validate_adapter_config field_validator validates config against RSSConfig/APIConfig/WebConfig
+    # Returns dict to match config field type (dict[str, Any]), but validation ensures type safety
 
 class RSSConfig(BaseModel):
     feed_url: str = Field(..., min_length=1)

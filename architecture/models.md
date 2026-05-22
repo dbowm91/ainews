@@ -30,7 +30,7 @@ Article
 
 PipelineRun
 ├── PipelineLog (one-to-many)
-└── Article (one-to-many) - via pipeline_run_id
+└── Article (via PipelineLog.article_id foreign key, not direct relationship)
 
 Newsletter
 ├── Subscriber (many-to-many via newsletter_subscribers)
@@ -173,7 +173,7 @@ class TrendMemory(Base):
     embedding = Column(Text)  # Stored as text, not vector type
 
     # Metadata
-    source_articles = Column(JSON)  # Related article IDs
+    source_article_id = Column(Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True)  # Single FK, not JSON
     created_at = Column(DateTime, default=datetime.utcnow)
     last_accessed_at = Column(DateTime)
 ```

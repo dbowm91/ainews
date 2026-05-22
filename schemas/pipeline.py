@@ -33,10 +33,11 @@ class RoleConfig(BaseModel):
 
 
 class ReviewConfig(BaseModel):
+    """Configuration for the review stage and auto-publish behavior."""
     enabled: bool = False
     auto_publish_threshold: Optional[int] = Field(
         default=None,
-        description="Auto-publish articles with impact_score >= this value, bypassing review",
+        description="Auto-publish articles with impact_score >= this value, bypassing review. Default: 80.",
     )
 
 

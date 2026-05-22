@@ -71,8 +71,8 @@ class PaginationConfig(BaseModel):
 
 
 class ListingConfig(BaseModel):
-    card_selector: str
-    link_selector: str
+    card_selector: str = Field(..., min_length=1)
+    link_selector: str = Field(..., min_length=1)
     link_attribute: str = "href"
     pagination: PaginationConfig = Field(default_factory=PaginationConfig)
 

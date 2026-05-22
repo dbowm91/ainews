@@ -84,12 +84,18 @@ class _TagStripper(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.result: list[str] = []
+        self._skip_data = False
+        self._skip_stack: list[str] = []
 
     def handle_data(self, data: str) -> None:
+        if self._skip_data:
+            return
         self.result.append(data)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _DANGEROUS_TAGS:
+            self._skip_data = True
+            self._skip_stack.append(tag)
             return
 
         has_dangerous_attrs = False
@@ -102,6 +108,9 @@ class _TagStripper(HTMLParser):
             if value:
                 value_lower = value.lower()
                 if any(pat in value_lower for pat in _JAVASCRIPT_PATTERNS):
+                    has_dangerous_attrs = True
+                    continue
+                if "expression(" in value_lower:
                     has_dangerous_attrs = True
                     continue
             filtered_attrs.append((name, value))
@@ -120,6 +129,10 @@ class _TagStripper(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if tag in _DANGEROUS_TAGS:
+            if self._skip_stack and self._skip_stack[-1] == tag:
+                self._skip_stack.pop()
+                if not self._skip_stack:
+                    self._skip_data = False
             return
         self.result.append(f"</{tag}>")
 

@@ -34,7 +34,6 @@ def _classify_stuck_article(article, now):
 def _process_dead_letter(article):
     """Process a single article for dead-lettering."""
     try:
-        from tasks.pipeline import _dead_letter
         _dead_letter(article)
         return True
     except Exception:  # noqa: BLE001 - dead-letter failures are logged and don't propagate
@@ -206,7 +205,7 @@ def _dispatch_stage(article):
 def _dead_letter(article):
     """Force-finalize a stuck article as failed with a fallback draft."""
     from extensions import db
-    from tasks.pipeline import _apply_fallback
+    from services.pipeline_degradation import _apply_fallback
 
     original_status = article.pipeline_status
     logger.error(

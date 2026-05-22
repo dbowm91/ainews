@@ -125,20 +125,8 @@ Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST me
 
 ## Design Notes for Future Agents
 
-### SSRFSafeRedirectHandler Counter (FIXED - CRIT-1)
-The `SSRFSafeRedirectHandler` in `adapters/session.py` now uses thread-local storage for `_redirect_count`, so the counter resets per-request. Previously it persisted across ALL requests (shared singleton), causing failures after 30 total redirects.
-
 ### Subagent Tool Execution
-The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
-
-### _finalize_subagent_result Has Recursive Bug (FIXED)
-The `_finalize_subagent_result()` function in `services/subagent/runner.py:277-297` previously recursively called itself with no base case. This has been fixed to properly construct SubagentResponse.
-
-### Error Dicts From _run_stage_core (FIXED)
-The `_run_stage_core()` function in `tasks/pipeline.py:346-387` returns error dicts like `{"article_id": article_id, "error": "pipeline_timeout"}`. These are now properly checked in `run_stage()` and returned early when the "error" key is present.
-
-### Duplicate _degrade_and_advance Definition (FIXED)
-The local definition in `tasks/pipeline.py` has been removed. `retry.py` now imports `_degrade_and_advance` from `services.pipeline_degradation` directly, which is the single source of truth.
+`run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.

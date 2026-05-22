@@ -44,7 +44,6 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/articles/<id>/original` - Original article view
 - `/admin/articles/<id>/versions` - Article version history
 - `/admin/articles/<id>/versions/<version_id>/rollback` - Rollback article to version
-- `/admin/articles/<id>/original` - Original article view
 - `/admin/articles/<id>/delete` - Article delete action
 - `/admin/articles/<id>/reprocess` - Article reprocess action
 - `/admin/sources` - Source management UI

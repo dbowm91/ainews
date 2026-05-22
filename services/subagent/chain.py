@@ -45,7 +45,7 @@ def run_subagent_chain(
     Steps can reference outputs of previous steps via template variables.
     Returns dict with step results and any fallback markers.
     """
-    from schemas.pipeline import load_pipeline_config, resolve_subagent_config
+    from schemas.pipeline import SubagentChainStep, load_pipeline_config, resolve_subagent_config
 
     config = load_pipeline_config()
     chain_config = config.subagent.chains.get(chain_name)
@@ -61,6 +61,8 @@ def run_subagent_chain(
 
     step_list = steps if steps is not None else chain_config.steps
     for i, step_config in enumerate(step_list[:max_length]):
+        if not isinstance(step_config, SubagentChainStep):
+            step_config = SubagentChainStep.model_validate(step_config)
         step_name = f"{chain_name}_step_{i}"
         task_type = step_config.task_type
 

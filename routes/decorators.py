@@ -1,10 +1,72 @@
 """Shared helpers for route handlers."""
 
+import logging
 from contextlib import contextmanager
 from functools import wraps
 
-from flask import jsonify, request
-from sqlalchemy.exc import SQLAlchemyError
+from flask import jsonify, redirect, request, session, url_for
+
+from logging_config import get_request_id
+
+logger = logging.getLogger(__name__)
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from routes.admin import verify_api_token
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if verify_api_token(token):
+                request_id = get_request_id()
+                logger.info(
+                    "Admin API access via token: %s %s",
+                    request.method,
+                    request.path,
+                    extra={
+                        "user": "api_token",
+                        "ip": request.remote_addr,
+                        "request_id": request_id,
+                        "admin": True,
+                    },
+                )
+                return f(*args, **kwargs)
+            else:
+                return jsonify({"error": "Invalid API token"}), 401
+
+        if not session.get("admin"):
+            if request.path.startswith("/api"):
+                return jsonify({"error": "Unauthorized", "message": "Authentication required"}), 401
+            return redirect(url_for("admin.login"))
+        stored_ip = session.get("ip")
+        stored_user_agent = session.get("user_agent")
+        current_ip = request.remote_addr or "unknown"
+        current_user_agent = request.headers.get("User-Agent", "")
+        if stored_ip and stored_ip != current_ip:
+            session.pop("admin", None)
+            logger.warning("Session hijacking detected: IP mismatch (%s vs %s)", stored_ip, current_ip)
+            return redirect(url_for("admin.login"))
+        if stored_user_agent and stored_user_agent != current_user_agent:
+            session.pop("admin", None)
+            logger.warning("Session hijacking detected: User-Agent mismatch")
+            return redirect(url_for("admin.login"))
+        request_id = get_request_id()
+        logger.info(
+            "Admin access: %s %s",
+            request.method,
+            request.path,
+            extra={
+                "user": "admin",
+                "ip": request.remote_addr,
+                "request_id": request_id,
+                "admin": True,
+            },
+        )
+        return f(*args, **kwargs)
+
+    return decorated
 
 
 def validate_csrf_json(f):

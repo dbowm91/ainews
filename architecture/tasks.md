@@ -7,6 +7,7 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | File | Task | Stage | Description |
 |------|------|-------|-------------|
 | `crawl.py` | `run_all_sources` | `crawl` | Orchestrates parallel crawling via Celery group/chord |
+| | `aggregate_crawl_results` | `crawl` | Chord callback that aggregates results after parallel crawling |
 | `extract.py` | `process_item` | `extract` | Extracts content, deduplicates, creates Article |
 | `select.py` | `select_article` | `select` | LLM scores article 1-10 for newsworthiness |
 | `research.py` | `research_article` | `research` | LLM builds research brief with web search + context |

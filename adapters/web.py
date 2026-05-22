@@ -178,6 +178,8 @@ class WebAdapter(BaseSourceAdapter):
             try:
                 resp = self._session.get(url, timeout=15)
                 if resp.status_code == 429:
+                    # Note: Retry-After header is not currently respected
+                    # Using fixed exponential backoff instead
                     wait = 2**attempt * 5 + random.uniform(0, 2)
                     time.sleep(wait)
                     continue

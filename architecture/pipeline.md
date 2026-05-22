@@ -72,8 +72,10 @@ Valid transitions:
 - Returns `{score, confidence, reasoning, key_topics}`
 
 **Thresholds**:
-- Score >= 6 with medium/high confidence → proceed to research
-- Score < 6 or low confidence → mark as `review` or `discard`
+- `selected=True` AND `score >= min_score` (default 6) → proceed to research
+- `selected=False` → mark as `skipped` (regardless of score)
+- `selected=True` but `score < min_score` → mark as `review` or `discard`
+- Low confidence → mark as `review` (regardless of selected/score)
 
 ### 2. Research
 
@@ -248,7 +250,9 @@ When stages fail persistently (after max retries), articles degrade to the next 
 | select | Auto-select with score 6, advance to research |
 | research | Uses source text only (impact_score=30), advance to write |
 | write | Minimal draft from extracted text, advance to edit |
-| edit | Apply fallback → route to review (if degradation_count >= 2 or _should_route_to_review()) |
+| edit | Apply fallback →
+  - If degradation_count >= 2 OR _should_route_to_review() → route to review
+  - Else → finalize to DONE (auto-publish if impact_score >= threshold) |
 
 **Retry Limits:**
 - Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)

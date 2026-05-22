@@ -135,6 +135,7 @@ class ModelLimiter:
         try:
             return int(self._redis.get(key) or 0)
         except redis.exceptions.RedisError:
+            logger.warning("Redis error getting active limiter slots for %s/%s", provider_id, model)
             return None
 
     def cleanup_stale_slots(self) -> int:

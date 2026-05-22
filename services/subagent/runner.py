@@ -343,9 +343,16 @@ def run_subagent_with_tools(
         TimingMiddleware(logger),
         ErrorHandlingMiddleware(logger),
     ]
-    for tool in tools:
+    for i, tool in enumerate(tools):
         if tool.fn:
-            tool.fn = apply_middleware(copy.deepcopy(tool.fn), middleware_chain)
+            wrapped_fn = apply_middleware(copy.deepcopy(tool.fn), middleware_chain)
+            tools[i] = ToolDefinition(
+                name=tool.name,
+                description=tool.description,
+                parameters=tool.parameters,
+                required=tool.required,
+                fn=wrapped_fn,
+            )
 
     messages = [{"role": "user", "content": prompt}]
     max_iterations = getattr(stage_config, 'max_iterations', 5)

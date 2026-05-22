@@ -277,3 +277,14 @@ services/search/
 | Hybrid | `hybrid.py` | Enabled (FTS5 + vector similarity) |
 | SQLite FTS | `sqlite_fts.py` | Internal article search |
 | DeepSeek | `deepseek.py` | Search only, not LLM |
+
+## Known Layering Exceptions
+
+The following imports represent intentional deviations from clean layering:
+
+- `services/crawling.py` imports from `adapters.base` (TYPE_CHECKING only, for type hints)
+- `services/subagent/tools.py` imports from `models` and `extensions`
+- `schemas/common.py` imports from `services.config_cache`
+- `tasks/crawl.py` imports from `adapters.base`
+
+These are documented and accepted - do not "fix" them.

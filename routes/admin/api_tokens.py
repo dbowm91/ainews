@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models import ApiToken
-from routes.admin import require_auth
+from routes.decorators import require_auth
 
 api_tokens_bp = Blueprint("api_tokens", __name__)
 

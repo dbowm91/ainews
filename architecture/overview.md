@@ -17,8 +17,8 @@ This document provides a **birds-eye view** of the system architecture. Each mod
 | [Tasks](tasks.md) | `tasks/` | Celery tasks for pipeline |
 | [Routes](routes.md) | `routes/` | Flask blueprints |
 | [Schemas](schemas.md) | `schemas/` | Pydantic validation models |
-| [Pipeline](pipeline.md) | — | Newsletter generation flow |
-| [Subagent](subagent.md) | `services/subagent/` | Tool-enabled LLM agents |
+| [Pipeline](architecture/pipeline.md) | — | Newsletter generation flow |
+| [Subagent](architecture/subagent.md) | `services/subagent/` | Tool-enabled LLM agents |
 | [Utils](utils.md) | `utils/` | Pure utility functions |
 
 ---

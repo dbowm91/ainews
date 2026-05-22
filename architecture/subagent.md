@@ -139,12 +139,13 @@ class SubagentChainConfig(BaseModel):
 1. Build messages with system prompt + context
 2. Call LLM with tool definitions via chat_with_tools()
 3. If tool_calls:
-   a. Execute tools in the LLM provider (not re-injected into messages)
-   b. Return final response
+   a. Execute tools in the LLM provider
+   b. Re-inject tool results into messages for next turn
+   c. Continue to next iteration (up to max_iterations)
 4. Return final response
 ```
 
-**Note**: Tool iteration happens inside `BaseLLMProvider.chat_with_tools()`, not in a loop in `run_subagent_with_tools()`. Tool results are NOT re-injected into messages for subsequent LLM calls.
+**Note**: Tool iteration happens inside `BaseLLMProvider.chat_with_tools()` via a while loop (line 475 in `services/llm/base.py`). Tool results ARE re-injected into `all_messages` for subsequent LLM calls within the same `chat_with_tools()` invocation. This enables multi-turn tool use within a single API call, up to `max_iterations` limit.
 
 ## Chain System (`chain.py`)
 

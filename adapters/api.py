@@ -60,6 +60,14 @@ class APIAdapter(BaseSourceAdapter):
             if cfg.pagination.type == "query_param" and next_url:
                 next_url = self._increment_query_param(next_url, pages_fetched)
 
+        if cfg.item_url:
+            ext_id_path = cfg.fields.get("external_id", "$.id")
+            if ext_id_path == "$.id":
+                logger.warning(
+                    "item_url is configured but external_id is not explicitly set. "
+                    "Using default path '$.id' which may not exist in API response data."
+                )
+
         if cfg.item_url and all_items:
             fetched = []
             for item in all_items[: cfg.max_items]:

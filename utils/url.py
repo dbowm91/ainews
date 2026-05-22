@@ -71,6 +71,8 @@ def normalize_url(url: str) -> str:
     if netloc.startswith("www."):
         netloc = netloc[4:]
 
+    # Normalize default ports - strip :443 for https and :80 for http
+    # This allows same-host comparison across protocol variations
     if netloc.endswith(":443") and scheme == "https":
         netloc = netloc[:-4]
     elif netloc.endswith(":80") and scheme == "http":

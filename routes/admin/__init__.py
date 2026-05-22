@@ -1,12 +1,10 @@
 import logging
 import threading
 import time
-from functools import wraps
 
 import redis.exceptions
-from flask import Blueprint, redirect, request, session, url_for, jsonify
+from flask import Blueprint
 
-from logging_config import get_request_id
 from services.validation import _is_password_hash
 
 logger = logging.getLogger(__name__)
@@ -44,62 +42,16 @@ def verify_api_token(token_str):
     return False
 
 
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        # Check for API token first
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-            if verify_api_token(token):
-                request_id = get_request_id()
-                logger.info(
-                    "Admin API access via token: %s %s",
-                    request.method,
-                    request.path,
-                    extra={
-                        "user": "api_token",
-                        "ip": request.remote_addr,
-                        "request_id": request_id,
-                        "admin": True,
-                    },
-                )
-                return f(*args, **kwargs)
-            else:
-                return jsonify({"error": "Invalid API token"}), 401
+from routes.decorators import require_auth  # noqa: F401, E402
 
-        if not session.get("admin"):
-            if request.path.startswith("/api"):
-                return jsonify({"error": "Unauthorized", "message": "Authentication required"}), 401
-            return redirect(url_for("admin.login"))
-        stored_ip = session.get("ip")
-        stored_user_agent = session.get("user_agent")
-        current_ip = request.remote_addr or "unknown"
-        current_user_agent = request.headers.get("User-Agent", "")
-        if stored_ip and stored_ip != current_ip:
-            session.pop("admin", None)
-            logger.warning("Session hijacking detected: IP mismatch (%s vs %s)", stored_ip, current_ip)
-            return redirect(url_for("admin.login"))
-        if stored_user_agent and stored_user_agent != current_user_agent:
-            session.pop("admin", None)
-            logger.warning("Session hijacking detected: User-Agent mismatch")
-            return redirect(url_for("admin.login"))
-        request_id = get_request_id()
-        logger.info(
-            "Admin access: %s %s",
-            request.method,
-            request.path,
-            extra={
-                "user": "admin",
-                "ip": request.remote_addr,
-                "request_id": request_id,
-                "admin": True,
-            },
-        )
-        return f(*args, **kwargs)
-
-    return decorated
-
+# Import all sub-modules to register routes with the blueprint
+# These must come after Blueprint creation to avoid circular imports
+from routes.admin import (  # noqa: E402
+    api as api,
+)
+from routes.admin import (  # noqa: E402
+    api_tokens as api_tokens,
+)
 
 # Login attempt lockout
 _LOGIN_MAX_ATTEMPTS = 5

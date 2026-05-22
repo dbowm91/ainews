@@ -34,7 +34,7 @@ Force-finalizes a stuck article as failed:
 - Sets status to `FAILED`
 - Records error message with threshold details
 
-#### `_retry_stuck_articles()`
+#### `retry_stuck()`
 Celery task that runs periodically to find and retry stuck articles:
 - Queries articles with `pipeline_status` in active stages
 - Checks if article has been stuck beyond threshold

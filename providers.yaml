@@ -146,6 +146,6 @@ search_providers:
   - id: hybrid
     type: hybrid
     enabled: true
-    config: {}
+    config: {}  # FTS5 + vector similarity search
 
 default_search_provider: duckduckgo

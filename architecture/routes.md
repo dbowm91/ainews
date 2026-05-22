@@ -11,9 +11,21 @@ routes/
 │   ├── subscribe.py        # Subscription management
 │   └── links.py           # Article detail, short URLs, share tracking
 └── admin/                  # Admin interface
-    ├── __init__.py        # Dashboard, articles, sources, subscribers, newsletters
+    ├── __init__.py        # Dashboard, login, dead-letters
     ├── auth.py            # Login with TOTP support
-    ├── api_tokens.py      # API token management (not registered)
+    ├── articles.py        # Article management UI
+    ├── dashboard.py       # Dashboard + dead-letters page
+    ├── newsletters.py     # Newsletter UI + API
+    ├── pipelines.py       # Pipeline runs + trigger-crawl
+    ├── review.py          # Article review queue
+    ├── sources.py         # Source management UI
+    ├── subscribers.py     # Subscriber management
+    ├── shares.py          # Share config management
+    ├── topic_notes.py     # Topic notes CRUD
+    ├── webhooks.py        # Webhook UI
+    ├── metrics.py         # Metrics dashboard
+    ├── trend_memory.py    # Trend memory UI + API
+    ├── api_tokens.py      # API token management
     └── api/               # Admin API endpoints
         ├── articles.py    # Article CRUD and pipeline control
         ├── sources.py     # Source management
@@ -21,7 +33,8 @@ routes/
         ├── search.py      # Search analytics
         ├── webhooks.py    # Webhook management
         ├── config.py      # Configuration management
-        └── audit.py       # Audit log access
+        ├── audit.py       # Audit log access
+        └── health.py      # Health check endpoints
 ```
 
 ## Blueprint Structure
@@ -78,7 +91,7 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/metrics` - Metrics dashboard
 - `/admin/verify-2fa` - 2FA verification page
 - `/admin/setup-2fa` - 2FA setup page
-- `/admin/logout` - Logout action
+- `/admin/logout` - Logout action (POST only)
 
 ### Admin API Blueprint (`admin_api_bp`)
 

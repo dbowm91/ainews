@@ -162,7 +162,7 @@ Closed (正常) → Open (熔断) → Half-Open (半开)
 Orchestrates the 3-stage newsletter generation:
 
 ```
-reader (extracts key points) → writer (generates summary) → editor (polishes)
+reader (extracts themes/highlights/connections via NewsletterBrief schema) → writer (generates ExecutiveSummary) → editor (reviews and improves with attribution/citation check)
 ```
 
 ### Article Processing
@@ -202,13 +202,13 @@ class ModelLimiter:  # Note: class is named ModelLimiter, not RateLimiter
 Module-level functions (not a class):
 
 ```python
-def send_newsletter_email(newsletter, subscribers) -> bool:
+def send_newsletter_email(email: str, subject: str, html_content: str, unsubscribe_url: str) -> None:
     """Send newsletter with connection pooling"""
 
-def send_verification_email(subscriber, token) -> bool:
+def send_verification_email(email: str, newsletter_type: str, verification_url: str, unsubscribe_url: str, site_name: str) -> None:
     """Send subscription verification email"""
 
-def send_welcome_email(subscriber, token) -> bool:
+def send_welcome_email(email: str, newsletter_type: str, unsubscribe_url: str, site_name: str) -> None:
     """Send welcome email"""
 ```
 
@@ -231,10 +231,10 @@ Embedding-based semantic trend tracking. **Note**: This module uses module-level
 def propose_trend_memory(article, engagement_data) -> list[TrendMemory]:
     """Post-finalization LLM extraction of high-signal entries"""
 
-def get_memory_for_topics(topics, min_importance=2, max_age_days=30) -> list[TrendMemory]:
-    """Retrieve valid memory entries filtered by topic and tier"""
+def get_memory_for_topics(topics, min_importance=1, max_age_days=None) -> list[TrendMemory]:
+    """Retrieve valid memory entries filtered by topic, tier, and freshness"""
 
-def consolidate_all_topics() -> int:
+def consolidate_all_topics() -> dict[str, int]:
     """Run consolidation across all topics with high-importance entries"""
 
 def purge_expired() -> int:
@@ -265,8 +265,7 @@ services/search/
 ├── google.py            # Google provider (disabled, requires API key)
 ├── searxng.py           # SearxNG provider (disabled, self-hosted)
 ├── hybrid.py            # Hybrid provider (enabled - FTS5 + vector similarity)
-├── sqlite_fts.py        # SQLite FTS provider (internal article search)
-└── deepseek.py          # DeepSeek provider (search only, not LLM)
+└── sqlite_fts.py        # SQLite FTS provider (internal article search)
 ```
 
 | Provider | File | Status |
@@ -276,7 +275,8 @@ services/search/
 | SearxNG | `searxng.py` | Disabled (self-hosted) |
 | Hybrid | `hybrid.py` | Enabled (FTS5 + vector similarity) |
 | SQLite FTS | `sqlite_fts.py` | Internal article search |
-| DeepSeek | `deepseek.py` | Search only, not LLM |
+
+**Note:** DeepSeek is not a search provider. DeepSeek is only referenced as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends.
 
 ## Known Layering Exceptions
 

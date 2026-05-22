@@ -137,6 +137,9 @@ The `ToolDefinition` in `services/llm/base.py` is a `@dataclass` with fields: `n
 ### RSSAdapter Session Independence
 `RSSAdapter` creates its own `requests.Session` with its own `SSRFSafeRedirectHandler`, while `APIAdapter` and `WebAdapter` share the global session from `get_crawl_session()`. This is BY DESIGN - different adapter types have different session management requirements.
 
+### APIAdapter/WebAdapter close() is No-Op
+`APIAdapter` and `WebAdapter` implement `close()` as a no-op (empty pass). They do NOT close the shared global session because doing so would break other adapters using the same session. `RSSAdapter` creates its own session and correctly closes it in `close()`.
+
 ### Adapter Config Validation
 `SourceConfig.config` in `schemas/source.py` has a `field_validator` that validates config against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on the source type.
 
@@ -185,7 +188,7 @@ APIAdapter supports these filter operations in `adapters/api.py:_passes_filters(
 - `equals`: Exact match
 - `min`: Numeric minimum
 - `exists`: Field existence check
-- `contains`: NOT implemented
+- `contains`: Substring match (case-insensitive)
 
 ### Authentication
 APIAdapter only supports Bearer token authentication. No API key header support (e.g., `X-Api-Key`) is implemented.

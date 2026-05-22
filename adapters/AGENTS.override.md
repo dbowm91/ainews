@@ -28,6 +28,8 @@ The `APIAdapter` in `adapters/api.py`:
 ## Session Independence
 - RSSAdapter creates its own session - BY DESIGN for different session management requirements.
 - APIAdapter and WebAdapter share global session from `get_crawl_session()`.
+- APIAdapter and WebAdapter implement `close()` as no-ops (empty pass). They do NOT close the shared global session because doing so would break other adapters using the same session.
+- RSSAdapter closes its own session in `close()`.
 
 ## Config Loading
 Config is loaded via `adapters/base.py:46`:

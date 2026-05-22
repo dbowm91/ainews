@@ -17,7 +17,7 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | `scheduler.py` | `publish_scheduled_articles` | `publish` | Publishes articles at scheduled time |
 | `cleanup.py` | Multiple: `cleanup_old_pipeline_logs`, `cleanup_expired_verifications`, `cleanup_stale_limiter_slots`, `consolidate_trend_memory`, `recalculate_impact_scores`, `purge_trend_memory`, `cleanup_old_article_versions` | - | Cleanup old logs, verifications, limiter slots, trend memory, impact scores, article versions |
 | `embeddings.py` | `backfill_embeddings` | `embeddings` | Generates embeddings for articles and trend memory |
-| `retry.py` | `retry_stuck_articles` | - | Retry/dead-letter stuck articles |
+| `retry.py` | `retry_stuck` | - | Retry/dead-letter stuck articles |
 | `subscribers.py` | `cleanup_inactive_subscribers` | - | Flag inactive subscribers |
 | `webhook.py` | `dispatch_webhook_task` | - | Dispatch webhook events |
 
@@ -78,12 +78,29 @@ def run_all_sources(self):
 
 ```python
 @celery_app.task(bind=True, max_retries=3)
-def process_item(self, source_id: int, item_data: dict):
-    """Extract content and create article"""
+def process_item(
+    self,
+    source_key,
+    source_name,
+    source_type,
+    external_id,
+    title,
+    url,
+    author,
+    published_at,
+    text_content,
+    raw_score,
+    raw_metadata,
+    topics,
+    min_content_length=None,
+    run_id=None,
+):
+    """Extract content, deduplicate, create article"""
     # 1. extract_content_if_needed() - trafilatura/readability
     # 2. find_duplicate_article() - URL + title dedup
     # 3. create_article_record()
     # 4. dispatch to select_article
+    # Validated via ProcessItemTask schema
 ```
 
 ### Select (`select.py`)
@@ -146,14 +163,23 @@ def generate_daily_newsletters(self):
 
 ## run_stage Helper
 
-Standard task lifecycle via `pipeline_utils.run_stage()`:
+Standard task lifecycle via `tasks/pipeline.py:run_stage()`:
 
 ```python
-def run_stage(task, article_id: int, stage: str, next_stage: str, task_func):
+def run_stage(
+    stage: str,
+    article_id: int,
+    work_fn,
+    task_self,
+    run_id=None,
+    skip_next: str = "finalize",
+    retry_countdown: int = 30,
+    retry_max: int = 15,
+):
     """Standard stage runner with locking and error handling"""
     # 1. Acquire stage lock (prevents duplicate processing)
     # 2. Update article status to stage
-    # 3. Execute task_func
+    # 3. Execute work_fn
     # 4. On success: transition to next_stage
     # 5. On failure: handle_retry() or mark_failed()
     # 6. Release stage lock in finally block

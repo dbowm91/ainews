@@ -55,6 +55,8 @@ class ToolDefinition:
 
 Tools are module-level functions registered in `_TOOL_REGISTRY`:
 
+**Note on naming:** Tool implementations use internal naming convention (prefixed with `_context_tool_` or `_search_`), but are registered under public names (e.g., `get_topic_note`, `web_search`). The public names are what external callers use.
+
 ```python
 def _context_tool_get_topic_note(topic: str, source: str | None = None) -> str:
     """Returns note content or 'No note found for this topic.'"""
@@ -188,7 +190,12 @@ subagent:
 
 ## Middleware (`middleware.py`)
 
-Middleware uses a sync `wrap()` pattern to intercept tool execution:
+Middleware uses a sync `wrap()` pattern to intercept tool execution. The middleware chain is applied in reverse order via `apply_middleware()`.
+
+**Middleware chain order (outer to inner):**
+1. `LoggingMiddleware` - logs tool call start/completion/failure
+2. `TimingMiddleware` - measures and logs execution time
+3. `ErrorHandlingMiddleware` - catches exceptions and returns error-formatted result
 
 ```python
 class ToolMiddleware:
@@ -223,6 +230,16 @@ class TimingMiddleware(ToolMiddleware):
                 self.logger.debug("Tool %s failed after %.3fs: %s", func.__name__, elapsed, e)
                 raise
         return wrapped
+
+class ErrorHandlingMiddleware(ToolMiddleware):
+    """Catches exceptions from tool execution and returns error-formatted result instead of raising."""
+    def wrap(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                return {"error": str(e), "tool": func.__name__}
+        return wrapped
 ```
 
 ## Configuration
@@ -231,17 +248,18 @@ From `pipeline.yaml`:
 
 ```yaml
 subagent:
-  enabled: true
   max_iterations: 5
   tool_timeout: 30.0
   default_model: "ollama-local"
-  tools:
-    - context_notes
-    - related_articles
-    - trend_memory
-    - article_lookup
-    - article_search
-    - web_search
+  default:
+    enabled: true
+    tools:
+      - context_notes
+      - related_articles
+      - trend_memory
+      - article_lookup
+      - article_search
+      - web_search
 ```
 
 ## Usage in Editor

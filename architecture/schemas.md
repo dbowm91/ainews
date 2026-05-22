@@ -9,12 +9,12 @@ The `schemas/` package contains Pydantic models for validation and serialization
 | `pipeline.py` | `PipelineRootConfig`, stage configs | Pipeline stage configuration |
 | `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig`, `TopicMatchConfig` | Source adapter configuration |
 | `llm.py` | Provider definitions | LLM/search provider settings |
-| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief` | LLM response schemas |
+| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief`, `SubagentResponse`, `ToolCall`, `ToolResult` | LLM response schemas |
 | `tasks.py` | Task input validation | Celery task input validation |
 | `topic.py` | Topic definitions | Topic configuration |
 | `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration |
 | `item.py` | `RawItem` | Crawled item data from adapters |
-| `admin.py` | Admin response schemas | Admin API response schemas |
+| `admin.py` | Admin request schemas | Admin API request validation |
 | `search.py` | `SearchConfig`, `load_search_config` | Search provider configuration (loaded from providers.yaml) |
 
 ## Pipeline Configuration (`pipeline.py`)
@@ -47,11 +47,13 @@ class NewsletterPipelineConfig(BaseModel):
     editor: RoleConfig
 
 class SubagentConfig(BaseModel):
-    enabled: bool = True
     default: SubagentStageConfig
     research: SubagentStageConfig
     edit: SubagentStageConfig
     chains: dict[str, SubagentChainConfig]  # Chain configurations
+
+    # Note: There is NO 'enabled' field on SubagentConfig.
+    # The enabled flag exists on individual SubagentStageConfig instances.
 
 class SubagentChainConfig(BaseModel):
     enabled: bool = False
@@ -137,7 +139,7 @@ class ListingConfig(BaseModel):
     pagination: PaginationConfig = Field(default_factory=PaginationConfig)
 
 class ArticleSelectors(BaseModel):
-    title_selector: str
+    title_selector: Optional[str] = None  # Optional - not all sources have separate title selectors
     author_selector: Optional[str] = None
     date_selector: Optional[str] = None
     date_attribute: Optional[str] = None

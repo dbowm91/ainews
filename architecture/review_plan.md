@@ -1,5 +1,7 @@
 # Architecture Review Plan
 
+**Status: COMPLETED** (2026-05-22)
+
 This plan coordinates review of architecture documentation against actual implementation code.
 
 **Excluded:** `review_plan.md` (this file)
@@ -190,3 +192,51 @@ Each review plan in `plans/review/` will contain:
 - **Improvements:** Suggested code improvements with rationale
 - **Security Concerns:** Any security-relevant findings
 - **Layering Violations:** Any violations not already documented
+
+---
+
+## Implementation Summary (2026-05-22)
+
+### Bugs Fixed (Code)
+
+1. **APIAdapter/WebAdapter shared session close** (`adapters/api.py`, `adapters/web.py`)
+   - `close()` was closing the global shared session from `get_crawl_session()`
+   - Fixed by making `close()` a no-op; RSSAdapter correctly closes its own session
+   - Impact: Would break API/Web adapters after any adapter closed
+
+2. **SearchConfig caching** (`schemas/search.py`)
+   - `load_search_config()` used `cached_config()` without mtime-based invalidation
+   - Changed to `cached_config_with_mtime()` for proper file-change detection
+   - Impact: Search config stale after providers.yaml changes
+
+### Documentation Fixed (Architecture Docs)
+
+| File | Issues Fixed |
+|------|-------------|
+| `adapters.md` | RawItem (was ArticleData), contains filter implemented, session close behavior documented |
+| `services.md` | Newsletter pipeline stages, email function signatures, trend_memory defaults, removed non-existent deepseek.py |
+| `tasks.md` | retry_stuck (was retry_stuck_articles), process_item signature, run_stage signature |
+| `routes.md` | Added missing files, removed "not registered" from api_tokens, logout POST requirement |
+| `schemas.md` | SubagentConfig.enabled removal, title_selector optional, admin.py request not response |
+| `pipeline.md` | Removed dangling "### Circuit Breaker" section header |
+| `subagent.md` | Added ErrorHandlingMiddleware, middleware chain order, tool naming convention, fixed config example |
+
+### Files Changed
+
+```
+adapters/api.py                              | 2 +-
+adapters/web.py                              | 2 +-
+schemas/search.py                           | 4 ++--
+architecture/adapters.md                    | 12 +-
+architecture/services.md                     | 20 +-
+architecture/tasks.md                        | 38 +-
+architecture/routes.md                      | 21 +-
+architecture/schemas.md                     | 10 +-
+architecture/pipeline.md                    | 2 +-
+architecture/subagent.md                    | 36 +-
+architecture/review_plan.md                 | 2 +-
+```
+
+### Modules Reviewed
+
+1-10. All 10 modules reviewed (overview, models, adapters, services, tasks, routes, schemas, pipeline, subagent, utils) with reviews written to `plans/review/`

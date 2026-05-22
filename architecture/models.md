@@ -134,6 +134,46 @@ class Source(Base):
     # NOT in this model. Adapters access via source_config.config at runtime.
 ```
 
+## Newsletter & Subscriber Models
+
+Newsletter and subscriber tracking for email delivery:
+
+```python
+class Newsletter(Base):
+    __tablename__ = 'newsletters'
+
+    id = Column(Integer, primary_key=True)
+    newsletter_type = Column(String(32), nullable=False, index=True)
+    subject = Column(String(256))
+    html_content = Column(Text)
+    article_count = Column(Integer, default=0)
+    recipients = Column(Integer, default=0)
+    delivered_count = Column(Integer, default=0)  # Successfully delivered
+    error_message = Column(Text, nullable=True)   # Last delivery error
+    generated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    sent_at = Column(DateTime, index=True)
+
+    # Relationships
+    articles = relationship("Article", secondary="newsletter_articles", backref="newsletters")
+
+class Subscriber(Base):
+    __tablename__ = 'subscribers'
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(256), nullable=False, index=True)
+    newsletter_type = Column(String(32), nullable=False, index=True)
+    unsubscribe_token = Column(String(64), unique=True, nullable=False, index=True)
+    verification_token = Column(String(64), unique=True, nullable=True, index=True)
+    subscribed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    confirmed_at = Column(DateTime, nullable=True, index=True)
+    active = Column(Boolean, default=True)
+    deleted_at = Column(DateTime, nullable=True)
+    preferences = Column(JSON, nullable=True, default=dict)  # User topic preferences
+    bounce_count = Column(Integer, nullable=False, default=0)
+    last_bounce_at = Column(DateTime, nullable=True)
+    last_active_at = Column(DateTime, nullable=True, index=True)
+```
+
 ## AdminUser Security
 
 Admin authentication with 2FA:

@@ -1,6 +1,6 @@
 # AINews Implementation Plan
 
-**Status:** IN PROGRESS (Consolidated from architecture review - 2026-05-22)
+**Status:** COMPLETED (All waves implemented - 2026-05-22)
 **Last Updated:** 2026-05-22
 
 ---
@@ -405,28 +405,57 @@ None currently pending.
 
 **Corrections/Verification:**
 - WAVE1-1 (XSS): FIXED - `sanitize_html` now properly handles SVG script content and CSS `expression()`
-- WAVE1-2/WAVE1-3: Moved to WAVE2-3 and WAVE2-4 (still pending bugs, not critical)
+- WAVE1-2/WAVE1-3: Moved to WAVE2-3 and WAVE2-4 (completed)
 - edit.py `_dispatch_next`: NOT a bug - properly imported at line 188
 - retry.py `_dead_letter`/`_apply_fallback`: NOT bugs - imports verified correct in current code
 - DeepSeek: Not a search provider - correctly documented as regex pattern in trend_detector.py
 - tasks_review.md retry bug claims: ERRONEOUS - current code verified correct
 
+**Implementation Results:**
+- WAVE2-1: COMPLETED - require_auth moved to routes/decorators.py
+- WAVE2-2: COMPLETED - item_url validation warning added
+- WAVE2-3: COMPLETED - chain step validation added
+- WAVE2-4: COMPLETED - middleware mutation bug fixed
+- WAVE3-1: COMPLETED - tool results re-injection documented correctly
+- WAVE3-2: VERIFIED - transitions already correctly documented
+- WAVE3-3: COMPLETED - select thresholds documented with selected=True requirement
+- WAVE3-4: COMPLETED - edit degradation routing documented correctly
+- WAVE3-5: VERIFIED - retry_countdown=15 already documented
+- WAVE3-6: VERIFIED - pipeline monitor limitations already documented
+- WAVE3-7: COMPLETED - overview paths fixed to architecture/
+- WAVE3-8: VERIFIED - 14 scheduled tasks claim is correct
+- WAVE3-9: COMPLETED - aggregate_crawl_results documented
+- WAVE3-10: COMPLETED - retry-stuck naming clarified
+- WAVE3-11: COMPLETED - layering exceptions documented
+- WAVE3-12: COMPLETED - BaseProvider documented in services.md
+- WAVE3-13: VERIFIED - article_parser.py already listed
+- WAVE4-1: VERIFIED - contains filter already implemented
+- WAVE4-2: VERIFIED - date_attribute default already None
+- WAVE4-3: VERIFIED - original_published_at index already exists
+- WAVE4-4: VERIFIED - onupdate lambda works correctly
+- WAVE4-5: VERIFIED - both files already listed in services.md
+- WAVE4-6: COMPLETED - get_active() now logs warning on Redis error
+- WAVE4-7: COMPLETED - Retry-After limitation documented
+- WAVE5-1: VERIFIED - sanitize_html orphaned but deliberate (nh3 used)
+- WAVE5-2: COMPLETED - port stripping behavior documented
+- WAVE5-3: COMPLETED - articles endpoint docs updated to articles/ids
+- WAVE5-4: COMPLETED - trend-memory URL prefix fixed
+- WAVE5-5: VERIFIED - no duplicate entry found
+- WAVE5-6: VERIFIED - shares routes doc matches code
+- WAVE5-7: VERIFIED - newsletter endpoints already documented
+- WAVE5-8: VERIFIED - AINewsBot typo already fixed
+- WAVE5-9: COMPLETED - sequential fetching limitation documented
+- WAVE5-10: COMPLETED - auth_header Bearer-only limitation documented
+- WAVE5-11: COMPLETED - item_url {id} placeholder documented
+- WAVE5-12: COMPLETED - updated_at index documented
+- WAVE5-13: COMPLETED - source_key nullable documented
+
 ---
 
 ## Original Plan Files
 
-The following files were consolidated into this plan and should be deleted:
-- `plans/adapters_review.md`
-- `plans/models_review.md`
-- `plans/overview_review.md`
-- `plans/pipeline_review.md`
-- `plans/routes_review.md`
-- `plans/schemas_review.md`
-- `plans/services_review.md`
-- `plans/subagent_review.md`
-- `plans/tasks_review.md`
-- `plans/utils_review.md`
+All consolidated into this plan.md - individual review files no longer exist.
 
 ---
 
-*Plan in progress - 2026-05-22*
+*Plan completed - 2026-05-22*

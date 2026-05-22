@@ -140,7 +140,7 @@ class ArticleSelectors(BaseModel):
     title_selector: str
     author_selector: Optional[str] = None
     date_selector: Optional[str] = None
-    date_attribute: str = "datetime"
+    date_attribute: Optional[str] = None
     body_selector: Optional[str] = None
 
 class PaginationConfig(BaseModel):

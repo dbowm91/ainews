@@ -120,6 +120,39 @@ tools[i] = ToolDefinition(
 import json  # Add at top of file
 ```
 
+#### Shared Session Close Bug (CRIT)
+```python
+# Before (buggy - APIAdapter/WebAdapter close global session):
+def close(self):
+    self._session.close()  # Closes the SHARED global session!
+
+# After (fixed - no-op since they share the global session):
+def close(self):
+    pass  # Don't close the shared global session!
+
+# Note: RSSAdapter creates its own session, so its close() correctly closes:
+# def close(self):
+#     self._session.close()  # Its own session, not shared
+```
+
+#### Config Cache Without mtime (CRIT)
+```python
+# Before (buggy - cached_config doesn't invalidate on file change):
+from schemas.common import cached_config  # No mtime tracking
+load_search_config():
+    return cached_config(key="search_config", loader_fn=loader_fn)
+
+# After (fixed - use cached_config_with_mtime):
+from schemas.common import cached_config_with_mtime
+load_search_config():
+    config_path = BASE_DIR / "providers.yaml"
+    return cached_config_with_mtime(
+        key="search_config",
+        loader_fn=loader_fn,
+        config_path=config_path,
+    )
+```
+
 ### 9. Commit Messages
 
 Use prefix `Fix <area>:` for review fixes:

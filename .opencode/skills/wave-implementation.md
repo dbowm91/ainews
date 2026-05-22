@@ -110,6 +110,18 @@ from utils.url import validate_url_safe, UnsafeURLError
 ### Session Hijacking Protection
 The `require_auth` decorator in `routes/admin/__init__.py` implements IP and User-Agent binding for session security.
 
+### Shared Session Bug (CRIT - Found in Architecture Review 2026-05-22)
+`APIAdapter` and `WebAdapter` share a global session from `get_crawl_session()`. Their `close()` methods must NOT close this shared session:
+```python
+# Correct pattern - close() is a no-op:
+def close(self):
+    pass  # Don't close the shared global session!
+
+# RSSAdapter creates its own session:
+def close(self):
+    self._session.close()  # Its own session, OK to close
+```
+
 ## Quality Gates
 Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
 - `select`: Low confidence (score OK but confidence="low") → `review`

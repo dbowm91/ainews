@@ -20,7 +20,7 @@ def truncate(text: str, length: int, suffix: str = "...") -> str:
     """Truncate text to length, breaking on words"""
 
 def sanitize_html(html: str) -> str:
-    """Remove dangerous HTML tags and attributes"""
+    """Remove dangerous HTML tags from content"""
 
 def extract_hashtags(text: str) -> list[str]:
     """Extract #hashtags from text"""
@@ -119,3 +119,4 @@ class UnsafeURLError(ValueError):
 3. **Comprehensive validation**: Input checking with clear errors
 4. **Type hints**: Full typing for better IDE support
 5. **Testable**: Easy to unit test without mocking complex systems
+6. **URL validation layering**: `services/url.py` contains a config-aware version of URL validation (reads `get_config_with_default`). Adapters should import from `utils/url.py` per clean layering. The duplication is intentional.

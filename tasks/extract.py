@@ -111,7 +111,7 @@ def _create_article_record(
         if pub_date.tzinfo is not None:
             pub_date = pub_date.replace(tzinfo=None)
     except (ValueError, TypeError):
-        pub_date = datetime.utcnow()
+        pub_date = datetime.now(timezone.utc)
 
     article = Article(
         source_id=source.id,

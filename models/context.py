@@ -41,7 +41,7 @@ class TrendMemory(db.Model):
         db.DateTime,
         nullable=True,
         index=True,
-        onupdate=datetime.utcnow
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     embedding = db.Column(db.Text, nullable=True)
 

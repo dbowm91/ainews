@@ -13,6 +13,8 @@ The `schemas/` package contains Pydantic models for validation and serialization
 | `tasks.py` | Task input validation | Celery task input validation |
 | `topic.py` | Topic definitions | Topic configuration |
 | `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration |
+| `item.py` | `RawItem` | Crawled item data from adapters |
+| `admin.py` | Admin response schemas | Admin API response schemas |
 
 ## Pipeline Configuration (`pipeline.py`)
 

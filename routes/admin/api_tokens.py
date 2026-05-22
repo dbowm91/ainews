@@ -47,8 +47,8 @@ def create_token():
     )
 
     if expires_in:
-        from datetime import datetime, timedelta
-        api_token.expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        from datetime import datetime, timedelta, timezone
+        api_token.expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
     db.session.add(api_token)
     db.session.commit()

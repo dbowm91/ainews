@@ -405,8 +405,8 @@ def _check_newsletter_lock(redis_client, task_id):
 
     if lock_status == 0:
         logger.info("Newsletter generation already in progress, skipping")
-        return None, {"skipped": True, "reason": "locked"}
-    return lock_status, None
+        return None, None, {"skipped": True, "reason": "locked"}
+    return lock_status, None, None
 
 
 def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
@@ -416,7 +416,7 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
 
     redis_client = get_redis()
 
-    lock_status, skip_result = _check_newsletter_lock(redis_client, task_id)
+    lock_status, lock_key, skip_result = _check_newsletter_lock(redis_client, task_id)
     if skip_result is not None:
         return skip_result
 
@@ -467,7 +467,8 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
         try:
             from services.redis_utils import release_lock
 
-            release_lock(redis_client, lock_key, task_id)
+            if lock_key:
+                release_lock(redis_client, lock_key, task_id)
         except redis.exceptions.RedisError:
             logger.warning("Failed to release newsletter lock")
 

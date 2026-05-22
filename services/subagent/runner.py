@@ -189,9 +189,9 @@ def run_subagent(
             max_retries=stage_config.max_retries + 1,
             base_delay=1.0,
             max_delay=stage_config.retry_delay,
-            retryable_exceptions=(ProviderTimeoutError, TimeoutError, ConnectionError),
+            retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
         )
-    except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
+    except (ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError) as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s failed after %d attempts: %s",
@@ -425,9 +425,9 @@ def run_subagent_with_tools(
             max_retries=stage_config.max_retries + 1,
             base_delay=1.0,
             max_delay=stage_config.retry_delay,
-            retryable_exceptions=(ProviderTimeoutError, TimeoutError, ConnectionError),
+            retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
         )
-    except (ProviderTimeoutError, TimeoutError, ConnectionError) as e:
+    except (ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError) as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s failed after %d attempts: %s",

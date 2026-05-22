@@ -7,7 +7,7 @@ The `schemas/` package contains Pydantic models for validation and serialization
 | File | Models | Purpose |
 |------|--------|---------|
 | `pipeline.py` | `PipelineRootConfig`, stage configs | Pipeline stage configuration |
-| `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig` | Source adapter configuration |
+| `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig`, `TopicMatchConfig` | Source adapter configuration |
 | `llm.py` | Provider definitions | LLM/search provider settings |
 | `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief` | LLM response schemas |
 | `tasks.py` | Task input validation | Celery task input validation |
@@ -15,6 +15,7 @@ The `schemas/` package contains Pydantic models for validation and serialization
 | `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration |
 | `item.py` | `RawItem` | Crawled item data from adapters |
 | `admin.py` | Admin response schemas | Admin API response schemas |
+| `search.py` | `SearchConfig`, `load_search_config` | Search provider configuration (loaded from providers.yaml) |
 
 ## Pipeline Configuration (`pipeline.py`)
 
@@ -109,9 +110,15 @@ class APIConfig(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)  # Additional fields to extract
     pagination: PaginationConfig = Field(default_factory=PaginationConfig)  # next_link, query_param, none
     api_key: Optional[str] = None
-    auth_header: Optional[str] = None    # e.g., "Authorization"
+    auth_header: Optional[str] = None    # Header name for Bearer auth token (e.g., "Authorization")
     request_timeout: int = 15
     user_agent: str = "AINewsBot/1.0"
+
+class TopicMatchConfig(BaseModel):
+    """Configuration for article topic matching in the selector stage."""
+    match_mode: MatchMode = MatchMode.KEYWORD  # keyword or contextual
+    include: list[str] = Field(default_factory=lambda: ["other"])  # Topics to include
+    min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)  # Minimum confidence threshold
 
 class WebConfig(BaseModel):
     base_url: str = Field(..., min_length=1)
@@ -244,10 +251,20 @@ class SelectArticleTask(BaseModel):
     run_id: Optional[int] = Field(default=None, ge=0, description="Pipeline run ID")
 
 class ProcessItemTask(BaseModel):
-    # Fields: source_key, source_name, source_type, external_id, title, url,
-    # author, published_at, text_content, raw_score, raw_metadata, topics,
-    # min_content_length, run_id
-    # Note: actual implementation differs from older documentation
+    source_key: str                      # Source identifier key
+    source_name: str                     # Source display name
+    source_type: str                     # rss, api, or web
+    external_id: Optional[str] = None    # External article ID
+    title: str                            # Article title
+    url: Optional[str] = None            # Article URL
+    author: Optional[str] = None         # Article author
+    published_at: Optional[str] = None   # Publication date ISO string
+    text_content: Optional[str] = None   # Article text content
+    raw_score: Optional[float] = None    # Relevance score 0-1
+    raw_metadata: Optional[dict] = None  # Raw metadata dict
+    topics: list[str] = Field(default_factory=list)  # Article topics (max 20)
+    min_content_length: Optional[int] = None  # Min content length
+    run_id: Optional[int] = None         # Pipeline run ID
 
 class GenerateNewsletterTask(BaseModel):
     dry_run_email: Optional[str] = None
@@ -262,6 +279,18 @@ class SendEmailTask(BaseModel):
 class CleanupArticleVersionsTask(BaseModel):
     days_to_keep: int = Field(default=90, ge=1, le=365, description="Days of versions to retain")
     dry_run: bool = Field(default=False, description="Preview without deleting")
+```
+
+## Intentional Layer Violations
+
+The following layer violations are intentional and documented:
+
+### `schemas/common.py` imports from `services`
+
+`schemas/common.py` imports `services.config_cache` via `cached_config()` and `cached_config_with_mtime()`. This is intentional because config caching requires services layer knowledge. Documented with inline comments:
+```python
+# Layer violation: schemas should not import from services.
+# This is intentional - config caching requires services layer knowledge.
 ```
 
 ## Usage Patterns

@@ -56,15 +56,15 @@ Each pipeline stage has quality gates that route articles to `review` for manual
 
 ## Bug Findings (2026-05-22 Session)
 
-### Newsletter Lock Scope Bug
+### Newsletter Lock Scope Bug (FIXED)
 `tasks/newsletter.py:466-472` - `lock_key` is a local variable inside `_check_newsletter_lock` (line 398) but the `finally` block in `_generate_daily_newsletters_core` references an undefined `lock_key`. The `_check_newsletter_lock` function returns only `(lock_status, None)` at line 409 - `lock_key` is NOT returned.
 
-**Fix:** Modify `_check_newsletter_lock` to return `lock_key` as third return value.
+**Fix Applied:** Modified `_check_newsletter_lock` to return `lock_key` as third return value.
 
-### Edit Stage Missing _dispatch_next
+### Edit Stage Missing _dispatch_next (FIXED)
 `tasks/edit.py:185,205` - When edit routes to review via `_should_route_to_review()`, it transitions the status but does NOT call `_dispatch_next()`. Other stages (select, research, write) all call `_dispatch_next` after transitioning to REVIEW.
 
-**Fix:** Add `_dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)` before returning review status.
+**Fix Applied:** Added `_dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)` before returning review status.
 
 ### Duplicate _degrade_and_advance Definitions
 There are two separate definitions of `_degrade_and_advance`:

@@ -132,6 +132,8 @@ class SSRFSafeRedirectHandler:
 
 Blocklist patterns include internal IP ranges and the `javascript:` and `data:` URL schemes are blocked via scheme validation.
 
+**Interface Verification:** The `SSRFSafeRedirectHandler.__call__` signature is `(self, request, response, **kwargs)`. While this differs from the `requests.Session.redirect_handler` expected interface of `(self, request, response)`, it has been verified to work correctly in practice with the `requests` library (tested 2026-05-22). The `**kwargs` parameter absorbs any additional arguments passed by newer requests versions.
+
 ## WebAdapter Request Delay
 
 The `request_delay_min`/`request_delay_max` configuration in `WebConfig` applies **per-article**, not per-page. When crawling a source with pagination, the delay is applied once per article fetch, not once per page load. This may result in more aggressive rate limiting than expected for sites with multiple pages of listings.

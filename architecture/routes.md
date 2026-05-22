@@ -43,6 +43,8 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/articles/<id>/edit` - Article edit page
 - `/admin/articles/<id>/original` - Original article view
 - `/admin/articles/<id>/versions` - Article version history
+- `/admin/articles/<id>/versions/<version_id>/rollback` - Rollback article to version
+- `/admin/articles/<id>/original` - Original article view
 - `/admin/articles/<id>/delete` - Article delete action
 - `/admin/articles/<id>/reprocess` - Article reprocess action
 - `/admin/sources` - Source management UI
@@ -66,16 +68,14 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/topic-notes/edit` - Edit topic note
 - `/admin/topic-notes/delete` - Delete topic note
 - `/admin/topic-notes/row/<topic>` - Topic note row
-- `/admin/trend-memory` - Trend memory UI
-- `/admin/trend-memory/delete/<id>` - Delete trend memory
-- `/admin/trend-memory/delete-expired` - Delete expired entries
 - `/admin/webhooks` - Webhook management UI
 - `/admin/shares` - Share config management
+- `/admin/shares/<id>/edit-form` - Edit share config form
+- `/admin/shares/<id>/row` - Share config row
 - `/admin/shares/add` - Add share config
 - `/admin/shares/<id>/edit` - Edit share config
 - `/admin/shares/<id>/delete` - Delete share config
 - `/admin/shares/<id>/toggle` - Toggle share config
-- `/admin/metrics` - Metrics dashboard
 - `/admin/metrics` - Metrics dashboard
 - `/admin/verify-2fa` - 2FA verification page
 - `/admin/setup-2fa` - 2FA setup page
@@ -227,16 +227,6 @@ Note: This blueprint is registered in `app.py` and provides `/api-tokens` endpoi
 - `GET /api-tokens` - List API tokens
 - `POST /api-tokens` - Create API token
 - `DELETE /api-tokens/<id>` - Revoke API token
-
-```python
-public_bp = Blueprint('links', __name__)
-
-@public_bp.route('/a/<short_id>')
-def article_short(short_id): ...  # Short URL redirect (also /s/<short_id>)
-
-@public_bp.route("/track/newsletter-click/<int:article_id>")
-def track_newsletter_click(article_id): ...  # Newsletter click tracking
-```
 
 **Note:** `/share/<platform>/<article_id>` is not implemented as a server endpoint. Social sharing is handled client-side via JavaScript.
 

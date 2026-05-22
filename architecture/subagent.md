@@ -163,6 +163,10 @@ class SubagentChainConfig(BaseModel):
     steps: list[SubagentChainStep] = Field(default_factory=list)
 ```
 
+**Location**: These schemas are defined in `schemas/pipeline.py`, not in `runner.py` or `chain.py`.
+
+**Note on chain execution**: Chains use `provider.chat()` directly, not `chat_with_tools()`. This means chains do not support tool calling - they are for simple multi-step prompts without tool use. If tool support is needed, use `run_subagent_with_tools()` instead.
+
 Chain configuration is loaded from `pipeline.yaml` under the `subagent.chains` section:
 
 ```yaml

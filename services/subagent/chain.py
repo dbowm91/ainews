@@ -59,7 +59,8 @@ def run_subagent_chain(
     max_length = chain_config.max_length
     results: dict[str, Any] = {}
 
-    for i, step_config in enumerate(chain_config.steps[:max_length]):
+    step_list = steps if steps is not None else chain_config.steps
+    for i, step_config in enumerate(step_list[:max_length]):
         step_name = f"{chain_name}_step_{i}"
         task_type = step_config.task_type
 

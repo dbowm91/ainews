@@ -37,7 +37,7 @@ class ReviewConfig(BaseModel):
     enabled: bool = False
     auto_publish_threshold: Optional[int] = Field(
         default=None,
-        description="Auto-publish articles with impact_score >= this value, bypassing review. Default: 80.",
+        description="Auto-publish articles with impact_score >= this value, bypassing review. Default: None (disabled).",
     )
 
 

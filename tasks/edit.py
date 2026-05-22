@@ -182,6 +182,7 @@ def _handle_validation_and_routing(
                 truncate_for_log(article.original_title),
                 article_id=article.id,
             )
+        _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
         return {"article_id": article.id, "status": "review"}
 
     from tasks.pipeline import _should_route_to_review, _transition_article_status
@@ -202,6 +203,7 @@ def _handle_validation_and_routing(
                 truncate_for_log(article.original_title),
                 article_id=article.id,
             )
+        _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
         return {"article_id": article.id, "status": "review"}
 
     return None

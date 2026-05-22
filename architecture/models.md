@@ -166,8 +166,11 @@ class TrendMemory(Base):
     __tablename__ = 'trend_memory'
 
     id = Column(Integer, primary_key=True)
-    topic = Column(String(200))
+    topic = Column(String(128))  # Not String(200)
     signal = Column(Text)
+    importance = Column(Integer, default=1)  # Priority level
+    expires_at = Column(DateTime, nullable=True)  # Expiration timestamp
+    last_consolidated_at = Column(DateTime, nullable=True)  # Last consolidation
 
     # Embeddings for semantic search
     embedding = Column(Text)  # Stored as text, not vector type

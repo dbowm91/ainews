@@ -119,9 +119,16 @@ Strict separation of concerns maintains modularity:
 | Layer | Can Import | Cannot Import |
 |-------|-----------|---------------|
 | **Adapters** | `utils/` | `services/`, `models/` |
-| **Services** | `models/`, `schemas/` | `adapters/` |
+| **Services** | `models/`, `schemas/` (TYPE_CHECKING for type hints only) | `adapters/` |
 | **Tasks** | `services/` | — |
 | **Routes** | `models/`, `schemas/`, `services/` | `adapters/` |
+
+**TYPE_CHECKING exception:** Services may use `TYPE_CHECKING` imports from adapters for type hints only (e.g., `from adapters.base import RawItem`). This allows static type analysis without creating runtime imports between layers.
+
+**Known intentional layer violations (do not fix):**
+- `schemas/common.py` imports from `services.config_cache` (documented in schemas.md)
+- `services/subagent/tools.py` imports from `models` and `extensions` (documented in AGENTS.md)
+- `tasks/crawl.py` imports directly from `adapters.base` (documented in AGENTS.md)
 
 ---
 
@@ -331,3 +338,4 @@ Each module has a dedicated deep-dive document. Click any link below to explore 
 - **NewsletterBrief fields**: Actual model does NOT have `preamble`, `footer`, or `articles` fields
 - **Rate limiter pattern**: Always release in `finally` block using `provider_id or rc.provider`
 - **Dynamic fallback chain**: Provider chain determined by enabled providers in `providers.yaml`, not hardcoded
+- **utils/url.py not pure**: `validate_url_safe()` and related DNS functions use global mutable state (`_dns_cache`, `_dns_executor`). Documented in utils.md.

@@ -120,3 +120,29 @@ class UnsafeURLError(ValueError):
 4. **Type hints**: Full typing for better IDE support
 5. **Testable**: Easy to unit test without mocking complex systems
 6. **URL validation layering**: `services/url.py` contains a config-aware version of URL validation (reads `get_config_with_default`). Adapters should import from `utils/url.py` per clean layering. The duplication is intentional.
+
+## __all__ exports
+
+The `utils/url.py` module exports a mix of functions, constants, and exception classes via `__all__`:
+
+```python
+__all__ = [
+    "normalize_url",      # Function
+    "normalize_title",    # Function
+    "TRACKING_PARAMS",    # Constant (set of tracking parameter names)
+    "UnsafeURLError",      # Exception class
+    "validate_url_safe",  # Function
+    "clear_dns_cache",     # Function
+]
+```
+
+This mixed export pattern (functions + types) is intentional to support `from utils.url import *` style imports while documenting what's available.
+
+## Empty __init__.py
+
+The `utils/__init__.py` file is intentionally empty (0 bytes) because:
+- `utils/` is not a proper Python package with submodules to export
+- Each utility module (`url.py`, `text.py`, etc.) is imported directly when needed
+- No top-level `from utils import *` pattern is used in the codebase
+
+This is a deliberate design choice, not an oversight or incomplete implementation.

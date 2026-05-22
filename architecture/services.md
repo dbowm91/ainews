@@ -29,6 +29,7 @@ services/
 ├── pipeline_degradation.py # Graceful degradation logic
 ├── pipeline_failure.py     # Failure handling
 ├── pipeline_utils.py       # Pipeline utilities
+├── circuit_breaker.py       # Circuit breaker for provider fallback
 ├── context_service.py      # Context management
 ├── related.py              # Related article finding
 ├── trend_memory.py         # Trend memory operations
@@ -256,6 +257,18 @@ Final fallback: Raw HTML with boilerplate removal
 
 Located in `services/search/`:
 
+```
+services/search/
+├── __init__.py           # Provider registry
+├── base.py              # SearchResult dataclass, abstract base
+├── duckduckgo.py        # DuckDuckGo provider (default/enabled)
+├── google.py            # Google provider (disabled, requires API key)
+├── searxng.py           # SearxNG provider (disabled, self-hosted)
+├── hybrid.py            # Hybrid provider (enabled - FTS5 + vector similarity)
+├── sqlite_fts.py        # SQLite FTS provider (internal article search)
+└── deepseek.py          # DeepSeek provider (search only, not LLM)
+```
+
 | Provider | File | Status |
 |----------|------|--------|
 | DuckDuckGo | `duckduckgo.py` | Default, enabled |
@@ -263,3 +276,4 @@ Located in `services/search/`:
 | SearxNG | `searxng.py` | Disabled (self-hosted) |
 | Hybrid | `hybrid.py` | Enabled (FTS5 + vector similarity) |
 | SQLite FTS | `sqlite_fts.py` | Internal article search |
+| DeepSeek | `deepseek.py` | Search only, not LLM |

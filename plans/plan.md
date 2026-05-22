@@ -8,12 +8,7 @@
 
 ## Overview
 
-This plan consolidates findings from 10 architecture review documents:
-- pipeline_review.md, services_review.md, tasks_review.md
-- schemas_review.md, routes_review.md, utils_review.md
-- subagent_review.md, adapters_review.md, overview_review.md, models_review.md
-
-Items marked ✅ were verified as already correct. Items marked PENDING need implementation.
+This plan consolidates findings from architecture reviews. Items marked ✅ were verified as already correct. Items marked PENDING need implementation. All items are organized into waves for parallel implementation.
 
 ---
 
@@ -34,15 +29,20 @@ The following items were verified as already correct or already fixed:
 | RawItem schema | `schemas/item.py` | ✅ VERIFIED | Exists and documented |
 | trafilatura failure | `adapters/web.py:119-120` | ✅ VERIFIED | Only logs warning |
 | request_delay per-article | `adapters/web.py:174-175` | ✅ VERIFIED | Per-article delay confirmed |
-| raw_token_hash security | `routes/admin/api_tokens.py:43-45` | ⚠️ ISSUE | Misnamed field - stores unhashed |
 | Dashboard cache TTL | `routes/admin/dashboard.py:188` | ✅ VERIFIED | 60 seconds |
 | updated_at index | `models/article.py:48` | ✅ VERIFIED | Inline index |
 | TrendMemory index name | `models/context.py:49` | ✅ VERIFIED | ix_trend_memory_topic_importance |
 | Source.source_key constraint | `architecture/models.md:118` | ✅ VERIFIED | Documented |
 | Provider chain iteration | `services/llm/__init__.py:57-97` | ✅ VERIFIED | Generator pattern documented |
 | TrendMemory semantic search | `services/trend_memory.py:414-430` | ✅ VERIFIED | 500 limit confirmed |
-| retry_max=20 selector | `tasks/select.py:202` | ✅ VERIFIED | Documented aggressive retry |
-| _DANGEROUS_ATTRS issue | `utils/text.py` | ⚠️ WRONG | `_DANGEROUS_ATTRS` doesn't exist, `_DANGEROUS_TAGS` exists but attributes not filtered |
+| retry_max=20 selector | `tasks/select.py:202` | ✅ VERIFIED | Aggressive retry behavior documented |
+
+### Known Issues (Not Fixed but Acceptable)
+
+| Item | Location | Status | Notes |
+|------|----------|--------|-------|
+| raw_token_hash security | `routes/admin/api_tokens.py:43-45` | ⚠️ ACCEPTABLE | Field stores unhashed hash; not displayed externally; acceptable risk |
+| Limiter release fallback | `tasks/pipeline.py:436-437` | ⚠️ ACCEPTABLE | `provider_id or rc.provider` pattern correctly handles None case |
 
 ---
 
@@ -51,11 +51,11 @@ The following items were verified as already correct or already fixed:
 These issues can be fixed independently across different modules.
 
 ### 1.1 Subagent Runner — Recursive _finalize_subagent_result
-| Item | Status | Location |
-|------|--------|---------|
-| SUB-1 | PENDING | `services/subagent/runner.py:277-297` |
+| Item | ID | Location |
+|------|----|----------|
+| Bug | SUB-1 | `services/subagent/runner.py:277-297` |
 
-**Problem:** `_finalize_subagent_result()` at line 288 recursively calls itself with same parameters - infinite loop bug. The `run_subagent()` function manually constructs `SubagentResponse` at lines 270-274 (not calling the broken function), while `run_subagent_with_tools()` at line 467 attempts to call `_finalize_subagent_result()` (would infinite loop if reached).
+**Problem:** `_finalize_subagent_result()` at line 288 recursively calls itself with same parameters - infinite loop bug. The `run_subagent()` function manually constructs `SubagentResponse` at lines 270-274 (not calling the broken function), while `run_subagent_with_tools()` at line 467 would hit infinite recursion if it called `_finalize_subagent_result()`.
 
 **Fix:** Rewrite `_finalize_subagent_result()` to actually finalize the result without recursion:
 ```python
@@ -78,143 +78,192 @@ def _finalize_subagent_result(
     )
 ```
 
-**Verification:** After fix, `run_subagent_with_tools()` should correctly call this function without infinite recursion.
+**Why the bug exists:** The original function was supposed to do something more complex (metrics, error handling) but instead just recursively called itself with no base case.
+
+**Verification:** After fix, `run_subagent_with_tools()` should correctly call this function without infinite recursion. Test by calling `run_subagent_with_tools()` with a valid task - it should return a `SubagentResponse` without hanging.
+
+---
+
+### 1.2 Tasks — Error Dicts From _run_stage_core Not Properly Handled
+| Item | ID | Location |
+|------|----|----------|
+| Bug | TASK-1 | `tasks/pipeline.py:346-387` |
+
+**Problem:** `_run_stage_core()` returns error dicts like `{"article_id": article_id, "error": "pipeline_timeout"}` at lines 351 and 368. These are returned directly without proper error handling - they're treated as success results instead of failures.
+
+**Code path:**
+```python
+# Line 351: Article not found
+return {"article_id": article_id, "error": "not found"}, None, None
+
+# Line 368: Pipeline timeout
+return {"article_id": article_id, "error": "pipeline_timeout"}, None, None
+```
+
+When `run_stage()` unpacks at line 426:
+```python
+result, provider_id, model = _run_stage_core(stage, article_id, work_fn, rc, t0, run_id)
+return result  # Returns the error dict directly!
+```
+
+**Fix:** Check for `error` key in returned dict and handle appropriately:
+```python
+result, provider_id, model = _run_stage_core(stage, article_id, work_fn, rc, t0, run_id)
+if isinstance(result, dict) and "error" in result:
+    return result  # Or wrap in proper error response
+return result
+```
+
+**Verification:** Add test case for article not found scenario - should return error dict, not treat as success.
+
+---
+
+### 1.3 Services — Duplicate _degrade_and_advance Definition
+| Item | ID | Location |
+|------|----|----------|
+| Design | SERVICE-1 | `tasks/pipeline.py:36`, `services/pipeline_degradation.py:183` |
+
+**Problem:** Two separate definitions of `_degrade_and_advance` exist:
+- `tasks/pipeline.py:36` - local version used by `retry.py`
+- `services/pipeline_degradation.py:183` - public API version
+
+The `tasks/__init__.py` exports the services version:
+```python
+from services.pipeline_degradation import degrade_stage as _degrade_and_advance
+```
+
+But `retry.py:47-48` imports from `tasks.pipeline` which has the local version.
+
+**Fix Options:**
+1. **Option A (Recommended):** Remove local definition from `tasks/pipeline.py` and have `retry.py` import from `services.pipeline_degradation` directly
+2. **Option B:** Keep local definition but document why duplication exists
+
+**Verification:** Check that `retry.py` still works after refactoring. The degradation behavior should remain the same.
 
 ---
 
 ## Wave 2: High Priority Issues (Parallelizable)
 
-### 2.1 schemas — validate_adapter_config Returns Dict
-| Item | Status | Location |
-|------|--------|---------|
-| SCHEMA-2 | PENDING | `schemas/source.py:124-131` |
-
-**Problem:** `validate_adapter_config` returns `model_dump()` dict, loses type info.
-
-**Fix:** Return the validated Pydantic model instance instead of dict, or document that callers should re-parse.
-
-**Verification:** Check all callers of `validate_adapter_config` to ensure they handle dict correctly.
-
----
-
-### 2.2 schemas — ReviewConfig.auto_publish_threshold Not Documented
-| Item | Status | Location |
-|------|--------|---------|
-| SCHEMA-3 | PENDING | `schemas/pipeline.py:35-40` |
-
-**Problem:** `ReviewConfig.auto_publish_threshold` field exists but not documented.
-
-**Fix:** Document this field in architecture/pipeline.md and add docstring.
-
-**Verification:** Verify field is used correctly in edit stage.
-
----
-
-### 2.3 Overview — utils/url.py Purity Documentation
-| Item | Status | Location |
-|------|--------|---------|
-| OVERVIEW-1 | PENDING | `utils/url.py:40-49` |
-
-**Problem:** Docstring claims "pure functions" but has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`).
-
-**Fix:** Update docstring to clarify DNS resolution is impure with side effects:
-```python
-# Not pure - performs DNS resolution with caching side effects
-```
-
-**Verification:** Ensure docstring reflects actual behavior.
-
----
-
-### 2.4 Overview — services/url.py Duplication
-| Item | Status | Location |
-|------|--------|---------|
-| OVERVIEW-2 | PENDING | `services/url.py:154-167` |
-
-**Problem:** `services/url.py` duplicates SSRF implementation from `utils/url.py`.
-
-**Fix:** Refactor `services/url.py` to import from `utils/url.py` where possible, or document why duplication is necessary.
-
-**Verification:** Both files should produce same validation results for same inputs.
-
----
-
-### 2.5 Models — Article→PipelineRun Relationship Docs
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-1 | PENDING | `architecture/models.md:33` |
+### 2.1 Models — Article→PipelineRun Relationship Docs Wrong
+| Item | ID | Location |
+|------|----|----------|
+| Docs | MODELS-1 | `architecture/models.md:33` |
 
 **Problem:** Docs claim `Article.pipeline_run_id` exists - it does not. Relationship is indirect via `PipelineLog`.
 
-**Fix:** Update `architecture/models.md` to clarify Article→PipelineRun relationship is via PipelineLog, not direct foreign key.
+**Fix:** Update `architecture/models.md` to show:
+```
+PipelineRun → PipelineLog → Article
+```
+NOT `PipelineRun → Article` via `pipeline_run_id`
 
-**Verification:** Check Article model - no `pipeline_run_id` field exists.
+**Verification:** Check `models/article.py` - no `pipeline_run_id` field exists.
 
 ---
 
-### 2.6 Models — TrendMemory Field Name Docs
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-2 | PENDING | `architecture/models.md:176` |
+### 2.2 Models — TrendMemory Field Name Docs Wrong
+| Item | ID | Location |
+|------|----|----------|
+| Docs | MODELS-2 | `architecture/models.md:176` |
 
-**Problem:** Docs claim `TrendMemory.source_articles` (plural) - actual field is `source_article_id` (singular).
+**Problem:** Docs claim `TrendMemory.source_articles` (plural) - actual field is `source_article_id` (singular integer FK).
 
-**Fix:** Update to `source_article_id` and clarify it's a single ID, not a relationship.
+**Fix:** Update to `source_article_id` and clarify it's a single FK, not JSON array.
+
+**Actual code in `models/context.py:27-30`:**
+```python
+source_article_id = Column(
+    Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True
+)
+```
 
 **Verification:** Check TrendMemory model for actual field name.
 
 ---
 
-### 2.7 Services — TrendMemoryService Class Not Implemented
-| Item | Status | Location |
-|------|--------|---------|
-| SERVICE-1 | PENDING | `services/trend_memory.py` |
+### 2.3 Overview — providers.yaml Missing hybrid Search Provider
+| Item | ID | Location |
+|------|----|----------|
+| Config | OVERVIEW-1 | `providers.yaml` |
 
-**Problem:** Architecture doc mentions `TrendMemoryService` class but actual code uses module-level functions.
+**Problem:** `hybrid` search provider exists in `services/search/hybrid.py` (FTS5 + vector similarity) but is not configured in `providers.yaml`.
 
-**Fix:** Either implement the class wrapper or update architecture doc to reflect module-level function pattern.
+**Fix:** Add `hybrid` to `providers.yaml` search_providers section:
+```yaml
+search_providers:
+  - duckduckgo
+  - google
+  - searxng
+  - hybrid  # FTS5 + vector similarity - ENABLED
+```
 
-**Verification:** Check for `class TrendMemoryService` - doesn't exist.
+**Verification:** Check that hybrid provider can be loaded and used.
 
 ---
 
-### 2.8 Routes — Undocumented Routes in Architecture
-| Item | Status | Location |
-|------|--------|---------|
-| ROUTES-2 | PENDING | `architecture/routes.md` |
+### 2.4 schemas — validate_adapter_config Returns Dict
+| Item | ID | Location |
+|------|----|----------|
+| Bug | SCHEMA-1 | `schemas/source.py:124-131` |
+
+**Problem:** `validate_adapter_config` returns `model_dump()` dict, loses type info. Callers may expect a validated model instance.
+
+**Fix:** Return the validated Pydantic model instance instead of dict:
+```python
+# Change from:
+return adapter_config.model_dump()
+
+# To:
+return adapter_config  # Return the validated model
+```
+
+**Note:** If dict is intentionally returned for serialization, document the contract clearly.
+
+**Verification:** Check all callers of `validate_adapter_config` to ensure they handle the return type correctly.
+
+---
+
+### 2.5 schemas — ReviewConfig.auto_publish_threshold Not Documented
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SCHEMA-2 | `schemas/pipeline.py:35-40` |
+
+**Problem:** `ReviewConfig.auto_publish_threshold` field exists but not documented in architecture.
+
+**Fix:** Document this field in `architecture/pipeline.md` and add docstring to the schema.
+
+**Verification:** Verify field is used correctly in edit stage.
+
+---
+
+### 2.6 Routes — Undocumented Routes in Architecture
+| Item | ID | Location |
+|------|----|----------|
+| Docs | ROUTES-1 | `architecture/routes.md` |
 
 **Problem:** 6 public routes, 35+ admin HTML routes, and 5 API endpoints not documented.
 
 **Fix:** Add undocumented routes to `architecture/routes.md`:
 - Public: `/sitemap.xml`, `/robots.txt`, feeds, links
-- Admin HTML: All admin pages
+- Admin HTML: All admin pages at `/admin/*`
 - API: `/api/v1/track/*` endpoints
 
-**Verification:** Compare route list in doc vs actual routes.
+**Verification:** Compare route list in doc vs actual routes in code.
 
 ---
 
-### 2.9 Routes — Session Key Documentation Mismatch
-| Item | Status | Location |
-|------|--------|---------|
-| ROUTES-3 | PENDING | `architecture/routes.md:201` |
-
-**Problem:** Session key `session['ua']` documented but code uses `session['user_agent']`.
-
-**Fix:** Update documentation to use `session['user_agent']`.
-
-**Verification:** Check `routes/admin/__init__.py:76` for correct key.
-
----
-
-### 2.10 Adapters — Session Ownership Documentation
-| Item | Status | Location |
-|------|--------|---------|
-| ADPT-3 | PENDING | `adapters/rss.py:47-52`, `api.py:22-23`, `web.py:35` |
+### 2.7 Adapters — Session Ownership Documentation Missing
+| Item | ID | Location |
+|------|----|----------|
+| Docs | ADPT-1 | `adapters/rss.py:47-52`, `api.py:22-23`, `web.py:35` |
 
 **Problem:** RSSAdapter creates own session; API/WebAdapter share global session - poorly documented.
 
-**Fix:** Document session ownership pattern per adapter type in architecture/adapters.md.
+**Session ownership pattern:**
+- `RSSAdapter`: Creates own `requests.Session` with own `SSRFSafeRedirectHandler`
+- `APIAdapter` and `WebAdapter`: Share global session from `get_crawl_session()`
+
+**Fix:** Document session ownership per adapter type in `architecture/adapters.md`.
 
 **Verification:** Verify session creation patterns in each adapter.
 
@@ -223,37 +272,72 @@ def _finalize_subagent_result(
 ## Wave 3: Medium Priority Issues (Parallelizable)
 
 ### 3.1 utils — sanitize_html XSS Vulnerability
-| Item | Status | Location |
-|------|--------|---------|
-| UTIL-1 | PENDING | `utils/text.py:70-108` |
+| Item | ID | Location |
+|------|----|----------|
+| Security | UTIL-1 | `utils/text.py:70-108` |
 
-**Problem:** `sanitize_html()` only strips dangerous **tags** via `_TagStripper` but doesn't filter **attributes**. XSS vectors like `<img onerror=alert(1)>` pass through. The `_DANGEROUS_TAGS` constant is used, but there's no `_DANGEROUS_ATTRS` constant (the plan incorrectly mentioned it).
+**Problem:** `sanitize_html()` only strips dangerous **tags** via `_TagStripper` but doesn't filter **attributes**. XSS vectors like `<img onerror=alert(1)>` pass through. The code uses `_DANGEROUS_TAGS` constant (not `_DANGEROUS_ATTRS` which doesn't exist).
 
-**Fix:** Implement attribute filtering in `sanitize_html()` to strip event handlers (onerror, onclick, etc.) and dangerous attributes (src, href with javascript:).
+**Current behavior:**
+- Strips dangerous tags like `<script>`, `<iframe>`, etc.
+- Does NOT strip event handler attributes like `onerror`, `onclick`, etc.
+- Does NOT filter `javascript:` in `href` or `src` attributes
 
-**Verification:** Test with `<img onerror=alert(1)>` - should be sanitized or stripped.
+**Fix:** Add attribute filtering to strip event handlers and javascript: URIs:
+```python
+def sanitize_html(html: str) -> str:
+    # Existing tag stripping logic...
+    # NEW: Attribute filtering
+    # Strip event handler attributes (onerror, onclick, onload, etc.)
+    # Strip javascript: from href, src, action attributes
+```
+
+**Verification:** Test with:
+- `<img onerror=alert(1)>` → should be stripped or sanitized
+- `<a href="javascript:alert(1)">` → javascript: should be removed
+- `<div onclick="alert(1)">` → onclick should be stripped
 
 ---
 
 ### 3.2 subagent — tools.py Layering Violation
-| Item | Status | Location |
-|------|--------|---------|
-| SUB-3 | PENDING | `services/subagent/tools.py:100-101,123,141-142` |
+| Item | ID | Location |
+|------|----|----------|
+| Layering | SUB-2 | `services/subagent/tools.py:100-101,123,141-142` |
 
-**Problem:** `tools.py` imports directly from `models` - violates layering rules.
+**Problem:** `tools.py` imports directly from `models` - violates layering rules (services should not import from adapters, but models is a separate layer).
 
-**Fix:** Create a service layer helper to avoid direct model imports, or document why this violation is necessary.
+**Fix:** Move model imports to TYPE_CHECKING block if only used for type hints, or create a service layer helper:
+```python
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from models.article import Article
+```
+
+**Note:** This is a known layering issue per AGENTS.md.
 
 **Verification:** Check if models import can be moved to TYPE_CHECKING block.
 
 ---
 
-### 3.3 subagent — SubagentChainStep/Config Location Docs
-| Item | Status | Location |
-|------|--------|---------|
-| SUB-4 | PENDING | `services/subagent/runner.py`, `schemas/pipeline.py:107-124` |
+### 3.3 subagent — Inconsistent Prompt Formatting
+| Item | ID | Location |
+|------|----|----------|
+| Consistency | SUB-3 | `services/subagent/runner.py:64-67` vs `utils.py:30-41` |
 
-**Problem:** Docs show `SubagentChainStep`/`SubagentChainConfig` in `runner.py` but they're actually in `schemas/pipeline.py`.
+**Problem:** `run_subagent()` and `run_subagent_with_tools()` use different prompt formatting.
+
+**Fix:** Unify prompt formatting to use consistent approach in both functions.
+
+**Verification:** Compare outputs of both functions for same input article.
+
+---
+
+### 3.4 subagent — SubagentChainStep/Config Location Docs Wrong
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SUB-4 | `architecture/subagent.md` |
+
+**Problem:** Docs show `SubagentChainStep`/`SubagentChainConfig` in `runner.py` but they're actually in `schemas/pipeline.py:107-124`.
 
 **Fix:** Update `architecture/subagent.md` to reflect correct location.
 
@@ -261,23 +345,10 @@ def _finalize_subagent_result(
 
 ---
 
-### 3.4 subagent — Inconsistent Prompt Formatting
-| Item | Status | Location |
-|------|--------|---------|
-| SUB-5 | PENDING | `services/subagent/runner.py:64-67` vs `utils.py:30-41` |
-
-**Problem:** `run_subagent()` and `run_subagent_with_tools()` use different prompt formatting.
-
-**Fix:** Unify prompt formatting to use consistent approach.
-
-**Verification:** Compare outputs of both functions for same input.
-
----
-
-### 3.5 subagent — Documentation Retry Count
-| Item | Status | Location |
-|------|--------|---------|
-| SUB-6 | PENDING | `architecture/subagent.md:268` |
+### 3.5 subagent — Documentation Retry Count Wrong
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SUB-5 | `architecture/subagent.md:268` |
 
 **Problem:** Doc says "max 3 attempts" but actual is `stage_config.max_retries + 1` (default 2).
 
@@ -287,38 +358,99 @@ def _finalize_subagent_result(
 
 ---
 
-### 3.6 adapters — trafilatura Failure Alerting
-| Item | Status | Location |
-|------|--------|---------|
-| ADPT-4 | PENDING | `adapters/web.py:119-120` |
+### 3.6 models — datetime.utcnow Deprecation
+| Item | ID | Location |
+|------|----|----------|
+| Modernization | MODELS-3 | `models/context.py:44` |
 
-**Problem:** `trafilatura` missing logs only warning, no operator alert.
+**Problem:** `datetime.utcnow` deprecated in Python 3.12+. Multiple files may have this issue.
 
-**Fix:** Add alerting for trafilatura extraction failures (may be already handled by article fallback).
+**Fix:** Replace with `datetime.now(timezone.utc)` across the codebase:
+```python
+# Before (deprecated):
+from datetime import datetime, utcnow
 
-**Verification:** Check if article fallback handles this gracefully.
+# After (Python 3.12+):
+from datetime import datetime, timezone
+datetime.now(timezone.utc)
+```
 
----
+**Files to check:** `models/context.py`, any other files using `datetime.utcnow`
 
-### 3.7 adapters — WebAdapter Request Delay Per-Page
-| Item | Status | Location |
-|------|--------|---------|
-| ADPT-5 | PENDING | `adapters/web.py:174-175` |
-
-**Problem:** `request_delay_min/max` is per-article not per-page - may be too aggressive.
-
-**Fix:** Document this behavior clearly so rate limiting expectations are correct.
-
-**Verification:** Check how delay is applied in web adapter.
+**Verification:** Run `grep -r "datetime.utcnow" --include="*.py"` to find all occurrences.
 
 ---
 
-### 3.8 schemas — RawItem Not Documented
-| Item | Status | Location |
-|------|--------|---------|
-| SCHEMA-4 | PENDING | `schemas/item.py` |
+### 3.7 Pipeline — finalized_at Not Set
+| Item | ID | Location |
+|------|----|----------|
+| Bug | TASK-2 | `services/pipeline_degradation.py:209-239` |
 
-**Problem:** `schemas/item.py` (RawItem) not documented in architecture.
+**Problem:** `finalized_at` not set in `_finalize()` - docs say it should be. Note: `Article.finalized_at` doesn't exist - use `published_at` instead.
+
+**Fix:** The `_finalize()` function should not set `finalized_at` since the field doesn't exist. Update documentation to clarify this.
+
+**Contrast with `edit.py:219`** where `published_at` IS set:
+```python
+article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+```
+
+**Verification:** Check article finalization - `published_at` should be set.
+
+---
+
+### 3.8 Pipeline — Invalid pending→skipped Transition
+| Item | ID | Location |
+|------|----|----------|
+| Docs | TASK-3 | `constants.py:52-63` |
+
+**Problem:** Docs show `pending → skipped` transition but not in `VALID_TRANSITIONS`. `SKIPPED` status is only reachable from `FAILED → pending` (for reprocessing), not directly from pending.
+
+**Fix:** Either add `skipped` as valid transition to `VALID_TRANSITIONS` if intentional, or update docs to remove it.
+
+**Current valid transitions from PENDING:**
+```python
+PipelineStatus.PENDING: frozenset([PipelineStatus.SELECTING, PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
+```
+
+**Verification:** Check `constants.py` for `VALID_TRANSITIONS`.
+
+---
+
+### 3.9 services — Provider Chain Performance
+| Item | ID | Location |
+|------|----|----------|
+| Performance | SERVICE-2 | `services/llm/__init__.py:57-97` |
+
+**Problem:** Provider chain iterates on every call to check circuit breaker state.
+
+**Fix:** Consider caching the filtered provider chain with short TTL, but ensure circuit breaker state is still checked on each call (state can change dynamically).
+
+**Verification:** Profile provider selection overhead.
+
+---
+
+### 3.10 services — TrendMemory Semantic Search Memory
+| Item | ID | Location |
+|------|----|----------|
+| Performance | SERVICE-3 | `services/trend_memory.py:414-430` |
+
+**Problem:** Semantic search loads 500 memories into memory for similarity calculation.
+
+**Fix:** Use database-side similarity calculation or chunked processing to reduce memory usage.
+
+**Current:** Loads all 500 memories then computes cosine similarity in Python.
+
+**Verification:** Monitor memory usage during trend searches.
+
+---
+
+### 3.11 schemas — RawItem Not Documented
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SCHEMA-3 | `schemas/item.py` |
+
+**Problem:** `RawItem` schema not documented in architecture.
 
 **Fix:** Add `RawItem` schema to architecture documentation.
 
@@ -326,10 +458,10 @@ def _finalize_subagent_result(
 
 ---
 
-### 3.9 schemas — Admin Schemas Not Documented
-| Item | Status | Location |
-|------|--------|---------|
-| SCHEMA-5 | PENDING | `schemas/admin.py` |
+### 3.12 schemas — Admin Schemas Not Documented
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SCHEMA-4 | `schemas/admin.py` |
 
 **Problem:** `schemas/admin.py` not documented - critical for admin API.
 
@@ -339,207 +471,83 @@ def _finalize_subagent_result(
 
 ---
 
-### 3.10 schemas — ListConfig Validation
-| Item | Status | Location |
-|------|--------|---------|
-| SCHEMA-6 | PENDING | `schemas/source.py:74-75` |
+### 3.13 schemas — ListConfig Validation Missing
+| Item | ID | Location |
+|------|----|----------|
+| Bug | SCHEMA-5 | `schemas/source.py:74-75` |
 
-**Problem:** `ListConfig.card_selector`/`link_selector` no `min_length=1` validation.
+**Problem:** `ListConfig.card_selector`/`link_selector` have no `min_length=1` validation.
 
-**Fix:** Add `min_length=1` validation to prevent empty selectors.
+**Fix:** Add `min_length=1` validation to prevent empty selectors:
+```python
+card_selector: str = Field(..., min_length=1)
+link_selector: str = Field(..., min_length=1)
+```
 
-**Verification:** Test with empty selector value.
-
----
-
-### 3.11 routes — api_token Hash Security
-| Item | Status | Location |
-|------|--------|---------|
-| ROUTES-4 | PENDING | `routes/admin/api_tokens.py:43-45` |
-
-**Problem:** `ApiToken.raw_token_hash` stores unhashed token hash - security concern.
-
-**Fix:** Either remove (if not needed) or encrypt the raw token hash.
-
-**Verification:** Check if raw_token_hash is ever displayed or used.
+**Verification:** Test with empty selector value - should fail validation.
 
 ---
 
-### 3.12 routes — Dashboard Cache TTL
-| Item | Status | Location |
-|------|--------|---------|
-| ROUTES-5 | PENDING | `routes/admin/dashboard.py:188` |
+### 3.14 routes — Dashboard Cache TTL May Be Too Aggressive
+| Item | ID | Location |
+|------|----|----------|
+| Performance | ROUTES-2 | `routes/admin/dashboard.py:188` |
 
 **Problem:** Dashboard stats cache TTL of 60s may be too aggressive for slow queries.
 
-**Fix:** Increase to 120-300s based on query cost.
+**Fix:** Increase to 120-300s based on query cost. Monitor dashboard load times.
 
-**Verification:** Monitor dashboard load times.
-
----
-
-### 3.13 models — updated_at Index Documentation
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-3 | PENDING | `architecture/models.md:194` |
-
-**Problem:** `updated_at` index documentation unclear - it's inline, not in `__table_args__`.
-
-**Fix:** Clarify that index is defined inline on the column, not as separate table args.
-
-**Verification:** Check Article model `updated_at` definition.
-
----
-
-### 3.14 models — TrendMemory Index Name
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-4 | PENDING | `architecture/models.md:197` |
-
-**Problem:** `ix_trend_memory_topic_importance` index name not documented.
-
-**Fix:** Document this index name in architecture.
-
-**Verification:** Check TrendMemory `__table_args__`.
-
----
-
-### 3.15 models — Source.source_key Constraint
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-5 | PENDING | `architecture/models.md:118` |
-
-**Problem:** `Source.source_key` unique constraint not documented.
-
-**Fix:** Document the unique constraint on `source_key`.
-
-**Verification:** Check Source model for unique constraint.
-
----
-
-### 3.16 models — datetime.utcnow Deprecation
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-6 | PENDING | `models/context.py:44` |
-
-**Problem:** `datetime.utcnow` deprecated in Python 3.12+.
-
-**Fix:** Replace with `datetime.now(timezone.utc)`.
-
-**Verification:** Check all uses of `datetime.utcnow`.
-
----
-
-### 3.17 services — Provider Chain Performance
-| Item | Status | Location |
-|------|--------|---------|
-| SERVICE-2 | PENDING | `services/llm/__init__.py:57-97` |
-
-**Problem:** Provider chain iterates on every call - performance issue.
-
-**Fix:** Consider caching the filtered provider chain, but ensure circuit breaker state is still checked.
-
-**Verification:** Profile provider selection overhead.
-
----
-
-### 3.18 services — TrendMemory Semantic Search Memory
-| Item | Status | Location |
-|------|--------|---------|
-| SERVICE-3 | PENDING | `services/trend_memory.py:414-430` |
-
-**Problem:** Semantic search loads 500 memories into memory for similarity calc.
-
-**Fix:** Use database-side similarity calculation or chunked processing.
-
-**Verification:** Check memory usage during trend searches.
-
----
-
-### 3.19 Overview — providers.yaml Missing hybrid
-| Item | Status | Location |
-|------|--------|---------|
-| OVERVIEW-3 | PENDING | `providers.yaml` |
-
-**Problem:** `providers.yaml` missing `hybrid` search provider - `hybrid.py` exists but not configured.
-
-**Fix:** Add `hybrid` to `providers.yaml` search providers section.
-
-**Verification:** Check if hybrid provider works.
-
----
-
-### 3.18 Pipeline — retry_max=20 Selector Behavior
-| Item | Status | Location |
-|------|--------|---------|
-| TASK-4 | PENDING | `tasks/select.py:201-203` |
-
-**Problem:** `retry_max=20` in selector overrides documented limit of 3 - may cause excessive retries.
-
-**Fix:** Document this aggressive retry behavior or adjust retry count.
-
-**Verification:** Monitor selector stage retry counts.
-
----
-
-### 3.19 Pipeline — finalized_at Not Set
-| Item | Status | Location |
-|------|--------|---------|
-| TASK-5 | PENDING | `services/pipeline_degradation.py:209-239` |
-
-**Problem:** `finalized_at` not set in `_finalize()` - docs say it should be.
-
-**Fix:** Add `article.finalized_at = datetime.utcnow()` in `_finalize()`.
-
-**Verification:** Check article finalization timestamp.
-
----
-
-### 3.22 Pipeline — Invalid pending→skipped Transition
-| Item | Status | Location |
-|------|--------|---------|
-| TASK-6 | PENDING | `constants.py:52-63` |
-
-**Problem:** Docs show `pending → skipped` transition but not in `VALID_TRANSITIONS`.
-
-**Fix:** Either add `skipped` as valid transition or remove from docs.
-
-**Verification:** Check PipelineStatus and VALID_TRANSITIONS.
+**Verification:** Measure actual dashboard load times.
 
 ---
 
 ## Wave 4: Low Priority / Documentation Issues
 
-### 4.1 utils — Add Tests for text/hash/security
-| Item | Status | Location |
-|------|--------|---------|
-| UTIL-2 | PENDING | `tests/` |
-
-**Problem:** No unit tests for `utils/text.py`, `utils/hash.py`, `utils/security.py`.
-
-**Fix:** Add comprehensive unit tests for these utilities.
-
-**Verification:** Run test suite for utils.
-
----
-
-### 4.2 utils — Document URL Validation Duplication
-| Item | Status | Location |
-|------|--------|---------|
-| UTIL-3 | PENDING | `architecture/utils.md` |
+### 4.1 utils — Document URL Validation Duplication
+| Item | ID | Location |
+|------|----|----------|
+| Docs | UTIL-2 | `architecture/utils.md` |
 
 **Problem:** URL validation duplication between `utils/url.py` and `services/url.py` not documented.
 
-**Fix:** Document the difference: `utils/url.py` is for adapters (pure), `services/url.py` is config-aware for services.
+**Fix:** Document the difference:
+- `utils/url.py`: For adapters (pure functions, no config dependency)
+- `services/url.py`: Config-aware for services (has TTL/max_size from config)
 
 **Verification:** Check architecture docs.
 
 ---
 
-### 4.3 subagent — Documentation Shows Tool Iteration Incorrectly
-| Item | Status | Location |
-|------|--------|---------|
-| SUB-7 | PENDING | `architecture/subagent.md:136-144` |
+### 4.2 adapters — trafilatura Failure Alerting Missing
+| Item | ID | Location |
+|------|----|----------|
+| Alerting | ADPT-2 | `adapters/web.py:119-120` |
+
+**Problem:** `trafilatura` missing logs only warning, no operator alert.
+
+**Fix:** Add alerting for trafilatura extraction failures (may be handled by article fallback already).
+
+**Verification:** Check if article fallback handles this gracefully.
+
+---
+
+### 4.3 adapters — WebAdapter Request Delay Per-Article Not Per-Page
+| Item | ID | Location |
+|------|----|----------|
+| Docs | ADPT-3 | `adapters/web.py:174-175` |
+
+**Problem:** `request_delay_min/max` is per-article not per-page - may be too aggressive.
+
+**Fix:** Document this behavior clearly so rate limiting expectations are correct.
+
+**Verification:** Check how delay is applied in web adapter.
+
+---
+
+### 4.4 subagent — Documentation Shows Tool Iteration Incorrectly
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SUB-6 | `architecture/subagent.md:136-144` |
 
 **Problem:** Docs show tool iteration in `run_subagent_with_tools()` but it happens inside `BaseLLMProvider.chat_with_tools()`.
 
@@ -549,10 +557,10 @@ def _finalize_subagent_result(
 
 ---
 
-### 4.4 adapters — Global Session Handler Sharing
-| Item | Status | Location |
-|------|--------|---------|
-| ADPT-6 | PENDING | `adapters/session.py:57-75` |
+### 4.5 adapters — Global Session Handler Sharing
+| Item | ID | Location |
+|------|----|----------|
+| Docs | ADPT-4 | `adapters/session.py:57-75` |
 
 **Problem:** Global session shares handler instance across all requests.
 
@@ -562,10 +570,79 @@ def _finalize_subagent_result(
 
 ---
 
-### 4.5 models — Complex Import Lambda
-| Item | Status | Location |
-|------|--------|---------|
-| MODELS-7 | PENDING | `Source.created_at` |
+### 4.6 tasks — Missing aggregate_crawl_results Task Documentation
+| Item | ID | Location |
+|------|----|----------|
+| Docs | TASK-5 | `tasks/crawl.py:215-253` |
+
+**Problem:** `aggregate_crawl_results` task (chord callback) not documented in architecture.
+
+**Fix:** Document this task in `architecture/tasks.md` as a chord callback for aggregating crawl results.
+
+**Verification:** Check task exists and works.
+
+---
+
+### 4.7 tasks — cleanup_old_article_versions days_to_keep Not Documented
+| Item | ID | Location |
+|------|----|----------|
+| Docs | TASK-6 | `tasks/cleanup.py:268` |
+
+**Problem:** `cleanup_old_article_versions` has configurable `days_to_keep` param not documented.
+
+**Fix:** Document this configurable parameter.
+
+**Actual signature:**
+```python
+def cleanup_old_article_versions(self, days_to_keep: int = 90, dry_run: bool = False):
+```
+
+**Verification:** Check task signature.
+
+---
+
+### 4.8 services — Missing Services Documentation
+| Item | ID | Location |
+|------|----|----------|
+| Docs | SERVICE-4 | `services/` |
+
+**Problem:** Not documented in architecture/services.md:
+- `article_validation.py` - Article quality validation
+- `article_fallback.py` - Fallback content extraction
+- `trend_detector.py` - Trend detection logic
+- `pipeline_monitor.py` - Pipeline health monitoring
+- `pipeline_degradation.py` - Graceful degradation logic
+
+**Fix:** Add these services to `architecture/services.md`.
+
+**Verification:** Check these files exist.
+
+---
+
+### 4.9 services — TYPE_CHECKING Import Layering Issue
+| Item | ID | Location |
+|------|----|----------|
+| Layering | SERVICE-5 | `services/crawling.py:12-13` |
+
+**Problem:** `TYPE_CHECKING` import from adapters violates layering (even though pattern is correct per AGENTS.md).
+
+**Fix:** Document that this is intentional for type hints only, or replace with protocol definition in schemas.
+
+**Current code:**
+```python
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from adapters.base import RawItem
+```
+
+**Verification:** Check import pattern.
+
+---
+
+### 4.10 models — Complex Import Lambda in Source.created_at
+| Item | ID | Location |
+|------|----|----------|
+| Readability | MODELS-4 | `Source.created_at` |
 
 **Problem:** Complex import lambda in `Source.created_at` is hard to read.
 
@@ -575,71 +652,49 @@ def _finalize_subagent_result(
 
 ---
 
-### 4.6 tasks — Missing aggregate_crawl_results
-| Item | Status | Location |
-|------|--------|---------|
-| TASK-7 | PENDING | `tasks/crawl.py:215-253` |
-
-**Problem:** `aggregate_crawl_results` task (chord callback) not documented.
-
-**Fix:** Document this task in architecture/tasks.md.
-
-**Verification:** Check task exists and works.
-
----
-
-### 4.7 tasks — cleanup_old_article_versions days_to_keep
-| Item | Status | Location |
-|------|--------|---------|
-| TASK-8 | PENDING | `tasks/cleanup.py:268` |
-
-**Problem:** `cleanup_old_article_versions` has configurable `days_to_keep` param not documented.
-
-**Fix:** Document this configurable parameter.
-
-**Verification:** Check task signature.
-
----
-
-### 4.8 services — Missing Services Documentation
-| Item | Status | Location |
-|------|--------|---------|
-| SERVICE-4 | PENDING | `services/` |
-
-**Problem:** Not documented: `article_validation.py`, `article_fallback.py`, `trend_detector.py`, `pipeline_monitor.py`, `pipeline_degradation.py`.
-
-**Fix:** Add these services to architecture/services.md.
-
-**Verification:** Check these files exist.
-
----
-
-### 4.9 services — TYPE_CHECKING Import Layering
-| Item | Status | Location |
-|------|--------|---------|
-| SERVICE-5 | PENDING | `services/crawling.py:12-13` |
-
-**Problem:** `TYPE_CHECKING` import from adapters violates layering (even though pattern is correct).
-
-**Fix:** Document that this is intentional for type hints only.
-
-**Verification:** Check import pattern.
-
----
-
 ## Implementation Order
 
-### Wave 1 (Critical) - Fix in parallel:
-1. SUB-1: Subagent runner recursive _finalize_subagent_result fix
+### Wave 1 (Critical) - Can fix in parallel:
+- **SUB-1:** Subagent runner recursive _finalize_subagent_result fix
+- **TASK-1:** Error dicts from _run_stage_core not properly handled
+- **SERVICE-1:** Duplicate _degrade_and_advance definition
 
-### Wave 2 (High) - Fix in parallel:
-2-11. All Wave 2 items (SCHEMA-2, SCHEMA-3, OVERVIEW-1, OVERVIEW-2, MODELS-1, MODELS-2, SERVICE-1, ROUTES-2, ROUTES-3, ADPT-3)
+### Wave 2 (High) - Can fix in parallel:
+- **MODELS-1:** Article→PipelineRun relationship docs wrong
+- **MODELS-2:** TrendMemory field name docs wrong
+- **OVERVIEW-1:** providers.yaml missing hybrid
+- **SCHEMA-1:** validate_adapter_config returns dict
+- **SCHEMA-2:** ReviewConfig.auto_publish_threshold not documented
+- **ROUTES-1:** Undocumented routes
+- **ADPT-1:** Session ownership documentation missing
 
-### Wave 3 (Medium) - Fix in parallel:
-12-28. All Wave 3 items (UTIL-1, SUB-3, SUB-4, SUB-5, SUB-6, ADPT-4, ADPT-5, SCHEMA-5, SCHEMA-6, ROUTES-4, MODELS-6, SERVICE-2, SERVICE-3, OVERVIEW-3, TASK-4, TASK-5, TASK-6)
+### Wave 3 (Medium) - Can fix in parallel:
+- **UTIL-1:** sanitize_html XSS vulnerability
+- **SUB-2:** tools.py layering violation
+- **SUB-3:** Inconsistent prompt formatting
+- **SUB-4:** SubagentChainStep/Config location docs wrong
+- **SUB-5:** Documentation retry count wrong
+- **MODELS-3:** datetime.utcnow deprecation
+- **TASK-2:** finalized_at not set (doc clarification needed)
+- **TASK-3:** Invalid pending→skipped transition
+- **SERVICE-2:** Provider chain performance
+- **SERVICE-3:** TrendMemory semantic search memory
+- **SCHEMA-3:** RawItem not documented
+- **SCHEMA-4:** Admin schemas not documented
+- **SCHEMA-5:** ListConfig validation missing
+- **ROUTES-2:** Dashboard cache TTL
 
-### Wave 4 (Low/Docs) - Fix in parallel:
-29-37. All Wave 4 items (UTIL-2, UTIL-3, SUB-7, ADPT-6, MODELS-7, TASK-7, TASK-8, SERVICE-4, SERVICE-5)
+### Wave 4 (Low/Docs) - Can fix in parallel:
+- **UTIL-2:** URL validation duplication documented
+- **ADPT-2:** trafilatura failure alerting
+- **ADPT-3:** WebAdapter delay per-article documented
+- **SUB-6:** Tool iteration docs wrong
+- **ADPT-4:** Global session handler sharing
+- **TASK-5:** aggregate_crawl_results not documented
+- **TASK-6:** days_to_keep parameter not documented
+- **SERVICE-4:** Missing services documentation
+- **SERVICE-5:** TYPE_CHECKING import layering
+- **MODELS-4:** Complex import lambda
 
 ---
 
@@ -654,4 +709,27 @@ pytest tests/ -v
 
 ---
 
-*Plan created 2026-05-22 - consolidating 10 architecture reviews*
+## Notes for Future Agents
+
+### Parallelization Opportunities
+- Wave 1 items (SUB-1, TASK-1, SERVICE-1) are independent - can assign to 3 agents in parallel
+- Wave 2 items are mostly documentation fixes - can parallelize with 3-4 agents
+- Wave 3 has some dependencies (SCHEMA fixes may affect SCHEMA-1) but mostly parallelizable
+- Within subagent module, SUB-2 through SUB-6 are all independent
+
+### Dependencies to Watch
+1. SCHEMA-1 (validate_adapter_config returns dict) - check all callers before changing return type
+2. SERVICE-1 (duplicate _degrade_and_advance) - ensure retry.py still works after refactoring
+3. MODELS-1/MODELS-2 (docs) - only documentation, no code impact
+
+### Security Items (Handle First in Wave)
+- UTIL-1 (XSS vulnerability) - should be prioritized for security review
+
+### Test Recommendations
+- SUB-1: Test `run_subagent_with_tools()` doesn't infinite loop
+- TASK-1: Test error dict handling for article not found
+- UTIL-1: Test XSS vectors are sanitized
+
+---
+
+*Plan consolidated from architecture review findings - 2026-05-22*

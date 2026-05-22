@@ -134,6 +134,16 @@ The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes 
 ### _finalize_subagent_result Has Recursive Bug
 The `_finalize_subagent_result()` function in `services/subagent/runner.py:277-297` is broken - it recursively calls itself at line 288 instead of finalizing the result. `run_subagent()` manually constructs the response at lines 270-274. `run_subagent_with_tools()` at line 467 would hit infinite recursion if it actually called this function.
 
+### Error Dicts From _run_stage_core Not Properly Handled
+The `_run_stage_core()` function in `tasks/pipeline.py:346-387` returns error dicts like `{"article_id": article_id, "error": "pipeline_timeout"}` at lines 351 and 368. These are returned directly without proper error handling - they're treated as success results instead of failures.
+
+### Duplicate _degrade_and_advance Definition
+Two separate definitions of `_degrade_and_advance` exist:
+- `tasks/pipeline.py:36` - local version used by `retry.py`
+- `services/pipeline_degradation.py:183` - public API version
+
+The `tasks/__init__.py` exports the services version, but `retry.py` imports from `tasks.pipeline` which has the local version. This creates confusing duplication.
+
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
 
@@ -170,6 +180,9 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 
 ### Missing json Import Fixed
 The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
+
+### sanitize_html XSS Vulnerability
+The `sanitize_html()` function in `utils/text.py:70-108` only strips dangerous **tags** via `_TagStripper` but doesn't filter **attributes**. XSS vectors like `<img onerror=alert(1)>` pass through. The code uses `_DANGEROUS_TAGS` constant (not `_DANGEROUS_ATTRS` which doesn't exist). Event handlers like `onerror`, `onclick`, etc. are not stripped.
 
 ## APIAdapter Specific Notes
 
@@ -230,8 +243,6 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Implementation details or code examples
 - Verification steps
 
-All items from plans/plan.md have been completed. See plans/plan.md for the current implementation plan status.
-
 ## Architecture Review Findings (Historical)
 
 The following issues were identified and fixed during architecture review:
@@ -256,28 +267,3 @@ The following issues were identified and fixed during architecture review:
 - `services/crawling.py` imports from `adapters.base` via `TYPE_CHECKING` block for type hints only
 - `services/subagent/tools.py` imports directly from `models` and `extensions` - this is a known layering issue
 - `schemas/common.py` intentionally imports from `services.config_cache` (documented with comment)
-
----
-
-## Current Implementation Plan
-
-See `plans/plan.md` for pending items. Key items include:
-
-### Critical (Wave 1)
-- **_finalize_subagent_result recursive bug**: `services/subagent/runner.py:288` calls itself infinitely. `run_subagent()` manually constructs response at lines 270-274, while `run_subagent_with_tools()` at line 467 would hit infinite recursion if it called `_finalize_subagent_result()`.
-
-### High Priority (Wave 2)
-- **`providers.yaml` missing hybrid**: The `hybrid` search provider exists in `services/search/hybrid.py` but is not configured in `providers.yaml`
-- **`validate_adapter_config` returns dict**: `schemas/source.py:130` returns `model_dump()` losing type info - callers may need to re-validate
-- **`datetime.utcnow` deprecated**: Use `datetime.now(timezone.utc)` instead in Python 3.12+
-- **Article→PipelineRun relationship**: `Article.pipeline_run_id` doesn't exist - relation is via `PipelineLog`
-- **`TrendMemory.source_articles` is singular**: Actual field is `source_article_id` (singular), not a relationship
-- **`TrendMemoryService` doesn't exist**: Architecture doc mentions class but code uses module-level functions
-- **Undocumented routes**: 6 public, 35+ admin HTML, 5 API endpoints not in `architecture/routes.md`
-
-### Medium Priority (Wave 3)
-- **sanitize_html XSS**: `utils/text.py` only strips tags, not attributes. `<img onerror=alert(1)>` passes through
-- **`SubagentChainStep` location**: Actually in `schemas/pipeline.py:107-117`, not `runner.py`
-- **`retry_max=20` selector**: Aggressive retry documented but may cause issues
-- **`finalized_at` not set**: `services/pipeline_degradation.py:_finalize()` doesn't set `finalized_at`
-- **`pending→skipped` invalid**: Not in `VALID_TRANSITIONS` - `skipped` is terminal

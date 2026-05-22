@@ -132,10 +132,9 @@ class SSRFSafeRedirectHandler:
 
 Blocklist patterns include internal IP ranges and the `javascript:` and `data:` URL schemes are blocked via scheme validation.
 
-Blocked patterns:
-- Internal IP ranges (10.x, 172.16-31.x, 192.168.x)
-- Private hostnames and DNS rebinding attacks
-- Non-http/https schemes (javascript:, data:, etc.) via scheme validation
+## WebAdapter Request Delay
+
+The `request_delay_min`/`request_delay_max` configuration in `WebConfig` applies **per-article**, not per-page. When crawling a source with pagination, the delay is applied once per article fetch, not once per page load. This may result in more aggressive rate limiting than expected for sites with multiple pages of listings.
 
 ## Session Ownership
 

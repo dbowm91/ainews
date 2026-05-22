@@ -141,4 +141,19 @@ The following CRIT fixes were applied in this review cycle:
 | Duplicate finalization | `services/subagent/runner.py` | `run_subagent()` calls `_finalize_subagent_result()` |
 | Invalid transition | `architecture/pipeline.md` | Remove `pending→skipped` |
 
+### 13. Wave 2 Review (2026-05-22) Key Findings
+
+**CRIT Fixed:**
+- APIAdapter item_url bug: `adapters/api.py` now extracts ID from item objects using `_resolve_path()` before calling `_fetch_item()`
+
+**CRIT Documented (Intentional):**
+- `services/crawling.py` uses TYPE_CHECKING import from adapters (intentional, documented in AGENTS.md)
+- `tasks/crawl.py` imports from adapters (documented in AGENTS.md)
+- Subagent self-correction never executes for ValidationError (intentional behavior)
+
+**HIGH Documented (Deferred):**
+- SSRFSafeRedirectHandler interface works but is non-standard
+- APIAdapter pagination off-by-one (page starts at 2 instead of 1)
+- TrendMemory.topic is String(128) not 200 as documented
+
 These are documented in AGENTS.md under "Architecture Review Findings".

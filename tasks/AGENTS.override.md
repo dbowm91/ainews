@@ -23,18 +23,6 @@
 
 These error dicts are returned directly without proper error handling - callers receive raw error dicts instead of structured responses. The calling code at line 426-427 unpacks and returns them as-is.
 
-## Duplicate _degrade_and_advance Definitions
-There are two separate definitions of `_degrade_and_advance`:
-- `tasks/pipeline.py:36` - local version used by `retry.py:47-48`
-- `services/pipeline_degradation.py:183` - public API version
-
-`tasks/__init__.py:13` exports the services version:
-```python
-from services.pipeline_degradation import degrade_stage as _degrade_and_advance
-```
-
-But `retry.py` imports from `tasks.pipeline` which has the local version. These have different logic paths.
-
 ## Degradation Notes
 - **`_degrade_and_advance` in `tasks/pipeline.py`:** When degrading select stage, ensure `selector_result` dict is set: `{"selected": True, "score": 6, "reason": "auto-selected after failure"}`
 - **Edit stage degradation:** Uses separate `_degrade_edit_stage()` in `services/pipeline_degradation.py` which bypasses `_STAGE_DEGRADE_MAP`. Routes to `review` when `degradation_count >= 2`.
@@ -65,3 +53,37 @@ Each pipeline stage has quality gates that route articles to `review` for manual
 - **research:** Degenerate brief (fails `_is_degenerate_research()`) → `review`
 - **write:** Degenerate draft (fails `_is_degenerate_write()`) → `review`
 - **edit:** Validation failure OR `_should_route_to_review()` → `review`
+
+## Bug Findings (2026-05-22 Session)
+
+### Newsletter Lock Scope Bug
+`tasks/newsletter.py:466-472` - `lock_key` is a local variable inside `_check_newsletter_lock` (line 398) but the `finally` block in `_generate_daily_newsletters_core` references an undefined `lock_key`. The `_check_newsletter_lock` function returns only `(lock_status, None)` at line 409 - `lock_key` is NOT returned.
+
+**Fix:** Modify `_check_newsletter_lock` to return `lock_key` as third return value.
+
+### Edit Stage Missing _dispatch_next
+`tasks/edit.py:185,205` - When edit routes to review via `_should_route_to_review()`, it transitions the status but does NOT call `_dispatch_next()`. Other stages (select, research, write) all call `_dispatch_next` after transitioning to REVIEW.
+
+**Fix:** Add `_dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)` before returning review status.
+
+### Duplicate _degrade_and_advance Definitions
+There are two separate definitions of `_degrade_and_advance`:
+- `tasks/pipeline.py:36` - local version used by `retry.py:47-48`
+- `services/pipeline_degradation.py:183` - public API version
+
+`tasks/__init__.py:13` exports the services version:
+```python
+from services.pipeline_degradation import degrade_stage as _degrade_and_advance
+```
+
+But `retry.py` imports from `tasks.pipeline` which has the local version. These have different logic paths.
+
+### Error Dicts Not Logged in run_stage
+`tasks/pipeline.py:390-391` - Error dicts from `_run_stage_core` are returned directly without logging. However, `_run_stage_core` already logs errors internally before returning them, so no silent error swallowing occurs. The error handling is proper.
+
+### _run_stage_core Error Return Values
+`_run_stage_core()` at `tasks/pipeline.py:346-387` returns:
+- `{"article_id": article_id, "error": "not found"}` - article not found (line 351)
+- `{"article_id": article_id, "error": "pipeline_timeout"}` - pipeline timeout exceeded (line 368)
+
+These dicts are returned to `run_stage()` which checks `if isinstance(result, dict) and "error" in result:` and returns early. Errors are already logged inside `_run_stage_core`.

@@ -7,7 +7,7 @@ This document provides instructions and context for agents working on the AI New
 1.  **Fail-Closed Security:** In production, any security check failure (e.g., insecure permissions, missing secrets) MUST prevent the application from starting.
 2.  **Clean Layering:**
     *   **Adapters** should NOT contain business logic or import from `services`.
-    *   **Services** should NOT import from `Adapters** (use `schemas` or `models` for shared types).
+    *   **Services** should NOT import from `Adapters` (use `schemas` or `models` for shared types).
     *   **Utils** should contain pure helper functions with minimal dependencies.
 3.  **Test-Driven Correctness:** Every bug fix MUST include a reproduction test case. Every new feature MUST have unit tests targeting 80% coverage.
 4.  **Type Safety:** Aim for 0 Mypy errors. Use explicit typing and avoid `Any` where possible.
@@ -221,32 +221,6 @@ Agents should use the nested `AGENTS.override.md` files in subdirectories for mo
 - `templates/AGENTS.override.md` - Template conventions
 - `static/AGENTS.override.md` - Static file conventions
 
-### Implementation Plan Reference
-When working on items from `plans/plan.md`, read the relevant section fully before implementing. Each section contains:
-- Exact file locations and line numbers
-- The specific bug or issue
-- Implementation details or code examples
-- Verification steps
-
-## Deferred Architecture Items
-
-The following items were identified in the 2026-05-22 architecture review and deferred for future implementation:
-
-| Priority | Module | Issue | Status |
-|----------|--------|-------|--------|
-| HIGH | Adapters | SSRFSafeRedirectHandler interface mismatch | Verified works with requests library |
-| HIGH | Adapters | APIAdapter pagination off-by-one | Documentation issue, not critical |
-| HIGH | Models | TrendMemory.topic is String(128) not 200 | Code correct, docs need update |
-| MED | Adapters | Missing `contains` filter | Not implemented, documented correctly |
-| MED | Models | TrendMemory.importance/expires_at undocumented | Fields exist, just undocumented |
-| MED | Schemas | APIConfig request_timeout missing from doc | Documentation fix only |
-| MED | Services | DeepSeek search provider missing from doc | Provider exists, just not documented |
-| MED | Services | circuit_breaker.py not in file inventory | File exists, just not listed |
-| MED | Tasks | Newsletter lock release scope bug | Bug confirmed - needs fix |
-| MED | Tasks | Edit stage missing `_dispatch_next` for review routing | Bug confirmed - needs fix |
-| MED | Services | Subagent chain `steps` parameter ignored | Bug confirmed - needs fix |
-| MED | Subagent | ValidationError not in retryable_exceptions | Bug confirmed - needs fix |
-
 ## Known Intentional Layering Violations
 
 The following are documented as intentional and should NOT be "fixed":
@@ -255,24 +229,35 @@ The following are documented as intentional and should NOT be "fixed":
 - `schemas/common.py` intentionally imports from `services.config_cache` (documented with comment)
 - `tasks/crawl.py` imports directly from `adapters.base` - documented in AGENTS.md
 
-## Bug Findings (2026-05-22 Session)
+## Key Files
 
-### Newsletter Lock Scope Bug
-`tasks/newsletter.py:466-472` - `lock_key` is a local variable inside `_check_newsletter_lock` (line 398) but the `finally` block in `_generate_daily_newsletters_core` references an undefined `lock_key`. The `_check_newsletter_lock` function returns only `(lock_status, None)` at line 409 - `lock_key` is NOT returned.
-
-**Fix:** Modify `_check_newsletter_lock` to return `lock_key` as third return value.
-
-### Edit Stage Missing _dispatch_next
-`tasks/edit.py:185,205` - When edit routes to review via `_should_route_to_review()`, it transitions the status but does NOT call `_dispatch_next()`. Other stages (select, research, write) all call `_dispatch_next` after transitioning to REVIEW.
-
-**Fix:** Add `_dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)` before returning review status.
-
-### Subagent Chain steps Parameter Ignored
-`services/subagent/chain.py:36-57` - `run_subagent_chain` accepts `steps: list[dict]` parameter but completely ignores it. Steps come only from `chain_config.steps`.
-
-**Fix:** Use passed steps if provided, fall back to config: `step_list = steps if steps is not None else chain_config.steps`
-
-### ValidationError Not in retryable_exceptions
-`services/subagent/runner.py:428` - The self-correction code block (lines 393-409) raises to trigger retry, but `_retry_with_backoff` won't retry on `ValidationError` since it's not in the retryable tuple.
-
-**Fix:** Add `ValidationError` to `retryable_exceptions` tuple at line 428.
+| File | Purpose |
+|------|---------|
+| `run.py` | WSGI/ASGI app entry point |
+| `app.py` | Flask app factory |
+| `config.py` | Flask config classes, Celery beat schedule |
+| `extensions.py` | Flask extensions (db, redis, limiter) |
+| `models.py` | SQLAlchemy models |
+| `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
+| `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
+| `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
+| `services/url.py` | URL validation (SSRF prevention), DNS cache |
+| `services/cache.py` | ResponseCache (L1 in-memory + L2 Redis) with LRU eviction and stampede protection |
+| `services/limiter.py` | ModelLimiter (Redis-based rate limiting) |
+| `services/config_utils.py` | `get_config_with_default()` for Celery-safe config |
+| `services/config_cache.py` | Config cache with mtime-based invalidation |
+| `services/config_unified.py` | Unified config loading + validation |
+| `services/pipeline_monitor.py` | Redis minute-bucket stage metrics |
+| `services/health.py` | Health check with degradation |
+| `services/logging_utils.py` | PipelineLogger, `log_pipeline_event()`, `log_article_event()` |
+| `services/article_validation.py` | `ValidationError(ValueError)`, `validate_final_article()` |
+| `routes/admin/__init__.py` | Admin blueprint, `@require_auth`, login lockout |
+| `routes/admin/api/` | Admin API endpoints (health, config, pipeline, articles, webhooks, search) |
+| `routes/admin/dashboard.py` | Dashboard with serialized cache (plain dicts, not model instances) |
+| `routes/public/feeds.py` | Public feed routes, RSS generation, search with analytics logging |
+| `routes/decorators.py` | `commit()` helper, `commit_or_rollback()` context manager |
+| `tasks/newsletter.py` | Newsletter generation and email delivery |
+| `tasks/extract.py` | Article extraction from crawled content |
+| `tasks/retry.py` | `retry_stuck` task, dead-letter handling |
+| `tasks/cleanup.py` | Log cleanup, trend memory consolidation |
+| `adapters/api.py` | API source adapter with error logging in `_fetch_item` |

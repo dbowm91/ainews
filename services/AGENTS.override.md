@@ -25,6 +25,7 @@
 - **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls. The architecture doc suggesting multi-step message injection is outdated.
 - **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
+- **Subagent Chain steps parameter:** The `run_subagent_chain()` function accepts a `steps` parameter but completely ignores it - steps come only from `chain_config.steps`. This is a bug.
 
 ## Utils Notes
 - **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. The `sanitize_html()` function strips event handler attributes (onerror, onclick, etc.) and javascript: URIs from HTML content. This was previously a known XSS vulnerability but has been fixed.
@@ -36,3 +37,22 @@
 
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.
+
+## Bug Findings (2026-05-22 Session)
+
+### ValidationError Not in retryable_exceptions
+`services/subagent/runner.py:428` - The self-correction code block (lines 393-409) raises to trigger retry, but `_retry_with_backoff` won't retry on `ValidationError` since it's not in the `retryable_exceptions` tuple.
+
+**Fix:** Add `ValidationError` to `retryable_exceptions` tuple at line 428:
+```python
+retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
+```
+
+### Subagent Chain steps Parameter Ignored
+`services/subagent/chain.py:62` - `run_subagent_chain` accepts `steps: list[dict]` parameter but completely ignores it. Steps come only from `chain_config.steps`.
+
+**Fix:** Use passed steps if provided, fall back to config:
+```python
+step_list = steps if steps is not None else chain_config.steps
+for i, step_config in enumerate(step_list[:max_length]):
+```

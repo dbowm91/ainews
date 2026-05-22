@@ -259,7 +259,7 @@ Session-based auth with security features:
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login(): ...
 
-@admin_bp.route('/logout')
+@admin_bp.route('/logout', methods=['POST'])
 def logout(): ...
 ```
 
@@ -329,9 +329,12 @@ templates/
 
 ```python
 # On each request:
+# Session binding validates BOTH IP address AND User-Agent header
 if session['ip'] != request.ip or session['ua'] != request.ua:
     # Force re-login
 ```
+
+**Session binding** validates both the client's IP address and User-Agent header to prevent session hijacking. If either changes mid-session, the user is forced to re-authenticate.
 
 ### API Token Authentication
 

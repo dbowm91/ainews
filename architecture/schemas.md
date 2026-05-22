@@ -9,7 +9,7 @@ The `schemas/` package contains Pydantic models for validation and serialization
 | `pipeline.py` | `PipelineRootConfig`, stage configs | Pipeline stage configuration |
 | `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig`, `TopicMatchConfig` | Source adapter configuration |
 | `llm.py` | Provider definitions | LLM/search provider settings |
-| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief`, `SubagentResponse`, `ToolCall`, `ToolResult` | LLM response schemas |
+| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief`, `SubagentResponse`, `ResearchSynthesisResponse`, `EditContextualizationResponse`, `ToolCall`, `ToolResult`, `ToolCallingResponse` | LLM response schemas |
 | `tasks.py` | Task input validation | Celery task input validation |
 | `topic.py` | Topic definitions | Topic configuration |
 | `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration |
@@ -245,7 +245,44 @@ class NewsletterArticle(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Topics/tags for this article")
 ```
 
-## Task Validation (`tasks.py`)
+### Subagent Responses
+
+```python
+class SubagentResponse(BaseModel):
+    """Response from subagent calls with optional fallback tracking."""
+    synthesis: str = Field(description="Synthesized output from the subagent")
+    used_fallback: bool = Field(default=False, description="Whether a fallback response was used")
+    fallback_stages: list[str] = Field(default=[], description="Which stages used fallback responses")
+
+class ResearchSynthesisResponse(BaseModel):
+    """Research synthesis output for contextualization."""
+    synthesis: str = Field(description="Synthesized summary of web research results")
+
+class EditContextualizationResponse(BaseModel):
+    """Edit contextualization output for gap/attribution/claims analysis."""
+    synthesis: str = Field(description="Contextualization notes for the editor")
+
+class ToolCall(BaseModel):
+    """Tool call representation from LLM with tools."""
+    id: str
+    name: str
+    arguments: dict
+
+class ToolResult(BaseModel):
+    """Tool result representation from tool execution."""
+    id: str
+    name: str
+    content: str
+
+class ToolCallingResponse(BaseModel):
+    """Combined tool calling response from LLM provider."""
+    text: str
+    model: str
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    tokens_used: int = 0
+```
+
+### Task Validation (`tasks.py`)
 
 ```python
 class SelectArticleTask(BaseModel):

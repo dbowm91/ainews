@@ -17,8 +17,7 @@ The `APIAdapter` in `adapters/api.py`:
   - `query_param` type: increments page/offset query param
   - `none` type: disables pagination
   - Respects `max_pages` limit (default 3) and `max_items` limit across all pages
-- Supports filter operations: `equals`, `min`, `exists`
-- Does NOT support `contains` operation
+- Supports filter operations: `equals`, `min`, `exists`, `contains`
 - Only supports Bearer token authentication (no API key header support)
 - Uses `list_items_path` and `list_method` (NOT `item_path`)
 

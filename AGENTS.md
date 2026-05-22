@@ -165,11 +165,11 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 ### Missing json Import Fixed
 The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
 
-### Chain Validation Bypass (Known Bug)
-`run_subagent_chain()` in `services/subagent/chain.py:36` accepts `steps: list[dict]` parameter which bypasses Pydantic schema validation. Dict objects don't have `.task_type` attribute access, so the code at line 65 will fail with an unclear `AttributeError` rather than a validation error. The fix is to add `SubagentChainStep.model_validate(step_config)` at the start of the for loop.
+### Chain Validation (Fixed)
+`run_subagent_chain()` in `services/subagent/chain.py:64-65` validates chain steps at runtime with `SubagentChainStep.model_validate()` before accessing `.task_type`.
 
-### Middleware Mutation Bug (Known Bug)
-In `services/subagent/runner.py:346-348`, `apply_middleware()` modifies `tool.fn` on ToolDefinition objects that are cached by `initialize_tool_registry()`. The `copy.deepcopy(tool.fn)` only copies the function, not the containing ToolDefinition object, so subsequent calls compound the wrappers. The fix requires cloning the ToolDefinition itself or applying middleware at registration time.
+### Middleware Clone Fix (Fixed)
+`run_subagent_with_tools()` in `services/subagent/runner.py:349-355` creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
 
 ## APIAdapter Specific Notes
 

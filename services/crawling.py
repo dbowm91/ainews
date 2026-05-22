@@ -10,6 +10,8 @@ from extensions import db
 from models import Article, PipelineRun, Source
 
 if TYPE_CHECKING:
+    # Intentional layer violation: adapters cannot be imported at runtime due to clean layering rules.
+    # This is for type hints only to avoid circular dependencies.
     from adapters.base import RawItem
 
 from schemas.source import SourceConfig

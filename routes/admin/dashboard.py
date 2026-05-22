@@ -185,7 +185,7 @@ def _compute_dashboard_stats():
         "pipeline_health": pipeline_health,
         "source_count": source_count,
     }
-    cache.set(cache_key, stats, 60)
+    cache.set(cache_key, stats, 180)
     return stats
 
 

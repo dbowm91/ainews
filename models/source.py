@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from extensions import db
 
 
@@ -14,7 +16,7 @@ class Source(db.Model):
     source_type = db.Column(db.String(32), nullable=False, index=True)
     active = db.Column(db.Boolean, default=True, index=True)
     last_crawled = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=lambda: __import__('datetime', fromlist=['datetime']).datetime.now(__import__('datetime', fromlist=['timezone']).timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     consecutive_failures = db.Column(db.Integer, nullable=False, default=0, index=True)
     consecutive_successes = db.Column(db.Integer, nullable=False, default=0)

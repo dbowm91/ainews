@@ -10,7 +10,7 @@ All adapters inherit from `BaseSourceAdapter` and are registered via the `@regis
 @register_adapter('rss')  # Registers in SOURCE_ADAPTERS registry
 class RSSAdapter(BaseSourceAdapter):
     def fetch(self) -> list[dict]: ...
-    def parse_item(self, item: dict) -> ArticleData: ...
+    def parse_item(self, item: dict) -> RawItem: ...
 ```
 
 ## File Inventory
@@ -32,10 +32,10 @@ class BaseSourceAdapter(ABC):
         """Fetch raw data from source"""
 
     @abstractmethod
-    def parse_item(self, item: dict) -> ArticleData:
-        """Parse raw item into ArticleData"""
+    def parse_item(self, item: dict) -> RawItem:
+        """Parse raw item into RawItem"""
 
-    def fetch_and_parse(self) -> list[ArticleData]:
+    def fetch_and_parse(self) -> list[RawItem]:
         """Combined fetch + parse with error handling"""
 ```
 
@@ -88,7 +88,7 @@ Features:
 - Item URL template for individual item fetching via `item_url`
 - Auth header injection (Bearer token only — API key in custom headers NOT supported)
 - Field mapping via `fields` dict
-- Filter operations: `equals`, `min`, `exists` (no `contains`)
+- Filter operations: `equals`, `min`, `exists`, `contains`
 
 **Note:** API adapter pagination is implemented via `PaginationConfig` (same as Web adapter). Supports `next_link` (extract URL via JSONPath), `query_param` (increment page/offset), and `none` (disabled).
 
@@ -151,6 +151,8 @@ Each adapter type manages HTTP sessions differently based on its requirements:
 **RSSAdapter** creates its own `requests.Session` with its own `SSRFSafeRedirectHandler` instance. This is intentional — RSS feeds have different session requirements (longer-lived connections, specific user agents) from API/Web adapters.
 
 **APIAdapter** and **WebAdapter** share the global session from `get_crawl_session()` in `adapters/session.py`. They use the same `SSRFSafeRedirectHandler` instance for redirect counting across all requests.
+
+**Important:** `APIAdapter` and `WebAdapter` do NOT close the shared session in their `close()` methods — they implement `close()` as no-ops. This prevents closing the global shared session which would break other adapters. `RSSAdapter` creates its own session and therefore its `close()` method correctly closes its own session.
 
 The global session handler shares state per-request (via thread-local storage for redirect counting). This means redirect counting is reset per-request but the handler instance is shared across all adapter types.
 

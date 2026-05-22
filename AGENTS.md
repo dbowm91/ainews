@@ -161,8 +161,8 @@ The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're a
 ### SubagentConfig is NOT SubagentStageConfig
 `SubagentConfig` in `schemas/pipeline.py:121-125` is the container for subagent stage configs. It does NOT have an `enabled` field at the top level. The `enabled` field is on `SubagentStageConfig` (line 94).
 
-### SearchConfig Caching Bug
-The `load_search_config()` function in `schemas/search.py:28-36` has a bug where `config_path` is hardcoded to `BASE_DIR / "providers.yaml"` instead of using the `path` parameter. This prevents proper mtime-based cache invalidation when a custom path is passed. Fix: change line 31 to `config_path = Path(path)`.
+### SearchConfig Caching Bug (FIXED)
+The `load_search_config()` function in `schemas/search.py:28-36` had a bug where `config_path` was hardcoded to `BASE_DIR / "providers.yaml"` instead of using the `path` parameter. This has been fixed - line 31 now uses `config_path = Path(path)` for proper mtime-based cache invalidation when a custom path is passed.
 
 ### api_tokens Blueprint IS Registered
 The `api_tokens_bp` blueprint IS registered in `app.py` with `url_prefix="/api-tokens"`. Any documentation claiming it is "not registered" is incorrect.

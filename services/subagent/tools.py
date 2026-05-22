@@ -9,6 +9,11 @@ from services.llm.base import ToolDefinition
 
 logger = logging.getLogger(__name__)
 
+# Layering note: tools.py imports directly from models and extensions for runtime
+# use (not just type hints). This is a known layering violation per AGENTS.md.
+# The alternative would be creating service-layer helpers for each tool, which
+# would add significant complexity. Acceptable given constraints.
+
 
 def _context_tool_get_topic_note(topic: str, source: str | None = None) -> str:
     from services.cache import get_response_cache

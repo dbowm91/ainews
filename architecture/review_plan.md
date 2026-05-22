@@ -1,7 +1,8 @@
 # Architecture Review Plan
 
-**Status:** IN_PROGRESS
+**Status:** INCOMPLETE
 **Created:** 2026-05-22
+**Last Updated:** 2026-05-22
 **Purpose:** Comprehensive review of all architecture documents with verification against actual codebase
 
 ## Modules to Review
@@ -137,6 +138,62 @@ Report back only the path to your written plan when complete.
 ## Execution
 
 Run all 10 subagents in parallel (independent modules). Cross-module references noted but not blocking.
+
+## Review Findings Summary (2026-05-22)
+
+### Completed Reviews
+All 10 module reviews completed and saved to `plans/<MODULE>_review.md`.
+
+### CRIT Issues Found (Wave A)
+| # | Module | Issue | Status |
+|---|--------|-------|--------|
+| 1 | Adapters | APIAdapter item_url bug - passed full objects instead of IDs | **FIXED** |
+| 2 | Models | Article.updated_at missing index | Documented - deferred |
+| 3 | Overview | Layering violation: services/crawling.py imports from adapters | Intentional (TYPE_CHECKING) |
+| 4 | Overview | Layering violation: tasks/crawl.py imports from adapters | Intentional (documented in AGENTS.md) |
+| 5 | Subagent | Self-correction in run_subagent_with_tools never executes | Documented - deferred |
+
+### HIGH Issues Found (Wave B)
+| # | Module | Issue | Status |
+|---|--------|-------|--------|
+| 1 | Adapters | SSRFSafeRedirectHandler interface mismatch | Documented - deferred |
+| 2 | Adapters | APIAdapter pagination off-by-one | Documented - deferred |
+| 3 | Models | TrendMemory.topic wrong size (128 vs 200) | Documented - deferred |
+| 4 | Models | TrendMemory.importance/expires_at undocumented | Documentation fix only |
+| 5 | Schemas | APIConfig request_timeout missing from doc | Documentation fix only |
+
+### MED Issues Found (Wave C)
+- Adapters: WebAdapter redirect handler documentation gap
+- Adapters: Missing `contains` filter
+- Models: Article.created_at index discrepancy
+- Models: TrendMemory.last_consolidated_at undocumented
+- Overview: utils/url.py Not Pure undocumented
+- Overview: Layering rule gaps
+- Overview: schemas/common.py imports from services
+- Schemas: SearchConfig missing from docs
+- Schemas: APIConfig auth_header description misleading
+- Subagent: run_subagent_chain ignores steps parameter
+- Services: DeepSeek search provider missing from doc
+- Services: circuit_breaker.py not in file inventory
+- Tasks: Incorrect task name documentation
+- Utils: Missing `__all__` exports in utils/url.py
+
+### LOW Issues Found (Wave D)
+- Adapters: Documentation missing pagination behavior
+- Adapters: trafilatura fallback warning
+- Models: PipelineRun.started_at missing index
+- Models: TrendMemory.embedding nullable discrepancy
+- Pipeline: Selector threshold logic documentation
+- Pipeline: Missing selector_result schema
+- Pipeline: Degradation routing condition clarity
+- Routes: Duplicate /admin/metrics entry
+- Routes: api_tokens_bp structure confusion
+- Routes: Missing API endpoints documented
+- Schemas: SearchConfig missing from docs
+- Services: search/ subdirectory structure not documented
+- Subagent: Chain execution uses chat() not chat_with_tools()
+- Tasks: retry_stuck task name vs documented name
+- Utils: Missing test file for utils.url
 
 ## Output
 

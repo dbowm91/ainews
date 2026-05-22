@@ -27,6 +27,9 @@
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
 - **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
 - **Subagent Chain steps parameter:** `run_subagent_chain()` in `services/subagent/chain.py:62` properly uses passed `steps` parameter or falls back to `chain_config.steps`.
+- **Middleware Chain Order:** The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.
+- **ErrorHandlingMiddleware:** Applied at `services/subagent/runner.py:344` to handle errors during tool execution.
+- **run_stage signature:** `tasks/pipeline.py:353-362` - Selector stage uses `retry_max=20` (hardcoded in `tasks/select.py:202`), not the default 15.
 
 ## Utils Notes
 - **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. The `sanitize_html()` function strips event handler attributes (onerror, onclick, etc.) and javascript: URIs from HTML content. This was previously a known XSS vulnerability but has been fixed.
@@ -38,6 +41,9 @@
 
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.
+
+## Known Bugs
+- **SearchConfig caching bug:** `load_search_config()` in `schemas/search.py:31` uses `config_path = BASE_DIR / "providers.yaml"` instead of `config_path = Path(path)`. This prevents proper mtime-based cache invalidation when a custom path is passed. Fix: change line 31 to `config_path = Path(path)`.
 
 ## Fixed Bug Patterns
 

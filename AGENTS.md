@@ -112,6 +112,25 @@ Key scheduled tasks:
 - `purge-trend-memory`: Daily at 3:45 AM
 - `cleanup-old-versions`: Daily at 3:45 AM
 
+### run_stage Function Signature
+The `run_stage()` function in `tasks/pipeline.py:353-362` has this signature:
+```python
+def run_stage(
+    stage: str,
+    article_id: int,
+    work_fn,
+    task_self,
+    run_id=None,
+    skip_next: str = "finalize",
+    retry_countdown: int = 30,
+    retry_max: int = 15,
+):
+```
+Note: Selector stage uses `retry_max=20` (hardcoded in `tasks/select.py:202`), not the default 15.
+
+### Logout Requires POST
+The logout endpoint at `/admin/logout` requires POST method only (not GET). This is intentional CSRF protection. Do not use GET for logout.
+
 ## API Reference
 
 ### Admin API Endpoints
@@ -133,7 +152,20 @@ Additional newsletter endpoints:
 
 ## Design Notes for Future Agents
 
-### Subagent Tool Execution
+### Middleware Chain Order
+The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.
+
+### ErrorHandlingMiddleware
+`ErrorHandlingMiddleware` is applied in the middleware chain at `services/subagent/runner.py:344`. This middleware handles errors during tool execution.
+
+### SubagentConfig is NOT SubagentStageConfig
+`SubagentConfig` in `schemas/pipeline.py:121-125` is the container for subagent stage configs. It does NOT have an `enabled` field at the top level. The `enabled` field is on `SubagentStageConfig` (line 94).
+
+### SearchConfig Caching Bug
+The `load_search_config()` function in `schemas/search.py:28-36` has a bug where `config_path` is hardcoded to `BASE_DIR / "providers.yaml"` instead of using the `path` parameter. This prevents proper mtime-based cache invalidation when a custom path is passed. Fix: change line 31 to `config_path = Path(path)`.
+
+### api_tokens Blueprint IS Registered
+The `api_tokens_bp` blueprint IS registered in `app.py` with `url_prefix="/api-tokens"`. Any documentation claiming it is "not registered" is incorrect.
 `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
 
 ### StageConfig is a Stub

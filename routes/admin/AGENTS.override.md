@@ -23,3 +23,9 @@ On successful admin login, ALWAYS call `session.clear()` before setting authenti
 - **Audit Logging:** `log_admin_action()` added to all mutation endpoints (review approve/reject, sources CRUD, topic notes CRUD, trend memory delete, articles edit/delete/reprocess/rollback, pipelines trigger, newsletters trigger).
 - **API Versioning:** All API routes use `/api/v1/` prefix (admin: `admin_api_bp`, public: updated routes).
 - **BLE001 Resolution:** Prioritize resolving BLE001 (`except Exception:`) lint errors in admin API routes by catching specific exceptions related to the operation (e.g., `SQLAlchemyError` for database queries, `KeyError` for dictionary access).
+
+## Logout Requires POST
+The logout endpoint at `/admin/logout` requires POST method only (not GET). This is intentional CSRF protection. Document in user-facing admin documentation.
+
+## api_tokens Blueprint IS Registered
+The `api_tokens_bp` blueprint IS registered in `app.py` with `url_prefix="/api-tokens"`. Any documentation claiming it is "not registered" is incorrect.

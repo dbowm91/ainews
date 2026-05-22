@@ -21,5 +21,5 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
 ## Adapter Config Validation (FIXED - CRIT-3)
 `SourceConfig.config` in `schemas/source.py` now has a `field_validator` that validates `config` against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on `type`. The `ADAPTER_CONFIGS` dict at line 98-102 maps type to config class.
 
-## SearchConfig Caching (BUG CONFIRMED - NOT FIXED)
-`load_search_config()` in `schemas/search.py` has a bug at line 31: `config_path` is hardcoded to `BASE_DIR / "providers.yaml"` instead of using `Path(path)`. This means the cache tracks the wrong file for invalidation when a custom path is passed. The fix is: change `config_path = BASE_DIR / "providers.yaml"` to `config_path = Path(path)`.
+## SearchConfig Caching Bug (IDENTIFIED - FIX PLANNED)
+`load_search_config()` in `schemas/search.py` has a bug at line 31: `config_path` is hardcoded to `BASE_DIR / "providers.yaml"` instead of using `Path(path)`. This means the cache tracks the wrong file for invalidation when a custom path is passed. The fix is: change `config_path = BASE_DIR / "providers.yaml"` to `config_path = Path(path)`. This is documented in `plans/plan.md` Phase 1 item 1.1.

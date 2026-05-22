@@ -196,11 +196,12 @@ APIAdapter uses these configuration fields (NOT `item_path`):
 ## Search Provider Notes
 
 The search providers are:
-- `services/search/duckduckgo.py`: DuckDuckGo provider
+- `services/search/duckduckgo.py`: DuckDuckGo provider (default/enabled)
 - `services/search/google.py`: Google provider (disabled, requires API key)
 - `services/search/searxng.py`: SearxNG provider (disabled, self-hosted)
 - `services/search/hybrid.py`: Hybrid provider (FTS5 + vector similarity) - ENABLED
 - `services/search/sqlite_fts.py`: SQLite FTS provider (internal article search)
+- `services/search/deepseek.py`: DeepSeek provider (search only, not LLM)
 
 Note: The Hybrid provider is `hybrid.py`, NOT `sqlite_fts.py`. These are separate files.
 
@@ -227,46 +228,51 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Implementation details or code examples
 - Verification steps
 
-## Architecture Review Findings (Historical)
+## Deferred Architecture Items
 
-The following issues were identified and fixed during architecture review:
+The following items were identified in the 2026-05-22 architecture review and deferred for future implementation:
 
-### CRIT Fixes Applied
-- **Redirect counter SSRF fix**: `adapters/session.py` now decrements the redirect count when `UnsafeURLError` is caught, preventing counter exhaustion attacks
-- **Missing `_should_route_to_review` export**: `tasks/pipeline.py` re-exports `_should_route_to_review` from `services.pipeline_degradation` so `tasks/edit.py` can import it
-- **Duplicate unreachable except block**: `schemas/common.py` had a second `except Exception` that could never execute
-- **Invalid `pending→skipped` transition**: `architecture/pipeline.md` corrected - `skipped` is not a valid transition from `pending`
-- **APIAdapter item_url bug FIXED**: `adapters/api.py` now correctly extracts external_id from item objects before calling `_fetch_item`. When `list_method` is `json_array`, full item objects were being passed to `_fetch_item()` instead of IDs.
-
-### HIGH Fixes Applied
-- **Selector retry_max=20 documented**: `architecture/pipeline.md` documents the selector's aggressive retry behavior (20 retries vs standard 3)
-- **`finalized_at` → `published_at`**: `architecture/pipeline.md` corrected - articles use `published_at` not `finalized_at`
-- **Duplicate `_degrade_and_advance` clarified**: `architecture/tasks.md` notes that `tasks/pipeline.py` has a local version for `retry.py` and `services/pipeline_degradation.py` has the public API
-- **Chain escaping uses `escape_prompt_data`**: `services/subagent/chain.py` now uses the proper escaping function instead of manual loop
-
-### MED Fixes Applied
-- **track_share_click returns JSON**: `routes/public/links.py` now returns `{"success": true}` instead of bare string
-- **URL validation layering documented**: `architecture/utils.md` explains that `services/url.py` is config-aware and `utils/url.py` is for adapters
-
-### Wave 2 Review Findings (2026-05-22) - Deferred
-The following issues were documented during the 2026-05-22 architecture review but deferred for future implementation:
-
-| Priority | Module | Issue | Notes |
-|----------|--------|-------|-------|
+| Priority | Module | Issue | Status |
+|----------|--------|-------|--------|
 | HIGH | Adapters | SSRFSafeRedirectHandler interface mismatch | Verified works with requests library |
 | HIGH | Adapters | APIAdapter pagination off-by-one | Documentation issue, not critical |
-| HIGH | Models | TrendMemory.topic is String(128) not 200 | Documentation vs code mismatch |
+| HIGH | Models | TrendMemory.topic is String(128) not 200 | Code correct, docs need update |
 | MED | Adapters | Missing `contains` filter | Not implemented, documented correctly |
 | MED | Models | TrendMemory.importance/expires_at undocumented | Fields exist, just undocumented |
 | MED | Schemas | APIConfig request_timeout missing from doc | Documentation fix only |
 | MED | Services | DeepSeek search provider missing from doc | Provider exists, just not documented |
 | MED | Services | circuit_breaker.py not in file inventory | File exists, just not listed |
+| MED | Tasks | Newsletter lock release scope bug | Bug confirmed - needs fix |
+| MED | Tasks | Edit stage missing `_dispatch_next` for review routing | Bug confirmed - needs fix |
+| MED | Services | Subagent chain `steps` parameter ignored | Bug confirmed - needs fix |
+| MED | Subagent | ValidationError not in retryable_exceptions | Bug confirmed - needs fix |
 
-### Known Intentional Layering Violations
+## Known Intentional Layering Violations
+
+The following are documented as intentional and should NOT be "fixed":
 - `services/crawling.py` imports from `adapters.base` via `TYPE_CHECKING` block for type hints only
 - `services/subagent/tools.py` imports directly from `models` and `extensions` - this is a known layering issue
 - `schemas/common.py` intentionally imports from `services.config_cache` (documented with comment)
 - `tasks/crawl.py` imports directly from `adapters.base` - documented in AGENTS.md
 
-### Subagent Self-Correction Behavior (Documented)
-The `run_subagent_with_tools()` function in `services/subagent/runner.py` has a self-correction mechanism where validation errors trigger a retry with an error message appended to messages. However, the raised `ValidationError` is caught by the outer exception handler at line 449, which sets `used_fallback = True` and returns early. The self-correction only executes if the retry loop is entered, which doesn't happen for `ValidationError` since it's not in `retryable_exceptions`. This is intentional behavior - validation failures use fallback stages rather than self-correcting.
+## Bug Findings (2026-05-22 Session)
+
+### Newsletter Lock Scope Bug
+`tasks/newsletter.py:466-472` - `lock_key` is a local variable inside `_check_newsletter_lock` (line 398) but the `finally` block in `_generate_daily_newsletters_core` references an undefined `lock_key`. The `_check_newsletter_lock` function returns only `(lock_status, None)` at line 409 - `lock_key` is NOT returned.
+
+**Fix:** Modify `_check_newsletter_lock` to return `lock_key` as third return value.
+
+### Edit Stage Missing _dispatch_next
+`tasks/edit.py:185,205` - When edit routes to review via `_should_route_to_review()`, it transitions the status but does NOT call `_dispatch_next()`. Other stages (select, research, write) all call `_dispatch_next` after transitioning to REVIEW.
+
+**Fix:** Add `_dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)` before returning review status.
+
+### Subagent Chain steps Parameter Ignored
+`services/subagent/chain.py:36-57` - `run_subagent_chain` accepts `steps: list[dict]` parameter but completely ignores it. Steps come only from `chain_config.steps`.
+
+**Fix:** Use passed steps if provided, fall back to config: `step_list = steps if steps is not None else chain_config.steps`
+
+### ValidationError Not in retryable_exceptions
+`services/subagent/runner.py:428` - The self-correction code block (lines 393-409) raises to trigger retry, but `_retry_with_backoff` won't retry on `ValidationError` since it's not in the retryable tuple.
+
+**Fix:** Add `ValidationError` to `retryable_exceptions` tuple at line 428.

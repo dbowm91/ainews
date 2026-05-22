@@ -210,7 +210,7 @@ generate_daily_newsletters (scheduled 8:00 AM ET)
 | File | Purpose |
 |------|---------|
 | `pipeline.yaml` | Pipeline stage configs, newsletter settings, subagent configs, schedules |
-| `providers.yaml` | LLM provider definitions (14 providers: ollama, openai, anthropic, etc.) |
+| `providers.yaml` | LLM provider definitions (16 providers: ollama, openai, anthropic, etc.) - 2 currently enabled (ollama-local, duckduckgo) |
 | `sources.yaml` | News source definitions with adapter types and URLs |
 | `topics.yaml` | Topic definitions for article classification |
 | `config.py` | Flask configuration classes (Development, Production, Testing) |

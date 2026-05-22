@@ -28,7 +28,7 @@ def _load_search_config_from_file(path: str | Path) -> SearchConfig:
 def load_search_config(
     path: str | Path = BASE_DIR / "providers.yaml",
 ) -> SearchConfig:
-    config_path = BASE_DIR / "providers.yaml"
+    config_path = Path(path)
     return cached_config_with_mtime(
         key="search_config",
         loader_fn=lambda: _load_search_config_from_file(path),

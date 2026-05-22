@@ -62,10 +62,12 @@ class APIAdapter(BaseSourceAdapter):
 
         if cfg.item_url and all_items:
             fetched = []
-            for item_id in all_items[: cfg.max_items]:
-                item = self._fetch_item(item_id)
-                if item:
-                    fetched.append(item)
+            for item in all_items[: cfg.max_items]:
+                item_id = self._resolve_path(item, cfg.fields.get("external_id", "$.id"))
+                if item_id:
+                    fetched_item = self._fetch_item(item_id)
+                    if fetched_item:
+                        fetched.append(fetched_item)
             return fetched
 
         return all_items

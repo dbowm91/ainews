@@ -131,8 +131,8 @@ The `SSRFSafeRedirectHandler` in `adapters/session.py` now uses thread-local sto
 ### Subagent Tool Execution
 The `run_subagent_with_tools()` function in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls (unlike what the architecture doc may suggest). This is the current implementation behavior.
 
-### _finalize_subagent_result Exists
-The `_finalize_subagent_result()` function in `services/subagent/runner.py` is defined at line 277 and called by `run_subagent_with_tools()` at line 505. Previously there was a duplicate definition issue (CRIT-2), which has been resolved.
+### _finalize_subagent_result Has Recursive Bug
+The `_finalize_subagent_result()` function in `services/subagent/runner.py:277-297` is broken - it recursively calls itself at line 288 instead of finalizing the result. `run_subagent()` manually constructs the response at lines 270-274. `run_subagent_with_tools()` at line 467 would hit infinite recursion if it actually called this function.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -230,17 +230,16 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Implementation details or code examples
 - Verification steps
 
-All items from plans/plan.md have been completed. See plans/plan.md for the implementation branches used.
+All items from plans/plan.md have been completed. See plans/plan.md for the current implementation plan status.
 
-## Architecture Review Findings
+## Architecture Review Findings (Historical)
 
-After reviewing all architecture documents against the codebase, the following patterns and bugs were identified and fixed:
+The following issues were identified and fixed during architecture review:
 
 ### CRIT Fixes Applied
 - **Redirect counter SSRF fix**: `adapters/session.py` now decrements the redirect count when `UnsafeURLError` is caught, preventing counter exhaustion attacks
 - **Missing `_should_route_to_review` export**: `tasks/pipeline.py` re-exports `_should_route_to_review` from `services.pipeline_degradation` so `tasks/edit.py` can import it
 - **Duplicate unreachable except block**: `schemas/common.py` had a second `except Exception` that could never execute
-- **Duplicate `_finalize_subagent_result` call**: `services/subagent/runner.py` now properly calls `_finalize_subagent_result()` from `run_subagent()` instead of duplicating the logic
 - **Invalid `pending→skipped` transition**: `architecture/pipeline.md` corrected - `skipped` is not a valid transition from `pending`
 
 ### HIGH Fixes Applied
@@ -257,3 +256,28 @@ After reviewing all architecture documents against the codebase, the following p
 - `services/crawling.py` imports from `adapters.base` via `TYPE_CHECKING` block for type hints only
 - `services/subagent/tools.py` imports directly from `models` and `extensions` - this is a known layering issue
 - `schemas/common.py` intentionally imports from `services.config_cache` (documented with comment)
+
+---
+
+## Current Implementation Plan
+
+See `plans/plan.md` for pending items. Key items include:
+
+### Critical (Wave 1)
+- **_finalize_subagent_result recursive bug**: `services/subagent/runner.py:288` calls itself infinitely. `run_subagent()` manually constructs response at lines 270-274, while `run_subagent_with_tools()` at line 467 would hit infinite recursion if it called `_finalize_subagent_result()`.
+
+### High Priority (Wave 2)
+- **`providers.yaml` missing hybrid**: The `hybrid` search provider exists in `services/search/hybrid.py` but is not configured in `providers.yaml`
+- **`validate_adapter_config` returns dict**: `schemas/source.py:130` returns `model_dump()` losing type info - callers may need to re-validate
+- **`datetime.utcnow` deprecated**: Use `datetime.now(timezone.utc)` instead in Python 3.12+
+- **Article→PipelineRun relationship**: `Article.pipeline_run_id` doesn't exist - relation is via `PipelineLog`
+- **`TrendMemory.source_articles` is singular**: Actual field is `source_article_id` (singular), not a relationship
+- **`TrendMemoryService` doesn't exist**: Architecture doc mentions class but code uses module-level functions
+- **Undocumented routes**: 6 public, 35+ admin HTML, 5 API endpoints not in `architecture/routes.md`
+
+### Medium Priority (Wave 3)
+- **sanitize_html XSS**: `utils/text.py` only strips tags, not attributes. `<img onerror=alert(1)>` passes through
+- **`SubagentChainStep` location**: Actually in `schemas/pipeline.py:107-117`, not `runner.py`
+- **`retry_max=20` selector**: Aggressive retry documented but may cause issues
+- **`finalized_at` not set**: `services/pipeline_degradation.py:_finalize()` doesn't set `finalized_at`
+- **`pending→skipped` invalid**: Not in `VALID_TRANSITIONS` - `skipped` is terminal

@@ -165,8 +165,11 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 ### Missing json Import Fixed
 The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
 
-### sanitize_html XSS Vulnerability (FIXED)
-The `sanitize_html()` function in `utils/text.py` now strips event handler attributes (onerror, onclick, etc.), javascript: URIs, and CSS expression() from HTML content. It also tracks dangerous tag context (script, style, etc.) to prevent script content from leaking through after tag removal.
+### Chain Validation Bypass (Known Bug)
+`run_subagent_chain()` in `services/subagent/chain.py:36` accepts `steps: list[dict]` parameter which bypasses Pydantic schema validation. Dict objects don't have `.task_type` attribute access, so the code at line 65 will fail with an unclear `AttributeError` rather than a validation error. The fix is to add `SubagentChainStep.model_validate(step_config)` at the start of the for loop.
+
+### Middleware Mutation Bug (Known Bug)
+In `services/subagent/runner.py:346-348`, `apply_middleware()` modifies `tool.fn` on ToolDefinition objects that are cached by `initialize_tool_registry()`. The `copy.deepcopy(tool.fn)` only copies the function, not the containing ToolDefinition object, so subsequent calls compound the wrappers. The fix requires cloning the ToolDefinition itself or applying middleware at registration time.
 
 ## APIAdapter Specific Notes
 

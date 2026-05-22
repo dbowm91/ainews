@@ -9,55 +9,27 @@
 
 This plan consolidates findings from 10 architecture review files across all modules. Items are organized into waves based on priority and parallelization potential.
 
+**Parallelization Strategy:**
+- WAVE 2 items (all code fixes) can be implemented in parallel by separate agents
+- WAVE 3-5 items (documentation) can be parallelized by module area
+- Within each wave, agents can claim different items independently
+
 ---
 
 ## WAVE 1 - Critical Bug Fixes (Sequential/High Risk)
 
-### WAVE1-1
-**Module:** Utils
-**Location:** `utils/text.py:83-131`
-**Description:** XSS bypass in `sanitize_html` - SVG script content executes after tag removal
-**Issue:** When `<script>` tags are removed from SVG content, JavaScript code inside is NOT removed. Input `'<svg><script>alert(1)</script></svg>'` outputs `'<svg>alert(1)</svg>'` which executes.
-**Implementation Notes:** Fix `_TagStripper` to track dangerous tag context in `_skip_data`/`_skip_stack` pattern (similar to `utils/html.py:_HTMLTextExtractor`). Also fix CSS `expression()` not being stripped at lines 104-106.
-**Dependencies:** None
-**Severity:** SECURITY CRITICAL
-
-### WAVE1-2
-**Module:** Subagent
-**Location:** `services/subagent/chain.py:36,62`
-**Description:** Schema validation bypass for chain steps
-**Issue:** `run_subagent_chain()` accepts `steps: list[dict]` parameter which bypasses schema validation. When called with custom `steps` list, no validation occurs against `SubagentChainStep`. At line 159, code accesses `step_config.task_type` etc. without validation.
-**Implementation Notes:** Add runtime validation in the for loop: `SubagentChainStep.model_validate(step_config)` or change parameter type from `list[dict]` to `list[SubagentChainStep]`.
-**Dependencies:** None
-**Severity:** HIGH
-
-### WAVE1-3
-**Module:** Subagent
-**Location:** `services/subagent/runner.py:346-348`
-**Description:** Middleware mutation bug - tool.fn compounding on cached ToolDefinition objects
-**Issue:** `apply_middleware` in `run_subagent_with_tools` mutates `tool.fn` on cached `ToolDefinition` objects. `initialize_tool_registry` returns `list(all_tools)` where `all_tools` is an LRU-cached tuple. So the same `ToolDefinition` objects are reused across calls. First call wraps `tool.fn`, second call wraps the already-wrapped function (compounding wrappers).
-**Implementation Notes:** Clone ToolDefinition objects before modifying `fn`, or apply middleware at registration time. E.g.:
-```python
-for tool in tools:
-    if tool.fn:
-        tool_copy = ToolDefinition(name=tool.name, description=tool.description,
-                                   parameters=tool.parameters, required=tool.required,
-                                   fn=copy.deepcopy(tool.fn))
-        tool_copy.fn = apply_middleware(tool_copy.fn, middleware_chain)
-```
-**Dependencies:** None
-**Severity:** MEDIUM
+No critical bugs currently pending - WAVE1-1 (XSS) has been fixed.
 
 ---
 
-## WAVE 2 - High Priority Fixes (Can parallelize with Wave 1)
+## WAVE 2 - High Priority Fixes
 
 ### WAVE2-1
 **Module:** Routes
 **Location:** `routes/admin/api_tokens.py:7`
 **Description:** Layering issue - api_tokens.py imports require_auth from parent
 **Issue:** `api_tokens.py` imports `require_auth` from `routes.admin.__init__.py`. This creates circular dependency risk since `__init__.py` imports all submodules including `api_tokens`.
-**Implementation Notes:** Move `require_auth` to `routes/decorators.py` or create `routes/admin/auth.py` for auth utilities.
+**Implementation Notes:** Move `require_auth` to `routes/decorators.py` or create `routes/admin/auth.py` for auth utilities. Alternative: use `from routes.decorators import require_auth` directly.
 **Dependencies:** None
 **Severity:** MEDIUM
 
@@ -67,6 +39,34 @@ for tool in tools:
 **Description:** item_url external_id validation bug
 **Issue:** The `item_url` template uses `{id}` placeholder but no validation exists to ensure `fields.external_id` is configured when `item_url` is used. Silently returns empty results if `external_id` not configured.
 **Implementation Notes:** Add validation that `fields.external_id` is configured when `item_url` is set; return clear error or log warning.
+**Dependencies:** None
+**Severity:** MEDIUM
+
+### WAVE2-3
+**Module:** Tasks
+**Location:** `services/subagent/chain.py:36,62`
+**Description:** Schema validation bypass for chain steps
+**Issue:** `run_subagent_chain()` accepts `steps: list[dict]` parameter which bypasses schema validation. At line 65, code accesses `step_config.task_type` without validation - dict objects don't have `.task_type` attribute access, so this fails with unclear `AttributeError`.
+**Implementation Notes:** Add runtime validation: `SubagentChainStep.model_validate(step_config)` at the start of the for loop, or change parameter type from `list[dict]` to `list[SubagentChainStep]`.
+**Dependencies:** None
+**Severity:** HIGH
+
+### WAVE2-4
+**Module:** Subagent
+**Location:** `services/subagent/runner.py:346-348`
+**Description:** Middleware mutation bug - tool.fn compounding on cached ToolDefinition objects
+**Issue:** `apply_middleware` mutates `tool.fn` on cached `ToolDefinition` objects. `initialize_tool_registry` returns cached tool definitions that are reused across calls. When `copy.deepcopy(tool.fn)` is applied, the wrapped function is copied but then re-assigned to `tool.fn` which is still the cached object. Second call wraps the already-wrapped function.
+**Implementation Notes:** Clone the ToolDefinition object itself before modifying, not just the fn. The current `copy.deepcopy(tool.fn)` only copies the function, not the containing ToolDefinition. Change to:
+```python
+for tool in tools:
+    if tool.fn:
+        tool_copy = ToolDefinition(name=tool.name, description=tool.description,
+                                   parameters=tool.parameters, required=tool.required,
+                                   fn=copy.deepcopy(tool.fn))
+        tool_copy.fn = apply_middleware(tool_copy.fn, middleware_chain)
+        # Replace in tools list, but this doesn't fix the cached registry
+```
+The real fix: modify `initialize_tool_registry()` to apply middleware at registration time, or make it return copies of tool definitions.
 **Dependencies:** None
 **Severity:** MEDIUM
 
@@ -396,17 +396,36 @@ None currently pending.
 
 | Wave | Items | Description |
 |------|-------|-------------|
-| WAVE 1 | 3 | Critical bugs (XSS in sanitize_html, chain validation, middleware mutation) |
-| WAVE 2 | 2 | High priority (api_tokens layering, api adapter validation) |
+| WAVE 1 | 0 | No critical bugs pending (XSS fix was verified complete) |
+| WAVE 2 | 4 | High priority (api_tokens layering, item_url validation, chain validation, middleware mutation) |
 | WAVE 3 | 13 | Documentation fixes (subagent, pipeline, overview, services, tasks) |
 | WAVE 4 | 7 | Medium priority (contains filter, indexes, limiter, web adapter) |
 | WAVE 5 | 13 | Low priority (unused code, typos, minor doc updates) |
-| **Total** | **38** | All items consolidated from 10 review files |
+| **Total** | **37** | Items consolidated from architecture reviews |
 
-**Corrections made during review:**
-- WAVE1-2 (edit.py): NOT a bug - _dispatch_next is properly imported and article.id is in scope
-- WAVE2 (retry.py): Removed - self-import and wrong import don't actually exist (verified against current code)
-- DeepSeek: Not a search provider - AGENTS.md corrected (it's a regex pattern in trend_detector.py) |
+**Corrections/Verification:**
+- WAVE1-1 (XSS): FIXED - `sanitize_html` now properly handles SVG script content and CSS `expression()`
+- WAVE1-2/WAVE1-3: Moved to WAVE2-3 and WAVE2-4 (still pending bugs, not critical)
+- edit.py `_dispatch_next`: NOT a bug - properly imported at line 188
+- retry.py `_dead_letter`/`_apply_fallback`: NOT bugs - imports verified correct in current code
+- DeepSeek: Not a search provider - correctly documented as regex pattern in trend_detector.py
+- tasks_review.md retry bug claims: ERRONEOUS - current code verified correct
+
+---
+
+## Original Plan Files
+
+The following files were consolidated into this plan and should be deleted:
+- `plans/adapters_review.md`
+- `plans/models_review.md`
+- `plans/overview_review.md`
+- `plans/pipeline_review.md`
+- `plans/routes_review.md`
+- `plans/schemas_review.md`
+- `plans/services_review.md`
+- `plans/subagent_review.md`
+- `plans/tasks_review.md`
+- `plans/utils_review.md`
 
 ---
 

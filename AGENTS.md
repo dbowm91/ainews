@@ -253,11 +253,11 @@ The following are documented as intentional and should NOT be "fixed":
 | `services/health.py` | Health check with degradation |
 | `services/logging_utils.py` | PipelineLogger, `log_pipeline_event()`, `log_article_event()` |
 | `services/article_validation.py` | `ValidationError(ValueError)`, `validate_final_article()` |
-| `routes/admin/__init__.py` | Admin blueprint, `@require_auth`, login lockout |
+| `routes/admin/__init__.py` | Admin blueprint, login lockout |
 | `routes/admin/api/` | Admin API endpoints (health, config, pipeline, articles, webhooks, search) |
 | `routes/admin/dashboard.py` | Dashboard with serialized cache (plain dicts, not model instances) |
 | `routes/public/feeds.py` | Public feed routes, RSS generation, search with analytics logging |
-| `routes/decorators.py` | `commit()` helper, `commit_or_rollback()` context manager |
+| `routes/decorators.py` | `commit()` helper, `commit_or_rollback()` context manager, `@require_auth` decorator |
 | `tasks/newsletter.py` | Newsletter generation and email delivery |
 | `tasks/extract.py` | Article extraction from crawled content |
 | `tasks/retry.py` | `retry_stuck` task, dead-letter handling |

@@ -172,9 +172,46 @@ git stash
 git stash pop
 ```
 
+## Architecture Review Findings (2026-05-22)
+
+### Bugs Fixed from Architecture Review (2026-05-22)
+
+| Bug | Module | Fix | Files Modified |
+|-----|--------|-----|----------------|
+| Layering: api_tokens imports require_auth | routes | Moved `require_auth` to `routes/decorators.py` | `routes/decorators.py`, `routes/admin/__init__.py`, `routes/admin/api_tokens.py` |
+| APIAdapter item_url silent failure | adapters | Added warning when using default external_id path | `adapters/api.py:63-69` |
+| Chain schema validation bypass | subagent | Added `SubagentChainStep.model_validate()` runtime check | `services/subagent/chain.py:63-65` |
+| Middleware mutates cached tool.fn | subagent | Clone ToolDefinition object before modifying fn | `services/subagent/runner.py:346-355` |
+| Limiter get_active() silent Redis error | services | Added warning log on Redis error | `services/limiter.py:132-138` |
+| WebAdapter Retry-After not respected | adapters | Added comment documenting limitation | `adapters/web.py:180-182` |
+| Port stripping behavior undocumented | utils | Added comment documenting behavior | `utils/url.py:74-77` |
+| Sequential item fetching performance | adapters | Added comment about async/threaded option | `adapters/api.py:168` |
+
+### Documentation Fixes (2026-05-22)
+
+| Issue | Location | Fix |
+|-------|----------|-----|
+| Tool results re-injection wrong | architecture/subagent.md | Updated to explain multi-turn behavior |
+| Select thresholds incomplete | architecture/pipeline.md | Added `selected=True` requirement |
+| Edit degradation routing wrong | architecture/pipeline.md | Clarified conditional DONE vs review |
+| Module Index paths wrong | architecture/overview.md | Fixed to `architecture/pipeline.md`, etc. |
+| aggregate_crawl_results missing | architecture/tasks.md | Added to file inventory |
+| Layering exceptions undocumented | architecture/services.md | Added Known Layering Exceptions section |
+| Duplicate route entry | architecture/routes.md | Removed duplicate `/admin/articles/<id>/original` |
+| Articles endpoint doc wrong | architecture/routes.md | Updated to use `/articles/ids` |
+| Trend-memory URL wrong prefix | architecture/routes.md | Fixed to `/admin/api/trend-memory/semantic-search` |
+| item_url placeholder undocumented | schemas/source.py | Added {id} placeholder description |
+| auth_header Bearer-only limitation | schemas/source.py | Clarified only Bearer auth supported |
+| updated_at index missing | architecture/models.md | Added `index=True` |
+| source_key nullable missing | architecture/models.md | Added `nullable=False` |
+
+---
+
 ## All Plan Items Completed
 
-**Status: ALL WAVES COMPLETED** as of 2026-05-21
+**Status: ALL WAVES COMPLETED** as of 2026-05-22
+
+All items from the consolidated implementation plan have been completed:
 
 All items from the consolidated implementation plan have been completed:
 - Wave A (CRIT-1, CRIT-2, CRIT-3): Critical bugs fixed

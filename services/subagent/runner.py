@@ -285,15 +285,11 @@ def _finalize_subagent_result(
     stage_config: SubagentStageConfig,
 ) -> SubagentResponse:
     """Finalize subagent result, handling fallback logic and metrics."""
-    return _finalize_subagent_result(
-        result=result,
+    synthesis = result.synthesis if result else ""
+    return SubagentResponse(
+        synthesis=synthesis,
         used_fallback=used_fallback,
         fallback_stages=fallback_stages,
-        last_exc=last_exc,
-        stage=stage,
-        task_type=task_type,
-        article_id=article_id,
-        stage_config=stage_config,
     )
 
 

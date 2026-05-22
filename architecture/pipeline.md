@@ -51,7 +51,7 @@ Pipeline stages use these statuses (defined in `constants.py`):
 | `failed` | Stage failed (can be retried) |
 
 Valid transitions:
-- `pending` → `selecting`, `selected`, `researching`, `skipped`, `review`
+- `pending` → `selecting`, `selected`, `researching`, `review`
 - `selecting` → `selected`, `failed`
 - `selected` → `researching`, `failed`
 - `researching` → `writing`, `failed`

@@ -95,5 +95,3 @@ def cached_config_with_mtime(
         return cast(T, result)
     except Exception:  # noqa: BLE001
         return cast(T, loader_fn())
-    except Exception:  # noqa: BLE001
-        return cast(T, loader_fn())

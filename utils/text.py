@@ -71,11 +71,6 @@ _DANGEROUS_TAGS = {
     "script", "style", "iframe", "noscript", "object", "embed", "form",
     "input", "button", "select", "textarea", "link", "meta", "base",
 }
-_DANGEROUS_ATTRS = {
-    "onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur",
-    "onchange", "onsubmit", "onkeydown", "onkeyup", "onkeypress",
-    "javascript:", "vbscript:", "data:", "href", "src",
-}
 
 
 class _TagStripper(HTMLParser):
@@ -94,7 +89,7 @@ class _TagStripper(HTMLParser):
 
 
 def sanitize_html(html: str) -> str:
-    """Remove dangerous HTML tags and attributes."""
+    """Remove dangerous HTML tags from content."""
     if not html:
         return ""
 

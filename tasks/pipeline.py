@@ -23,6 +23,7 @@ from services.llm import (
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
 from services.metrics import get_metrics
 from services.pipeline_degradation import (
+    _should_route_to_review,  # noqa: F401 - re-exported for tasks/edit.py
     finalize_article as _finalize,
 )
 from services.pipeline_failure import handle_stage_failure as _handle_stage_failure

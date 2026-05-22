@@ -45,6 +45,7 @@ class SSRFSafeRedirectHandler:
             try:
                 validate_url_safe(location)
             except UnsafeURLError:
+                self._redirect_count -= 1
                 raise
             except ValueError as e:
                 parsed = urlparse(location)

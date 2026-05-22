@@ -44,7 +44,7 @@ class APIConfig(BaseModel):
     list_method: str = "json_array"
     list_items_path: Optional[str] = None
     max_items: int = Field(default=30, ge=1, le=200)
-    item_url: Optional[str] = None
+    item_url: Optional[str] = Field(default=None, description="Template URL using {id} placeholder for item ID")
     item_method: str = "json_object"
     fields: dict[str, str] = Field(default_factory=dict)
     filters: list[dict[str, Any]] = Field(default_factory=list)
@@ -53,7 +53,7 @@ class APIConfig(BaseModel):
     request_timeout: int = 15
     user_agent: str = "AINewsBot/1.0"
     api_key: Optional[str] = None
-    auth_header: Optional[str] = None  # Header name for Bearer auth token (e.g., "Authorization")
+    auth_header: Optional[str] = None  # Header name; only Bearer auth supported (value always 'Bearer {api_key}')
 
 
 class PaginationConfig(BaseModel):

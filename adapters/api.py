@@ -166,6 +166,7 @@ class APIAdapter(BaseSourceAdapter):
         return item.title
 
     def _fetch_item(self, item_id) -> Optional[dict]:
+        # Note: Sequential fetching - could benefit from async/threaded fetching for large item counts
         cfg = self.adapter_config
         try:
             url = cfg.item_url.format(id=item_id)

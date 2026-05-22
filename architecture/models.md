@@ -84,7 +84,7 @@ class Article(Base):
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, index=True)
     scheduled_publish_at = Column(DateTime, nullable=True, index=True)
     crawled_at = Column(DateTime, nullable=True, index=True)
     selected_at = Column(DateTime, nullable=True, index=True)
@@ -115,7 +115,7 @@ class Source(Base):
     __tablename__ = 'sources'
 
     id = Column(Integer, primary_key=True)
-    source_key = Column(String(64), unique=True)  # Unique source identifier
+    source_key = Column(String(64), unique=True, nullable=False)  # Unique source identifier
     name = Column(String(128))
     url = Column(String(512))                     # Source website URL
     feed_url = Column(String(512))                 # RSS/API feed URL

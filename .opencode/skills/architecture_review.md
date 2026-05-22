@@ -111,3 +111,34 @@ Use prefix `Fix <area>:` for review fixes:
 - `Fix subagent CRIT-1: Add missing _finalize_subagent_result function`
 - `Fix services HIGH: Fix limiter slot leak using rc.provider fallback`
 - `Fix documentation: Update adapters.md to reflect actual field names`
+
+### 11. Wave-Based Implementation Approach
+
+When multiple issues are found across modules, use a wave-based approach to avoid conflicts:
+
+| Wave | Focus | Branch Pattern |
+|------|-------|----------------|
+| Wave A | CRIT bugs | `wave-a-crit-fixes` |
+| Wave B | HIGH issues | `wave-b-high-fixes` |
+| Wave C | MED issues | `wave-c-med-fixes` |
+| Wave D | LOW issues | `wave-d-low-fixes` |
+
+**Critical rules**:
+- One wave per branch, sequential implementation
+- Verify each fix on its branch before proceeding
+- Create separate branches for AGENTS.md/skill updates
+- Never run parallel agents on the same branch
+
+### 12. Key Fixes Applied in Review
+
+The following CRIT fixes were applied in this review cycle:
+
+| Fix | File | Change |
+|-----|------|--------|
+| Redirect counter SSRF | `adapters/session.py` | Decrement counter on UnsafeURLError |
+| Missing re-export | `tasks/pipeline.py` | Re-export `_should_route_to_review` |
+| Duplicate except block | `schemas/common.py` | Remove unreachable second except |
+| Duplicate finalization | `services/subagent/runner.py` | `run_subagent()` calls `_finalize_subagent_result()` |
+| Invalid transition | `architecture/pipeline.md` | Remove `pending→skipped` |
+
+These are documented in AGENTS.md under "Architecture Review Findings".

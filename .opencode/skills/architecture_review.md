@@ -76,13 +76,7 @@ When fixing bugs found during review:
 2. **Documentation fixes** — Batch together for single commit
 3. **MED issues** — Fix if straightforward, defer complex ones
 
-### 8. Example Fix Patterns
-
-#### Missing Function
-```python
-# If _finalize_subagent_result is called but not defined:
-# Add the function following similar patterns in the same file
-```
+### 8. Common Fix Patterns
 
 #### Limiter Slot Leak
 ```python
@@ -92,27 +86,48 @@ limiter.release(provider_id, model, timeout)
 limiter.release(provider_id or rc.provider, model or rc.model, timeout)
 ```
 
+#### Chain Step Validation
+```python
+# Before (buggy):
+for i, step_config in enumerate(steps):
+    task_type = step_config.task_type  # AttributeError if dict
+# After (fixed):
+for i, step_config in enumerate(steps):
+    if not isinstance(step_config, SubagentChainStep):
+        step_config = SubagentChainStep.model_validate(step_config)
+    task_type = step_config.task_type
+```
+
+#### Middleware Clone Fix
+```python
+# Before (buggy - mutates cached ToolDefinition):
+wrapped_fn = apply_middleware(copy.deepcopy(tool.fn), middleware_chain)
+tool.fn = wrapped_fn  # Mutates cached object!
+# After (fixed - creates new ToolDefinition):
+wrapped_fn = apply_middleware(copy.deepcopy(tool.fn), middleware_chain)
+tools[i] = ToolDefinition(
+    name=tool.name,
+    description=tool.description,
+    parameters=tool.parameters,
+    required=tool.required,
+    fn=wrapped_fn,
+)
+```
+
 #### Missing Import
 ```python
 # If json.JSONDecodeError is used but json not imported:
 import json  # Add at top of file
 ```
 
-### 9. Related Files
-
-- `architecture/review_plan.md` — Master review plan
-- `plans/*_review.md` — Individual module review outputs
-- `AGENTS.md` — Contains "Design Notes for Future Agents" section
-- `.opencode/skills/` — Specialized skills for subdirectories
-
-### 10. Commit Messages
+### 9. Commit Messages
 
 Use prefix `Fix <area>:` for review fixes:
-- `Fix subagent CRIT-1: Add missing _finalize_subagent_result function`
-- `Fix services HIGH: Fix limiter slot leak using rc.provider fallback`
+- `Fix subagent: Add chain step validation`
+- `Fix services: Fix limiter slot leak using rc.provider fallback`
 - `Fix documentation: Update adapters.md to reflect actual field names`
 
-### 11. Wave-Based Implementation Approach
+### 10. Wave-Based Implementation Approach
 
 When multiple issues are found across modules, use a wave-based approach to avoid conflicts:
 
@@ -129,31 +144,9 @@ When multiple issues are found across modules, use a wave-based approach to avoi
 - Create separate branches for AGENTS.md/skill updates
 - Never run parallel agents on the same branch
 
-### 12. Key Fixes Applied in Review
+### 11. Related Files
 
-The following CRIT fixes were applied in this review cycle:
-
-| Fix | File | Change |
-|-----|------|--------|
-| Redirect counter SSRF | `adapters/session.py` | Decrement counter on UnsafeURLError |
-| Missing re-export | `tasks/pipeline.py` | Re-export `_should_route_to_review` |
-| Duplicate except block | `schemas/common.py` | Remove unreachable second except |
-| Duplicate finalization | `services/subagent/runner.py` | `run_subagent()` calls `_finalize_subagent_result()` |
-| Invalid transition | `architecture/pipeline.md` | Remove `pending→skipped` |
-
-### 13. Wave 2 Review (2026-05-22) Key Findings
-
-**CRIT Fixed:**
-- APIAdapter item_url bug: `adapters/api.py` now extracts ID from item objects using `_resolve_path()` before calling `_fetch_item()`
-
-**CRIT Documented (Intentional):**
-- `services/crawling.py` uses TYPE_CHECKING import from adapters (intentional, documented in AGENTS.md)
-- `tasks/crawl.py` imports from adapters (documented in AGENTS.md)
-- Subagent self-correction never executes for ValidationError (intentional behavior)
-
-**HIGH Documented (Deferred):**
-- SSRFSafeRedirectHandler interface works but is non-standard
-- APIAdapter pagination off-by-one (page starts at 2 instead of 1)
-- TrendMemory.topic is String(128) not 200 as documented
-
-These are documented in AGENTS.md under "Architecture Review Findings".
+- `architecture/review_plan.md` — Master review plan
+- `plans/*_review.md` — Individual module review outputs
+- `AGENTS.md` — Contains "Design Notes for Future Agents" section
+- `.opencode/skills/` — Specialized skills for subdirectories

@@ -25,8 +25,8 @@
 - **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
 - **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
-- **Tool Middleware Mutation:** `run_subagent_with_tools()` at line 348 applies middleware to `tool.fn` using `copy.deepcopy(tool.fn)`. However, the tools come from `initialize_tool_registry()` which returns `list(all_tools)` where `all_tools` is an LRU-cached tuple. The returned list contains the same `ToolDefinition` object references across calls, so middleware is applied to cached objects on each call, compounding wrappers.
-- **Subagent Chain steps parameter:** The `run_subagent_chain()` function accepts a `steps` parameter but completely ignores it - steps come only from `chain_config.steps`. This is a bug.
+- **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
+- **Subagent Chain steps parameter:** `run_subagent_chain()` in `services/subagent/chain.py:62` properly uses passed `steps` parameter or falls back to `chain_config.steps`.
 
 ## Utils Notes
 - **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. The `sanitize_html()` function strips event handler attributes (onerror, onclick, etc.) and javascript: URIs from HTML content. This was previously a known XSS vulnerability but has been fixed.

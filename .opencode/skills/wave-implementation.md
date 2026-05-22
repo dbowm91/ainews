@@ -72,75 +72,34 @@ Some tests fail due to MagicMock objects being JSON serialized - this is a test 
 ### Complex Type Errors
 Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
 
-## Architecture Review Findings (2026-05-22)
+## Implementation Patterns
 
-### Bugs Fixed from Architecture Review (2026-05-22)
+### Limiter Slot Leak Prevention
+Always use `provider_id or rc.provider` and `model or rc.model` when releasing limiter slots:
+```python
+finally:
+    limiter.release(provider_id or rc.provider, model or rc.model, timeout)
+```
 
-The following bugs were identified and fixed during the 2026-05-22 architecture review:
+### Chain Validation
+`run_subagent_chain()` validates chain steps at runtime with `SubagentChainStep.model_validate()`:
+```python
+for i, step_config in enumerate(step_list[:max_length]):
+    if not isinstance(step_config, SubagentChainStep):
+        step_config = SubagentChainStep.model_validate(step_config)
+```
 
-| Bug | Module | Fix | Files Modified |
-|-----|--------|-----|----------------|
-| Missing `_dispatch_next` import | tasks/edit | Added import from `tasks.pipeline` | `tasks/edit.py:159` |
-| `article_id` unbound in validation handler | tasks/edit | Changed calls to use `article.id` | `tasks/edit.py:185,206` |
-| Self-import circular dependency | tasks/retry | Removed self-import of `_dead_letter` | `tasks/retry.py:37` |
-| Wrong `_apply_fallback` import source | tasks/retry | Import from `services.pipeline_degradation` | `tasks/retry.py:209` |
-| SVG script XSS bypass | utils/text | Added `_skip_data`/`_skip_stack` tracking | `utils/text.py:83-131` |
-| CSS expression() not stripped | utils/text | Added `expression(` pattern check | `utils/text.py:104-106` |
-| Middleware mutates cached tool.fn | subagent | Clone fn before wrapping via `copy.deepcopy` | `services/subagent/runner.py:347` |
-| APIAdapter item_url no external_id warning | adapters/api | Added warning when using default `external_id` path | `adapters/api.py:63-71` |
-| APIAdapter missing `contains` filter | adapters/api | Implemented `contains` filter operation | `adapters/api.py:196-211` |
-
----
-
-## Architecture Review Findings (2026-05-12)
-
-### Bugs Fixed from Architecture Review
-
-The following bugs were identified and fixed during architecture review:
-
-| Bug | Module | Fix | Files Modified |
-|-----|--------|-----|----------------|
-| Missing `urlparse` import | routes | Added `from urllib.parse import urlparse` | `routes/admin/api/articles.py` |
-| `retry_stuck` missing SELECTING status | tasks | Added `PipelineStatus.SELECTING` to filter | `tasks/retry.py` |
-| Limiter slot leak on LLM fallback | services | Use `provider_id` from `get_provider_for_role()` not `stage_config.provider` | `services/newsletter_pipeline.py` |
-| Tool registry race condition | subagent | Added `_TOOL_REGISTRY_LOCK` threading lock | `services/subagent/registry.py` |
-| Executor never shutdown | subagent | Added `atexit.register(shutdown_executor)` | `services/subagent/config.py` |
-| SSRF redirect counter persists | adapters | `_redirect_count` now uses thread-local storage | `adapters/session.py` |
-| Duplicate `_finalize_subagent_result` | subagent | Removed duplicate definition | `services/subagent/runner.py` |
-| No adapter config validation | schemas | Added `field_validator` to `SourceConfig` | `schemas/source.py` |
-| sanitize_html bare except | utils/text | Uses `except (ValueError, Exception)` | `utils/text.py` |
-| strip_tags bare except | utils/html | Uses `except (ValueError, Exception)` | `utils/html.py` |
-| trafilatura ImportError silent | utils/html | Logs warning when trafilatura unavailable | `utils/html.py` |
-| truncate no negative validation | utils/text | Raises `ValueError` if length < 0 | `utils/text.py` |
-| utils/url.py docstring inaccurate | utils/url | Docstring now notes global mutable state | `utils/url.py` |
-| StageConfig stub undocumented | schemas/pipeline | Added docstring explaining stub purpose | `schemas/pipeline.py` |
-| backfill_embeddings no max_retries | tasks/embeddings | Added `max_retries=CELERY_TASK_MAX_RETRIES` | `tasks/embeddings.py` |
-| TrendMemory missing last_accessed_at | models/context | Added `last_accessed_at` field | `models/context.py` |
-
-### Subagent System Thread Safety
-
-The subagent system uses module-level singletons that require thread-safe initialization:
-
-1. **Tool Registry**: `_TOOL_REGISTRY` dict with `_TOOL_REGISTRY_LOCK` for thread-safe initialization via `initialize_tool_registry()`
-2. **ThreadPoolExecutor**: `_subagent_executor` should be shutdown via `atexit.register(shutdown_executor)` on application exit
-
-### Limiter Pattern Verification
-
-When acquiring and releasing rate limiter slots:
-- Always use `provider_id` (the actual provider used, returned from `get_provider_for_role()` or `_try_stage_work()`) not `rc.provider` (the configured provider)
-- The configured provider may differ from actual provider when fallback occurs
-- This applies to both `limiter.acquire()` and `limiter.release()` calls
-
-### Quality Gates
-Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
-- `select`: Low confidence (score OK but confidence="low") → `review`
-- `research`: Degenerate research brief (fails `_is_degenerate_research()`) → `review`
-- `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
-- `edit`: Validation failure → `review`
-
-See `architecture/tasks.md` for full documentation.
-
-## Common Fix Patterns
+### Middleware Application
+When applying middleware to tool functions, create a new ToolDefinition object:
+```python
+tools[i] = ToolDefinition(
+    name=tool.name,
+    description=tool.description,
+    parameters=tool.parameters,
+    required=tool.required,
+    fn=wrapped_fn,  # New wrapped function
+)
+```
 
 ### SSRF Protection Import
 Adapters should import from `utils/url.py`, not `services/url.py`:
@@ -151,17 +110,14 @@ from utils.url import validate_url_safe, UnsafeURLError
 ### Session Hijacking Protection
 The `require_auth` decorator in `routes/admin/__init__.py` implements IP and User-Agent binding for session security.
 
-### Newsletter Idempotency
-The `idempotency_key` for newsletter generation is defined in `_generate_daily_newsletters_core()` scope.
+## Quality Gates
+Each pipeline stage has quality gates that can route articles to `review` for manual inspection even when the stage "succeeds":
+- `select`: Low confidence (score OK but confidence="low") → `review`
+- `research`: Degenerate research brief (fails `_is_degenerate_research()`) → `review`
+- `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
+- `edit`: Validation failure → `review`
 
-### trafilatura ImportError Handling
-```python
-except ImportError:
-    logger.warning("trafilatura not installed, ...")
-except (ValueError, AttributeError) as e:
-    logger.warning("Content extraction failed for ...")
-    raise  # Re-raise unexpected errors
-```
+See `architecture/tasks.md` for full documentation.
 
 ## Testing Notes
 
@@ -172,71 +128,9 @@ git stash
 git stash pop
 ```
 
-## Architecture Review Findings (2026-05-22)
-
-### Bugs Fixed from Architecture Review (2026-05-22)
-
-| Bug | Module | Fix | Files Modified |
-|-----|--------|-----|----------------|
-| Layering: api_tokens imports require_auth | routes | Moved `require_auth` to `routes/decorators.py` | `routes/decorators.py`, `routes/admin/__init__.py`, `routes/admin/api_tokens.py` |
-| APIAdapter item_url silent failure | adapters | Added warning when using default external_id path | `adapters/api.py:63-69` |
-| Chain schema validation bypass | subagent | Added `SubagentChainStep.model_validate()` runtime check | `services/subagent/chain.py:63-65` |
-| Middleware mutates cached tool.fn | subagent | Clone ToolDefinition object before modifying fn | `services/subagent/runner.py:346-355` |
-| Limiter get_active() silent Redis error | services | Added warning log on Redis error | `services/limiter.py:132-138` |
-| WebAdapter Retry-After not respected | adapters | Added comment documenting limitation | `adapters/web.py:180-182` |
-| Port stripping behavior undocumented | utils | Added comment documenting behavior | `utils/url.py:74-77` |
-| Sequential item fetching performance | adapters | Added comment about async/threaded option | `adapters/api.py:168` |
-
-### Documentation Fixes (2026-05-22)
-
-| Issue | Location | Fix |
-|-------|----------|-----|
-| Tool results re-injection wrong | architecture/subagent.md | Updated to explain multi-turn behavior |
-| Select thresholds incomplete | architecture/pipeline.md | Added `selected=True` requirement |
-| Edit degradation routing wrong | architecture/pipeline.md | Clarified conditional DONE vs review |
-| Module Index paths wrong | architecture/overview.md | Fixed to `architecture/pipeline.md`, etc. |
-| aggregate_crawl_results missing | architecture/tasks.md | Added to file inventory |
-| Layering exceptions undocumented | architecture/services.md | Added Known Layering Exceptions section |
-| Duplicate route entry | architecture/routes.md | Removed duplicate `/admin/articles/<id>/original` |
-| Articles endpoint doc wrong | architecture/routes.md | Updated to use `/articles/ids` |
-| Trend-memory URL wrong prefix | architecture/routes.md | Fixed to `/admin/api/trend-memory/semantic-search` |
-| item_url placeholder undocumented | schemas/source.py | Added {id} placeholder description |
-| auth_header Bearer-only limitation | schemas/source.py | Clarified only Bearer auth supported |
-| updated_at index missing | architecture/models.md | Added `index=True` |
-| source_key nullable missing | architecture/models.md | Added `nullable=False` |
-
----
-
-## All Plan Items Completed
-
-**Status: ALL WAVES COMPLETED** as of 2026-05-22
-
-All items from the consolidated implementation plan have been completed:
-
-All items from the consolidated implementation plan have been completed:
-- Wave A (CRIT-1, CRIT-2, CRIT-3): Critical bugs fixed
-- Wave B (MED-1 through MED-8): Medium priority fixes completed
-- Wave C (LOW-1 through LOW-6): Documentation updates completed
-- Wave A4 (CRIT-A4): TrendMemory field added
-- Wave B1 (HIGH-B1): Quality gate documentation added
-- Wave C9 (MED-C9): backfill_embeddings decorator fixed
-- Wave D7 (LOW-D7): Scheduled tasks documentation completed
-
-Additional items completed on 2026-05-21:
-- HIGH-1: Article model documentation updated with all 30+ fields
-- HIGH-3: Index documentation updated with exact index names
-- MED-8: Missing admin routes added to documentation
-- MED-11: APIAdapter pagination implemented (next_link + query_param)
-- MED-16: PENDING→SKIPPED transition documented
-- MED-17: API token prefix detail (first 16 chars) documented
-- MED-18: Missing task files (retry.py, subscribers.py, webhook.py) added to docs
-- MED-19: pipeline_monitor functionality corrected in docs
-- LOW-1: cleanup.py tasks listed individually
-- LOW-2: Degradation path documented as pending→review
-- LOW-4: Duplicate URL Utilities section removed
-- MED-1: Edit stage degradation behavior corrected
-- MED-9: AuthError bypass documented
-- MED-10: Backoff max 300s documented
-- MED-12: Hybrid provider table corrected
-
-See `plans/plan.md` for full details.
+When testing subagent functions that use `_build_context_tools()` or `_build_search_tools()`:
+```python
+with patch("services.subagent.tools.extensions") as mock_ext:
+    mock_ext.db.session.get.return_value = mock_article
+    result = tool.fn(article_id=123)
+```

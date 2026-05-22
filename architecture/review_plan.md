@@ -1,418 +1,192 @@
 # Architecture Review Plan
 
-**Status:** COMPLETE
-**Created:** 2026-05-22
-**Completed:** 2026-05-22
-**Purpose:** Comprehensive review of all architecture documents with verification against actual codebase
+This plan coordinates review of architecture documentation against actual implementation code.
 
-## Modules to Review
+**Excluded:** `review_plan.md` (this file)
 
-| # | Module | Document | Output Plan |
-|---|--------|----------|-------------|
-| 1 | Adapters | `architecture/adapters.md` | `plans/adapters_review.md` |
-| 2 | Models | `architecture/models.md` | `plans/models_review.md` |
-| 3 | Overview | `architecture/overview.md` | `plans/overview_review.md` |
-| 4 | Pipeline | `architecture/pipeline.md` | `plans/pipeline_review.md` |
-| 5 | Routes | `architecture/routes.md` | `plans/routes_review.md` |
-| 6 | Schemas | `architecture/schemas.md` | `plans/schemas_review.md` |
-| 7 | Services | `architecture/services.md` | `plans/services_review.md` |
-| 8 | Subagent | `architecture/subagent.md` | `plans/subagent_review.md` |
-| 9 | Tasks | `architecture/tasks.md` | `plans/tasks_review.md` |
-| 10 | Utils | `architecture/utils.md` | `plans/utils_review.md` |
+**Reviewed Modules:**
+1. `architecture/overview.md`
+2. `architecture/models.md`
+3. `architecture/adapters.md`
+4. `architecture/services.md`
+5. `architecture/tasks.md`
+6. `architecture/routes.md`
+7. `architecture/schemas.md`
+8. `architecture/pipeline.md`
+9. `architecture/subagent.md`
+10. `architecture/utils.md`
 
-**Excluded:** `architecture/review_plan.md` (this document)
+---
 
-## Review Methodology
+## Review Instructions for Subagents
 
 Each subagent will:
+1. Read the assigned architecture document
+2. Verify claims against actual implementation in the codebase
+3. Identify bugs, inconsistencies, and improvement opportunities
+4. Write findings to `plans/review/{module}_review.md`
 
-1. **Read** the architecture document at `architecture/<MODULE>.md`
-2. **Verify claims** by:
-   - Locating actual implementation files referenced
-   - Comparing documented patterns against actual code
-   - Checking file inventories match reality
-   - Verifying function signatures, class definitions, behavior
-3. **Identify bugs and issues**:
-   - Layering violations (adapters importing from services, etc.)
-   - Deprecated patterns vs documented patterns
-   - Missing implementations
-   - Security concerns (SSRF, XSS, etc.)
-   - Performance concerns
-4. **Interrogate code for improvements**:
-   - Code quality issues
-   - Missing error handling
-   - Race conditions
-   - API design improvements
-5. **Write improvement plan** to `plans/<MODULE>_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues found
-   - Specific bugs (with file:line references)
-   - Recommendations with priority (CRIT/HIGH/MED/LOW)
+**Verification approach:**
+- Cross-reference architectural claims with actual code
+- Check field names, method signatures, class relationships
+- Identify discrepancies between documentation and implementation
+- Note layer violations, security issues, performance concerns
 
-## Subagent Execution
+---
 
-Launch 10 parallel subagents using the `general` subagent_type:
+## Module Review Assignments
 
-### Adapters Review
-```
-Review the architecture document at `architecture/adapters.md` and verify all claims against the actual codebase.
+### 1. Overview Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/overview.md`  
+**Output:** `plans/review/overview_review.md`
 
-Your assigned module: Adapters
+Review the system architecture overview, directory structure, layering rules, and data flow summaries. Verify the module index, system diagram, and cross-references to other architecture documents.
 
-Tasks:
-1. Read `architecture/adapters.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security issues (SSRF, etc.)
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/adapters_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
+---
 
-Focus areas:
-- RSSAdapter, APIAdapter, WebAdapter implementations
-- Config field naming (config vs adapter_config)
-- Pagination and filter implementations
-- SSRF protection in session handling
-- APIAdapter item_url handling
+### 2. Models Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/models.md`  
+**Output:** `plans/review/models_review.md`
 
-Report back only the path to your written plan when complete.
-```
+Review database models (article, source, newsletter, pipeline, context, webhook, auth, tag, search, audit, share). Verify:
+- Model field names and types
+- Relationship cardinalities
+- Index definitions
+- Security fields (TOTP, backup codes)
 
-### Models Review
-```
-Review the architecture document at `architecture/models.md` and verify all claims against the actual codebase.
+---
 
-Your assigned module: Models
+### 3. Adapters Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/adapters.md`  
+**Output:** `plans/review/adapters_review.md`
 
-Tasks:
-1. Read `architecture/models.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/models_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
+Review RSS, API, and Web adapters. Verify:
+- Adapter pattern and registry
+- SSRF protection implementation
+- Session ownership differences
+- Error handling conventions
+- Configuration field names (config vs adapter_config)
 
-Focus areas:
-- Source, Article, Tag, Newsletter, PipelineLog models
-- Field naming accuracy (type vs source_type, last_fetch_at vs last_crawled)
-- Relationship definitions and indexes
-- PipelineStatus state machine
-- TrendMemory model details
+---
 
-Report back only the path to your written plan when complete.
-```
+### 4. Services Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/services.md`  
+**Output:** `plans/review/services_review.md`
 
-### Overview Review
-```
-Review the architecture document at `architecture/overview.md` and verify all claims against the actual codebase.
+Review business logic layer (LLM providers, pipeline services, rate limiter, email, webhooks, trend memory). Verify:
+- Provider base class interface
+- Circuit breaker pattern
+- Rate limiter class name (ModelLimiter) and methods (acquire, release, get_active)
+- Email module-level functions vs class
+- Layering violations documentation
 
-Your assigned module: Overview
+---
 
-Tasks:
-1. Read `architecture/overview.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/overview_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
+### 5. Tasks Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/tasks.md`  
+**Output:** `plans/review/tasks_review.md`
 
-Focus areas:
-- Project structure accuracy
-- Layer boundaries
-- Directory structure
-- utils/url.py purity assumptions
+Review Celery task implementations. Verify:
+- Task inventory by stage
+- Stage transitions and quality gates
+- run_stage helper signature and behavior
+- Celery Beat schedule (14 tasks)
+- Degradation behavior
 
-Report back only the path to your written plan when complete.
-```
+---
 
-### Pipeline Review
-```
-Review the architecture document at `architecture/pipeline.md` and verify all claims against the actual codebase.
+### 6. Routes Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/routes.md`  
+**Output:** `plans/review/routes_review.md`
 
-Your assigned module: Pipeline
+Review Flask blueprints (public_bp, admin_bp, admin_api_bp). Verify:
+- URL prefixes (/, /admin, /api/v1)
+- Route inventory matches actual endpoints
+- Authentication methods
+- Template structure
 
-Tasks:
-1. Read `architecture/pipeline.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/pipeline_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
+---
 
-Focus areas:
-- Stage transitions (select→research→write→edit)
-- Quality gates routing to review
-- Rate limiter slot management
-- Provider fallback chain behavior
-- _run_stage_core implementation
+### 7. Schemas Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/schemas.md`  
+**Output:** `plans/review/schemas_review.md`
 
-Report back only the path to your written plan when complete.
-```
+Review Pydantic validation models. Verify:
+- PipelineRootConfig structure (StageConfig is a stub)
+- SourceConfig field_validator behavior
+- LLM response schemas (SelectionResult, ResearchBrief, CondensedArticle, NewsletterBrief)
+- NewsletterBrief does NOT have preamble/footer/articles fields
+- Task validation schemas
 
-### Routes Review
-```
-Review the architecture document at `architecture/routes.md` and verify all claims against the actual codebase.
+---
 
-Your assigned module: Routes
+### 8. Pipeline Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/pipeline.md`  
+**Output:** `plans/review/pipeline_review.md`
 
-Tasks:
-1. Read `architecture/routes.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/routes_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
+Review newsletter pipeline stages (select, research, write, edit, finalize). Verify:
+- Stage status values and transitions
+- Quality gates (confidence="low", degenerate checks, validation)
+- Degradation behavior (degradation_count >= 2)
+- Two-tier retry system (Celery task retry + stage failure retry)
+- Circuit breaker and dynamic fallback chain
+- Newsletter generation flow (3-stage LLM)
 
-Focus areas:
-- Blueprint registration and URL prefixes
-- Admin API at /api/v1/
-- Public vs admin separation
-- API token authentication
+---
 
-Report back only the path to your written plan when complete.
-```
+### 9. Subagent Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/subagent.md`  
+**Output:** `plans/review/subagent_review.md`
 
-### Schemas Review
-```
-Review the architecture document at `architecture/schemas.md` and verify all claims against the actual codebase.
+Review tool-enabled LLM agents. Verify:
+- ToolDefinition dataclass (no `cached` field)
+- Tool registry entries
+- Chain system (SubagentChainStep, SubagentChainConfig in schemas/pipeline.py)
+- Middleware pattern (wrap vs as_computed)
+- Provider chat() vs chat_with_tools() distinction
+- Tool results re-injection behavior within single chat_with_tools() call
 
-Your assigned module: Schemas
+---
 
-Tasks:
-1. Read `architecture/schemas.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/schemas_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
+### 10. Utils Module Review
+**Subagent:** `explore` agent  
+**File:** `architecture/utils.md`  
+**Output:** `plans/review/utils_review.md`
 
-Focus areas:
-- RSSConfig, APIConfig, WebConfig schemas
-- PaginationConfig implementation
-- SourceConfig validation
-- SearchConfig documentation
+Review pure utility functions. Verify:
+- URL validation layering (utils/url.py vs services/url.py)
+- validate_url_safe() uses global mutable state (_dns_cache, _dns_executor)
+- Text, datetime, security, hash, html utilities
+- __all__ exports pattern
+- Empty __init__.py in utils/
 
-Report back only the path to your written plan when complete.
-```
-
-### Services Review
-```
-Review the architecture document at `architecture/services.md` and verify all claims against the actual codebase.
-
-Your assigned module: Services
-
-Tasks:
-1. Read `architecture/services.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/services_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
-
-Focus areas:
-- Service layer not importing from adapters
-- LLM provider fallback chain
-- Subagent orchestration
-- Search provider inventory
-
-Report back only the path to your written plan when complete.
-```
-
-### Subagent Review
-```
-Review the architecture document at `architecture/subagent.md` and verify all claims against the actual codebase.
-
-Your assigned module: Subagent
-
-Tasks:
-1. Read `architecture/subagent.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/subagent_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
-
-Focus areas:
-- ToolDefinition dataclass fields
-- run_subagent_with_tools implementation
-- _finalize_subagent_result
-- Chain execution with tools
-
-Report back only the path to your written plan when complete.
-```
-
-### Tasks Review
-```
-Review the architecture document at `architecture/tasks.md` and verify all claims against the actual codebase.
-
-Your assigned module: Tasks
-
-Tasks:
-1. Read `architecture/tasks.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/tasks_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
-
-Focus areas:
-- Celery task definitions
-- Rate limiter usage
-- Stage task routing
-- Celery Beat schedule accuracy
-
-Report back only the path to your written plan when complete.
-```
-
-### Utils Review
-```
-Review the architecture document at `architecture/utils.md` and verify all claims against the actual codebase.
-
-Your assigned module: Utils
-
-Tasks:
-1. Read `architecture/utils.md` thoroughly
-2. For each claim, pattern, and file inventory in the document:
-   - Locate the actual code in the codebase
-   - Verify the claim is accurate
-   - Note any discrepancies
-3. Check for:
-   - Layering violations
-   - Deprecated patterns vs documented
-   - Missing implementations
-   - Security concerns
-   - Performance concerns
-   - Bugs in implementation
-4. Write a detailed improvement plan to `plans/utils_review.md` with:
-   - Summary of verified claims
-   - Discrepancies and issues
-   - Specific bugs (file:line)
-   - Recommendations (CRIT/HIGH/MED/LOW)
-
-Focus areas:
-- URL validation (SSRF protection)
-- dns_cache behavior (mutable state)
-- Helper function purity assumptions
-- sanitize_html XSS protection
-
-Report back only the path to your written plan when complete.
-```
+---
 
 ## Execution Order
 
-1. Write this plan to `architecture/review_plan.md`
-2. Launch all 10 subagents in parallel (independent modules)
-3. Each subagent writes its improvement plan to `plans/<MODULE>_review.md`
-4.汇总结果
+Launch all 10 subagents in parallel. Each subagent will:
+1. Read assigned architecture document
+2. Explore relevant codebase sections
+3. Verify claims and identify issues
+4. Write improvement plan to plans/review/
 
-## Output Files
+---
 
-All review plans will be written to the `plans/` directory:
-- `plans/adapters_review.md`
-- `plans/models_review.md`
-- `plans/overview_review.md`
-- `plans/pipeline_review.md`
-- `plans/routes_review.md`
-- `plans/schemas_review.md`
-- `plans/services_review.md`
-- `plans/subagent_review.md`
-- `plans/tasks_review.md`
-- `plans/utils_review.md`
+## Success Criteria
+
+Each review plan in `plans/review/` will contain:
+- **Verified Claims:** Documentation matches implementation
+- **Discrepancies:** Any field names, signatures, or behaviors that differ
+- **Bugs:** Identified bugs or potential issues
+- **Improvements:** Suggested code improvements with rationale
+- **Security Concerns:** Any security-relevant findings
+- **Layering Violations:** Any violations not already documented

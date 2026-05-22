@@ -54,17 +54,23 @@ Each pipeline stage has quality gates that route articles to `review` for manual
 - **write:** Degenerate draft (fails `_is_degenerate_write()`) → `review`
 - **edit:** Validation failure OR `_should_route_to_review()` → `review`
 
-## Bug Findings (2026-05-22 Session)
+## Fixed Bug Patterns
 
-### Newsletter Lock Scope Bug (FIXED)
-`tasks/newsletter.py:466-472` - `lock_key` is a local variable inside `_check_newsletter_lock` (line 398) but the `finally` block in `_generate_daily_newsletters_core` references an undefined `lock_key`. The `_check_newsletter_lock` function returns only `(lock_status, None)` at line 409 - `lock_key` is NOT returned.
+The following bugs were previously encountered and fixed - do not re-fix these:
 
-**Fix Applied:** Modified `_check_newsletter_lock` to return `lock_key` as third return value.
+### Newsletter Lock Key Return Value
+`tasks/newsletter.py:398-409` - `_check_newsletter_lock` must return `lock_key` as third value for the `finally` block to release the lock:
+```python
+return lock_status, lock_key, skip_result  # 3 values, not 2
+```
 
-### Edit Stage Missing _dispatch_next (FIXED)
-`tasks/edit.py:185,205` - When edit routes to review via `_should_route_to_review()`, it transitions the status but does NOT call `_dispatch_next()`. Other stages (select, research, write) all call `_dispatch_next` after transitioning to REVIEW.
-
-**Fix Applied:** Added `_dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)` before returning review status.
+### Edit Stage _dispatch_next
+`tasks/edit.py:185,205` - When routing to review, must call `_dispatch_next`:
+```python
+if run_id:
+    _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+return {"article_id": article.id, "status": "review"}
+```
 
 ### Duplicate _degrade_and_advance Definitions
 There are two separate definitions of `_degrade_and_advance`:

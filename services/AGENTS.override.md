@@ -38,20 +38,18 @@
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.
 
-## Bug Findings (2026-05-22 Session)
+## Fixed Bug Patterns
 
-### ValidationError Not in retryable_exceptions
-`services/subagent/runner.py:428` - The self-correction code block (lines 393-409) raises to trigger retry, but `_retry_with_backoff` won't retry on `ValidationError` since it's not in the `retryable_exceptions` tuple.
+The following bugs were previously encountered and fixed - do not re-fix these:
 
-**Fix:** Add `ValidationError` to `retryable_exceptions` tuple at line 428:
+### ValidationError in Subagent Retry
+`services/subagent/runner.py:428` - `ValidationError` must be in `retryable_exceptions` tuple for self-correction to work:
 ```python
 retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
 ```
 
-### Subagent Chain steps Parameter Ignored
-`services/subagent/chain.py:62` - `run_subagent_chain` accepts `steps: list[dict]` parameter but completely ignores it. Steps come only from `chain_config.steps`.
-
-**Fix:** Use passed steps if provided, fall back to config:
+### Subagent Chain steps Parameter
+`services/subagent/chain.py:62` - `run_subagent_chain` must use passed `steps` parameter:
 ```python
 step_list = steps if steps is not None else chain_config.steps
 for i, step_config in enumerate(step_list[:max_length]):

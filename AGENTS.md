@@ -107,7 +107,7 @@ Key scheduled tasks:
 - `backfill-embeddings`: Daily at 2 AM
 - `cleanup-old-logs`: Daily at cleanup_logs_hour (default 3 AM)
 - `publish-scheduled-articles`: Every 5 minutes (publish_interval)
-- `retry-stuck-articles`: Every 60 minutes
+- `retry-stuck`: Every 60 minutes
 - `consolidate-trend-memory`: Daily at 3:30 AM
 - `purge-trend-memory`: Daily at 3:45 AM
 - `cleanup-old-versions`: Daily at 3:45 AM
@@ -122,6 +122,14 @@ Individual article CRUD endpoints exist at `/admin/api/articles/<id>` with GET, 
 
 ### Source Refresh
 Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
+
+### Newsletter API Endpoints
+Additional newsletter endpoints:
+- `GET /api/v1/newsletters/stats` - Newsletter statistics
+- `POST /api/v1/newsletter/preview` - Preview a newsletter
+
+### Trend Memory API
+- `GET /api/trend-memory/semantic-search` - Semantic search for trend memory entries (at `/api/trend-memory/semantic-search`)
 
 ## Design Notes for Future Agents
 
@@ -208,7 +216,8 @@ The search providers are:
 - `services/search/hybrid.py`: Hybrid provider (FTS5 + vector similarity) - ENABLED
 - `services/search/sqlite_fts.py`: SQLite FTS provider (internal article search)
 
-Note: The Hybrid provider is `hybrid.py`, NOT `sqlite_fts.py`. These are separate files. DeepSeek is NOT a search provider - it appears only as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends.
+### DeepSeek Provider Status
+DeepSeek is NOT a search provider - it only appears as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends and in `adapters/base.py` for URL sanitization. Do not add DeepSeek to search provider documentation without implementing `services/search/deepseek.py`.
 
 ## Shared Context
 

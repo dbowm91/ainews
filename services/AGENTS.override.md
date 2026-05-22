@@ -19,7 +19,7 @@
 
 ## Provider Notes
 - **SubagentStageConfig vs StageConfig:** The actual stage configuration class is `SubagentStageConfig` in `schemas/pipeline.py`, NOT `StageConfig` which is an empty stub with only `tools` field.
-- **DeepSeek Provider:** Not implemented. References in `cost_tracker.py` and documentation have been removed.
+- **DeepSeek Provider:** Not implemented as a search provider. DeepSeek is only an LLM provider (in providers.yaml) and a regex pattern for URL sanitization and trend detection. Do NOT document DeepSeek as a search provider without implementing `services/search/deepseek.py`.
 
 ## Subagent Notes
 - **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.

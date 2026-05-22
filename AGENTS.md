@@ -126,7 +126,7 @@ Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST me
 ## Design Notes for Future Agents
 
 ### Subagent Tool Execution
-`run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results are NOT re-injected into messages for subsequent LLM calls.
+`run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -201,9 +201,8 @@ The search providers are:
 - `services/search/searxng.py`: SearxNG provider (disabled, self-hosted)
 - `services/search/hybrid.py`: Hybrid provider (FTS5 + vector similarity) - ENABLED
 - `services/search/sqlite_fts.py`: SQLite FTS provider (internal article search)
-- `services/search/deepseek.py`: DeepSeek provider (search only, not LLM)
 
-Note: The Hybrid provider is `hybrid.py`, NOT `sqlite_fts.py`. These are separate files.
+Note: The Hybrid provider is `hybrid.py`, NOT `sqlite_fts.py`. These are separate files. DeepSeek is NOT a search provider - it appears only as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends.
 
 ## Shared Context
 

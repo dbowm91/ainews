@@ -134,6 +134,46 @@ class Source(Base):
     # NOT in this model. Adapters access via source_config.config at runtime.
 ```
 
+## Newsletter & Subscriber Models
+
+Newsletter and subscriber tracking for email delivery:
+
+```python
+class Newsletter(Base):
+    __tablename__ = 'newsletters'
+
+    id = Column(Integer, primary_key=True)
+    newsletter_type = Column(String(32), nullable=False, index=True)
+    subject = Column(String(256))
+    html_content = Column(Text)
+    article_count = Column(Integer, default=0)
+    recipients = Column(Integer, default=0)
+    delivered_count = Column(Integer, default=0)  # Successfully delivered
+    error_message = Column(Text, nullable=True)   # Last delivery error
+    generated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    sent_at = Column(DateTime, index=True)
+
+    # Relationships
+    articles = relationship("Article", secondary="newsletter_articles", backref="newsletters")
+
+class Subscriber(Base):
+    __tablename__ = 'subscribers'
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(256), nullable=False, index=True)
+    newsletter_type = Column(String(32), nullable=False, index=True)
+    unsubscribe_token = Column(String(64), unique=True, nullable=False, index=True)
+    verification_token = Column(String(64), unique=True, nullable=True, index=True)
+    subscribed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    confirmed_at = Column(DateTime, nullable=True, index=True)
+    active = Column(Boolean, default=True)
+    deleted_at = Column(DateTime, nullable=True)
+    preferences = Column(JSON, nullable=True, default=dict)  # User topic preferences
+    bounce_count = Column(Integer, nullable=False, default=0)
+    last_bounce_at = Column(DateTime, nullable=True)
+    last_active_at = Column(DateTime, nullable=True, index=True)
+```
+
 ## AdminUser Security
 
 Admin authentication with 2FA:
@@ -195,6 +235,6 @@ Key indexes for query performance:
   - `ix_articles_degradation_count` on `degradation_count` - degradation tracking
   - `uq_source_external_id` unique constraint on `(source_id, external_id)` - dedup
   - Plus individual indexes on: `short_id`, `source_id` (FK), `original_title`, `external_id`, `category`, `experiment_group`, `updated_at`, `scheduled_publish_at`, `crawled_at`, `selected_at`, `published_at`
-- `Source`: unique constraint on `source_key`, index on `consecutive_failures`, index on `disabled_at`
+- `Source`: unique constraint on `source_key`, index on `active`, index on `consecutive_failures`, index on `disabled_at`
 - `PipelineRun`: index on `run_type`, composite index on `(run_type, status)`, index on `started_at`
 - `TrendMemory`: indexes on `(topic, importance)`, `expires_at`, `last_accessed_at`

@@ -318,5 +318,3 @@ The fallback chain is **dynamic** - determined by enabled providers in `provider
 If primary fails, falls through to next provider until one succeeds.
 
 **AuthError handling**: Authentication failures (`AuthError`) cause immediate failure without retry or fallback. This prevents infinite auth loops and is not retried.
-
-### Circuit Breaker

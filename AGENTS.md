@@ -166,7 +166,7 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
 
 ### sanitize_html XSS Vulnerability (FIXED)
-The `sanitize_html()` function in `utils/text.py` now strips event handler attributes (onerror, onclick, etc.) and javascript: URIs from HTML content. The fix uses an HTMLParser-based approach that strips dangerous attributes while preserving safe tags and attributes.
+The `sanitize_html()` function in `utils/text.py` now strips event handler attributes (onerror, onclick, etc.), javascript: URIs, and CSS expression() from HTML content. It also tracks dangerous tag context (script, style, etc.) to prevent script content from leaking through after tag removal.
 
 ## APIAdapter Specific Notes
 

@@ -72,6 +72,26 @@ Some tests fail due to MagicMock objects being JSON serialized - this is a test 
 ### Complex Type Errors
 Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
 
+## Architecture Review Findings (2026-05-22)
+
+### Bugs Fixed from Architecture Review (2026-05-22)
+
+The following bugs were identified and fixed during the 2026-05-22 architecture review:
+
+| Bug | Module | Fix | Files Modified |
+|-----|--------|-----|----------------|
+| Missing `_dispatch_next` import | tasks/edit | Added import from `tasks.pipeline` | `tasks/edit.py:159` |
+| `article_id` unbound in validation handler | tasks/edit | Changed calls to use `article.id` | `tasks/edit.py:185,206` |
+| Self-import circular dependency | tasks/retry | Removed self-import of `_dead_letter` | `tasks/retry.py:37` |
+| Wrong `_apply_fallback` import source | tasks/retry | Import from `services.pipeline_degradation` | `tasks/retry.py:209` |
+| SVG script XSS bypass | utils/text | Added `_skip_data`/`_skip_stack` tracking | `utils/text.py:83-131` |
+| CSS expression() not stripped | utils/text | Added `expression(` pattern check | `utils/text.py:104-106` |
+| Middleware mutates cached tool.fn | subagent | Clone fn before wrapping via `copy.deepcopy` | `services/subagent/runner.py:347` |
+| APIAdapter item_url no external_id warning | adapters/api | Added warning when using default `external_id` path | `adapters/api.py:63-71` |
+| APIAdapter missing `contains` filter | adapters/api | Implemented `contains` filter operation | `adapters/api.py:196-211` |
+
+---
+
 ## Architecture Review Findings (2026-05-12)
 
 ### Bugs Fixed from Architecture Review

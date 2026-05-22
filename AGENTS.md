@@ -231,3 +231,29 @@ When working on items from `plans/plan.md`, read the relevant section fully befo
 - Verification steps
 
 All items from plans/plan.md have been completed. See plans/plan.md for the implementation branches used.
+
+## Architecture Review Findings
+
+After reviewing all architecture documents against the codebase, the following patterns and bugs were identified and fixed:
+
+### CRIT Fixes Applied
+- **Redirect counter SSRF fix**: `adapters/session.py` now decrements the redirect count when `UnsafeURLError` is caught, preventing counter exhaustion attacks
+- **Missing `_should_route_to_review` export**: `tasks/pipeline.py` re-exports `_should_route_to_review` from `services.pipeline_degradation` so `tasks/edit.py` can import it
+- **Duplicate unreachable except block**: `schemas/common.py` had a second `except Exception` that could never execute
+- **Duplicate `_finalize_subagent_result` call**: `services/subagent/runner.py` now properly calls `_finalize_subagent_result()` from `run_subagent()` instead of duplicating the logic
+- **Invalid `pending→skipped` transition**: `architecture/pipeline.md` corrected - `skipped` is not a valid transition from `pending`
+
+### HIGH Fixes Applied
+- **Selector retry_max=20 documented**: `architecture/pipeline.md` documents the selector's aggressive retry behavior (20 retries vs standard 3)
+- **`finalized_at` → `published_at`**: `architecture/pipeline.md` corrected - articles use `published_at` not `finalized_at`
+- **Duplicate `_degrade_and_advance` clarified**: `architecture/tasks.md` notes that `tasks/pipeline.py` has a local version for `retry.py` and `services/pipeline_degradation.py` has the public API
+- **Chain escaping uses `escape_prompt_data`**: `services/subagent/chain.py` now uses the proper escaping function instead of manual loop
+
+### MED Fixes Applied
+- **track_share_click returns JSON**: `routes/public/links.py` now returns `{"success": true}` instead of bare string
+- **URL validation layering documented**: `architecture/utils.md` explains that `services/url.py` is config-aware and `utils/url.py` is for adapters
+
+### Layering Notes
+- `services/crawling.py` imports from `adapters.base` via `TYPE_CHECKING` block for type hints only
+- `services/subagent/tools.py` imports directly from `models` and `extensions` - this is a known layering issue
+- `schemas/common.py` intentionally imports from `services.config_cache` (documented with comment)

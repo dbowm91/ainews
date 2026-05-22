@@ -41,7 +41,7 @@ class Article(db.Model):
     degradation_count = db.Column(db.Integer, nullable=False, default=0)
     pipeline_started_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),

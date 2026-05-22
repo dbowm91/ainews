@@ -196,5 +196,5 @@ Key indexes for query performance:
   - `uq_source_external_id` unique constraint on `(source_id, external_id)` - dedup
   - Plus individual indexes on: `short_id`, `source_id` (FK), `original_title`, `external_id`, `category`, `experiment_group`, `updated_at`, `scheduled_publish_at`, `crawled_at`, `selected_at`, `published_at`
 - `Source`: unique constraint on `source_key`, index on `consecutive_failures`, index on `disabled_at`
-- `PipelineRun`: index on `run_type`, composite index on `(run_type, status)`
+- `PipelineRun`: index on `run_type`, composite index on `(run_type, status)`, index on `started_at`
 - `TrendMemory`: indexes on `(topic, importance)`, `expires_at`, `last_accessed_at`

@@ -17,7 +17,7 @@ class PipelineRun(db.Model):
     articles_processed = db.Column(db.Integer, default=0)
     articles_selected = db.Column(db.Integer, default=0)
     error_message = db.Column(db.Text)
-    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     finished_at = db.Column(db.DateTime, index=True)
 
     logs = db.relationship(

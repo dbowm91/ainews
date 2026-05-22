@@ -103,13 +103,15 @@ def normalize_title(title: str) -> str:
     """Normalize title for fuzzy matching"""
 
 TRACKING_PARAMS: set[str]
-    """Set of tracking parameter names to strip from URLs"""
+    """Set of tracking parameter names to strip from URLs (14 params)"""
 
 def clear_dns_cache() -> None:
     """Clear the DNS resolution cache"""
 
 class UnsafeURLError(ValueError):
     """Raised when URL fails SSRF checks"""
+
+The 14 tracked parameters are: `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `utm_id`, `fbclid`, `gclid`, `ref`, `source`, `mc_cid`, `mc_eid`, `twclid`, `yclid`. These are stripped during URL normalization to prevent deduplication issues with tracking-heavy URLs.
 ```
 
 ## Design Principles

@@ -6,74 +6,104 @@ ainews is an autonomous AI-powered tech news aggregation and newsletter system. 
 
 ## Module Index
 
-This document provides a **birds-eye view** of the system architecture. Each module below links to its detailed deep-dive document.
+This document provides a **bird's-eye view** of the system architecture. Each module below links to its detailed deep-dive document.
 
-| Module | File | Description |
-|--------|------|-------------|
-| [Overview](overview.md) | This file | System architecture index |
-| [Models](models.md) | `models/` | SQLAlchemy database models |
-| [Adapters](adapters.md) | `adapters/` | Source fetchers (RSS, API, Web) |
-| [Services](services.md) | `services/` | Business logic and LLM providers |
-| [Tasks](tasks.md) | `tasks/` | Celery tasks for pipeline |
-| [Routes](routes.md) | `routes/` | Flask blueprints |
-| [Schemas](schemas.md) | `schemas/` | Pydantic validation models |
-| [Pipeline](architecture/pipeline.md) | — | Newsletter generation flow |
-| [Subagent](architecture/subagent.md) | `services/subagent/` | Tool-enabled LLM agents |
-| [Utils](utils.md) | `utils/` | Pure utility functions |
+### Core Application Modules
+
+| Module | Deep Dive | Description |
+|--------|-----------|-------------|
+| [Models](models.md) | `models/` | SQLAlchemy database models (Article, Source, Newsletter, etc.) |
+| [Schemas](schemas.md) | `schemas/` | Pydantic validation models for config, LLM responses, tasks |
+| [Adapters](adapters.md) | `adapters/` | Source fetchers (RSS, API, Web) with SSRF protection |
+| [Services](services.md) | `services/` | Business logic, LLM interactions, infrastructure services |
+| [Tasks](tasks.md) | `tasks/` | Celery tasks implementing the article pipeline |
+| [Routes](routes.md) | `routes/` | Flask blueprints (public, admin, admin API) |
+| [Utils](utils.md) | `utils/` | Pure utility functions (URL, text, datetime, hash, HTML, security) |
+
+### Pipeline & AI Modules
+
+| Module | Deep Dive | Description |
+|--------|-----------|-------------|
+| [Pipeline](pipeline.md) | — | Article processing pipeline stages and newsletter generation |
+| [Subagent](subagent.md) | `services/subagent/` | Tool-enabled LLM agents for context and research |
+| [LLM Providers](llm-providers.md) | `services/llm/` | Multi-provider LLM architecture with fallback chain |
+| [Search Providers](search-providers.md) | `services/search/` | Web search and article search providers |
+| [Prompts](prompts.md) | `prompts/` | LLM prompt templates for pipeline stages |
+
+### Infrastructure & Configuration
+
+| Module | Deep Dive | Description |
+|--------|-----------|-------------|
+| [Configuration](config.md) | `config.py`, `pipeline.yaml`, `providers.yaml` | Config system, validation, and YAML files |
+| [Infrastructure](infrastructure.md) | Redis, SQLite, Celery, email | Core infrastructure services and patterns |
 
 ---
 
 ## System Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              External Systems                               │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
-│  │  RSS Feeds  │  │  REST APIs  │  │  Web Pages  │  │  SMTP Mail  │       │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘       │
-└─────────┼────────────────┼────────────────┼────────────────┼──────────────┘
-          │                │                │                │
-          ▼                ▼                ▼                │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               Adapters Layer                                 │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐           │
-│  │    RSSAdapter    │  │    APIAdapter    │  │    WebAdapter    │           │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘           │
-└───────────┼────────────────────┼────────────────────┼───────────────────────┘
-            │                    │                    │
-            ▼                    ▼                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Services Layer                                    │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │  Researcher  │  │    Writer    │  │    Editor    │  │   Subagent   │     │
-│  │  (research)  │  │   (write)    │  │   (edit)     │  │   (tools)    │     │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
-│         │                 │                 │                 │             │
-│         └─────────────────┴────────┬────────┴─────────────────┘             │
-│                                    │                                        │
-│         ┌──────────────────────────┼──────────────────────────┐              │
-│         │                          ▼                          │              │
-│         │              Newsletter Pipeline                     │              │
-│         │   (select → research → write → edit → finalize)     │              │
-│         └──────────────────────────┬──────────────────────────┘              │
-│                                    │                                        │
-│  ┌─────────────────────────────────┼─────────────────────────────────┐       │
-│  │                                 │                                 │       │
-│  ▼                                 ▼                                 ▼       │
-│ ┌──────────┐               ┌──────────────┐                ┌────────────┐   │
-│ │  Models  │               │    Routes    │                │   Tasks    │   │
-│ │   (DB)   │               │   (Flask)    │                │  (Celery)  │   │
-│ └──────────┘               └──────────────┘                └────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌─────────────────────────────────┐
-                    │       Infrastructure Layer        │
-                    │  ┌─────────┐  ┌─────────────┐    │
-                    │  │  Redis  │  │   SQLite    │    │
-                    │  │(broker) │  │    (DB)     │    │
-                    │  └─────────┘  └─────────────┘    │
-                    └─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                External Systems                                  │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐     │
+│  │ RSS Feeds │  │ REST APIs │  │ Web Pages │  │ LLM APIs  │  │ SMTP Mail │     │
+│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘     │
+└────────┼──────────────┼──────────────┼──────────────┼──────────────┼────────────┘
+         │              │              │              │              │
+         ▼              ▼              ▼              │              │
+┌────────────────────────────────────────────────┐    │              │
+│              Adapters Layer                      │    │              │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────┐│    │              │
+│  │  RSSAdapter  │ │  APIAdapter  │ │WebAdapter││    │              │
+│  └──────┬───────┘ └──────┬───────┘ └────┬─────┘│    │              │
+└─────────┼────────────────┼──────────────┼──────┘    │              │
+          │                │              │           │              │
+          ▼                ▼              ▼           │              │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            Services Layer                                        │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  Pipeline Services                                                      │    │
+│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐          │    │
+│  │  │ Researcher │ │   Writer   │ │   Editor   │ │  Crawling  │          │    │
+│  │  └────────────┘ └────────────┘ └────────────┘ └────────────┘          │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  AI Systems                                                             │    │
+│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐          │    │
+│  │  │ LLM Provs  │ │  Subagent  │ │   Trend    │ │  Search    │          │    │
+│  │  │ (fallback) │ │  (tools)   │ │  Memory    │ │  Providers │          │    │
+│  │  └────────────┘ └────────────┘ └────────────┘ └────────────┘          │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  Infrastructure Services                                                │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐    │    │
+│  │  │  Cache   │ │ Limiter  │ │Circuit Br│ │ Webhooks │ │  Email   │    │    │
+│  │  │(Redis L2)│ │(Redis)   │ │(Redis)   │ │(HMAC+TLS)│ │ (SMTP)   │    │    │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘    │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+          │                │              │
+          ▼                ▼              ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          Orchestration Layer                                     │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐              │
+│  │   Celery Tasks   │  │   Celery Beat    │  │    Flask App     │              │
+│  │ (pipeline stages)│  │   (scheduler)    │  │ (routes + admin) │              │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘              │
+└───────────┼─────────────────────┼─────────────────────┼────────────────────────┘
+            │                     │                     │
+            ▼                     ▼                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           Data Layer                                             │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐              │
+│  │  SQLite (WAL)    │  │  Redis (broker)  │  │  YAML Configs    │              │
+│  │  articles,       │  │  queue, locks,   │  │  pipeline,       │              │
+│  │  sources,        │  │  cache, rate     │  │  providers,      │              │
+│  │  newsletters     │  │  limiting        │  │  sources, topics │              │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘              │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -83,31 +113,164 @@ This document provides a **birds-eye view** of the system architecture. Each mod
 ```
 ainews/
 ├── app.py                  # Flask application factory
-├── config.py               # Configuration classes (Dev, Prod, Test)
-├── celery_app.py           # Celery application setup
-├── constants.py            # Pipeline status values, shared constants
-├── extensions.py           # Flask extensions (db, limiter, redis)
-├── models/                 # SQLAlchemy models (article, source, newsletter, etc.)
-├── services/               # Business logic (NO adapter imports)
-│   ├── llm/               # LLM provider implementations
-│   ├── subagent/          # Tool-enabled LLM agents
-│   └── search/            # Search provider implementations
-├── adapters/               # Source adapters (NO service imports)
+├── config.py               # Configuration classes (Dev, Prod, Test) + beat schedule
+├── celery_app.py           # Celery application setup + FlaskTask base
+├── constants.py            # PipelineStatus enum, shared constants
+├── extensions.py           # Flask extensions (db, redis, limiter)
+├── run.py                  # WSGI/ASGI entry point (Granian)
+├── logging_config.py       # Structured JSON logging + OpenTelemetry
+│
+├── models/                 # SQLAlchemy models
+│   ├── article.py          # Article, Citation
+│   ├── source.py           # Source (health tracking)
+│   ├── newsletter.py       # Newsletter, Subscriber, ArticleMetric
+│   ├── pipeline.py         # PipelineRun, PipelineLog, ArticleVersion
+│   ├── context.py          # TopicNote, TrendMemory
+│   ├── auth.py             # ApiToken, AdminUser (TOTP 2FA)
+│   ├── webhook.py          # Webhook, WebhookEvent
+│   ├── tag.py              # Tag, article_tags
+│   ├── search.py           # SearchQuery
+│   ├── audit.py            # AuditLog
+│   └── share.py            # ShareConfig
+│
+├── schemas/                # Pydantic models
+│   ├── pipeline.py         # PipelineRootConfig, RoleConfig, SubagentConfig
+│   ├── source.py           # SourceConfig, RSSConfig, APIConfig, WebConfig
+│   ├── llm.py              # Provider definitions
+│   ├── llm_responses.py    # SelectionResult, ResearchBrief, CondensedArticle
+│   ├── tasks.py            # Celery task input validation
+│   ├── topic.py            # Topic definitions
+│   ├── search.py           # SearchConfig
+│   ├── webhook.py          # Webhook schemas
+│   ├── admin.py            # Admin API request validation
+│   └── item.py             # RawItem (adapter output)
+│
+├── adapters/               # Source data fetchers
+│   ├── base.py             # BaseSourceAdapter + registry
+│   ├── rss.py              # RSS/Atom feed adapter
+│   ├── api.py              # REST API adapter
+│   ├── web.py              # Web scraping adapter
+│   └── session.py          # Shared HTTP session + SSRF protection
+│
+├── services/               # Business logic layer
+│   ├── llm/                # LLM provider implementations
+│   │   ├── __init__.py     # Provider registry + fallback chain
+│   │   ├── base.py         # BaseLLMProvider + ToolDefinition
+│   │   ├── openai.py       # OpenAI + OpenAI-compatible providers
+│   │   ├── anthropic.py    # Anthropic Claude
+│   │   ├── gemini.py       # Google Gemini
+│   │   ├── ollama.py       # Local Ollama
+│   │   ├── errors.py       # Error classification
+│   │   └── json_utils.py   # JSON parsing for LLM responses
+│   ├── subagent/           # Tool-enabled LLM agents
+│   │   ├── runner.py       # run_subagent(), tool loop
+│   │   ├── chain.py        # Multi-step chains with conditions
+│   │   ├── tools.py        # Built-in tool implementations
+│   │   ├── registry.py     # Tool registry
+│   │   ├── middleware.py    # Logging, timing, error handling
+│   │   └── conditions.py   # AST-based condition evaluation
+│   ├── search/             # Search providers
+│   │   ├── duckduckgo.py   # DuckDuckGo (default)
+│   │   ├── hybrid.py       # FTS5 + vector similarity
+│   │   ├── google.py       # Google Custom Search
+│   │   └── searxng.py      # Self-hosted SearxNG
+│   ├── researcher.py       # Research prompt builder
+│   ├── writer.py           # Writer prompt builder
+│   ├── editor.py           # Editor prompt builder
+│   ├── crawling.py         # Source management, dedup
+│   ├── content_extractor.py# trafilatura + readability
+│   ├── trend_memory.py     # LLM-judged trend insights
+│   ├── embeddings.py       # Vector embeddings
+│   ├── cache.py            # ResponseCache (L1 + L2 Redis)
+│   ├── limiter.py          # ModelLimiter (Redis concurrency)
+│   ├── circuit_breaker.py  # Provider circuit breaker
+│   ├── email.py            # SMTP with connection pooling
+│   ├── webhooks.py         # HMAC-signed webhook dispatch
+│   ├── pipeline_monitor.py # Redis stage metrics
+│   ├── pipeline_degradation.py # Graceful degradation
+│   ├── pipeline_failure.py # Stage failure handling
+│   └── health.py           # Health check with degradation
+│
+├── tasks/                  # Celery tasks
+│   ├── crawl.py            # run_all_sources, crawl_source
+│   ├── extract.py          # process_item (content extraction)
+│   ├── select.py           # select_article (LLM scoring)
+│   ├── research.py         # research_article (LLM brief)
+│   ├── write.py            # write_article (LLM condensation)
+│   ├── edit.py             # edit_article (LLM editing + tags)
+│   ├── pipeline.py         # run_stage() helper, shared utilities
+│   ├── newsletter.py       # generate_daily_newsletters
+│   ├── retry.py            # retry_stuck (dead-letter handling)
+│   ├── cleanup.py          # Maintenance tasks (logs, versions, memory)
+│   ├── scheduler.py        # publish_scheduled_articles
+│   ├── embeddings.py       # backfill_embeddings
+│   ├── webhook.py          # dispatch_webhook_task
+│   └── subscribers.py      # cleanup_inactive_subscribers
+│
 ├── routes/                 # Flask blueprints
-│   ├── admin/             # Admin interface + JSON API at /api/v1
-│   └── public/            # Public-facing routes
-├── tasks/                  # Celery tasks (pipeline stages, cleanup, etc.)
-├── schemas/                # Pydantic models (validation, configuration)
-├── utils/                  # Pure utilities (url, text, datetime, hash, html, security)
-├── templates/              # Jinja templates
+│   ├── public/             # Public-facing routes
+│   │   ├── feeds.py        # Article feeds, RSS, search
+│   │   ├── subscribe.py    # Subscription management
+│   │   └── links.py        # Short URLs, share tracking
+│   ├── admin/              # Admin interface
+│   │   ├── __init__.py     # Login, lockout, session mgmt
+│   │   ├── dashboard.py    # Dashboard with stats
+│   │   ├── articles.py     # Article CRUD + versions
+│   │   ├── pipelines.py    # Pipeline monitoring
+│   │   ├── sources.py      # Source management
+│   │   ├── newsletters.py  # Newsletter management
+│   │   ├── review.py       # Article review queue
+│   │   ├── webhooks.py     # Webhook management
+│   │   ├── trend_memory.py # Trend memory UI
+│   │   ├── api_tokens.py   # API token management
+│   │   └── api/            # Admin JSON API (/api/v1/*)
+│   └── decorators.py       # @require_auth, commit(), commit_or_rollback()
+│
+├── utils/                  # Pure utility functions
+│   ├── url.py              # SSRF protection, URL normalization, DNS cache
+│   ├── text.py             # XML escaping, truncation, HTML sanitization
+│   ├── datetime.py         # Date parsing and formatting
+│   ├── hash.py             # HMAC hash generation/verification
+│   ├── html.py             # HTML processing, trafilatura fallback
+│   └── security.py         # Token generation, constant-time compare
+│
 ├── prompts/                # LLM prompt templates
-├── scripts/                # Utility scripts
-├── tests/                  # Test suite
+│   ├── selector.txt        # Article selection/scoring
+│   ├── researcher.txt      # Research brief compilation
+│   ├── writer.txt          # Smart Brevity article writing
+│   ├── editor.txt          # Editorial review
+│   ├── newsletter_reader.txt  # Newsletter theme analysis
+│   ├── newsletter_writer.txt  # Newsletter summary writing
+│   └── newsletter_editor.txt  # Newsletter review
+│
+├── templates/              # Jinja2 templates
+│   ├── base.html           # Public site layout
+│   ├── base_admin.html     # Admin layout
+│   ├── admin/              # Admin templates
+│   ├── partials/           # Reusable components
+│   ├── macros/             # Jinja macros
+│   └── errors/             # Error pages (404, 500, 429)
+│
+├── static/                 # Static assets
+│   ├── css/                # Stylesheets
+│   ├── js/                 # JavaScript (app.js, share-a11y.js)
+│   └── svg/                # Icons and images
+│
+├── tests/                  # Test suite (87+ files)
+│   ├── conftest.py         # Shared fixtures
+│   ├── factories.py        # Test data factories
+│   └── test_*.py           # Test modules by component
+│
+├── migrations/             # Alembic database migrations
+├── scripts/                # Utility scripts (backup, deploy, dev)
 ├── plans/                  # Implementation plans
+├── docs/                   # Additional documentation
+│
+├── providers.yaml          # LLM + search provider definitions
+├── pipeline.yaml           # Pipeline stage + newsletter + subagent config
 ├── sources.yaml            # News source definitions
-├── pipeline.yaml           # Pipeline stage configurations
-├── providers.yaml          # LLM/search provider definitions
-└── topics.yaml             # Topic definitions for article classification
+├── topics.yaml             # Topic definitions for classification
+└── openapi.yaml            # API specification
 ```
 
 ---
@@ -118,17 +281,17 @@ Strict separation of concerns maintains modularity:
 
 | Layer | Can Import | Cannot Import |
 |-------|-----------|---------------|
-| **Adapters** | `utils/` | `services/`, `models/` |
-| **Services** | `models/`, `schemas/` (TYPE_CHECKING for type hints only) | `adapters/` |
-| **Tasks** | `services/` | — |
+| **Adapters** | `utils/`, `schemas/` | `services/`, `models/` |
+| **Services** | `models/`, `schemas/` | `adapters/` (TYPE_CHECKING OK) |
+| **Tasks** | `services/`, `models/`, `schemas/` | `adapters/` (except `tasks/crawl.py`) |
 | **Routes** | `models/`, `schemas/`, `services/` | `adapters/` |
 
-**TYPE_CHECKING exception:** Services may use `TYPE_CHECKING` imports from adapters for type hints only (e.g., `from adapters.base import RawItem`). This allows static type analysis without creating runtime imports between layers.
+**TYPE_CHECKING exception:** Services may use `TYPE_CHECKING` imports from adapters for type hints only (e.g., `from adapters.base import RawItem`).
 
 **Known intentional layer violations (do not fix):**
-- `schemas/common.py` imports from `services.config_cache` (documented in schemas.md)
-- `services/subagent/tools.py` imports from `models` and `extensions` (documented in AGENTS.md)
-- `tasks/crawl.py` imports directly from `adapters.base` (documented in AGENTS.md)
+- `schemas/common.py` imports from `services.config_cache`
+- `services/subagent/tools.py` imports from `models` and `extensions`
+- `tasks/crawl.py` imports directly from `adapters.base`
 
 ---
 
@@ -137,83 +300,104 @@ Strict separation of concerns maintains modularity:
 ### 1. Source Ingestion
 
 ```
-Sources (RSS/API/Web)
-    │
-    ▼
-Adapters.fetch_and_parse()
-    │
-    ▼
-process_item task
-    │
-    ├── extract_content()     # trafilatura/readability
-    ├── deduplicate()         # URL + title matching
-    └── create Article record
-    │
-    ▼
-dispatch to select_article
+Sources (RSS/API/Web)         sources.yaml definitions
+       │
+       ▼
+Adapters.fetch_and_parse()    adapters/{rss,api,web}.py
+       │
+       ▼
+process_item task              tasks/extract.py
+       │
+       ├── extract_content()      trafilatura/readability
+       ├── deduplicate()          URL + title matching
+       └── create Article record
+       │
+       ▼
+dispatch to select_article     tasks/select.py
 ```
 
 ### 2. Article Processing Pipeline
 
 ```
-select_article
-    │  LLM scores 1-10
-    ▼
-research_article
-    │  LLM builds research brief with web search + context
-    ▼
-write_article
-    │  LLM writes condensed article (Smart Brevity format)
-    ▼
-edit_article
-    │  LLM edits + contextualization via subagent tools
-    │  Tag assignment + validation
-    ▼
-finalize_article
-    │  Trend memory update + webhook dispatch
-    ▼
-done
+select_article                 tasks/select.py
+       │  LLM scores 1-10, assigns experiment group
+       ▼
+research_article               tasks/research.py
+       │  LLM builds research brief with web search + context
+       │  Subagent: web_search, related_articles, trend_memory
+       ▼
+write_article                  tasks/write.py
+       │  LLM writes condensed article (Smart Brevity format)
+       ▼
+edit_article                   tasks/edit.py
+       │  Subagent contextualization + LLM editing
+       │  Tag assignment + validation
+       ▼
+finalize                       tasks/pipeline.py
+       │  Trend memory update + webhook dispatch
+       ▼
+done ✓
 ```
 
 ### 3. Newsletter Generation
 
 ```
-generate_daily_newsletters (scheduled 8:00 AM ET)
-    │
-    ├── fetch_articles()      # DONE status, last 24h, impact_score > 0
-    │
-    ├── executive_summary     # reader → writer → editor (3-stage)
-    │
-    ├── main_newsletter       # built from articles
-    │
-    └── topic_newsletters     # per-topic groupings
-        │
-        └── email_dispatch    # batched (500/retry)
+generate_daily_newsletters     tasks/newsletter.py (scheduled 8:00 AM ET)
+       │
+       ├── fetch_articles()        DONE status, last 24h, impact_score > 0
+       │
+       ├── executive_summary       3-stage LLM pipeline:
+       │   ├── reader              Extract themes/highlights
+       │   ├── writer              Generate summary
+       │   └── editor              Polish for clarity
+       │
+       ├── main_newsletter         HTML email with preamble + articles
+       │
+       └── _send_emails_parallel() Batch size: 500, retry: 3 attempts
 ```
 
 ---
 
 ## Infrastructure
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Web Server | Granian (ASGI) | High-performance Python HTTP server |
-| Task Queue | Celery + Redis | Async task processing and scheduling |
-| Database | SQLite (WAL) | Primary data store with WAL mode |
-| Cache | Redis | Rate limiting, distributed locks, caching |
-| Email | SMTP | Newsletter delivery with connection pooling |
+| Component | Technology | Purpose | Deep Dive |
+|-----------|------------|---------|-----------|
+| Web Server | Granian (ASGI) | High-performance Python HTTP server | [infrastructure.md](infrastructure.md) |
+| Task Queue | Celery + Redis | Async task processing + scheduling | [infrastructure.md](infrastructure.md) |
+| Database | SQLite (WAL) | Primary data store | [infrastructure.md](infrastructure.md) |
+| Cache | Redis | Rate limiting, distributed locks, caching | [infrastructure.md](infrastructure.md) |
+| Email | SMTP | Newsletter delivery with connection pooling | [infrastructure.md](infrastructure.md) |
+| LLM | Multi-provider | Ollama, OpenAI, Anthropic, Gemini, etc. | [llm-providers.md](llm-providers.md) |
+| Search | Multi-provider | DuckDuckGo, Hybrid (FTS5+vector) | [search-providers.md](search-providers.md) |
 
 ---
 
 ## Key Configuration Files
 
-| File | Purpose |
-|------|---------|
-| `pipeline.yaml` | Pipeline stage configs, newsletter settings, subagent configs, schedules |
-| `providers.yaml` | LLM provider definitions (16 providers: ollama, openai, anthropic, etc.) - 2 currently enabled (ollama-local, duckduckgo) |
-| `sources.yaml` | News source definitions with adapter types and URLs |
-| `topics.yaml` | Topic definitions for article classification |
-| `config.py` | Flask configuration classes (Development, Production, Testing) |
+| File | Purpose | Deep Dive |
+|------|---------|-----------|
+| `pipeline.yaml` | Pipeline stages, newsletter settings, subagent config, schedules, experiments | [config.md](config.md) |
+| `providers.yaml` | LLM provider definitions (16 providers), search provider definitions | [config.md](config.md) |
+| `sources.yaml` | News source definitions with adapter types and URLs | [config.md](config.md) |
+| `topics.yaml` | Topic definitions for article classification | [config.md](config.md) |
+| `config.py` | Flask configuration classes + Celery beat schedule | [config.md](config.md) |
+
+---
+
+## Security Architecture
+
+| Feature | Implementation | Location |
+|---------|---------------|----------|
+| Fail-Closed | Production startup validates all secrets | `app.py` |
+| TOTP 2FA | Admin users with 8 backup codes | `models/auth.py`, `services/totp.py` |
+| Session Binding | IP + User-Agent validation | `routes/admin/__init__.py` |
+| HMAC Webhooks | Timestamp replay protection | `services/webhooks.py` |
+| SSRF Protection | URL validation + DNS rebinding detection | `utils/url.py`, `adapters/session.py` |
+| Encrypted Secrets | Webhook secrets at rest (Fernet/AES-128-CBC) | `services/webhooks.py` |
+| Login Lockout | Redis Lua script with in-memory fallback | `routes/admin/__init__.py` |
+| Task Signing | HMAC task signature verification | `services/task_security.py` |
+| XSS Prevention | Template `|e` filter, bleach HTML sanitization | `templates/`, `services/article.py` |
+| CSP | Nonce-based script-src, strict directives | `app.py` |
 
 ---
 
@@ -221,111 +405,73 @@ generate_daily_newsletters (scheduled 8:00 AM ET)
 
 ### LLM Providers (via `providers.yaml`)
 
-- **ollama-local** (default, enabled) - Local Ollama instance
-- **openai**, **anthropic**, **gemini**, **deepseek**, **groq**, **openrouter** (disabled)
-- **xai**, **togetherai**, **fireworks**, **cerebras**, **zai**, **minimax**, **opencode** (disabled)
+| Provider | Type | Status |
+|----------|------|--------|
+| ollama-local | Local | **Enabled** (default) |
+| openai | OpenAI-compatible | Disabled |
+| anthropic | Native Anthropic | Disabled |
+| gemini | Native Google | Disabled |
+| deepseek | OpenAI-compatible | Disabled |
+| groq | OpenAI-compatible | Disabled |
+| openrouter | OpenAI-compatible | Disabled |
+| xai | OpenAI-compatible | Disabled |
+| togetherai | OpenAI-compatible | Disabled |
+| fireworks | OpenAI-compatible | Disabled |
+| cerebras | OpenAI-compatible | Disabled |
+| zai | OpenAI-compatible | Disabled |
+| minimax | OpenAI-compatible | Disabled |
+| opencode | OpenAI-compatible | Disabled |
 
 ### Search Providers
 
-- **duckduckgo** (default, enabled) - Web search
-- **google** (disabled) - Google Custom Search
-- **searxng** (disabled) - Self-hosted SearxNG
-- **hybrid** (enabled) - FTS5 + vector similarity
-
----
-
-## Security Architecture
-
-- **Fail-Closed**: Production startup validates all required secrets
-- **TOTP 2FA**: Admin users with 8 backup codes
-- **Session Binding**: IP + User-Agent validation
-- **HMAC Webhooks**: Timestamp replay protection
-- **SSRF Protection**: URL allowlist validation with DNS rebinding detection
-- **Encrypted Secrets**: Webhook secrets encrypted at rest
-- **Login Lockout**: Redis-based with in-memory fallback
-
----
-
-## Deep Dive Documents
-
-Each module has a dedicated deep-dive document. Click any link below to explore that component in detail.
-
-### [models.md](models.md)
-- Complete file inventory and model relationships
-- Article model with pipeline_status flow
-- Source health tracking model
-- TrendMemory embedding-based semantic tracking
-- Index definitions for query performance
-
-### [adapters.md](adapters.md)
-- Adapter pattern with registry decorator
-- RSS, API, and Web adapter implementations
-- SSRF protection via SSRFSafeRedirectHandler
-- Source configuration from sources.yaml
-- Error handling conventions
-
-### [services.md](services.md)
-- LLM provider system architecture (base class, implementations)
-- Circuit breaker pattern for provider fallback
-- Pipeline services (researcher, writer, editor)
-- Rate limiter with Redis pub/sub
-- Email and webhook infrastructure
-- Trend memory and content extraction
-
-### [tasks.md](tasks.md)
-- Complete task inventory by stage
-- Stage transitions and quality gates
-- Core tasks (crawl, extract, select, research, write, edit)
-- run_stage helper for standard lifecycle
-- Celery Beat schedule (14 scheduled tasks)
-
-### [routes.md](routes.md)
-- Blueprint structure (public_bp, admin_bp, admin_api_bp)
-- Public routes for feeds, subscription, links
-- Admin interface and JSON API endpoints at /api/v1
-- Authentication with TOTP 2FA
-- Template structure
-
-### [schemas.md](schemas.md)
-- Pipeline configuration schema (PipelineRootConfig)
-- Source adapter configuration (RSSConfig, APIConfig, WebConfig)
-- LLM response schemas (SelectionResult, ResearchBrief, CondensedArticle)
-- Task validation schemas
-- NewsletterBrief clarification (no preamble/footer/articles fields)
-
-### [pipeline.md](pipeline.md)
-- Complete pipeline stage details
-- Newsletter generation flow (3-stage LLM: reader → writer → editor)
-- Scheduled tasks (14 tasks)
-- Degradation behavior
-- Two-tier retry system (Celery task retry + stage failure retry)
-- Circuit breaker and dynamic fallback chain
-
-### [subagent.md](subagent.md)
-- Tool registry with built-in context tools
-- Tool implementations for articles, trends, search
-- Subagent runner with retry and revocation checking
-- Chain system with conditional branching
-- Middleware for logging and timing
-
-### [utils.md](utils.md)
-- URL utilities with SSRF protection and DNS caching
-- Text processing and XML escaping
-- DateTime parsing and formatting
-- Security and hash utilities
-- HTML processing with trafilatura fallback
+| Provider | Status |
+|----------|--------|
+| duckduckgo | **Enabled** (default) |
+| hybrid (FTS5 + vector) | **Enabled** |
+| google | Disabled (requires API key) |
+| searxng | Disabled (self-hosted) |
 
 ---
 
 ## Entry Points
 
-| Entry Point | Purpose |
-|-------------|---------|
-| `python run.py` | Development server |
-| `flask db upgrade` | Database migrations |
-| `celery -A celery_app:celery_app worker` | Celery worker |
-| `celery -A celery_app:celery_app beat` | Celery beat scheduler |
-| `python scripts/hash_password.py` | Generate admin password hash |
+| Entry Point | Command | Purpose |
+|-------------|---------|---------|
+| Development server | `python run.py` | Start Flask dev server |
+| Database migrations | `flask db upgrade` | Run Alembic migrations |
+| Celery worker | `celery -A celery_app worker` | Process pipeline tasks |
+| Celery beat | `celery -A celery_app beat` | Run scheduled tasks |
+| Password hashing | `python scripts/hash_password.py` | Generate admin password hash |
+| Backup | `scripts/backup.sh` | SQLite backup with verification |
+
+---
+
+## Deep Dive Documents
+
+Each component has a dedicated document for detailed exploration. Click any link below.
+
+### Core Application
+
+- **[models.md](models.md)** — Complete model inventory, field definitions, relationships, indexes, pipeline status flow
+- **[schemas.md](schemas.md)** — Pipeline config (PipelineRootConfig), source adapter config, LLM response schemas, task validation, newsletter brief clarification
+- **[adapters.md](adapters.md)** — Adapter pattern with registry, RSS/API/Web implementations, SSRF protection, session ownership, error handling
+- **[services.md](services.md)** — LLM provider system, pipeline services, infrastructure services, layering violations
+- **[tasks.md](tasks.md)** — Task inventory by stage, run_stage helper, quality gates, degradation path, Celery Beat schedule (14 tasks)
+- **[routes.md](routes.md)** — Blueprint structure, public routes, admin interface, API endpoints (/api/v1/*), auth, templates
+- **[utils.md](utils.md)** — URL validation (SSRF + DNS cache), text escaping, datetime, hash, HTML, security utilities
+
+### Pipeline & AI
+
+- **[pipeline.md](pipeline.md)** — Article pipeline stages, newsletter generation flow (3-stage LLM), scheduled tasks, degradation behavior, two-tier retry system, circuit breaker
+- **[subagent.md](subagent.md)** — Tool registry (9 built-in tools), runner with tool loop, chain system with conditions, middleware, error handling
+- **[llm-providers.md](llm-providers.md)** — BaseLLMProvider interface, provider implementations, fallback chain, circuit breaker, retry with backoff, cost tracking
+- **[search-providers.md](search-providers.md)** — Provider registry, DuckDuckGo/Hybrid/Google/SearxNG, FTS5 article search, hybrid search
+- **[prompts.md](prompts.md)** — Prompt template system, stage-specific prompts, context truncation, A/B experiment variants
+
+### Infrastructure & Configuration
+
+- **[config.md](config.md)** — YAML config files, Pydantic validation, config caching, environment variables, beat schedule
+- **[infrastructure.md](infrastructure.md)** — Redis patterns, SQLite WAL, Celery architecture, email delivery, health checks, rate limiting, caching
 
 ---
 
@@ -338,4 +484,6 @@ Each module has a dedicated deep-dive document. Click any link below to explore 
 - **NewsletterBrief fields**: Actual model does NOT have `preamble`, `footer`, or `articles` fields
 - **Rate limiter pattern**: Always release in `finally` block using `provider_id or rc.provider`
 - **Dynamic fallback chain**: Provider chain determined by enabled providers in `providers.yaml`, not hardcoded
-- **utils/url.py not pure**: `validate_url_safe()` and related DNS functions use global mutable state (`_dns_cache`, `_dns_executor`). Documented in utils.md.
+- **utils/url.py not pure**: `validate_url_safe()` uses global mutable state (`_dns_cache`, `_dns_executor`). Documented in utils.md.
+- **PipelineLog meta field**: Uses `meta` (not `metadata`) due to SQLAlchemy reserved name restriction
+- **Logout requires POST**: CSRF protection at `/admin/logout` — do not add GET

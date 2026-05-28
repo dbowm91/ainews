@@ -177,15 +177,15 @@ def _resolve_and_check(hostname: str) -> list[str]:
 
 def validate_url_safe(url: str) -> str:
     if not url:
-        raise ValueError("Empty URL")
+        raise UnsafeURLError("Empty URL")
 
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Unsupported URL scheme: {parsed.scheme!r}")
+        raise UnsafeURLError(f"Unsupported URL scheme: {parsed.scheme!r}")
 
     hostname = parsed.hostname
     if not hostname:
-        raise ValueError("URL has no hostname")
+        raise UnsafeURLError("URL has no hostname")
 
     _resolve_and_check(hostname)
 

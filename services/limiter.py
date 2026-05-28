@@ -121,8 +121,8 @@ class ModelLimiter:
                 try:
                     from services.metrics import get_metrics
 
-                    get_metrics().increment(
-                        "limiter.slot_leak", {"provider": provider_id, "model": model},
+                    get_metrics().counter_inc(
+                        "limiter.slot_leak", value=1, labels={"provider": provider_id, "model": model},
                     )
                 except (ImportError, AttributeError, ValueError):
                     logger.warning(

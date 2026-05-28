@@ -473,6 +473,18 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
             logger.warning("Failed to release newsletter lock")
 
 
+@shared_task(
+    bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
+    soft_time_limit=300,
+    time_limit=360,
+    autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError),
+    dont_autoretry_for=(smtplib.SMTPResponseException,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
     try:
         from schemas.tasks import GenerateNewsletterTask

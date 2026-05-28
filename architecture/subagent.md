@@ -195,7 +195,7 @@ Middleware uses a sync `wrap()` pattern to intercept tool execution. The middlew
 **Middleware chain order (outer to inner):**
 1. `LoggingMiddleware` - logs tool call start/completion/failure
 2. `TimingMiddleware` - measures and logs execution time
-3. `ErrorHandlingMiddleware` - catches exceptions and returns error-formatted result
+3. `ErrorHandlingMiddleware` - catches exceptions, logs them with traceback, then re-raises
 
 ```python
 class ToolMiddleware:

@@ -22,4 +22,4 @@ The logout endpoint at `/admin/logout` requires POST method only. This is intent
 
 ## api_tokens Blueprint IS Registered
 
-The `api_tokens_bp` blueprint is registered in `app.py` with `url_prefix="/api-tokens"`. Any documentation claiming it is "not registered" is incorrect.
+The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.

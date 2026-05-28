@@ -151,7 +151,7 @@ Additional newsletter endpoints:
 - `POST /api/v1/newsletter/preview` - Preview a newsletter
 
 ### Trend Memory API
-- `GET /api/trend-memory/semantic-search` - Semantic search for trend memory entries (at `/api/trend-memory/semantic-search`)
+- `GET /admin/api/trend-memory/semantic-search` - Semantic search for trend memory entries (at `/admin/api/trend-memory/semantic-search`)
 
 ## Design Notes for Future Agents
 
@@ -159,7 +159,7 @@ Additional newsletter endpoints:
 The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.
 
 ### ErrorHandlingMiddleware
-`ErrorHandlingMiddleware` is applied in the middleware chain at `services/subagent/runner.py:344`. This middleware handles errors during tool execution.
+`ErrorHandlingMiddleware` is applied in the middleware chain at `services/subagent/runner.py:344`. This middleware handles errors during tool execution. Note: It re-raises exceptions after logging, it does NOT return error dicts as some documentation suggests.
 
 ### SubagentConfig is NOT SubagentStageConfig
 `SubagentConfig` in `schemas/pipeline.py:121-125` is the container for subagent stage configs. It does NOT have an `enabled` field at the top level. The `enabled` field is on `SubagentStageConfig` (line 94).
@@ -168,7 +168,7 @@ The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're a
 The `load_search_config()` function in `schemas/search.py:28-36` had a bug where `config_path` was hardcoded to `BASE_DIR / "providers.yaml"` instead of using the `path` parameter. This has been fixed - line 31 now uses `config_path = Path(path)` for proper mtime-based cache invalidation when a custom path is passed.
 
 ### api_tokens Blueprint IS Registered
-The `api_tokens_bp` blueprint IS registered in `app.py` with `url_prefix="/api-tokens"`. Any documentation claiming it is "not registered" is incorrect.
+The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
 `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
 
 ### StageConfig is a Stub
@@ -216,6 +216,39 @@ The `services/trend_memory.py` has `import json` which is needed for `json.JSOND
 
 ### Middleware Clone Fix (Fixed)
 `run_subagent_with_tools()` in `services/subagent/runner.py:349-355` creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
+
+### MetricsCollector Method Names
+The `MetricsCollector` in `services/metrics.py` uses these method names:
+- `counter_inc(name, value=1, labels=None)` — NOT `increment()`
+- `gauge_set(name, value, labels=None)` — NOT `set_gauge()`
+- `histogram_observe(name, value, labels=None)` — NOT `observe()`
+- `get_metrics()` — returns dict of all metrics
+- `get_prometheus()` — returns Prometheus exposition format
+
+### ModelLimiter Interface
+The `ModelLimiter` in `services/limiter.py` is provider/model-aware:
+- `acquire(provider_id, model, max_concurrent, timeout=300)` — NOT `acquire(slots=1, timeout=30)`
+- `release(provider_id, model, timeout=300)`
+- `get_active(provider_id, model)`
+- `cleanup_stale_slots()`
+- Uses Redis DB 15 for storage (NOT DB 0 or DB 2)
+
+### Redis DB Allocation
+- DB 0: Celery broker (from `CELERY_BROKER_URL` env var)
+- DB 1: Config cache (in `services/config_cache.py`)
+- DB 15: Flask-Limiter storage (derived from broker URL)
+
+### CircuitBreaker Interface
+The `CircuitBreaker` in `services/circuit_breaker.py`:
+- Constructor requires `name` param: `__init__(self, name: str, failure_threshold=5, ...)`
+- Method is `can_execute()` — NOT `is_open()`
+- Factory function: `get_breaker(name, failure_threshold=5, ...)`
+- Decorator: `circuit_protected(breaker_name, fallback=None)`
+
+### Health Check Function
+The health check function in `services/health.py`:
+- Function name: `run_health_checks(include_celery=True, detailed=False)` — NOT `check_health()`
+- `HealthResult` has fields: `status: str`, `checks: dict[str, Any]`, `version: dict[str, str] | None`
 
 ## APIAdapter Specific Notes
 

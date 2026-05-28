@@ -93,8 +93,9 @@ def validate_url_safe(url: str) -> str:
 
     Performs DNS resolution to check for SSRF attempts via DNS rebinding.
     Returns the validated URL string.
-    Raises ValueError for empty URL, unsupported scheme, or missing hostname.
-    Raises UnsafeURLError for DNS resolution failure or blocked IP address.
+    Raises UnsafeURLError for all invalid URL cases: empty URL, unsupported
+    scheme, missing hostname, DNS resolution failure, or blocked IP address.
+    UnsafeURLError inherits from ValueError, so callers can catch either type.
     """
 
 def normalize_url(url: str) -> str:

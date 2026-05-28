@@ -18,30 +18,163 @@ Top-level structure:
 
 ```yaml
 pipeline:
-  selector:     # RoleConfig: provider, model, temperature, max_tokens, concurrency, timeout
-  researcher:   # RoleConfig
-  writer:       # RoleConfig
-  editor:       # RoleConfig
+  selector:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 1024
+    temperature: 0.2
+    concurrency: 4
+    timeout_seconds: 60
+    min_score: 6
+    system_prompt: |
+      You are a news editor deciding which stories to cover...
+
+  researcher:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 8192
+    temperature: 0.0
+    concurrency: 2
+    timeout_seconds: 180
+    web_search: true
+    web_search_max_results: 5
+    web_search_provider: null
+    db_related_max: 5
+    max_article_text_length: 6000
+    system_prompt: |
+      You are a tech research analyst...
+
+  writer:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 4096
+    temperature: 0.3
+    concurrency: 2
+    timeout_seconds: 180
+    max_key_points: 5
+    system_prompt: |
+      You are a professional tech news writer...
+
+  editor:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 4096
+    temperature: 0.0
+    concurrency: 2
+    timeout_seconds: 120
+    max_tags: 3
+    system_prompt: |
+      You are a meticulous editor...
 
 newsletter:
-  send_time: "08:00"
   max_articles: 10
+  send_time: "08:00"
   timezone: "America/New_York"
-  site_url: "https://ainews.dev"
+  site_url: "${SITE_URL}"
   prep_minutes: 15
 
 newsletter_pipeline:
-  reader:     # RoleConfig for newsletter reader stage
-  writer:     # RoleConfig for newsletter writer stage
-  editor:     # RoleConfig for newsletter editor stage
+  reader:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 4096
+    temperature: 0.0
+    concurrency: 2
+    timeout_seconds: 120
+    system_prompt: |
+      You are a news analyst...
+
+  writer:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 2048
+    temperature: 0.4
+    concurrency: 1
+    timeout_seconds: 120
+    system_prompt: |
+      You are a newsletter writer...
+
+  editor:
+    enabled: true
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 2048
+    temperature: 0.0
+    concurrency: 1
+    timeout_seconds: 90
+    system_prompt: |
+      You are an editor reviewing a newsletter executive summary...
 
 subagent:
-  max_iterations: 5
-  tool_timeout: 30.0
-  default:      # SubagentStageConfig: enabled, tools, max_retries
-  research:     # SubagentStageConfig
-  edit:         # SubagentStageConfig
-  chains:       # SubagentChainConfig with conditional steps
+  default:
+    enabled: false
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+  research:
+    enabled: true
+    provider: null
+    model: null
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+    max_iterations: 5
+    tools:
+      - web_search
+      - context_notes
+      - related_articles
+      - get_source_health
+    system_prompt: |
+      You are a research synthesizer...
+    task_template: prompts/subagent_research_synthesis.txt
+  edit:
+    enabled: true
+    provider: null
+    model: null
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+    max_iterations: 5
+    tools:
+      - context_notes
+      - related_articles
+      - trend_memory
+    system_prompt: |
+      You are an editorial contextualizer...
+    task_template: prompts/subagent_edit_contextualization.txt
+  chains:
+    research_deep:
+      max_length: 3
+      steps:
+        - task_type: research
+          prompt_data_template: ""
+          condition: "article.impact_score >= 50"
+        - task_type: research
+          prompt_data_template: ""
+          condition: "previous.steps[0].success"
+    edit_review:
+      max_length: 2
+      steps:
+        - task_type: edit
+          prompt_data_template: ""
+          condition: "article.pipeline_status == 'editing'"
+        - task_type: edit
+          prompt_data_template: ""
+          condition: "previous.steps[0].success and article.degradation_count == 0"
 
 memory:
   ttl_days_low: 7
@@ -52,27 +185,49 @@ memory:
   consolidation_merge_window_hours: 72
 
 stages:
-  selector:     # StageConfig (stub - only tools field)
-  researcher:
-  writer:
-  editor:
+  research:
+    tools: ["search_web", "get_topic_note"]
+  write:
+    tools: ["search_web"]
+  edit:
+    tools: ["get_topic_note", "get_related_articles", "get_trend_memory"]
 
 experiments:
-  enabled: false
+  enabled: true
   assignment_salt: "${EXPERIMENT_SALT}"
   prompt_variants:
     writer:
-      control: "..."
-      variant_a: "..."
+      control: |
+        You are a professional tech news writer...
+      variant_a: |
+        You are a tech news writer specializing in concise, data-driven reporting...
+      variant_b: |
+        You are a narrative tech journalist...
     editor:
-      control: "..."
-      variant_a: "..."
+      control: |
+        You are a meticulous editor...
+      variant_a: |
+        You are a copy editor focused on clarity and conciseness...
+      variant_b: |
+        You are a content strategist editor...
 
 schedule:
-  run-all-sources: "every-30-min"
-  generate-newsletters: "08:00-et"
-  # ... other schedule overrides
+  crawl_interval_minutes: 30
+  retry_stuck_interval_minutes: 60
+  cleanup_interval_minutes: 180
+  cleanup_old_logs_hour: 3
+  cleanup_old_versions_hour: 3
+  cleanup_expired_verifications_interval_minutes: 15
+  publish_scheduled_interval_minutes: 5
+  cleanup_stale_limiter_interval_minutes: 5
+  generate_newsletters_hour: 8
+  consolidate_trend_memory_hour: 3
+  cleanup_inactive_subscribers_hour: 1
+  cleanup_inactive_subscribers_minute: 0
+  cleanup_old_versions_days_to_keep: 90
 ```
+
+> **Note:** System prompts are truncated above for readability. See the actual `pipeline.yaml` for full prompts. The `site_url` field supports environment variable expansion via `${SITE_URL}` syntax.
 
 ### RoleConfig
 

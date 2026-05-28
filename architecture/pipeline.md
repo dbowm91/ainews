@@ -166,6 +166,15 @@ Per-topic newsletters generated similarly:
 3. Build topic newsletter HTML
 4. Send to topic subscribers
 
+### Newsletter Lock
+
+Newsletter generation uses a Redis‑based lock to prevent concurrent runs. The `_check_newsletter_lock` function:
+
+1. Checks an idempotency key (`idempotency:newsletter:{YYYY-MM-DD}`) to skip if already completed today.
+2. Acquires a distributed lock (`ainews:newsletter_lock`) with a 10‑minute TTL using a Lua script.
+3. If the lock is held by another task, the current task skips (returns `skipped`).
+4. If acquisition fails due to Redis error, the task raises (cannot proceed safely).
+
 ### Scheduled Tasks
 
 The pipeline uses Celery Beat for scheduled task orchestration:
@@ -231,6 +240,28 @@ newsletter:
 ```
 
 **Note:** The fallback chain is dynamically determined from enabled providers in `providers.yaml` configuration order, not a hardcoded order.
+
+## Pipeline Details
+
+### Pipeline Timeout
+
+The pipeline enforces a hard timeout per article. If an article exceeds `PIPELINE_TIMEOUT_SECONDS` (default: 3600 seconds, configurable via environment variable), it is automatically dead‑lettered (status set to `failed`) and removed from further processing. This prevents articles from being stuck indefinitely in the pipeline.
+
+### Valid Pipeline Statuses
+
+`VALID_PIPELINE_STATUSES` is a frozen set used for validating article statuses. It includes: `pending`, `researching`, `writing`, `editing`, `review`, `done`, `skipped`, and `failed`. Notably, it excludes the transient statuses `selecting`, `selected`, and `written`, which are only used internally during stage transitions and are never persisted as final article statuses.
+
+### MAX_CONSECUTIVE_FAILURES
+
+The `MAX_CONSECUTIVE_FAILURES` configuration (default: 10) controls the maximum number of consecutive failures across all stages before an article is marked as failed. This is separate from per-stage retry limits and total retry budget. Configurable via environment variable.
+
+### Shadow Quality Assessments
+
+Each stage (research, write, edit) performs a non‑blocking “shadow” quality assessment using `lightweight_quality_signals()`. This evaluates the output for groundedness, coherence, completeness, and safety. Results are logged for monitoring but do not affect the pipeline flow (the assessment is purely observational).
+
+### A/B Experiment Distribution
+
+When experiments are enabled in `pipeline.yaml`, articles are assigned to experiment groups (`control`, `variant_a`, `variant_b`) via deterministic MD5 hashing of `article_id:salt:experiment`. The distribution is 70% control, 15% variant_a, 15% variant_b. The writer and editor stages select prompt variants based on the assigned group.
 
 ## Degradation Behavior
 

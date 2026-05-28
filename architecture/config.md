@@ -102,7 +102,7 @@ class SubagentStageConfig(BaseModel):
     max_tokens: int = 4096
     temperature: float = 0.0
     system_prompt: Optional[str] = None
-    retry_delay: int = 30
+    retry_delay: float = 5.0
     task_template: Optional[str] = None
     max_iterations: int = 5
 ```
@@ -271,13 +271,9 @@ def load_providers_config(path: str = None) -> dict:
 
 ```python
 # schemas/common.py
-def cached_config_with_mtime(path: Path, model_class):
-    """Cache config with mtime-based invalidation.
-    Re-reads file when mtime changes."""
-    mtime = path.stat().st_mtime
-    if path in _cache and _cache[path]["mtime"] == mtime:
-        return _cache[path]["config"]
-    # Load, validate, cache
+def cached_config_with_mtime(key: str, loader_fn: Callable[[], T], config_path: Path, ttl: int = 300) -> T:
+    """Load a config with automatic invalidation when the source file changes.
+    Uses ConfigCache (Redis-backed) with mtime-based staleness detection."""
 ```
 
 ### Celery-Safe Config Access

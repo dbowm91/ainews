@@ -182,13 +182,10 @@ def get_provider_chain() -> Generator[Tuple[BaseLLMProvider, str, int, str], Non
 The fallback chain is **dynamic** — determined by enabled providers in `providers.yaml` configuration order:
 
 ```python
-def get_provider_chain() -> list[str]:
-    """Returns enabled providers in config order, filtering out those with open circuits."""
-    chain = []
-    for provider_id, config in providers_config.items():
-        if config.enabled and not circuit_breaker.is_open(provider_id):
-            chain.append(provider_id)
-    return chain
+def get_provider_chain(role: str) -> Generator[Tuple[BaseLLMProvider, str, int, str], None, None]:
+    """Yield (provider, model, max_tokens, provider_id) tuples for enabled providers.
+    Yields primary provider first, then enabled fallback providers in order.
+    Filters out providers with open circuits."""
 ```
 
 If the primary provider fails, the system falls through to the next provider in the chain until one succeeds.
@@ -285,11 +282,17 @@ All pipeline tasks pass `stage=` parameter (select, research, write, edit).
 
 ## Cost Tracking
 
-`services/cost_tracker.py` tracks LLM usage per provider:
+`services/cost_tracker.py` derives cost data from `MetricsCollector` counters (no separate `record_usage()` call):
 
 ```python
-def get_cost_summary() -> dict:
-    """Return daily/monthly usage and cost per provider."""
+def get_cost_summary() -> CostSummary:
+    """Read LLM token and call counters from MetricsCollector, estimate costs using configured rates."""
+
+def _load_rates() -> dict[str, dict[str, float]]:
+    """Load cost rates from COST_RATES env var or use defaults."""
+
+def _parse_metric_key(key: str) -> tuple[str | None, dict[str, str]]:
+    """Parse metric keys like 'llm.tokens{model=gpt-4o,provider=openai}'."""
 ```
 
 ## Key Files
@@ -307,5 +310,5 @@ def get_cost_summary() -> dict:
 | `providers.yaml` | Provider configuration (16 providers) |
 | `pipeline.yaml` | Per-role provider/model assignments |
 | `services/circuit_breaker.py` | Circuit breaker implementation |
-| `services/cost_tracker.py` | Token usage tracking |
+| `services/cost_tracker.py` | Cost estimation from metrics counters |
 | `constants.py` | `DEFAULT_LLM_TIMEOUT_SECONDS` |

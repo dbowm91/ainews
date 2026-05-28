@@ -24,9 +24,9 @@ _redis_lock = threading.Lock()
 
 | DB | Purpose |
 |----|---------|
-| 0 | General cache, distributed locks, ModelLimiter, metrics, circuit breaker, ResponseCache |
-| 1 | Config cache (via CONFIG_CACHE_REDIS_URL) |
-| 15 | Flask-Limiter only |
+| 0 | Celery broker (from `CELERY_BROKER_URL` env var) |
+| 1 | Config cache (via `CONFIG_CACHE_REDIS_URL`) |
+| 15 | Flask-Limiter storage (derived from broker URL) |
 
 ### Distributed Locks
 
@@ -53,13 +53,15 @@ SQLite with WAL mode is the primary data store — intentional for read-heavy wo
 
 ```python
 # app.py
-def _configure_sqlite_pragmas(dbapi_conn, connection_record):
+def set_sqlite_pragma(dbapi_conn, _):
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA busy_timeout=5000")
     cursor.execute("PRAGMA cache_size=-64000")  # 64MB
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA mmap_size=268435456")  # 256MB
 ```
 
 ### Key Models

@@ -9,8 +9,8 @@ All adapters inherit from `BaseSourceAdapter` and are registered via the `@regis
 ```python
 @register_adapter('rss')  # Registers in SOURCE_ADAPTERS registry
 class RSSAdapter(BaseSourceAdapter):
-    def fetch(self) -> list[dict]: ...
-    def parse_item(self, item: dict) -> RawItem: ...
+    def fetch(self) -> list[Any]: ...
+    def parse_item(self, raw: Any) -> Optional[RawItem]: ...
 ```
 
 ## File Inventory
@@ -30,6 +30,11 @@ class BaseSourceAdapter(ABC):
     def __init__(self, source_config: SourceConfig):
         self.source_config = source_config
         self.source_id = source_config.id
+        self.topic_config = source_config.topics
+        if self.config_class and source_config.config:
+            self.adapter_config = self.config_class(**source_config.config)
+        else:
+            self.adapter_config = None
 
     @abstractmethod
     def fetch(self) -> list[Any]:
@@ -44,6 +49,17 @@ class BaseSourceAdapter(ABC):
 
     def match_topics(self, item: RawItem) -> RawItem:
         """Match item against configured topics"""
+
+    def _get_match_text(self, item: RawItem) -> str:
+        """Build text for topic matching. Override for custom matching."""
+
+    @staticmethod
+    def _hash_ext_id(url: str = None, title: str = None) -> str:
+        """Generate a stable external ID from URL or title."""
+
+    @staticmethod
+    def _truncate(text: Optional[str], limit: int = MAX_TEXT_LENGTH) -> Optional[str]:
+        """Truncate text to limit, returning None for empty input."""
 
     def __enter__(self) -> 'BaseSourceAdapter':
         """Context manager support"""
@@ -68,10 +84,9 @@ def get_adapter_class(source_type: str) -> type[BaseSourceAdapter]:
 
 ```python
 def _classify_topics(title: str, text: str = "") -> list[str]:
-    """Classify article topics based on title and text content"""
-
-def _hash_ext_id(url: str, title: str) -> str:
-    """Generate external ID hash from URL and title"""
+    """Classify article topics based on title and text content.
+    Module-level function (not a class method) to avoid layering violations.
+    """
 ```
 
 ## RSS Adapter (`rss.py`)
@@ -138,7 +153,7 @@ Features:
 - Single listing URL (not multiple start_urls)
 - CSS selector-based extraction via `ListingConfig` and `ArticleSelectors`
 - Pagination link following via `PaginationConfig`
-- Link URL discovery
+- Link URL resolution via `base_url` (used with `urljoin()` at `adapters/web.py:160,166` to resolve relative hrefs)
 - Trafilatura content extraction with fallback to CSS selectors
 
 ## SSRF Protection
@@ -204,6 +219,7 @@ sources:
   - name: "Example Blog"
     type: "web"
     config:
+      base_url: "https://example.com"
       listing_url: "https://example.com/articles"
       listing:
         card_selector: "article.post"

@@ -122,7 +122,7 @@ The 14 tracked parameters are: `utm_source`, `utm_medium`, `utm_campaign`, `utm_
 3. **Comprehensive validation**: Input checking with clear errors
 4. **Type hints**: Full typing for better IDE support
 5. **Testable**: Easy to unit test without mocking complex systems
-6. **URL validation layering**: `services/url.py` re-exports `TRACKING_PARAMS`, `normalize_title`, and `normalize_url` from `utils/url.py`. It duplicates `UnsafeURLError`, `_resolve_and_check`, and `validate_url_safe` with config support (reads `get_config_with_default`). Adapters should import from `utils/url.py` per clean layering.
+6. **URL validation layering**: `services/url.py` re-exports `TRACKING_PARAMS`, `normalize_title`, and `normalize_url` from `utils/url.py` unchanged. Only `UnsafeURLError`, `_resolve_and_check`, and `validate_url_safe` are duplicated in `services/url.py` — these copies add config support by reading `DNS_CACHE_TTL` and `DNS_CACHE_MAX` via `get_config_with_default()` (see `services/url.py:60-63`), whereas `utils/url.py` uses hardcoded constants (`_DNS_CACHE_TTL = 5`, `_DNS_CACHE_MAX = 1024`). Adapters should import from `utils/url.py` per clean layering.
 
 ## __all__ exports
 

@@ -24,12 +24,11 @@ pipeline:
   editor:       # RoleConfig
 
 newsletter:
-  daily_send_time: "08:00"
-  enable_topic_newsletters: true
-  batch_size: 500
+  send_time: "08:00"
   max_articles: 10
   timezone: "America/New_York"
   site_url: "https://ainews.dev"
+  prep_minutes: 15
 
 newsletter_pipeline:
   reader:     # RoleConfig for newsletter reader stage
@@ -79,11 +78,11 @@ schedule:
 
 ```python
 class RoleConfig(BaseModel):
-    provider: str = "ollama-local"
-    model: str = "qwen3:8b"
+    provider: str = Field(...)  # Required
+    model: str = Field(...)  # Required
     max_tokens: int = 4096
-    temperature: float = 0.5
-    concurrency: int = 4
+    temperature: float = 0.0
+    concurrency: int = 2
     timeout_seconds: int = 120
     enabled: bool = True
     system_prompt: Optional[str] = None  # Override prompts/*.txt
@@ -94,10 +93,18 @@ class RoleConfig(BaseModel):
 
 ```python
 class SubagentStageConfig(BaseModel):
-    enabled: bool = True
+    enabled: bool = False
     tools: list[str] = Field(default_factory=list)
     max_retries: int = 1
-    timeout_seconds: int = 60
+    timeout_seconds: int = 120
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    max_tokens: int = 4096
+    temperature: float = 0.0
+    system_prompt: Optional[str] = None
+    retry_delay: int = 30
+    task_template: Optional[str] = None
+    max_iterations: int = 5
 ```
 
 ### MemoryConfig

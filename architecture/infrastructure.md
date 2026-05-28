@@ -11,7 +11,7 @@ Redis serves multiple roles: message broker, cache, rate limiter, distributed lo
 ```python
 # extensions.py
 
-def get_redis(db: int = 0) -> redis.Redis:
+def get_redis() -> redis.Redis:
     """Thread-safe Redis client with connection pooling.
     Supports TLS via REDIS_SSL env var.
     Password preserved via urlparse when switching DBs."""
@@ -24,10 +24,9 @@ _redis_lock = threading.Lock()
 
 | DB | Purpose |
 |----|---------|
-| 0 | General cache, distributed locks |
-| 1 | Rate limiter slots |
-| 2 | Config cache |
-| 15 | Limiter (Flask-Limiter) |
+| 0 | General cache, distributed locks, ModelLimiter, metrics, circuit breaker, ResponseCache |
+| 1 | Config cache (via CONFIG_CACHE_REDIS_URL) |
+| 15 | Flask-Limiter only |
 
 ### Distributed Locks
 
@@ -105,8 +104,6 @@ class Config:
     CELERY_ACCEPT_CONTENT = ["json"]
     CELERY_TIMEZONE = "UTC"
     CELERY_TASK_TRACK_STARTED = True
-    CELERY_TASK_TIME_LIMIT = 300
-    CELERY_TASK_SOFT_TIME_LIMIT = 240
 ```
 
 ### Autoretry Pattern
@@ -177,15 +174,15 @@ def send_welcome_email(email: str, newsletter_type: str, unsubscribe_url: str, .
 @dataclass
 class HealthResult:
     status: str  # "ok", "degraded", "unhealthy"
-    checks: dict[str, bool]
-    details: dict[str, str]
+    checks: dict[str, Any]
+    version: dict[str, str] | None
 
     @property
     def is_healthy(self) -> bool:
         """Returns True for both 'ok' and 'degraded'."""
         return self.status in ("ok", "degraded")
 
-def check_health(detailed: bool = False) -> HealthResult:
+def run_health_checks(include_celery: bool = True, detailed: bool = False) -> HealthResult:
     """Check database, Redis, Celery, and limiter health."""
     # Database: Core service - failure → "unhealthy"
     # Redis: Non-core - failure → "degraded"
@@ -204,16 +201,17 @@ def check_health(detailed: bool = False) -> HealthResult:
 
 class ModelLimiter:
     """Redis-based concurrency limiter for LLM providers.
-    Uses Lua scripts for atomic slot management."""
+    Uses Lua scripts for atomic slot management.
+    Provider/model-aware with pub/sub notifications."""
 
-    def acquire(self, slots: int = 1, timeout: float = 30) -> bool:
-        """Acquire rate limiter slots. Returns True if acquired."""
+    def acquire(self, provider_id: str, model: str, max_concurrent: int, timeout: float = 300) -> bool:
+        """Acquire rate limiter slot for specific provider/model. Returns True if acquired."""
 
-    def release(self, slots: int = 1) -> None:
-        """Release rate limiter slots. Always call in finally block."""
+    def release(self, provider_id: str, model: str, timeout: float = 300) -> None:
+        """Release rate limiter slot. Always call in finally block."""
 
-    def get_active(self) -> int:
-        """Get count of active slots."""
+    def get_active(self, provider_id: str, model: str) -> int | None:
+        """Get count of active slots for provider/model."""
 ```
 
 ### Slot Management
@@ -237,10 +235,13 @@ class ResponseCache:
     def get(self, key: str) -> Any | None:
         """Get value from cache (L1 then L2)."""
 
-    def set(self, key: str, value: Any, ttl: int = 300) -> None:
+    def set(self, key: str, value: Any, ttl: int = 120) -> None:
         """Set value in both cache levels."""
 
-    def invalidate(self, prefix: str) -> None:
+    def invalidate(self, key: str) -> None:
+        """Invalidate a specific cache key."""
+
+    def invalidate_prefix(self, prefix: str) -> None:
         """Invalidate all keys matching prefix."""
 ```
 
@@ -268,7 +269,7 @@ class CircuitBreaker:
     """CLOSED → OPEN → HALF_OPEN state machine.
     Uses sliding window failure counting."""
 
-    def __init__(self, failure_threshold=5, recovery_timeout=60):
+    def __init__(self, name: str, failure_threshold=5, recovery_timeout=60.0, half_open_max_calls=1, window_seconds=120.0):
         ...
 
     def record_success(self) -> None:
@@ -277,8 +278,8 @@ class CircuitBreaker:
     def record_failure(self) -> None:
         """Record failure, potentially opening circuit."""
 
-    def is_open(self) -> bool:
-        """Check if circuit is blocking requests."""
+    def can_execute(self) -> bool:
+        """Check if circuit allows requests (not open)."""
 ```
 
 ### States
@@ -292,7 +293,7 @@ class CircuitBreaker:
 ```python
 # services/webhooks.py
 
-def dispatch_webhook(event_type: str, payload: dict):
+def dispatch_webhook(webhook_id, name, url, secret, event_type, event_data, idempotency_key=None) -> tuple[bool, str | None]:
     """Dispatch webhook event with HMAC signing."""
     # 1. Find matching webhooks by event_type
     # 2. Sign payload with HMAC-SHA256
@@ -319,13 +320,13 @@ def get_tracer() -> Tracer:
 def traced_llm_call(provider: str, model: str, stage: str):
     """Context manager for LLM spans."""
 
-def traced_stage(stage_name: str):
+def traced_stage(stage: str, operation: str = "execute"):
     """Context manager for pipeline stage spans."""
 
-def log_pipeline_event(event_type: str, article_id: int, stage: str, **kwargs):
+def log_pipeline_event(stage: str, event: str, article_id=None, run_id=None, level="info", **extra):
     """Structured pipeline event logging."""
 
-def log_article_event(event_type: str, article_id: int, **kwargs):
+def log_article_event(article_id: int, event: str, level="info", **extra):
     """Structured article event logging."""
 ```
 
@@ -345,10 +346,10 @@ class MetricsCollector:
     """Redis-backed counters, gauges, histograms.
     With in-memory fallback."""
 
-    def increment(self, name: str, value: int = 1, labels: dict = None): ...
-    def gauge(self, name: str, value: float, labels: dict = None): ...
-    def histogram(self, name: str, value: float, labels: dict = None): ...
-    def export_prometheus(self) -> str: ...
+    def counter_inc(self, name: str, value: int = 1, labels: dict = None): ...
+    def gauge_set(self, name: str, value: float, labels: dict = None): ...
+    def histogram_observe(self, name: str, value: float, labels: dict = None): ...
+    def get_prometheus(self) -> str: ...
 ```
 
 ### Pipeline Metrics

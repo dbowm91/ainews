@@ -377,7 +377,7 @@ generate_daily_newsletters     tasks/newsletter.py (scheduled 8:00 AM ET)
 | File | Purpose | Deep Dive |
 |------|---------|-----------|
 | `pipeline.yaml` | Pipeline stages, newsletter settings, subagent config, schedules, experiments | [config.md](config.md) |
-| `providers.yaml` | LLM provider definitions (16 providers), search provider definitions | [config.md](config.md) |
+| `providers.yaml` | LLM provider definitions (14 providers), search provider definitions | [config.md](config.md) |
 | `sources.yaml` | News source definitions with adapter types and URLs | [config.md](config.md) |
 | `topics.yaml` | Topic definitions for article classification | [config.md](config.md) |
 | `config.py` | Flask configuration classes + Celery beat schedule | [config.md](config.md) |
@@ -390,7 +390,7 @@ generate_daily_newsletters     tasks/newsletter.py (scheduled 8:00 AM ET)
 |---------|---------------|----------|
 | Fail-Closed | Production startup validates all secrets | `app.py` |
 | TOTP 2FA | Admin users with 8 backup codes | `models/auth.py`, `services/totp.py` |
-| Session Binding | IP + User-Agent validation | `routes/admin/__init__.py` |
+| Session Binding | IP + User-Agent validation | `routes/decorators.py` |
 | HMAC Webhooks | Timestamp replay protection | `services/webhooks.py` |
 | SSRF Protection | URL validation + DNS rebinding detection | `utils/url.py`, `adapters/session.py` |
 | Encrypted Secrets | Webhook secrets at rest (Fernet/AES-128-CBC) | `services/webhooks.py` |

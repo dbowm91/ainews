@@ -27,16 +27,29 @@ class RSSAdapter(BaseSourceAdapter):
 
 ```python
 class BaseSourceAdapter(ABC):
+    def __init__(self, source_config: SourceConfig):
+        self.source_config = source_config
+        self.source_id = source_config.id
+
     @abstractmethod
-    def fetch(self) -> list[dict]:
+    def fetch(self) -> list[Any]:
         """Fetch raw data from source"""
 
     @abstractmethod
-    def parse_item(self, item: dict) -> RawItem:
+    def parse_item(self, raw: Any) -> Optional[RawItem]:
         """Parse raw item into RawItem"""
 
     def fetch_and_parse(self) -> list[RawItem]:
         """Combined fetch + parse with error handling"""
+
+    def match_topics(self, item: RawItem) -> RawItem:
+        """Match item against configured topics"""
+
+    def __enter__(self) -> 'BaseSourceAdapter':
+        """Context manager support"""
+
+    def __exit__(self, *args) -> None:
+        """Context manager cleanup"""
 ```
 
 ### Registry
@@ -46,6 +59,19 @@ SOURCE_ADAPTERS: dict[str, type[BaseSourceAdapter]] = {}
 
 def register_adapter(source_type: str):
     """Decorator to register adapter in SOURCE_ADAPTERS registry"""
+
+def get_adapter_class(source_type: str) -> type[BaseSourceAdapter]:
+    """Get adapter class by source type"""
+```
+
+### Helper Functions
+
+```python
+def _classify_topics(title: str, text: str = "") -> list[str]:
+    """Classify article topics based on title and text content"""
+
+def _hash_ext_id(url: str, title: str) -> str:
+    """Generate external ID hash from URL and title"""
 ```
 
 ## RSS Adapter (`rss.py`)
@@ -54,7 +80,7 @@ Fetches RSS/Atom feeds using `feedparser`:
 
 ```python
 class RSSAdapter(BaseSourceAdapter):
-    def fetch(self) -> list[dict]:
+    def fetch(self) -> list[Any]:
         # Uses feedparser.parse()
         # Falls back to requests + BeautifulSoup for malformed feeds
         return self._fetch_feed(url) or self._scrape_feed(url)
@@ -72,12 +98,11 @@ Fetches from REST APIs with JSONPath field extraction:
 
 ```python
 class APIAdapter(BaseSourceAdapter):
-    def __init__(self, config: dict):
-        self.list_url = config['list_url']
-        self.list_items_path = config.get('list_items_path')
-        self.fields = config.get('fields', {})
+    def __init__(self, source_config: SourceConfig):
+        self.source_config = source_config
+        self._session = get_crawl_session()
 
-    def fetch(self) -> list[dict]:
+    def fetch(self) -> list[Any]:
         # Handles authentication (Bearer token via auth_header or Authorization fallback)
         # Rate limiting compliance
         return self._fetch_page() or []
@@ -98,12 +123,11 @@ Scrapes listing pages with CSS selectors:
 
 ```python
 class WebAdapter(BaseSourceAdapter):
-    def __init__(self, config: dict):
-        self.listing_url = config['listing_url']
-        self.listing = ListingConfig(**config['listing'])
-        self.article = ArticleSelectors(**config['article'])
+    def __init__(self, source_config: SourceConfig):
+        self.source_config = source_config
+        self._session = get_crawl_session()
 
-    def fetch(self) -> list[dict]:
+    def fetch(self) -> list[Any]:
         # Fetches listing URL
         # Optionally follows pagination links via next_link_selector
         # Extracts items via CSS selectors
@@ -124,7 +148,7 @@ Features:
 ```python
 class SSRFSafeRedirectHandler:
     """Custom redirect handler (not based on urllib HTTPRedirectHandler)"""
-    def redirect_request(self, req, fp, code, msg, hdrs, newurl):
+    def __call__(self, request, response, **kwargs):
         # Validates newurl against allowlist
         # Blocks javascript:, data:, and internal IP ranges
         # Logs blocked redirects

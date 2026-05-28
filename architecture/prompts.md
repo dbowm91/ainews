@@ -19,13 +19,13 @@ The `prompts/` directory contains LLM prompt templates used by pipeline stages. 
 ```python
 # services/prompts.py
 
-def get_system_prompt(stage: str) -> str:
-    """Load system prompt for a pipeline stage.
-    Checks pipeline.yaml system_prompt override first,
+def get_system_prompt(role: str, yaml_prompt: str | None) -> str:
+    """Load system prompt for a pipeline role.
+    Checks yaml_prompt override first,
     then falls back to prompts/*.txt file."""
 
-def load_prompt_file(filename: str) -> str:
-    """Load prompt template from prompts/ directory."""
+def load_prompt_file(name: str) -> str | None:
+    """Load prompt template from prompts/ directory. Returns None if not found."""
 ```
 
 ### Override Mechanism
@@ -49,19 +49,19 @@ If `system_prompt` is set, it takes priority over the `prompts/*.txt` file.
 LLM prompts can grow large. `services/prompts.py` provides token budgeting:
 
 ```python
-def count_tokens(text: str, model: str = "gpt-4") -> int:
+def count_tokens(text: str, model: str | None = None) -> int:
     """Estimate token count for text."""
 
-def sliding_window_truncate(text: str, max_tokens: int) -> str:
-    """Truncate text to max_tokens using sliding window."""
+def sliding_window_truncate(text: str, max_chars: int = 8000, model: str | None = None, ...) -> str:
+    """Truncate text to max_chars using sliding window."""
 
-def importance_weighted_truncate(text: str, max_tokens: int) -> str:
+def importance_weighted_truncate(text: str, max_chars: int = 8000, key_topics: list[str] = None) -> str:
     """Truncate while preserving most important content."""
 
-def smart_truncate_context(context: str, max_tokens: int) -> str:
-    """LLM-powered summarization fallback for context truncation."""
+def smart_truncate_context(text: str, max_chars: int = 8000, model: str | None = None, llm_provider=None, ...) -> tuple[str, bool]:
+    """LLM-powered summarization fallback for context truncation. Returns (truncated_text, was_truncated)."""
 
-def summarize_context(context: str, max_tokens: int) -> str:
+def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, temperature: float = 0.0) -> str:
     """Summarize context using LLM with caching."""
 ```
 
@@ -82,7 +82,7 @@ def escape_prompt_data(data: dict) -> dict:
     """Recursively escape dict values for prompt injection prevention."""
 ```
 
-Used by `services/subagent.py:_escape_prompt_data()` before template resolution.
+Used by `services/subagent/runner.py`, `services/subagent/chain.py`, and `services/subagent/utils.py` before template resolution.
 
 ## Stage Prompts
 

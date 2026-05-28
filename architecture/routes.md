@@ -76,6 +76,7 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/trend-memory` [GET] - Trend memory management UI
 - `/admin/trend-memory/delete/<id>` [POST] - Delete trend memory entry
 - `/admin/trend-memory/delete-expired` [POST] - Delete expired trend memory entries
+- `/admin/api/trend-memory/semantic-search` [GET] - Semantic search in trend memory
 - `/admin/review` [GET] - Article review queue
 - `/admin/review/<id>/approve` [POST] - Approve article action
 - `/admin/review/<id>/reject` [POST] - Reject article action
@@ -128,9 +129,9 @@ Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
-| `/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
+| `/admin/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
 
-**Note:** The `api_tokens_bp` blueprint is registered in `app.py` with `url_prefix="/api-tokens"`.
+**Note:** The `api_tokens_bp` blueprint is registered in `app.py` without a `url_prefix` — routes include the full `/api-tokens` path.
 
 ## Public Routes
 
@@ -326,7 +327,7 @@ Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, n
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
-| `/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
+| `/admin/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
 
 ## Template Structure
 

@@ -153,7 +153,13 @@ def my_task(self, ...):
 def send_newsletter_email(email: str, subject: str, html_content: str, unsubscribe_url: str):
     """Send newsletter with SMTP connection pooling."""
 
-def send_verification_email(email: str, newsletter_type: str, verification_url: str, ...):
+def send_verification_email(
+    email: str,
+    newsletter_type: str,
+    verification_url: str,
+    unsubscribe_url: str,
+    site_name: str = "ainews//",
+):
     """Send subscription verification email."""
 
 def send_welcome_email(email: str, newsletter_type: str, unsubscribe_url: str, ...):
@@ -225,7 +231,44 @@ class ModelLimiter:
 
 **Critical**: Always release in `finally` block using `provider_id or rc.provider` as fallback.
 
-## Caching
+## Config Cache
+
+```python
+# services/config_cache.py
+
+class ConfigCache:
+    """Two-tier config cache: L1 in-memory + L2 Redis (DB 1).
+    With stampede protection via Redis locks and mtime-based invalidation."""
+
+    def get(self, key: str, loader_fn: Callable, ttl: int = 300) -> Any:
+        """Get config value. L1 → L2 → loader_fn() on miss."""
+
+    def invalidate(self, key: str) -> None:
+        """Invalidate a specific config key in both tiers."""
+
+    def invalidate_all(self) -> None:
+        """Invalidate all cached config values."""
+
+    def invalidate_if_stale(self, key: str, config_path) -> None:
+        """Invalidate if the config file has been modified since last load."""
+```
+
+### Two-Tier Architecture
+
+| Tier | Storage | Max Entries | TTL | Purpose |
+|------|---------|-------------|-----|---------|
+| L1 | In-memory `dict` | 500 (`_MAX_MEMORY_ENTRIES`) | Same as Redis TTL | Fast reads, avoids Redis roundtrip |
+| L2 | Redis DB 1 | Unlimited | 300s default | Shared across workers, persistent |
+
+**Read path**: L1 hit → return. L2 hit → populate L1 → return. Both miss → acquire Redis lock → call `loader_fn()` → write to L2 + L1 → return.
+
+**Stampede protection**: Uses Redis `SET NX EX` lock (10s expiry). Losers poll Redis every 50ms for 10 iterations, then fall back to direct `loader_fn()` call.
+
+**Invalidation**: `invalidate()` removes from both L1 and L2. `invalidate_if_stale()` compares config file mtime against cached mtime (stored separately in Redis with 86400s TTL) to avoid unnecessary reloads.
+
+**Pydantic serialization**: Config values are serialized with type metadata (`_type: "pydantic"`, `"pydantic_list"`, or `"plain"`) to reconstruct Pydantic models on deserialization. Only `schemas.*` classes are permitted (allowlist enforced).
+
+## Response Cache
 
 ```python
 # services/cache.py
@@ -390,6 +433,7 @@ Used in: `services/content_extractor.py`, `services/search/*.py`, `services/suba
 | `config.py` | Flask config + Celery beat schedule |
 | `celery_app.py` | Celery setup + `FlaskTask` base |
 | `services/cache.py` | `ResponseCache` (L1 + L2) |
+| `services/config_cache.py` | `ConfigCache` (L1 memory + L2 Redis, mtime invalidation) |
 | `services/limiter.py` | `ModelLimiter` (Redis slots) |
 | `services/circuit_breaker.py` | `CircuitBreaker` + `RedisCircuitBreaker` |
 | `services/health.py` | Health check with degradation |

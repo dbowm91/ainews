@@ -93,7 +93,8 @@ def validate_url_safe(url: str) -> str:
 
     Performs DNS resolution to check for SSRF attempts via DNS rebinding.
     Returns the validated URL string.
-    Raises UnsafeURLError if URL is invalid or unsafe.
+    Raises ValueError for empty URL, unsupported scheme, or missing hostname.
+    Raises UnsafeURLError for DNS resolution failure or blocked IP address.
     """
 
 def normalize_url(url: str) -> str:
@@ -121,7 +122,7 @@ The 14 tracked parameters are: `utm_source`, `utm_medium`, `utm_campaign`, `utm_
 3. **Comprehensive validation**: Input checking with clear errors
 4. **Type hints**: Full typing for better IDE support
 5. **Testable**: Easy to unit test without mocking complex systems
-6. **URL validation layering**: `services/url.py` contains a config-aware version of URL validation (reads `get_config_with_default`). Adapters should import from `utils/url.py` per clean layering. The duplication is intentional.
+6. **URL validation layering**: `services/url.py` re-exports `TRACKING_PARAMS`, `normalize_title`, and `normalize_url` from `utils/url.py`. It duplicates `UnsafeURLError`, `_resolve_and_check`, and `validate_url_safe` with config support (reads `get_config_with_default`). Adapters should import from `utils/url.py` per clean layering.
 
 ## __all__ exports
 

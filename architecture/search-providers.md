@@ -27,7 +27,7 @@ def get_search_provider(provider_id: str = None) -> BaseSearchProvider:
 def search_web(query: str, max_results: int = 5) -> list[SearchResult]:
     """Search the web using the configured default provider."""
 
-def get_article_search_provider() -> BaseSearchProvider:
+def get_article_search_provider() -> SearchProvider:
     """Get provider for internal article search (Hybrid or SQLite FTS)."""
 ```
 
@@ -59,7 +59,7 @@ class DuckDuckGoProvider(BaseSearchProvider):
 Combines FTS5 full-text search with vector similarity:
 
 ```python
-class HybridSearchProvider(BaseSearchProvider):
+class HybridSearchProvider(SearchProvider):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         # 1. FTS5 search for keyword matches
         # 2. Vector similarity for semantic matches
@@ -97,10 +97,10 @@ class GoogleSearchProvider(BaseSearchProvider):
 Self-hosted metasearch engine:
 
 ```python
-class SearxNGProvider(BaseSearchProvider):
+class SearXNGSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         # Queries self-hosted SearxNG instance
-        # Requires: SEARXNG_BASE_URL
+        # Requires: host config in providers.yaml
         # Timeout: 20 seconds
 ```
 
@@ -108,7 +108,7 @@ class SearxNGProvider(BaseSearchProvider):
 |----------|-------|
 | Status | Disabled |
 | Self-hosted | Yes |
-| Config | `SEARXNG_BASE_URL` env var |
+| Config | `host` field in `providers.yaml` |
 
 ### SQLite FTS (`sqlite_fts.py`)
 
@@ -137,7 +137,6 @@ class SearchResult:
     url: str
     snippet: str
     source: str = ""  # Provider name
-    score: float = 0.0  # Relevance score
 ```
 
 ## Provider Selection
@@ -167,7 +166,7 @@ Search providers are exposed as subagent tools:
 
 ```python
 # In services/subagent/tools.py
-def _context_tool_search_web(query: str, max_results: int = 5) -> str:
+def _search_web(query: str, max_results: int = 5) -> str:
     """Web search via configured search provider."""
     results = search_web(query, max_results)
     return format_search_results(results)

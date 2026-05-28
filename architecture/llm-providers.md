@@ -159,13 +159,14 @@ Providers are registered in `providers.yaml` and loaded via `services/llm/__init
 ```python
 # services/llm/__init__.py
 
-def get_provider_for_role(role: str) -> BaseLLMProvider:
+def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
     """Get LLM provider configured for a specific pipeline role.
+    Returns (provider, model, max_tokens, provider_id).
     Integrates circuit breaker - skips providers with open circuits."""
 
-def get_provider_chain() -> list[str]:
-    """Return ordered list of enabled provider IDs.
-    Dynamic - determined by providers.yaml config order."""
+def get_provider_chain() -> Generator[Tuple[BaseLLMProvider, str, int, str], None, None]:
+    """Yield (provider, model, max_tokens, provider_id) tuples for enabled providers.
+    Dynamic - determined by providers.yaml config order, filtering out open circuits."""
 ```
 
 ### Provider Resolution
@@ -213,11 +214,13 @@ Closed (normal) ──5 failures──→ Open (blocking) ──60s timeout─�
 `BaseLLMProvider._retry_with_backoff()` retries on transient errors:
 
 ```python
-def _retry_with_backoff(self, fn, max_retries=3, base_delay=1.0, max_delay=30.0):
-    """Retry with exponential backoff + jitter."""
-    # Retries on: RateLimitError, ProviderTimeoutError, ProviderServerError
-    # Does NOT retry: AuthError, CircuitOpenError
-    # Uses server Retry-After header when available
+def _retry_with_backoff(self, func, model, *args, **kwargs):
+    """Retry with exponential backoff + jitter.
+    Uses class constants: RETRY_MAX_ATTEMPTS=3, RETRY_BASE_DELAY=1.0, RETRY_MAX_DELAY=30.0
+    Retries on: RateLimitError, ProviderTimeoutError, ProviderServerError
+    Does NOT retry: AuthError, CircuitOpenError
+    Uses server Retry-After header when available
+    """
 ```
 
 | Error Type | Retryable | Behavior |
@@ -230,13 +233,16 @@ def _retry_with_backoff(self, fn, max_retries=3, base_delay=1.0, max_delay=30.0)
 
 ## Error Classification
 
-`services/llm/errors.py` defines provider error types:
+`services/llm/errors.py` defines provider error types. `CircuitOpenError` is defined in `services/circuit_breaker.py` and imported into the LLM package:
 
 ```python
+# services/llm/errors.py
 class AuthError(Exception): ...           # Invalid API key/credentials
 class RateLimitError(Exception): ...      # Rate limit exceeded (may have retry_after)
 class ProviderServerError(Exception): ...  # 5xx server errors
 class ProviderTimeoutError(Exception): ... # Request timeout
+
+# services/circuit_breaker.py
 class CircuitOpenError(Exception): ...    # Circuit breaker is open
 ```
 
@@ -282,10 +288,7 @@ All pipeline tasks pass `stage=` parameter (select, research, write, edit).
 `services/cost_tracker.py` tracks LLM usage per provider:
 
 ```python
-def record_usage(provider_id: str, model: str, prompt_tokens: int, completion_tokens: int):
-    """Record token usage and calculate cost."""
-
-def get_usage_summary() -> dict:
+def get_cost_summary() -> dict:
     """Return daily/monthly usage and cost per provider."""
 ```
 

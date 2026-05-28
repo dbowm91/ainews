@@ -83,7 +83,7 @@ def _context_tool_search_articles(query: str, limit: int = 5) -> str:
 def _context_tool_get_source_health() -> str:
     """Returns JSON array of source health summaries"""
 
-def _context_tool_search_web(query: str, max_results: int = 5) -> str:
+def _search_web(query: str, max_results: int = 5) -> str:
     """Returns formatted web search results"""
 
 def _context_tool_get_search_provider(provider_id: str | None = None) -> str:
@@ -232,13 +232,14 @@ class TimingMiddleware(ToolMiddleware):
         return wrapped
 
 class ErrorHandlingMiddleware(ToolMiddleware):
-    """Catches exceptions from tool execution and returns error-formatted result instead of raising."""
+    """Logs exceptions from tool execution and re-raises them."""
     def wrap(self, func: Callable[..., Any]) -> Callable[..., Any]:
         def wrapped(*args: Any, **kwargs: Any) -> Any:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                return {"error": str(e), "tool": func.__name__}
+                self.logger.error("Tool %s failed: %s", func.__name__, e)
+                raise
         return wrapped
 ```
 

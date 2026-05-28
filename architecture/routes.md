@@ -71,7 +71,11 @@ Serves HTML admin pages at `/admin/*`:
 - `/admin/dead-letters` [GET] - Dead letter queue UI
 - `/admin/pipelines` [GET] - Pipeline run history
 - `/admin/pipelines/<run_id>/logs` [GET] - Pipeline run logs
-- `/admin/pipelines/trigger-crawl` [POST] - Manual crawl trigger
+- `/admin/trigger-crawl` [POST] - Manual crawl trigger
+- `/admin/sources/add` [POST] - Add new source
+- `/admin/trend-memory` [GET] - Trend memory management UI
+- `/admin/trend-memory/delete/<id>` [POST] - Delete trend memory entry
+- `/admin/trend-memory/delete-expired` [POST] - Delete expired trend memory entries
 - `/admin/review` [GET] - Article review queue
 - `/admin/review/<id>/approve` [POST] - Approve article action
 - `/admin/review/<id>/reject` [POST] - Reject article action
@@ -352,7 +356,7 @@ templates/
 ```python
 # On each request:
 # Session binding validates BOTH IP address AND User-Agent header
-if session['ip'] != request.ip or session['ua'] != request.ua:
+if session['ip'] != request.ip or session['user_agent'] != request.user_agent:
     # Force re-login
 ```
 
@@ -374,4 +378,4 @@ All state-changing routes protected via Flask-WTF tokens.
 
 ### Rate Limiting
 
-Admin routes have stricter rate limits via `extensions.limiter`.
+Admin login routes have explicit rate limits via `extensions.limiter` (`@limiter.limit("10 per minute")`). Other admin routes rely on the global default limit.

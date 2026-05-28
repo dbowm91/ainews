@@ -1,8 +1,10 @@
 # Architecture Documentation Review Plan
 
 **Created:** 2026-05-28
-**Status:** ACTIVE
+**Status:** INCOMPLETE (iterative improvement in progress)
 **Purpose:** Systematic review of all architecture documents (except this file) to verify claims in code, interrogate for bugs/improvements, and prune stale content.
+
+> **Note:** This plan is being executed iteratively. Each wave of subagent reviews is completed, verified, and committed before proceeding to the next. Review outputs are written to `plans/` and architecture docs are updated in-place after consolidation.
 
 ---
 

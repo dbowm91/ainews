@@ -8,9 +8,10 @@ The `schemas/` package contains Pydantic models for validation and serialization
 |------|--------|---------|
 | `pipeline.py` | `PipelineRootConfig`, stage configs | Pipeline stage configuration |
 | `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig`, `TopicMatchConfig` | Source adapter configuration |
+| `common.py` | `ProviderDef` | Shared provider definitions for LLM and search providers |
 | `llm.py` | Provider definitions | LLM/search provider settings |
 | `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief`, `SubagentResponse`, `ResearchSynthesisResponse`, `EditContextualizationResponse`, `ToolCall`, `ToolResult`, `ToolCallingResponse` | LLM response schemas |
-| `tasks.py` | Task input validation | Celery task input validation |
+| `tasks.py` | `SelectArticleTask`, `ProcessItemTask`, `GenerateNewsletterTask`, `SendEmailTask`, `CleanupArticleVersionsTask` | Celery task input validation |
 | `topic.py` | Topic definitions | Topic configuration |
 | `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration |
 | `item.py` | `RawItem` | Crawled item data from adapters |
@@ -42,9 +43,36 @@ class NewsletterConfig(BaseModel):
     prep_minutes: int = Field(default=15, ge=5, le=60)
 
 class NewsletterPipelineConfig(BaseModel):
-    reader: RoleConfig = Field(default_factory=lambda: RoleConfig(...))
-    writer: RoleConfig = Field(default_factory=lambda: RoleConfig(...))
-    editor: RoleConfig = Field(default_factory=lambda: RoleConfig(...))
+    reader: RoleConfig = Field(
+        default_factory=lambda: RoleConfig(
+            provider="ollama-local",
+            model="qwen3:8b",
+            max_tokens=4096,
+            temperature=0.0,
+            concurrency=2,
+            timeout_seconds=120,
+        )
+    )
+    writer: RoleConfig = Field(
+        default_factory=lambda: RoleConfig(
+            provider="ollama-local",
+            model="qwen3:8b",
+            max_tokens=2048,
+            temperature=0.4,
+            concurrency=1,
+            timeout_seconds=120,
+        )
+    )
+    editor: RoleConfig = Field(
+        default_factory=lambda: RoleConfig(
+            provider="ollama-local",
+            model="qwen3:8b",
+            max_tokens=2048,
+            temperature=0.0,
+            concurrency=1,
+            timeout_seconds=90,
+        )
+    )
 
 class SubagentConfig(BaseModel):
     default: SubagentStageConfig
@@ -336,6 +364,21 @@ class CleanupArticleVersionsTask(BaseModel):
     days_to_keep: int = Field(default=90, ge=1, le=365, description="Days of versions to retain")
     dry_run: bool = Field(default=False, description="Preview without deleting")
 ```
+
+## Common Schemas (`common.py`)
+
+### Provider Definition
+
+```python
+class ProviderDef(BaseModel):
+    """Shared provider definition for LLM and search providers."""
+    id: str = Field(..., pattern=r"^[a-z0-9_\-]+$")
+    type: str
+    enabled: bool = True
+    config: dict = Field(default_factory=dict)
+```
+
+`ProviderDef` is the base schema for provider entries in `providers.yaml`. Both LLM providers and search providers use this shape.
 
 ## Intentional Layer Violations
 

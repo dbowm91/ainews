@@ -96,15 +96,31 @@ class Article(Base):
     # Embedding for semantic search
     embedding = Column(Text)
 
+    # Relationships
+    citations = relationship("Citation", backref="article", lazy="selectin", cascade="all, delete-orphan")
+    tags = relationship("Tag", secondary=article_tags, lazy="selectin")
+    metrics = relationship("ArticleMetric", backref="article", uselist=False, cascade="all, delete-orphan")
+```
+
 ### Pipeline Status Flow
 
-```
-pending → selecting → selected → researching → writing → written → editing → review → done
-    ↓                                         ↓                      ↓
-    └→ researching (skip select)             └→ failed              └→ done (skip review)
-                                                    ↓
-                                               failed → pending (retry)
-```
+Valid transitions (from `constants.py:VALID_TRANSITIONS`):
+
+| From | To |
+|------|-----|
+| `pending` | `selecting`, `researching`, `review` |
+| `selecting` | `selected`, `failed` |
+| `selected` | `researching`, `failed` |
+| `researching` | `writing`, `failed` |
+| `writing` | `editing`, `failed` |
+| `written` | `editing`, `failed` |
+| `editing` | `review`, `done`, `failed` |
+| `review` | `done`, `failed` |
+| `done` | _(terminal)_ |
+| `skipped` | _(terminal)_ |
+| `failed` | `pending` |
+
+Typical happy path: `pending → selecting → selected → researching → writing → written → editing → review → done`
 
 Actual statuses used in code: `pending`, `selecting`/`selected`, `researching`, `writing`/`written`, `editing`, `review`, `done`, `skipped`, `failed`
 
@@ -136,6 +152,37 @@ class Source(Base):
 
     # Configuration: adapter config is stored in SourceConfig.config (schemas/source.py)
     # NOT in this model. Adapters access via source_config.config at runtime.
+```
+
+## Newsletter Association Tables
+
+### newsletter_articles
+
+Links newsletters to articles with ordering:
+
+```python
+newsletter_articles = db.Table(
+    "newsletter_articles",
+    db.Column("newsletter_id", db.Integer, db.ForeignKey("newsletters.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("article_id", db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("position", db.Integer, nullable=False, default=0),
+    db.Column("created_at", db.DateTime, default=lambda: datetime.now(timezone.utc)),
+)
+```
+
+### newsletter_subscribers
+
+Links newsletters to subscribers with delivery tracking:
+
+```python
+newsletter_subscribers = db.Table(
+    "newsletter_subscribers",
+    db.Column("newsletter_id", db.Integer, db.ForeignKey("newsletters.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("subscriber_id", db.Integer, db.ForeignKey("subscribers.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("sent_at", db.DateTime, nullable=True),
+    db.Column("opened_at", db.DateTime, nullable=True),
+    db.Column("clicked_at", db.DateTime, nullable=True),
+)
 ```
 
 ## Newsletter & Subscriber Models
@@ -237,7 +284,7 @@ class TopicNote(Base):
     id = Column(Integer, primary_key=True)
     topic = Column(String(128), nullable=False)
     note = Column(Text, nullable=False)
-    source = Column(String(128), nullable=False)
+    source = Column(String(256))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

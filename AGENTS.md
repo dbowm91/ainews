@@ -23,7 +23,6 @@ This document provides instructions and context for agents working on the AI New
 *   `routes/`: Flask blueprints for public and admin interfaces.
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
-*   `plans/`: Implementation plans consolidated from architecture reviews.
 
 ## Known Issues & Gotchas
 
@@ -39,7 +38,7 @@ The rate limiter uses Redis slots. Always release slots in a `finally` block to 
 SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Adapters import from `utils/url.py` for clean layering. `services/url.py` has duplicate implementations and should not be imported by adapters.
 
 ### URL Validation Duplication
-`utils/url.py` and `services/url.py` have duplicate SSRF protection implementations. `services/url.py` does NOT re-export from `utils/url.py` - it redefines everything locally with its own config support. Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
+`utils/url.py` and `services/url.py` have duplicate SSRF protection implementations. `services/url.py` re-exports `TRACKING_PARAMS`, `normalize_title`, and `normalize_url` from `utils/url.py`, but duplicates `UnsafeURLError`, `_resolve_and_check`, and `validate_url_safe` with its own config support. Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
 
 ### utils/url.py Not Pure
 Despite docstring claims, `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Don't assume pure function behavior. `validate_url_safe()` performs actual DNS resolution with caching.
@@ -114,6 +113,11 @@ Key scheduled tasks:
 - `consolidate-trend-memory`: Daily at 3:30 AM
 - `purge-trend-memory`: Daily at 3:45 AM
 - `cleanup-old-versions`: Daily at 3:45 AM
+- `cleanup-expired-verifications`: Every 15 minutes
+- `cleanup-stale-limiter-slots`: Every 5 minutes
+- `retry-failed-newsletter-deliveries`: Every 2 hours
+- `recalculate-impact-scores`: Daily at 4 AM
+- `cleanup-inactive-subscribers`: Daily at 1 AM
 
 ### run_stage Function Signature
 The `run_stage()` function in `tasks/pipeline.py:353-362` has this signature:
@@ -164,9 +168,6 @@ The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're a
 ### SubagentConfig is NOT SubagentStageConfig
 `SubagentConfig` in `schemas/pipeline.py:121-125` is the container for subagent stage configs. It does NOT have an `enabled` field at the top level. The `enabled` field is on `SubagentStageConfig` (line 94).
 
-### SearchConfig Caching Bug (FIXED)
-The `load_search_config()` function in `schemas/search.py:28-36` had a bug where `config_path` was hardcoded to `BASE_DIR / "providers.yaml"` instead of using the `path` parameter. This has been fixed - line 31 now uses `config_path = Path(path)` for proper mtime-based cache invalidation when a custom path is passed.
-
 ### api_tokens Blueprint IS Registered
 The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
 `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
@@ -207,12 +208,6 @@ The `TrendMemory` model in `models/context.py` has a `last_accessed_at` field fo
 
 ### Limiter Slot Leak Fix
 In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.provider` and `model or rc.model` as fallbacks to prevent slot leaks when `_run_stage_core` raises before returning provider info.
-
-### Missing json Import Fixed
-The `services/trend_memory.py` has `import json` which is needed for `json.JSONDecodeError` handling.
-
-### Chain Validation (Fixed)
-`run_subagent_chain()` in `services/subagent/chain.py:64-65` validates chain steps at runtime with `SubagentChainStep.model_validate()` before accessing `.task_type`.
 
 ### Middleware Clone Fix (Fixed)
 `run_subagent_with_tools()` in `services/subagent/runner.py:349-355` creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
@@ -319,7 +314,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `app.py` | Flask app factory |
 | `config.py` | Flask config classes, Celery beat schedule |
 | `extensions.py` | Flask extensions (db, redis, limiter) |
-| `models.py` | SQLAlchemy models |
+| `models/` | SQLAlchemy models package (article, source, newsletter, pipeline, context, etc.) |
 | `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |

@@ -44,7 +44,7 @@ SSRF protection (`validate_url_safe`, `UnsafeURLError`) is in `utils/url.py`. Ad
 Despite docstring claims, `utils/url.py` has global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Don't assume pure function behavior. `validate_url_safe()` performs actual DNS resolution with caching.
 
 ### validate_url_safe Exception Types
-`validate_url_safe()` raises `ValueError` for empty URL, unsupported scheme, or missing hostname. Only DNS resolution failures and blocked IPs raise `UnsafeURLError`. Callers must catch both exception types.
+`validate_url_safe()` raises `UnsafeURLError` for all invalid URL cases (empty URL, unsupported scheme, missing hostname, DNS failure, blocked IP). `UnsafeURLError` inherits from `ValueError`, so callers can catch either type.
 
 ### Context Window
 LLM prompts can grow large. Use the token budgeting and `summarize_context()` caching in `services/prompts.py`.

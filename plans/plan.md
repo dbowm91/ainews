@@ -1,6 +1,6 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** IN PROGRESS
+**Status:** COMPLETED
 **Last Updated:** 2026-05-28
 **Source:** Consolidated from 7 architecture review files
 
@@ -641,20 +641,20 @@ This plan consolidates findings from architecture reviews across all modules. It
 
 ## Verification Checklist
 
-Before marking items complete, verify:
-- [ ] `routes/admin/sources.py` imports `UnsafeURLError`
-- [ ] `tasks/newsletter.py` has `@shared_task` on `generate_daily_newsletters`
-- [ ] `validate_url_safe()` documentation matches actual exception behavior
-- [ ] All function signatures match actual code
-- [ ] All return types match actual implementations
-- [ ] All default values match actual defaults
-- [ ] All class names match actual class names
-- [ ] All route paths match actual route definitions
-- [ ] All field names match actual schema fields
-- [ ] All method names match actual method names
-- [ ] Provider count updated (14 total, 1 enabled)
-- [ ] Redis DB allocation corrected (DB 0 = broker, DB 1 = config cache, DB 15 = limiter)
-- [ ] `ruff check . --exclude .venv` passes with no new errors
+All items verified and complete:
+- [x] `routes/admin/sources.py` imports `UnsafeURLError`
+- [x] `tasks/newsletter.py` has `@shared_task` on `generate_daily_newsletters`
+- [x] `validate_url_safe()` documentation matches actual exception behavior (now raises `UnsafeURLError` for all cases)
+- [x] All function signatures match actual code (verified in Wave 2)
+- [x] All return types match actual implementations (verified in Wave 2)
+- [x] All default values match actual defaults (verified in Wave 2)
+- [x] All class names match actual class names (verified in Wave 2)
+- [x] All route paths match actual route definitions (verified in Wave 4)
+- [x] All field names match actual schema fields (verified in Wave 3)
+- [x] All method names match actual method names (verified in Wave 2)
+- [x] Provider count updated (14 total, 1 enabled)
+- [x] Redis DB allocation corrected (DB 0 = broker, DB 1 = config cache, DB 15 = limiter)
+- [x] `ruff check . --exclude .venv` passes (2 pre-existing S311 warnings in adapters/web.py only)
 
 ---
 
@@ -683,3 +683,4 @@ Before marking items complete, verify:
 
 *Plan consolidated: 2026-05-28*
 *All claims verified against codebase on 2026-05-28*
+*Implementation completed: 2026-05-28*

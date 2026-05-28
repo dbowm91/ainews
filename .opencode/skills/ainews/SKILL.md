@@ -479,7 +479,7 @@ The implementation plan (plans/plan.md) was completed in 2026-05. Key features i
 - Wave 7: Removed DeepSeek references (not implemented), filled RSS adapter gaps
 - Wave 8: Fixed documentation drift across pipeline, subagent, schemas, models, routes, utils
 
-All planned improvements are complete. Deferred items are tracked in plans/plan.md.
+All planned improvements are complete.
 
 ## Code Quality Workflow
 

@@ -42,9 +42,9 @@ class NewsletterConfig(BaseModel):
     prep_minutes: int = Field(default=15, ge=5, le=60)
 
 class NewsletterPipelineConfig(BaseModel):
-    reader: RoleConfig
-    writer: RoleConfig
-    editor: RoleConfig
+    reader: RoleConfig = Field(default_factory=lambda: RoleConfig(...))
+    writer: RoleConfig = Field(default_factory=lambda: RoleConfig(...))
+    editor: RoleConfig = Field(default_factory=lambda: RoleConfig(...))
 
 class SubagentConfig(BaseModel):
     default: SubagentStageConfig
@@ -327,6 +327,7 @@ class GenerateNewsletterTask(BaseModel):
 
 class SendEmailTask(BaseModel):
     email: str = Field(..., description="Recipient email address")
+    # Note: No email format validator exists on this field (unlike GenerateNewsletterTask)
     subject: str = Field(..., min_length=1, max_length=500, description="Email subject")
     html: str = Field(..., min_length=1, description="Email HTML body")
     unsub_url: str = Field(..., min_length=1, description="Unsubscribe URL")
@@ -373,6 +374,6 @@ result = SelectionResult.model_validate_json(response.content)
 @celery_app.task
 def select_article(article_id: int):
     # Automatic validation via Pydantic
-    input_data = SelectArticleInput(article_id=article_id)
+    input_data = SelectArticleTask(article_id=article_id)
     ...
 ```

@@ -48,7 +48,7 @@ class Article(Base):
     # Identity & Source
     id = Column(Integer, primary_key=True)
     short_id = Column(String(12), unique=True, index=True)  # Public-facing ID
-    source_id = Column(Integer, ForeignKey('sources.id'), nullable=False, index=True)
+    source_id = Column(Integer, ForeignKey('sources.id', ondelete='CASCADE'), nullable=False, index=True)
     external_id = Column(String(128), index=True)
 
     # Original Content
@@ -83,8 +83,8 @@ class Article(Base):
     last_error = Column(Text)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     scheduled_publish_at = Column(DateTime, nullable=True, index=True)
     crawled_at = Column(DateTime, nullable=True, index=True)
     selected_at = Column(DateTime, nullable=True, index=True)
@@ -100,11 +100,15 @@ class Article(Base):
 
 ```
 pending → selecting → selected → researching → writing → written → editing → review → done
+    ↓                                         ↓                      ↓
+    └→ researching (skip select)             └→ failed              └→ done (skip review)
                                                     ↓
-                                               failed (after retries)
+                                               failed → pending (retry)
 ```
 
 Actual statuses used in code: `pending`, `selecting`/`selected`, `researching`, `writing`/`written`, `editing`, `review`, `done`, `skipped`, `failed`
+
+See `constants.py:VALID_TRANSITIONS` for the complete transition map.
 
 ## Source Model
 
@@ -116,7 +120,7 @@ class Source(Base):
 
     id = Column(Integer, primary_key=True)
     source_key = Column(String(64), unique=True, nullable=False)  # Unique source identifier
-    name = Column(String(128))
+    name = Column(String(128), nullable=False, index=True)
     url = Column(String(512))                     # Source website URL
     feed_url = Column(String(512))                 # RSS/API feed URL
     source_type = Column(String(32))              # rss, api, web
@@ -172,6 +176,9 @@ class Subscriber(Base):
     bounce_count = Column(Integer, nullable=False, default=0)
     last_bounce_at = Column(DateTime, nullable=True)
     last_active_at = Column(DateTime, nullable=True, index=True)
+
+    # Unique constraint
+    __table_args__ = (UniqueConstraint("email", "newsletter_type", name="uq_email_newsletter"),)
 ```
 
 ## AdminUser Security
@@ -183,7 +190,7 @@ class AdminUser(Base):
     __tablename__ = 'admin_users'
 
     id = Column(Integer, primary_key=True)
-    username = Column(String(64), unique=True)
+    username = Column(String(64), unique=True, nullable=False, index=True)
     password_hash = Column(String(128))
 
     # TOTP 2FA
@@ -209,16 +216,33 @@ class TrendMemory(Base):
     topic = Column(String(128))  # Not String(200)
     signal = Column(Text)
     importance = Column(Integer, default=1)  # Priority level
+    source_article_id = Column(Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True)  # Single FK, not JSON
     expires_at = Column(DateTime, nullable=True)  # Expiration timestamp
     last_consolidated_at = Column(DateTime, nullable=True)  # Last consolidation
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_accessed_at = Column(DateTime)
 
     # Embeddings for semantic search
     embedding = Column(Text)  # Stored as text, not vector type
+```
 
-    # Metadata
-    source_article_id = Column(Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True)  # Single FK, not JSON
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_accessed_at = Column(DateTime)
+## TopicNote
+
+Manual editor notes per topic:
+
+```python
+class TopicNote(Base):
+    __tablename__ = 'topic_notes'
+
+    id = Column(Integer, primary_key=True)
+    topic = Column(String(128), nullable=False)
+    note = Column(Text, nullable=False)
+    source = Column(String(128), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Unique constraint on (topic, source)
+    __table_args__ = (UniqueConstraint("topic", "source", name="uq_topic_source"),)
 ```
 
 ## Indexes

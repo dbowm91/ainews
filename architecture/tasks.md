@@ -107,7 +107,7 @@ def process_item(
 
 ```python
 @celery_app.task(bind=True, max_retries=3)
-def select_article(self, article_id: int):
+def select_article(self, article_id: int, run_id=None):
     """LLM scores article 1-10 for newsworthiness"""
     # Uses selector prompt template
     # Returns: {score, confidence, reasoning}
@@ -118,7 +118,7 @@ def select_article(self, article_id: int):
 
 ```python
 @celery_app.task(bind=True, max_retries=3)
-def research_article(self, article_id: int):
+def research_article(self, article_id: int, run_id=None):
     """LLM builds research brief with web search + context"""
     # Uses researcher prompt template
     # Calls subagent for web search
@@ -129,7 +129,7 @@ def research_article(self, article_id: int):
 
 ```python
 @celery_app.task(bind=True, max_retries=3)
-def write_article(self, article_id: int):
+def write_article(self, article_id: int, run_id=None):
     """LLM writes condensed article (Smart Brevity format)"""
     # Uses writer prompt template
     # Target: 200-400 words, 2-5 key points
@@ -140,7 +140,7 @@ def write_article(self, article_id: int):
 
 ```python
 @celery_app.task(bind=True, max_retries=3)
-def edit_article(self, article_id: int):
+def edit_article(self, article_id: int, run_id=None):
     """LLM edits with contextualization, assigns tags"""
     # Calls subagent with context tools
     # Assigns tags via _assign_tags()

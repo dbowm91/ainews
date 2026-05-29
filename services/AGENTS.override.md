@@ -66,7 +66,7 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 - **utils/security.py:** Contains `generate_token` (using `secrets.token_urlsafe`), `constant_time_compare` (using `hmac.compare_digest`).
 - **utils/hash.py:** Contains `generate_hash`, `verify_hash`.
 - **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`. Note: `strip_tags` fallback uses bare `except Exception` with noqa: BLE001. Also `extract_text` logs a warning when trafilatura is not available.
-- **utils/url.py:** Contains global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Do not assume pure function behavior. Docstring now clarifies this after architecture review.
+- **utils/url.py:** Contains global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Do not assume pure function behavior. Docstring clarifies this.
 - **Two truncate() functions:** `utils/text.py:truncate()` breaks on word boundaries; `BaseSourceAdapter._truncate()` (adapters/base.py:104) does not - it just slices.
 
 ## services/url.py vs utils/url.py
@@ -82,21 +82,6 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 
 ## Known Bugs (OPEN)
 - **ResponseCache pubsub leak:** `ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, `pubsub.close()` is never called. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block. Fix: add `pubsub.close()` in the finally block.
-
-## Architecture Review Process
-
-When conducting architecture reviews or updating documentation:
-1. **Always verify against actual codebase** - documentation claims may be stale
-2. **Check file existence before claiming bugs** - some "missing" items already exist
-3. **Verify function calls, not just definitions** - "dead code" claims need call-site verification
-4. **File naming discrepancies** - use actual filenames (e.g., `services/quality_report.py` not `quality_report_service.py`)
-
-Example verification pattern:
-```bash
-# Always verify file existence and content
-ls -la architecture/*.md
-grep -n "function_name" services/*.py
-```
 
 ## Fixed Bug Patterns
 

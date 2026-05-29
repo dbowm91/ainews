@@ -1,10 +1,8 @@
 # Architecture Documentation Review Plan
 
-**Created:** 2026-05-28
-**Status:** COMPLETE (all 6 subagent reviews finished, findings consolidated)
+**Created:** 2026-05-29
+**Status:** PENDING
 **Purpose:** Systematic review of all architecture documents (except this file) to verify claims in code, interrogate for bugs/improvements, and prune stale content.
-
-> **Note:** All waves completed. 15 architecture documents reviewed, 65+ incorrect claims fixed, 5 bugs found, 45+ improvement opportunities identified. Consolidated findings in `plans/architecture_review_consolidated.md`.
 
 ---
 
@@ -12,23 +10,23 @@
 
 Review all 15 architecture documents (excluding `review_plan.md`):
 
-| # | Document | Module(s) | Lines |
-|---|----------|-----------|-------|
-| 1 | `adapters.md` | `adapters/` | 201 |
-| 2 | `config.md` | `config.py`, YAML files, `schemas/` | 365 |
-| 3 | `infrastructure.md` | Redis, SQLite, Celery, email, health, rate limiting, caching | 398 |
-| 4 | `llm-providers.md` | `services/llm/` | 308 |
-| 5 | `models.md` | `models/` | 240 |
-| 6 | `overview.md` | System-wide bird's-eye view | 489 |
-| 7 | `pipeline.md` | Article pipeline stages, newsletter generation | 320 |
-| 8 | `prompts.md` | `prompts/`, `services/prompts.py` | 181 |
-| 9 | `routes.md` | `routes/` (public, admin, API) | 377 |
-| 10 | `schemas.md` | `schemas/` | 378 |
-| 11 | `search-providers.md` | `services/search/` | 195 |
-| 12 | `services.md` | `services/` (business logic) | 290 |
-| 13 | `subagent.md` | `services/subagent/` | 295 |
-| 14 | `tasks.md` | `tasks/` | 230 |
-| 15 | `utils.md` | `utils/` | 150 |
+| # | Document | Module(s) | Output File |
+|---|----------|-----------|-------------|
+| 1 | `adapters.md` | `adapters/` | `plans/review_adapters.md` |
+| 2 | `config.md` | `config.py`, YAML files, `schemas/` | `plans/review_config.md` |
+| 3 | `infrastructure.md` | Redis, SQLite, Celery, email, health, rate limiting, caching | `plans/review_infrastructure.md` |
+| 4 | `llm-providers.md` | `services/llm/` | `plans/review_llm_providers.md` |
+| 5 | `models.md` | `models/` | `plans/review_models.md` |
+| 6 | `overview.md` | System-wide bird's-eye view | `plans/review_overview.md` |
+| 7 | `pipeline.md` | Article pipeline stages, newsletter generation | `plans/review_pipeline.md` |
+| 8 | `prompts.md` | `prompts/`, `services/prompts.py` | `plans/review_prompts.md` |
+| 9 | `routes.md` | `routes/` (public, admin, API) | `plans/review_routes.md` |
+| 10 | `schemas.md` | `schemas/` | `plans/review_schemas.md` |
+| 11 | `search-providers.md` | `services/search/` | `plans/review_search_providers.md` |
+| 12 | `services.md` | `services/` (business logic) | `plans/review_services.md` |
+| 13 | `subagent.md` | `services/subagent/` | `plans/review_subagent.md` |
+| 14 | `tasks.md` | `tasks/` | `plans/review_tasks.md` |
+| 15 | `utils.md` | `utils/` | `plans/review_utils.md` |
 
 ---
 
@@ -57,7 +55,7 @@ Each subagent review must:
 - Cross-reference with `plans/plan.md` to see if previously identified issues were resolved or regressed
 
 ### 4. Write Improvement Plan
-Each subagent must write its findings to `plans/{module_name}_review.md` with:
+Each subagent must write its findings to `plans/review_{module_name}.md` with:
 - **Verified Claims**: What was confirmed correct
 - **Incorrect Claims**: What is wrong in the documentation (with file:line references to actual code)
 - **Bugs Found**: Potential bugs discovered during review
@@ -71,7 +69,7 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 
 ### Subagent 1: Data Layer Review
 **Documents:** `models.md`, `schemas.md`
-**Output:** `plans/data_layer_review.md`
+**Output:** `plans/review_models.md` and `plans/review_schemas.md`
 
 **Review checklist for `models.md`:**
 - [ ] Verify every model class exists in `models/` package
@@ -98,7 +96,7 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 
 ### Subagent 2: Adapter & Utils Review
 **Documents:** `adapters.md`, `utils.md`
-**Output:** `plans/adapter_utils_review.md`
+**Output:** `plans/review_adapters.md` and `plans/review_utils.md`
 
 **Review checklist for `adapters.md`:**
 - [ ] Verify BaseSourceAdapter abstract methods
@@ -125,7 +123,7 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 
 ### Subagent 3: LLM & Search Review
 **Documents:** `llm-providers.md`, `search-providers.md`, `subagent.md`
-**Output:** `plans/llm_search_subagent_review.md`
+**Output:** `plans/review_llm_providers.md`, `plans/review_search_providers.md`, and `plans/review_subagent.md`
 
 **Review checklist for `llm-providers.md`:**
 - [ ] Verify BaseLLMProvider abstract methods and signatures
@@ -161,7 +159,7 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 
 ### Subagent 4: Pipeline & Tasks Review
 **Documents:** `pipeline.md`, `tasks.md`, `prompts.md`
-**Output:** `plans/pipeline_tasks_review.md`
+**Output:** `plans/review_pipeline.md`, `plans/review_tasks.md`, and `plans/review_prompts.md`
 
 **Review checklist for `pipeline.md`:**
 - [ ] Verify pipeline status values match `constants.py`
@@ -194,7 +192,7 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 
 ### Subagent 5: Infrastructure & Config Review
 **Documents:** `infrastructure.md`, `config.md`, `overview.md`
-**Output:** `plans/infra_config_overview_review.md`
+**Output:** `plans/review_infrastructure.md`, `plans/review_config.md`, and `plans/review_overview.md`
 
 **Review checklist for `infrastructure.md`:**
 - [ ] Verify Redis DB allocation (0, 1, 2, 15)
@@ -231,7 +229,7 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 
 ### Subagent 6: Routes Review
 **Documents:** `routes.md`
-**Output:** `plans/routes_review.md`
+**Output:** `plans/review_routes.md`
 
 **Review checklist for `routes.md`:**
 - [ ] Verify all route files exist in `routes/`
@@ -247,13 +245,29 @@ Each subagent must write its findings to `plans/{module_name}_review.md` with:
 - [ ] Verify rate limiting on admin routes
 - [ ] Look for routes not documented
 
+### Subagent 7: Services Review
+**Documents:** `services.md`
+**Output:** `plans/review_services.md`
+
+**Review checklist for `services.md`:**
+- [ ] Verify every service module exists in `services/`
+- [ ] Check service function signatures match actual code
+- [ ] Verify config_cache.py and config_unified.py patterns
+- [ ] Check circuit_breaker.py interface (name param, can_execute(), get_breaker())
+- [ ] Verify limiter.py ModelLimiter interface (provider/model-aware)
+- [ ] Check cache.py ResponseCache implementation
+- [ ] Verify metrics.py MetricsCollector method names (counter_inc, gauge_set, histogram_observe)
+- [ ] Check health.py run_health_checks() function signature
+- [ ] Verify logging_utils.py PipelineLogger and log functions
+- [ ] Look for service features not documented
+
 ---
 
 ## Stale Content Pruning Protocol
 
 After all subagent reviews complete, the orchestrator must:
 
-1. **Aggregate findings** from all `plans/*_review.md` files
+1. **Aggregate findings** from all `plans/review_*.md` files
 2. **Identify stale claims** that are confirmed incorrect or outdated
 3. **Create a pruning list** of specific documentation sections to remove or rewrite
 4. **Cross-reference** with `plans/plan.md` to avoid re-fixing already-resolved items
@@ -271,11 +285,11 @@ After all subagent reviews complete, the orchestrator must:
 
 ## Execution Plan
 
-### Phase 1: Parallel Subagent Reviews (6 subagents)
-Launch all 6 subagents in parallel. Each writes findings to `plans/{module}_review.md`.
+### Phase 1: Parallel Subagent Reviews (7 subagents)
+Launch all 7 subagents in parallel. Each writes findings to `plans/review_{module}.md`.
 
 ### Phase 2: Consolidation
-Read all review output files. Merge into a single consolidated findings document.
+Read all review output files. Merge into a single consolidated findings document at `plans/architecture_review_consolidated.md`.
 
 ### Phase 3: Stale Content Pruning
 Remove or rewrite stale sections from architecture documents based on verified findings.
@@ -291,12 +305,21 @@ Commit all changes to `main` branch.
 ## Output File Naming
 
 Each subagent writes to `plans/` at the repo root:
-- `plans/data_layer_review.md` (Subagent 1)
-- `plans/adapter_utils_review.md` (Subagent 2)
-- `plans/llm_search_subagent_review.md` (Subagent 3)
-- `plans/pipeline_tasks_review.md` (Subagent 4)
-- `plans/infra_config_overview_review.md` (Subagent 5)
-- `plans/routes_review.md` (Subagent 6)
+- `plans/review_adapters.md` (Subagent 2)
+- `plans/review_config.md` (Subagent 5)
+- `plans/review_infrastructure.md` (Subagent 5)
+- `plans/review_llm_providers.md` (Subagent 3)
+- `plans/review_models.md` (Subagent 1)
+- `plans/review_overview.md` (Subagent 5)
+- `plans/review_pipeline.md` (Subagent 4)
+- `plans/review_prompts.md` (Subagent 4)
+- `plans/review_routes.md` (Subagent 6)
+- `plans/review_schemas.md` (Subagent 1)
+- `plans/review_search_providers.md` (Subagent 3)
+- `plans/review_services.md` (Subagent 7)
+- `plans/review_subagent.md` (Subagent 3)
+- `plans/review_tasks.md` (Subagent 4)
+- `plans/review_utils.md` (Subagent 2)
 
 After consolidation, a final `plans/architecture_review_consolidated.md` summarizes all findings.
 
@@ -304,7 +327,7 @@ After consolidation, a final `plans/architecture_review_consolidated.md` summari
 
 ## Constraints
 
-- Work only in the current working directory (`/Users/davidbowman/projects/ainews`)
+- Work only in the current working directory (`/home/sugarwookie/projects/ainews`)
 - Do not modify code files unless a bug is confirmed
 - Documentation improvements go into architecture docs directly
 - Improvement plans go into `plans/` directory

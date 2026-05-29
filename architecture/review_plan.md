@@ -1,335 +1,312 @@
 # Architecture Documentation Review Plan
 
 **Created:** 2026-05-29
-**Status:** COMPLETE
-**Purpose:** Systematic review of all architecture documents (except this file) to verify claims in code, interrogate for bugs/improvements, and prune stale content.
+**Status:** IN_PROGRESS
+**Purpose:** Systematic review of architecture documents to verify claims against code, identify bugs and improvements, and prune stale content.
 
 ---
 
 ## Scope
 
-Review all 15 architecture documents (excluding `review_plan.md`):
+Review all 14 architecture documents (excluding this file):
 
-| # | Document | Module(s) | Output File |
-|---|----------|-----------|-------------|
-| 1 | `adapters.md` | `adapters/` | `plans/review_adapters.md` |
-| 2 | `config.md` | `config.py`, YAML files, `schemas/` | `plans/review_config.md` |
-| 3 | `infrastructure.md` | Redis, SQLite, Celery, email, health, rate limiting, caching | `plans/review_infrastructure.md` |
-| 4 | `llm-providers.md` | `services/llm/` | `plans/review_llm_providers.md` |
-| 5 | `models.md` | `models/` | `plans/review_models.md` |
-| 6 | `overview.md` | System-wide bird's-eye view | `plans/review_overview.md` |
-| 7 | `pipeline.md` | Article pipeline stages, newsletter generation | `plans/review_pipeline.md` |
-| 8 | `prompts.md` | `prompts/`, `services/prompts.py` | `plans/review_prompts.md` |
-| 9 | `routes.md` | `routes/` (public, admin, API) | `plans/review_routes.md` |
-| 10 | `schemas.md` | `schemas/` | `plans/review_schemas.md` |
-| 11 | `search-providers.md` | `services/search/` | `plans/review_search_providers.md` |
-| 12 | `services.md` | `services/` (business logic) | `plans/review_services.md` |
-| 13 | `subagent.md` | `services/subagent/` | `plans/review_subagent.md` |
-| 14 | `tasks.md` | `tasks/` | `plans/review_tasks.md` |
-| 15 | `utils.md` | `utils/` | `plans/review_utils.md` |
+| Document | Module | Output Plan |
+|----------|--------|-------------|
+| `adapters.md` | `adapters/` | `plans/review_adapters.md` |
+| `config.md` | `config.py`, YAML configs | `plans/review_config.md` |
+| `infrastructure.md` | Redis, SQLite, Celery, email, health | `plans/review_infrastructure.md` |
+| `llm-providers.md` | `services/llm/` | `plans/review_llm_providers.md` |
+| `models.md` | `models/` | `plans/review_models.md` |
+| `overview.md` | System-wide | `plans/review_overview.md` |
+| `pipeline.md` | `tasks/pipeline.py`, newsletter | `plans/review_pipeline.md` |
+| `prompts.md` | `prompts/`, `services/prompts.py` | `plans/review_prompts.md` |
+| `routes.md` | `routes/` | `plans/review_routes.md` |
+| `schemas.md` | `schemas/` | `plans/review_schemas.md` |
+| `search-providers.md` | `services/search/` | `plans/review_search_providers.md` |
+| `services.md` | `services/` | `plans/review_services.md` |
+| `subagent.md` | `services/subagent/` | `plans/review_subagent.md` |
+| `tasks.md` | `tasks/` | `plans/review_tasks.md` |
+| `utils.md` | `utils/` | `plans/review_utils.md` |
 
 ---
 
 ## Review Methodology
 
-Each subagent review must:
+For each document, the reviewing subagent must:
 
-### 1. Verify Claims in Code
-- For every file path referenced, confirm the file exists and contains the claimed code
-- For every function/class signature, verify it matches the actual implementation
-- For every field/model/constant, confirm it exists with the documented type and default
-- For every relationship, verify the foreign key/association table exists
-- For every scheduled task, confirm the task name, schedule, and beat schedule entry
+### Phase 1: Verify Claims Against Code
+- Confirm every file path, class, function, and field referenced in the document exists in the codebase
+- Verify every signature, default value, and type matches the documented claim
+- Check every relationship (foreign keys, associations, enums) is accurate
+- Validate every scheduled task name, schedule, and beat entry
 
-### 2. Interrogate for Bugs and Improvements
+### Phase 2: Interrogate for Bugs and Improvements
 - Identify potential bugs: race conditions, resource leaks, missing error handling, incorrect assumptions
 - Identify improvement opportunities: performance, security, maintainability, testability
-- Check for inconsistencies between documents (e.g., overview.md vs module-specific doc)
-- Check for inconsistencies between documentation and AGENTS.md
-- Flag any code patterns that violate the documented layering rules (unless marked as intentional)
+- Flag violations of documented layering rules (unless marked as intentional)
+- Note discrepancies between architecture docs and AGENTS.md
 
-### 3. Check for Stale Content
-- Verify that all referenced files, classes, and functions still exist
-- Check if any documented behaviors have been superseded by newer implementations
-- Look for outdated version references, deprecated patterns, or removed features
-- Cross-reference with `plans/plan.md` to see if previously identified issues were resolved or regressed
+### Phase 3: Identify Stale Content
+- Documented items that no longer exist in code
+- Behaviors superseded by newer implementations
+- Outdated version references or deprecated patterns
+- Cross-reference with `plans/plan.md` to avoid re-flagging resolved issues
 
-### 4. Write Improvement Plan
-Each subagent must write its findings to `plans/review_{module_name}.md` with:
-- **Verified Claims**: What was confirmed correct
-- **Incorrect Claims**: What is wrong in the documentation (with file:line references to actual code)
-- **Bugs Found**: Potential bugs discovered during review
+### Phase 4: Write Improvement Plan
+Write findings to `plans/review_{module}.md` with sections:
+- **Verified Claims**: Confirmed correct items
+- **Incorrect Claims**: Wrong documentation (file:line references)
+- **Bugs Found**: Potential bugs with severity (HIGH/MEDIUM/LOW)
 - **Improvement Opportunities**: Suggested enhancements
-- **Stale Content**: Items that should be pruned or updated
-- **Priority**: HIGH / MEDIUM / LOW for each finding
+- **Stale Content**: Items to prune or update
+- **Priority**: For each finding
 
 ---
 
-## Subagent Review Assignments
+## Subagent Assignments
 
-### Subagent 1: Data Layer Review
+### Subagent 1: Data Layer
 **Documents:** `models.md`, `schemas.md`
-**Output:** `plans/review_models.md` and `plans/review_schemas.md`
+**Output:** `plans/review_models.md`, `plans/review_schemas.md`
 
-**Review checklist for `models.md`:**
-- [ ] Verify every model class exists in `models/` package
-- [ ] Verify every field name, type, and default value
-- [ ] Verify every relationship (foreign keys, association tables)
-- [ ] Verify every index name and column list
-- [ ] Check Article model has 30+ fields as claimed
-- [ ] Verify PipelineStatus enum values match `constants.py`
-- [ ] Check TrendMemory field names (`signal` not `observation`, `embedding` as Text)
-- [ ] Verify AdminUser 2FA fields exist (backup_codes as JSON)
-- [ ] Check Source model field names (`source_type` not `type`, `last_crawled` not `last_fetch_at`)
-- [ ] Look for missing models or fields not documented
+Checklist for `models.md`:
+- [ ] All model classes exist in `models/` package
+- [ ] All field names, types, defaults match code
+- [ ] All relationships (FKs, association tables) verified
+- [ ] Article model field count (30+)
+- [ ] PipelineStatus enum matches `constants.py`
+- [ ] TrendMemory field names (`signal`, `embedding` as Text)
+- [ ] AdminUser 2FA backup_codes as JSON
+- [ ] Source model field names (`source_type`, `last_crawled`)
+- [ ] Newsletter association tables exist
 
-**Review checklist for `schemas.md`:**
-- [ ] Verify every Pydantic model class exists in `schemas/`
-- [ ] Verify field names, types, validators, and defaults
-- [ ] Check PipelineRootConfig structure matches `pipeline.yaml`
-- [ ] Verify RoleConfig fields and defaults
-- [ ] Check SubagentConfig has no `enabled` field (only SubagentStageConfig does)
-- [ ] Verify SourceConfig validator logic
-- [ ] Check all LLM response schemas (SelectionResult, ResearchBrief, CondensedArticle, etc.)
-- [ ] Verify task validation schemas match actual task signatures
-- [ ] Look for schemas in code not documented here
+Checklist for `schemas.md`:
+- [ ] All Pydantic models exist in `schemas/`
+- [ ] Field names, types, validators match code
+- [ ] PipelineRootConfig matches `pipeline.yaml`
+- [ ] RoleConfig fields and defaults
+- [ ] SubagentConfig has NO top-level `enabled` (only SubagentStageConfig)
+- [ ] SourceConfig validator logic
+- [ ] LLM response schemas (SelectionResult, ResearchBrief, etc.)
+- [ ] Task validation schemas match task signatures
 
-### Subagent 2: Adapter & Utils Review
+### Subagent 2: Adapter & Utils Layer
 **Documents:** `adapters.md`, `utils.md`
-**Output:** `plans/review_adapters.md` and `plans/review_utils.md`
+**Output:** `plans/review_adapters.md`, `plans/review_utils.md`
 
-**Review checklist for `adapters.md`:**
-- [ ] Verify BaseSourceAdapter abstract methods
-- [ ] Verify @register_adapter decorator exists and works
-- [ ] Check RSSAdapter implements fetch/parse_item correctly
-- [ ] Check APIAdapter config fields match `schemas/source.py` (list_url, list_items_path, fields, etc.)
-- [ ] Verify filter operations (equals, min, exists, contains) are implemented
-- [ ] Check WebAdapter CSS selector configuration
-- [ ] Verify SSRFSafeRedirectHandler signature and behavior
-- [ ] Confirm session ownership table (RSS=own, API/Web=shared)
-- [ ] Verify close() is no-op for APIAdapter and WebAdapter
-- [ ] Check error handling patterns match claims
-- [ ] Look for adapter features not documented
+Checklist for `adapters.md`:
+- [ ] BaseSourceAdapter abstract methods
+- [ ] @register_adapter decorator
+- [ ] RSSAdapter fetch/parse_item
+- [ ] APIAdapter config fields (list_url, list_items_path, fields, pagination)
+- [ ] Filter operations (equals, min, exists, contains)
+- [ ] WebAdapter CSS selector configuration
+- [ ] SSRFSafeRedirectHandler signature
+- [ ] Session ownership (RSS=own, API/Web=shared)
+- [ ] APIAdapter/WebAdapter close() is no-op
 
-**Review checklist for `utils.md`:**
-- [ ] Verify every function exists in `utils/`
-- [ ] Check function signatures match actual code
-- [ ] Verify `validate_url_safe()` behavior and DNS cache
-- [ ] Check TRACKING_PARAMS set has 14 entries as claimed
-- [ ] Verify `UnsafeURLError` inherits from `ValueError`
-- [ ] Check `escape_prompt_data()` exists and works
-- [ ] Look for utility functions in code not documented
-- [ ] Verify the `services/url.py` duplication is intentional
+Checklist for `utils.md`:
+- [ ] All functions exist in `utils/`
+- [ ] Function signatures match code
+- [ ] validate_url_safe() behavior and DNS cache
+- [ ] TRACKING_PARAMS set size (14 entries)
+- [ ] UnsafeURLError inherits from ValueError
+- [ ] escape_prompt_data() exists
+- [ ] services/url.py duplication documented as intentional
 
-### Subagent 3: LLM & Search Review
+### Subagent 3: LLM & Search Layer
 **Documents:** `llm-providers.md`, `search-providers.md`, `subagent.md`
-**Output:** `plans/review_llm_providers.md`, `plans/review_search_providers.md`, and `plans/review_subagent.md`
+**Output:** `plans/review_llm_providers.md`, `plans/review_search_providers.md`, `plans/review_subagent.md`
 
-**Review checklist for `llm-providers.md`:**
-- [ ] Verify BaseLLMProvider abstract methods and signatures
-- [ ] Check ToolDefinition dataclass fields (no `cached` field)
-- [ ] Verify provider implementations exist (openai.py, anthropic.py, gemini.py, ollama.py)
-- [ ] Check provider registry in `services/llm/__init__.py`
-- [ ] Verify get_provider_for_role() and get_provider_chain() functions
-- [ ] Check circuit breaker integration
-- [ ] Verify error classification types in `services/llm/errors.py`
-- [ ] Check DEFAULT_LLM_TIMEOUT_SECONDS constant exists
-- [ ] Look for LLM features not documented
+Checklist for `llm-providers.md`:
+- [ ] BaseLLMProvider abstract methods and signatures
+- [ ] ToolDefinition dataclass fields (NO `cached` field)
+- [ ] Provider implementations (openai, anthropic, gemini, ollama)
+- [ ] Provider registry in `services/llm/__init__.py`
+- [ ] get_provider_for_role() and get_provider_chain()
+- [ ] Circuit breaker integration
+- [ ] Error classification in `services/llm/errors.py`
+- [ ] DEFAULT_LLM_TIMEOUT_SECONDS constant
 
-**Review checklist for `search-providers.md`:**
-- [ ] Verify all search provider files exist in `services/search/`
-- [ ] Check DuckDuckGo provider is default/enabled
-- [ ] Verify Hybrid provider (FTS5 + vector) is enabled
-- [ ] Confirm Google and SearxNG are disabled
-- [ ] Check SearchResult dataclass fields
-- [ ] Verify provider registry in `services/search/__init__.py`
-- [ ] Confirm DeepSeek is NOT a search provider
-- [ ] Look for search features not documented
+Checklist for `search-providers.md`:
+- [ ] All search provider files in `services/search/`
+- [ ] DuckDuckGo is default/enabled
+- [ ] Hybrid provider (FTS5 + vector) is enabled
+- [ ] Google and SearxNG are disabled
+- [ ] SearchResult dataclass fields
+- [ ] Provider registry
+- [ ] DeepSeek is NOT a search provider (only a regex pattern)
 
-**Review checklist for `subagent.md`:**
-- [ ] Verify tool registry in `services/subagent/registry.py`
-- [ ] Check all 9 built-in tools exist and are registered
-- [ ] Verify runner.py functions (run_subagent, run_subagent_with_tools)
-- [ ] Check chain.py implementation
-- [ ] Verify middleware classes (Logging, Timing, ErrorHandling)
-- [ ] Check middleware chain order (applied in reverse)
-- [ ] Verify prompt_templates.py exists
-- [ ] Check conditions.py AST-based evaluation
-- [ ] Look for subagent features not documented
+Checklist for `subagent.md`:
+- [ ] Tool registry in `services/subagent/registry.py`
+- [ ] 14 tools (12 context + 2 search), NOT 9
+- [ ] Runner functions (run_subagent, run_subagent_with_tools)
+- [ ] Chain implementation
+- [ ] Middleware classes (Logging, Timing, ErrorHandling)
+- [ ] Middleware chain order (applied in reverse)
+- [ ] Prompt templates
+- [ ] Conditions AST-based evaluation
 
-### Subagent 4: Pipeline & Tasks Review
+### Subagent 4: Pipeline & Tasks Layer
 **Documents:** `pipeline.md`, `tasks.md`, `prompts.md`
-**Output:** `plans/review_pipeline.md`, `plans/review_tasks.md`, and `plans/review_prompts.md`
+**Output:** `plans/review_pipeline.md`, `plans/review_tasks.md`, `plans/review_prompts.md`
 
-**Review checklist for `pipeline.md`:**
-- [ ] Verify pipeline status values match `constants.py`
-- [ ] Check status transition flow is accurate
-- [ ] Verify stage thresholds and scoring behavior
-- [ ] Check newsletter generation flow (3-stage LLM)
-- [ ] Verify scheduled tasks table (14 tasks)
-- [ ] Check degradation behavior table
-- [ ] Verify retry limits (per-stage: 3, total: 10)
-- [ ] Check selector retry_max=20 claim
-- [ ] Verify circuit breaker claims
-- [ ] Look for pipeline behaviors not documented
+Checklist for `pipeline.md`:
+- [ ] Pipeline status values match `constants.py`
+- [ ] Status transition flow
+- [ ] Stage thresholds and scoring
+- [ ] Newsletter generation (3-stage LLM)
+- [ ] Scheduled tasks table (14 tasks)
+- [ ] Degradation behavior
+- [ ] Retry limits (per-stage: 3, total: 10)
+- [ ] Selector retry_max=20
+- [ ] Circuit breaker claims
 
-**Review checklist for `tasks.md`:**
-- [ ] Verify every task function exists in `tasks/`
-- [ ] Check task signatures match actual code
-- [ ] Verify run_stage() signature and behavior
-- [ ] Check quality gate conditions per stage
-- [ ] Verify degradation path documentation
-- [ ] Check beat schedule matches `config.py:get_beat_schedule()`
-- [ ] Look for task features not documented
+Checklist for `tasks.md`:
+- [ ] All task functions exist in `tasks/`
+- [ ] Task signatures match code
+- [ ] run_stage() signature and behavior
+- [ ] Quality gate conditions per stage
+- [ ] Degradation path
+- [ ] Beat schedule matches `config.py:get_beat_schedule()`
 
-**Review checklist for `prompts.md`:**
-- [ ] Verify all 7 prompt template files exist in `prompts/`
-- [ ] Check get_system_prompt() and load_prompt_file() functions
-- [ ] Verify override mechanism works
-- [ ] Check context truncation functions exist
-- [ ] Verify prompt escaping functions exist
-- [ ] Look for prompt features not documented
+Checklist for `prompts.md`:
+- [ ] 7 prompt template files in `prompts/`
+- [ ] get_system_prompt() and load_prompt_file()
+- [ ] Override mechanism
+- [ ] Context truncation functions
+- [ ] Prompt escaping functions (esc_xml_text, esc_xml_attr)
 
-### Subagent 5: Infrastructure & Config Review
+### Subagent 5: Infrastructure & Config Layer
 **Documents:** `infrastructure.md`, `config.md`, `overview.md`
-**Output:** `plans/review_infrastructure.md`, `plans/review_config.md`, and `plans/review_overview.md`
+**Output:** `plans/review_infrastructure.md`, `plans/review_config.md`, `plans/review_overview.md`
 
-**Review checklist for `infrastructure.md`:**
-- [ ] Verify Redis DB allocation (0, 1, 2, 15)
-- [ ] Check SQLite WAL pragmas in `app.py`
-- [ ] Verify Celery task configuration
-- [ ] Check email delivery functions exist
-- [ ] Verify health check implementation
-- [ ] Check rate limiter (ModelLimiter) interface
-- [ ] Verify ResponseCache (L1 + L2) implementation
-- [ ] Check circuit breaker implementation
-- [ ] Verify webhook dispatch security features
-- [ ] Check metrics collector interface
-- [ ] Verify ThreadPoolExecutor pattern usage
-- [ ] Look for infrastructure features not documented
+Checklist for `infrastructure.md`:
+- [ ] Redis DB allocation (0=broker, 1=config cache, 15=limiter)
+- [ ] SQLite WAL pragmas in `app.py`
+- [ ] Celery task configuration
+- [ ] Email delivery functions
+- [ ] Health check implementation
+- [ ] Rate limiter (ModelLimiter) interface
+- [ ] ResponseCache (L1 + L2) implementation
+- [ ] Circuit breaker implementation
+- [ ] Webhook dispatch security
+- [ ] Metrics collector interface
+- [ ] ThreadPoolExecutor pattern
 
-**Review checklist for `config.md`:**
-- [ ] Verify PipelineRootConfig structure
-- [ ] Check all YAML file purposes and schemas
-- [ ] Verify environment variables table
-- [ ] Check config loading and caching patterns
-- [ ] Verify Celery beat schedule loading
-- [ ] Look for config features not documented
+Checklist for `config.md`:
+- [ ] PipelineRootConfig structure
+- [ ] YAML file purposes and schemas
+- [ ] Environment variables table
+- [ ] Config loading and caching
+- [ ] Celery beat schedule loading
 
-**Review checklist for `overview.md`:**
-- [ ] Verify system diagram accuracy
-- [ ] Check directory structure matches actual codebase
-- [ ] Verify layering rules table
-- [ ] Check data flow summaries
-- [ ] Verify security architecture table
-- [ ] Check external integrations list
-- [ ] Verify entry points table
-- [ ] Cross-reference all deep-dive links
-- [ ] Look for overview claims contradicted by module docs
+Checklist for `overview.md`:
+- [ ] System diagram accuracy
+- [ ] Directory structure matches codebase
+- [ ] Layering rules table
+- [ ] Data flow summaries
+- [ ] Security architecture
+- [ ] External integrations list
+- [ ] Entry points table
+- [ ] Cross-reference deep-dive links
 
-### Subagent 6: Routes Review
+### Subagent 6: Routes Layer
 **Documents:** `routes.md`
 **Output:** `plans/review_routes.md`
 
-**Review checklist for `routes.md`:**
-- [ ] Verify all route files exist in `routes/`
-- [ ] Check blueprint registration (public_bp, admin_bp, admin_api_bp)
-- [ ] Verify URL prefixes (/admin, /api/v1)
-- [ ] Check admin routes table (all endpoints listed)
-- [ ] Verify API endpoints table (all endpoints listed)
-- [ ] Check HTTP methods for each endpoint
-- [ ] Verify authentication methods per blueprint
-- [ ] Check template structure
-- [ ] Verify session hijacking protection claims
-- [ ] Check CSRF protection
-- [ ] Verify rate limiting on admin routes
-- [ ] Look for routes not documented
+Checklist:
+- [ ] All route files exist in `routes/`
+- [ ] Blueprint registration (public_bp, admin_bp, admin_api_bp)
+- [ ] URL prefixes (/admin, /api/v1)
+- [ ] Admin routes table (all endpoints)
+- [ ] API endpoints table (all endpoints)
+- [ ] HTTP methods per endpoint
+- [ ] Authentication methods
+- [ ] Template structure
+- [ ] Session hijacking protection
+- [ ] CSRF protection
+- [ ] Rate limiting on admin routes
 
-### Subagent 7: Services Review
+### Subagent 7: Services Layer
 **Documents:** `services.md`
 **Output:** `plans/review_services.md`
 
-**Review checklist for `services.md`:**
-- [ ] Verify every service module exists in `services/`
-- [ ] Check service function signatures match actual code
-- [ ] Verify config_cache.py and config_unified.py patterns
-- [ ] Check circuit_breaker.py interface (name param, can_execute(), get_breaker())
-- [ ] Verify limiter.py ModelLimiter interface (provider/model-aware)
-- [ ] Check cache.py ResponseCache implementation
-- [ ] Verify metrics.py MetricsCollector method names (counter_inc, gauge_set, histogram_observe)
-- [ ] Check health.py run_health_checks() function signature
-- [ ] Verify logging_utils.py PipelineLogger and log functions
-- [ ] Look for service features not documented
+Checklist:
+- [ ] All service modules exist in `services/`
+- [ ] Service function signatures match code
+- [ ] config_cache.py and config_unified.py patterns
+- [ ] circuit_breaker.py interface (name param, can_execute(), get_breaker())
+- [ ] limiter.py ModelLimiter interface (provider/model-aware)
+- [ ] cache.py ResponseCache implementation
+- [ ] metrics.py MetricsCollector methods (counter_inc, gauge_set, histogram_observe)
+- [ ] health.py run_health_checks() signature
+- [ ] logging_utils.py PipelineLogger and log functions
+- [ ] article_validation.py ValidationError
 
 ---
 
-## Stale Content Pruning Protocol
+## Stale Content Pruning
 
-After all subagent reviews complete, the orchestrator must:
+After all subagent reviews complete:
 
-1. **Aggregate findings** from all `plans/review_*.md` files
-2. **Identify stale claims** that are confirmed incorrect or outdated
-3. **Create a pruning list** of specific documentation sections to remove or rewrite
-4. **Cross-reference** with `plans/plan.md` to avoid re-fixing already-resolved items
-5. **Update architecture documents** to remove stale content
-6. **Delete or archive** any architecture documents that are fully superseded
+1. **Aggregate** findings from all `plans/review_*.md` files
+2. **Identify** stale claims confirmed incorrect or outdated
+3. **Create** pruning list of specific sections to remove or rewrite
+4. **Cross-reference** with `plans/plan.md` to avoid re-flagging resolved items
+5. **Update** architecture documents to remove stale content
+6. **Delete** any architecture documents fully superseded
 
 ### Stale Content Indicators
-- Documented file/class/function no longer exists in codebase
-- Documented behavior contradicts current implementation
-- Documented field/type/default doesn't match actual code
+- Documented file/class/function no longer exists
+- Documented behavior contradicts implementation
+- Documented field/type/default doesn't match code
 - Documented feature was removed or replaced
-- Documented pattern contradicts AGENTS.md conventions
+- Documented pattern contradicts AGENTS.md
 
 ---
 
-## Execution Plan
+## Execution
 
-### Phase 1: Parallel Subagent Reviews (7 subagents)
-Launch all 7 subagents in parallel. Each writes findings to `plans/review_{module}.md`.
+**Phase 1:** Launch 7 subagents in parallel, each reviewing their assigned documents and writing to `plans/review_*.md`
 
-### Phase 2: Consolidation
-Read all review output files. Merge into a single consolidated findings document at `plans/architecture_review_consolidated.md`.
+**Phase 2:** Read all `plans/review_*.md` outputs. Consolidate into `plans/architecture_review_consolidated.md`
 
-### Phase 3: Stale Content Pruning
-Remove or rewrite stale sections from architecture documents based on verified findings.
+**Phase 3:** Apply stale content pruning to architecture documents
 
-### Phase 4: Verification
-Run linting (`ruff check . --exclude .venv`) to ensure no syntax errors introduced.
+**Phase 4:** Run `ruff check . --exclude .venv` to verify no syntax errors
 
-### Phase 5: Commit
-Commit all changes to `main` branch.
+**Phase 5:** Commit all changes to `main`
 
 ---
 
-## Output File Naming
+## Output Files
 
-Each subagent writes to `plans/` at the repo root:
-- `plans/review_adapters.md` (Subagent 2)
-- `plans/review_config.md` (Subagent 5)
-- `plans/review_infrastructure.md` (Subagent 5)
-- `plans/review_llm_providers.md` (Subagent 3)
-- `plans/review_models.md` (Subagent 1)
-- `plans/review_overview.md` (Subagent 5)
-- `plans/review_pipeline.md` (Subagent 4)
-- `plans/review_prompts.md` (Subagent 4)
-- `plans/review_routes.md` (Subagent 6)
-- `plans/review_schemas.md` (Subagent 1)
-- `plans/review_search_providers.md` (Subagent 3)
-- `plans/review_services.md` (Subagent 7)
-- `plans/review_subagent.md` (Subagent 3)
-- `plans/review_tasks.md` (Subagent 4)
-- `plans/review_utils.md` (Subagent 2)
-
-After consolidation, a final `plans/architecture_review_consolidated.md` summarizes all findings.
+| Plan File | Subagent | Source Document(s) |
+|-----------|----------|-------------------|
+| `plans/review_adapters.md` | Subagent 2 | `adapters.md` |
+| `plans/review_config.md` | Subagent 5 | `config.md` |
+| `plans/review_infrastructure.md` | Subagent 5 | `infrastructure.md` |
+| `plans/review_llm_providers.md` | Subagent 3 | `llm-providers.md` |
+| `plans/review_models.md` | Subagent 1 | `models.md` |
+| `plans/review_overview.md` | Subagent 5 | `overview.md` |
+| `plans/review_pipeline.md` | Subagent 4 | `pipeline.md` |
+| `plans/review_prompts.md` | Subagent 4 | `prompts.md` |
+| `plans/review_routes.md` | Subagent 6 | `routes.md` |
+| `plans/review_schemas.md` | Subagent 1 | `schemas.md` |
+| `plans/review_search_providers.md` | Subagent 3 | `search-providers.md` |
+| `plans/review_services.md` | Subagent 7 | `services.md` |
+| `plans/review_subagent.md` | Subagent 3 | `subagent.md` |
+| `plans/review_tasks.md` | Subagent 4 | `tasks.md` |
+| `plans/review_utils.md` | Subagent 2 | `utils.md` |
+| `plans/architecture_review_consolidated.md` | Orchestrator | All above |
 
 ---
 
 ## Constraints
 
-- Work only in the current working directory (`/home/sugarwookie/projects/ainews`)
-- Do not modify code files unless a bug is confirmed
-- Documentation improvements go into architecture docs directly
+- Work only in `/home/sugarwookie/projects/ainews`
+- Do NOT specify direct code changes; this is a review plan only
 - Improvement plans go into `plans/` directory
-- All changes must pass `ruff check . --exclude .venv`
-- Commit only when all reviews are complete
+- All linting must pass before commit
+- Commit only when all reviews and pruning complete

@@ -235,41 +235,38 @@ class SubagentStageConfig(BaseModel):
 | Wave | Items | Done | Needs Fix |
 |------|-------|------|-----------|
 | W1 | 4 | 4 | 0 |
-| W2 | 4 | 0 | 4 |
-| W3 | 4 | 1 (W3-2) | 3 |
+| W2 | 4 | 4 | 0 |
+| W3 | 4 | 4 | 0 |
 | W4 | 5 | 5 | 0 |
-| W5 | 18 | 12 | 6 |
+| W5 | 18 | 18 | 0 |
 
-**Total: 35 action items - 22 already done, 13 need fixing**
+**Total: 35 action items - all completed 2026-05-29**
 
 ---
 
 ## Implementation Notes
 
-### Parallelization Strategy - WAVE Assignment
+### Completed Implementation
 
-**Wave A (Config + Schemas - HIGH Priority):**
-Can run in parallel with Wave B:
-- W2-1: Document RoleConfig.enabled
-- W2-2: Document ReviewConfig
-- W2-3: Document SubagentStageConfig fields
-- W2-4: Document RoleConfig role-specific fields
+**Wave A (Config + Schemas - HIGH Priority):** ✅ COMPLETED
+- W2-1: Added RoleConfig documentation including `enabled` field
+- W2-2: Added ReviewConfig documentation
+- W2-3: Added SubagentStageConfig full field documentation
+- W2-4: Added RoleConfig role-specific fields with role annotations
 
-**Wave B (Routes - HIGH Priority):**
-Can run in parallel with Wave A:
-- W3-1: Fix triple-listed counts-by-status
-- W3-3: Document CSRF protection
-- W3-4: Document default rate limit
+**Wave B (Routes - HIGH Priority):** ✅ COMPLETED
+- W3-1: Removed duplicate counts-by-status table (kept single canonical entry)
+- W3-3: Documented X-CSRFToken header mechanism via `@validate_csrf_json` decorator
+- W3-4: Documented global default rate limit of 60 per minute
 
-**Wave C (Minor Improvements - MEDIUM Priority):**
-After Waves A and B complete:
-- W5-5: Enumerate routes/admin/api/ contents
-- W5-8: Document self-correction mechanism
-- W5-12: Document _format_subagent_prompt()
-- W5-13: Document max_iterations default
-- W5-15: Document two truncate() functions
-- W5-16: Document SMTPConnectionPool
-- W5-17: Document cleanup_old_versions_hour limitation
+**Wave C (Minor Improvements - MEDIUM Priority):** ✅ COMPLETED
+- W5-5: Enumerated routes/admin/api/ contents (17 files)
+- W5-8: Documented self-correction mechanism with `self_corrected` flag
+- W5-12: Documented `_format_subagent_prompt()` helper
+- W5-13: Documented max_iterations default of 5
+- W5-15: Documented two different truncate() functions
+- W5-16: Documented SMTPConnectionPool class
+- W5-17: Documented cleanup_old_versions_hour limitation (minute hardcoded to :45)
 
 ### Verification Steps
 Before implementing any item:

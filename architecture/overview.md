@@ -268,7 +268,23 @@ ainews/
 │   │   ├── webhooks.py     # Webhook management
 │   │   ├── trend_memory.py # Trend memory UI
 │   │   ├── api_tokens.py   # API token management
-│   │   └── api/            # Admin JSON API (/api/v1/*)
+│   │   └── api/            # Admin JSON API at /api/v1/*
+        ├── articles.py    # Article CRUD and pipeline control
+        ├── sources.py     # Source management
+        ├── pipeline.py    # Pipeline run control
+        ├── search.py      # Search analytics
+        ├── webhooks.py    # Webhook management
+        ├── config.py      # Configuration management
+        ├── audit.py       # Audit log access
+        ├── health.py      # Health check endpoints
+        ├── alerts.py      # Alerting API
+        ├── newsletter.py  # Newsletter performance API
+        ├── quality.py     # Quality report API
+        ├── replay.py      # Pipeline replay API
+        ├── source_intelligence.py  # Source intelligence API
+        ├── topic_gap.py   # Topic gap analysis API
+        ├── utils.py       # API utility functions
+        └── __init__.py
 │   └── decorators.py       # @require_auth, commit(), commit_or_rollback()
 │
 ├── utils/                  # Pure utility functions

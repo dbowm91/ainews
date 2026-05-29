@@ -305,33 +305,6 @@ def logout(): ...
 
 Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, not `/articles`).
 
-| Endpoint | Methods | Purpose |
-|----------|---------|---------|
-| `/articles/ids` | GET | Batch article ID lookup with filters |
-| `/articles/counts-by-status` | GET | Article count by pipeline status |
-| `/articles/<id>` | GET, PUT, DELETE | Article CRUD |
-| `/articles/<id>/pipeline` | POST | Trigger pipeline stage |
-| `/articles/bulk` | POST | Bulk article operations |
-| `/sources` | GET, POST | List/create sources |
-| `/sources/<id>` | GET, PUT, PATCH, DELETE | Source CRUD |
-| `/sources/<id>/refresh` | POST | Force source refresh |
-| `/sources/health` | GET | Source health status |
-| `/pipeline/stats` | GET | Pipeline stage statistics |
-| `/pipeline/backlog` | GET | Pipeline backlog |
-| `/pipeline/dead-letter/stats` | GET | Dead letter queue stats |
-| `/pipeline/sla` | GET | SLA metrics |
-| `/costs` | GET | LLM cost summary |
-| `/webhooks` | GET, POST | List/create webhooks |
-| `/webhooks/<id>` | GET, PUT, PATCH, DELETE | Webhook CRUD |
-| `/webhooks/<id>/test` | POST | Test webhook delivery |
-| `/webhooks/<id>/events` | GET | Webhook delivery events |
-| `/webhooks/events/<id>/resend` | POST | Resend webhook event |
-| `/search/analytics` | GET | Search analytics |
-| `/config/reload` | POST | Reload configuration |
-| `/metrics` | GET | Application metrics |
-| `/metrics/prometheus` | GET | Prometheus-formatted metrics |
-| `/audit-logs` | GET | Audit log entries |
-
 ## Template Structure
 
 Templates use a flat directory structure under `templates/`:
@@ -378,8 +351,15 @@ Admin API supports token auth:
 
 ### CSRF Protection
 
-All state-changing routes protected via Flask-WTF tokens.
+All state-changing routes protected via Flask-WTF tokens. JSON API endpoints use the `X-CSRFToken` header:
+
+```python
+# Header: X-CSRFToken: <token>
+# Decorator: @validate_csrf_json (routes/decorators.py:72-94)
+# Validates X-CSRFToken header for JSON endpoints (Flask-WTF only handles form/multipart)
+# Respects WTF_CSRF_ENABLED = False in TestingConfig
+```
 
 ### Rate Limiting
 
-Admin login routes have explicit rate limits via `extensions.limiter` (`@limiter.limit("10 per minute")`). Other admin routes rely on the global default limit.
+Admin login routes have explicit rate limits via `extensions.limiter` (`@limiter.limit("10 per minute")`). Other admin routes rely on the **global default limit of 60 per minute**, configurable via `RATELIMIT_DEFAULT` env var.

@@ -17,7 +17,7 @@ The `utils/` package contains pure utility functions with minimal dependencies.
 
 ```python
 def truncate(text: str, length: int, suffix: str = "...") -> str:
-    """Truncate text to length, breaking on words"""
+    """Truncate text to length, breaking on word boundaries."""
 
 def sanitize_html(html: str) -> str:
     """Remove dangerous HTML tags from content"""
@@ -34,6 +34,12 @@ def esc_xml_attr(text: str) -> str:
 def escape_prompt_data(data: dict) -> dict:
     """Escape dict values for prompt injection prevention"""
 ```
+
+**Two different truncate() functions:**
+
+1. `utils/text.py:truncate()` - Word-boundary truncation. Breaks on word boundaries, finds last space before limit, appends suffix. Used for general text truncation.
+
+2. `adapters/base.py:BaseSourceAdapter._truncate()` - Simple slicing. Returns `text[:limit]` for non-empty input, `None` for empty. Used for adapter text truncation where word boundaries don't matter.
 
 ## DateTime Utilities (`datetime.py`)
 

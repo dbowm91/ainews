@@ -23,6 +23,56 @@ The `schemas/` package contains Pydantic models for validation and serialization
 **Note:** `StageConfig` is a stub with only `tools: list[str]`. Actual stage configuration is handled by `RoleConfig` within `PipelineConfig`.
 
 ```python
+class PipelineConfig(BaseModel):
+    selector: RoleConfig
+    researcher: RoleConfig
+    writer: RoleConfig
+    editor: RoleConfig
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
+
+class RoleConfig(BaseModel):
+    """Per-stage LLM role configuration."""
+    enabled: bool = True
+    provider: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
+    max_tokens: int = MAX_TOKENS_FIELD
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    concurrency: int = Field(default=2, ge=1, le=32)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
+    system_prompt: Optional[str] = None  # configurable system prompt for all roles
+    # Role-specific optional fields:
+    min_score: Optional[int] = None          # selector role only
+    web_search: Optional[bool] = None       # researcher role only
+    web_search_max_results: Optional[int] = None   # researcher role only
+    web_search_provider: Optional[str] = None      # researcher role only
+    db_related_max: Optional[int] = None           # researcher role only
+    max_article_text_length: Optional[int] = None # researcher role only
+    max_key_points: Optional[int] = None          # writer role only
+    max_tags: Optional[int] = None               # editor role only
+
+class ReviewConfig(BaseModel):
+    """Configuration for the review stage and auto-publish behavior."""
+    enabled: bool = False
+    auto_publish_threshold: Optional[int] = Field(
+        default=None,
+        description="Auto-publish articles with impact_score >= this value, bypassing review.",
+    )
+
+class SubagentStageConfig(BaseModel):
+    """Per-stage subagent configuration."""
+    enabled: bool = False
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    max_tokens: int = MAX_TOKENS_FIELD
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
+    system_prompt: Optional[str] = None
+    max_retries: int = Field(default=1, ge=0, le=5)
+    retry_delay: float = Field(default=5.0, ge=0.0, le=60.0)
+    task_template: Optional[str] = None
+    tools: list[str] = Field(default_factory=list)
+    max_iterations: int = Field(default=5, ge=1, le=20)
+
 class PipelineRootConfig(BaseModel):
     pipeline: PipelineConfig           # Stage role configurations (selector, researcher, writer, editor)
     newsletter: NewsletterConfig

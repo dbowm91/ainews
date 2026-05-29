@@ -140,6 +140,29 @@ class SubagentChainConfig(BaseModel):
 - **Tool-calling support**: Via `chat_with_tools()`
 - **Self-correction**: Re-validates output and retries on failure
 - **`copy.deepcopy()` for tool functions**: Prevents middleware compounding on cached tool definitions. Each invocation wraps the tool function fresh rather than re-wrapping an already-wrapped function.
+- **max_iterations default**: `max_iterations` defaults to 5 (ge=1, le=20)
+
+### Self-Correction Mechanism
+
+The subagent runner uses a `self_corrected` flag to track whether the LLM output required self-correction:
+
+```python
+# At runner.py:401-417:
+self_corrected = False
+for attempt in range(max_attempts):
+    response = llm_provider.chat_with_tools(...)
+    if validation_success:
+        return response
+    # Adjust prompt with correction hint
+    self_corrected = True
+# Return fallback or raise
+```
+
+Self-correction occurs when structured output validation fails. The runner adjusts the prompt with correction hints and retries with `max_retries + 1` total attempts.
+
+### Helper Functions (`utils.py`)
+
+`_format_subagent_prompt(template, prompt_data, stage, task_type)` - Formats subagent prompt templates by escaping prompt_data via `escape_prompt_data()` and substituting into the template. Returns `None` if template key is missing (logs warning with stage/task_type context). Used by `run_subagent_with_tools()` to build context-rich prompts.
 
 ### Execution Flow
 

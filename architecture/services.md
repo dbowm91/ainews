@@ -210,7 +210,22 @@ class ModelLimiter:
 
 ### Email (`email.py`)
 
-Module-level functions (not a class):
+`SMTPConnectionPool` class at `services/email.py:13` provides connection pooling:
+
+```python
+class SMTPConnectionPool:
+    """Pool of reusable SMTP connections."""
+    def __init__(self, pool_size: int = 5): ...
+    def get_connection(self) -> smtplib.SMTP: ...
+    def return_connection(self, server: smtplib.SMTP): ...
+    def close_all(self): ...
+    def _is_healthy(self, server) -> bool: ...
+    def _compute_cfg_hash(self, cfg: dict) -> str: ...
+```
+
+The pool is thread-safe and detects config changes (host, port, user, password, from_addr, use_tls) to reset pool on change. Unhealthy connections are automatically replaced. A global `_smtp_pool` singleton is created on first use via `_get_smtp_pool()`.
+
+Module-level functions for email sending:
 
 ```python
 def send_newsletter_email(email: str, subject: str, html_content: str, unsubscribe_url: str) -> None:

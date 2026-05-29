@@ -104,7 +104,6 @@ Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
-| `/articles` | GET | List articles |
 | `/articles/ids` | GET | Batch article ID lookup with filters |
 | `/articles/counts-by-status` | GET | Article count by pipeline status |
 | `/articles/<id>` | GET, PUT, DELETE | Article CRUD |
@@ -302,7 +301,6 @@ Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, n
 
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
-| `/articles` | GET | List articles |
 | `/articles/ids` | GET | Batch article ID lookup with filters |
 | `/articles/counts-by-status` | GET | Article count by pipeline status |
 | `/articles/<id>` | GET, PUT, DELETE | Article CRUD |

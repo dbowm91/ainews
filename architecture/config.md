@@ -438,9 +438,14 @@ def cached_config_with_mtime(key: str, loader_fn: Callable[[], T], config_path: 
 def get_config_with_default(key: str, default=None):
     """Access Flask config from Celery tasks safely.
     Celery tasks run outside Flask app context."""
-    from celery_support import get_current_app
-    app = get_current_app()
-    return app.config.get(key, default)
+    try:
+        from flask import current_app
+        value = current_app.config.get(key)
+        if value is not None:
+            return value
+    except RuntimeError:
+        pass  # Outside Flask app context
+    return default
 ```
 
 ## Environment Variables

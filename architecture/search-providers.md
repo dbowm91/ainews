@@ -82,15 +82,15 @@ Google Custom Search API (requires API key):
 class GoogleSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         # Uses Google Custom Search JSON API
-        # Requires: GOOGLE_SEARCH_API_KEY, GOOGLE_SEARCH_CX
+        # Requires: GOOGLE_API_KEY, GOOGLE_CSE_ID
         # Timeout: 20 seconds
 ```
 
 | Property | Value |
 |----------|-------|
 | Status | Disabled |
-| API Key | Required (`GOOGLE_SEARCH_API_KEY`) |
-| Custom Engine | Required (`GOOGLE_SEARCH_CX`) |
+| API Key | Required (`GOOGLE_API_KEY`) |
+| Custom Engine | Required (`GOOGLE_CSE_ID`) |
 
 ### SearxNG (`searxng.py`)
 
@@ -144,7 +144,7 @@ class SearchResult:
 The default web search provider is configured in `providers.yaml`:
 
 ```yaml
-search:
+search_providers:
   default: duckduckgo
   providers:
     duckduckgo:
@@ -153,8 +153,8 @@ search:
       enabled: true
     google:
       enabled: false
-      api_key: "${GOOGLE_SEARCH_API_KEY}"
-      cx: "${GOOGLE_SEARCH_CX}"
+      api_key: "${GOOGLE_API_KEY}"
+      cse_id: "${GOOGLE_CSE_ID}"
     searxng:
       enabled: false
       base_url: "${SEARXNG_BASE_URL}"

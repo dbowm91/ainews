@@ -164,7 +164,7 @@ _SUBAGENT_TASK_TEMPLATES = {
 
 Template resolution order:
 1. `stage_config.task_template` (from pipeline.yaml, can reference files in `prompts/`)
-2. `_SUBAGENT_TASK_TEMPLATES` fallback in `subagent.py`
+2. `_SUBAGENT_TASK_TEMPLATES` fallback in `services/subagent/prompt_templates.py`
 
 ## Key Files
 

@@ -355,7 +355,6 @@ class GenerateNewsletterTask(BaseModel):
 
 class SendEmailTask(BaseModel):
     email: str = Field(..., description="Recipient email address")
-    # Note: No email format validator exists on this field (unlike GenerateNewsletterTask)
     subject: str = Field(..., min_length=1, max_length=500, description="Email subject")
     html: str = Field(..., min_length=1, description="Email HTML body")
     unsub_url: str = Field(..., min_length=1, description="Unsubscribe URL")

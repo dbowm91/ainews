@@ -181,6 +181,7 @@ class ResponseCache:
                     return self.get(key)
                 finally:
                     pubsub.unsubscribe(done_channel)
+                    pubsub.close()
         except redis.exceptions.RedisError as e:
             logger.warning("Failed to acquire cache lock for %s: %s", lock_key, e)
             value = loader_fn()

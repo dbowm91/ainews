@@ -74,7 +74,7 @@ Valid transitions:
 **Thresholds**:
 - `selected=True` AND `score >= min_score` (default 6) → proceed to research
 - `selected=False` → mark as `skipped` (regardless of score)
-- `selected=True` but `score < min_score` → mark as `review` or `discard`
+- `selected=True` but `score < min_score` → mark as `skipped`
 - Low confidence → mark as `review` (regardless of selected/score)
 
 ### 2. Research
@@ -98,7 +98,7 @@ Valid transitions:
 - Format: hook → context → key points → implications
 - Target: 3-5 key points, actionable insights
 
-**Validation**: If body < 500 chars, marks for `review`
+**Validation**: Marks for `review` if body < 500 chars OR empty key_points OR empty citations
 
 ### 4. Edit
 

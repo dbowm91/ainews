@@ -6,48 +6,53 @@ The `services/` package contains business logic, LLM interactions, and third-par
 
 ```
 services/
+├── provider_base.py         # BaseProvider, ProviderManager (provider registry)
 ├── llm/                     # LLM provider implementations
-│   ├── provider_base.py    # Abstract base class
-│   ├── anthropic.py        # Anthropic Claude provider
-│   ├── openai.py           # OpenAI-compatible provider
-│   ├── gemini.py           # Google Gemini provider
-│   ├── ollama.py           # Ollama local provider
-├── subagent/               # Tool-enabled LLM agents
-├── search/                 # Search provider implementations
-├── article_parser.py       # Article content parsing
-├── article_validation.py   # Article quality validation
-├── article_fallback.py     # Fallback content extraction
-├── researcher.py           # Article research logic
-├── writer.py               # Article writing logic
-├── editor.py               # Article editing logic
-├── content_extractor.py   # trafilatura + readability extraction
-├── crawling.py            # Crawling utilities
-├── trend_detector.py       # Trend detection logic
-├── embeddings.py           # Embedding generation
-├── newsletter_pipeline.py  # Newsletter orchestration
-├── pipeline_monitor.py     # Pipeline health monitoring
-├── pipeline_degradation.py # Graceful degradation logic
-├── pipeline_failure.py     # Failure handling
-├── pipeline_utils.py       # Pipeline utilities
+│   ├── base.py              # BaseLLMProvider, LLMResponse, ToolDefinition
+│   ├── anthropic.py         # Anthropic Claude provider
+│   ├── openai.py            # OpenAI-compatible provider
+│   ├── gemini.py            # Google Gemini provider
+│   ├── ollama.py            # Ollama local provider
+│   ├── errors.py            # Error classification (AuthError, RateLimitError, etc.)
+│   ├── types.py             # Type definitions
+│   └── json_utils.py        # JSON extraction helpers
+├── subagent/                # Tool-enabled LLM agents
+├── search/                  # Search provider implementations
+├── article_parser.py        # Article content parsing
+├── article_validation.py    # Article quality validation
+├── article_fallback.py      # Fallback content extraction
+├── researcher.py            # Article research logic
+├── writer.py                # Article writing logic
+├── editor.py                # Article editing logic
+├── content_extractor.py    # trafilatura + readability extraction
+├── crawling.py             # Crawling utilities
+├── trend_detector.py        # Trend detection logic
+├── embeddings.py            # Embedding generation
+├── newsletter_pipeline.py   # Newsletter orchestration
+├── pipeline_monitor.py      # Pipeline health monitoring
+├── pipeline_degradation.py  # Graceful degradation logic
+├── pipeline_failure.py      # Failure handling
+├── pipeline_utils.py        # Pipeline utilities
 ├── circuit_breaker.py       # Circuit breaker for provider fallback
-├── context_service.py      # Context management
-├── related.py              # Related article finding
-├── trend_memory.py         # Trend memory operations
-├── email.py                # SMTP email delivery
-├── webhooks.py             # Webhook dispatch
-├── cache.py                # Redis caching
-├── limiter.py              # Redis-based rate limiting
-└── cost_tracker.py         # LLM cost tracking
+├── context_service.py       # Context management
+├── related.py               # Related article finding
+├── trend_memory.py          # Trend memory operations
+├── email.py                 # SMTP email delivery
+├── webhooks.py              # Webhook dispatch
+├── cache.py                 # Redis caching (ResponseCache L1+L2)
+├── limiter.py               # Redis-based rate limiting (ModelLimiter)
+├── cost_tracker.py          # LLM cost tracking
+└── ...                      # Additional modules (audit, alerts, quality, etc.)
 ```
 
 ## LLM Provider System
 
 ### Provider Base (`llm/base.py`)
 
-Abstract base class defining the interface:
+Abstract base class defining the interface. Inherits from `BaseProvider` (`services/provider_base.py`) which provides `provider_id` and `config` fields:
 
 ```python
-class BaseLLMProvider(ABC):
+class BaseLLMProvider(BaseProvider, abc.ABC):
     default_model: str = ""
 
     @property
@@ -181,21 +186,27 @@ See [subagent.md](subagent.md) for detailed documentation.
 
 ### Rate Limiter (`limiter.py`)
 
-Redis-based concurrency limiter using pub/sub:
+Redis-based concurrency limiter using pub/sub. Provider/model-aware — each provider+model combination has independent concurrency slots:
 
 ```python
-class ModelLimiter:  # Note: class is named ModelLimiter, not RateLimiter
-    def acquire(self, slots: int = 1, timeout: float = 30) -> bool:
-        """Acquire rate limiter slots"""
+class ModelLimiter:
+    def acquire(self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300) -> bool:
+        """Acquire a slot for the given provider/model. Blocks until available or timeout."""
 
-    def release(self, slots: int = 1) -> None:
-        """Release rate limiter slots"""
+    def release(self, provider_id: str, model: str, timeout: int = 300) -> None:
+        """Release the slot for the given provider/model."""
 
-    def get_active(self) -> int:  # Note: method is get_active, not is_available
-        """Get count of active slots"""
+    def get_active(self, provider_id: str, model: str) -> int | None:
+        """Get count of active slots for the given provider/model."""
+
+    def cleanup_stale_slots(self) -> None:
+        """Remove slots with expired TTL."""
+
+    def is_healthy(self) -> bool:
+        """Check if Redis is available for slot management."""
 ```
 
-**Important**: Always release slots in a `finally` block to avoid leaks.
+**Important**: Always release slots in a `finally` block to avoid leaks. Use `provider_id or rc.provider` and `model or rc.model` as fallbacks when releasing on early return paths.
 
 ### Email (`email.py`)
 

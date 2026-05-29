@@ -48,6 +48,11 @@ class ToolDefinition:
 | `get_article_by_id` | `get_article_by_id` | Fetch article by ID |
 | `search_articles` | `search_articles` | Search articles by query |
 | `get_source_health` | `get_source_health` | Get source status summary |
+| `get_topic_gap_report` | `get_topic_gap_report` | Analyze topic coverage gaps |
+| `get_source_performance` | `get_source_performance` | Get source performance metrics |
+| `get_quality_report` | `get_quality_report` | Get article quality report |
+| `find_dedupe_candidates` | `find_dedupe_candidates` | Find potential duplicate articles |
+| `estimate_stage_cost` | `estimate_stage_cost` | Estimate LLM cost for a stage |
 | `web_search` | `web_search` | External web search |
 | `get_search_provider` | `get_search_provider` | Get configured search provider |
 
@@ -257,9 +262,9 @@ subagent:
     tools:
       - context_notes
       - related_articles
-      - trend_memory
-      - article_lookup
-      - article_search
+      - get_trend_memory
+      - get_article_by_id
+      - search_articles
       - web_search
 ```
 

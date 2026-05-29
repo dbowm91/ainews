@@ -5,6 +5,7 @@ import logging
 from flask import Response, request
 
 from extensions import db
+from models import Article
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 
@@ -42,8 +43,6 @@ def replay_article_stage(article_id: int) -> Response:
         "reason": "manual_replay_after_quality_failure"
     }
     """
-    from models import Article
-
     article = db.session.get(Article, article_id)
     if not article:
         return api_response(error=f"Article {article_id} not found", status=404)
@@ -115,8 +114,6 @@ def restore_article_version(article_id: int) -> Response:
         "version_id": int
     }
     """
-    from models import Article
-
     article = db.session.get(Article, article_id)
     if not article:
         return api_response(error=f"Article {article_id} not found", status=404)

@@ -46,7 +46,7 @@ This document provides a **bird's-eye view** of the system architecture. Each mo
 | Language | Python 3.12 |
 | Web Framework | Flask 3.1.3 |
 | ASGI Wrapper | Granian (via asgiref) |
-| Database | SQLite (WAL) / PostgreSQL (prod) |
+| Database | SQLite (WAL) |
 | ORM | Flask-SQLAlchemy 3.1.1 + SQLAlchemy |
 | Migrations | Flask-Migrate 4.1.0 (Alembic) |
 | Task Queue | Celery 5.6.2 with Redis broker |

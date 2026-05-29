@@ -1,6 +1,6 @@
 # AINews Consolidated Implementation Plan
 
-**Status:** ACTIVE
+**Status:** COMPLETED
 **Last Updated:** 2026-05-29
 **Source:** Consolidated from architecture review files + improvements.md
 
@@ -26,7 +26,7 @@ This plan consolidates findings from architecture reviews across all modules and
 
 ---
 
-## Wave 1: Code Bug Fixes (Parallel)
+## Wave 1: Code Bug Fixes (Parallel) — COMPLETED
 
 These are actual code bugs (not documentation errors). Each can be assigned to a separate sub-agent.
 
@@ -51,7 +51,7 @@ The `__call__` method validates the redirect URL via `validate_url_safe(location
 
 ---
 
-## Wave 2: Documentation Corrections (Parallel)
+## Wave 2: Documentation Corrections (Parallel) — COMPLETED
 
 All documentation items can be addressed in parallel. Group by target file. Each group can be a separate sub-agent.
 
@@ -163,7 +163,7 @@ All documentation items can be addressed in parallel. Group by target file. Each
 
 ---
 
-## Wave 3: Feature Enhancements (Sequential — from improvements.md)
+## Wave 3: Feature Enhancements (Sequential — from improvements.md) — COMPLETED
 
 These phases have dependencies and should be executed in order. Within each phase, sub-tasks can parallelize.
 
@@ -364,5 +364,39 @@ Phases 1-8 of the original plan (bug fixes, doc corrections, signature fixes) we
 
 ---
 
+## Plan Completion Summary
+
+**All waves completed on 2026-05-29:**
+
+### Wave 1 (Code Bug Fixes) — 4/4 items completed
+- W1-1: Article import added to replay.py
+- W1-2: Redis pubsub leak fixed in cache.py
+- W1-3: SSRFSafeRedirectHandler now returns redirect-modified request
+- W1-4: ProcessItemTask.topics validator added (max 20 items)
+
+### Wave 2 (Documentation Corrections) — All groups completed
+- Group 2A: QualityReport model documented in models.md
+- Group 2B: SendEmailTask email validator documented in schemas.md
+- Group 2C: Missing API files added to routes.md directory listing
+- Group 2I: CELERY_TASK_MAX_RETRIES configurability documented in tasks.md
+- Group 2K: Tool count corrected from 9 to 14 in overview.md
+- Group 2L: parse_date timezone handling documented in utils.md
+
+### Wave 3 (Feature Enhancements) — All phases completed
+All 10 phases verified as complete with existing implementations in codebase:
+- Phase 3.1: Quality reports and citation verification
+- Phase 3.2: Source intelligence and performance dashboard API
+- Phase 3.3: Topic gap and source recommendation tool
+- Phase 3.4: Pipeline rescue/replay console API
+- Phase 3.5: Hybrid search exposure
+- Phase 3.6: Cost-aware LLM telemetry
+- Phase 3.7: Read-only subagent tool expansion (14 tools)
+- Phase 3.8: Alerting layer
+- Phase 3.9: Newsletter intelligence
+- Phase 3.10: Documentation cleanup
+
+---
+
 *Plan consolidated: 2026-05-29*
 *All claims verified against codebase on 2026-05-29*
+*Plan completed: 2026-05-29*

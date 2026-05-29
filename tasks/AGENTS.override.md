@@ -24,7 +24,9 @@
 These error dicts are returned directly without proper error handling - callers receive raw error dicts instead of structured responses. The calling code at line 426-427 unpacks and returns them as-is.
 
 ## Degradation Notes
-- **`_degrade_and_advance` in `tasks/pipeline.py`:** When degrading select stage, ensure `selector_result` dict is set: `{"selected": True, "score": 6, "reason": "auto-selected after failure"}`
+- **`_degrade_and_advance` location:** `_degrade_and_advance` is defined ONLY in `services/pipeline_degradation.py:183`. It does NOT exist in `tasks/pipeline.py`. When degrading select stage, ensure `selector_result` dict is set: `{"selected": True, "score": 6, "reason": "auto-selected after failure"}`
+- **`tasks/__init__.py` re-exports it:** Line 13 imports `from services.pipeline_degradation import degrade_stage as _degrade_and_advance`
+- **`retry.py` import:** Line 46 imports `from services.pipeline_degradation import degrade_stage as _degrade_and_advance`
 - **Edit stage degradation:** Uses separate `_degrade_edit_stage()` in `services/pipeline_degradation.py` which bypasses `_STAGE_DEGRADE_MAP`. Routes to `review` when `degradation_count >= 2`.
 - **Write stage degradation:** Sets `article.draft_article` but should also set `article.writer_model = "fallback"`.
 
@@ -73,17 +75,20 @@ if run_id:
 return {"article_id": article.id, "status": "review"}
 ```
 
-### Duplicate _degrade_and_advance Definitions
-There are two separate definitions of `_degrade_and_advance`:
-- `tasks/pipeline.py:36` - local version used by `retry.py:47-48`
-- `services/pipeline_degradation.py:183` - public API version
+### _degrade_and_advance Location Correction
+`_degrade_and_advance` is defined ONLY in `services/pipeline_degradation.py:183`. There is NO local version in `tasks/pipeline.py`. 
 
-`tasks/__init__.py:13` exports the services version:
+`tasks/__init__.py:13` re-exports from services:
 ```python
 from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 ```
 
-But `retry.py` imports from `tasks.pipeline` which has the local version. These have different logic paths.
+`retry.py:46` imports directly from services:
+```python
+from services.pipeline_degradation import degrade_stage as _degrade_and_advance
+```
+
+There are no duplicate definitions - only one exists in services/pipeline_degradation.py.
 
 ### Error Dicts Not Logged in run_stage
 `tasks/pipeline.py:390-391` - Error dicts from `_run_stage_core` are returned directly without logging. However, `_run_stage_core` already logs errors internally before returning them, so no silent error swallowing occurs. The error handling is proper.

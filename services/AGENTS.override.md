@@ -44,11 +44,21 @@
 - **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
 - **Tool Count:** 14 tools total (12 context + 2 search). Registered in `services/subagent/tools.py:306-603`.
-- **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
+- **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions. Uses `copy.deepcopy(tool.fn)`.
+- **Self-Correction Mechanism:** `run_subagent_with_tools()` at lines 401-417 implements a `self_corrected` flag that retries on `ValidationError`. The LLM is given a chance to self-correct its output.
+- **_format_subagent_prompt() Helper:** `services/subagent/utils.py` helper function used by `run_subagent_with_tools()` for template formatting with error recovery. Not extensively documented elsewhere.
 - **Subagent Chain steps parameter:** `run_subagent_chain()` in `services/subagent/chain.py:62` properly uses passed `steps` parameter or falls back to `chain_config.steps`.
-- **Middleware Chain Order:** The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.
-- **ErrorHandlingMiddleware:** Applied at `services/subagent/runner.py:344` to handle errors during tool execution.
+- **Middleware Chain Order:** The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`. Application order is reversed: ErrorHandling applied first (innermost), Logging applied last (outermost).
+- **ErrorHandlingMiddleware:** Applied at `services/subagent/runner.py:344` to handle errors during tool execution. Note: It re-raises exceptions after logging, does NOT return error dicts.
 - **run_stage signature:** `tasks/pipeline.py:353-362` - Selector stage uses `retry_max=20` (hardcoded in `tasks/select.py:202`), not the default 15.
+- **max_iterations default:** Both `run_subagent()` and `run_subagent_with_tools()` default `max_iterations` to 5 when not specified in stage_config.
+
+## Dual-Provider Search Architecture
+The search system has two parallel provider systems:
+1. **`_manager` (web search):** duckduckgo, google, searxng - used by `search_web()` in `services/search/__init__.py`
+2. **`_db_search_manager` (article search):** sqlite_fts, hybrid - used by `search_articles()` in `services/search/__init__.py`
+
+DuckDuckGo is the default for web search; Hybrid is for internal article search (hybrid FTS5 + vector similarity).
 
 ## Utils Notes
 - **utils/text.py:** Contains `esc_xml_text`, `esc_xml_attr`, `escape_prompt_data`, `truncate`, `sanitize_html`, `extract_hashtags`. The `sanitize_html()` function strips event handler attributes (onerror, onclick, etc.) and javascript: URIs from HTML content. This was previously a known XSS vulnerability but has been fixed.
@@ -57,6 +67,12 @@
 - **utils/hash.py:** Contains `generate_hash`, `verify_hash`.
 - **utils/html.py:** Contains `strip_tags`, `linkify`, `extract_text`. Note: `strip_tags` fallback uses bare `except Exception` with noqa: BLE001. Also `extract_text` logs a warning when trafilatura is not available.
 - **utils/url.py:** Contains global mutable state (`_dns_cache`, `_dns_cache_lock`, `_dns_executor`). Do not assume pure function behavior. Docstring now clarifies this after architecture review.
+- **Two truncate() functions:** `utils/text.py:truncate()` breaks on word boundaries; `BaseSourceAdapter._truncate()` (adapters/base.py:104) does not - it just slices.
+
+## services/url.py vs utils/url.py
+- **`utils/url.py`:** For adapters (clean layering). Contains SSRF protection implementation.
+- **`services/url.py`:** For services (has config support). Re-exports `TRACKING_PARAMS`, `normalize_title`, `normalize_url` from `utils/url.py`.
+- **Config support is dead code:** `_get_dns_cache_config()` function in `services/url.py:60-63` exists but is NEVER called. Both `utils/url.py` and `services/url.py` initialize `_TTLCache` with hardcoded values (`_DNS_CACHE_TTL`, `_DNS_CACHE_MAX`), not from config. Documentation may claim config support but it's not implemented.
 
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.

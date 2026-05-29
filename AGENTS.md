@@ -157,6 +157,18 @@ Additional newsletter endpoints:
 ### Trend Memory API
 - `GET /admin/api/trend-memory/semantic-search` - Semantic search for trend memory entries (at `/admin/api/trend-memory/semantic-search`)
 
+### Alerting API
+`routes/admin/api/alerts.py` provides `GET /api/v1/alerts` endpoint that calls `get_active_alerts()` and `dispatch_alerts()` from `services/alerts.py`. Alerts are grouped by severity. This is a real implementation, not a stub.
+
+### Source Intelligence API
+`routes/admin/api/source_intelligence.py` provides: `GET /api/v1/sources/performance`, `GET /api/v1/topics/coverage`, `GET /api/v1/sources/recommendations`.
+
+### Topic Gap API
+`routes/admin/api/topic_gap.py` provides topic gap analysis endpoint.
+
+### Newsletter Performance API
+`routes/admin/api/newsletter.py` provides newsletter performance metrics.
+
 ## Design Notes for Future Agents
 
 ### Middleware Chain Order
@@ -235,7 +247,19 @@ The hybrid search function is `search_articles()` in `services/search/hybrid.py:
 `schemas/admin.py` contains: `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`. `schemas/llm.py` contains: `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig`, `load_providers_config()`.
 
 ### SSRFSafeRedirectHandler Bug
-`SSRFSafeRedirectHandler.__call__` in `adapters/session.py:54` returns the original request object instead of a redirect-modified request. The redirect URL is validated via `validate_url_safe(location)` but the return value is misleading. This is a known issue.
+`SSRFSafeRedirectHandler.__call__` in `adapters/session.py:54` returns the original request object instead of a redirect-modified request. The redirect URL is validated via `validate_url_safe(location)` but the return value is misleading. This is a known issue. Fix: should return a new `PreparedRequest` with the redirect URL set, or `None` to skip.
+
+### ResponseCache Pubsub Leak
+`ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, a `pubsub` object is created and subscribed but `pubsub.close()` is never called — only `unsubscribe()`. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block.
+
+### Missing Article Import in replay.py
+`routes/admin/api/replay.py` uses `Article` model in `get_pipeline_history()` but never imports it. Will cause `NameError` at runtime. Add `from models import Article` at module level.
+
+### Celery Timezone
+Celery uses UTC (`CELERY_TIMEZONE = "UTC"` in `config.py:102`). The `NewsletterConfig.timezone` setting is display-only for newsletter rendering. All beat schedule times are in UTC.
+
+### SQLite Only (No PostgreSQL)
+The codebase uses SQLite with WAL mode only. There is no PostgreSQL configuration, driver, or connection string anywhere. Do not reference PostgreSQL in documentation.
 
 ### MetricsCollector Method Names
 The `MetricsCollector` in `services/metrics.py` uses these method names:

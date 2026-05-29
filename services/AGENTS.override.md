@@ -64,6 +64,9 @@
 ## Known Bugs (RESOLVED)
 - **SearchConfig caching bug:** FIXED - `load_search_config()` in `schemas/search.py:31` now uses `config_path = Path(path)` for proper mtime-based cache invalidation when custom paths are passed.
 
+## Known Bugs (OPEN)
+- **ResponseCache pubsub leak:** `ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, `pubsub.close()` is never called. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block. Fix: add `pubsub.close()` in the finally block.
+
 ## Fixed Bug Patterns
 
 The following bugs were previously encountered and fixed - do not re-fix these:

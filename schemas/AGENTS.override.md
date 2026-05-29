@@ -26,3 +26,6 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
 
 ## SearchConfig Caching Bug (FIXED)
 `load_search_config()` in `schemas/search.py:31` now correctly uses `config_path = Path(path)` for proper mtime-based cache invalidation. The cache now tracks the correct file when a custom path is passed.
+
+## Known Bugs (OPEN)
+- **ProcessItemTask topics validation:** `ProcessItemTask.topics` at `schemas/tasks.py:99` is a `list[str]` with no `max_length` constraint. Other schemas like `SelectArticleTask` have `validate_topics` validators. Add a similar validator or `max_length` constraint.

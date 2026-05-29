@@ -2,7 +2,7 @@
 
 **Status:** ACTIVE
 **Last Updated:** 2026-05-29
-**Source:** Consolidated from 15 architecture review files + improvements.md
+**Source:** Consolidated from architecture review files + improvements.md
 
 ---
 
@@ -10,37 +10,56 @@
 
 This plan consolidates findings from architecture reviews across all modules and the improvements roadmap. Items are organized into waves that can be executed in parallel by sub-agents.
 
-**Previous work (2026-05-28):** Phases 1-8 of the original plan (bug fixes, doc corrections, signature fixes) are COMPLETE. This plan adds remaining bug fixes, documentation gaps, and future feature work.
+**Previously completed (2026-05-28):** Phases 1-8 of the original plan (bug fixes, doc corrections, signature fixes) are COMPLETE. See git history for details.
+
+**Key architecture notes for agents:**
+- **Tool count is 14** (12 context + 2 search), NOT 9 as some docs claim. Verified at `services/subagent/tools.py:306-603`.
+- **QualityReport already exists** at `models/quality.py:10-51` with full field set, gate at `tasks/edit.py:378-419`.
+- **Many features partially implemented** — Phases 3.1-3.4, 3.7 have existing code. Verify and complete rather than build from scratch.
+- **SSRF protection** lives in `utils/url.py` (for adapters) and `services/url.py` (for services with config support). Intentional duplication for layering.
+- **APIAdapter/WebAdapter close() is no-op** — BY DESIGN. They share the global session. RSSAdapter owns its own.
+- **PipelineLog uses `meta`** not `metadata` (SQLAlchemy reserved name restriction).
+- **Config cache is two-tier:** L1 (in-memory, 500 entries) + L2 (Redis, DB 1).
+- **Limiter uses Redis DB 15.** Not DB 0 or DB 2.
+- **DeepSeek is NOT a search provider** — only a regex pattern in `services/trend_detector.py` and `adapters/base.py`.
+- **SubagentConfig has no top-level `enabled` field** — the `enabled` field is on `SubagentStageConfig`.
 
 ---
 
-## Wave 1: Remaining Bug Fixes (Parallel)
+## Wave 1: Code Bug Fixes (Parallel)
 
-These are actual code bugs that should be fixed before documentation work. Each item can be assigned to a separate sub-agent.
+These are actual code bugs (not documentation errors). Each can be assigned to a separate sub-agent.
 
-| ID | Item | File | Priority | Verified |
-|----|------|------|----------|----------|
-| W1-1 | `SSRFSafeRedirectHandler.__call__` returns original request instead of redirect-modified request | `adapters/session.py:54` | MEDIUM | YES |
-| W1-2 | `ProcessItemTask.topics` lacks `max_length` validator — API callers can submit unbounded lists | `schemas/tasks.py:99` | MEDIUM | YES |
-| W1-3 | `overview.md` stale tool count: says "9 built-in tools" but actual is 14 | `architecture/overview.md:585` | LOW | YES |
+| ID | Item | File(s) | Priority | Verified |
+|----|------|---------|----------|----------|
+| W1-1 | Missing `Article` import in `get_pipeline_history()` — will cause `NameError` at runtime | `routes/admin/api/replay.py:21` | HIGH | YES |
+| W1-2 | `ResponseCache.get_or_set()` leaks Redis pubsub connections — `pubsub.close()` never called | `services/cache.py:172-183` | HIGH | YES |
+| W1-3 | `SSRFSafeRedirectHandler.__call__` returns original request instead of redirect-modified request | `adapters/session.py:54` | MEDIUM | YES |
+| W1-4 | `ProcessItemTask.topics` lacks `max_length` validator — API callers can submit unbounded lists | `schemas/tasks.py:99` | MEDIUM | YES |
 
-**W1-1 details:** The `__call__` method validates the redirect URL via `validate_url_safe(location)` but then returns the original `request` object unchanged. Should return a new `PreparedRequest` with the redirect URL set, or `None` to skip. Compare with how `requests` library redirect handlers work.
+### W1-1 details
+`get_pipeline_history()` at `routes/admin/api/replay.py` uses `Article` model but never imports it. Add `from models import Article` at module level. Check other functions in the same file for the same issue.
 
-**W1-2 details:** `ProcessItemTask.topics` at `schemas/tasks.py:99` is a `list[str]` with no `max_length` constraint. Other schemas like `SelectArticleTask` have `validate_topics` validators. Add a similar validator or `max_length` constraint.
+### W1-2 details
+At `services/cache.py:172-183`, when `set(nx=True)` fails, a `pubsub` object is created and subscribed but only `unsubscribe()` is called — `pubsub.close()` is never called. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block. Fix: add `pubsub.close()` in the finally block.
 
-**W1-3 details:** Update `architecture/overview.md:585` from "Tool registry (9 built-in tools)" to "Tool registry (14 built-in tools)".
+### W1-3 details
+The `__call__` method validates the redirect URL via `validate_url_safe(location)` but then returns the original `request` object unchanged. Should return a new `PreparedRequest` with the redirect URL set, or `None` to skip. Compare with how `requests` library redirect handlers work. Note: this works in practice due to requests library internals, but is semantically incorrect.
+
+### W1-4 details
+`ProcessItemTask.topics` at `schemas/tasks.py:99` is a `list[str]` with no `max_length` constraint. Other schemas like `SelectArticleTask` have `validate_topics` validators. Add a similar validator or `max_length` constraint.
 
 ---
 
 ## Wave 2: Documentation Corrections (Parallel)
 
-All documentation items can be addressed in parallel. Group by target file.
+All documentation items can be addressed in parallel. Group by target file. Each group can be a separate sub-agent.
 
 ### Group 2A: Models Documentation (`architecture/models.md`)
 
 | ID | Item | Verified |
 |----|------|----------|
-| W2A-1 | Document `QualityReport` model (exists in `models/quality.py:10-51`) with all fields: `groundedness`, `coherence`, `completeness`, `safety`, `citation_score`, `claim_score`, `passed`, `needs_review`, `findings`, `meta` | YES |
+| W2A-1 | Document `QualityReport` model (exists in `models/quality.py:10-51`) with all fields: `groundedness`, `coherence`, `completeness`, `safety`, `citation_score`, `claim_score`, `passed`, `needs_review`, `findings` (JSON), `meta` (JSON) | YES |
 | W2A-2 | Document `Webhook` model fields: `failure_count`, `last_triggered_at`, `last_success_at`, `last_failure_at`, `last_error` | YES |
 | W2A-3 | Document `WebhookEvent` model (`models/webhook.py:32-49`) | YES |
 | W2A-4 | Document `ArticleMetric` fields: `page_loads`, `newsletter_clicks`, `share_button_clicks`, `share_link_views`, `updated_at` | YES |
@@ -61,60 +80,92 @@ All documentation items can be addressed in parallel. Group by target file.
 
 | ID | Item | Verified |
 |----|------|----------|
-| W2C-1 | Add 6 missing API files to structure: `alerts.py`, `quality.py`, `replay.py`, `source_intelligence.py`, `topic_gap.py`, `newsletter.py` | YES |
-| W2C-2 | Document undocumented endpoints: `/api/v1/alerts`, `/api/v1/sources/performance`, `/api/v1/topics/coverage`, `/api/v1/newsletters/performance`, `/api/v1/articles/<id>/quality`, `/api/v1/articles/<id>/pipeline/history`, `/api/v1/articles/<id>/pipeline/replay` | YES |
-| W2C-3 | Fix unsubscribe route to show two handlers (`unsubscribe` GET + `unsubscribe_confirm` POST) | YES |
+| W2C-1 | **Remove false claim** that `GET /articles` list endpoint exists — no such endpoint exists in code | YES |
+| W2C-2 | Add 6 missing API files to structure: `alerts.py`, `quality.py`, `replay.py`, `source_intelligence.py`, `topic_gap.py`, `newsletter.py` | YES |
+| W2C-3 | Document undocumented endpoints: `/api/v1/alerts`, `/api/v1/sources/performance`, `/api/v1/topics/coverage`, `/api/v1/newsletters/performance`, `/api/v1/articles/<id>/quality`, `/api/v1/articles/<id>/pipeline/history`, `/api/v1/articles/<id>/pipeline/replay` | YES |
+| W2C-4 | Fix unsubscribe route to show two handlers (`unsubscribe` GET + `unsubscribe_confirm` POST) | YES |
 
 ### Group 2D: Services Documentation (`architecture/services.md`)
 
 | ID | Item | Verified |
 |----|------|----------|
-| W2D-1 | Add ~30 missing service files to architecture tree (`provider_base.py`, `degradation.py`, `prompts.py`, `tracing.py`, `redis_utils.py`, `subagent/`, `cost_tracker.py`, `quality_report.py`, `source_intelligence.py`, `topic_gap.py`, `pipeline_replay.py`, `alerts.py`, etc.) | YES |
-| W2D-2 | Document `BaseProvider` and `ProviderManager` classes | YES |
-| W2D-3 | Document `RedisCircuitBreaker` as default return from `get_breaker()` | YES |
-| W2D-4 | Document `BaseLLMProvider.__init__(provider_id, config)` signature | YES |
-| W2D-5 | Document `_retry_with_backoff()` method | YES |
-| W2D-6 | Document `ResponseCache` and `ConfigCache` classes/methods | YES |
+| W2D-1 | **Fix ModelLimiter interface** — all three signatures are wrong. Update to: `acquire(provider_id, model, max_concurrent, timeout=300)`, `release(provider_id, model, timeout=300)`, `get_active(provider_id, model) -> int \| None` | YES |
+| W2D-2 | Add ~30 missing service files to architecture tree (`provider_base.py`, `degradation.py`, `prompts.py`, `tracing.py`, `redis_utils.py`, `subagent/`, `cost_tracker.py`, `quality_report.py`, `source_intelligence.py`, `topic_gap.py`, `pipeline_replay.py`, `alerts.py`, etc.) | YES |
+| W2D-3 | Document `BaseProvider` and `ProviderManager` classes from `services/provider_base.py` | YES |
+| W2D-4 | Document `RedisCircuitBreaker` as default return from `get_breaker()` | YES |
+| W2D-5 | Document `BaseLLMProvider.__init__(provider_id, config)` signature | YES |
+| W2D-6 | Document `_retry_with_backoff()` method | YES |
+| W2D-7 | Document `ResponseCache` and `ConfigCache` classes/methods | YES |
 
 ### Group 2E: Pipeline Documentation (`architecture/pipeline.md`)
 
 | ID | Item | Verified |
 |----|------|----------|
-| W2E-1 | Update researcher temperature example from 0.4 to 0.0 | YES |
-| W2E-2 | Document all write validation conditions: body length + empty `key_points` + empty `citations` | YES |
-| W2E-3 | Document `build_quality_report()` routing in edit stage (`tasks/edit.py:378-419`) | YES |
+| W2E-1 | Fix selector routing documentation — `selected=True, score < min_score` routes to `SKIPPED`, not `review` or `discard` | YES |
+| W2E-2 | Update researcher temperature example from 0.4 to 0.0 | YES |
+| W2E-3 | Document all write validation conditions: body length + empty `key_points` + empty `citations` | YES |
+| W2E-4 | Document `build_quality_report()` routing in edit stage (`tasks/edit.py:378-419`) | YES |
 
 ### Group 2F: Subagent Documentation (`architecture/subagent.md`)
 
 | ID | Item | Verified |
 |----|------|----------|
-| W2F-1 | Fix tool function signatures to match actual implementations (add `exclude_id`, `min_importance`, `max_age_days` params; note return types) | YES |
-| W2F-2 | Update pipeline.yaml config example tool names: `article_lookup` → `get_article_by_id`, `article_search` → `search_articles` | YES |
-| W2F-3 | Document `ToolSelector` and `StageAwareToolSelector` from `services/tool_selection.py` | YES |
-| W2F-4 | Document `SubagentStageConfig` schema fields from `schemas/pipeline.py:93-105` | YES |
+| W2F-1 | **Fix tool count** from 9 to 14. Add missing tools: `get_topic_gap_report`, `get_source_performance`, `get_quality_report`, `find_dedupe_candidates`, `estimate_stage_cost` | YES |
+| W2F-2 | Fix tool function signatures to match actual implementations (add `exclude_id`, `min_importance`, `max_age_days` params; note return types) | YES |
+| W2F-3 | Update pipeline.yaml config example tool names: `article_lookup` → `get_article_by_id`, `article_search` → `search_articles` | YES |
+| W2F-4 | Document `ToolSelector` and `StageAwareToolSelector` from `services/tool_selection.py` | YES |
+| W2F-5 | Document `SubagentStageConfig` schema fields from `schemas/pipeline.py:93-105` | YES |
 
-### Group 2G: Other Documentation
+### Group 2G: Search Providers Documentation (`architecture/search-providers.md`)
 
-| ID | File | Item | Verified |
+| ID | Item | Verified |
+|----|------|----------|
+| W2G-1 | **Fix Google env var names**: `GOOGLE_SEARCH_API_KEY`/`GOOGLE_SEARCH_CX` → `GOOGLE_API_KEY`/`GOOGLE_CSE_ID` (in `providers.yaml:137-138`) | YES |
+| W2G-2 | Fix config section name: `search:` → `search_providers:` (plural) | YES |
+| W2G-3 | Document SSRF protection in `services/search/session.py` | YES |
+
+### Group 2H: LLM Providers Documentation (`architecture/llm-providers.md`)
+
+| ID | Item | Verified |
+|----|------|----------|
+| W2H-1 | Document full `record_provider_success()` signature (add `input_tokens`, `output_tokens`, `cached_tokens`, `latency_ms`, `article_id`) | YES |
+| W2H-2 | Document `chat_structured_batch()` and `BatchError` | YES |
+
+### Group 2I: Tasks Documentation (`architecture/tasks.md`)
+
+| ID | Item | Verified |
+|----|------|----------|
+| W2I-1 | Update task signatures to show `max_retries=CELERY_TASK_MAX_RETRIES` (configurable, not hardcoded 3) | YES |
+| W2I-2 | Document edit stage quality report gate as routing path to `review` | YES |
+
+### Group 2J: Prompts Documentation (`architecture/prompts.md`)
+
+| ID | Item | Verified |
+|----|------|----------|
+| W2J-1 | Fix template resolution reference from "subagent.py" to `services/subagent/prompt_templates.py` | YES |
+| W2J-2 | Document 2 additional prompt template files: `prompts/subagent_research_synthesis.txt` and `prompts/subagent_edit_contextualization.txt` | YES |
+
+### Group 2K: Config & Infrastructure Documentation
+
+| ID | Item | File | Verified |
 |----|------|------|----------|
-| W2G-1 | `architecture/search-providers.md` | Fix config section name: `search:` → `search_providers:` | YES |
-| W2G-2 | `architecture/search-providers.md` | Document SSRF protection in `services/search/session.py` | YES |
-| W2G-3 | `architecture/llm-providers.md` | Document full `record_provider_success()` signature (add `input_tokens`, `output_tokens`, `cached_tokens`, `latency_ms`, `article_id`) | YES |
-| W2G-4 | `architecture/llm-providers.md` | Document `chat_structured_batch()` and `BatchError` | YES |
-| W2G-5 | `architecture/tasks.md` | Update task signatures to show `max_retries=CELERY_TASK_MAX_RETRIES` (configurable) | YES |
-| W2G-6 | `architecture/tasks.md` | Document edit stage quality report gate as routing path to `review` | YES |
-| W2G-7 | `architecture/prompts.md` | Fix template resolution reference from "subagent.py" to `services/subagent/prompt_templates.py` | YES |
-| W2G-8 | `architecture/prompts.md` | Document 2 additional prompt template files: `prompts/subagent_research_synthesis.txt` and `prompts/subagent_edit_contextualization.txt` | YES |
-| W2G-9 | `architecture/config.md` | Fix `config_utils.py` code sample to show actual `flask.current_app` usage | YES |
-| W2G-10 | `architecture/infrastructure.md` | Fix `config_utils.py` code sample (same as W2G-9) | YES |
-| W2G-11 | `architecture/overview.md` | Update beat schedule to clarify UTC timezone (Celery uses UTC, `NewsletterConfig.timezone` is display-only) | YES |
-| W2G-12 | `architecture/utils.md` | Document `parse_date()` timezone handling (naive datetimes get `timezone.utc` appended) | YES |
+| W2K-1 | Fix `config_utils.py` code sample to show actual `flask.current_app` usage (not `celery_support.get_current_app`) | `architecture/config.md` | YES |
+| W2K-2 | Fix `config_utils.py` code sample (same as W2K-1) | `architecture/infrastructure.md` | YES |
+| W2K-3 | **Remove PostgreSQL claim** from tech stack — no PostgreSQL config, driver, or connection string exists in codebase | `architecture/overview.md:49` | YES |
+| W2K-4 | Update beat schedule to clarify UTC timezone (Celery uses UTC, `NewsletterConfig.timezone` is display-only) | `architecture/overview.md` | YES |
+| W2K-5 | Update tool count from 9 to 14 in overview | `architecture/overview.md:585` | YES |
+
+### Group 2L: Utils Documentation (`architecture/utils.md`)
+
+| ID | Item | Verified |
+|----|------|----------|
+| W2L-1 | Document `parse_date()` timezone handling (naive datetimes get `timezone.utc` appended) | YES |
 
 ---
 
 ## Wave 3: Feature Enhancements (Sequential — from improvements.md)
 
-These phases have dependencies and should be executed in order. Each phase can have parallel sub-tasks within it.
+These phases have dependencies and should be executed in order. Within each phase, sub-tasks can parallelize.
 
 ### Phase 3.1: Persisted Quality Reports and Citation Verification
 
@@ -174,7 +225,7 @@ These phases have dependencies and should be executed in order. Each phase can h
 
 | ID | Item | Files |
 |----|------|-------|
-| W3.5-1 | Add `search_articles(query, mode="fts|hybrid", ...)` service wrapper | `services/search/hybrid.py` or `services/article.py` |
+| W3.5-1 | Add `search_articles(query, mode="fts\|hybrid", ...)` service wrapper | `services/search/hybrid.py` or `services/article.py` |
 | W3.5-2 | Ensure graceful fallback when sentence-transformers unavailable | `services/search/hybrid.py` |
 | W3.5-3 | Add incremental embedding generation on article finalization | `tasks/edit.py` |
 | W3.5-4 | Update public/admin search to support hybrid mode | `routes/public/feeds.py`, `routes/admin/api/search.py` |
@@ -208,15 +259,15 @@ These phases have dependencies and should be executed in order. Each phase can h
 
 ### Phase 3.8: Alerting Layer
 
-**Status:** NOT STARTED — `routes/admin/api/alerts.py` exists but may be a stub.
+**Status:** PARTIALLY COMPLETE — `routes/admin/api/alerts.py` exists with a real `list_alerts` endpoint calling `get_active_alerts()` and `dispatch_alerts()` from `services/alerts.py`.
 
 **Remaining work:**
 
 | ID | Item | Files |
 |----|------|-------|
-| W3.8-1 | Implement `services/alerts.py` with deterministic alert rules | New file |
-| W3.8-2 | Implement `GET /api/v1/alerts` endpoint | `routes/admin/api/alerts.py` |
-| W3.8-3 | Alert rules: no workers, Redis unavailable, circuit breaker open, backlog threshold, stuck articles, source failures, quality gate failures, cost threshold | `services/alerts.py` |
+| W3.8-1 | Verify `services/alerts.py` has complete alert rule implementations | `services/alerts.py` |
+| W3.8-2 | Verify `GET /api/v1/alerts` endpoint works correctly | `routes/admin/api/alerts.py` |
+| W3.8-3 | Add missing alert rules if needed: no workers, Redis unavailable, circuit breaker open, backlog threshold, stuck articles, source failures, quality gate failures, cost threshold | `services/alerts.py` |
 | W3.8-4 | Add tests for alert rule evaluation | `tests/` |
 
 ### Phase 3.9: Newsletter Intelligence
@@ -248,53 +299,68 @@ These phases have dependencies and should be executed in order. Each phase can h
 
 ## Execution Strategy
 
-### Parallelization Map
+### Wave Dependency Graph
 
 ```
-Wave 1 (Bug Fixes)     ──┬── W1-1, W1-2, W1-3 can run in parallel
-                          │
-Wave 2 (Doc Fixes)     ──┼── Groups 2A-2G can all run in parallel
-                          │   Each group targets different architecture/*.md files
-                          │
-Wave 3 (Features)      ──┴── Phases 3.1-3.10 run sequentially
-                             But within each phase, sub-tasks can parallelize
+Wave 1 (Code Bugs)      ──┬── W1-1, W1-2, W1-3, W1-4 can ALL run in parallel
+                           │   No dependencies between them
+                           │
+Wave 2 (Doc Fixes)      ──┼── Groups 2A-2L can ALL run in parallel
+                           │   Each group targets different architecture/*.md files
+                           │   Some groups share files (2K targets overview.md + config.md + infrastructure.md)
+                           │
+Wave 3 (Features)       ──┴── Phases 3.1-3.10 run SEQUENTIALLY (dependencies between phases)
+                              But within each phase, sub-tasks can parallelize
 ```
 
 ### Recommended Sub-Agent Distribution
 
-**Batch 1 (Wave 1 + Wave 2 Groups):**
-- Agent A: W1-1 (SSRF handler bug) + W1-2 (schema validator) + W1-3 (tool count)
-- Agent B: Group 2A (models.md)
-- Agent C: Group 2B (schemas.md)
-- Agent D: Group 2C (routes.md)
-- Agent E: Group 2D (services.md)
+**Batch 1 — Wave 1 (all parallel):**
+- Agent A: W1-1 (replay.py missing Article import)
+- Agent B: W1-2 (ResponseCache pubsub leak)
+- Agent C: W1-3 + W1-4 (SSRF handler + schema validator — both small fixes)
 
-**Batch 2 (Wave 2 Groups continued):**
-- Agent F: Group 2E (pipeline.md)
-- Agent G: Group 2F (subagent.md)
-- Agent H: Group 2G (all other docs)
+**Batch 2 — Wave 2 Groups (all parallel):**
+- Agent D: Group 2A (models.md)
+- Agent E: Group 2B (schemas.md)
+- Agent F: Group 2C (routes.md)
+- Agent G: Group 2D (services.md — largest group, may need dedicated agent)
+- Agent H: Group 2E (pipeline.md)
+- Agent I: Group 2F (subagent.md)
+- Agent J: Group 2G + 2H (search-providers.md + llm-providers.md — related topics)
+- Agent K: Group 2I + 2J (tasks.md + prompts.md)
+- Agent L: Group 2K + 2L (config/infra/overview/utils — cross-cutting docs)
 
-**Batch 3 (Wave 3 early phases):**
-- Agent I: Phase 3.1 (quality reports) — verify existing implementation
-- Agent J: Phase 3.2 (source intelligence) — verify existing implementation
-- Agent K: Phase 3.3 (topic gap) — verify existing implementation
-- Agent L: Phase 3.4 (pipeline replay) — verify existing implementation
+**Batch 3 — Wave 3 early phases (parallel verification):**
+- Agent M: Phase 3.1 (quality reports) — verify existing implementation
+- Agent N: Phase 3.2 (source intelligence) — verify existing implementation
+- Agent O: Phase 3.3 (topic gap) — verify existing implementation
+- Agent P: Phase 3.4 (pipeline replay) — verify existing implementation
+
+**Batch 4 — Wave 3 later phases (sequential after Batch 3):**
+- Agent Q: Phase 3.5 (hybrid search)
+- Agent R: Phase 3.6 (cost telemetry)
+- Agent S: Phase 3.7 (subagent tools)
+- Agent T: Phase 3.8 (alerting — verify and extend)
+- Agent U: Phase 3.9 (newsletter intelligence)
+- Agent V: Phase 3.10 (documentation cleanup)
+
+### Parallelization Notes
+
+- **Wave 1 and Wave 2 can run concurrently** — they touch different files (code vs architecture docs).
+- **Wave 2 groups are fully parallel** — each targets separate `architecture/*.md` files. Exception: Group 2K touches `overview.md`, `config.md`, and `infrastructure.md` which may overlap with other groups.
+- **Wave 3 phases are sequential** — each builds on previous phase outputs. But within a phase, verification tasks (W3.x-1, W3.x-2) can run in parallel with test writing (W3.x-3).
+- **Batch 3 (verification) should complete before Batch 4 (new features)** — verification results may change scope of later phases.
 
 ---
 
-## Notes
+## Previously Completed Work
 
-- **Previously completed work:** Phases 1-8 of the original plan (bug fixes, doc corrections, signature fixes) were completed on 2026-05-28. See git history for details.
-- **APIAdapter/WebAdapter close() Design:** These adapters intentionally have no-op `close()` because they share the global session. RSSAdapter owns its own session and closes it properly. This is BY DESIGN.
-- **utils/url.py and services/url.py Duplication:** Intentional for layering — `utils/url.py` is for adapters, `services/url.py` is for services with config support.
-- **DeepSeek is NOT a search provider:** DeepSeek is only a regex pattern in `services/trend_detector.py` and `adapters/base.py`. Do NOT list it as a search provider.
-- **SubagentConfig has no top-level `enabled` field:** The `enabled` field is on `SubagentStageConfig`, not `SubagentConfig`.
-- **Config cache is two-tier:** L1 (in-memory, 500 entries) + L2 (Redis, DB 1).
-- **Limiter uses Redis DB 15:** Not DB 0 or DB 2.
-- **PipelineLog uses `meta` not `metadata`:** Due to SQLAlchemy reserved name restriction.
-- **Tool count is 14:** 12 context tools + 2 search tools (verified in `services/subagent/tools.py:306-603`).
-- **QualityReport already exists:** `models/quality.py` with full field set, gate in `tasks/edit.py:378-419`.
-- **Many features partially implemented:** Phases 3.1-3.4, 3.7 have existing code — verify and complete rather than build from scratch.
+Phases 1-8 of the original plan (bug fixes, doc corrections, signature fixes) were completed on 2026-05-28. See git history for details. These included:
+- Bug fixes in adapters, services, and tasks
+- Documentation corrections across architecture docs
+- Signature fixes in LLM providers and schemas
+- Various code quality improvements
 
 ---
 

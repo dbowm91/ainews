@@ -9,6 +9,7 @@
 - Uses thread-local storage for `_redirect_count` to prevent cross-request accumulation.
 - Validates redirects: blocks internal IPs, private hostnames, and scheme-relative URLs (`//evil.com`).
 - Blocklist check happens at redirect time, not just initial validation.
+- **Known Bug:** `__call__` at `adapters/session.py:54` returns the original request object instead of a redirect-modified request. The redirect URL is validated but the return value is misleading. Works in practice due to requests library internals. Fix: should return a new `PreparedRequest` with the redirect URL set, or `None` to skip.
 
 ## APIAdapter Implementation Notes
 The `APIAdapter` in `adapters/api.py`:

@@ -13,7 +13,7 @@ services/search/
 ├── searxng.py        # SearxNG (disabled, self-hosted)
 ├── hybrid.py         # Hybrid FTS5 + vector similarity (enabled)
 ├── sqlite_fts.py     # SQLite FTS5 internal article search
-└── session.py        # Search HTTP session management
+└── session.py        # Shared crawl session (SSRFSafeRedirectHandler) for web scraping
 ```
 
 ## Provider Registry
@@ -31,7 +31,7 @@ def get_article_search_provider() -> SearchProvider:
     """Get provider for internal article search (Hybrid or SQLite FTS)."""
 ```
 
-Providers are registered in `providers.yaml` under the `search` section.
+Providers are registered in `providers.yaml` under the `search_providers` section.
 
 ## Provider Implementations
 
@@ -69,9 +69,9 @@ class HybridSearchProvider(SearchProvider):
 
 | Property | Value |
 |----------|-------|
-| Status | **Enabled** |
+| Status | **Enabled** (for article search, not web search) |
 | Components | SQLite FTS5 + sentence-transformers embeddings |
-| Use Case | Internal article search |
+| Use Case | Internal article search (hybrid similarity + FTS5) |
 | Embedding Model | `all-MiniLM-L6-v2` |
 
 ### Google (`google.py`)

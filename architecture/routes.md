@@ -135,7 +135,6 @@ Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
-| `/admin/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
 
 **Note:** The `api_tokens_bp` blueprint is registered in `app.py` without a `url_prefix` — routes include the full `/api-tokens` path.
 
@@ -332,7 +331,6 @@ Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, n
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
-| `/admin/api/trend-memory/semantic-search` | GET | Semantic search in trend memory |
 
 ## Template Structure
 

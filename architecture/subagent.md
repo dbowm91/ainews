@@ -139,6 +139,7 @@ class SubagentChainConfig(BaseModel):
 - **Task revocation checking**: Stops if Celery task is revoked
 - **Tool-calling support**: Via `chat_with_tools()`
 - **Self-correction**: Re-validates output and retries on failure
+- **`copy.deepcopy()` for tool functions**: Prevents middleware compounding on cached tool definitions. Each invocation wraps the tool function fresh rather than re-wrapping an already-wrapped function.
 
 ### Execution Flow
 
@@ -195,12 +196,14 @@ subagent:
 
 ## Middleware (`middleware.py`)
 
-Middleware uses a sync `wrap()` pattern to intercept tool execution. The middleware chain is applied in reverse order via `apply_middleware()`.
+Middleware uses a sync `wrap()` pattern to intercept tool execution. The middleware chain is applied in reverse order via `apply_middleware()`, so the first middleware in the list wraps the outermost layer.
 
-**Middleware chain order (outer to inner):**
-1. `LoggingMiddleware` - logs tool call start/completion/failure
-2. `TimingMiddleware` - measures and logs execution time
-3. `ErrorHandlingMiddleware` - catches exceptions, logs them with traceback, then re-raises
+**Middleware chain (as applied to tool function):**
+- `LoggingMiddleware` (outermost) - logs tool call start/completion/failure
+- `TimingMiddleware` (middle) - measures and logs execution time
+- `ErrorHandlingMiddleware` (innermost) - catches exceptions, logs them with traceback, then re-raises
+
+Execution flow: Logging → Timing → ErrorHandling → tool function → ErrorHandling → Timing → Logging
 
 ```python
 class ToolMiddleware:

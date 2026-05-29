@@ -184,7 +184,22 @@ newsletter_subscribers = db.Table(
     db.Column("opened_at", db.DateTime, nullable=True),
     db.Column("clicked_at", db.DateTime, nullable=True),
 )
+
+## Article-Tag Association
+
+### article_tags
+
+Links articles to tags with cascading deletes:
+
+```python
+article_tags = db.Table(
+    "article_tags",
+    db.Column("article_id", db.Integer, db.ForeignKey("articles.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("tag_id", db.Integer, db.ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True, index=True),
+)
 ```
+
+**Note:** `Article` model has a `tags` relationship and a `newsletters` dynamic backref (`db.backref("newsletters", lazy="dynamic")`) established in `models/newsletter.py:43`.
 
 ## Newsletter & Subscriber Models
 

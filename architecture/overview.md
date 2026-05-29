@@ -159,7 +159,7 @@ ainews/
 │   ├── search.py           # SearchQuery
 │   ├── audit.py            # AuditLog
 │   └── share.py            # ShareConfig
-│
+├── models.py               # Re-exports from models package
 ├── schemas/                # Pydantic models
 │   ├── pipeline.py         # PipelineRootConfig, RoleConfig, SubagentConfig
 │   ├── source.py           # SourceConfig, RSSConfig, APIConfig, WebConfig

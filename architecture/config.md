@@ -233,15 +233,22 @@ schedule:
 
 ```python
 class RoleConfig(BaseModel):
-    provider: str = Field(...)  # Required
-    model: str = Field(...)  # Required
-    max_tokens: int = 4096
-    temperature: float = 0.0
-    concurrency: int = 2
-    timeout_seconds: int = 120
     enabled: bool = True
+    provider: str = Field(..., min_length=1)  # Required
+    model: str = Field(..., min_length=1)  # Required
+    max_tokens: int = 4096
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    concurrency: int = Field(default=2, ge=1, le=32)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
     system_prompt: Optional[str] = None  # Override prompts/*.txt
     min_score: Optional[int] = None      # Selector-specific
+    # Role-specific fields:
+    web_search: Optional[bool] = None    # researcher only
+    web_search_max_results: Optional[int] = None  # researcher only
+    db_related_max: Optional[int] = None  # researcher only
+    max_article_text_length: Optional[int] = None  # researcher only
+    max_key_points: Optional[int] = None  # writer only
+    max_tags: Optional[int] = None       # editor only
 ```
 
 ### SubagentStageConfig
@@ -249,17 +256,29 @@ class RoleConfig(BaseModel):
 ```python
 class SubagentStageConfig(BaseModel):
     enabled: bool = False
-    tools: list[str] = Field(default_factory=list)
-    max_retries: int = 1
-    timeout_seconds: int = 120
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    max_tokens: int = 4096
-    temperature: float = 0.0
+    provider: Optional[str] = None  # Falls back to default role config
+    model: Optional[str] = None    # Falls back to default role config
+    max_tokens: int = Field(default=4096, ge=256, le=128000)
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
+    max_retries: int = Field(default=1, ge=0, le=5)
+    retry_delay: float = Field(default=5.0, ge=0.0, le=60.0)
     system_prompt: Optional[str] = None
-    retry_delay: float = 5.0
     task_template: Optional[str] = None
-    max_iterations: int = 5
+    tools: list[str] = Field(default_factory=list)
+    max_iterations: int = Field(default=5, ge=1, le=20)
+```
+
+### ReviewConfig
+
+```python
+class ReviewConfig(BaseModel):
+    """Configuration for the review stage and auto-publish behavior."""
+    enabled: bool = False
+    auto_publish_threshold: Optional[int] = Field(
+        default=None,
+        description="Auto-publish articles with impact_score >= this value, bypassing review. Default: None (disabled).",
+    )
 ```
 
 ### MemoryConfig
@@ -282,42 +301,66 @@ class MemoryConfig(BaseModel):
 
 ```yaml
 providers:
-  ollama-local:
-    type: openai
+  - id: ollama-local
+    type: ollama
     enabled: true
-    base_url: "http://localhost:11434/v1"
-    api_key: "ollama"
-    default_model: "qwen3:8b"
+    config:
+      host: "http://localhost:11434"
+      model: "qwen3:8b"
+      max_tokens: 4096
 
-  openai:
+  - id: openai
     type: openai
     enabled: false
-    api_key: "${OPENAI_API_KEY}"
-    default_model: "gpt-4o"
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      base_url: "https://api.openai.com/v1"
+      model: "gpt-4o-mini"
+      max_tokens: 4096
 
-  anthropic:
+  - id: anthropic
     type: anthropic
     enabled: false
-    api_key: "${ANTHROPIC_API_KEY}"
-    default_model: "claude-sonnet-4-20250514"
+    config:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-sonnet-4-5-20250929"
+      max_tokens: 4096
 
-  gemini:
+  - id: gemini
     type: gemini
     enabled: false
-    api_key: "${GEMINI_API_KEY}"
-    default_model: "gemini-2.0-flash"
+    config:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.0-flash"
+      max_tokens: 4096
 
-search:
-  default: duckduckgo
-  providers:
-    duckduckgo:
-      enabled: true
-    hybrid:
-      enabled: true
-    google:
-      enabled: false
-    searxng:
-      enabled: false
+default_provider: ollama-local
+
+search_providers:
+  - id: duckduckgo
+    type: duckduckgo
+    enabled: true
+    config: {}
+
+  - id: google
+    type: google
+    enabled: false
+    config:
+      api_key: "${GOOGLE_API_KEY}"
+      cse_id: "${GOOGLE_CSE_ID}"
+
+  - id: searxng
+    type: searxng
+    enabled: false
+    config:
+      host: "http://localhost:8888"
+
+  - id: hybrid
+    type: hybrid
+    enabled: true
+    config: {}  # FTS5 + vector similarity search
+
+default_search_provider: duckduckgo
 ```
 
 ## Source Configuration (`sources.yaml`)
@@ -460,6 +503,8 @@ Key environment variables used across the codebase:
 | `REDIS_URL` | Redis connection string |
 | `REDIS_SSL` | Enable Redis SSL |
 | `REDIS_MAX_CONNECTIONS` | Redis pool size (default: 100) |
+| `CONFIG_CACHE_REDIS_URL` | Dedicated Redis for config cache (default: derived from `REDIS_URL`) |
+| `CONFIG_CACHE_REDIS_PASSWORD` | Redis password for config cache auth (default: none) |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `GEMINI_API_KEY` | Google Gemini API key |

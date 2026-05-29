@@ -1,8 +1,19 @@
 # Architecture Documentation Review Plan
 
 **Created:** 2026-05-29
-**Status:** IN_PROGRESS
+**Status:** PHASE_3_IN_PROGRESS
 **Purpose:** Systematic review of architecture documents to verify claims against code, identify bugs and improvements, and prune stale content.
+
+**Phase 3 Work Items (from consolidated review):**
+- HIGH: Fix config.md YAML structure errors (providers.yaml list-based, search_providers key)
+- HIGH: Fix infrastructure.md CELERY_RESULT_BACKEND env var name
+- MEDIUM: Fix tasks.md stale _degrade_and_advance reference
+- MEDIUM: Fix services/url.py config documentation in utils.md
+- MEDIUM: Add missing environment variables to config.md
+- MEDIUM: Add missing schema documentation to schemas.md
+- MEDIUM: Add missing endpoints to routes.md
+- MEDIUM: Document services/url.py vs utils/url.py relationship
+- LOW: Various clarifications across documents
 
 ---
 
@@ -268,13 +279,13 @@ After all subagent reviews complete:
 
 ## Execution
 
-**Phase 1:** Launch 7 subagents in parallel, each reviewing their assigned documents and writing to `plans/review_*.md`
+~~**Phase 1:** Launch 7 subagents in parallel, each reviewing their assigned documents and writing to `plans/review_*.md`~~ ✅ DONE
 
-**Phase 2:** Read all `plans/review_*.md` outputs. Consolidate into `plans/architecture_review_consolidated.md`
+~~**Phase 2:** Read all `plans/review_*.md` outputs. Consolidate into `plans/architecture_review_consolidated.md`~~ ✅ DONE
 
-**Phase 3:** Apply stale content pruning to architecture documents
+~~**Phase 3:** Apply stale content pruning to architecture documents~~ ✅ DONE
 
-**Phase 4:** Run `ruff check . --exclude .venv` to verify no syntax errors
+**Phase 4:** Run `ruff check . --exclude .venv` to verify no syntax errors (SKIPPED - ruff not available)
 
 **Phase 5:** Commit all changes to `main`
 

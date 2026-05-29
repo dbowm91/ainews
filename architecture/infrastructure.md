@@ -99,8 +99,8 @@ class FlaskTask(celery.Task):
 ```python
 # config.py
 class Config:
-    CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    CELERY_RESULT_BACKEND = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
     CELERY_TASK_SERIALIZER = "json"
     CELERY_RESULT_SERIALIZER = "json"
     CELERY_ACCEPT_CONTENT = ["json"]
@@ -443,3 +443,16 @@ Used in: `services/content_extractor.py`, `services/search/*.py`, `services/suba
 | `services/webhooks.py` | HMAC-signed webhook dispatch |
 | `services/cost_tracker.py` | LLM cost tracking |
 | `services/task_security.py` | HMAC task signing |
+| `services/url.py` | URL validation with config support (SSRF prevention) |
+| `services/alerts.py` | Alerting system |
+| `services/quality_report.py` | Quality report generation |
+| `services/stage_cost.py` | LLM cost estimation per stage |
+
+### URL Validation Layering
+
+The codebase has two URL validation implementations:
+
+- **`utils/url.py`**: SSRF protection for adapters (clean layering). Adapters import from here.
+- **`services/url.py`**: URL validation with config support for services. Re-exports `TRACKING_PARAMS`, `normalize_title`, `normalize_url` from `utils/url.py` but has its own `validate_url_safe()` implementation with config support.
+
+Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).

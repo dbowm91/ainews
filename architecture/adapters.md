@@ -130,7 +130,7 @@ Features:
 - Field mapping via `fields` dict
 - Filter operations: `equals`, `min`, `exists`, `contains`
 
-**Note:** API adapter pagination is implemented via `PaginationConfig` (same as Web adapter). Supports `next_link` (extract URL via JSONPath), `query_param` (increment page/offset), and `none` (disabled).
+**Note:** API adapter pagination uses `PaginationConfig` (same schema as Web adapter) with `next_link` (extract URL via JSONPath), `query_param` (increment page/offset), and `none` (disabled). Implementation differs from Web adapter: API adapter fetches all pages in `fetch()` while Web adapter uses recursive link following.
 
 ## Web Adapter (`web.py`)
 

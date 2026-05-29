@@ -115,6 +115,7 @@ def select_article(self, article_id: int, run_id=None):
     # Returns: {score, confidence, reasoning}
     # Threshold: score >= 6 with medium/high confidence
 ```
+Note: Uses `retry_max=20` in `run_stage()` (vs default 15) for more aggressive selection attempts.
 
 ### Research (`research.py`)
 
@@ -199,8 +200,8 @@ pending → review → done
 
 **Degraded flow:** When stages fail persistently (degradation_count >= 2), articles bypass remaining stages and go directly to `review` for manual processing.
 
-See `services/pipeline_degradation.py:_degrade_and_advance()` for the public degradation API.
-Note: `tasks/pipeline.py` has a local `_degrade_and_advance` for use by `retry.py` (task-layer only).
+See `services/pipeline_degradation.py:degrade_stage()` for the public degradation API.
+Note: `tasks/retry.py` imports `degrade_stage` aliased as `_degrade_and_advance` for readability.
 
 ## Scheduler
 

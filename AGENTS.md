@@ -249,12 +249,6 @@ The hybrid search function is `search_articles()` in `services/search/hybrid.py:
 ### SSRFSafeRedirectHandler
 `SSRFSafeRedirectHandler.__call__` in `adapters/session.py` validates redirect URLs via `validate_url_safe(location)` and returns a new `PreparedRequest` with the redirect URL set. The handler uses thread-local storage for redirect counting to ensure per-request scoping.
 
-### ResponseCache Pubsub Leak
-`ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, a `pubsub` object is created and subscribed but `pubsub.close()` is never called — only `unsubscribe()`. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block.
-
-### Missing Article Import in replay.py
-`routes/admin/api/replay.py` uses `Article` model in `get_pipeline_history()` but never imports it. Will cause `NameError` at runtime. Add `from models import Article` at module level.
-
 ### Celery Timezone
 Celery uses UTC (`CELERY_TIMEZONE = "UTC"` in `config.py:102`). The `NewsletterConfig.timezone` setting is display-only for newsletter rendering. All beat schedule times are in UTC.
 

@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 
 class TestPipelineReplayService:
     """Tests for services/pipeline_replay.py."""

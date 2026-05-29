@@ -463,8 +463,8 @@ Key environment variables used across the codebase:
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `GEMINI_API_KEY` | Google Gemini API key |
-| `GOOGLE_SEARCH_API_KEY` | Google Custom Search API key |
-| `GOOGLE_SEARCH_CX` | Google Custom Search engine ID |
+| `GOOGLE_API_KEY` | Google Custom Search API key |
+| `GOOGLE_CSE_ID` | Google Custom Search engine ID |
 | `SEARXNG_BASE_URL` | SearxNG instance URL |
 | `WEBHOOK_SECRET_KEY` | Fernet key for webhook secret encryption |
 | `CELERY_TASK_SECRET` | HMAC secret for task signing |

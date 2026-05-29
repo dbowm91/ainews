@@ -4,12 +4,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from models import Subscriber
+
 
 @pytest.mark.timeout(30)
 class TestNewsletterPerformanceEndpoint:
     """Tests for GET /api/v1/newsletters/performance endpoint."""
 
-    def test_returns_performance_metrics(self, app, admin_headers):
+    def test_returns_performance_metrics(self, app, auth_client):
         """Returns performance metrics with all required fields."""
         with app.app_context():
             from extensions import db
@@ -64,52 +66,48 @@ class TestNewsletterPerformanceEndpoint:
             db.session.add(subscriber)
             db.session.commit()
 
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=30", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
+            resp = auth_client.get("/api/v1/newsletters/performance?days=30")
+            assert resp.status_code == 200
+            data = resp.get_json()
 
-                assert "summary" in data
-                assert data["summary"]["click_count"] == 42
-                assert data["summary"]["sent_count"] == 1
-                assert data["period_days"] == 30
+            assert "summary" in data
+            assert data["summary"]["click_count"] == 42
+            assert data["summary"]["sent_count"] == 1
+            assert data["period_days"] == 30
 
-                assert "by_newsletter_type" in data
-                assert "main" in data["by_newsletter_type"]
+            assert "by_newsletter_type" in data
+            assert "main" in data["by_newsletter_type"]
 
-                assert "top_clicked_articles" in data
-                assert len(data["top_clicked_articles"]) == 1
-                assert data["top_clicked_articles"][0]["newsletter_clicks"] == 42
+            assert "top_clicked_articles" in data
+            assert len(data["top_clicked_articles"]) == 1
+            assert data["top_clicked_articles"][0]["newsletter_clicks"] == 42
 
-                assert "subscriber_counts" in data
-                assert data["subscriber_counts"]["active"]["main"] == 1
+            assert "subscriber_counts" in data
+            assert data["subscriber_counts"]["active"]["main"] == 1
 
-    def test_defaults_to_30_days(self, app, admin_headers):
+    def test_defaults_to_30_days(self, app, auth_client):
         """Uses 30 days as default when no days param provided."""
         with app.app_context():
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
-                assert data["period_days"] == 30
+            resp = auth_client.get("/api/v1/newsletters/performance")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["period_days"] == 30
 
-    def test_caps_at_365_days(self, app, admin_headers):
+    def test_caps_at_365_days(self, app, auth_client):
         """Caps lookback period at 365 days."""
         with app.app_context():
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=999", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
-                assert data["period_days"] == 365
+            resp = auth_client.get("/api/v1/newsletters/performance?days=999")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["period_days"] == 365
 
-    def test_minimum_1_day(self, app, admin_headers):
+    def test_minimum_1_day(self, app, auth_client):
         """Uses minimum of 1 day when days=0 or negative."""
         with app.app_context():
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=0", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
-                assert data["period_days"] == 1
+            resp = auth_client.get("/api/v1/newsletters/performance?days=0")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["period_days"] == 1
 
     def test_requires_auth(self, app):
         """Returns 401 without authentication."""
@@ -118,21 +116,20 @@ class TestNewsletterPerformanceEndpoint:
                 resp = client.get("/api/v1/newsletters/performance")
                 assert resp.status_code == 401
 
-    def test_empty_data_returns_zeros(self, app, admin_headers):
+    def test_empty_data_returns_zeros(self, app, auth_client):
         """Returns zero counts when no data exists."""
         with app.app_context():
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=7", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
+            resp = auth_client.get("/api/v1/newsletters/performance?days=7")
+            assert resp.status_code == 200
+            data = resp.get_json()
 
-                assert data["summary"]["sent_count"] == 0
-                assert data["summary"]["failed_count"] == 0
-                assert data["summary"]["retry_count"] == 0
-                assert data["summary"]["click_count"] == 0
-                assert data["top_clicked_articles"] == []
+            assert data["summary"]["sent_count"] == 0
+            assert data["summary"]["failed_count"] == 0
+            assert data["summary"]["retry_count"] == 0
+            assert data["summary"]["click_count"] == 0
+            assert data["top_clicked_articles"] == []
 
-    def test_tracks_failed_newsletters(self, app, admin_headers):
+    def test_tracks_failed_newsletters(self, app, auth_client):
         """Correctly counts newsletters with error messages as failed."""
         with app.app_context():
             from extensions import db
@@ -149,13 +146,12 @@ class TestNewsletterPerformanceEndpoint:
             db.session.add(nl)
             db.session.commit()
 
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=7", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
-                assert data["summary"]["failed_count"] == 1
+            resp = auth_client.get("/api/v1/newsletters/performance?days=7")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["summary"]["failed_count"] == 1
 
-    def test_click_through_by_type(self, app, admin_headers):
+    def test_click_through_by_type(self, app, auth_client):
         """Groups click data by newsletter type."""
         with app.app_context():
             from extensions import db
@@ -204,20 +200,18 @@ class TestNewsletterPerformanceEndpoint:
 
             db.session.commit()
 
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=7", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
+            resp = auth_client.get("/api/v1/newsletters/performance?days=7")
+            assert resp.status_code == 200
+            data = resp.get_json()
 
-                assert data["by_newsletter_type"]["main"]["clicks"] == 10
-                assert data["by_newsletter_type"]["ai"]["clicks"] == 10
-                assert data["by_newsletter_type"]["security"]["clicks"] == 10
+            assert data["by_newsletter_type"]["main"]["clicks"] == 10
+            assert data["by_newsletter_type"]["ai"]["clicks"] == 10
+            assert data["by_newsletter_type"]["security"]["clicks"] == 10
 
-    def test_subscriber_counts_by_type(self, app, admin_headers):
+    def test_subscriber_counts_by_type(self, app, auth_client):
         """Groups subscriber counts by newsletter type."""
         with app.app_context():
             from extensions import db
-            from models import Subscriber
 
             for ntype, email_suffix in [("main", "a"), ("ai", "b"), ("security", "c")]:
                 for i in range(3):
@@ -230,12 +224,11 @@ class TestNewsletterPerformanceEndpoint:
                     db.session.add(sub)
             db.session.commit()
 
-            with app.test_client() as client:
-                resp = client.get("/api/v1/newsletters/performance?days=30", headers=admin_headers)
-                assert resp.status_code == 200
-                data = resp.get_json()
+            resp = auth_client.get("/api/v1/newsletters/performance?days=30")
+            assert resp.status_code == 200
+            data = resp.get_json()
 
-                assert data["subscriber_counts"]["active"]["main"] == 3
-                assert data["subscriber_counts"]["active"]["ai"] == 3
-                assert data["subscriber_counts"]["active"]["security"] == 3
-                assert data["subscriber_counts"]["total"]["main"] == 3
+            assert data["subscriber_counts"]["active"]["main"] == 3
+            assert data["subscriber_counts"]["active"]["ai"] == 3
+            assert data["subscriber_counts"]["active"]["security"] == 3
+            assert data["subscriber_counts"]["total"]["main"] == 3

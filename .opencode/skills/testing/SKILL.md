@@ -30,7 +30,8 @@ Tests live in `tests/` with subdirectories mirroring the main codebase:
 ## Key Fixtures (in `tests/conftest.py`)
 
 - **`app`** — Flask test client with app context, Celery HMAC verification
-- **`client`** — Authenticated test client with admin session set
+- **`client`** — Plain Flask test client (no auth)
+- **`auth_client`** — Authenticated test client with admin session set (use this for API tests)
 - **`mock_redis`** — plain MagicMock for simple Redis ops
 - **`mock_redis_client`** — MockRedis instance for stateful operations
 - **`mock_celery_tasks`** — patches all Celery task calls

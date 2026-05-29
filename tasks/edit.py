@@ -276,6 +276,12 @@ def _post_finalize_article(article, run_id: int | None = None) -> None:
             article.id,
         )
 
+    try:
+        from tasks.embeddings import generate_article_embedding
+        generate_article_embedding.delay(article.id)
+    except Exception:  # noqa: BLE001 - embedding generation is non-critical
+        logger.debug("Failed to enqueue embedding generation for article %s", article.id)
+
 
 def _execute_editor_work(article, provider, model, max_tokens, article_id: int, run_id: int | None = None):
     """Execute the editor LLM work.
@@ -368,6 +374,49 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     routing_result = _handle_validation_and_routing(article, db, run_id)
     if routing_result:
         return routing_result
+
+    quality_result = None
+    try:
+        from services.quality_report import build_quality_report, persist_quality_report
+        quality_result = build_quality_report(article)
+        if quality_result:
+            persist_quality_report(article, quality_result, stage="edit")
+            logger.info(
+                "Quality report: article_id=%s passed=%s needs_review=%s overall=%.3f citation=%.3f claim=%.3f findings=%d",
+                article.id,
+                quality_result.passed,
+                quality_result.needsreview,
+                quality_result.overall_score,
+                quality_result.citation_score,
+                quality_result.claim_score,
+                len(quality_result.findings),
+            )
+            if not quality_result.passed:
+                from constants import PipelineStatus, truncate_for_log
+                from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status
+
+                _transition_article_status(article, PipelineStatus.REVIEW)
+                article.last_error = f"Quality gate failed: {quality_result.findings[0].message if quality_result.findings else 'unknown'}"
+                try:
+                    db.session.commit()
+                except SQLAlchemyError:
+                    db.session.rollback()
+                    raise
+                if run_id:
+                    _log_pipeline(
+                        run_id,
+                        "edit",
+                        "info",
+                        "Quality gate failed, queued for review: %s",
+                        truncate_for_log(article.original_title),
+                        article_id=article.id,
+                    )
+                _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+                return {"article_id": article.id, "status": "review"}
+    except Exception as e:  # noqa: BLE001 - quality report failures are non-critical, log and continue
+        logger.warning(
+            "Quality report generation failed for article %s: %s", article.id, e
+        )
 
     _post_finalize_article(article, run_id)
 

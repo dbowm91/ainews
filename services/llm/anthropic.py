@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Iterator, Optional
 
 import httpx
@@ -82,6 +83,7 @@ class AnthropicProvider(BaseLLMProvider):
         }
         if system:
             call_kwargs["system"] = system
+        t0 = time.monotonic()
         try:
             resp = self.client.messages.create(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
@@ -89,16 +91,24 @@ class AnthropicProvider(BaseLLMProvider):
         except (ImportError, httpx.HTTPError, ConnectionError,
                 TimeoutError, ValueError, Exception) as e:
             raise _handle_anthropic_error(e) from e
+        latency_ms = (time.monotonic() - t0) * 1000
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
+        input_toks = resp.usage.input_tokens if resp.usage else 0
+        output_toks = resp.usage.output_tokens if resp.usage else 0
+        cached_toks = getattr(resp.usage, "cacheMetrics", None)
+        if cached_toks:
+            cached_toks = getattr(cached_toks, "input_tokens", 0) or 0
+        else:
+            cached_toks = 0
         return LLMResponse(
             text=resp.content[0].text,
             model=model,
-            tokens_used=(
-                (resp.usage.input_tokens or 0) + (resp.usage.output_tokens or 0)
-                if resp.usage
-                else 0
-            ),
+            tokens_used=input_toks + output_toks,
+            input_tokens=input_toks,
+            output_tokens=output_toks,
+            cached_tokens=cached_toks,
+            latency_ms=latency_ms,
         )
 
     def chat(

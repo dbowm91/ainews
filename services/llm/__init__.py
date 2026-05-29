@@ -97,33 +97,56 @@ def get_provider_chain(role: str):
             )
 
 
-def record_provider_success(provider_id: str, model: str, tokens_used: int = 0, stage: str = "") -> None:
+def record_provider_success(
+    provider_id: str,
+    model: str,
+    tokens_used: int = 0,
+    stage: str = "",
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cached_tokens: int = 0,
+    latency_ms: float = 0.0,
+    article_id: int | None = None,
+) -> None:
     """Record a successful LLM call for circuit breaker tracking."""
     from services.metrics import get_metrics
 
     breaker_key = f"llm:{provider_id}:{model}:{stage}" if stage else f"llm:{provider_id}:{model}"
     breaker = get_breaker(breaker_key)
     breaker.record_success()
-    # Increment call counter
-    labels = {"provider": provider_id, "model": model}
-    if stage:
-        labels["stage"] = stage
-    get_metrics().counter_inc(
-        "llm.calls", labels=labels,
-    )
-    if tokens_used:
-        get_metrics().counter_inc(
-            "llm.tokens",
-            value=tokens_used,
-            labels=labels,
-        )
+
+    labels = {"provider": provider_id, "model": model, "stage": stage, "status": "success"}
+    get_metrics().counter_inc("llm.calls", labels=labels)
+
+    if input_tokens > 0:
+        get_metrics().counter_inc("llm.input_tokens", value=input_tokens, labels=labels)
+    if output_tokens > 0:
+        get_metrics().counter_inc("llm.output_tokens", value=output_tokens, labels=labels)
+    if cached_tokens > 0:
+        get_metrics().counter_inc("llm.cached_tokens", value=cached_tokens, labels=labels)
+
+    if latency_ms > 0:
+        get_metrics().histogram_observe("llm.latency_ms", latency_ms, labels=labels)
+
+    if tokens_used > 0 and input_tokens == 0 and output_tokens == 0:
+        get_metrics().counter_inc("llm.tokens", value=tokens_used, labels=labels)
 
 
-def record_provider_failure(provider_id: str, model: str, stage: str = "") -> None:
+def record_provider_failure(
+    provider_id: str,
+    model: str,
+    stage: str = "",
+    article_id: int | None = None,
+) -> None:
     """Record a failed LLM call for circuit breaker tracking."""
+    from services.metrics import get_metrics
+
     breaker_key = f"llm:{provider_id}:{model}:{stage}" if stage else f"llm:{provider_id}:{model}"
     breaker = get_breaker(breaker_key)
     breaker.record_failure()
+
+    labels = {"provider": provider_id, "model": model, "stage": stage, "status": "failure"}
+    get_metrics().counter_inc("llm.calls", labels=labels)
 
 
 def get_provider() -> BaseLLMProvider:

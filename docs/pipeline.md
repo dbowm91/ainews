@@ -123,6 +123,64 @@ Article processing has SLA timestamps tracked at each stage:
 
 SLA metrics are computed at publication time.
 
+## Quality Gates & Review Routing
+
+Articles can be routed to `review` status from multiple quality gates:
+
+| Gate | Condition | Location |
+|------|-----------|----------|
+| Selection | Score OK but confidence="low" | `tasks/select.py` |
+| Research | Degenerate research brief (fails `_is_degenerate_research()`) | `tasks/research.py` |
+| Write | Degenerate draft (fails `_is_degenerate_write()`) | `tasks/write.py` |
+| Edit | Validation failure | `tasks/edit.py` |
+
+### Degenerate Brief Detection
+
+Research brief is degenerate if:
+- Fewer than 2 key claims
+- No external sources
+- Source text word count < 50
+
+### Degenerate Draft Detection
+
+Draft is degenerate if:
+- Body word count < 50
+- TLDR word count < 10
+- Fewer than 1 key point
+
+## Replay & Rescue
+
+### Reprocessing an Article
+
+Articles in `failed` or `review` status can be reprocessed:
+
+```bash
+# Single article via API
+curl -X POST http://localhost:5000/api/v1/articles/<id>/reprocess \
+  -H "X-API-Token: ..." \
+  -H "X-CSRFToken: ..."
+
+# Bulk reprocess
+curl -X POST http://localhost:5000/api/v1/articles/bulk \
+  -H "X-API-Token: ..." \
+  -H "X-CSRFToken: ..." \
+  -H "Content-Type: application/json" \
+  -d '{"article_ids": [1,2,3], "action": "reprocess"}'
+```
+
+Reprocess resets: `pipeline_status → pending`, clears `selector_result`, `research_brief`, `draft_article`, `final_article`, `retry_count`, `total_retries`, `last_error`, and clears Redis stage failure keys.
+
+### Dead Letter Queue
+
+Articles stuck in the pipeline (no progress within threshold) are tracked in the dead letter queue.
+
+```bash
+# View stats
+curl http://localhost:5000/admin/api/pipeline/dead-letter/stats
+
+# Via admin UI: /admin/dead-letters
+```
+
 ## Pipeline Run Tracking
 
 `PipelineRun` model tracks each crawl/newsletter execution:

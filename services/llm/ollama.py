@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import uuid
 from typing import Any, Iterator, Optional
 
@@ -74,6 +75,7 @@ class OllamaProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
+        t0 = time.monotonic()
         try:
             resp = self.client.chat(
                 model=model,
@@ -85,10 +87,17 @@ class OllamaProvider(BaseLLMProvider):
         except (httpx.HTTPError, ImportError, ConnectionError,
                 TimeoutError, ValueError) as e:
             raise _handle_ollama_error(e) from e
+        latency_ms = (time.monotonic() - t0) * 1000
+        prompt_tokens = resp.get("prompt_eval_count", 0)
+        eval_tokens = resp.get("eval_count", 0)
         return LLMResponse(
             text=self._extract_text(resp),
             model=model,
-            tokens_used=resp.get("prompt_eval_count", 0) + resp.get("eval_count", 0),
+            tokens_used=prompt_tokens + eval_tokens,
+            input_tokens=prompt_tokens,
+            output_tokens=eval_tokens,
+            cached_tokens=0,
+            latency_ms=latency_ms,
         )
 
     def chat(

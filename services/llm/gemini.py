@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Iterator, Optional
 
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
@@ -77,6 +78,7 @@ class GeminiProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         contents, system_instruction = self._build_contents(messages, system)
+        t0 = time.monotonic()
         try:
             resp = self.client.models.generate_content(
                 model=model,
@@ -92,12 +94,24 @@ class GeminiProvider(BaseLLMProvider):
         except (ImportError, ConnectionError, TimeoutError,
                 ValueError, AttributeError) as e:
             raise _handle_gemini_error(e) from e
+        latency_ms = (time.monotonic() - t0) * 1000
         usage = resp.usage_metadata
-        tokens_used = usage.total_token_count if usage else 0
+        if usage:
+            prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
+            candidates_tokens = getattr(usage, "candidates_token_count", 0) or 0
+            total_tokens = getattr(usage, "total_token_count", 0) or 0
+        else:
+            prompt_tokens = 0
+            candidates_tokens = 0
+            total_tokens = 0
         return LLMResponse(
             text=resp.text or "",
             model=model,
-            tokens_used=tokens_used,
+            tokens_used=total_tokens,
+            input_tokens=prompt_tokens,
+            output_tokens=candidates_tokens,
+            cached_tokens=0,
+            latency_ms=latency_ms,
         )
 
     def chat(

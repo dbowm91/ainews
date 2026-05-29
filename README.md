@@ -1,11 +1,11 @@
 # ainews
 
-AI-powered news aggregation and newsletter platform. Automatically discovers, summarizes, and curates news articles from configurable RSS sources using large language models.
+AI-powered news aggregation and newsletter platform. Automatically discovers, summarizes, and curates news articles from configurable RSS/API sources using a multi-stage LLM pipeline with quality gates, subagent tool calling, and trend memory.
 
 ## Quick Start (Docker)
 
 ```bash
-git clone https://github.com/yourorg/ainews.git
+git clone https://github.com/davidbowman/ainews.git
 cd ainews
 cp .env.example .env
 # Edit .env — set SECRET_KEY and at least one LLM provider
@@ -19,7 +19,7 @@ App is running at `http://localhost:5000`. Admin login at `http://localhost:5000
 Requires Python 3.12+, Redis, and optionally Ollama for local LLM inference.
 
 ```bash
-git clone https://github.com/yourorg/ainews.git
+git clone https://github.com/davidbowman/ainews.git
 cd ainews
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -48,12 +48,15 @@ Nginx → Granian (WSGI) → Flask
 
 ## Features
 
-- **Automated RSS/API Ingestion** — Configurable source feeds with scheduled polling
-- **AI-Powered Processing** — Selection, research, writing, and editing stages via LLM
-- **Topic Classification** — Automatic categorization using configurable topic definitions
-- **Newsletter Generation** — Curated newsletters from aggregated content
-- **Full-Text Search** — SQLite FTS5-powered article search
-- **Admin Dashboard** — Web UI for managing sources, articles, topics, and newsletters
+- **Multi-Provider LLM Pipeline** — Select, research, write, and edit stages via configurable LLM providers with automatic fallback
+- **Subagent Tool Calling** — Contextualization tools (topic notes, related articles, trend memory, web search) available to LLM stages
+- **Quality Gates & Review Routing** — Degenerate drafts, low confidence selections, and validation failures route to manual review
+- **Trend Memory & Topic Notes** — LLM-judged editorial memory with importance tiers (LOW/MEDIUM/HIGH) and per-topic context notes
+- **Webhook Events** — article.published, article.failed, newsletter.sent, newsletter.failed with HMAC signatures and retry
+- **Hybrid Search** — SQLite FTS5 + vector similarity (sentence transformers) for article search with weighted ranking
+- **Metrics, Health & Cost Endpoints** — Prometheus metrics, public/admin health checks, per-article cost tracking
+- **Admin API Tokens & 2FA** — Programmmatic API access with token expiry, and TOTP 2FA with backup codes for admin login
+- **Newsletter Generation** — Curated daily newsletters with per-subscriber topic filtering and delivery tracking
 - **RSS Output** — Published feed at `/feed` for downstream consumption
 
 ## Endpoints
@@ -71,7 +74,9 @@ Nginx → Granian (WSGI) → Flask
 | `/subscribe` | Newsletter subscription |
 | `/unsubscribe/<token>` | Unsubscribe |
 | `/admin/login` | Admin dashboard |
-| `/admin/api/health` | Authenticated health check |
+| `/api/v1/health` | Authenticated health check |
+| `/api/v1/newsletters/stats` | Newsletter statistics |
+| `/api/v1/articles/<id>` | Article CRUD (API token auth) |
 
 ## Configuration
 
@@ -108,6 +113,11 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 - [Quick Start](docs/quickstart.md) — Local development setup
 - [Configuration](docs/configuration.md) — All config files and env vars
 - [Deployment](docs/deployment.md) — Production deployment (Docker or bare metal)
+- [Pipeline](docs/pipeline.md) — Stages, state transitions, review routing, retry behavior
+- [Subagents](docs/subagent.md) — Subagent config, tools, how to add tools
+- [Search](docs/search.md) — FTS, hybrid vector search, embedding backfill
+- [Operations](docs/operations.md) — Health, metrics, Celery workers, failure recovery
+- [Quality](docs/quality.md) — Quality report model, scoring, citation verification
 
 ## License
 

@@ -11,6 +11,7 @@ from .webhook import Webhook, WebhookEvent
 from .audit import AuditLog
 from .search import SearchQuery
 from .auth import ApiToken, AdminUser
+from .quality import QualityReport
 
 from .utils import slugify, encode_short_url, decode_short_url
 
@@ -35,6 +36,7 @@ __all__ = [
     "SearchQuery",
     "ApiToken",
     "AdminUser",
+    "QualityReport",
     "slugify",
     "encode_short_url",
     "decode_short_url",

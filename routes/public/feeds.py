@@ -78,9 +78,10 @@ def index() -> str:
     category = request.args.get("category", "", type=str).strip()
     query = request.args.get("q", "", type=str).strip()
     sort = request.args.get("sort", "recent", type=str).strip()
+    search_mode = request.args.get("mode", "fts", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}:sort:{sort}"
+    cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}:sort:{sort}:mode:{search_mode}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -92,6 +93,7 @@ def index() -> str:
         category=category if category else None,
         query=query if query else None,
         sort=sort,
+        search_mode=search_mode if search_mode in ("fts", "hybrid") else "fts",
     )
 
     share_configs = _get_share_configs()
@@ -104,6 +106,7 @@ def index() -> str:
         category=category,
         query=query,
         sort=sort,
+        search_mode=search_mode,
         categories=_get_categories(),
         topic_icons=_get_topic_icons(),
         top_impact=parse_articles(_get_top_impact())

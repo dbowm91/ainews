@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
-from typing import Optional
 
 from services.provider_base import BaseProvider, ProviderManager
 
@@ -102,7 +101,7 @@ class SearchProviderManager:
 
     def __init__(self):
         self._registry: dict[str, type[SearchProvider]] = {}
-        self._instance: Optional[SearchProvider] = None
+        self._instances: dict[str, SearchProvider] = {}
 
     def register(self, name: str):
         """Decorator to register a SearchProvider subclass."""
@@ -113,12 +112,12 @@ class SearchProviderManager:
 
     def get_provider(self, name: str = "sqlite_fts") -> SearchProvider:
         """Get or create the configured search provider instance."""
-        if self._instance is None:
+        if name not in self._instances:
             if name not in self._registry:
                 raise KeyError(f"No database search provider '{name}' registered")
             cls = self._registry[name]
-            self._instance = cls()
-        return self._instance
+            self._instances[name] = cls()
+        return self._instances[name]
 
 
 # Global manager for database search providers

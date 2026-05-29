@@ -44,8 +44,11 @@ class ModelCost:
     provider: str
     model: str
     total_tokens: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
     estimated_cost_usd: float = 0.0
     call_count: int = 0
+    stages: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -55,7 +58,10 @@ class CostSummary:
     total_tokens: int = 0
     total_cost_usd: float = 0.0
     total_calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
     models: list[ModelCost] = field(default_factory=list)
+    stages: dict[str, float] = field(default_factory=dict)
     period_start: str = ""
     period_end: str = ""
 
@@ -74,12 +80,12 @@ def _load_rates() -> dict[str, dict[str, float]]:
     return dict(_DEFAULT_RATES)
 
 
-def get_cost_summary() -> CostSummary:
+def get_cost_summary() -> CostSummary:  # noqa: C901
     """Get cost summary from current metrics counters.
 
     Reads LLM token and call counters from MetricsCollector and estimates
-    costs using configured rates. Since we don't distinguish input vs output
-    tokens in the counter, we use a blended rate (60% input, 40% output).
+    costs using configured rates. Uses input_tokens/output_tokens when available,
+    falls back to blended total_tokens (60% input / 40% output) for legacy counters.
 
     Returns:
         CostSummary with per-model breakdown.
@@ -94,8 +100,6 @@ def get_cost_summary() -> CostSummary:
     model_costs: dict[str, ModelCost] = {}
 
     for key, value in counters.items():
-        # Parse keys like: llm.tokens{model=gpt-4o,provider=openai}
-        # or: llm.calls{model=gpt-4o,provider=openai}
         if not key.startswith("llm."):
             continue
 
@@ -105,18 +109,27 @@ def get_cost_summary() -> CostSummary:
 
         provider = labels_str.get("provider", "unknown")
         model = labels_str.get("model", "unknown")
+        stage = labels_str.get("stage", "")
         model_key = f"{provider}/{model}"
 
         if model_key not in model_costs:
             model_costs[model_key] = ModelCost(provider=provider, model=model)
 
         mc = model_costs[model_key]
-        if metric_type == "llm.tokens":
-            mc.total_tokens += value
-        elif metric_type == "llm.calls":
+        if metric_type == "llm.calls":
             mc.call_count += value
+        elif metric_type == "llm.tokens":
+            mc.total_tokens += value
+        elif metric_type == "llm.input_tokens":
+            mc.input_tokens += value
+        elif metric_type == "llm.output_tokens":
+            mc.output_tokens += value
+        elif metric_type == "llm.cached_tokens":
+            pass
 
-    # Estimate costs
+        if stage and metric_type == "llm.calls":
+            mc.stages[stage] = mc.stages.get(stage, 0) + value
+
     input_ratio_str = os.environ.get("COST_INPUT_RATIO", "0.6")
     output_ratio_str = os.environ.get("COST_OUTPUT_RATIO", "0.4")
     try:
@@ -129,20 +142,44 @@ def get_cost_summary() -> CostSummary:
     except ValueError:
         logger.warning("Invalid COST_OUTPUT_RATIO: %r, using 0.4", output_ratio_str)
         output_ratio = 0.4
+
+    stage_costs: dict[str, float] = {}
+
     for model_key, mc in model_costs.items():
         rate = rates.get(model_key)
-        if rate and mc.total_tokens > 0:
-            blended = rate["input"] * input_ratio + rate["output"] * output_ratio
-            mc.estimated_cost_usd = round(mc.total_tokens / 1_000_000 * blended, 4)
+
+        if mc.input_tokens > 0 and mc.output_tokens > 0:
+            mc.total_tokens = mc.input_tokens + mc.output_tokens
+            if rate:
+                input_cost = mc.input_tokens / 1_000_000 * rate["input"]
+                output_cost = mc.output_tokens / 1_000_000 * rate["output"]
+                mc.estimated_cost_usd = round(input_cost + output_cost, 4)
+                summary.input_tokens += mc.input_tokens
+                summary.output_tokens += mc.output_tokens
+        elif mc.total_tokens > 0:
+            if rate:
+                blended = rate["input"] * input_ratio + rate["output"] * output_ratio
+                mc.estimated_cost_usd = round(mc.total_tokens / 1_000_000 * blended, 4)
+            summary.input_tokens += int(mc.total_tokens * input_ratio)
+            summary.output_tokens += int(mc.total_tokens * output_ratio)
         else:
             logger.debug("No pricing found for model: %s", model_key)
+
         summary.total_tokens += mc.total_tokens
         summary.total_cost_usd += mc.estimated_cost_usd
         summary.total_calls += mc.call_count
         summary.models.append(mc)
 
+        if rate and mc.estimated_cost_usd > 0:
+            if mc.stages:
+                for stage_name, stage_calls in mc.stages.items():
+                    if stage_name not in stage_costs:
+                        stage_costs[stage_name] = 0.0
+                    stage_costs[stage_name] += mc.estimated_cost_usd * stage_calls / mc.call_count if mc.call_count > 0 else 0.0
+
     summary.models.sort(key=lambda m: m.estimated_cost_usd, reverse=True)
     summary.total_cost_usd = round(summary.total_cost_usd, 4)
+    summary.stages = {k: round(v, 4) for k, v in stage_costs.items()}
     return summary
 
 

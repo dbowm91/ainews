@@ -220,7 +220,7 @@ def _assess_coherence(content: str) -> float:
     """Assess coherence based on text structure."""
     sentences = [s.strip() for s in re.split(r'[.!?]+', content) if s.strip()]
     if len(sentences) < 3:
-        return 0.4
+        return 0.5
 
     transition_words = [
         "however", "therefore", "furthermore", "moreover",
@@ -231,7 +231,8 @@ def _assess_coherence(content: str) -> float:
     transitions = sum(1 for tw in transition_words if tw in content_lower)
     sentence_score = min(1.0, len(sentences) / 10.0)
     transition_score = min(1.0, transitions / 3.0)
-    return transition_score * 0.4 + sentence_score * 0.6
+    base_score = transition_score * 0.4 + sentence_score * 0.6
+    return max(0.5, base_score)
 
 
 def _assess_completeness(content: str) -> float:

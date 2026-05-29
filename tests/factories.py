@@ -5,6 +5,7 @@
 # ---------------------------------------------------------------------------
 import json
 import secrets
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -74,11 +75,14 @@ def create_article(
     impact_score: int = 0,
     original_title: str = "Test Article",
     original_url: str = "https://example.com/article",
-    external_id: str = "test-123",
+    external_id: Optional[str] = None,
     final_article: Optional[str] = None,
     extracted_text: Optional[str] = None,
     created_at: Optional[datetime] = None,
     short_id: Optional[str] = None,
+    research_brief: Optional[str] = None,
+    topics: Optional[list] = None,
+    published_at: Optional[datetime] = None,
 ) -> Article:
     """Create a test article.
 
@@ -90,11 +94,14 @@ def create_article(
         impact_score: Impact score (0-100)
         original_title: Original article title
         original_url: Original article URL
-        external_id: External ID from source
+        external_id: External ID from source (auto-generated if None)
         final_article: Final article JSON
         extracted_text: Extracted text content
         created_at: Creation timestamp
-        short_id: Short ID for URL shortening
+        short_id: Short ID for URL shortening (auto-generated if None)
+        research_brief: Research brief JSON string
+        topics: List of topic strings
+        published_at: Publication timestamp
 
     Returns:
         The created Article instance
@@ -116,11 +123,14 @@ def create_article(
         impact_score=impact_score,
         original_title=original_title,
         original_url=original_url,
-        external_id=external_id,
+        external_id=external_id or f"ext-{uuid.uuid4().hex[:12]}",
         final_article=final_article,
         extracted_text=extracted_text,
         created_at=created_at or datetime.now(timezone.utc),
-        short_id=short_id,
+        short_id=short_id or secrets.token_hex(6),
+        research_brief=research_brief,
+        topics=topics,
+        published_at=published_at,
     )
     db.session.add(article)
     db.session.flush()

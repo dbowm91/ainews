@@ -144,13 +144,19 @@ def cost_summary() -> Response:
             "total_tokens": summary.total_tokens,
             "total_cost_usd": summary.total_cost_usd,
             "total_calls": summary.total_calls,
+            "input_tokens": summary.input_tokens,
+            "output_tokens": summary.output_tokens,
+            "stages": summary.stages,
             "models": [
                 {
                     "provider": m.provider,
                     "model": m.model,
                     "total_tokens": m.total_tokens,
+                    "input_tokens": m.input_tokens,
+                    "output_tokens": m.output_tokens,
                     "estimated_cost_usd": m.estimated_cost_usd,
                     "call_count": m.call_count,
+                    "stages": m.stages,
                 }
                 for m in summary.models
             ],

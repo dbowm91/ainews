@@ -75,6 +75,10 @@ class LLMResponse:
     text: str
     model: str
     tokens_used: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    latency_ms: float = 0.0
 
 
 @dataclass
@@ -106,6 +110,10 @@ class ToolCallingResponse:
     model: str
     tool_calls: list[ToolCall] = field(default_factory=list)
     tokens_used: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    latency_ms: float = 0.0
 
 
 class BaseLLMProvider(BaseProvider, abc.ABC):
@@ -184,13 +192,33 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 time.sleep(delay)
         raise last_exc
 
-    def _record_success(self, model: str, tokens_used: int = 0, stage: str = "") -> None:
+    def _record_success(
+        self,
+        model: str,
+        tokens_used: int = 0,
+        stage: str = "",
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cached_tokens: int = 0,
+        latency_ms: float = 0.0,
+        article_id: int | None = None,
+    ) -> None:
         from services.llm import record_provider_success
-        record_provider_success(self.provider_id, model, tokens_used, stage)
+        record_provider_success(
+            self.provider_id,
+            model,
+            tokens_used,
+            stage,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
+            latency_ms=latency_ms,
+            article_id=article_id,
+        )
 
-    def _record_failure(self, model: str, stage: str = "") -> None:
+    def _record_failure(self, model: str, stage: str = "", article_id: int | None = None) -> None:
         from services.llm import record_provider_failure
-        record_provider_failure(self.provider_id, model, stage)
+        record_provider_failure(self.provider_id, model, stage, article_id=article_id)
 
     @abc.abstractmethod
     def _create_client(self) -> Any:
@@ -247,13 +275,15 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             stage,
             response_model.__name__,
         )
+        t0 = time.monotonic()
         resp = self._chat_with_schema(
             messages, response_model, system, temperature, max_tokens, schema, model,
         )
+        latency_ms = (time.monotonic() - t0) * 1000
         try:
             resp = _extract_json(resp)
             result = response_model.model_validate_json(resp)
-            self._record_success(model or self.default_model, stage=stage)
+            self._record_success(model or self.default_model, stage=stage, latency_ms=latency_ms)
             logger.info(
                 "TraceID=%s: LLM call succeeded for %s (model=%s, stage=%s)",
                 trace_id,
@@ -306,7 +336,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                 )
                 resp = _extract_json(resp)
                 result = response_model.model_validate_json(resp)
-                self._record_success(model or self.default_model, stage=stage)
+                self._record_success(model or self.default_model, stage=stage, latency_ms=latency_ms)
                 return result
             raise
 

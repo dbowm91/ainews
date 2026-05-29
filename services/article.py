@@ -144,6 +144,7 @@ def get_articles_paginated(
     query: Optional[str] = None,
     status_filter: Optional[str] = None,
     sort: str = "recent",
+    search_mode: str = "fts",
 ) -> tuple[list[Article], bool, int]:
     """Get paginated articles with optional filtering.
 
@@ -156,23 +157,27 @@ def get_articles_paginated(
         query: Search query for title/content
         status_filter: Filter by pipeline status
         sort: Sort order - "recent" (default), "impact", or "published"
+        search_mode: Search mode - "fts" for FTS-only, "hybrid" for FTS+vector.
 
     Returns:
         Tuple of (articles, has_next, next_page)
     """
-    # Use FTS5 for text search when query is provided
+    # Use search for text search when query is provided
     if query:
         try:
-            from services.search import get_article_search_provider
+            from services.search.hybrid import search_articles
 
-            provider = get_article_search_provider()
-            results = provider.search(
-                query, page=page, per_page=per_page, category=category
+            results_page = search_articles(
+                query,
+                mode=search_mode,
+                category=category,
+                page=page,
+                per_page=per_page,
             )
-            _log_search_query(query, len(results))
+            _log_search_query(query, results_page.total)
 
-            if results:
-                article_ids = [r["id"] for r in results]
+            if results_page.items:
+                article_ids = [r.id for r in results_page.items]
                 id_order = {id_: i for i, id_ in enumerate(article_ids)}
                 articles = (
                     db.session.execute(
@@ -189,11 +194,11 @@ def get_articles_paginated(
                 )
                 articles.sort(key=lambda a: id_order.get(a.id, 999))
                 parse_articles(articles)
-                has_next = len(results) >= per_page
+                has_next = results_page.total >= per_page
                 return articles, has_next, page + 1
         except SQLAlchemyError:
             # FTS5 table may not exist yet (e.g., tests, fresh install)
-            logger.debug("FTS5 search failed, falling back to ILIKE", exc_info=True)
+            logger.debug("Search failed, falling back to ILIKE", exc_info=True)
 
     # Standard SQL query (no search, or ILIKE fallback)
     q = (

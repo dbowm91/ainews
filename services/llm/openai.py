@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Any, Iterator, Optional
 
 import httpx
@@ -81,6 +82,7 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> LLMResponse:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
+        t0 = time.monotonic()
         try:
             resp = self.client.chat.completions.create(
                 model=model,
@@ -93,16 +95,20 @@ class OpenAIProvider(BaseLLMProvider):
         except (ImportError, httpx.HTTPError, ConnectionError,
                 TimeoutError, ValueError, Exception) as e:
             raise _handle_openai_error(e) from e
+        latency_ms = (time.monotonic() - t0) * 1000
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
+        input_toks = resp.usage.prompt_tokens if resp.usage else 0
+        output_toks = resp.usage.completion_tokens if resp.usage else 0
+        cached_toks = getattr(resp.usage, "cached_tokens", 0) or 0
         return LLMResponse(
             text=resp.choices[0].message.content or "",
             model=model,
-            tokens_used=(
-                (resp.usage.prompt_tokens or 0) + (resp.usage.completion_tokens or 0)
-                if resp.usage
-                else 0
-            ),
+            tokens_used=input_toks + output_toks,
+            input_tokens=input_toks,
+            output_tokens=output_toks,
+            cached_tokens=cached_toks,
+            latency_ms=latency_ms,
         )
 
     def chat(

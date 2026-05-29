@@ -1,8 +1,10 @@
 """Hybrid search combining SQLite FTS5 with vector similarity search."""
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from extensions import db
@@ -11,13 +13,29 @@ from services.embeddings import (
     deserialize_embedding,
     generate_embedding,
 )
-from services.search.base import SearchProvider, register_db_search_provider
+from services.search.base import SearchProvider, get_db_search_provider, register_db_search_provider
 from services.search.sqlite_fts import (
     SQLiteFTSProvider,
     _build_fts_query,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SearchResultItem:
+    id: int
+    fts_rank: float
+    vector_score: float
+    combined_score: float
+
+
+class SearchPage(BaseModel):
+    items: list[SearchResultItem]
+    total: int
+    page: int
+    per_page: int
+    vector_available: bool = True
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
@@ -306,3 +324,73 @@ class HybridSearchProvider(SearchProvider):
     ) -> list[int]:
         """Delegate to FTS provider for admin search."""
         return self._fts_provider.search_admin(query, limit=limit, **kwargs)
+
+
+def search_articles(
+    query: str,
+    *,
+    mode: str = "fts",
+    category: str | None = None,
+    page: int = 1,
+    per_page: int = 20,
+) -> SearchPage:
+    """Search articles with mode=fts (FTS-only) or mode=hybrid (FTS+vector).
+
+    Args:
+        query: Search query string.
+        mode: Search mode - "fts" for FTS-only, "hybrid" for FTS+vector similarity.
+        category: Optional category filter.
+        page: Page number (1-indexed).
+        per_page: Results per page.
+
+    Returns:
+        SearchPage with items, total, page, per_page, and vector_available flag.
+    """
+    provider = get_db_search_provider("hybrid")
+    per_page = min(per_page, 100)
+
+    if mode == "hybrid":
+        vector_available = SENTENCE_TRANSFORMERS_AVAILABLE
+        results = provider.hybrid_search(
+            query,
+            limit=per_page * 3,
+            category=category,
+            page=page,
+            per_page=per_page,
+        )
+        if not vector_available:
+            logger.debug("Hybrid mode requested but sentence-transformers unavailable, using FTS fallback")
+        items = [
+            SearchResultItem(
+                id=r["id"],
+                fts_rank=r.get("fts_rank", 0.0),
+                vector_score=r.get("vector_score", 0.0),
+                combined_score=r.get("combined_score", 0.0),
+            )
+            for r in results
+        ]
+        return SearchPage(
+            items=items,
+            total=len(items),
+            page=page,
+            per_page=per_page,
+            vector_available=vector_available,
+        )
+    else:
+        fts_results = provider.search(query, limit=per_page, category=category, page=page, per_page=per_page)
+        items = [
+            SearchResultItem(
+                id=r["id"],
+                fts_rank=r.get("rank", 0.0),
+                vector_score=0.0,
+                combined_score=0.0,
+            )
+            for r in fts_results
+        ]
+        return SearchPage(
+            items=items,
+            total=len(items),
+            page=page,
+            per_page=per_page,
+            vector_available=False,
+        )

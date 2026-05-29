@@ -21,10 +21,29 @@
 - **SubagentStageConfig vs StageConfig:** The actual stage configuration class is `SubagentStageConfig` in `schemas/pipeline.py`, NOT `StageConfig` which is an empty stub with only `tools` field.
 - **DeepSeek Provider:** Not implemented as a search provider. DeepSeek is only an LLM provider (in providers.yaml) and a regex pattern for URL sanitization and trend detection. Do NOT document DeepSeek as a search provider without implementing `services/search/deepseek.py`.
 
+## Quality Report
+- **QualityReport model:** `models/quality.py:10-51` with fields: `article_id`, `article_version_id`, `stage`, `overall_score`, `groundedness`, `coherence`, `completeness`, `safety`, `citation_score`, `claim_score`, `passed`, `needs_review`, `findings` (JSON), `meta` (JSON), `created_at`.
+- **Quality report service:** `services/quality_report.py` with `build_quality_report()` (line 438) and `persist_quality_report()` (line 531).
+- **Edit stage integration:** `tasks/edit.py:378-419` runs quality report after final article is produced. If `quality_result.passed` is False, article routes to `PipelineStatus.REVIEW`.
+
+## Source Intelligence
+- `services/source_intelligence.py` provides: `get_source_performance()` (line 58), `get_topic_coverage()` (line 175), `get_source_recommendations()` (line 230).
+- API endpoints in `routes/admin/api/source_intelligence.py`.
+
+## Topic Gap
+- `services/topic_gap.py` provides topic gap analysis.
+- API endpoint in `routes/admin/api/topic_gap.py`.
+- Subagent tool `get_topic_gap_report` registered in `services/subagent/tools.py:451`.
+
+## Hybrid Search
+- The hybrid search function is `search_articles()` in `services/search/hybrid.py:329`, NOT `hybrid_search()`.
+- Also has `cosine_similarity` (line 41) and `reciprocal_rank_fusion` (line 67).
+
 ## Subagent Notes
 - **Tool Execution:** `run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
 - **ToolDefinition:** Actual class in `services/llm/base.py` is a `@dataclass` with fields: `name`, `description`, `parameters`, `required`, `fn`. It does NOT have a `cached` field.
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
+- **Tool Count:** 14 tools total (12 context + 2 search). Registered in `services/subagent/tools.py:306-603`.
 - **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
 - **Subagent Chain steps parameter:** `run_subagent_chain()` in `services/subagent/chain.py:62` properly uses passed `steps` parameter or falls back to `chain_config.steps`.
 - **Middleware Chain Order:** The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.

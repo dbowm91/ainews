@@ -199,6 +199,7 @@ Each pipeline stage has quality gates that can route articles to `review` for ma
 - `research`: Degenerate research brief (fails `_is_degenerate_research()`) → `review`
 - `write`: Degenerate draft (fails `_is_degenerate_write()`) → `review`
 - `edit`: Validation failure → `review`
+- `edit`: Quality report failure (`build_quality_report()` in `tasks/edit.py:378-419`) → `review`
 
 ### backfill_embeddings max_retries
 The `backfill_embeddings` task in `tasks/embeddings.py` has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
@@ -211,6 +212,30 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 
 ### Middleware Clone Fix (Fixed)
 `run_subagent_with_tools()` in `services/subagent/runner.py:349-355` creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
+
+### Subagent Tool Count
+The subagent system has **14 tools** (not 9 as some docs claim). 12 context tools + 2 search tools. Registered in `services/subagent/tools.py:306-603`. The tools are: `get_topic_note`, `context_notes`, `related_articles`, `get_trend_memory`, `get_article_by_id`, `search_articles`, `get_source_health`, `get_topic_gap_report`, `get_source_performance`, `get_quality_report`, `find_dedupe_candidates`, `estimate_stage_cost`, `web_search`, `get_search_provider`.
+
+### QualityReport Model
+The `QualityReport` model exists in `models/quality.py:10-51` with fields: `article_id`, `article_version_id`, `stage`, `overall_score`, `groundedness`, `coherence`, `completeness`, `safety`, `citation_score`, `claim_score`, `passed`, `needs_review`, `findings` (JSON), `meta` (JSON), `created_at`. The quality report service is in `services/quality_report.py` with `build_quality_report()` (line 438) and `persist_quality_report()` (line 531).
+
+### Source Intelligence Service
+`services/source_intelligence.py` provides: `get_source_performance()` (line 58), `get_topic_coverage()` (line 175), `get_source_recommendations()` (line 230). API endpoints in `routes/admin/api/source_intelligence.py`.
+
+### Topic Gap Service
+`services/topic_gap.py` provides topic gap analysis. API endpoint in `routes/admin/api/topic_gap.py`. Subagent tool `get_topic_gap_report` registered in `services/subagent/tools.py:451`.
+
+### Pipeline Replay API
+`routes/admin/api/replay.py` provides: `GET /articles/<id>/pipeline/history` (line 15), `POST /articles/<id>/pipeline/replay` (line 33), `POST /articles/<id>/pipeline/restore-version` (line 107).
+
+### Hybrid Search Function Name
+The hybrid search function is `search_articles()` in `services/search/hybrid.py:329`, NOT `hybrid_search()`. Also has `cosine_similarity` (line 41) and `reciprocal_rank_fusion` (line 67).
+
+### Undocumented Schema Files
+`schemas/admin.py` contains: `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`. `schemas/llm.py` contains: `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig`, `load_providers_config()`.
+
+### SSRFSafeRedirectHandler Bug
+`SSRFSafeRedirectHandler.__call__` in `adapters/session.py:54` returns the original request object instead of a redirect-modified request. The redirect URL is validated via `validate_url_safe(location)` but the return value is misleading. This is a known issue.
 
 ### MetricsCollector Method Names
 The `MetricsCollector` in `services/metrics.py` uses these method names:

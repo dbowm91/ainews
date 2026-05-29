@@ -17,6 +17,9 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
   - `CondensedArticle` uses `headline`, `tldr`, `body` (not `title`, `summary`, `word_count`)
   - `NewsletterBrief` uses `themes`, `highlights`, `connections` (not `newsletter_id`, `subject`)
 - **PipelineLog meta field:** Uses `meta` (not `metadata`) due to SQLAlchemy reserved name restriction.
+- **Admin Schemas:** `schemas/admin.py` contains: `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`.
+- **LLM Config Schemas:** `schemas/llm.py` contains: `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig`, `load_providers_config()`.
+- **SendEmailTask validator:** `SendEmailTask` in `schemas/tasks.py:59-70` HAS an email validator (`@field_validator("email")` using `_EMAIL_RE`). Do NOT document it as lacking validation.
 
 ## Adapter Config Validation (FIXED - CRIT-3)
 `SourceConfig.config` in `schemas/source.py` now has a `field_validator` that validates `config` against the appropriate adapter schema (RSSConfig, APIConfig, or WebConfig) based on `type`. The `ADAPTER_CONFIGS` dict at line 98-102 maps type to config class.

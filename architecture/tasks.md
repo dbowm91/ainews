@@ -63,6 +63,8 @@ Beyond simple success/failure, each stage has quality gates that can route artic
 
 ## Core Tasks
 
+**Retry Configuration:** All pipeline tasks use `max_retries=CELERY_TASK_MAX_RETRIES` from `constants.py` (default: 3, configurable via `CELERY_TASK_MAX_RETRIES` environment variable). This allows tuning retry behavior without code changes.
+
 ### Crawl Task (`crawl.py`)
 
 ```python

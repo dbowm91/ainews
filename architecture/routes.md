@@ -34,7 +34,14 @@ routes/
         ├── webhooks.py    # Webhook management
         ├── config.py      # Configuration management
         ├── audit.py       # Audit log access
-        └── health.py      # Health check endpoints
+        ├── health.py      # Health check endpoints
+        ├── alerts.py      # Alerting API
+        ├── newsletter.py  # Newsletter performance API
+        ├── quality.py     # Quality report API
+        ├── replay.py      # Pipeline replay API
+        ├── source_intelligence.py  # Source intelligence API
+        ├── topic_gap.py   # Topic gap analysis API
+        └── utils.py       # API utility functions
 ```
 
 ## Blueprint Structure

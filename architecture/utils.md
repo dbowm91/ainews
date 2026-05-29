@@ -39,7 +39,13 @@ def escape_prompt_data(data: dict) -> dict:
 
 ```python
 def parse_date(date_str: str) -> datetime | None:
-    """Parse various date formats"""
+    """Parse various date formats.
+
+    Handles ISO 8601, RFC 2822, and other common formats.
+    Naive datetimes (without timezone info) automatically get UTC
+    appended via dt.replace(tzinfo=timezone.utc) to ensure consistent
+    timezone handling throughout the application.
+    """
 
 def format_date(dt: datetime) -> str:
     """Format datetime as human-readable relative or absolute date.

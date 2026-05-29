@@ -16,6 +16,7 @@ The `models/` package contains SQLAlchemy database models defining the data laye
 | `tag.py` | `Tag`, `article_tags` | Topic/category tags with many-to-many association |
 | `search.py` | `SearchQuery` | Search analytics |
 | `audit.py` | `AuditLog` | Admin action audit trail |
+| `quality.py` | `QualityReport` | Persisted editorial quality verification reports |
 | `share.py` | `ShareConfig` | Social sharing platform configuration |
 
 ## Key Relationships
@@ -292,6 +293,51 @@ class TopicNote(Base):
     __table_args__ = (UniqueConstraint("topic", "source", name="uq_topic_source"),)
 ```
 
+## QualityReport
+
+Persisted editorial quality verification reports generated during the edit stage:
+
+```python
+class QualityReport(Base):
+    __tablename__ = 'quality_reports'
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, ForeignKey('articles.id', ondelete='CASCADE'), nullable=False, index=True)
+    article_version_id = Column(Integer, ForeignKey('article_versions.id', ondelete='CASCADE'), nullable=True, index=True)
+    stage = Column(String(32), nullable=False, default='edit')
+
+    # Quality scores (0.0-1.0)
+    overall_score = Column(Float, nullable=False, default=0.0)
+    groundedness = Column(Float, nullable=True)
+    coherence = Column(Float, nullable=True)
+    completeness = Column(Float, nullable=True)
+    safety = Column(Float, nullable=True)
+    citation_score = Column(Float, nullable=True)
+    claim_score = Column(Float, nullable=True)
+
+    # Gate results
+    passed = Column(Boolean, nullable=False, default=False, index=True)
+    needs_review = Column(Boolean, nullable=False, default=True, index=True)
+
+    # Detailed findings and metadata
+    findings = Column(JSON, nullable=False, default=list)  # List of quality issues found
+    meta = Column(JSON, nullable=False, default=dict)  # Additional metadata
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    # Relationships
+    article = relationship("Article", backref=backref("quality_reports", lazy="dynamic"))
+    article_version = relationship("ArticleVersion", backref=backref("quality_reports", lazy="dynamic"))
+
+    # Composite indexes
+    __table_args__ = (
+        Index("ix_quality_reports_article_stage", "article_id", "stage"),
+        Index("ix_quality_reports_created", "created_at"),
+    )
+```
+
+**Quality Gate Routing:** Failed quality reports (where `passed=False` or `needs_review=True`) route articles to `review` for manual inspection. The `build_quality_report()` function in `services/quality_report.py` evaluates article quality and the edit stage task (`tasks/edit.py:378-419`) uses the report to decide whether to route to `review` or proceed to `done`.
+
 ## Indexes
 
 Key indexes for query performance:
@@ -309,3 +355,4 @@ Key indexes for query performance:
 - `Source`: unique constraint on `source_key`, index on `active`, index on `consecutive_failures`, index on `disabled_at`
 - `PipelineRun`: index on `run_type`, composite index on `(run_type, status)`, index on `started_at`
 - `TrendMemory`: indexes on `(topic, importance)`, `expires_at`, `last_accessed_at`
+- `QualityReport`: composite index on `(article_id, stage)`, index on `created_at`

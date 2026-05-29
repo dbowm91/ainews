@@ -359,6 +359,13 @@ class SendEmailTask(BaseModel):
     html: str = Field(..., min_length=1, description="Email HTML body")
     unsub_url: str = Field(..., min_length=1, description="Unsubscribe URL")
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not _EMAIL_RE.match(v):
+            raise ValueError(f"Invalid email format: {v}")
+        return v
+
 class CleanupArticleVersionsTask(BaseModel):
     days_to_keep: int = Field(default=90, ge=1, le=365, description="Days of versions to retain")
     dry_run: bool = Field(default=False, description="Preview without deleting")

@@ -582,7 +582,7 @@ Each component has a dedicated document for detailed exploration. Click any link
 ### Pipeline & AI
 
 - **[pipeline.md](pipeline.md)** — Article pipeline stages, newsletter generation flow (3-stage LLM), scheduled tasks, degradation behavior, two-tier retry system, circuit breaker
-- **[subagent.md](subagent.md)** — Tool registry (9 built-in tools), runner with tool loop, chain system with conditions, middleware, error handling
+- **[subagent.md](subagent.md)** — Tool registry (14 built-in tools), runner with tool loop, chain system with conditions, middleware, error handling
 - **[llm-providers.md](llm-providers.md)** — BaseLLMProvider interface, provider implementations, fallback chain, circuit breaker, retry with backoff, cost tracking
 - **[search-providers.md](search-providers.md)** — Provider registry, DuckDuckGo/Hybrid/Google/SearxNG, FTS5 article search, hybrid search
 - **[prompts.md](prompts.md)** — Prompt template system, stage-specific prompts, context truncation, A/B experiment variants

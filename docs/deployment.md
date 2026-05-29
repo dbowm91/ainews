@@ -12,7 +12,7 @@ Deploy ainews to a production server using Docker (recommended) or bare metal wi
 ### Quick Deploy
 
 ```bash
-git clone https://github.com/yourorg/ainews.git
+git clone https://github.com/dbowm91/ainews.git
 cd ainews
 cp .env.example .env
 ```
@@ -153,12 +153,11 @@ sudo systemctl enable --now redis-server
 ```bash
 sudo -u ainews -i
 cd /opt/ainews
-git clone https://github.com/yourorg/ainews.git .
+git clone https://github.com/dbowm91/ainews.git .
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install granian
+uv sync
+uv pip install "granian>=1.0.0,<2"
 ```
 
 #### 3. Configure
@@ -183,7 +182,7 @@ sudo systemctl start ainews-web ainews-celery-worker ainews-celery-beat
 
 | Service | Description | Memory Limit |
 |---------|-------------|-------------|
-| `ainews-web` | Granian WSGI server | 1 GB |
+| `ainews-web` | Granian ASGI server | 1 GB |
 | `ainews-celery-worker` | Celery task processor | 2 GB |
 | `ainews-celery-beat` | Celery beat scheduler | 512 MB |
 
@@ -349,7 +348,7 @@ Group=ainews
 WorkingDirectory=/opt/ainews
 Environment="PATH=/opt/ainews/.venv/bin"
 Environment="FLASK_CONFIG=production"
-ExecStart=/opt/ainews/.venv/bin/granian --host 127.0.0.1 --port 5000 --workers 5 --threading --interface wsgi app:app
+ExecStart=/opt/ainews/.venv/bin/granian --host 127.0.0.1 --port 5000 --workers 5 --threads 4 --interface asgi run:app
 Restart=always
 RestartSec=5
 MemoryMax=1G
@@ -448,7 +447,7 @@ services:
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -611,7 +610,7 @@ sudo -u ainews git pull origin main
 # Activate virtual environment and update dependencies
 sudo -u ainews -i
 source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 deactivate
 
 # Restart services

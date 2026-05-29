@@ -1,6 +1,6 @@
 [Unit]
 Description=ainews Celery Beat Scheduler
-Documentation=https://github.com/yourorg/ainews
+Documentation=https://github.com/dbowm91/ainews
 After=network.target redis.service
 Requires=redis.service
 

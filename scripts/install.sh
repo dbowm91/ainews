@@ -8,7 +8,7 @@ APP_NAME="ainews"
 APP_USER="ainews"
 APP_GROUP="ainews"
 APP_DIR="/opt/ainews"
-REPO_URL="${REPO_URL:-https://github.com/yourorg/ainews.git}"
+REPO_URL="${REPO_URL:-https://github.com/dbowm91/ainews.git}"
 
 # Default flags
 PULL_OLLAMA=false
@@ -116,9 +116,9 @@ sudo -u "$APP_USER" python3.12 -m venv "$APP_DIR/.venv"
 # 6. Install Python dependencies
 # -------------------------------------------------------
 log_info "Installing Python dependencies..."
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install --upgrade pip
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install granian
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install uv
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/uv" sync --frozen --no-dev
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/uv" pip install "granian>=1.0.0,<2"
 
 # -------------------------------------------------------
 # 7. Create directories

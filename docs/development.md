@@ -13,7 +13,7 @@ Welcome to the ainews development team. This guide will help you set up your loc
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/yourorg/ainews.git
+git clone https://github.com/dbowm91/ainews.git
 cd ainews
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -96,7 +96,7 @@ ainews/
 ├── celery_support.py       # Celery support utilities
 ├── constants.py            # Shared constants
 ├── extensions.py           # Flask extensions (db, redis, etc.)
-├── models.py               # SQLAlchemy models
+├── models/                # SQLAlchemy models (article, source, newsletter, etc.)
 ├── routes/                 # Flask route handlers
 │   ├── admin/             # Admin panel routes
 │   └── public/            # Public-facing routes
@@ -127,7 +127,7 @@ ainews/
 | `routes/` | HTTP request handlers |
 | `services/` | Business logic and external integrations |
 | `tasks/` | Celery background tasks |
-| `models.py` | Database schema |
+| `models/` | Database models package |
 | `schemas/` | Configuration and data validation |
 
 ---
@@ -302,10 +302,8 @@ MONITOR
 Articles flow through stages:
 
 ```
-Research → Write → Edit → Newsletter
+Select → Research → Write → Edit → Newsletter
 ```
-
-Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is integrated into the research phase.
 
 Each stage is a Celery task that can retry independently. On failure, the article enters a retry queue with exponential backoff.
 
@@ -415,12 +413,10 @@ class MyProviderAdapter(BaseLLMProvider):
 Articles flow through stages:
 
 ```
-research → write → edit → newsletter
-    ↓        ↓       ↓
- failed   failed  failed
+select → research → write → edit → newsletter
+   ↓        ↓        ↓       ↓
+failed    failed   failed  failed
 ```
-
-Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is integrated into the research phase. Articles start in `pending` status and transition to `researching`.
 
 Each stage is a Celery task with independent retry budget.
 
@@ -428,7 +424,8 @@ Each stage is a Celery task with independent retry budget.
 
 | Stage | Description | Quality Gate |
 |-------|-------------|------------|
-| `research` | LLM evaluates newsworthiness, selects articles, compiles research brief | Min score >= 6 |
+| `select` | LLM evaluates newsworthiness and scores articles | Min score >= 6 |
+| `research` | LLM compiles research brief with sources and context | Degenerate brief check |
 | `write` | LLM drafts condensed article in Smart Brevity style | Min 500 char body |
 | `edit` | LLM reviews, polishes, assigns tags | Schema validation |
 

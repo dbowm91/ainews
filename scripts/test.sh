@@ -34,7 +34,8 @@ fi
 source .venv/bin/activate
 
 # Ensure dev dependencies are installed
-pip install -q -r requirements-dev.txt 2>/dev/null
+.venv/bin/pip install uv -q 2>/dev/null
+.venv/bin/uv sync --all-extras 2>/dev/null
 
 echo "Running tests..."
 echo "===================="

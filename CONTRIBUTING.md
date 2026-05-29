@@ -1,4 +1,4 @@
-# Contributing to ainews//
+# Contributing to ainews
 
 ## Prerequisites
 
@@ -10,21 +10,20 @@
 
 ```bash
 # Clone and enter the repo
-git clone <repo-url> && cd ainews
+git clone https://github.com/dbowm91/ainews.git && cd ainews
 
-# Create virtual environment and install dependencies
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+# Install dependencies (requires [uv](https://docs.astral.sh/uv/getting-started/installation/))
+uv sync
 
 # Copy environment template
 cp .env.example .env
 # Edit .env with your config (SECRET_KEY, ADMIN_PASSWORD, SMTP settings, etc.)
 
 # Run database migrations
-.venv/bin/flask db upgrade
+uv run flask db upgrade
 
 # Start the development server
-.venv/bin/python run.py
+uv run python run.py
 ```
 
 ## Running Tests
@@ -68,10 +67,10 @@ See [AGENTS.md](AGENTS.md) for detailed conventions. Key points:
 ```
 ├── app.py              # Flask app factory
 ├── config.py           # Configuration classes
-├── models.py           # SQLAlchemy models
+├── models/             # SQLAlchemy models (article, source, newsletter, etc.)
 ├── routes/             # HTTP route handlers
 │   ├── admin/          # Admin panel routes
-│   └── public.py       # Public-facing routes
+│   └── public/         # Public-facing routes
 ├── services/           # Business logic
 ├── tasks/              # Celery task definitions
 ├── schemas/            # Pydantic schemas and config loading
@@ -82,9 +81,7 @@ See [AGENTS.md](AGENTS.md) for detailed conventions. Key points:
 
 ## Pipeline
 
-The article pipeline flows: **research → write → edit → done** (or **review**).
-
-Note: `PipelineStatus.SELECTING` is deprecated and removed; selection logic is now integrated into the research phase. Articles transition from `pending` to `researching`.
+The article pipeline flows: **select → research → write → edit → done** (or **review**).
 
 Each stage runs as an independent Celery task. Pipeline status is tracked in the `Article.pipeline_status` column using constants from `PipelineStatus` in `constants.py`.
 
@@ -94,3 +91,7 @@ Each stage runs as an independent Celery task. Pipeline status is tracked in the
 2. Make your changes following the conventions above
 3. Run linting and tests to verify
 4. Submit a pull request with a clear description of the changes
+
+## Security
+
+To report security vulnerabilities, see [SECURITY.md](SECURITY.md). Do not disclose vulnerabilities in public issues.

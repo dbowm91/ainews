@@ -312,7 +312,7 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
 ### Contact
 
-For security issues, contact: security@example.com
+Report security vulnerabilities privately via [GitHub Private Vulnerability Reporting](https://github.com/dbowm91/ainews/security/advisories/new). Do not disclose vulnerabilities in public issues.
 
 ---
 
@@ -336,11 +336,11 @@ For security issues, contact: security@example.com
 Run security checks before deployment:
 
 ```bash
-# Check for exposed secrets
-.venv/bin/ruff check . --select= secrets
+# Check for exposed secrets (install: https://github.com/gitleaks/gitleaks)
+gitleaks detect --source . --no-git
 
 # Dependency audit
-pip audit
+pip-audit
 ```
 
 ---

@@ -48,14 +48,12 @@ ollama pull qwen3:8b
 
 ### 1. Clone and install
 
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or pip.
+
 ```bash
-git clone https://github.com/yourorg/ainews.git
+git clone https://github.com/dbowm91/ainews.git
 cd ainews
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+uv sync
 ```
 
 ### 2. Configure environment

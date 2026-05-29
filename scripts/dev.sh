@@ -46,9 +46,8 @@ check_deps() {
     if [ ! -d "$PROJECT_DIR/.venv" ]; then
         log_warn "Virtual environment not found. Creating..."
         python3 -m venv "$PROJECT_DIR/.venv"
-        "$PROJECT_DIR/.venv/bin/pip" install --upgrade pip -q
-        "$PROJECT_DIR/.venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt" -q
-        "$PROJECT_DIR/.venv/bin/pip" install -r "$PROJECT_DIR/requirements-dev.txt" -q
+        "$PROJECT_DIR/.venv/bin/pip" install uv -q
+        "$PROJECT_DIR/.venv/bin/uv" sync --all-extras
         log_info "Virtual environment created and dependencies installed"
     fi
 

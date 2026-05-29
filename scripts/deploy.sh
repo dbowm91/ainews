@@ -67,7 +67,8 @@ if $ROLLBACK; then
 
     sudo -u "$APP_USER" git checkout "$PREV_COMMIT"
 
-    sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r requirements.txt -q
+    sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install uv -q
+    sudo -u "$APP_USER" "$APP_DIR/.venv/bin/uv" sync --frozen --no-dev
 
     for service in "${SERVICES[@]}"; do
         if systemctl is-enabled "$service" &>/dev/null; then
@@ -153,8 +154,8 @@ log_info "Deploying commit: $NEW_COMMIT - $COMMIT_MSG"
 # 5. Install dependencies
 # -------------------------------------------------------
 log_info "Installing dependencies..."
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install --upgrade pip -q
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r requirements.txt -q
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install uv -q
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/uv" sync --frozen --no-dev
 
 # Install granian if not present
 if ! sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" show granian &>/dev/null; then

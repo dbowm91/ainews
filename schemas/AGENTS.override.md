@@ -29,3 +29,13 @@ Use `resolve_env_var()` from `schemas/common.py` for `${ENV_VAR}` placeholders i
 
 ## Known Bugs (OPEN)
 - **ProcessItemTask topics validation:** `ProcessItemTask.topics` at `schemas/tasks.py:99` is a `list[str]` with no `max_length` constraint. Other schemas like `SelectArticleTask` have `validate_topics` validators. Add a similar validator or `max_length` constraint.
+
+## Architecture Documentation Review Findings
+
+When reviewing or updating `architecture/schemas.md`:
+- **`RoleConfig` is missing entirely** - not documented at all despite having `enabled: bool = True` field and role-specific optional fields
+- **`ReviewConfig` is missing** - exists at `schemas/pipeline.py:35-41` but not documented
+- **`SubagentStageConfig` fields not enumerated** - 13 fields at `schemas/pipeline.py:93-105` with `max_iterations: int = Field(default=5, ge=1, le=20)`
+- **Role-specific optional fields** at `schemas/pipeline.py:24-32` include: `system_prompt`, `min_score` (selector), `web_search`, `web_search_max_results`, `web_search_provider`, `db_related_max`, `max_article_text_length` (researcher), `max_key_points` (writer), `max_tags` (editor)
+
+When updating architecture documentation, verify claims against `schemas/pipeline.py` directly.

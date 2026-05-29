@@ -35,6 +35,15 @@ These error dicts are returned directly without proper error handling - callers 
 - **PipelineLog meta field:** The model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
 - **Missing Article import in replay.py:** `routes/admin/api/replay.py` uses `Article` model in `get_pipeline_history()` but never imports it. Will cause `NameError` at runtime. Add `from models import Article` at module level.
 
+## Architecture Documentation Review Findings
+
+When reviewing or updating `architecture/tasks.md`:
+- **Selector retry_max=20:** Already correctly documented at line 118 - uses `retry_max=20` in `run_stage()` (vs default 15)
+- **degradation_count >= 2:** Already correctly documented at line 201 - means 2 stages have failed (not 2 retries of same stage)
+- **_degrade_and_advance location:** CORRECTLY attributed to `services/pipeline_degradation.py` with alias - NOT in `tasks/pipeline.py`. The `tasks/__init__.py:13` and `tasks/retry.py:46` import it via `from services.pipeline_degradation import degrade_stage as _degrade_and_advance`
+
+When updating architecture documentation, verify function locations against actual import statements.
+
 ## run_stage Signature
 The `run_stage()` function in `tasks/pipeline.py:389-442` has 8 parameters:
 ```python

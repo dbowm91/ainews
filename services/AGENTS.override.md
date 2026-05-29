@@ -45,13 +45,13 @@
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
 - **Tool Count:** 14 tools total (12 context + 2 search). Registered in `services/subagent/tools.py:306-603`.
 - **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions. Uses `copy.deepcopy(tool.fn)`.
-- **Self-Correction Mechanism:** `run_subagent_with_tools()` at lines 401-417 implements a `self_corrected` flag that retries on `ValidationError`. The LLM is given a chance to self-correct its output.
-- **_format_subagent_prompt() Helper:** `services/subagent/utils.py` helper function used by `run_subagent_with_tools()` for template formatting with error recovery. Not extensively documented elsewhere.
+- **Self-Correction Mechanism:** `run_subagent_with_tools()` at lines 401-417 implements a `self_corrected` flag that retries on `ValidationError`. The LLM is given a chance to self-correct its output. This mechanism is NOT well documented in `architecture/subagent.md`.
+- **_format_subagent_prompt() Helper:** `services/subagent/utils.py:30` helper function used by `run_subagent_with_tools()` for template formatting with error recovery. Not documented in `architecture/subagent.md`.
 - **Subagent Chain steps parameter:** `run_subagent_chain()` in `services/subagent/chain.py:62` properly uses passed `steps` parameter or falls back to `chain_config.steps`.
 - **Middleware Chain Order:** The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`. Application order is reversed: ErrorHandling applied first (innermost), Logging applied last (outermost).
 - **ErrorHandlingMiddleware:** Applied at `services/subagent/runner.py:344` to handle errors during tool execution. Note: It re-raises exceptions after logging, does NOT return error dicts.
 - **run_stage signature:** `tasks/pipeline.py:353-362` - Selector stage uses `retry_max=20` (hardcoded in `tasks/select.py:202`), not the default 15.
-- **max_iterations default:** Both `run_subagent()` and `run_subagent_with_tools()` default `max_iterations` to 5 when not specified in stage_config.
+- **max_iterations default:** Both `run_subagent()` and `run_subagent_with_tools()` default `max_iterations` to 5 when not specified in stage_config. NOT explicitly documented in `architecture/subagent.md`.
 
 ## Dual-Provider Search Architecture
 The search system has two parallel provider systems:
@@ -83,6 +83,21 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 ## Known Bugs (OPEN)
 - **ResponseCache pubsub leak:** `ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, `pubsub.close()` is never called. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block. Fix: add `pubsub.close()` in the finally block.
 
+## Architecture Review Process
+
+When conducting architecture reviews or updating documentation:
+1. **Always verify against actual codebase** - documentation claims may be stale
+2. **Check file existence before claiming bugs** - some "missing" items already exist
+3. **Verify function calls, not just definitions** - "dead code" claims need call-site verification
+4. **File naming discrepancies** - use actual filenames (e.g., `services/quality_report.py` not `quality_report_service.py`)
+
+Example verification pattern:
+```bash
+# Always verify file existence and content
+ls -la architecture/*.md
+grep -n "function_name" services/*.py
+```
+
 ## Fixed Bug Patterns
 
 The following bugs were previously encountered and fixed - do not re-fix these:
@@ -99,3 +114,6 @@ retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, Conne
 step_list = steps if steps is not None else chain_config.steps
 for i, step_config in enumerate(step_list[:max_length]):
 ```
+
+### _get_dns_cache_config() IS Called
+The claim that `_get_dns_cache_config()` in `services/url.py` is "dead code" is incorrect. The function IS called at line 123 via the `_get_dns_cache()` call chain within `validate_url_safe()`. Both `utils/url.py` and `services/url.py` use hardcoded cache values, but the config function exists and is invoked.

@@ -27,3 +27,13 @@ The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. Th
 ## Known Bugs (OPEN)
 
 - **Missing Article import in replay.py:** `routes/admin/api/replay.py` uses `Article` model in `get_pipeline_history()` but never imports it. Will cause `NameError` at runtime. Add `from models import Article` at module level.
+
+## Architecture Documentation Review Findings
+
+When reviewing or updating `architecture/routes.md`:
+- **Triple-listing issue:** `/articles/counts-by-status` endpoint appears 3 times in documentation (lines 115, 215, 311) - should appear only once
+- **CSRF protection mechanism:** Document mentions Flask-WTF tokens but doesn't document `X-CSRFToken` header via `@validate_csrf_json` decorator for JSON API endpoints
+- **Global default rate limit:** Not specified - actual default is `60 per minute` (configurable via `RATELIMIT_DEFAULT` env var)
+- **api_tokens_bp registered correctly:** The blueprint IS registered in `app.py` WITHOUT `url_prefix` - routes at `/api-tokens/*`
+
+When updating architecture documentation, verify route paths against actual route decorators in `routes/admin/` and `routes/public/`.

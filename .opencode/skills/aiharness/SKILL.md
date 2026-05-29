@@ -38,7 +38,16 @@ Providers are registered in `providers.yaml` and loaded via `services/llm/__init
 - `get_topic_notes_for_topics(topics)` — batch topic note lookup
 - `get_related_articles(topics, exclude_id, limit)` — related article search
 - `get_trend_memory(topics, min_importance, max_age_days)` — tiered trend memory retrieval
-- `search_web(query, max_results)` — web search
+- `get_article_by_id(article_id)` — fetch article metadata by ID
+- `search_articles(query, limit)` — search articles by query
+- `get_source_health()` — get source status summaries
+- `get_topic_gap_report()` — analyze topic coverage gaps
+- `get_source_performance()` — get source performance metrics
+- `get_quality_report()` — get article quality report
+- `find_dedupe_candidates()` — find potential duplicate articles
+- `estimate_stage_cost()` — estimate LLM cost for a pipeline stage
+- `search_web(query, max_results)` — external web search
+- `get_search_provider()` — get configured search provider
 
 **Tool registration pattern:**
 ```python

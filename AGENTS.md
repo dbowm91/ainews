@@ -282,6 +282,9 @@ The search providers are:
 ### DeepSeek Provider Status
 DeepSeek is NOT a search provider - it only appears as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends and in `adapters/base.py` for URL sanitization. Do not add DeepSeek to search provider documentation without implementing `services/search/deepseek.py`.
 
+### Search Config Section Name
+The search provider configuration in `providers.yaml` uses the key `search_providers:` (plural), NOT `search:`. Google env vars are `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` (not `GOOGLE_SEARCH_API_KEY`/`GOOGLE_SEARCH_CX`).
+
 ## Shared Context
 
 Agents should use the nested `AGENTS.override.md` files in subdirectories for more specific instructions related to those modules:

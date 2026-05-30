@@ -11,7 +11,6 @@ def _reset_singletons():
     for module_name, attr, default in [
         ("services.config_cache", "_cache_instance", None),
         ("services.cache", "_cache_instance", None),
-        ("services.metrics", "_metrics_instance", None),
         ("schemas.common", "_warned_missing_vars", None),
         ("services.config_unified", "_instance", None),
     ]:
@@ -63,8 +62,12 @@ def _set_celery_task_secret(monkeypatch):
 @pytest.fixture(autouse=True)
 def _reset_redis():
     """Reset the global Redis singleton and config cache between tests."""
+    from services.metrics import reset_metrics
+    reset_metrics()
     _reset_singletons()
     yield
+    from services.metrics import reset_metrics
+    reset_metrics()
     _reset_singletons()
 
 

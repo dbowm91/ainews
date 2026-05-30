@@ -267,7 +267,7 @@ class TestAdminHealth:
 
     def test_health_requires_auth(self, client):
         resp = client.get("/api/v1/health")
-        assert resp.status_code == 302
+        assert resp.status_code == 401
 
     def test_health_returns_json(self, client, app, hashed_password):
         from extensions import db

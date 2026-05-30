@@ -49,7 +49,7 @@ class TestDuckDuckGoProvider:
 
     @patch("duckduckgo_search.DDGS")
     def test_search_graceful_failure(self, mock_ddgs_class):
-        mock_ddgs_class.side_effect = Exception("DDG down")
+        mock_ddgs_class.side_effect = ConnectionError("DDG down")
 
         provider = DuckDuckGoSearchProvider("duckduckgo", {})
         results = provider.search("test query")
@@ -93,9 +93,13 @@ class TestGoogleProvider:
         assert len(results) == 1
         assert results[0].title == "Google Result"
 
-    @patch("requests.get")
-    def test_search_graceful_failure(self, mock_get):
-        mock_get.side_effect = Exception("API down")
+    @patch("services.search.session.get_session")
+    def test_search_graceful_failure(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = ConnectionError("API down")
+        mock_session.get.return_value = mock_response
+        mock_get_session.return_value = mock_session
 
         provider = GoogleSearchProvider(
             "google",
@@ -140,7 +144,7 @@ class TestSearXNGProvider:
     @patch("services.url.validate_url_safe")
     def test_search_graceful_failure(self, mock_validate, mock_get_session):
         mock_validate.return_value = None
-        mock_get_session.side_effect = Exception("SearXNG down")
+        mock_get_session.side_effect = ConnectionError("SearXNG down")
 
         provider = SearXNGSearchProvider("searxng", {"host": "http://localhost:8888"})
         results = provider.search("test")

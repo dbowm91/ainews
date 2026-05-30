@@ -39,6 +39,21 @@ class RSSConfig(BaseModel):
     )
 
 
+
+class PaginationConfig(BaseModel):
+    enabled: bool = False
+    type: str = "next_link"
+    next_link_selector: Optional[str] = None
+    max_pages: int = 3
+
+    @field_validator("type")
+    @classmethod
+    def validate_pagination_type(cls, v):
+        if v not in ("next_link", "query_param", "none"):
+            raise ValueError(f"Unknown pagination type '{v}'")
+        return v
+
+
 class APIConfig(BaseModel):
     list_url: str = Field(..., min_length=1)
     list_method: str = "json_array"
@@ -54,20 +69,6 @@ class APIConfig(BaseModel):
     user_agent: str = "AINewsBot/1.0"
     api_key: Optional[str] = None
     auth_header: Optional[str] = None  # Header name; only Bearer auth supported (value always 'Bearer {api_key}')
-
-
-class PaginationConfig(BaseModel):
-    enabled: bool = False
-    type: str = "next_link"
-    next_link_selector: Optional[str] = None
-    max_pages: int = 3
-
-    @field_validator("type")
-    @classmethod
-    def validate_pagination_type(cls, v):
-        if v not in ("next_link", "query_param", "none"):
-            raise ValueError(f"Unknown pagination type '{v}'")
-        return v
 
 
 class ListingConfig(BaseModel):

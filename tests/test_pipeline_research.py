@@ -15,7 +15,7 @@ class TestResearchStage:
                 extracted_text="Some content.",
             )
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "research")
@@ -36,7 +36,7 @@ class TestResearchStage:
             article.retry_count = 3
             article.last_error = "research: timeout"
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "research")
@@ -52,7 +52,7 @@ class TestResearchStage:
                 extracted_text="A" * 1000,
             )
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "research")
@@ -68,7 +68,7 @@ class TestResearchStage:
                 extracted_text="Some content.",
             )
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "researching")
@@ -83,7 +83,7 @@ class TestResearchStage:
                 extracted_text="Text",
             )
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "research")

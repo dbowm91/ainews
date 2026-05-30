@@ -36,7 +36,7 @@ class TestCrawlSource:
             "id": "src1",
             "name": "Source 1",
             "type": "rss",
-            "config": {},
+            "config": {"feed_url": "https://example.com/feed"},
             "schedule_minutes": 5,
         }
         with app.app_context():
@@ -59,7 +59,7 @@ class TestCrawlSource:
                 "id": "src_skip",
                 "name": "Skip Source",
                 "type": "rss",
-                "config": {},
+                "config": {"feed_url": "https://example.com/feed"},
                 "schedule_minutes": 30,
             }
             result = _call_crawl(cfg)
@@ -135,7 +135,7 @@ class TestCrawlSource:
                 "id": "src_err",
                 "name": "Error Source",
                 "type": "rss",
-                "config": {},
+                "config": {"feed_url": "https://example.com/feed"},
                 "schedule_minutes": 5,
             }
             with patch(
@@ -161,7 +161,7 @@ class TestCrawlSource:
                 "id": "src_reacquire",
                 "name": "Reacquire Source",
                 "type": "rss",
-                "config": {},
+                "config": {"feed_url": "https://example.com/feed"},
                 "schedule_minutes": 5,
             }
 

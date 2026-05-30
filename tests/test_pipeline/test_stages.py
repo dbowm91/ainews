@@ -7,7 +7,7 @@ class TestDegradeAndAdvance:
 
     def test_select_degrades_to_research(self, app):
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -16,7 +16,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "select")
 
         assert article.pipeline_status == "researching"
@@ -26,7 +26,7 @@ class TestDegradeAndAdvance:
 
     def test_research_degrades_to_write(self, app):
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -36,7 +36,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "research")
 
         assert article.pipeline_status == "writing"
@@ -45,7 +45,7 @@ class TestDegradeAndAdvance:
 
     def test_write_degrades_to_edit(self, app):
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -57,7 +57,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "write")
 
         assert article.pipeline_status == "editing"
@@ -67,7 +67,7 @@ class TestDegradeAndAdvance:
 
     def test_edit_degrades_to_done(self, app):
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -84,7 +84,7 @@ class TestDegradeAndAdvance:
     def test_normalizes_status_name_researching(self, app):
         """retry_stuck passes 'researching' but _degrade_and_advance checks 'research'."""
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -94,7 +94,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "researching")
 
         assert article.pipeline_status == "writing"
@@ -103,7 +103,7 @@ class TestDegradeAndAdvance:
     def test_normalizes_status_name_writing(self, app):
         """retry_stuck passes 'writing' but _degrade_and_advance checks 'write'."""
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -115,7 +115,7 @@ class TestDegradeAndAdvance:
         article.degradation_count = 0
 
         with app.app_context():
-            with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+            with patch("services.pipeline_degradation._dispatch_next") as mock_dispatch:
                 _degrade_and_advance(article, "writing")
 
         assert article.pipeline_status == "editing"
@@ -124,7 +124,7 @@ class TestDegradeAndAdvance:
     def test_normalizes_status_name_editing(self, app):
         """retry_stuck passes 'editing' but _degrade_and_advance checks 'edit'."""
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1
@@ -139,7 +139,7 @@ class TestDegradeAndAdvance:
 
     def test_resets_retry_state_on_degrade(self, app):
         from models import Article
-        from tasks.pipeline import _degrade_and_advance
+        from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
         article = MagicMock(spec=Article)
         article.id = 1

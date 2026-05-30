@@ -119,7 +119,7 @@ class TestRetryStuck:
         ]
 
         with patch("extensions.db"):
-            with patch("tasks.pipeline._degrade_and_advance") as mock_degrade:
+            with patch("services.pipeline_degradation.degrade_stage") as mock_degrade:
                 result = retry_stuck()
 
         mock_degrade.assert_called_once()
@@ -137,7 +137,7 @@ class TestRetryStuck:
         ]
 
         with patch("extensions.db"):
-            with patch("tasks.pipeline._degrade_and_advance") as mock_degrade:
+            with patch("services.pipeline_degradation.degrade_stage") as mock_degrade:
                 with patch("tasks.retry._dead_letter") as mock_dead:
                     with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
                         result = retry_stuck()

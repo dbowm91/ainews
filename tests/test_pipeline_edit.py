@@ -57,7 +57,7 @@ class TestEditStage:
             article = create_article(pipeline_status="editing")
             article.draft_article = draft
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "edit")
@@ -74,7 +74,7 @@ class TestEditStage:
             article.retry_count = 5
             article.last_error = "edit: some error"
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "edit")
@@ -88,7 +88,7 @@ class TestEditStage:
             article = create_article(pipeline_status="editing")
             article.draft_article = '{"headline": "Test"}'
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "editing")
@@ -102,7 +102,7 @@ class TestEditStage:
             article.draft_article = '{"headline": "Test"}'
 
             with patch("services.pipeline_degradation._should_route_to_review", return_value=True):
-                from tasks.pipeline import _degrade_and_advance
+                from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
                 with patch("extensions.db"):
                     _degrade_and_advance(article, "edit")

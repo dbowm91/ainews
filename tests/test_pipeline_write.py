@@ -56,7 +56,7 @@ class TestWriteStage:
             )
             article.original_author = "Author"
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "write")
@@ -79,7 +79,7 @@ class TestWriteStage:
             )
             article.original_author = "Author"
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "write")
@@ -98,7 +98,7 @@ class TestWriteStage:
             )
             article.original_author = "Jane Doe"
 
-            from tasks.pipeline import _degrade_and_advance
+            from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
             with patch("extensions.db"):
                 _degrade_and_advance(article, "write")

@@ -467,7 +467,7 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 
 ## Implementation History
 
-The implementation plan (plans/plan.md) was completed in 2026-05. Key features implemented include:
+Key features implemented (2026-05):
 - LLM batching, semantic search optimization, prompt caching
 - Database indexes, inline Lua login lockout, request_id in error responses
 - Security hardening (lxml upgrade, file permissions, password docs)
@@ -478,8 +478,6 @@ The implementation plan (plans/plan.md) was completed in 2026-05. Key features i
 - Wave 7: Implemented missing utils modules (datetime, text, security, hash, html)
 - Wave 7: Removed DeepSeek references (not implemented), filled RSS adapter gaps
 - Wave 8: Fixed documentation drift across pipeline, subagent, schemas, models, routes, utils
-
-All planned improvements are complete.
 
 ## Code Quality Workflow
 

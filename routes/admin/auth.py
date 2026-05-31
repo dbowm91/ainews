@@ -8,7 +8,10 @@ from models import AdminUser
 from routes import limit_content_length
 from routes.admin import (
     _check_and_record_attempt,
+    _check_and_record_2fa_attempt,
+    _clear_2fa_attempts,
     _clear_attempts,
+    _is_2fa_locked_out,
     _verify_password,
     admin_bp,
 )
@@ -103,18 +106,31 @@ def verify_2fa() -> str | Response:
     if not session.get("partial_login"):
         return redirect(url_for("admin.login"))
 
+    ip = session.get("ip", request.remote_addr or "unknown")
     error = None
     admin_user = AdminUser.query.filter_by(username="admin").first()
+
+    # Check if 2FA is locked out
+    if _is_2fa_locked_out(ip):
+        error = "Too many failed 2FA attempts. Try again later."
+        try:
+            from services.audit import log_admin_action
+
+            log_admin_action("admin_2fa_locked_out", user="admin", details={"ip": ip})
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to log 2FA lockout: %s", e)
+        return render_template("admin/verify_2fa.html", error=error), 429
 
     if request.method == "POST":
         token = request.form.get("token", "")
         backup_code = request.form.get("backup_code", "")
 
-        if admin_user and admin_user.totp_secret and verify_token(admin_user.totp_secret, token):
+        if admin_user and admin_user.totp_secret and token and verify_token(admin_user.totp_secret, token):
+            _clear_2fa_attempts(ip)
             session.clear()
             session["admin"] = True
-            session["ip"] = session.get("ip")
-            session["user_agent"] = session.get("user_agent")
+            session["ip"] = ip
+            session["user_agent"] = request.headers.get("User-Agent", "")
             try:
                 from services.audit import log_admin_action
 
@@ -125,6 +141,7 @@ def verify_2fa() -> str | Response:
 
         if admin_user and admin_user.backup_codes and backup_code:
             if verify_backup_code(admin_user.backup_codes, backup_code):
+                _clear_2fa_attempts(ip)
                 new_codes = consume_backup_code(admin_user.backup_codes, backup_code)
                 if new_codes is not None:
                     admin_user.backup_codes = new_codes
@@ -133,8 +150,8 @@ def verify_2fa() -> str | Response:
                     db.session.commit()
                 session.clear()
                 session["admin"] = True
-                session["ip"] = session.get("ip")
-                session["user_agent"] = session.get("user_agent")
+                session["ip"] = ip
+                session["user_agent"] = request.headers.get("User-Agent", "")
                 try:
                     from services.audit import log_admin_action
 
@@ -144,6 +161,17 @@ def verify_2fa() -> str | Response:
                 return redirect(url_for("admin.dashboard"))
             error = "Invalid backup code"
 
+        # Record failed 2FA attempt
+        locked = _check_and_record_2fa_attempt(ip)
+        if locked:
+            error = "Too many failed 2FA attempts. Try again later."
+            try:
+                from services.audit import log_admin_action
+
+                log_admin_action("admin_2fa_locked_out", user="admin", details={"ip": ip})
+            except Exception as e:  # noqa: BLE001
+                logger.error("Failed to log 2FA lockout: %s", e)
+            return render_template("admin/verify_2fa.html", error=error), 429
         error = "Invalid 2FA token"
     return render_template("admin/verify_2fa.html", error=error)
 
@@ -158,11 +186,13 @@ def setup_2fa() -> str | Response:
         return redirect(url_for("admin.dashboard"))
 
     error = None
+    backup_codes = None
     if request.method == "POST":
         token = request.form.get("token", "")
         if admin_user.totp_secret and verify_token(admin_user.totp_secret, token):
             admin_user.totp_enabled = True
-            admin_user.backup_codes = generate_backup_codes()
+            backup_codes = generate_backup_codes()
+            admin_user.backup_codes = backup_codes
             from extensions import db
 
             db.session.commit()
@@ -172,7 +202,7 @@ def setup_2fa() -> str | Response:
                 log_admin_action("admin_2fa_enabled", user="admin")
             except Exception as e:  # noqa: BLE001
                 logger.error("Failed to log 2FA enable: %s", e)
-            return redirect(url_for("admin.dashboard"))
+            return render_template("admin/setup_2fa.html", qr_uri=None, error=None, backup_codes=backup_codes)
         error = "Invalid 2FA token"
 
     if not admin_user.totp_secret:
@@ -182,7 +212,7 @@ def setup_2fa() -> str | Response:
         db.session.commit()
 
     qr_uri = get_provisioning_uri(admin_user.totp_secret, "admin", "ainews")
-    return render_template("admin/setup_2fa.html", qr_uri=qr_uri, error=error)
+    return render_template("admin/setup_2fa.html", qr_uri=qr_uri, error=error, backup_codes=None)
 
 
 @admin_bp.route("/logout", methods=["POST"])

@@ -107,7 +107,7 @@ def _setup_security(app):
 
     csp = {
         "default-src": "'self'",
-        "style-src": "'self' 'unsafe-inline'",
+        "style-src": "'self'",
         "script-src": "'self'",
         "img-src": "'self' data:",
         "connect-src": "'self'",
@@ -118,7 +118,7 @@ def _setup_security(app):
     Talisman(
         app,
         content_security_policy=csp,
-        content_security_policy_nonce_in=["script-src"],
+        content_security_policy_nonce_in=["script-src", "style-src"],
         frame_options="SAMEORIGIN",
         referrer_policy="strict-origin-when-cross-origin",
         strict_transport_security_max_age=31536000,

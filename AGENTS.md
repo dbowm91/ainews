@@ -400,3 +400,56 @@ The following are documented as intentional and should NOT be "fixed":
 | `tasks/cleanup.py` | Log cleanup, trend memory consolidation |
 | `services/pipeline_degradation.py` | `post_finalize_article()`, `degrade_stage()`, `_finalize()` |
 | `adapters/api.py` | API source adapter with error logging in `_fetch_item` |
+
+## Security Features (Implemented)
+
+### 2FA System
+- **Backup Codes:** 8 alphanumeric codes stored as JSON in `AdminUser.backup_codes`
+- **TOTP Encryption:** Secrets encrypted at rest using Fernet (AES-128-CBC)
+- **Rate Limiting:** 5 failed 2FA attempts triggers 15-minute lockout
+- **Session Regeneration:** `session.clear()` called on all login paths
+
+### CSP Configuration
+- `style-src`: `'self'` (no `unsafe-inline`)
+- `script-src`: `'self'` with nonce support
+- Nonce support for inline styles via `csp_nonce()` function
+
+### Webhook Security
+- **MultiFernet:** Key rotation support via `WEBHOOK_SECRET_KEY_PREVIOUS_1/2` env vars
+- **HMAC Signing:** Payloads signed with timestamp for replay protection
+- **SSRF Protection:** All webhook URLs validated via `validate_url_safe()`
+
+### Rate Limiting
+- **Login:** 5 attempts per 15 minutes (Redis-backed with in-memory fallback)
+- **2FA:** 5 attempts per 15 minutes (separate counter from login)
+- **Limiter Slots:** Provider/model-aware concurrency control with pub/sub waiting
+
+## Performance Features (Implemented)
+
+### Token Budgeting
+- `_budget_tokens()` in `services/prompts.py` truncates prompts exceeding model context limits
+- Integrated into subagent runner before LLM calls
+
+### Database Optimization
+- `Article.metrics` relationship uses `lazy="selectin"` to prevent N+1 queries
+- Indexes on `PipelineRun.status`, `Article.pipeline_status`, `Article.created_at`
+
+### Asset Bundling
+- CSS: `style.bundled.css` (eliminates @import waterfall)
+- JS: `bundle.min.js` (minified app.js + theme.js + toast.js + admin.js)
+- Build script: `scripts/build_assets.py`
+
+### LLM Caching
+- `summarize_context()` results cached for 10 minutes
+- Token counting cached to avoid repeated computation
+
+## Remaining Work
+
+### Wave 5: Quality, Typing & Docs (Medium Priority)
+- **5.1:** Boost test coverage from 62% to 80%
+- **5.2:** Fix 423 Mypy errors
+- **5.3:** Sync OpenAPI documentation with actual routes
+
+### Wave 6: Infrastructure & Polish (Low Priority)
+- **6.1:** Complete Docker hardening (multi-stage builds, read_only filesystem)
+- **6.2:** Add `is_fully_healthy` property to health checks

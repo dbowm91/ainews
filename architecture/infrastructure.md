@@ -171,8 +171,11 @@ def send_welcome_email(email: str, newsletter_type: str, unsubscribe_url: str, .
 - **Connection pooling**: Reuses SMTP connections across sends
 - **Plain-text fallback**: `multipart/alternative` with both plain-text and HTML
 - **HTML-to-plain**: `html_to_plain_text()` for RFC-compliant email
-- **Batched sending**: Newsletter dispatch in batches of 500
-- **Retry logic**: 3 attempts with exponential backoff
+
+Batch sending and retry logic live in `tasks/newsletter.py`, not here:
+
+- **Batched sending**: `_send_emails_parallel()` dispatches via Celery `group()` in batches of 500
+- **Retry logic**: `send_single_email` Celery task uses autoretry for transient SMTP errors; `retry_failed_newsletter_deliveries` re-attempts delivery for previously failed newsletters
 
 ## Health Checks
 
@@ -339,12 +342,18 @@ class CircuitBreaker:
 # services/webhooks.py
 
 def dispatch_webhook(webhook_id, name, url, secret, event_type, event_data, idempotency_key=None) -> tuple[bool, str | None]:
-    """Dispatch webhook event with HMAC signing."""
-    # 1. Find matching webhooks by event_type
-    # 2. Sign payload with HMAC-SHA256
-    # 3. Encrypt secrets at rest (Fernet/AES-128-CBC)
-    # 4. Send with retry + exponential backoff
-    # 5. Log delivery in WebhookEvent model
+    """Dispatch an event to a single webhook endpoint."""
+    # 1. Check idempotency key to prevent duplicate deliveries
+    # 2. Validate target URL (SSRF protection)
+    # 3. Sign payload with HMAC-SHA256
+    # 4. Encrypt/decrypt secrets at rest (Fernet/AES-128-CBC)
+    # 5. Send with retry + exponential backoff (up to 5 attempts)
+    # 6. Log delivery in WebhookEvent model
+
+def trigger_event(event_type, event_data, idempotency_key=None) -> None:
+    """Trigger an event for all active webhooks listening to that event type.
+    Queries active webhooks matching event_type and calls dispatch_webhook()
+    for each one (fanout)."""
 ```
 
 ### Security

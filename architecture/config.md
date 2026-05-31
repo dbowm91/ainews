@@ -535,22 +535,101 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `config.py:
 
 ```python
 class Config:
-    @staticmethod
-    def get_beat_schedule() -> dict:
-        """Build Celery beat schedule from pipeline.yaml."""
-        pipeline_config = load_pipeline_config()
+    @classmethod
+    def get_beat_schedule(cls, pipeline_cfg: dict | None = None) -> dict:
+        """Build beat schedule from pipeline.yaml config."""
+        if pipeline_cfg is None:
+            from schemas.pipeline import load_pipeline_config
+            pipeline_cfg = load_pipeline_config()
+
+        sched = pipeline_cfg.schedule
+        crawl_interval = int(sched.get("crawl_interval_minutes", 30))
+        retry_interval = int(sched.get("retry_stuck_interval_minutes", 60))
+        cleanup_logs_hour = int(sched.get("cleanup_old_logs_hour", 3))
+        cleanup_versions_hour = int(sched.get("cleanup_old_versions_hour", 3))
+        cleanup_expired_interval = int(sched.get("cleanup_expired_verifications_interval_minutes", 15))
+        publish_interval = int(sched.get("publish_scheduled_interval_minutes", 5))
+        cleanup_limiter_interval = int(sched.get("cleanup_stale_limiter_interval_minutes", 5))
+        newsletters_hour = int(sched.get("generate_newsletters_hour", 8))
+        trend_memory_hour = int(sched.get("consolidate_trend_memory_hour", 3))
+        cleanup_subscribers_hour = int(sched.get("cleanup_inactive_subscribers_hour", 1))
+        cleanup_subscribers_minute = int(sched.get("cleanup_inactive_subscribers_minute", 0))
+
         return {
             "run-all-sources": {
                 "task": "tasks.crawl.run_all_sources",
-                "schedule": crontab(minute="*/30"),
+                "schedule": timedelta(minutes=crawl_interval),
+            },
+            "retry-stuck-articles": {
+                "task": "tasks.retry.retry_stuck",
+                "schedule": timedelta(minutes=retry_interval),
             },
             "generate-newsletters": {
                 "task": "tasks.newsletter.generate_daily_newsletters",
-                "schedule": crontab(hour=8, minute=0),  # 8:00 AM ET
+                "schedule": crontab(hour=newsletters_hour, minute=0),
             },
-            # ... 14 scheduled tasks total
+            "cleanup-old-logs": {
+                "task": "tasks.cleanup.cleanup_old_pipeline_logs",
+                "schedule": crontab(hour=cleanup_logs_hour, minute=0),
+            },
+            "consolidate-trend-memory": {
+                "task": "tasks.cleanup.consolidate_trend_memory",
+                "schedule": crontab(hour=trend_memory_hour, minute=30),
+            },
+            "purge-trend-memory": {
+                "task": "tasks.cleanup.purge_trend_memory",
+                "schedule": crontab(hour=trend_memory_hour, minute=45),
+            },
+            "cleanup-old-versions": {
+                "task": "tasks.cleanup.cleanup_old_article_versions",
+                "schedule": crontab(hour=cleanup_versions_hour, minute=45),
+            },
+            "cleanup-expired-verifications": {
+                "task": "tasks.cleanup.cleanup_expired_verifications",
+                "schedule": timedelta(minutes=cleanup_expired_interval),
+            },
+            "publish-scheduled-articles": {
+                "task": "tasks.scheduler.publish_scheduled_articles",
+                "schedule": timedelta(minutes=publish_interval),
+            },
+            "cleanup-stale-limiter-slots": {
+                "task": "tasks.cleanup.cleanup_stale_limiter_slots",
+                "schedule": timedelta(minutes=cleanup_limiter_interval),
+            },
+            "retry-failed-newsletter-deliveries": {
+                "task": "tasks.newsletter.retry_failed_newsletter_deliveries",
+                "schedule": timedelta(hours=2),
+            },
+            "recalculate-impact-scores": {
+                "task": "tasks.cleanup.recalculate_impact_scores",
+                "schedule": crontab(hour=4, minute=0),
+            },
+            "cleanup-inactive-subscribers": {
+                "task": "tasks.subscribers.cleanup_inactive_subscribers",
+                "schedule": crontab(hour=cleanup_subscribers_hour, minute=cleanup_subscribers_minute),
+            },
+            "backfill-embeddings": {
+                "task": "tasks.embeddings.backfill_embeddings",
+                "schedule": crontab(hour=2, minute=0),
+            },
         }
 ```
+
+All 14 tasks are shown above. Configurable values come from `pipeline.yaml` `schedule:` section with defaults in parentheses:
+
+| Config Key | Default | Used By |
+|------------|---------|---------|
+| `crawl_interval_minutes` | 30 | `run-all-sources` (`timedelta`) |
+| `retry_stuck_interval_minutes` | 60 | `retry-stuck-articles` (`timedelta`) |
+| `cleanup_old_logs_hour` | 3 | `cleanup-old-logs` (`crontab`) |
+| `cleanup_old_versions_hour` | 3 | `cleanup-old-versions` (`crontab`) |
+| `cleanup_expired_verifications_interval_minutes` | 15 | `cleanup-expired-verifications` (`timedelta`) |
+| `publish_scheduled_interval_minutes` | 5 | `publish-scheduled-articles` (`timedelta`) |
+| `cleanup_stale_limiter_interval_minutes` | 5 | `cleanup-stale-limiter-slots` (`timedelta`) |
+| `generate_newsletters_hour` | 8 | `generate-newsletters` (`crontab`) |
+| `consolidate_trend_memory_hour` | 3 | `consolidate-trend-memory`, `purge-trend-memory` (`crontab`) |
+| `cleanup_inactive_subscribers_hour` | 1 | `cleanup-inactive-subscribers` (`crontab`) |
+| `cleanup_inactive_subscribers_minute` | 0 | `cleanup-inactive-subscribers` (`crontab`) |
 
 After changing `pipeline.yaml`, call `Config.reload_beat_schedule()` then `POST /api/v1/config/reload` to apply.
 

@@ -13,6 +13,8 @@ The `prompts/` directory contains LLM prompt templates used by pipeline stages. 
 | `prompts/newsletter_reader.txt` | Newsletter | Extract themes from articles |
 | `prompts/newsletter_writer.txt` | Newsletter | Generate newsletter summary |
 | `prompts/newsletter_editor.txt` | Newsletter | Review newsletter for quality |
+| `prompts/subagent_research_synthesis.txt` | Subagent | Synthesize external sources into research context |
+| `prompts/subagent_edit_contextualization.txt` | Subagent | Contextualize draft for editor |
 
 ## Prompt Loading
 
@@ -73,7 +75,7 @@ All prompt data is auto-escaped to prevent XML injection:
 # utils/text.py
 def esc_xml_text(text: str) -> str:
     """Escape text for XML element content.
-    Handles <, >, &, ", ' characters."""
+    Handles <, >, & characters."""
 
 def esc_xml_attr(text: str) -> str:
     """Escape text for XML attribute values."""
@@ -158,7 +160,6 @@ Subagent prompts are defined in `services/subagent/prompt_templates.py`:
 _SUBAGENT_TASK_TEMPLATES = {
     "research_synthesis": "...",
     "edit_contextualization": "...",
-    # Additional templates
 }
 ```
 

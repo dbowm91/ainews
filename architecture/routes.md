@@ -135,6 +135,18 @@ Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 | `/metrics` | GET | Application metrics |
 | `/metrics/prometheus` | GET | Prometheus-formatted metrics |
 | `/audit-logs` | GET | Audit log entries |
+| `/alerts` | GET | Active alerts grouped by severity |
+| `/sources/performance` | GET | Source performance metrics |
+| `/topics/coverage` | GET | Topic coverage distribution |
+| `/sources/recommendations` | GET | Source improvement recommendations |
+| `/topic-gap/reports` | GET | Topic gap analysis reports |
+| `/articles/<id>/quality` | GET | Latest quality report for article |
+| `/quality/recent` | GET | Recent quality reports with filtering |
+| `/articles/<id>/pipeline/history` | GET | Pipeline history for article |
+| `/articles/<id>/pipeline/replay` | POST | Replay article from specific stage |
+| `/articles/<id>/pipeline/restore-version` | POST | Restore article to previous version |
+| `/newsletters/performance` | GET | Newsletter performance metrics |
+| `/search/articles` | GET | Article search with hybrid mode |
 
 **Note:** The `api_tokens_bp` blueprint is registered in `app.py` without a `url_prefix` — routes include the full `/api-tokens` path.
 
@@ -187,10 +199,10 @@ Article routing and tracking:
 def article_detail(article_id): ...
 
 @public_bp.route("/s/<short_id>")
-def short_url(short_id): ...  # Short URL redirect
+def short_url_redirect(short_id): ...  # Short URL redirect
 
 @public_bp.route("/a/<short_id>")
-def article_short(short_id): ...  # Article short URL
+def short_url_tracking_page(short_id): ...  # Article short URL with share tracking
 
 @public_bp.route("/api/v1/track/share-click/<int:article_id>", methods=["POST"])
 def track_share_click(article_id): ...
@@ -237,8 +249,30 @@ JSON REST API at `/api/v1/*`:
 - `GET /api/v1/pipeline/sla` - SLA metrics
 
 #### Newsletters
-- `GET /api/v1/newsletters/stats` - Newsletter delivery stats
-- `POST /api/v1/newsletter/preview` - Preview newsletter
+- `GET /api/v1/newsletters/performance` - Newsletter performance metrics (sent/failed/click counts, top articles, subscriber counts by type)
+
+#### Quality
+- `GET /api/v1/articles/<id>/quality` - Latest quality report for an article (scores, findings by severity)
+- `GET /api/v1/quality/recent` - Recent quality reports (filterable by `passed`, `needs_review`, `limit`)
+
+#### Alerts
+- `GET /api/v1/alerts` - Active alerts grouped by severity (critical/warning/info); also dispatches critical alerts via webhooks
+
+#### Source Intelligence
+- `GET /api/v1/sources/performance` - Source performance metrics within time window (query: `days`, `limit`)
+- `GET /api/v1/topics/coverage` - Topic coverage distribution across sources (query: `days`)
+- `GET /api/v1/sources/recommendations` - Actionable source recommendations (query: `days`)
+
+#### Topic Gap
+- `GET /api/v1/topic-gap/reports` - Topic gap analysis reports (query: `topics`, `days`)
+
+#### Pipeline Replay
+- `GET /api/v1/articles/<id>/pipeline/history` - Pipeline log history for an article
+- `POST /api/v1/articles/<id>/pipeline/replay` - Replay article from a specific stage (body: `stage`, `reason`, optional `provider_id`/`model`)
+- `POST /api/v1/articles/<id>/pipeline/restore-version` - Restore article to a previous version (body: `version_id`)
+
+#### Search
+- `GET /api/v1/search/articles` - Article search with hybrid mode (query: `q`, `mode` [fts/hybrid], `category`, `page`, `per_page`)
 
 #### Webhooks
 - `GET /api/v1/webhooks` - List webhooks
@@ -311,18 +345,46 @@ Templates use a flat directory structure under `templates/`:
 
 ```
 templates/
+├── base.html              # Base layout for public pages
+├── base_admin.html        # Base layout for admin pages
 ├── admin/                 # Admin templates (flat)
 │   ├── dashboard.html     # Main dashboard
+│   ├── login.html         # Admin login page
 │   ├── articles.html      # Article list
 │   ├── article_edit.html  # Article editor
+│   ├── article_versions.html # Article version history
 │   ├── sources.html       # Source management
+│   ├── subscribers.html   # Subscriber management
 │   ├── newsletters.html   # Newsletter history
+│   ├── pipelines.html     # Pipeline run history
+│   ├── pipeline_logs.html # Pipeline run logs
+│   ├── review.html        # Article review queue
+│   ├── topic_notes.html   # Topic notes management
+│   ├── shares.html        # Share config management
+│   ├── webhooks.html      # Webhook management UI
+│   ├── trend_memory.html  # Trend memory management
+│   ├── metrics.html       # Metrics dashboard
+│   ├── dead_letters.html  # Dead letter queue
+│   ├── setup_2fa.html     # 2FA setup page
+│   ├── verify_2fa.html    # 2FA verification page
 │   └── partials/          # Admin partial templates
+│       ├── articles_table.html
+│       ├── source_row.html
+│       ├── topic_note_row.html
+│       ├── share_row.html
+│       ├── share_edit_form.html
+│       ├── review_table.html
+│       ├── webhook_events.html
+│       └── empty_state.html
 ├── partials/              # Public partial templates
 ├── errors/                # Error pages (404, 500, 429)
 ├── macros/                # Jinja macros
 ├── article.html           # Article detail page
 ├── index.html             # Home page
+├── topic.html             # Topic feed page
+├── tag.html               # Tag feed page
+├── verify.html            # Email verification page
+├── unsubscribe.html       # Unsubscribe page
 └── share_redirect.html    # Share redirect page
 ```
 
@@ -351,12 +413,13 @@ Admin API supports token auth:
 
 ### CSRF Protection
 
-All state-changing routes protected via Flask-WTF tokens. JSON API endpoints use the `X-CSRFToken` header:
+All state-changing routes protected via Flask-WTF tokens. JSON API endpoints use the `@validate_csrf_json` decorator (for JSON endpoints only — form-based routes use Flask-WTF's built-in CSRF):
 
 ```python
 # Header: X-CSRFToken: <token>
 # Decorator: @validate_csrf_json (routes/decorators.py:72-94)
-# Validates X-CSRFToken header for JSON endpoints (Flask-WTF only handles form/multipart)
+# Validates X-CSRFToken header for JSON API endpoints only (not form-based routes)
+# Flask-WTF handles CSRF for form/multipart requests automatically
 # Respects WTF_CSRF_ENABLED = False in TestingConfig
 ```
 

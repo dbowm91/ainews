@@ -68,7 +68,7 @@ Beyond simple success/failure, each stage has quality gates that can route artic
 ### Crawl Task (`crawl.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def run_all_sources(self):
     """Orchestrate parallel crawling of all sources"""
     # Uses Celery group for parallel source fetching
@@ -79,7 +79,7 @@ def run_all_sources(self):
 ### Process Item (`extract.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def process_item(
     self,
     source_key,
@@ -108,7 +108,7 @@ def process_item(
 ### Select (`select.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def select_article(self, article_id: int, run_id=None):
     """LLM scores article 1-10 for newsworthiness"""
     # Uses selector prompt template
@@ -120,7 +120,7 @@ Note: Uses `retry_max=20` in `run_stage()` (vs default 15) for more aggressive s
 ### Research (`research.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def research_article(self, article_id: int, run_id=None):
     """LLM builds research brief with web search + context"""
     # Uses researcher prompt template
@@ -131,7 +131,7 @@ def research_article(self, article_id: int, run_id=None):
 ### Write (`write.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def write_article(self, article_id: int, run_id=None):
     """LLM writes condensed article (Smart Brevity format)"""
     # Uses writer prompt template
@@ -142,7 +142,7 @@ def write_article(self, article_id: int, run_id=None):
 ### Edit (`edit.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def edit_article(self, article_id: int, run_id=None):
     """LLM edits with contextualization, assigns tags"""
     # Calls subagent with context tools
@@ -154,7 +154,7 @@ def edit_article(self, article_id: int, run_id=None):
 ### Newsletter (`newsletter.py`)
 
 ```python
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=CELERY_TASK_MAX_RETRIES)
 def generate_daily_newsletters(self):
     """Build and send newsletters with executive summary"""
     # 1. _fetch_articles_for_newsletter()

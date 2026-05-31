@@ -282,8 +282,9 @@ When stages fail persistently (after max retries), articles degrade to the next 
 | research | Uses source text only (impact_score=30), advance to write |
 | write | Minimal draft from extracted text, advance to edit |
 | edit | Apply fallback →
-  - If degradation_count >= 2 OR _should_route_to_review() → route to review
-  - Else → finalize to DONE (auto-publish if impact_score >= threshold) |
+  - If degradation_count >= 2 → route to review
+  - Else if `_should_route_to_review()` → route to review (when `review.enabled` AND (`auto_publish_threshold` is None OR `impact_score < auto_publish_threshold`))
+  - Else → finalize to DONE |
 
 **Retry Limits:**
 - Per-stage retries: 3 (configurable via `MAX_STAGE_RETRIES`)
@@ -326,7 +327,7 @@ The pipeline has two independent retry mechanisms:
 
 **1. Celery Task Retry** (for transient errors)
 - Max retries: 3 per task
-- Backoff: exponential (30s, 60s, 120s, 240s, ... up to 300s max)
+- Backoff: exponential starting at 1s (Celery default `RETRY_BASE_DELAY=1.0`), capped at 300s max. Note: the select stage overrides this with `default_retry_delay=30`.
 - Triggered by: network timeouts, rate limits, temporary provider failures
 
 **2. Stage Failure Retry** (for persistent failures)

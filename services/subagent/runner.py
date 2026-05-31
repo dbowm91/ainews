@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import copy
 import logging
 from concurrent.futures import TimeoutError
-from typing import Type
+from typing import Any, Callable, Type
 
 import json
 
@@ -34,6 +33,177 @@ def _get_task_template(task_type: str, stage_config: SubagentStageConfig) -> str
         if loaded:
             return loaded
     return SUBAGENT_TASK_TEMPLATES.get(task_type, "")
+
+
+def _run_subagent_core(
+    stage_config: SubagentStageConfig,
+    task_type: str,
+    stage: str,
+    article_id: int | None,
+    call_fn: Callable[[], Any],
+    response_model: Type[BaseModel],
+    self_correct: bool = False,
+    messages: list[dict] | None = None,
+) -> SubagentResponse:
+    """Core subagent execution with retry/timeout logic.
+
+    Handles executor submission, timeout, retry with backoff, error handling,
+    metrics emission, and response construction.
+
+    Args:
+        stage_config: Resolved subagent stage configuration.
+        task_type: The task type identifier.
+        stage: The pipeline stage name.
+        article_id: Optional article ID for logging.
+        call_fn: Callable that makes the LLM call (submitted to executor).
+        response_model: Pydantic model for response validation.
+        self_correct: Whether to attempt self-correction on validation errors.
+        messages: Mutable messages list for self-correction (required if self_correct=True).
+    """
+    from . import get_metrics, log_pipeline_event
+
+    result = None
+    used_fallback = False
+    fallback_stages: list[str] = []
+    last_exc: BaseException | None = None
+    corrected = False
+    future = None
+
+    def _attempt() -> Any:
+        nonlocal corrected, future
+        from . import time_histogram
+
+        if _is_task_revoked():
+            logger.info("Subagent %s/%s cancelled - task revoked", stage, task_type)
+            raise ProviderTimeoutError("Subagent task revoked")
+
+        with time_histogram(
+            "subagent.duration_seconds",
+            labels={"stage": stage, "task_type": task_type},
+        ):
+            future = _subagent_executor.submit(call_fn)
+            try:
+                resp = future.result(timeout=stage_config.timeout_seconds)
+
+                if self_correct and messages is not None:
+                    try:
+                        return response_model.model_validate(
+                            {"synthesis": resp.text},
+                        )
+                    except (json.JSONDecodeError, ValidationError) as validation_err:
+                        if corrected:
+                            raise validation_err
+                        error_msg = (
+                            f"Your previous response was not valid JSON or did not match "
+                            f"the expected schema: {validation_err}. Please correct and "
+                            f"return valid JSON in the same format."
+                        )
+                        logger.info(
+                            "Subagent %s/%s self-correcting after validation error: %s",
+                            stage,
+                            task_type,
+                            validation_err,
+                        )
+                        messages.append({"role": "user", "content": error_msg})
+                        corrected = True
+                        raise  # Trigger retry
+
+                return resp
+            except TimeoutError as e:
+                future.cancel()
+                logger.warning(
+                    "Subagent %s/%s timed out after %ss",
+                    stage,
+                    task_type,
+                    stage_config.timeout_seconds,
+                )
+                raise ProviderTimeoutError(
+                    f"Subagent timed out after {stage_config.timeout_seconds}s",
+                ) from e
+
+    try:
+        result = _retry_with_backoff(
+            _attempt,
+            max_retries=stage_config.max_retries + 1,
+            base_delay=1.0,
+            max_delay=stage_config.retry_delay,
+            retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
+        )
+    except (ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError) as e:
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s failed after %d attempts: %s",
+            stage,
+            task_type,
+            stage_config.max_retries + 1,
+            e,
+        )
+    except (AuthError, ProviderServerError) as e:
+        last_exc = e
+        logger.warning(
+            "Subagent %s/%s failed with non-retryable error: %s",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
+    except (ValidationError, json.JSONDecodeError, ValueError, AttributeError) as e:
+        last_exc = e
+        logger.error(
+            "Subagent %s/%s unexpected error: %s — using fallback",
+            stage,
+            task_type,
+            e,
+        )
+        used_fallback = True
+        fallback_stages = [stage]
+    finally:
+        if future:
+            future.cancel()
+
+    if result is None:
+        used_fallback = True
+        fallback_stages = [stage]
+        get_metrics().counter_inc(
+            "subagent.failure",
+            labels={"stage": stage, "task_type": task_type},
+        )
+        log_pipeline_event(
+            stage="subagent",
+            event="subagent.failure",
+            article_id=article_id,
+            task_type=task_type,
+            stage_name=stage,
+            error=str(last_exc) if last_exc else None,
+        )
+    else:
+        get_metrics().counter_inc(
+            "subagent.success",
+            labels={"stage": stage, "task_type": task_type},
+        )
+        log_pipeline_event(
+            stage="subagent",
+            event="subagent.complete",
+            article_id=article_id,
+            task_type=task_type,
+            stage_name=stage,
+        )
+
+    get_metrics().counter_inc(
+        "subagent.calls",
+        labels={
+            "stage": stage,
+            "task_type": task_type,
+            "status": "failure" if used_fallback else "success",
+        },
+    )
+
+    return SubagentResponse(
+        synthesis=result.synthesis if result else "",
+        used_fallback=used_fallback,
+        fallback_stages=fallback_stages,
+    )
 
 
 def run_subagent(
@@ -111,7 +281,7 @@ def run_subagent(
         selector = StageAwareToolSelector(tool_names=stage_config.tools)
         tools = initialize_tool_registry(selector=selector, context={"stage": stage})
 
-    def _call_with_timeout():
+    def _call_with_timeout() -> Any:
         from . import traced_llm_call
 
         with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
@@ -151,146 +321,13 @@ def run_subagent(
                     max_tokens=max_tokens,
                 )
 
-    result = None
-    used_fallback = False
-    fallback_stages: list[str] = []
-    last_exc: BaseException | None = None
-    future = None
-
-    def _attempt():
-        nonlocal future
-        from . import time_histogram
-
-        if _is_task_revoked():
-            logger.info("Subagent %s/%s cancelled - task revoked", stage, task_type)
-            raise ProviderTimeoutError("Subagent task revoked")
-
-        with time_histogram(
-            "subagent.duration_seconds",
-            labels={"stage": stage, "task_type": task_type},
-        ):
-            future = _subagent_executor.submit(_call_with_timeout)
-            try:
-                return future.result(timeout=stage_config.timeout_seconds)
-            except TimeoutError as e:
-                future.cancel()
-                logger.warning(
-                    "Subagent %s/%s timed out after %ss",
-                    stage,
-                    task_type,
-                    stage_config.timeout_seconds,
-                )
-                raise ProviderTimeoutError(
-                    f"Subagent timed out after {stage_config.timeout_seconds}s",
-                ) from e
-
-    try:
-        result = _retry_with_backoff(
-            _attempt,
-            max_retries=stage_config.max_retries + 1,
-            base_delay=1.0,
-            max_delay=stage_config.retry_delay,
-            retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
-        )
-    except (ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError) as e:
-        last_exc = e
-        logger.error(
-            "Subagent %s/%s failed after %d attempts: %s",
-            stage,
-            task_type,
-            stage_config.max_retries + 1,
-            e,
-        )
-    except (AuthError, ProviderServerError) as e:
-        last_exc = e
-        logger.warning(
-            "Subagent %s/%s failed with non-retryable error: %s",
-            stage,
-            task_type,
-            e,
-        )
-        used_fallback = True
-        fallback_stages = [stage]
-    except (ValidationError, json.JSONDecodeError, ValueError, AttributeError) as e:
-        last_exc = e
-        logger.error(
-            "Subagent %s/%s unexpected error: %s — using fallback",
-            stage,
-            task_type,
-            e,
-        )
-        used_fallback = True
-        fallback_stages = [stage]
-    finally:
-        if future:
-            future.cancel()
-
-    if result is None:
-        used_fallback = True
-        fallback_stages = [stage]
-        from . import get_metrics, log_pipeline_event
-
-        get_metrics().counter_inc(
-            "subagent.failure",
-            labels={"stage": stage, "task_type": task_type},
-        )
-        log_pipeline_event(
-            stage="subagent",
-            event="subagent.failure",
-            article_id=article_id,
-            task_type=task_type,
-            stage_name=stage,
-            error=str(last_exc) if last_exc else None,
-        )
-    else:
-        from . import get_metrics, log_pipeline_event
-
-        get_metrics().counter_inc(
-            "subagent.success",
-            labels={"stage": stage, "task_type": task_type},
-        )
-        log_pipeline_event(
-            stage="subagent",
-            event="subagent.complete",
-            article_id=article_id,
-            task_type=task_type,
-            stage_name=stage,
-        )
-
-    from . import get_metrics
-
-    get_metrics().counter_inc(
-        "subagent.calls",
-        labels={
-            "stage": stage,
-            "task_type": task_type,
-            "status": "failure" if used_fallback else "success",
-        },
-    )
-
-    return SubagentResponse(
-        synthesis=result.synthesis if result else "",
-        used_fallback=used_fallback,
-        fallback_stages=fallback_stages,
-    )
-
-
-def _finalize_subagent_result(
-    result: BaseModel | None,
-    used_fallback: bool,
-    fallback_stages: list[str],
-    last_exc: BaseException | None,
-    stage: str,
-    task_type: str,
-    article_id: int | None,
-    stage_config: SubagentStageConfig,
-) -> SubagentResponse:
-    """Finalize subagent result, handling fallback logic and metrics."""
-    synthesis = result.synthesis if result else ""
-    return SubagentResponse(
-        synthesis=synthesis,
-        used_fallback=used_fallback,
-        fallback_stages=fallback_stages,
+    return _run_subagent_core(
+        stage_config=stage_config,
+        task_type=task_type,
+        stage=stage,
+        article_id=article_id,
+        call_fn=_call_with_timeout,
+        response_model=response_model,
     )
 
 
@@ -345,7 +382,7 @@ def run_subagent_with_tools(
     ]
     for i, tool in enumerate(tools):
         if tool.fn:
-            wrapped_fn = apply_middleware(copy.deepcopy(tool.fn), middleware_chain)
+            wrapped_fn = apply_middleware(tool.fn, middleware_chain)
             tools[i] = ToolDefinition(
                 name=tool.name,
                 description=tool.description,
@@ -357,14 +394,7 @@ def run_subagent_with_tools(
     messages = [{"role": "user", "content": prompt}]
     max_iterations = getattr(stage_config, 'max_iterations', 5)
 
-    result = None
-    used_fallback = False
-    fallback_stages: list[str] = []
-    last_exc: BaseException | None = None
-    self_corrected = False
-    future = None
-
-    def _call_with_timeout():
+    def _call_with_timeout() -> Any:
         from . import traced_llm_call
 
         with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
@@ -379,96 +409,13 @@ def run_subagent_with_tools(
                 max_iterations=max_iterations,
             )
 
-    def _attempt():
-        nonlocal self_corrected, future
-        from . import time_histogram
-
-        if _is_task_revoked():
-            logger.info("Subagent %s/%s cancelled - task revoked", stage, task_type)
-            raise ProviderTimeoutError("Subagent task revoked")
-
-        with time_histogram(
-            "subagent.duration_seconds",
-            labels={"stage": stage, "task_type": task_type},
-        ):
-            future = _subagent_executor.submit(_call_with_timeout)
-            try:
-                tc_resp = future.result(timeout=stage_config.timeout_seconds)
-                try:
-                    return response_model.model_validate(
-                        {"synthesis": tc_resp.text},
-                    )
-                except (json.JSONDecodeError, ValidationError) as validation_err:
-                    if self_corrected:
-                        raise validation_err
-                    error_msg = (
-                        f"Your previous response was not valid JSON or did not match "
-                        f"the expected schema: {validation_err}. Please correct and "
-                        f"return valid JSON in the same format."
-                    )
-                    logger.info(
-                        "Subagent %s/%s self-correcting after validation error: %s",
-                        stage,
-                        task_type,
-                        validation_err,
-                    )
-                    messages.append({"role": "user", "content": error_msg})
-                    self_corrected = True
-                    raise  # Trigger retry
-            except TimeoutError as e:
-                future.cancel()
-                logger.warning(
-                    "Subagent %s/%s timed out after %ss",
-                    stage,
-                    task_type,
-                    stage_config.timeout_seconds,
-                )
-                raise ProviderTimeoutError(
-                    f"Subagent timed out after {stage_config.timeout_seconds}s",
-                ) from e
-
-    try:
-        result = _retry_with_backoff(
-            _attempt,
-            max_retries=stage_config.max_retries + 1,
-            base_delay=1.0,
-            max_delay=stage_config.retry_delay,
-            retryable_exceptions=(ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError),
-        )
-    except (ProviderTimeoutError, ValidationError, TimeoutError, ConnectionError) as e:
-        last_exc = e
-        logger.error(
-            "Subagent %s/%s failed after %d attempts: %s",
-            stage,
-            task_type,
-            stage_config.max_retries + 1,
-            e,
-        )
-    except (AuthError, ProviderServerError) as e:
-        last_exc = e
-        logger.warning(
-            "Subagent %s/%s failed with non-retryable error: %s",
-            stage,
-            task_type,
-            e,
-        )
-        used_fallback = True
-        fallback_stages = [stage]
-    except (ValidationError, json.JSONDecodeError, ValueError, AttributeError) as e:
-        last_exc = e
-        logger.error(
-            "Subagent %s/%s unexpected error: %s — using fallback",
-            stage,
-            task_type,
-            e,
-        )
-        used_fallback = True
-        fallback_stages = [stage]
-    finally:
-        if future:
-            future.cancel()
-
-    return _finalize_subagent_result(
-        result, used_fallback, fallback_stages, last_exc,
-        stage, task_type, article_id, stage_config,
+    return _run_subagent_core(
+        stage_config=stage_config,
+        task_type=task_type,
+        stage=stage,
+        article_id=article_id,
+        call_fn=_call_with_timeout,
+        response_model=response_model,
+        self_correct=True,
+        messages=messages,
     )

@@ -41,10 +41,10 @@ def _process_dead_letter(article):
         return False
 
 
-def _process_degrade(article):
+def _process_degrade(article, run_id=None):
     """Process a single article for degradation."""
     from services.pipeline_degradation import degrade_stage as _degrade_and_advance
-    _degrade_and_advance(article, article.pipeline_status)
+    _degrade_and_advance(article, article.pipeline_status, run_id=run_id)
     logger.warning("Degraded stuck article %s from %s", article.id, article.pipeline_status)
     return True
 
@@ -153,7 +153,7 @@ def retry_stuck(self):
                 dead_lettered += 1
 
         for article in articles_to_degrade:
-            if _process_degrade(article):
+            if _process_degrade(article, run_id=task_id):
                 degraded += 1
 
         for i in range(0, len(articles_to_retry), BATCH_SIZE):

@@ -35,7 +35,7 @@ def _resolve_template_variables(
 
 def run_subagent_chain(
     chain_name: str,
-    steps: list[dict],
+    steps: list | None,
     initial_prompt_data: dict,
     article_id: int | None = None,
 ) -> dict[str, Any]:

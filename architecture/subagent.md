@@ -37,6 +37,12 @@ class ToolDefinition:
     # Note: ToolDefinition does NOT have a `cached` field
 ```
 
+### Side Effects
+
+- **Global `_TOOL_REGISTRY` is write-once**: Once populated, subsequent calls with different `tool_names` do NOT update the registry. The `tool_names` parameter only filters the return value, not the registry contents. This is because `initialize_tool_registry()` only registers tools when `_TOOL_REGISTRY` is empty (line 60: `if not _TOOL_REGISTRY:`).
+- **Tool definitions are cached**: `_get_all_tools_cached()` uses `@functools.lru_cache(maxsize=1)`, so the tool list is built once and reused across all calls.
+- **Thread-safe registration**: Registration uses `_TOOL_REGISTRY_LOCK` (a `threading.Lock`) to prevent races during initial population.
+
 ### Built-in Tools
 
 | Tool | Name | Purpose |

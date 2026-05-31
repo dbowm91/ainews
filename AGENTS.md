@@ -243,6 +243,21 @@ The `QualityReport` model exists in `models/quality.py:10-51` with fields: `arti
 ### Hybrid Search Function Name
 The hybrid search function is `search_articles()` in `services/search/hybrid.py:329`, NOT `hybrid_search()`. Also has `cosine_similarity` (line 41) and `reciprocal_rank_fusion` (line 67).
 
+### Experiments Config Location
+Experiment configuration lives in `PipelineRootConfig.experiments` (added to `schemas/pipeline.py`). Callers must use `load_pipeline_config()` from `schemas.pipeline` to access experiments — NOT `get_config()` which returns an `AppConfig` dataclass without `.get()` method.
+
+### Circuit Breaker Key Convention
+Circuit breaker keys use the **role** convention: `llm:{provider}:{model}:{selector|researcher|writer|editor}`. The `record_provider_success()` and `record_provider_failure()` functions accept `stage=` parameter which must use the role name (e.g., `"selector"`, NOT `"select"`). This ensures the circuit breaker sees success signals from the same key that `get_provider_chain()` checks.
+
+### Post-Finalization Processing
+`post_finalize_article()` in `services/pipeline_degradation.py` handles: `published_at` timestamp, SLA metrics, trend memory, webhook dispatch, and embedding generation. Called by both `_finalize()` (degradation path) and `_post_finalize_article()` in `tasks/edit.py` (normal path).
+
+### Hybrid Search Candidate Cap
+`_get_vector_results()` in `services/search/hybrid.py` caps vector search candidates via `HYBRID_SEARCH_MAX_CANDIDATES` env var (default 500). Prevents excessive memory usage when loading all articles with embeddings.
+
+### Adapter Per-Request Headers
+`APIAdapter` and `WebAdapter` pass headers via `headers=` parameter to `session.get()` instead of mutating the shared session's headers. This prevents race conditions when concurrent Celery workers use the same session.
+
 ### Undocumented Schema Files
 `schemas/admin.py` contains: `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`. `schemas/llm.py` contains: `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig`, `load_providers_config()`.
 
@@ -383,4 +398,5 @@ The following are documented as intentional and should NOT be "fixed":
 | `tasks/extract.py` | Article extraction from crawled content |
 | `tasks/retry.py` | `retry_stuck` task, dead-letter handling |
 | `tasks/cleanup.py` | Log cleanup, trend memory consolidation |
+| `services/pipeline_degradation.py` | `post_finalize_article()`, `degrade_stage()`, `_finalize()` |
 | `adapters/api.py` | API source adapter with error logging in `_fetch_item` |

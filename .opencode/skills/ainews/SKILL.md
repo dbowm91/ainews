@@ -37,7 +37,7 @@ Each stage is a Celery task in `tasks/` with:
 | `tasks/pipeline.py` | Shared helpers: `run_stage()`, `_dispatch_next()`, `_assign_tags()` |
 | `tasks/scheduler.py` | Scheduled publishing |
 | `services/pipeline_failure.py` | `_handle_stage_failure()`, retry budget logic |
-| `services/pipeline_degradation.py` | `degrade_stage()`, `_finalize()`, `_apply_fallback()` |
+| `services/pipeline_degradation.py` | `post_finalize_article()`, `degrade_stage()`, `_finalize()` |
 
 ### A/B Experiment System
 
@@ -64,6 +64,8 @@ experiments:
 ```
 
 **Assignment:** `_assign_experiment_group(article_id, salt)` in `tasks/select.py` uses MD5 hash of `article_id:salt:experiment` for deterministic 70/15/15 split across control/variant_a/variant_b.
+
+**Config access:** Use `load_pipeline_config()` from `schemas.pipeline` to access `config.experiments`. Do NOT use `get_config()` (returns `AppConfig` dataclass without `.get()` method).
 
 **Variant selection:**
 - `get_writer_system_prompt(article)` in `services/writer.py` checks `article.experiment_group` and returns variant prompt if available

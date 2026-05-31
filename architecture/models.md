@@ -140,20 +140,136 @@ class Source(Base):
     name = Column(String(128), nullable=False, index=True)
     url = Column(String(512))                     # Source website URL
     feed_url = Column(String(512))                 # RSS/API feed URL
-    source_type = Column(String(32))              # rss, api, web
-    active = Column(Boolean, default=True)
+    source_type = Column(String(32), nullable=False, index=True)  # rss, api, web
+    active = Column(Boolean, default=True, index=True)
+    last_crawled = Column(DateTime)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # Item 5.8
 
     # Health tracking
-    consecutive_failures = Column(Integer, default=0)
-    consecutive_successes = Column(Integer, default=0)
-    last_crawled = Column(DateTime)
-    last_success_at = Column(DateTime)
-    last_error = Column(Text)
-    disabled_at = Column(DateTime)
+    consecutive_failures = Column(Integer, nullable=False, default=0, index=True)
+    consecutive_successes = Column(Integer, nullable=False, default=0)
+    last_success_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+    disabled_at = Column(DateTime, nullable=True, index=True)
+
+    # Relationships
+    articles = relationship("Article", backref="source", lazy="dynamic", cascade="all, delete-orphan")
 
     # Configuration: adapter config is stored in SourceConfig.config (schemas/source.py)
     # NOT in this model. Adapters access via source_config.config at runtime.
 ```
+
+## Webhook Model
+
+Event delivery tracking with health monitoring:
+
+```python
+class Webhook(db.Model):
+    __tablename__ = 'webhooks'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False)
+    url = Column(String(2048), nullable=False)
+    secret = Column(String(128), nullable=False)
+    events = Column(JSON, nullable=False, default=list)
+    active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Delivery health tracking (Item 5.1)
+    last_triggered_at = Column(DateTime, nullable=True)   # Last delivery attempt
+    last_success_at = Column(DateTime, nullable=True)     # Last successful delivery
+    last_failure_at = Column(DateTime, nullable=True)     # Last failed delivery
+    last_error = Column(Text, nullable=True)              # Last error message
+    failure_count = Column(Integer, default=0)            # Consecutive failure counter
+```
+
+## WebhookEvent Model
+
+Individual webhook delivery attempts:
+
+```python
+class WebhookEvent(db.Model):
+    __tablename__ = 'webhook_events'
+
+    id = Column(Integer, primary_key=True)
+    webhook_id = Column(Integer, ForeignKey('webhooks.id', ondelete='CASCADE'), nullable=False, index=True)
+    event_type = Column(String(64), nullable=False)
+    status_code = Column(Integer, nullable=True)
+    response_body = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    delivered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Delivery tracking (Item 5.2)
+    attempt_number = Column(Integer, nullable=False, default=1)           # Retry counter per event
+    idempotency_key = Column(String(64), nullable=True, index=True)      # Dedup key
+    payload = Column(Text, nullable=True)                                 # Serialized event data
+```
+
+## PipelineLog Model
+
+Per-stage execution logging within a pipeline run:
+
+```python
+class PipelineLog(db.Model):
+    __tablename__ = 'pipeline_logs'
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(Integer, ForeignKey('pipeline_runs.id', ondelete='CASCADE'), nullable=False, index=True)
+    article_id = Column(Integer, ForeignKey('articles.id', ondelete='CASCADE'), nullable=True, index=True)
+    stage = Column(String(32), nullable=False)
+    level = Column(String(8), default="info")
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Stage timing and status (Item 5.3)
+    started_at = Column(DateTime, nullable=True)    # Stage start timestamp
+    completed_at = Column(DateTime, nullable=True)  # Stage completion timestamp
+    status = Column(String(16), nullable=True)      # Stage result (success/failure)
+    error = Column(Text, nullable=True)             # Error message if failed
+    meta = Column(JSON, nullable=True)              # Additional structured data
+```
+
+## SearchQuery Model
+
+Search analytics with article click tracking:
+
+```python
+class SearchQuery(db.Model):
+    __tablename__ = 'search_queries'
+
+    id = Column(Integer, primary_key=True)
+    query = Column(String(256), nullable=False, index=True)
+    results_count = Column(Integer, nullable=False, default=0)
+    clicked_article_id = Column(Integer, ForeignKey('articles.id', ondelete='SET NULL'), nullable=True, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationship (Item 5.4)
+    clicked_article = relationship("Article", foreign_keys=[clicked_article_id])
+```
+
+**Note:** `clicked_article` uses explicit `foreign_keys` because `SearchQuery` has a nullable FK to `Article` but Article doesn't have a corresponding backref defined on this model.
+
+## ArticleMetric Model
+
+Per-article engagement tracking with auto-updated timestamps:
+
+```python
+class ArticleMetric(db.Model):
+    __tablename__ = 'article_metrics'
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, ForeignKey('articles.id', ondelete='CASCADE'), unique=True, nullable=False, index=True)
+
+    # Engagement counters (Item 5.5)
+    page_loads = Column(Integer, default=0)              # Page view count
+    newsletter_clicks = Column(Integer, default=0)       # Click-throughs from newsletters
+    share_button_clicks = Column(Integer, default=0)     # Social share button presses
+    share_link_views = Column(Integer, default=0)        # Shared link landing page views
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+```
+
+**Auto-update listener:** A `before_update` event listener on `ArticleMetric` automatically sets `updated_at` to the current UTC time before each update, ensuring the timestamp reflects the most recent modification without relying on application code.
 
 ## Newsletter Association Tables
 
@@ -340,8 +456,8 @@ class QualityReport(Base):
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
-    # Relationships
-    article = relationship("Article", backref=backref("quality_reports", lazy="dynamic"))
+    # Relationships (Item 5.7: cascade="all, delete-orphan" on article)
+    article = relationship("Article", backref=backref("quality_reports", lazy="dynamic", cascade="all, delete-orphan"))
     article_version = relationship("ArticleVersion", backref=backref("quality_reports", lazy="dynamic"))
 
     # Composite indexes

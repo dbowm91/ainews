@@ -6,17 +6,17 @@ The `schemas/` package contains Pydantic models for validation and serialization
 
 | File | Models | Purpose |
 |------|--------|---------|
-| `pipeline.py` | `PipelineRootConfig`, stage configs | Pipeline stage configuration |
-| `source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig`, `TopicMatchConfig` | Source adapter configuration |
+| `pipeline.py` | `PipelineRootConfig`, `PipelineConfig`, `RoleConfig`, `ReviewConfig`, `StageConfig`, `NewsletterConfig`, `NewsletterPipelineConfig`, `SubagentConfig`, `SubagentStageConfig`, `SubagentChainConfig`, `SubagentChainStep`, `MemoryConfig` | Pipeline stage configuration |
+| `source.py` | `SourceConfig`, `SourceType`, `MatchMode`, `RSSConfig`, `APIConfig`, `WebConfig`, `TopicMatchConfig`, `PaginationConfig`, `ListingConfig`, `ArticleSelectors` | Source adapter configuration |
 | `common.py` | `ProviderDef` | Shared provider definitions for LLM and search providers |
-| `llm.py` | Provider definitions | LLM/search provider settings |
-| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief`, `SubagentResponse`, `ResearchSynthesisResponse`, `EditContextualizationResponse`, `ToolCall`, `ToolResult`, `ToolCallingResponse` | LLM response schemas |
+| `llm.py` | `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig` | LLM provider settings |
+| `llm_responses.py` | `SelectionResult`, `ResearchBrief`, `KeyClaim`, `DirectQuote`, `ExternalSource`, `RelatedArticle`, `CitationItem`, `OriginalAttribution`, `CondensedArticle`, `ExecutiveSummary`, `NewsletterBrief`, `NewsletterArticle`, `SubagentResponse`, `ResearchSynthesisResponse`, `EditContextualizationResponse`, `ToolCall`, `ToolResult`, `ToolCallingResponse` | LLM response schemas |
 | `tasks.py` | `SelectArticleTask`, `ProcessItemTask`, `GenerateNewsletterTask`, `SendEmailTask`, `CleanupArticleVersionsTask` | Celery task input validation |
-| `topic.py` | Topic definitions | Topic configuration |
+| `topic.py` | `TopicDef`, `TopicsConfig` | Topic configuration |
 | `webhook.py` | `WebhookCreate`, `WebhookResponse` | Webhook configuration |
 | `item.py` | `RawItem` | Crawled item data from adapters |
-| `admin.py` | Admin request schemas | Admin API request validation |
-| `search.py` | `SearchConfig`, `load_search_config` | Search provider configuration (loaded from providers.yaml) |
+| `admin.py` | `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams` | Admin API request validation |
+| `search.py` | `SearchConfig` | Search provider configuration (loaded from providers.yaml) |
 
 ## Pipeline Configuration (`pipeline.py`)
 
@@ -159,6 +159,23 @@ class MemoryConfig(BaseModel):
 
 ## Source Configuration (`source.py`)
 
+### Enums
+
+```python
+class SourceType(str, Enum):
+    RSS = "rss"
+    API = "api"
+    WEB = "web"
+
+class MatchMode(str, Enum):
+    KEYWORD = "keyword"
+    CONTEXTUAL = "contextual"
+```
+
+`SourceType` defines valid source adapter types. `MatchMode` selects between keyword-based or LLM-based contextual topic matching in the selector stage.
+
+### Source Config Models
+
 ```python
 class SourceConfig(BaseModel):
     id: str = Field(..., pattern=r"^[a-z0-9_]+$")
@@ -176,23 +193,24 @@ class RSSConfig(BaseModel):
     max_items: int = Field(default=50, ge=1, le=200)
     request_timeout: int = Field(default=15, ge=5, le=60)
     user_agent: str = "AINewsBot/1.0"
-    min_content_length: int = Field(default=200, ge=0, le=5000)
+    min_content_length: int = Field(default=200, ge=0, le=5000,
+        description="If feed content is shorter than this, scrape the article page")
 
 class APIConfig(BaseModel):
     list_url: str = Field(..., min_length=1)
     list_method: str = "json_array"    # or "json_object_items" for nested items
     list_items_path: Optional[str] = None  # JSONPath to items array
     max_items: int = Field(default=30, ge=1, le=200)
-    item_url: Optional[str] = None       # Template for individual item URLs
+    item_url: Optional[str] = None     # Template URL using {id} placeholder for item ID
     item_method: str = "json_object"
     fields: dict[str, str] = Field(default_factory=dict)
-    filters: list[dict[str, Any]] = Field(default_factory=list)  # equals, min, exists
+    filters: list[dict[str, Any]] = Field(default_factory=list)  # equals, min, exists, contains
     metadata: dict[str, str] = Field(default_factory=dict)  # Additional fields to extract
     pagination: PaginationConfig = Field(default_factory=PaginationConfig)  # next_link, query_param, none
-    api_key: Optional[str] = None
-    auth_header: Optional[str] = None    # Header name for Bearer auth token (e.g., "Authorization")
     request_timeout: int = 15
     user_agent: str = "AINewsBot/1.0"
+    api_key: Optional[str] = None
+    auth_header: Optional[str] = None  # Header name; only Bearer auth supported (value always 'Bearer {api_key}')
 
 class TopicMatchConfig(BaseModel):
     """Configuration for article topic matching in the selector stage."""
@@ -284,19 +302,37 @@ class RelatedArticle(BaseModel):
     created_at: str
 ```
 
+### Citation and Attribution Models
+
+```python
+class CitationItem(BaseModel):
+    title: str
+    url: str
+    author: Optional[str] = None
+    type: str = "article"  # "article", "web", or "db"
+
+class OriginalAttribution(BaseModel):
+    source: str
+    author: Optional[str] = None
+    url: Optional[str] = None
+    published_at: Optional[str] = None
+```
+
+`CitationItem` represents a source referenced within a condensed article. `OriginalAttribution` identifies the original article's source, author, URL, and publication date for proper credit.
+
 ### Condensed Article
 
 ```python
 class CondensedArticle(BaseModel):
-    headline: str
-    tldr: str
-    body: str
-    why_it_matters: str                      # Additional fields not in doc
-    key_points: list[str]
-    what_to_watch: str
-    citations: list[CitationItem]
-    original_attribution: OriginalAttribution
-    tags: list[str]
+    headline: str                          # Catchy but accurate headline
+    tldr: str                              # One-sentence summary for busy readers
+    body: str                              # Full condensed article in markdown
+    why_it_matters: str                    # 1-2 sentences connecting to a bigger trend
+    key_points: list[str]                  # 3-5 bullet points of key takeaways
+    what_to_watch: str                     # Forward-looking indicator
+    citations: list[CitationItem]          # All sources referenced in the article
+    original_attribution: OriginalAttribution  # Original source credit
+    tags: list[str]                        # 1-3 concise topic tags (lowercase, hyphenated)
 ```
 
 ### Executive Summary
@@ -309,18 +345,19 @@ class ExecutiveSummary(BaseModel):
 ### Newsletter Brief
 
 ```python
+class NewsletterArticle(BaseModel):
+    """Individual article entry within a newsletter."""
+    headline: str = Field(description="Article headline within the newsletter")
+    summary: str = Field(description="Brief summary of the article")
+    url: Optional[str] = Field(default=None, description="URL to the article")
+    tags: list[str] = Field(default_factory=list, description="Topics/tags for this article")
+
 class NewsletterBrief(BaseModel):
     themes: list[str]                        # Major themes across selected articles
     highlights: list[str]                    # Most notable individual stories
     connections: list[str]                    # Patterns connecting multiple articles
     # Note: actual model does NOT have preamble, footer, or articles fields
     # These were in older documentation but are not implemented
-
-class NewsletterArticle(BaseModel):
-    headline: str = Field(description="Article headline within the newsletter")
-    summary: str = Field(description="Brief summary of the article")
-    url: Optional[str] = Field(default=None, description="URL to the article")
-    tags: list[str] = Field(default_factory=list, description="Topics/tags for this article")
 ```
 
 ### Subagent Responses
@@ -435,6 +472,118 @@ class ProviderDef(BaseModel):
 ```
 
 `ProviderDef` is the base schema for provider entries in `providers.yaml`. Both LLM providers and search providers use this shape.
+
+## LLM Provider Configurations (`llm.py`)
+
+```python
+class OllamaConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    host: str = "http://localhost:11434"
+    model: str = Field(..., min_length=1)
+    max_tokens: int = MAX_TOKENS_FIELD   # 4096 default, 256-128000 range
+
+class OpenAIConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    api_key: str = Field(..., min_length=1)        # Resolved from ${ENV_VAR} at validation time
+    base_url: str = "https://api.openai.com/v1"
+    model: str = Field(..., min_length=1)
+    max_tokens: int = MAX_TOKENS_FIELD
+
+class AnthropicConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    api_key: str = Field(..., min_length=1)        # Resolved from ${ENV_VAR} at validation time
+    model: str = Field(..., min_length=1)
+    max_tokens: int = MAX_TOKENS_FIELD
+
+class GeminiConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    api_key: str = Field(..., min_length=1)        # Resolved from ${ENV_VAR} at validation time
+    model: str = Field(..., min_length=1)
+    max_tokens: int = MAX_TOKENS_FIELD
+
+class LLMProvidersConfig(BaseModel):
+    providers: list[ProviderDef] = Field(default_factory=list)
+    default_provider: str = "ollama-local"
+```
+
+All provider configs use `ConfigDict(extra="allow")` to permit additional provider-specific fields. API keys support `${ENV_VAR}` syntax and are resolved at validation time via `resolve_env_var()` with `required=True`.
+
+The `ADAPTER_CONFIGS` dict maps provider type strings to their config classes: `{"ollama": OllamaConfig, "openai": OpenAIConfig, "anthropic": AnthropicConfig, "gemini": GeminiConfig}`.
+
+`LLMProvidersConfig` is loaded from `providers.yaml` via `load_providers_config()` with Redis-backed caching.
+
+## Search Provider Configuration (`search.py`)
+
+```python
+class SearchConfig(BaseModel):
+    providers: list[ProviderDef] = Field(default_factory=list)
+    default_provider: str = "duckduckgo"
+```
+
+`SearchConfig` is loaded from the `search_providers:` key in `providers.yaml` via `load_search_config()`. Defaults to DuckDuckGo if no config file exists.
+
+## Topic Configuration (`topic.py`)
+
+```python
+class TopicDef(BaseModel):
+    display_name: str                      # Human-readable topic name
+    description: str                       # Topic description for matching context
+    color: str = "blue"                    # Display color for UI
+    icon: Optional[str] = None             # Optional icon identifier
+
+class TopicsConfig(BaseModel):
+    topics: dict[str, TopicDef] = Field(default_factory=dict)  # Keyed by topic slug
+```
+
+`TopicsConfig` is loaded from `topics.yaml` via `load_topics()`. Topic keys are lowercase slugs used throughout the pipeline for article tagging and matching.
+
+## Admin Schemas (`admin.py`)
+
+```python
+class ArticleIdsParams(BaseModel):
+    """Query parameters for GET /api/articles/ids."""
+    q: Optional[str] = Field(default="", max_length=200)
+    status: Optional[str] = Field(default=None, max_length=64)
+    category: Optional[str] = Field(default=None, max_length=64)
+    source_id: Optional[int] = Field(default=None, ge=1)
+    date_from: Optional[str] = Field(default=None, max_length=32)  # ISO date format
+    date_to: Optional[str] = Field(default=None, max_length=32)    # ISO date format
+    impact_min: Optional[int] = Field(default=None, ge=0, le=100)
+    impact_max: Optional[int] = Field(default=None, ge=0, le=100)
+    tag: Optional[str] = Field(default=None, max_length=64)
+    # Validators: validate_iso_date (date_from/date_to), validate_status (must be valid PipelineStatus)
+
+class CreateSourceRequest(BaseModel):
+    """Request body for POST /api/sources."""
+    source_key: str = Field(..., pattern=r"^[a-z0-9_]+$", max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+    url: Optional[str] = Field(default=None, max_length=2048)
+    feed_url: Optional[str] = Field(default=None, max_length=2048)
+    source_type: str = Field(..., max_length=32)  # rss, atom, web, twitter, reddit
+    active: bool = Field(default=True)
+
+class UpdateSourceRequest(BaseModel):
+    """Request body for PUT /api/sources/<id>."""
+    source_key: Optional[str] = Field(default=None, pattern=r"^[a-z0-9_]+$", max_length=64)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    url: Optional[str] = Field(default=None, max_length=2048)
+    feed_url: Optional[str] = Field(default=None, max_length=2048)
+    source_type: Optional[str] = Field(default=None, max_length=32)
+    active: Optional[bool] = None
+
+class BulkArticleRequest(BaseModel):
+    """Request body for POST /api/articles/bulk."""
+    article_ids: list[int] = Field(..., min_length=1, max_length=500)
+    action: str = Field(..., min_length=1, max_length=32)
+    status: Optional[str] = Field(default=None, max_length=64)
+    category: Optional[str] = Field(default=None, max_length=64)
+    tags: Optional[list[str]] = Field(default=None, max_length=10)
+    # Valid actions: "delete", "set_status", "set_category", "reprocess", "add_tags"
+
+class TaskStatusParams(BaseModel):
+    """Path parameter for GET /api/task/<task_id>."""
+    task_id: str = Field(..., min_length=1, max_length=128)  # alphanumeric + hyphens
+```
 
 ## Intentional Layer Violations
 

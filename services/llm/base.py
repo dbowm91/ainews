@@ -177,7 +177,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     delay = min(e.retry_after, self.RETRY_MAX_DELAY)
                 else:
                     delay = min(
-                        self.RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5),  # noqa: S311
+                        random.uniform(0, self.RETRY_BASE_DELAY * (2 ** attempt)),  # noqa: S311
                         self.RETRY_MAX_DELAY,
                     )
                 logger.warning(

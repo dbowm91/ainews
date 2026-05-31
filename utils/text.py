@@ -43,7 +43,7 @@ def escape_prompt_data(data: dict[str, Any]) -> dict[str, Any]:
             result[key] = escape_prompt_data(value)
         elif isinstance(value, list):
             result[key] = [
-                esc_xml_text(str(v)) if isinstance(v, str) else v for v in value
+                escape_prompt_data(v) if isinstance(v, dict) else esc_xml_text(str(v)) if isinstance(v, str) else v for v in value
             ]
         else:
             result[key] = value
@@ -158,7 +158,7 @@ def sanitize_html(html: str) -> str:
         parser.feed(html)
     except ValueError:
         return html
-    except Exception:  # noqa: BLE001 - return original on any other parse error
+    except (ValueError, TypeError, AttributeError):
         return html
     result = "".join(parser.result)
     for pat in _JAVASCRIPT_PATTERNS:

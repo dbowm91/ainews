@@ -20,7 +20,7 @@ class APIAdapter(BaseSourceAdapter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._session = get_crawl_session()
-        self._session.headers["User-Agent"] = self.adapter_config.user_agent
+        self._user_agent = self.adapter_config.user_agent
 
     def close(self):
         pass
@@ -34,7 +34,7 @@ class APIAdapter(BaseSourceAdapter):
         pages_fetched = 0
 
         while next_url and pages_fetched < cfg.pagination.max_pages:
-            resp = self._session.get(next_url, timeout=cfg.request_timeout)
+            resp = self._session.get(next_url, headers={"User-Agent": self._user_agent}, timeout=cfg.request_timeout)
             resp.raise_for_status()
             data = resp.json()
 
@@ -171,7 +171,7 @@ class APIAdapter(BaseSourceAdapter):
         try:
             url = cfg.item_url.format(id=item_id)
             validate_url_safe(url)
-            headers = {}
+            headers = {"User-Agent": self._user_agent}
             if cfg.api_key:
                 if cfg.auth_header:
                     headers[cfg.auth_header] = f"Bearer {cfg.api_key}"

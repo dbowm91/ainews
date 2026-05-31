@@ -1,6 +1,7 @@
 """Hybrid search combining SQLite FTS5 with vector similarity search."""
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from extensions import db
+from services.circuit_breaker import circuit_protected
 from services.embeddings import (
     SENTENCE_TRANSFORMERS_AVAILABLE,
     deserialize_embedding,
@@ -106,6 +108,7 @@ class HybridSearchProvider(SearchProvider):
         """
         return self._fts_provider.search(query, limit=limit, **kwargs)
 
+    @circuit_protected("search_hybrid")
     def hybrid_search(
         self, query: str, limit: int = 10, vector_weight: float = 0.5, **kwargs
     ) -> list[dict]:
@@ -199,6 +202,8 @@ class HybridSearchProvider(SearchProvider):
         if not query_embedding:
             return []
 
+        max_candidates = int(os.environ.get("HYBRID_SEARCH_MAX_CANDIDATES", "500"))
+
         # Fetch articles with embeddings
         if category:
             sql = text("""
@@ -208,8 +213,10 @@ class HybridSearchProvider(SearchProvider):
                   AND category = :category
                   AND embedding IS NOT NULL
                   AND embedding != ''
+                ORDER BY id DESC
+                LIMIT :limit
             """)
-            params = {"category": category}
+            params = {"category": category, "limit": max_candidates}
         else:
             sql = text("""
                 SELECT id, embedding, category
@@ -217,8 +224,10 @@ class HybridSearchProvider(SearchProvider):
                 WHERE pipeline_status IN ('done', 'skipped')
                   AND embedding IS NOT NULL
                   AND embedding != ''
+                ORDER BY id DESC
+                LIMIT :limit
             """)
-            params = {}
+            params = {"limit": max_candidates}
 
         result = db.session.execute(sql, params)
         articles = result.fetchall()

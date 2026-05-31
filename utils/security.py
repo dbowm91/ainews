@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import secrets
 
 __all__ = ["generate_token", "constant_time_compare"]
@@ -14,5 +15,4 @@ def generate_token(length: int = 32) -> str:
 
 def constant_time_compare(a: str, b: str) -> bool:
     """Constant-time string comparison (timing attack prevention)."""
-    import hmac
     return hmac.compare_digest(a, b)

@@ -35,15 +35,12 @@ class WebAdapter(BaseSourceAdapter):
         self._session = get_crawl_session()
         ua = self.adapter_config.user_agent
         if ua == "AINwsBot/1.0":
-            self._session.headers["User-Agent"] = USER_AGENTS[secrets.randbelow(len(USER_AGENTS))]
-        else:
-            self._session.headers["User-Agent"] = ua
-        self._session.headers.update(
-            {
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "en-US,en;q=0.5",
-            }
-        )
+            ua = USER_AGENTS[secrets.randbelow(len(USER_AGENTS))]
+        self._headers = {
+            "User-Agent": ua,
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "en-US,en;q=0.5",
+        }
 
     def close(self):
         pass
@@ -176,7 +173,7 @@ class WebAdapter(BaseSourceAdapter):
 
         for attempt in range(cfg.max_retries):
             try:
-                resp = self._session.get(url, timeout=15)
+                resp = self._session.get(url, headers=self._headers, timeout=15)
                 if resp.status_code == 429:
                     # Note: Retry-After header is not currently respected
                     # Using fixed exponential backoff instead

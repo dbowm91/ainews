@@ -74,9 +74,9 @@ class ModelLimiter:
                     if remaining <= 0:
                         break
 
-                    pubsub.get_message(timeout=min(remaining, poll_interval))
-                    time.sleep(min(poll_interval, remaining))
-                    poll_interval = min(poll_interval * 1.5, 0.5)
+                    # Use pub/sub blocking wait instead of time.sleep()
+                    # get_message() with timeout blocks efficiently until message or timeout
+                    pubsub.get_message(timeout=min(remaining, 0.5))
 
             finally:
                 pubsub.unsubscribe(channel)

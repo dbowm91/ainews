@@ -19,12 +19,11 @@
   <style>
 {% include "partials/critical_css.html" %}
   </style>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.bundled.css') }}">
   <link rel="alternate" type="application/rss+xml" href="/feed" title="All articles">
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/bundle.min.js') }}" defer></script>
 </head>
 <body hx-boost="true">
   <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>

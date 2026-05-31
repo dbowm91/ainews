@@ -114,7 +114,7 @@ Only include items where code was actually checked and confirmed.
 
 | Line(s) | Claim | Actual Code | Severity |
 |---------|-------|-------------|----------|
-| ... | ... | file.py:line — actual value | HIGH/MEDIUM/LOW |
+| ... | ... | file.py:line -- actual value | HIGH/MEDIUM/LOW |
 
 ## Bugs Found
 
@@ -231,7 +231,7 @@ Severity: HIGH = likely production impact, MEDIUM = correctness/reliability conc
 
 **llm-providers.md Checklist:**
 - [ ] `BaseLLMProvider` abstract methods: `chat()`, `chat_streaming()`, `chat_structured()`, `chat_with_tools()`, `_create_client()`, `_chat_with_schema()`, `_call_api_with_tools()`, `_extract_text_and_tool_calls()`, `_format_tool_result()`
-- [ ] `ToolDefinition` dataclass: fields are `name`, `description`, `parameters`, `required`, `fn` — NO `cached` field
+- [ ] `ToolDefinition` dataclass: fields are `name`, `description`, `parameters`, `required`, `fn` -- NO `cached` field
 - [ ] `LLMResponse` and `ToolCall` types
 - [ ] Provider implementations: `OpenAIProvider`, `AnthropicProvider`, `GeminiProvider`, `OllamaProvider`
 - [ ] `services/llm/__init__.py`: `get_provider_for_role()`, `get_provider_chain()`
@@ -272,7 +272,7 @@ Severity: HIGH = likely production impact, MEDIUM = correctness/reliability conc
 - [ ] `ToolCall` and `ToolResult` schemas
 - [ ] Chain system: `SubagentChainStep`, `SubagentChainConfig` in `schemas/pipeline.py`
 - [ ] Chains use `provider.chat()` directly (no tool calling in chains)
-- [ ] Middleware chain: `LoggingMiddleware` → `TimingMiddleware` → `ErrorHandlingMiddleware` (applied in reverse)
+- [ ] Middleware chain: `LoggingMiddleware` -> `TimingMiddleware` -> `ErrorHandlingMiddleware` (applied in reverse)
 - [ ] `ErrorHandlingMiddleware` re-raises exceptions (does NOT return error dicts)
 - [ ] `copy.deepcopy()` for tool definitions prevents middleware compounding
 - [ ] `max_iterations` default: 5 (ge=1, le=20)
@@ -290,12 +290,12 @@ Severity: HIGH = likely production impact, MEDIUM = correctness/reliability conc
 - [ ] Pipeline status values match `constants.py:PipelineStatus`
 - [ ] Valid transitions match `constants.py:VALID_TRANSITIONS`
 - [ ] Stage descriptions (select, research, write, edit)
-- [ ] Select stage: scoring 1-10, `min_score` threshold, low confidence → review
-- [ ] Research stage: web search + subagent, degenerate brief → review
+- [ ] Select stage: scoring 1-10, `min_score` threshold, low confidence -> review
+- [ ] Research stage: web search + subagent, degenerate brief -> review
 - [ ] Write stage: Smart Brevity format, validation (body < 500 chars, empty key_points, empty citations)
 - [ ] Edit stage: subagent contextualization, tag assignment, quality report
 - [ ] Finalize: `published_at`, `pipeline_status="done"`, webhooks, trend memory
-- [ ] Newsletter generation: 3-stage LLM (reader → writer → editor)
+- [ ] Newsletter generation: 3-stage LLM (reader -> writer -> editor)
 - [ ] Newsletter lock: Redis-based, idempotency key, 10-minute TTL
 - [ ] Scheduled tasks table: 14 tasks with correct names and schedules
 - [ ] Pipeline timeout: `PIPELINE_TIMEOUT_SECONDS` default 3600
@@ -330,7 +330,7 @@ Severity: HIGH = likely production impact, MEDIUM = correctness/reliability conc
 - [ ] Prompt escaping: `esc_xml_text()`, `esc_xml_attr()` in `utils/text.py`
 - [ ] `escape_prompt_data()` recursive dict escaping
 - [ ] Subagent task templates in `services/subagent/prompt_templates.py`
-- [ ] Template resolution order: YAML task_template → fallback templates
+- [ ] Template resolution order: YAML task_template -> fallback templates
 - [ ] A/B experiment prompts in `pipeline.yaml` `experiments.prompt_variants`
 
 ### Subagent 5: Infrastructure & Config Layer
@@ -432,7 +432,7 @@ Severity: HIGH = likely production impact, MEDIUM = correctness/reliability conc
 - [ ] `tasks/crawl.py` imports from `adapters.base`
 - [ ] Circuit breaker: `get_breaker(name, failure_threshold=5)`, `circuit_protected` decorator
 - [ ] `MetricsCollector` methods: `counter_inc()`, `gauge_set()`, `histogram_observe()`
-- [ ] `run_health_checks()` — NOT `check_health()`
+- [ ] `run_health_checks()` -- NOT `check_health()`
 - [ ] `PipelineLogger` and `log_pipeline_event()`, `log_article_event()` in `logging_utils.py`
 - [ ] `ValidationError(ValueError)` in `article_validation.py`
 - [ ] `validate_final_article()` function
@@ -496,7 +496,7 @@ Each subagent reads its assigned architecture document(s), performs the 4-phase 
 - The specific checklist items to verify
 - The output file path to write
 - Instructions to work only in `/home/sugarwookie/projects/ainews`
-- Instructions to NOT make direct code changes — only write the improvement plan
+- Instructions to NOT make direct code changes -- only write the improvement plan
 
 ### Step 3: Read All Subagent Outputs
 
@@ -514,7 +514,7 @@ Write `plans/architecture_review_consolidated.md` with:
 
 ### Step 5: Stale Content Pruning
 
-Execute Phase A–D above on the architecture documents themselves.
+Execute Phase A-D above on the architecture documents themselves.
 
 ### Step 6: Validate
 
@@ -551,7 +551,7 @@ Stage all changes and commit to `main`.
 
 ## Constraints
 
-- Work only in `/home/sugarwookie/projects/ainews` — no external directories
+- Work only in `/home/sugarwookie/projects/ainews` -- no external directories
 - Do NOT specify direct code changes; this is a review plan only
 - Improvement plans go into `plans/` directory
 - All subagent outputs must be written before consolidation

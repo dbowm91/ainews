@@ -44,10 +44,13 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 
 | Current | Next (success) | Next (review) | Next (fail) |
 |---------|----------------|--------------|-------------|
-| `pending` | `select` | - | `failed` |
+| `pending` | `selecting`, `researching` | - | `failed` |
+| `selecting` | `selected` | - | `failed` |
+| `selected` | `researching` | - | `failed` |
 | `select` | `research` | `review` | `failed` |
-| `research` | `write` | `review` | `failed` |
-| `write` | `edit` | `review` | `failed` |
+| `research` | `writing` | `review` | `failed` |
+| `writing` | `editing` | `review` | `failed` |
+| `written` | `editing` | - | `failed` |
 | `edit` | `done` | `review` | `failed` |
 
 ### Quality Gates
@@ -63,7 +66,7 @@ Beyond simple success/failure, each stage has quality gates that can route artic
 
 ## Core Tasks
 
-**Retry Configuration:** All pipeline tasks use `max_retries=CELERY_TASK_MAX_RETRIES` from `constants.py` (default: 3, configurable via `CELERY_TASK_MAX_RETRIES` environment variable). This allows tuning retry behavior without code changes.
+**Retry Configuration:** Most pipeline tasks use `max_retries=CELERY_TASK_MAX_RETRIES` from `constants.py` (default: 3, configurable via `CELERY_TASK_MAX_RETRIES` environment variable). This includes the core pipeline tasks (select, research, write, edit, crawl, process_item). Some orchestration and cleanup tasks (e.g., `generate_daily_newsletters`, `retry_stuck`, `publish_scheduled_articles`, cleanup tasks) use `autoretry_for` without an explicit `max_retries` limit.
 
 ### Crawl Task (`crawl.py`)
 

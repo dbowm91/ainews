@@ -159,14 +159,14 @@ Providers are registered in `providers.yaml` and loaded via `services/llm/__init
 ```python
 # services/llm/__init__.py
 
-def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
-    """Get LLM provider configured for a specific pipeline role.
-    Returns (provider, model, max_tokens, provider_id).
+def get_provider_for_role(role: str):
+    """Returns (provider, model, max_tokens, provider_id) for a pipeline role.
     Integrates circuit breaker - skips providers with open circuits."""
 
-def get_provider_chain() -> Generator[Tuple[BaseLLMProvider, str, int, str], None, None]:
-    """Yield (provider, model, max_tokens, provider_id) tuples for enabled providers.
-    Dynamic - determined by providers.yaml config order, filtering out open circuits."""
+def get_provider_chain(role: str):
+    """Generator yielding (provider, model, max_tokens, provider_id) tuples.
+    Yields primary provider first, then enabled fallback providers in order.
+    Filters out providers with open circuits."""
 ```
 
 ### Provider Resolution
@@ -182,8 +182,8 @@ def get_provider_chain() -> Generator[Tuple[BaseLLMProvider, str, int, str], Non
 The fallback chain is **dynamic** — determined by enabled providers in `providers.yaml` configuration order:
 
 ```python
-def get_provider_chain(role: str) -> Generator[Tuple[BaseLLMProvider, str, int, str], None, None]:
-    """Yield (provider, model, max_tokens, provider_id) tuples for enabled providers.
+def get_provider_chain(role: str):
+    """Generator yielding (provider, model, max_tokens, provider_id) tuples.
     Yields primary provider first, then enabled fallback providers in order.
     Filters out providers with open circuits."""
 ```
@@ -245,7 +245,7 @@ class CircuitOpenError(Exception): ...    # Circuit breaker is open
 
 ## Structured Output
 
-`chat_structured()` uses `_extract_json()` helper to handle markdown-wrapped JSON from Ollama:
+`chat_structured()` uses `extract_json()` helper to handle markdown-wrapped JSON from Ollama:
 
 ```python
 def chat_structured(self, messages, response_model, ...):
@@ -270,7 +270,7 @@ Provider files should import and use this constant rather than hardcoding values
 
 ## LLM Stage Metrics
 
-`record_provider_success(provider_id, model, tokens_used, stage="")` accepts optional `stage` parameter:
+`record_provider_success(provider_id, model, tokens_used, stage="", input_tokens=0, output_tokens=0, cached_tokens=0, latency_ms=0.0, article_id=None)` accepts optional parameters:
 
 ```python
 # When stage is provided, metrics include stage label

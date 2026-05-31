@@ -64,7 +64,7 @@ class BaseSourceAdapter(ABC):
     def __enter__(self) -> 'BaseSourceAdapter':
         """Context manager support"""
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, *exc) -> None:
         """Context manager cleanup"""
 ```
 
@@ -83,7 +83,7 @@ def get_adapter_class(source_type: str) -> type[BaseSourceAdapter]:
 ### Helper Functions
 
 ```python
-def _classify_topics(title: str, text: str = "") -> list[str]:
+def _classify_topics(text: str) -> list[str]:
     """Classify article topics based on title and text content.
     Module-level function (not a class method) to avoid layering violations.
     """
@@ -187,7 +187,7 @@ Blocklist patterns include internal IP ranges and the `javascript:` and `data:` 
 
 ## WebAdapter Request Delay
 
-The `request_delay_min`/`request_delay_max` configuration in `WebConfig` applies **per-article**, not per-page. When crawling a source with pagination, the delay is applied once per article fetch, not once per page load. This may result in more aggressive rate limiting than expected for sites with multiple pages of listings.
+The `request_delay_min`/`request_delay_max` configuration in `WebConfig` applies **per HTTP request**. Both listing page fetches and individual article fetches go through `_polite_get()`, so the delay is applied to each request. This means paginated sources accumulate delays across both page loads and article fetches.
 
 ## Session Ownership
 

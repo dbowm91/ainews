@@ -182,7 +182,6 @@ Template resolution order:
 | `services/prompts.py` | `get_system_prompt()`, `load_prompt_file()`, token counting, truncation |
 | `utils/text.py` | `esc_xml_text()`, `esc_xml_attr()`, `escape_prompt_data()` |
 | `services/subagent/prompt_templates.py` | Subagent task prompt templates |
-| `services/subagent/prompt_templates.py` | Template rendering |
 | `pipeline.yaml` | `system_prompt` overrides, experiment variants |
 | `services/researcher.py` | Research prompt assembly with XML tags |
 | `services/writer.py` | Writer prompt assembly with experiment support |

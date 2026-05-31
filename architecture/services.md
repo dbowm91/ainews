@@ -43,7 +43,7 @@ services/
 ├── cache.py                 # Redis caching (ResponseCache L1+L2)
 ├── limiter.py               # Redis-based rate limiting (ModelLimiter)
 ├── cost_tracker.py          # LLM cost tracking
-└── ...                      # Additional modules (audit, alerts, quality, etc.)
+└── ...                      # Additional modules (see `ls services/` for full list; includes health.py, totp.py, prompts.py, url.py, topic_gap.py, stage_cost.py, source_intelligence.py, quality_report.py, alerts.py, config_utils.py, config_unified.py, audit.py, subscribers.py, redis_utils.py, task_security.py, timeout.py, etc.)
 ```
 
 ## LLM Provider System
@@ -255,7 +255,7 @@ Event notifications with security features:
 Embedding-based semantic trend tracking. **Note**: This module uses module-level functions, not a class:
 
 ```python
-def propose_trend_memory(article, engagement_data) -> list[TrendMemory]:
+def propose_trend_memory(article: Article, engagement_data: dict | None = None) -> SubagentResponse:
     """Post-finalization LLM extraction of high-signal entries"""
 
 def get_memory_for_topics(topics, min_importance=1, max_age_days=None) -> list[TrendMemory]:
@@ -278,7 +278,7 @@ Finds related articles by topics and content similarity.
 
 Primary: `trafilatura` for main content extraction
 Fallback: `readability` for article parsing
-Final fallback: Raw HTML with boilerplate removal
+If both fail: Returns `ExtractionStatus.EMPTY` (no content extracted)
 
 ## Search Providers
 

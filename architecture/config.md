@@ -635,7 +635,7 @@ All 14 tasks are shown above. Configurable values come from `pipeline.yaml` `sch
 | `cleanup_inactive_subscribers_hour` | 1 | `cleanup-inactive-subscribers` (`crontab`) |
 | `cleanup_inactive_subscribers_minute` | 0 | `cleanup-inactive-subscribers` (`crontab`) |
 
-After changing `pipeline.yaml`, call `Config.reload_beat_schedule()` then `POST /api/v1/config/reload` to apply.
+After changing `pipeline.yaml`, call `Config.reload_beat_schedule(celery_app)` with the Celery app instance, then `POST /api/v1/config/reload` to apply.
 
 ## Key Files
 

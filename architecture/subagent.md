@@ -286,18 +286,47 @@ From `pipeline.yaml`:
 
 ```yaml
 subagent:
-  max_iterations: 5
-  tool_timeout: 30.0  # Timeout for individual tool execution (seconds)
-  default_model: "ollama-local"
   default:
+    enabled: false
+    provider: ollama-local
+    model: qwen3:8b
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+  research:
     enabled: true
+    provider: null
+    model: null
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+    max_iterations: 5
+    tools:
+      - web_search
+      - context_notes
+      - related_articles
+      - get_source_health
+    task_template: prompts/subagent_research_synthesis.txt
+  edit:
+    enabled: true
+    provider: null
+    model: null
+    max_tokens: 2048
+    temperature: 0.0
+    timeout_seconds: 120
+    max_retries: 1
+    retry_delay: 5.0
+    max_iterations: 5
     tools:
       - context_notes
       - related_articles
-      - get_trend_memory
-      - get_article_by_id
-      - search_articles
-      - web_search
+      - trend_memory
+    task_template: prompts/subagent_edit_contextualization.txt
+  chains: {}
 ```
 
 ## Usage in Editor

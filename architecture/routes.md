@@ -145,7 +145,7 @@ Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 | `/articles/<id>/pipeline/history` | GET | Pipeline history for article |
 | `/articles/<id>/pipeline/replay` | POST | Replay article from specific stage |
 | `/articles/<id>/pipeline/restore-version` | POST | Restore article to previous version |
-| `/newsletters/performance` | GET | Newsletter performance metrics |
+| `/newsletters/stats` | GET | Newsletter performance metrics |
 | `/search/articles` | GET | Article search with hybrid mode |
 
 **Note:** The `api_tokens_bp` blueprint is registered in `app.py` without a `url_prefix` — routes include the full `/api-tokens` path.
@@ -249,7 +249,7 @@ JSON REST API at `/api/v1/*`:
 - `GET /api/v1/pipeline/sla` - SLA metrics
 
 #### Newsletters
-- `GET /api/v1/newsletters/performance` - Newsletter performance metrics (sent/failed/click counts, top articles, subscriber counts by type)
+- `GET /api/v1/newsletters/stats` - Newsletter performance metrics (sent/failed/click counts, top articles, subscriber counts by type)
 
 #### Quality
 - `GET /api/v1/articles/<id>/quality` - Latest quality report for an article (scores, findings by severity)

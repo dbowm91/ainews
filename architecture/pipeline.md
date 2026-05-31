@@ -170,7 +170,7 @@ Per-topic newsletters generated similarly:
 
 Newsletter generation uses a Redis‑based lock to prevent concurrent runs. The `_check_newsletter_lock` function:
 
-1. Checks an idempotency key (`idempotency:newsletter:{YYYY-MM-DD}`) to skip if already completed today.
+1. Checks an idempotency key (`idempotency:newsletter:{YYYY-MM-DD}`) with a 2-day TTL to skip if already completed today.
 2. Acquires a distributed lock (`ainews:newsletter_lock`) with a 10‑minute TTL using a Lua script.
 3. If the lock is held by another task, the current task skips (returns `skipped`).
 4. If acquisition fails due to Redis error, the task raises (cannot proceed safely).
@@ -265,14 +265,14 @@ When experiments are enabled in `pipeline.yaml`, articles are assigned to experi
 
 ## Degradation Behavior
 
-When stages are disabled via `pipeline.yaml`, articles bypass that stage and advance directly to the next status:
+When stages are disabled via `pipeline.yaml`, articles bypass that stage by routing through `_finalize()`. The `_finalize()` function applies the standard finalization logic: it checks `_should_route_to_review()` (when `review.enabled` AND `auto_publish_threshold` is None OR `impact_score < auto_publish_threshold`) and routes to `review` or `done` accordingly:
 
 | Stage Disabled | Behavior |
 |----------------|----------|
-| select | Article goes directly to `researching` (selection skipped) |
-| research | Article goes directly to `writing` |
-| write | Article goes directly to `editing` |
-| edit | Article finalizes immediately (no editing) |
+| select | Article advances directly to `researching` (selection skipped) |
+| research | Article routes through `_finalize()` — may go to `review` or `done` |
+| write | Article routes through `_finalize()` — may go to `review` or `done` |
+| edit | Article routes through `_finalize()` — may go to `review` or `done` |
 
 When stages fail persistently (after max retries), articles degrade to the next stage:
 

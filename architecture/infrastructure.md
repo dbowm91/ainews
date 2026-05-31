@@ -444,7 +444,7 @@ def blocking_api(arg):
 
 **Important**: In `finally` block, use `executor.shutdown(wait=False, cancel_futures=True)` — not a `with` context manager.
 
-Used in: `services/content_extractor.py`, `services/search/*.py`, `services/subagent/`.
+Used in: `services/content_extractor.py`, `services/search/*.py`, `services/subagent/config.py`.
 
 ## Key Files
 

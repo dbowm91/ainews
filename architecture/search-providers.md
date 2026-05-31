@@ -54,6 +54,8 @@ class BaseSearchProvider(BaseProvider, abc.ABC):
 
 Registered via `@register_search_provider` into a `ProviderManager("search")` instance.
 
+**Note:** `BaseSearchProvider` defines the abstract `search()` method. The `SearchProvider` class (for article search) is a separate abstract base class with its own `search()` signature.
+
 ### Entry Points
 
 ```python
@@ -225,19 +227,30 @@ The default web search provider is configured in `providers.yaml`:
 
 ```yaml
 search_providers:
-  default: duckduckgo
-  providers:
-    duckduckgo:
-      enabled: true
-    hybrid:
-      enabled: true
-    google:
-      enabled: false
+  - id: duckduckgo
+    type: duckduckgo
+    enabled: true
+    config: {}
+
+  - id: google
+    type: google
+    enabled: false
+    config:
       api_key: "${GOOGLE_API_KEY}"
       cse_id: "${GOOGLE_CSE_ID}"
-    searxng:
-      enabled: false
-      base_url: "${SEARXNG_BASE_URL}"
+
+  - id: searxng
+    type: searxng
+    enabled: false
+    config:
+      host: "http://localhost:8888"
+
+  - id: hybrid
+    type: hybrid
+    enabled: true
+    config: {}  # FTS5 + vector similarity search
+
+default_search_provider: duckduckgo
 ```
 
 ## Integration with Subagent

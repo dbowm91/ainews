@@ -1,8 +1,10 @@
 """Prompt utilities: system prompt loading, safe text escaping, and context truncation for LLM input."""
 
+import collections
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from pathlib import Path
@@ -81,15 +83,58 @@ def max_tokens_for_model(model: str | None) -> int:
 TRUNCATION_WARNING = "[Warning: The preceding context was truncated due to length limits. A summary may have been generated to preserve key information.]"
 
 
-@lru_cache(maxsize=128)
+class _PromptFileCache:
+    """LRU cache with file-mtime-based invalidation for prompt files."""
+
+    def __init__(self, maxsize: int = 128) -> None:
+        self._maxsize = maxsize
+        self._cache: dict[str, tuple[float, str | None]] = {}
+        self._access_order: collections.OrderedDict[str, None] = collections.OrderedDict()
+
+    def get(self, name: str) -> str | None:
+        path = _PROMPTS_DIR / f"{name}.txt"
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            if name in self._cache:
+                del self._cache[name]
+                self._access_order.pop(name, None)
+            return None
+
+        if name in self._cache:
+            cached_mtime, cached_content = self._cache[name]
+            if mtime == cached_mtime:
+                self._access_order.move_to_end(name)
+                return cached_content
+
+        try:
+            content = path.read_text().strip()
+        except FileNotFoundError:
+            content = None
+
+        self._cache[name] = (mtime, content)
+        self._access_order[name] = None
+        self._access_order.move_to_end(name)
+        while len(self._access_order) > self._maxsize:
+            evicted, _ = self._access_order.popitem(last=False)
+            self._cache.pop(evicted, None)
+        return content
+
+    def clear(self) -> None:
+        self._cache.clear()
+        self._access_order.clear()
+
+
+_prompt_file_cache = _PromptFileCache(maxsize=128)
+
+
 def load_prompt_file(name: str) -> str | None:
-    """Load a prompt from prompts/{name}.txt. Returns None if not found."""
-    path = _PROMPTS_DIR / f"{name}.txt"
-    try:
-        return path.read_text().strip()
-    except FileNotFoundError:
-        logger.debug("TraceID=%s: Prompt file not found: %s", get_current_trace_id(), path)
-        return None
+    """Load a prompt from prompts/{name}.txt. Returns None if not found.
+
+    Uses an mtime-based cache: files are re-read when their modification
+    time changes. LRU eviction keeps at most 128 entries.
+    """
+    return _prompt_file_cache.get(name)
 
 
 def get_system_prompt(role: str, yaml_prompt: str | None) -> str:

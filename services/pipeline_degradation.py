@@ -1,11 +1,12 @@
 """Pipeline degradation and article finalization logic."""
 
 import json
+from datetime import datetime, timezone
 
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from constants import STAGE_STATUS_MAP, PipelineStatus
+from constants import STAGE_STATUS_MAP, PipelineStatus, truncate_for_log
 from services.article_fallback import build_fallback_article_json
 from services.pipeline_utils import _dispatch_next, _log_pipeline
 
@@ -206,6 +207,74 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
     _apply_degrade_config(article, stage_config, run_id, stage=failed_stage)
 
 
+def post_finalize_article(article, run_id=None):
+    """Post-finalize article: published_at, trend memory, webhooks, SLA metrics, embeddings."""
+    from extensions import db
+    from models import ArticleMetric
+    from services.metrics import get_metrics
+    from services.trend_memory import propose_trend_memory
+    from services.webhooks import trigger_event
+    from tasks.embeddings import generate_article_embedding
+
+    article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if article.crawled_at:
+        sla_duration = (article.published_at - article.crawled_at).total_seconds()
+        get_metrics().histogram_observe("pipeline.e2e_duration_seconds", sla_duration)
+
+    if run_id:
+        _log_pipeline(
+            run_id,
+            "edit",
+            "info",
+            "Finalized: %s",
+            truncate_for_log(article.original_title),
+            article_id=article.id,
+        )
+
+    try:
+        metric = db.session.get(ArticleMetric, article.id)
+        engagement_data = {}
+        if metric:
+            engagement_data = {
+                "newsletter_clicks": metric.newsletter_clicks or 0,
+                "page_loads": metric.page_loads or 0,
+            }
+        propose_trend_memory(article, engagement_data=engagement_data)
+    except SQLAlchemyError:
+        logger.warning(
+            "propose_trend_memory failed for article %s, continuing",
+            article.id,
+        )
+
+    try:
+        trigger_event(
+            "article.published",
+            {
+                "article_id": article.id,
+                "headline": (
+                    json.loads(article.final_article).get("headline", "")
+                    if article.final_article
+                    else ""
+                ),
+                "category": article.category,
+                "impact_score": article.impact_score,
+            },
+        )
+    except json.JSONDecodeError as e:
+        logger.warning("Malformed final_article JSON in webhook for article %s: %s", article.id, e)
+    except Exception:  # noqa: BLE001 - webhook failures are non-critical
+        logger.warning(
+            "Webhook trigger failed for article %s, continuing",
+            article.id,
+        )
+
+    try:
+        generate_article_embedding.delay(article.id)
+    except Exception:  # noqa: BLE001 - embedding generation is non-critical
+        logger.debug("Failed to enqueue embedding generation for article %s", article.id)
+
+
 def _finalize(article_id: int):
     from extensions import db
     from models import Article
@@ -233,6 +302,8 @@ def _finalize(article_id: int):
             )
 
             db.session.commit()
+
+            post_finalize_article(article)
     except (SQLAlchemyError, ImportError) as e:
         db.session.rollback()
         logger.error("Finalize failed for article %s: %s", article_id, e)

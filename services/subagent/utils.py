@@ -1,4 +1,5 @@
 import logging
+import random
 import time
 
 from utils.text import escape_prompt_data
@@ -13,7 +14,7 @@ def _retry_with_backoff(func, max_retries, base_delay=1.0, max_delay=30.0, retry
         except retryable_exceptions:
             if attempt == max_retries - 1:
                 raise
-            time.sleep(min(base_delay * 2**attempt, max_delay))
+            time.sleep(random.uniform(0, min(base_delay * 2**attempt, max_delay)))  # noqa: S311
 
 
 def _is_task_revoked() -> bool:

@@ -1,4 +1,3 @@
-import json
 import threading
 import time
 
@@ -211,76 +210,11 @@ def _handle_validation_and_routing(
 
 def _post_finalize_article(article, run_id: int | None = None) -> None:
     """Post-finalize article: trend memory, webhooks, SLA metrics."""
-    from datetime import datetime, timezone
-
-    from constants import truncate_for_log
-    from services.metrics import get_metrics
-    from tasks.pipeline import _log_pipeline, _transition_article_status
+    from services.pipeline_degradation import post_finalize_article
+    from tasks.pipeline import _transition_article_status
 
     _transition_article_status(article, PipelineStatus.DONE)
-    article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    if article.crawled_at:
-        sla_duration = (article.published_at - article.crawled_at).total_seconds()
-        get_metrics().histogram_observe("pipeline.e2e_duration_seconds", sla_duration)
-
-    if run_id:
-        _log_pipeline(
-            run_id,
-            "edit",
-            "info",
-            "Finalized: %s",
-            truncate_for_log(article.original_title),
-            article_id=article.id,
-        )
-
-    try:
-        from extensions import db
-        from models import ArticleMetric
-
-        metric = db.session.get(ArticleMetric, article.id)
-        engagement_data = {}
-        if metric:
-            engagement_data = {
-                "newsletter_clicks": metric.newsletter_clicks or 0,
-                "page_loads": metric.page_loads or 0,
-            }
-        from services.trend_memory import propose_trend_memory
-        propose_trend_memory(article, engagement_data=engagement_data)
-    except SQLAlchemyError:
-        logger.warning(
-            "propose_trend_memory failed for article %s, continuing",
-            article.id,
-        )
-
-    try:
-        from services.webhooks import trigger_event
-        trigger_event(
-            "article.published",
-            {
-                "article_id": article.id,
-                "headline": (
-                    json.loads(article.final_article).get("headline", "")
-                    if article.final_article
-                    else ""
-                ),
-                "category": article.category,
-                "impact_score": article.impact_score,
-            },
-        )
-    except json.JSONDecodeError as e:
-        logger.warning("Malformed final_article JSON in webhook for article %s: %s", article.id, e)
-    except Exception:  # noqa: BLE001 - webhook failures are non-critical, we continue processing
-        logger.warning(
-            "Webhook trigger failed for article %s, continuing",
-            article.id,
-        )
-
-    try:
-        from tasks.embeddings import generate_article_embedding
-        generate_article_embedding.delay(article.id)
-    except Exception:  # noqa: BLE001 - embedding generation is non-critical
-        logger.debug("Failed to enqueue embedding generation for article %s", article.id)
+    post_finalize_article(article, run_id=run_id)
 
 
 def _execute_editor_work(article, provider, model, max_tokens, article_id: int, run_id: int | None = None):

@@ -106,7 +106,7 @@ class BaseSourceAdapter(abc.ABC):
         return text[:limit] if text else None
 
 
-def _classify_topics(title: str, text: str = "") -> list[str]:
+def _classify_topics(text: str) -> list[str]:
     """Classify topics from title/text using regex patterns.
 
     This is a pure function with no external dependencies, defined here
@@ -139,7 +139,7 @@ def _classify_topics(title: str, text: str = "") -> list[str]:
         ],
     }
     compiled = {k: [re.compile(p, re.I) for p in pats] for k, pats in _PATTERNS.items()}
-    combined = f"{title} {text}".lower()
+    combined = text.lower()
     matched = [
         topic for topic, pats in compiled.items()
         if any(p.search(combined) for p in pats)

@@ -262,7 +262,42 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         max_validation_retries: int = 2,
         stage: str = "",
     ) -> T:
-        """Chat with structured output, returns validated Pydantic model."""
+        """Chat with structured output, returns validated Pydantic model.
+
+        Calls the LLM with a JSON schema derived from ``response_model`` and
+        validates the response against that Pydantic model. On validation
+        failure the method retries once by appending an error-message to the
+        conversation (if ``max_validation_retries > 0``).
+
+        Args:
+            messages: Conversation history (list of ``{"role": ..., "content": ...}`` dicts).
+            response_model: Pydantic model class (``BaseModel`` subclass) that defines
+                the expected output schema. A ``TypeVar`` bound to ``BaseModel`` so the
+                return type matches the input model.
+            model: Model name override; uses ``self.default_model`` when *None*.
+            system: System prompt prepended to the conversation.
+            temperature: Sampling temperature (default 0.0).
+            max_tokens: Maximum tokens for the LLM response.
+            max_validation_retries: How many times to retry after a Pydantic
+                ``ValidationError`` / ``json.JSONDecodeError`` / ``ValueError`` /
+                ``AttributeError`` / ``ImportError``. Each retry sends the
+                validation error and expected schema back to the LLM as a new
+                user message. Default ``2`` (first attempt + up to 2 retries).
+                Set to ``0`` to disable retries (raise on first failure).
+            stage: Tracing stage name used in metrics and logs (e.g. ``"select"``,
+                ``"research"``, ``"write"``, ``"edit"``).
+
+        Returns:
+            A validated instance of ``response_model``.
+
+        Raises:
+            ValidationError: If the LLM response cannot be validated after all
+                retries are exhausted.
+            json.JSONDecodeError: If the response is not valid JSON after retries.
+            ValueError: If JSON extraction fails for structural reasons.
+            AttributeError: If the response lacks required attributes.
+            ImportError: If a required dependency is missing for extraction.
+        """
         from services.metrics import get_metrics
 
         trace_id = get_current_trace_id()

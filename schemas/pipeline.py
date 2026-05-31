@@ -119,6 +119,15 @@ class SubagentChainConfig(BaseModel):
 
 
 class SubagentConfig(BaseModel):
+    """Configuration for subagent pipeline stages.
+
+    All fields are optional with sensible defaults:
+    - default: Fallback config for any stage not explicitly configured.
+    - research: Config for the research stage.
+    - edit: Config for the edit stage.
+    - chains: Named subagent chains for multi-step workflows.
+    """
+
     default: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
     research: SubagentStageConfig = Field(default_factory=SubagentStageConfig)
     edit: SubagentStageConfig = Field(default_factory=SubagentStageConfig)

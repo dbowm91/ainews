@@ -38,6 +38,10 @@ services:
       db-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/instance
 
   celery-worker:
     build: .

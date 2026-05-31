@@ -375,6 +375,10 @@ def run_subagent_with_tools(
         stage_config, default_role=default_role,
     )
 
+    # Apply token budgeting to prevent context overflow
+    from services.prompts import _budget_tokens
+    prompt = _budget_tokens(prompt, model, max_tokens)
+
     middleware_chain = [
         LoggingMiddleware(logger),
         TimingMiddleware(logger),

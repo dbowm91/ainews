@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from schemas.pipeline import SubagentStageConfig
 from services.llm import get_provider_for_role
 
-SUBAGENT_WORKERS = int(os.environ.get("SUBAGENT_WORKERS", "8"))
+SUBAGENT_WORKERS = int(os.environ.get("SUBAGENT_WORKERS", "16"))
 _subagent_executor = ThreadPoolExecutor(max_workers=SUBAGENT_WORKERS, thread_name_prefix="subagent")
 
 

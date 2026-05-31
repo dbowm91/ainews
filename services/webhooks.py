@@ -22,6 +22,7 @@ MAX_DELAY_SECONDS = 300
 
 _ENCRYPTION_KEY: bytes | None = None
 _FALLBACK_KEYS: list[bytes] = []
+_MULTIFERNET: "Fernet | None" = None
 
 
 class WebhookSecretDecryptionError(Exception):
@@ -50,13 +51,13 @@ def _get_encryption_key() -> bytes:
 
 def _load_fallback_keys() -> None:
     """Load fallback encryption keys for key rotation support."""
-    global _FALLBACK_KEYS
+    global _FALLBACK_KEYS, _MULTIFERNET
     _FALLBACK_KEYS = []
     fallback_vars = [
         os.environ.get("WEBHOOK_SECRET_KEY_PREVIOUS_1", ""),
         os.environ.get("WEBHOOK_SECRET_KEY_PREVIOUS_2", ""),
     ]
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet, MultiFernet
 
     for key in fallback_vars:
         if key:
@@ -64,6 +65,11 @@ def _load_fallback_keys() -> None:
                 _FALLBACK_KEYS.append(Fernet(key.encode("utf-8")))
             except (ValueError, TypeError) as e:
                 logger.debug("Skipping invalid fallback key: %s", e)
+
+    # Create MultiFernet with primary key first, then fallback keys
+    primary_key = _get_encryption_key()
+    all_keys = [Fernet(primary_key)] + [Fernet(k.encode("utf-8")) for k in fallback_vars if k]
+    _MULTIFERNET = MultiFernet(all_keys)
 
 
 def _encrypt_secret(plaintext: str) -> str:
@@ -88,6 +94,13 @@ def _decrypt_secret(ciphertext: str) -> str:
         return f.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
     elif ciphertext.startswith("v1:enc:"):
         actual_cipher = ciphertext[6:]
+        # Try MultiFernet first (handles key rotation automatically)
+        if _MULTIFERNET is not None:
+            try:
+                return _MULTIFERNET.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+            except (ValueError, TypeError):
+                pass
+        # Fall back to manual iteration
         for fallback in _FALLBACK_KEYS:
             try:
                 return fallback.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")

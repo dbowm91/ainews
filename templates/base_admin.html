@@ -9,14 +9,13 @@
 {% include "partials/critical_css.html" %}
 {% include "partials/critical_css_admin.html" %}
   </style>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.bundled.css') }}">
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script nonce="{{ csp_nonce() }}">
     htmx.config.inlineScriptNonce = "{{ csp_nonce() }}";
   </script>
-  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/admin.js') }}" defer nonce="{{ csp_nonce() }}"></script>
+  <script src="{{ url_for('static', filename='js/bundle.min.js') }}" defer nonce="{{ csp_nonce() }}"></script>
 </head>
 <body class="admin-body" hx-boost="true">
   <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>

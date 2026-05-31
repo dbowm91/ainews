@@ -41,7 +41,7 @@ services:
 
   celery-worker:
     build: .
-    command: celery -A celery_app:celery_app worker -l info --concurrency=4
+    command: celery -A celery_app:celery_app worker -l info --concurrency=${CELERY_CONCURRENCY:-4}
     deploy:
       resources:
         limits:

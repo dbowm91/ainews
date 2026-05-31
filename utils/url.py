@@ -200,10 +200,62 @@ def clear_dns_cache() -> None:
     _get_dns_cache().clear()
 
 
+def _normalize_ip_address(hostname: str) -> str:
+    """Normalize IP address representations (decimal, hex, octal) to standard dotted notation.
+
+    Handles:
+    - Decimal: 2130706433 -> 127.0.0.1
+    - Hex: 0x7f000001 -> 127.0.0.1
+    - Octal: 0177.0.0.1 -> 127.0.0.1 (with leading zeros)
+    """
+    # Try decimal IP (e.g., 2130706433)
+    if hostname.isdigit():
+        try:
+            num = int(hostname)
+            if 0 <= num <= 0xFFFFFFFF:
+                ip = ipaddress.IPv4Address(num)
+                return str(ip)
+        except (ValueError, OverflowError):
+            pass
+
+    # Try hex IP (e.g., 0x7f000001)
+    if hostname.startswith("0x") or hostname.startswith("0X"):
+        try:
+            num = int(hostname, 16)
+            if 0 <= num <= 0xFFFFFFFF:
+                ip = ipaddress.IPv4Address(num)
+                return str(ip)
+        except (ValueError, OverflowError):
+            pass
+
+    # Try octal IP (e.g., 0177.0.0.1)
+    if hostname.startswith("0") and len(hostname) > 1 and hostname[1].isdigit():
+        try:
+            # Check if all parts are valid octal
+            parts = hostname.split(".")
+            if len(parts) == 4:
+                decimal_parts = []
+                for part in parts:
+                    if part.startswith("0") and len(part) > 1:
+                        # Octal
+                        decimal_parts.append(int(part, 8))
+                    else:
+                        decimal_parts.append(int(part))
+                ip = ipaddress.IPv4Address(".".join(str(p) for p in decimal_parts))
+                return str(ip)
+        except (ValueError, OverflowError):
+            pass
+
+    return hostname
+
+
 def _resolve_and_check(hostname: str) -> list[str]:
     cached = _get_dns_cache().get(hostname)
     if cached is not None:
         return cached
+
+    # Normalize IP address representations
+    hostname = _normalize_ip_address(hostname)
 
     future = _dns_executor.submit(socket.getaddrinfo, hostname, None)
     try:

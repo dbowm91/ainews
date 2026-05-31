@@ -300,6 +300,7 @@ newsletter_subscribers = db.Table(
     db.Column("opened_at", db.DateTime, nullable=True),
     db.Column("clicked_at", db.DateTime, nullable=True),
 )
+```
 
 ## Article-Tag Association
 
@@ -337,7 +338,7 @@ class Newsletter(Base):
     sent_at = Column(DateTime, index=True)
 
     # Relationships
-    articles = relationship("Article", secondary="newsletter_articles", backref="newsletters")
+    articles = relationship("Article", secondary="newsletter_articles", backref=db.backref("newsletters", lazy="dynamic"))
 
 class Subscriber(Base):
     __tablename__ = 'subscribers'

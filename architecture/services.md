@@ -18,6 +18,7 @@ services/
 │   └── json_utils.py        # JSON extraction helpers
 ├── subagent/                # Tool-enabled LLM agents
 ├── search/                  # Search provider implementations
+│   └── session.py           # Shared requests.Session with SSRF-safe redirect handler
 ├── article_parser.py        # Article content parsing
 ├── article_validation.py    # Article quality validation
 ├── article_fallback.py      # Fallback content extraction
@@ -291,6 +292,7 @@ services/search/
 ├── google.py            # Google provider (disabled, requires API key)
 ├── searxng.py           # SearxNG provider (disabled, self-hosted)
 ├── hybrid.py            # Hybrid provider (enabled - FTS5 + vector similarity)
+├── session.py           # Shared requests.Session with SSRF-safe redirect handler
 └── sqlite_fts.py        # SQLite FTS provider (internal article search)
 ```
 
@@ -301,6 +303,7 @@ services/search/
 | SearxNG | `searxng.py` | Disabled (self-hosted) |
 | Hybrid | `hybrid.py` | Enabled (FTS5 + vector similarity) |
 | SQLite FTS | `sqlite_fts.py` | Internal article search |
+| Session | `session.py` | Shared connection pool with SSRF-safe redirects |
 
 **Note:** DeepSeek is not a search provider. DeepSeek is only referenced as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends.
 

@@ -4,7 +4,6 @@ import abc
 import json
 import logging
 import random
-import re
 import threading
 import time
 from concurrent.futures import CancelledError, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -16,50 +15,14 @@ from pydantic import BaseModel, ValidationError
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from services.circuit_breaker import CircuitOpenError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
+from services.llm.json_utils import extract_json
 from utils.text import esc_xml_text
 from services.provider_base import BaseProvider, ProviderManager
 from services.tracing import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
-_MARKDOWN_JSON_RE = re.compile(r'```(?:json)?\s*([\s\S]+?)\s*```', re.MULTILINE)
-_BRACE_JSON_RE = re.compile(r'\{[\s\S]*\}')
-
 T = TypeVar("T", bound=BaseModel)
-
-
-def _extract_json(raw: str) -> str:
-    """Extract JSON from response that may contain markdown."""
-    import json as json_mod
-    raw = raw.strip()
-    if not raw:
-        raise ValueError("LLM returned empty response")
-
-    try:
-        json_mod.loads(raw)
-        return raw
-    except json_mod.JSONDecodeError:
-        pass
-
-    match = _MARKDOWN_JSON_RE.search(raw)
-    if match:
-        candidate = match.group(1).strip()
-        try:
-            json_mod.loads(candidate)
-            return candidate
-        except json_mod.JSONDecodeError:
-            pass
-
-    match = _BRACE_JSON_RE.search(raw)
-    if match:
-        candidate = match.group(0).strip()
-        try:
-            json_mod.loads(candidate)
-            return candidate
-        except json_mod.JSONDecodeError:
-            pass
-
-    return raw
 
 
 class BatchError(Exception):
@@ -316,7 +279,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         )
         latency_ms = (time.monotonic() - t0) * 1000
         try:
-            resp = _extract_json(resp)
+            resp = extract_json(resp)
             result = response_model.model_validate_json(resp)
             self._record_success(model or self.default_model, stage=stage, latency_ms=latency_ms)
             logger.info(
@@ -369,7 +332,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     schema,
                     model,
                 )
-                resp = _extract_json(resp)
+                resp = extract_json(resp)
                 result = response_model.model_validate_json(resp)
                 self._record_success(model or self.default_model, stage=stage, latency_ms=latency_ms)
                 return result

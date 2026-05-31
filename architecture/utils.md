@@ -32,7 +32,8 @@ def esc_xml_attr(text: str) -> str:
     """Escape text for XML attribute value"""
 
 def escape_prompt_data(data: dict) -> dict:
-    """Escape dict values for prompt injection prevention"""
+    """Escape dict values for prompt injection prevention.
+    Handles strings, nested dicts, and lists (escapes string items recursively)."""
 ```
 
 **Two different truncate() functions:**
@@ -68,7 +69,9 @@ def time_ago(dt: datetime) -> str:
 
 ```python
 def generate_token(length: int = 32) -> str:
-    """Generate cryptographically secure random token"""
+    """Generate cryptographically secure random token.
+    `length` is the number of random bytes (not characters); output uses
+    URL-safe base64 encoding so the resulting string is ~33% longer."""
 
 def constant_time_compare(a: str, b: str) -> bool:
     """Constant-time string comparison (timing attack prevention)"""
@@ -131,11 +134,12 @@ The 14 tracked parameters are: `utm_source`, `utm_medium`, `utm_campaign`, `utm_
 ## Design Principles
 
 1. **Pure functions**: Most functions are pure, but `validate_url_safe()` and related DNS functions in `url.py` perform DNS resolution with caching using global state (`_dns_cache`, `_dns_executor`, `_TTLCache`). These are intentionally not pure for performance.
-2. **Minimal dependencies**: Only standard library + very common packages
-3. **Comprehensive validation**: Input checking with clear errors
-4. **Type hints**: Full typing for better IDE support
-5. **Testable**: Easy to unit test without mocking complex systems
-6. **URL validation layering**: `services/url.py` re-exports `TRACKING_PARAMS`, `normalize_title`, and `normalize_url` from `utils/url.py` unchanged. Only `UnsafeURLError`, `_resolve_and_check`, and `validate_url_safe` are duplicated in `services/url.py` — these copies add config support by reading `DNS_CACHE_TTL` and `DNS_CACHE_MAX` via `get_config_with_default()` (see `services/url.py:60-63`), whereas `utils/url.py` uses hardcoded constants (`_DNS_CACHE_TTL = 5`, `_DNS_CACHE_MAX = 1024`). Adapters should import from `utils/url.py` per clean layering.
+2. **Thread-safety**: `_TTLCache` (`utils/url.py:138`) uses a `threading.Lock` to protect all `get`/`set`/`clear` operations. The global `_dns_cache` singleton is initialized with double-checked locking via `_dns_cache_lock` (`utils/url.py:185-196`).
+3. **Minimal dependencies**: Only standard library + very common packages
+4. **Comprehensive validation**: Input checking with clear errors
+5. **Type hints**: Full typing for better IDE support
+6. **Testable**: Easy to unit test without mocking complex systems
+7. **URL validation layering**: `services/url.py` re-exports `TRACKING_PARAMS`, `normalize_title`, and `normalize_url` from `utils/url.py` unchanged. Only `UnsafeURLError`, `_resolve_and_check`, and `validate_url_safe` are duplicated in `services/url.py` — these copies add config support by reading `DNS_CACHE_TTL` and `DNS_CACHE_MAX` via `get_config_with_default()` (see `services/url.py:60-63`), whereas `utils/url.py` uses hardcoded constants (`_DNS_CACHE_TTL = 5`, `_DNS_CACHE_MAX = 1024`). Adapters should import from `utils/url.py` per clean layering.
 
 ## __all__ exports
 

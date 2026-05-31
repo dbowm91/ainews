@@ -415,7 +415,9 @@ ainews/
 │   ├── tag.py              # Tag, article_tags
 │   ├── search.py           # SearchQuery
 │   ├── audit.py            # AuditLog
-│   └── share.py            # ShareConfig
+│   ├── share.py            # ShareConfig
+│   ├── quality.py          # QualityReport
+│   └── utils.py            # Model utility functions
 ├── models.py               # Re-exports from models package
 ├── schemas/                # Pydantic models
 │   ├── pipeline.py         # PipelineRootConfig, RoleConfig, SubagentConfig
@@ -516,6 +518,7 @@ ainews/
 │   │   └── links.py        # Short URLs, share tracking
 │   ├── admin/              # Admin interface
 │   │   ├── __init__.py     # Login, lockout, session mgmt
+│   │   ├── auth.py         # Authentication routes
 │   │   ├── dashboard.py    # Dashboard with stats
 │   │   ├── articles.py     # Article CRUD + versions
 │   │   ├── pipelines.py    # Pipeline monitoring
@@ -524,6 +527,10 @@ ainews/
 │   │   ├── review.py       # Article review queue
 │   │   ├── webhooks.py     # Webhook management
 │   │   ├── trend_memory.py # Trend memory UI
+│   │   ├── shares.py       # Share management
+│   │   ├── subscribers.py  # Subscriber management
+│   │   ├── topic_notes.py  # Topic notes UI
+│   │   ├── metrics.py      # Metrics dashboard
 │   │   ├── api_tokens.py   # API token management
 │   │   └── api/            # Admin JSON API at /api/v1/*
 │       ├── articles.py     # Article CRUD and pipeline control
@@ -581,7 +588,7 @@ ainews/
 │   ├── helpers/            # Pipeline test helpers
 │   └── test_*.py           # Test modules by component
 │
-├── migrations/             # Alembic database migrations (35 versions)
+├── migrations/             # Alembic database migrations (36 versions)
 ├── scripts/                # Utility scripts (backup, deploy, dev)
 ├── docs/                   # Additional documentation (37 files)
 ├── architecture/           # Architecture documentation (this directory)

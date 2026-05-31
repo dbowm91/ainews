@@ -113,6 +113,7 @@ class Config:
 All tasks use autoretry for transient errors:
 
 ```python
+# Non-LLM tasks
 @shared_task(
     bind=True,
     autoretry_for=(ConnectionError, TimeoutError),
@@ -121,6 +122,17 @@ All tasks use autoretry for transient errors:
     retry_jitter=True,
 )
 def my_task(self, ...):
+    ...
+
+# LLM pipeline tasks (select, research, write, edit) also retry on ProviderServerError
+@shared_task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError, ProviderServerError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def pipeline_task(self, ...):
     ...
 ```
 
@@ -215,10 +227,10 @@ class ModelLimiter:
     Uses Lua scripts for atomic slot management.
     Provider/model-aware with pub/sub notifications."""
 
-    def acquire(self, provider_id: str, model: str, max_concurrent: int, timeout: float = 300) -> bool:
+    def acquire(self, provider_id: str, model: str, max_concurrent: int, timeout: int = 300) -> bool:
         """Acquire rate limiter slot for specific provider/model. Returns True if acquired."""
 
-    def release(self, provider_id: str, model: str, timeout: float = 300) -> None:
+    def release(self, provider_id: str, model: str, timeout: int = 300) -> None:
         """Release rate limiter slot. Always call in finally block."""
 
     def get_active(self, provider_id: str, model: str) -> int | None:
@@ -368,7 +380,7 @@ def trigger_event(event_type, event_data, idempotency_key=None) -> None:
 ```python
 # services/logging_utils.py
 
-def get_tracer() -> Tracer:
+def get_tracer() -> Optional[Tracer]:
     """Returns tracer (noop exporter when OTel unavailable)."""
 
 def traced_llm_call(provider: str, model: str, stage: str):

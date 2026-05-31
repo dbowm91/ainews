@@ -96,9 +96,15 @@ Fetches RSS/Atom feeds using `feedparser`:
 ```python
 class RSSAdapter(BaseSourceAdapter):
     def fetch(self) -> list[Any]:
-        # Uses feedparser.parse()
-        # Falls back to requests + BeautifulSoup for malformed feeds
-        return self._fetch_feed(url) or self._scrape_feed(url)
+        # Validates feed URL via validate_url_safe()
+        # Fetches feed with feedparser.parse()
+        # Falls back to _scrape_feed_fallback() for malformed feeds
+        cfg = self.adapter_config
+        validate_url_safe(cfg.feed_url)
+        # ...
+        if not _validate_feed(feed):
+            return _scrape_feed_fallback(cfg.feed_url, self._session, cfg.request_timeout)
+        return feed.entries[: cfg.max_items]
 ```
 
 Features:
@@ -106,6 +112,8 @@ Features:
 - Atom feed support
 - Malformed feed fallback (HTTP + BeautifulSoup)
 - Feed metadata extraction (title, description, language)
+
+**Note:** `_scrape_feed_fallback()` is a standalone function that does NOT call `validate_url_safe()` — the URL is validated once in `fetch()` before any HTTP requests.
 
 ## API Adapter (`api.py`)
 
@@ -118,9 +126,13 @@ class APIAdapter(BaseSourceAdapter):
         self._session = get_crawl_session()
 
     def fetch(self) -> list[Any]:
+        # Validates list URL via validate_url_safe()
         # Handles authentication (Bearer token via auth_header or Authorization fallback)
         # Rate limiting compliance
-        return self._fetch_page() or []
+        # Pagination via next_link or query_param
+        cfg = self.adapter_config
+        validate_url_safe(cfg.list_url)
+        # ...
 ```
 
 Features:
@@ -194,6 +206,13 @@ Each adapter type manages HTTP sessions differently based on its requirements:
 **Important:** `APIAdapter` and `WebAdapter` do NOT close the shared session in their `close()` methods — they implement `close()` as no-ops. This prevents closing the global shared session which would break other adapters. `RSSAdapter` creates its own session and therefore its `close()` method correctly closes its own session.
 
 The global session handler shares state per-request (via thread-local storage for redirect counting). This means redirect counting is reset per-request but the handler instance is shared across all adapter types.
+
+## Adapter Constants vs Service Configuration
+
+Adapters use **hardcoded constants** (e.g., `MAX_TEXT_LENGTH = 3000` in `base.py`, `MIN_CONTENT_LENGTH = 200` in `web.py`, `_max_redirects = 30` in `session.py`), while services use **configurable values** from Flask config or environment variables. This is intentional:
+
+- **Adapters** are pure infrastructure code that must not depend on Flask app context or complex configuration loading. Hardcoded constants ensure adapters remain simple, testable, and decoupled from the application layer.
+- **Services** have access to Flask config, environment variables, and `get_config_with_default()` for Celery-safe access. They can afford configuration complexity because they operate within the application context.
 
 ## Source Configuration
 

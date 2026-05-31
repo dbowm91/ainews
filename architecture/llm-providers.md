@@ -307,7 +307,7 @@ def _parse_metric_key(key: str) -> tuple[str | None, dict[str, str]]:
 | `services/llm/ollama.py` | Local Ollama |
 | `services/llm/errors.py` | Error classification |
 | `services/llm/json_utils.py` | JSON parsing for LLM responses |
-| `providers.yaml` | Provider configuration (16 providers) |
+| `providers.yaml` | Provider configuration (14 LLM providers + 4 search providers) |
 | `pipeline.yaml` | Per-role provider/model assignments |
 | `services/circuit_breaker.py` | Circuit breaker implementation |
 | `services/cost_tracker.py` | Cost estimation from metrics counters |

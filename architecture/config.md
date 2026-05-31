@@ -245,6 +245,7 @@ class RoleConfig(BaseModel):
     # Role-specific fields:
     web_search: Optional[bool] = None    # researcher only
     web_search_max_results: Optional[int] = None  # researcher only
+    web_search_provider: Optional[str] = None  # researcher only (overrides default_search_provider)
     db_related_max: Optional[int] = None  # researcher only
     max_article_text_length: Optional[int] = None  # researcher only
     max_key_points: Optional[int] = None  # writer only
@@ -449,10 +450,13 @@ topics:
 
 ```python
 # schemas/pipeline.py
-def load_pipeline_config(path: str = None) -> PipelineRootConfig:
+def load_pipeline_config(path: str | Path = BASE_DIR / "pipeline.yaml") -> PipelineRootConfig:
     """Load and validate pipeline.yaml with mtime-based cache."""
-    config_path = Path(path or BASE_DIR / "pipeline.yaml")
-    return cached_config_with_mtime(config_path, PipelineRootConfig)
+    return cached_config_with_mtime(
+        key="pipeline",
+        loader_fn=lambda: _load_pipeline_config_from_file(path),
+        config_path=Path(path),
+    )
 
 # schemas/source.py
 def load_sources(path: str = None) -> list[SourceConfig]:

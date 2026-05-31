@@ -121,7 +121,7 @@ class TestGenerateDailyNewslettersCore:
 
         with app.app_context():
             with patch("tasks.newsletter._check_newsletter_lock") as mock_lock:
-                mock_lock.return_value = (None, {"skipped": True, "reason": "already_generated_today"})
+                mock_lock.return_value = (None, None, {"skipped": True, "reason": "already_generated_today"})
 
                 from tasks.newsletter import _generate_daily_newsletters_core
 
@@ -134,7 +134,7 @@ class TestGenerateDailyNewslettersCore:
 
         with app.app_context():
             with patch("tasks.newsletter._check_newsletter_lock") as mock_lock:
-                mock_lock.return_value = (None, {"skipped": True, "reason": "locked"})
+                mock_lock.return_value = (None, None, {"skipped": True, "reason": "locked"})
 
                 from tasks.newsletter import _generate_daily_newsletters_core
 

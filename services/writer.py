@@ -13,15 +13,15 @@ def get_writer_system_prompt(article=None) -> str:
         article: Optional article object with experiment_group attribute.
                  If provided and experiment_group is set, uses the variant prompt.
     """
-    from schemas.pipeline import get_config, get_role_config
+    from schemas.pipeline import load_pipeline_config, get_role_config
     from services.prompts import get_system_prompt
 
     rc = get_role_config("writer")
-    config = get_config()
+    config = load_pipeline_config()
 
     # Check for experiment variant
     if article and hasattr(article, 'experiment_group') and article.experiment_group:
-        experiments = config.get("experiments", {})
+        experiments = config.experiments
         if experiments.get("enabled", False):
             prompt_variants = experiments.get("prompt_variants", {})
             writer_variants = prompt_variants.get("writer", {})

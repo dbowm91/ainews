@@ -79,7 +79,7 @@ def _perform_web_search_and_synthesis(article, rc):
         tools = initialize_tool_registry(selector=selector)
         web_synthesis_result = run_subagent_with_tools(
             task_type="research_synthesis",
-            stage="research",
+            stage="researcher",
             prompt_data={
                 "title": article.original_title or "",
                 "body": article.extracted_text or "",
@@ -92,7 +92,7 @@ def _perform_web_search_and_synthesis(article, rc):
     else:
         web_synthesis_result = run_subagent(
             task_type="research_synthesis",
-            stage="research",
+            stage="researcher",
             prompt_data={
                 "title": article.original_title or "",
                 "body": article.extracted_text or "",
@@ -162,9 +162,9 @@ def _generate_research_brief(
         topic_notes=topic_notes,
         trend_memory=trend_memory,
     )
-    with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="research"):
+    with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="researcher"):
         with time_histogram(
-            "pipeline.stage_duration_seconds", labels={"stage": "research"},
+            "pipeline.stage_duration_seconds", labels={"stage": "researcher"},
         ):
             brief = provider.chat_structured(
                 messages=[{"role": "user", "content": prompt}],
@@ -173,7 +173,7 @@ def _generate_research_brief(
                 system=get_researcher_system_prompt(),
                 temperature=rc.temperature,
                 max_tokens=max_tokens,
-                stage="research",
+                stage="researcher",
             )
     return brief
 

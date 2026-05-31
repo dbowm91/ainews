@@ -381,7 +381,7 @@ def _check_newsletter_lock(redis_client, task_id):
     idempotency_key = f"idempotency:newsletter:{today}"
     if redis_client.exists(idempotency_key):
         logger.info("Newsletter generation already completed today, skipping")
-        return None, {"skipped": True, "reason": "already_generated_today"}
+        return None, None, {"skipped": True, "reason": "already_generated_today"}
 
     _NEWSLETTER_LOCK_SCRIPT = """
     local current = redis.call('GET', KEYS[1])

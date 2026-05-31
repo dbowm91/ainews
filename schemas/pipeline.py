@@ -155,6 +155,7 @@ class PipelineRootConfig(BaseModel):
     )
     subagent: SubagentConfig = Field(default_factory=SubagentConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    experiments: dict = Field(default_factory=dict)
     stages: dict[str, StageConfig] = Field(default_factory=dict)
     schedule: dict = Field(default_factory=dict)
 

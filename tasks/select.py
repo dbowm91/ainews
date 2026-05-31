@@ -18,10 +18,10 @@ logger = get_task_logger(__name__)
 
 def _assign_experiment_group(article_id: int, salt: str = "") -> str:
     """Assign experiment group using hash of article_id + salt for deterministic assignment."""
-    from services.config_unified import get_config
+    from schemas.pipeline import load_pipeline_config
 
-    config = get_config()
-    experiments = config.get("experiments", {})
+    config = load_pipeline_config()
+    experiments = config.experiments
     if not experiments.get("enabled", False):
         return "control"
 
@@ -97,9 +97,9 @@ def select_article(self, article_id: int, run_id=None):
         from services.logging_utils import traced_llm_call
         from services.metrics import time_histogram
 
-        with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="select"):
+        with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="selector"):
             with time_histogram(
-                "pipeline.stage_duration_seconds", labels={"stage": "select"},
+                "pipeline.stage_duration_seconds", labels={"stage": "selector"},
             ):
                 result = provider.chat_structured(
                     messages=[{"role": "user", "content": prompt}],
@@ -108,15 +108,15 @@ def select_article(self, article_id: int, run_id=None):
                     system=get_system_prompt("selector", rc.system_prompt),
                     temperature=rc.temperature,
                     max_tokens=max_tokens,
-                    stage="select",
+                    stage="selector",
                 )
 
         article.selector_result = result.model_dump()
 
         # A/B experiment assignment (if experiments configured)
-        from services.config_unified import get_config
-        config = get_config()
-        experiments = config.get("experiments", {})
+        from schemas.pipeline import load_pipeline_config
+        config = load_pipeline_config()
+        experiments = config.experiments
         if experiments.get("enabled", False):
             salt = experiments.get("assignment_salt", "")
             group = _assign_experiment_group(article.id, salt)

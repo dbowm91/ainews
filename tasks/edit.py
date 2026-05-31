@@ -111,7 +111,7 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
         tools = initialize_tool_registry(selector=selector)
         context_result = run_subagent_with_tools(
             task_type="edit_contextualization",
-            stage="edit",
+            stage="editor",
             prompt_data={
                 "draft": article.draft_article or "",
                 "brief": article.research_brief or "",
@@ -126,7 +126,7 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     else:
         context_result = run_subagent(
             task_type="edit_contextualization",
-            stage="edit",
+            stage="editor",
             prompt_data={
                 "draft": article.draft_article or "",
                 "brief": article.research_brief or "",
@@ -319,9 +319,9 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
         contextualization=contextualization,
     )
 
-    with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="edit"):
+    with traced_llm_call(provider=provider.__class__.__name__, model=model, stage="editor"):
         with time_histogram(
-            "pipeline.stage_duration_seconds", labels={"stage": "edit"},
+            "pipeline.stage_duration_seconds", labels={"stage": "editor"},
         ):
             result = provider.chat_structured(
                 messages=[{"role": "user", "content": prompt}],
@@ -330,7 +330,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
                 system=get_editor_system_prompt(article),
                 temperature=rc.temperature,
                 max_tokens=max_tokens,
-                stage="edit",
+                stage="editor",
             )
 
     result_json = result.model_dump_json()

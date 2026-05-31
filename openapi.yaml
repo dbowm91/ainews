@@ -299,52 +299,60 @@ paths:
       tags: [Pipeline]
       responses:
         '200':
-          description: Backlog articles
+          description: Backlog stats
+
   /pipeline/sla:
     get:
-      summary: Pipeline SLA metrics
+      summary: Pipeline SLA compliance
       tags: [Pipeline]
       responses:
         '200':
-          description: SLA metrics (avg, p50, p95 processing times)
+          description: SLA stats
+
   /costs:
     get:
-      summary: LLM cost summary
-      tags: [Pipeline]
+      summary: LLM cost breakdown
+      tags: [Costs]
       responses:
         '200':
-          description: Cost summary
+          description: Cost breakdown by provider/model
+
   /sources/health:
     get:
       summary: Source health status
       tags: [Sources]
       responses:
         '200':
-          description: Source health list
+          description: Source health summary
+
   /newsletters/stats:
     get:
-      summary: Newsletter delivery stats
-      tags: [Newsletter]
+      summary: Newsletter statistics
+      tags: [Newsletters]
       responses:
         '200':
-          description: Aggregate delivery statistics
+          description: Newsletter delivery stats
+
   /newsletter/preview:
     post:
       summary: Preview newsletter
-      tags: [Newsletter]
+      tags: [Newsletters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                topic:
+                  type: string
       responses:
         '200':
           description: Newsletter preview
-  /search/analytics:
-    get:
-      summary: Search analytics
-      tags: [Search]
-      responses:
-        '200':
-          description: Top queries and zero-result queries
+
   /audit-logs:
     get:
-      summary: Audit logs
+      summary: List audit logs
       tags: [Audit]
       parameters:
         - in: query
@@ -359,10 +367,11 @@ paths:
           name: days
           schema:
             type: integer
-            default: 7
+            default: 30
       responses:
         '200':
-          description: Audit log entries
+          description: Paginated audit log list
+
   /config/reload:
     post:
       summary: Reload configuration
@@ -370,28 +379,8 @@ paths:
       responses:
         '200':
           description: Config reloaded
-  /metrics:
-    get:
-      summary: Get metrics
-      tags: [Metrics]
-      responses:
-        '200':
-          description: Metrics data
-  /metrics/prometheus:
-    get:
-      summary: Prometheus metrics
-      tags: [Metrics]
-      responses:
-        '200':
-          description: Prometheus formatted metrics
-  /workers/health:
-    get:
-      summary: Celery worker health
-      tags: [Health]
-      responses:
-        '200':
-          description: Worker health status
-  /task/{task_id}:
+
+  /tasks/{task_id}:
     get:
       summary: Get task status
       tags: [Tasks]
@@ -404,6 +393,135 @@ paths:
       responses:
         '200':
           description: Task status
+
+  /alerts:
+    get:
+      summary: Get active alerts
+      tags: [Alerts]
+      responses:
+        '200':
+          description: Active alerts grouped by severity
+
+  /articles/{article_id}/quality:
+    get:
+      summary: Get article quality report
+      tags: [Quality]
+      parameters:
+        - in: path
+          name: article_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Quality report for article
+
+  /quality/recent:
+    get:
+      summary: Get recent quality reports
+      tags: [Quality]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Recent quality reports
+
+  /articles/{article_id}/pipeline/history:
+    get:
+      summary: Get article pipeline history
+      tags: [Pipeline]
+      parameters:
+        - in: path
+          name: article_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipeline run history for article
+
+  /articles/{article_id}/pipeline/replay:
+    post:
+      summary: Replay article pipeline
+      tags: [Pipeline]
+      parameters:
+        - in: path
+          name: article_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_stage:
+                  type: string
+      responses:
+        '202':
+          description: Pipeline replay started
+
+  /articles/{article_id}/pipeline/restore-version:
+    post:
+      summary: Restore article to version
+      tags: [Pipeline]
+      parameters:
+        - in: path
+          name: article_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version_id
+              properties:
+                version_id:
+                  type: integer
+      responses:
+        '200':
+          description: Article restored to version
+
+  /sources/performance:
+    get:
+      summary: Get source performance metrics
+      tags: [Sources]
+      responses:
+        '200':
+          description: Source performance data
+
+  /topics/coverage:
+    get:
+      summary: Get topic coverage analysis
+      tags: [Sources]
+      responses:
+        '200':
+          description: Topic coverage data
+
+  /sources/recommendations:
+    get:
+      summary: Get source recommendations
+      tags: [Sources]
+      responses:
+        '200':
+          description: Source recommendations
+
+  /topic-gap/reports:
+    get:
+      summary: Get topic gap analysis
+      tags: [Sources]
+      responses:
+        '200':
+          description: Topic gap analysis report
 components:
   schemas:
     CreateSourceRequest:

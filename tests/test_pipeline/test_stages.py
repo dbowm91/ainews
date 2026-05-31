@@ -163,6 +163,8 @@ class TestFinalize:
 
         with patch("extensions.db") as mock_db:
             article = MagicMock()
+            article.draft_article = {"title": "Test", "body": "Content"}
+            article.final_article = None
             mock_db.session.get.return_value = article
 
             mock_db.session.commit.side_effect = Exception("DB error")

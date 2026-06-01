@@ -44,6 +44,10 @@ For each module, verify:
 - Documented function signatures differ from implementation
 - Missing files in inventory
 - Extra files not documented
+- YAML examples use wrong field names or structure
+- Abstract vs concrete method misclassification
+- Incomplete function signatures (missing parameters)
+- Wrong return type documentation
 
 #### Security Issues
 - SSRF protection gaps
@@ -180,6 +184,27 @@ When multiple issues are found across modules, use a wave-based approach to avoi
 ### 11. Related Files
 
 - `architecture/review_plan.md` — Master review plan
-- `plans/*_review.md` — Individual module review outputs
+- `plans/review_*.md` — Individual module review outputs (15 files)
+- `plans/architecture_review_consolidated.md` — Consolidated findings across all modules
+- `plans/architecture_pruning_log.md` — Log of stale content fixes applied
 - `AGENTS.md` — Contains "Design Notes for Future Agents" section
 - `.opencode/skills/` — Specialized skills for subdirectories
+
+### 12. Review Statistics (from 2026-05-31 review)
+
+| Metric | Count |
+|--------|-------|
+| Documents reviewed | 15 |
+| Total verified claims | 863 |
+| Total incorrect claims | 41 (2H, 10M, 29L) |
+| Total bugs | 22 (2H, 8M, 12L) |
+| Total improvements | 82 |
+| Total stale items | 17 |
+| Cross-document contradictions | 3 |
+| Recommended pruning actions | 25 |
+
+**Key patterns discovered:**
+- `models.md` has most incorrect claims (6) due to missing `index=True`/`nullable=` attributes
+- `infrastructure.md` has most LOW bugs (3) from undocumented ThreadPoolExecutors
+- `tasks.md` has most MEDIUM bugs (2) from incomplete stage transitions and missing `max_retries`
+- 3 documents (utils, config, overview) have 0 incorrect claims — highly accurate

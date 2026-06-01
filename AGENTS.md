@@ -445,11 +445,20 @@ The following are documented as intentional and should NOT be "fixed":
 
 ## Remaining Work
 
-### Wave 5: Quality, Typing & Docs (Medium Priority)
-- **5.1:** Boost test coverage from 62% to 80%
-- **5.2:** Fix 423 Mypy errors
-- **5.3:** Sync OpenAPI documentation with actual routes
+See `plan.md` for the full consolidated implementation plan with parallelization waves.
 
-### Wave 6: Infrastructure & Polish (Low Priority)
-- **6.1:** Complete Docker hardening (multi-stage builds, read_only filesystem)
-- **6.2:** Add `is_fully_healthy` property to health checks
+### Current Priorities (from plan.md)
+- **Wave 5A:** Code reliability fixes (max_retries, return types, field docs, degradation behavior)
+- **Wave 5B:** Documentation accuracy fixes (12 independent tasks)
+- **Wave 5C:** Documentation gap fills (9 independent tasks)
+- **Wave 6:** Quality, typing & docs (test coverage 80%, 0 Mypy errors, OpenAPI sync)
+- **Wave 7:** Infrastructure & polish (Docker hardening, observability)
+
+### Quick Reference: Known Doc Inaccuracies (from architecture reviews)
+- `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`)
+- Disabled pipeline stages route through `_finalize()` to REVIEW/DONE, NOT directly to next stage (`tasks/pipeline.py:260-267`)
+- `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`)
+- Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files)
+- `publish_scheduled_articles` has NO `autoretry_for` (unlike other tasks) (`tasks/scheduler.py:10`)
+- Subagent YAML config example in docs has non-existent fields (`tool_timeout`, `default_model`)
+- Search providers YAML example in docs shows wrong structure (nested vs flat list)

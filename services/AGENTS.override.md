@@ -16,6 +16,7 @@
 - **Logging:** `services/logging_utils.py` contains implicit `Optional` parameters that trigger Mypy errors. Use `Optional[Type] = None` explicitly.
 - **Audit:** Harden against database connection issues; logging an action should not crash the request.
 - **Prompts:** Use `@lru_cache` for prompt file loading and truncation summaries.
+- **Trend Memory:** `propose_trend_memory()` at `services/trend_memory.py:217` returns `SubagentResponse`, NOT `list[TrendMemory]`. The `synthesis` field contains proposed entries as text. Callers expecting a list will fail at runtime.
 
 ## Provider Notes
 - **SubagentStageConfig vs StageConfig:** The actual stage configuration class is `SubagentStageConfig` in `schemas/pipeline.py`, NOT `StageConfig` which is an empty stub with only `tools` field.

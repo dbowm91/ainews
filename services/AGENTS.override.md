@@ -46,8 +46,8 @@
 - **Tool Registry:** Thread-safe via `_TOOL_REGISTRY_LOCK`. `_subagent_executor` shutdown via `atexit.register(shutdown_executor)`.
 - **Tool Count:** 14 tools total (12 context + 2 search). Registered in `services/subagent/tools.py:306-603`.
 - **Tool Middleware Clone:** `run_subagent_with_tools()` at lines 349-355 creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions. Uses `copy.deepcopy(tool.fn)`.
-- **Self-Correction Mechanism:** `run_subagent_with_tools()` at lines 401-417 implements a `self_corrected` flag that retries on `ValidationError`. The LLM is given a chance to self-correct its output. This mechanism is NOT well documented in `architecture/subagent.md`.
-- **_format_subagent_prompt() Helper:** `services/subagent/utils.py:30` helper function used by `run_subagent_with_tools()` for template formatting with error recovery. Not documented in `architecture/subagent.md`.
+- **Self-Correction Mechanism:** `run_subagent_with_tools()` implements a `self_corrected` flag that retries on `ValidationError`. The LLM is given a chance to self-correct its output. This mechanism is NOT well documented in `architecture/subagent.md`.
+- **_format_subagent_prompt() Helper:** `services/subagent/utils.py:31` helper function used by `run_subagent_with_tools()` for template formatting with error recovery. Not documented in `architecture/subagent.md`.
 - **Subagent Chain steps parameter:** `run_subagent_chain()` in `services/subagent/chain.py:62` properly uses passed `steps` parameter or falls back to `chain_config.steps`.
 - **Middleware Chain Order:** The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`. Application order is reversed: ErrorHandling applied first (innermost), Logging applied last (outermost).
 - **ErrorHandlingMiddleware:** Applied at `services/subagent/runner.py:344` to handle errors during tool execution. Note: It re-raises exceptions after logging, does NOT return error dicts.
@@ -56,8 +56,8 @@
 
 ## Dual-Provider Search Architecture
 The search system has two parallel provider systems:
-1. **`_manager` (web search):** duckduckgo, google, searxng - used by `search_web()` in `services/search/__init__.py`
-2. **`_db_search_manager` (article search):** sqlite_fts, hybrid - used by `search_articles()` in `services/search/__init__.py`
+1. **`_manager` (web search):** duckduckgo, google, searxng - used by `search_web()` in `services/search/base.py`
+2. **`_db_search_manager` (article search):** sqlite_fts, hybrid - used by `search_articles()` in `services/search/base.py`
 
 DuckDuckGo is the default for web search; Hybrid is for internal article search (hybrid FTS5 + vector similarity).
 
@@ -73,7 +73,7 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 ## services/url.py vs utils/url.py
 - **`utils/url.py`:** For adapters (clean layering). Contains SSRF protection implementation.
 - **`services/url.py`:** For services (has config support). Re-exports `TRACKING_PARAMS`, `normalize_title`, `normalize_url` from `utils/url.py`.
-- **Config support is dead code:** `_get_dns_cache_config()` function in `services/url.py:60-63` exists but is NEVER called. Both `utils/url.py` and `services/url.py` initialize `_TTLCache` with hardcoded values (`_DNS_CACHE_TTL`, `_DNS_CACHE_MAX`), not from config. Documentation may claim config support but it's not implemented.
+- **Config support:** `_get_dns_cache_config()` function in `services/url.py:60-63` IS called at line 123 via the `_get_dns_cache()` call chain within `validate_url_safe()`. Both `utils/url.py` and `services/url.py` initialize `_TTLCache` with hardcoded values (`_DNS_CACHE_TTL`, `_DNS_CACHE_MAX`), not from config.
 
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.

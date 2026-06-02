@@ -24,10 +24,6 @@ The logout endpoint at `/admin/logout` requires POST method only. This is intent
 
 The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
 
-## Known Bugs (OPEN)
-
-- **Missing Article import in replay.py:** `routes/admin/api/replay.py` uses `Article` model in `get_pipeline_history()` but never imports it. Will cause `NameError` at runtime. Add `from models import Article` at module level.
-
 ## Architecture Documentation Review Findings
 
 When reviewing or updating `architecture/routes.md`:

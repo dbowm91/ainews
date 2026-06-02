@@ -33,11 +33,10 @@ These error dicts are returned directly without proper error handling - callers 
 ## Known Issues
 - **`_STAGE_TASKS`:** Contains `review` status mapping to `tasks/edit.edit_article` - verified present as of 2026-05-07.
 - **PipelineLog meta field:** The model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
-- **Missing Article import in replay.py:** `routes/admin/api/replay.py` uses `Article` model in `get_pipeline_history()` but never imports it. Will cause `NameError` at runtime. Add `from models import Article` at module level.
 - **`publish_scheduled_articles` has NO `autoretry_for`:** Unlike other pipeline tasks, this task at `tasks/scheduler.py:10` has no `autoretry_for` parameter. It uses Redis locks and SQLAlchemy error handling internally. Adding `max_retries` is recommended for consistency.
 
 ## run_stage Signature
-The `run_stage()` function in `tasks/pipeline.py:389-442` has 8 parameters:
+The `run_stage()` function in `tasks/pipeline.py:353-362` has 8 parameters:
 ```python
 def run_stage(
     stage: str,

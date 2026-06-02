@@ -1,14 +1,14 @@
 # Master Implementation Plan (Consolidated)
 
 **Status:** ACTIVE  
-**Last Updated:** 2026-06-01  
+**Last Updated:** 2026-06-02  
 **Goal:** Address code quality, security gaps, performance, documentation accuracy, and technical debt.
 
 ---
 
 ## Executive Summary
 
-This consolidated plan merges the existing wave-based implementation plan with findings from 15 deep-dive architecture reviews (863 verified claims, 41 incorrect, 22 bugs). It prioritizes **code reliability fixes** first, followed by **documentation accuracy corrections**, then **comprehensive documentation gaps**. The ultimate goals are 100% test pass rate, 80% test coverage, 0 Mypy/Ruff errors, and significant throughput improvements.
+This is the **single consolidated implementation plan** for the ainews project. All other plan files have been merged into this document. Previous architecture review output files (`plans/review_*.md`) have been deleted — their findings are incorporated into the wave tasks below.
 
 **Key Targets:**
 - **Test Coverage:** 80% (Current: ~61-62%)
@@ -74,8 +74,12 @@ This consolidated plan merges the existing wave-based implementation plan with f
 ### 5A.1 Add `max_retries` to Celery Tasks
 - **Files:** `tasks/newsletter.py:476-487`, `tasks/retry.py:67-77`, `tasks/scheduler.py:10`
 - **Issue:** `generate_daily_newsletters` has `autoretry_for` but no `max_retries` (could retry indefinitely). `retry_stuck` has `autoretry_for` but no `max_retries`. `publish_scheduled_articles` has NO `autoretry_for` and NO `max_retries`.
-- **Fix:** Add `max_retries=CELERY_TASK_MAX_RETRIES` to all three `@shared_task` decorators. Import `CELERY_TASK_MAX_RETRIES` from `config.py` (value: 5). Consistent with pipeline tasks (select, research, write, edit).
-- **Verification:** `celery -A celery_app inspect active` to verify task registration.
+- **Fix:** Add `max_retries=CELERY_TASK_MAX_RETRIES` to all three `@shared_task` decorators. Import `CELERY_TASK_MAX_RETRIES` from `constants.py` (value: 3, configurable via env var). Consistent with pipeline tasks (select, research, write, edit).
+- **Code changes for each file:**
+  - `tasks/newsletter.py`: Add `max_retries=CELERY_TASK_MAX_RETRIES` to `@shared_task` decorator around line 476. Add `from constants import CELERY_TASK_MAX_RETRIES` at top of file if not already imported.
+  - `tasks/retry.py`: Add `max_retries=CELERY_TASK_MAX_RETRIES` to `@shared_task` decorator around line 67. Add import if needed.
+  - `tasks/scheduler.py`: Add `autoretry_for=(ConnectionError, TimeoutError), max_retries=CELERY_TASK_MAX_RETRIES` to `@shared_task` decorator at line 10. Add import if needed.
+- **Verification:** `celery -A celery_app inspect active` to verify task registration. Check that tasks now show `max_retries` in their configuration.
 
 ### 5A.2 ~~Fix `propose_trend_memory` Return Type Documentation~~ — COMPLETED
 - Already fixed per architecture pruning log. `architecture/services.md:258` now shows `-> SubagentResponse`.
@@ -98,7 +102,7 @@ This consolidated plan merges the existing wave-based implementation plan with f
 
 ---
 
-## Wave 5B: Documentation Accuracy Fixes (MEDIUM Priority) — 11 tasks remaining
+## Wave 5B: Documentation Accuracy Fixes (MEDIUM Priority) — 10 tasks remaining
 
 *Focus: Correct inaccurate documentation that could mislead future agents. All tasks are independent and can be parallelized.*
 
@@ -220,7 +224,7 @@ This consolidated plan merges the existing wave-based implementation plan with f
 
 ---
 
-## Wave 5C: Documentation Gaps (LOW Priority) — 8 tasks remaining
+## Wave 5C: Documentation Gaps (LOW Priority) — 7 tasks remaining
 
 *Focus: Comprehensive documentation improvements. All tasks are independent and can be parallelized.*
 
@@ -340,7 +344,7 @@ This consolidated plan merges the existing wave-based implementation plan with f
 
 ## Parallelization Map
 
-### Wave 5A (Code Bugs — 2 independent tasks, 1 completed)
+### Wave 5A (Code Bugs — 3 independent tasks, 1 completed)
 ```
 Wave 5A:
 ├── 5A.1 Add max_retries to Celery tasks (newsletter, retry, scheduler)
@@ -348,7 +352,7 @@ Wave 5A:
 ├── 5A.3 Document PipelineRootConfig.experiments field
 └── 5A.4 Fix degradation behavior documentation
 ```
-**Sub-agent allocation:** 2 agents max (5A.1 + one of 5A.3/5A.4). Each task touches different files.
+**Sub-agent allocation:** 3 agents in parallel (5A.1, 5A.3, 5A.4). Each task touches different files.
 
 ### Wave 5B (Doc Accuracy — 11 independent tasks)
 ```
@@ -374,7 +378,7 @@ Wave 5B:
 - Agent 5: `architecture/search-providers.md` (5B.10)
 - Agent 6: Remaining docs (5B.4, 5B.6, 5B.7, 5B.12)
 
-### Wave 5C (Doc Gaps — 8 independent tasks)
+### Wave 5C (Doc Gaps — 7 independent tasks)
 ```
 Wave 5C:
 ├── 5C.1 Document missing models (ArticleVersion, Citation, Tag, AuditLog, ApiToken, ShareConfig)
@@ -383,13 +387,12 @@ Wave 5C:
 ├── 5C.5 Document missing API endpoint (/newsletter/preview)
 ├── 5C.6 Document LLM types
 ├── 5C.7 Fix schema location contradiction
-├── 5C.8 Document subagent package structure
-└── 5C.9 Document WebhookCreate/WebhookResponse schemas
+└── 5C.8 Document subagent package structure
 ```
 **Sub-agent allocation:** Up to 4 agents in parallel. Group by target doc file:
 - Agent 1: `architecture/models.md` (5C.1)
 - Agent 2: `architecture/infrastructure.md` (5C.3, 5C.4)
-- Agent 3: `architecture/routes.md` + `architecture/schemas.md` (5C.5, 5C.9)
+- Agent 3: `architecture/routes.md` + `architecture/schemas.md` (5C.5)
 - Agent 4: Remaining docs (5C.6, 5C.7, 5C.8)
 
 ### Wave 6 (Quality — 3 independent tasks)
@@ -448,29 +451,9 @@ Wave 8:
 
 ---
 
-## Architecture Review Summary
+## Notes
 
-From 15 architecture document reviews (863 verified claims):
-
-| Document | Verified | Incorrect | Bugs | Priority |
-|----------|----------|-----------|------|----------|
-| overview.md | 138 | 0 | 1 (LOW) | ✅ Accurate |
-| config.md | 92 | 0 | 1 (MED) | ⏳ Minor fix |
-| infrastructure.md | 68 | 2 | 3 (LOW) | ⏳ Minor fixes |
-| schemas.md | 58 | 6 | 3 (1H, 1M, 1L) | ❌ Needs work |
-| adapters.md | 48 | 3 | 1 (MED) | ⏳ Minor fix |
-| routes.md | 47 | 1 | 1 (LOW) | ⏳ Minor fix |
-| models.md | 42 | 6 | 6 (1M, 5L) | ⏳ Missing docs |
-| utils.md | 42 | 0 | 0 | ✅ Accurate |
-| services.md | 38 | 3 | 1 (HIGH) | ❌ Wrong return type |
-| pipeline.md | 38 | 6 | 1 (MED) | ❌ Wrong degradation |
-| tasks.md | 35 | 5 | 3 (2M, 1L) | ❌ Incomplete |
-| subagent.md | 35 | 4 | 2 (HIGH) | ❌ Wrong YAML example |
-| llm_providers.md | 32 | 6 | 0 | ⏳ Minor fixes |
-| search_providers.md | 28 | 3 | 1 (HIGH) | ❌ Wrong YAML example |
-| prompts.md | 22 | 3 | 1 (LOW) | ⏳ Minor fix |
-
-**Top 3 Critical Documentation Issues:**
-1. `propose_trend_memory` returns `SubagentResponse`, not `list[TrendMemory]` — ✅ ALREADY FIXED
-2. Degradation behavior table wrong — disabled stages route through `_finalize()` to DONE (default), NOT directly to next stage
-3. Subagent YAML config example has non-existent fields (`tool_timeout`, `default_model`)
+- This plan is the **single source of truth** for implementation work
+- All architecture review findings have been incorporated into the wave tasks above
+- Previous review output files (`plans/review_*.md`) have been deleted
+- For architecture review workflow, see `architecture/review_plan.md`

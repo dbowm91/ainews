@@ -454,19 +454,28 @@ The following are documented as intentional and should NOT be "fixed":
 See `plans/plan.md` for the full consolidated implementation plan with parallelization waves.
 
 ### Current Priorities (from plans/plan.md)
-- **Wave 5A:** Code reliability fixes — 2 tasks remaining (max_retries, degradation docs)
-- **Wave 5B:** Documentation accuracy fixes — 11 tasks remaining
-- **Wave 5C:** Documentation gap fills — 8 tasks remaining
-- **Wave 6:** Quality, typing & docs (test coverage 80%, 0 Mypy errors, OpenAPI sync)
+- **Wave 5A:** Code reliability fixes — 3 tasks remaining (max_retries, experiments field, degradation docs)
+- **Wave 5B:** Documentation accuracy fixes — 10 tasks remaining (5B.3 is NO FIX NEEDED)
+- **Wave 5C:** Documentation gap fills — 7 tasks remaining
+- **Wave 6:** Quality, typing & docs (test coverage 80%, 0 Mypy errors, OpenAPI sync) — NOT DONE
 - **Wave 7:** Infrastructure & polish (Docker hardening, observability)
 - **Wave 8:** Adapter bug fixes (WebAdapter pagination)
 
 ### Quick Reference: Known Doc Inaccuracies (from architecture reviews)
+These are awareness items for agents — some are already fixed, others need attention:
 - `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`) — ✅ ALREADY FIXED in docs
-- Disabled pipeline stages route through `_finalize()` to DONE (default), NOT directly to next stage (`tasks/pipeline.py:260-267`). REVIEW is conditional via `_should_route_to_review()`.
-- `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`)
-- Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files)
-- `publish_scheduled_articles` has NO `autoretry_for` (unlike other tasks) (`tasks/scheduler.py:10`)
-- Subagent YAML config example in docs has non-existent fields (`tool_timeout`, `default_model`)
-- Search providers YAML example in docs shows wrong structure (nested vs flat list)
-- `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py`
+- Disabled pipeline stages route through `_finalize()` to DONE (default), NOT directly to next stage (`tasks/pipeline.py:260-267`). REVIEW is conditional via `_should_route_to_review()`. — ⏳ NEEDS FIX (5A.4)
+- `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`) — ⏳ NEEDS FIX (5B.1)
+- Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files) — ✅ Already correct
+- `publish_scheduled_articles` has NO `autoretry_for` (unlike other tasks) (`tasks/scheduler.py:10`) — ⏳ NEEDS FIX (5A.1)
+- Subagent YAML config example in docs has non-existent fields (`tool_timeout`, `default_model`) — ⏳ NEEDS FIX (5B.9)
+- Search providers YAML example in docs shows wrong structure (nested vs flat list) — ⏳ NEEDS FIX (5B.10)
+- `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py` — ⏳ NEEDS FIX (5B.8)
+
+### Key Constant Locations (Verified)
+- `CELERY_TASK_MAX_RETRIES`: `constants.py:6` (default: 3, configurable via env var)
+- `MAX_STAGE_RETRIES`: `constants.py:9` (value: 3)
+- `MAX_STAGE_FAILURES`: `constants.py:10` (value: 3)
+- `MAX_TOTAL_RETRIES`: `constants.py:11` (value: 10)
+- `PIPELINE_TIMEOUT_SECONDS`: `constants.py:14` (value: 3600)
+- `DEFAULT_LLM_TIMEOUT_SECONDS`: `constants.py:17` (value: 120.0)

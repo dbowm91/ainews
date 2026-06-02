@@ -512,7 +512,7 @@ class TrendMemory(Base):
     expires_at = Column(DateTime, nullable=True)  # Expiration timestamp
     last_consolidated_at = Column(DateTime, nullable=True)  # Last consolidation
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    last_accessed_at = Column(DateTime)
+    last_accessed_at = Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))  # Auto-updated on access
 
     # Embeddings for semantic search
     embedding = Column(Text)  # Stored as text, not vector type
@@ -527,7 +527,7 @@ class TopicNote(Base):
     __tablename__ = 'topic_notes'
 
     id = Column(Integer, primary_key=True)
-    topic = Column(String(128), nullable=False)
+    topic = Column(String(128), nullable=False, index=True)  # Indexed for fast topic lookups
     note = Column(Text, nullable=False)
     source = Column(String(256))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

@@ -541,6 +541,8 @@ class SearchConfig(BaseModel):
 
 `SearchConfig` is loaded from the `search_providers:` key in `providers.yaml` via `load_search_config()`. Defaults to DuckDuckGo if no config file exists.
 
+**Note:** The schema field `default_provider` maps to the `default_search_provider` key in YAML configuration.
+
 ## Topic Configuration (`topic.py`)
 
 ```python

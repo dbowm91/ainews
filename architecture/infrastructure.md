@@ -411,7 +411,7 @@ def log_article_event(article_id: int, event: str, level="info", **extra):
 
 ### Features
 
-- **Request ID propagation**: `g.request_id` → Celery task headers
+- **Request ID propagation**: `request_id_var` (ContextVar) → Celery task headers
 - **OpenTelemetry tracing**: LLM calls and pipeline stages
 - **Slow query detection**: Query duration logging
 - **Correlation IDs**: Request-level tracing

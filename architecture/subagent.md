@@ -94,6 +94,12 @@ def _context_tool_search_articles(query: str, limit: int = 5) -> str:
 def _context_tool_get_source_health() -> str:
     """Returns JSON array of source health summaries"""
 
+def _context_tool_get_topic_gap_report(topics: list[str] | None = None, days: int = 30) -> str:
+    """Returns formatted topic gap analysis report"""
+
+def _context_tool_get_source_performance(source_key: str | None = None, days: int = 7) -> str:
+    """Returns formatted source performance metrics"""
+
 def _search_web(query: str, max_results: int = 5) -> str:
     """Returns formatted web search results"""
 
@@ -224,7 +230,7 @@ subagent:
 
 ## Middleware (`middleware.py`)
 
-Middleware uses a sync `wrap()` pattern to intercept tool execution. The middleware chain is applied in reverse order via `apply_middleware()`, so the first middleware in the list wraps the outermost layer.
+Middleware uses a sync `wrap()` pattern to intercept tool execution. The middleware chain is defined as `[LoggingMiddleware, TimingMiddleware, ErrorHandlingMiddleware]` but applied in reverse order via `reversed(middleware_chain)`, so the last middleware in the list (`ErrorHandlingMiddleware`) is applied first (innermost), and the first (`LoggingMiddleware`) is applied last (outermost).
 
 **Middleware chain (as applied to tool function):**
 - `LoggingMiddleware` (outermost) - logs tool call start/completion/failure

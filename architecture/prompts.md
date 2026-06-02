@@ -114,7 +114,7 @@ Builds research context:
 Creates condensed article:
 - Input: Research brief, source article
 - Output: Smart Brevity format (hook → context → key points → implications)
-- Target: 200-400 words, 3-5 key points
+- Target: 3-5 tight paragraphs (Smart Brevity format)
 
 ### Editor (`editor.txt`)
 

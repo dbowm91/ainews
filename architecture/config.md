@@ -214,7 +214,6 @@ experiments:
 schedule:
   crawl_interval_minutes: 30
   retry_stuck_interval_minutes: 60
-  cleanup_interval_minutes: 180
   cleanup_old_logs_hour: 3
   cleanup_old_versions_hour: 3
   cleanup_expired_verifications_interval_minutes: 15
@@ -507,12 +506,13 @@ Key environment variables used across the codebase:
 | `DATABASE_URL` | Database connection string |
 | `CELERY_BROKER_URL` | Redis connection string (Celery broker) |
 | `REDIS_SSL` | Enable Redis SSL |
-| `REDIS_MAX_CONNECTIONS` | Redis pool size (default: 100) |
+| `REDIS_MAX_CONNECTIONS` | Redis pool size (default: 100 for main client, 20 for config cache) |
 | `CONFIG_CACHE_REDIS_URL` | Dedicated Redis for config cache (default: derived from `CELERY_BROKER_URL`) |
 | `CONFIG_CACHE_REDIS_PASSWORD` | Redis password for config cache auth (default: none) |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `GEMINI_API_KEY` | Google Gemini API key |
+| `DEEPSEEK_API_KEY` | DeepSeek API key (for DeepSeek LLM provider) |
 | `GOOGLE_API_KEY` | Google Custom Search API key |
 | `GOOGLE_CSE_ID` | Google Custom Search engine ID |
 | `WEBHOOK_SECRET_KEY` | Fernet key for webhook secret encryption |

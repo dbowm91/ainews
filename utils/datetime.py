@@ -50,7 +50,13 @@ def parse_date(date_str: str) -> datetime | None:
 
 
 def format_date(dt: datetime) -> str:
-    """Format datetime as human-readable relative or absolute date."""
+    """Format datetime as human-readable relative or absolute date.
+
+    Returns:
+        Supported formats: "just now", "X minutes ago", "1 hour ago",
+        "X hours ago", "yesterday", "X days ago", "%b %d", "%b %d, %Y".
+        Returns empty string if dt is None.
+    """
     if dt is None:
         return ""
 

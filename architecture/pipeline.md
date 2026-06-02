@@ -85,7 +85,7 @@ Valid transitions:
 - LLM analyzes article content
 - Subagent performs web search for context
 - Fetches related trend memory entries
-- Produces `{key_findings, context, citations, related_trends}`
+- Produces `{source_summary, key_claims, direct_quotes, external_sources, related_articles, context_notes, newsworthiness, impact_score}`
 
 **Degradation**: If disabled, skips to `review`
 

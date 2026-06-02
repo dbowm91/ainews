@@ -2,12 +2,24 @@
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
+from constants import CELERY_TASK_MAX_RETRIES
 from services.task_security import verify_task
 
 logger = get_task_logger(__name__)
 
 
-@shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=120, time_limit=180)
+@shared_task(
+    bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
+    soft_time_limit=120,
+    time_limit=180,
+    autoretry_for=(ConnectionError, TimeoutError),
+    max_retries=CELERY_TASK_MAX_RETRIES,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def publish_scheduled_articles(self):
     """Publish articles whose scheduled_publish_at time has arrived.
 

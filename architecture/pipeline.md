@@ -269,10 +269,10 @@ When stages are disabled via `pipeline.yaml`, articles bypass that stage by rout
 
 | Stage Disabled | Behavior |
 |----------------|----------|
-| select | Article advances directly to `researching` (selection skipped) |
-| research | Article routes through `_finalize()` — may go to `review` or `done` |
-| write | Article routes through `_finalize()` — may go to `review` or `done` |
-| edit | Article routes through `_finalize()` — may go to `review` or `done` |
+| select | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
+| research | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
+| write | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
+| edit | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
 
 When stages fail persistently (after max retries), articles degrade to the next stage:
 

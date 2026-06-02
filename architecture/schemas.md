@@ -79,6 +79,7 @@ class PipelineRootConfig(BaseModel):
     newsletter_pipeline: NewsletterPipelineConfig  # 3-stage LLM pipeline for newsletter generation
     subagent: SubagentConfig            # Subagent tool and chain configuration
     memory: MemoryConfig
+    experiments: dict                   # A/B experiment configuration (prompt_variants, assignment_salt)
     stages: dict[str, StageConfig]     # Stub - only has tools field
     schedule: dict                      # Beat schedule overrides
 

@@ -24,10 +24,10 @@ try:
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
-    trace = None
-    Tracer = object
-    SpanKind = None
-    TraceContextTextMapPropagator = None
+    trace = None  # type: ignore[assignment]
+    Tracer = object  # type: ignore[assignment,misc]
+    SpanKind = None  # type: ignore[assignment,misc]
+    TraceContextTextMapPropagator = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 

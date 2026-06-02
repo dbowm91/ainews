@@ -64,9 +64,9 @@ class ProviderServerError(Exception):
 def handle_provider_error(
     e: Exception,
     provider_name: str,
-    rate_limit_exc: type,
+    rate_limit_exc: type | tuple[type, ...],
     auth_exc: type,
-    timeout_exc: type,
+    timeout_exc: type | tuple[type, ...],
 ) -> Exception:
     """Convert SDK-specific exceptions to generic provider errors."""
     if isinstance(e, rate_limit_exc):

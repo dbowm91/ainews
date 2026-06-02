@@ -68,7 +68,7 @@ class RSSAdapter(BaseSourceAdapter):
         feed = feedparser.parse(resp.content)
         if not _validate_feed(feed):
             return _scrape_feed_fallback(cfg.feed_url, self._session, cfg.request_timeout)
-        return feed.entries[: cfg.max_items]
+        return feed.entries[: cfg.max_items]  # type: ignore[no-any-return]
 
     def parse_item(self, raw: Any) -> Optional[RawItem]:
         title = (raw.get("title") or "").strip()
@@ -82,7 +82,7 @@ class RSSAdapter(BaseSourceAdapter):
         for attr in ("published_parsed", "updated_parsed"):
             ts = getattr(raw, attr, None)
             if ts:
-                published = datetime(*ts[:6], tzinfo=timezone.utc)
+                published = datetime(*ts[:6], tzinfo=timezone.utc)  # type: ignore[misc]
                 break
 
         # Content: prefer full content, fall back to summary

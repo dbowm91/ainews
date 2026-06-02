@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from extensions import db
 from models import Article, TrendMemory
 from schemas.llm_responses import SubagentResponse
+from schemas.pipeline import MemoryConfig
 from services.embeddings import deserialize_embedding, generate_embedding, serialize_embedding
 from services.llm import get_provider_for_role
 from services.metrics import get_metrics
@@ -88,7 +89,7 @@ class TrendMemoryConfig(BaseModel):
     consolidation_merge_window_hours: int = 72
 
 
-def _get_config() -> TrendMemoryConfig:
+def _get_config() -> MemoryConfig:
     from schemas.pipeline import load_pipeline_config
 
     return load_pipeline_config().memory
@@ -121,15 +122,16 @@ def get_memory_for_topics(
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
         stmt = stmt.where(TrendMemory.created_at >= cutoff)
     stmt = stmt.order_by(TrendMemory.importance.desc(), TrendMemory.created_at.desc())
-    return db.session.execute(stmt).scalars().all()
+    result: list[TrendMemory] = list(db.session.execute(stmt).scalars().all())
+    return result
 
 
 def _format_memory_for_prompt(memory_entries: list[TrendMemory]) -> str:
     if not memory_entries:
         return "No prior trend memory found for these topics."
 
-    sections = []
-    by_importance = {3: [], 2: [], 1: []}
+    sections: list[str] = []
+    by_importance: dict[int, list[TrendMemory]] = {3: [], 2: [], 1: []}
     for entry in memory_entries:
         by_importance.setdefault(entry.importance, []).append(entry)
 
@@ -345,7 +347,10 @@ def consolidate_topic(topic: str) -> int:
         db.session.rollback()
         raise
 
-    return result.rowcount
+    from sqlalchemy.engine import Result
+    cursor_result: Result = result
+    rowcount: int = cursor_result.rowcount or 0  # type: ignore[attr-defined]
+    return rowcount
 
 
 def consolidate_all_topics() -> dict[str, int]:
@@ -430,7 +435,7 @@ def semantic_search_trends(query: str, limit: int = 10) -> list[dict]:
         .all()
     )
 
-    scored = []
+    scored: list[dict[str, float | TrendMemory]] = []
     for memory in memories:
         memory_embedding = deserialize_embedding(memory.embedding)
         if memory_embedding:

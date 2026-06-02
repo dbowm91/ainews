@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, cast
 
 import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
@@ -14,7 +14,7 @@ from services.llm.base import (
     ToolDefinition,
     register_provider,
 )
-from services.llm.errors import make_error_handler
+from services.llm.errors import RateLimitError as CustomRateLimitError, make_error_handler
 
 from schemas.llm import AnthropicConfig
 
@@ -38,7 +38,7 @@ def _handle_anthropic_error(e: Exception) -> Exception:
             retry_after = e.headers.get("retry-after")
         elif hasattr(e, "response") and e.response and hasattr(e.response, "headers"):
             retry_after = e.response.headers.get("retry-after")
-        return RateLimitError(str(e), retry_after=retry_after)
+        return CustomRateLimitError(str(e), retry_after=retry_after)
 
     return make_error_handler(
         "Anthropic",
@@ -120,10 +120,10 @@ class AnthropicProvider(BaseLLMProvider):
         max_tokens: int = 4096,
         **kwargs: Any,
     ) -> LLMResponse:
-        return self._retry_with_backoff(
+        return cast(LLMResponse, self._retry_with_backoff(
             self._do_chat, model,
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
-        )
+        ))
 
     @circuit_protected("llm_anthropic")
     def chat_streaming(
@@ -185,7 +185,7 @@ class AnthropicProvider(BaseLLMProvider):
             raise _handle_anthropic_error(e) from e
         if not resp.content:
             raise RuntimeError(f"Anthropic returned empty content for model {model}")
-        return resp.content[0].text
+        return str(resp.content[0].text)
 
     def _chat_with_schema(
         self,
@@ -197,11 +197,11 @@ class AnthropicProvider(BaseLLMProvider):
         schema: dict,
         model: Optional[str] = None,
     ) -> str:
-        return self._retry_with_backoff(
+        return cast(str, self._retry_with_backoff(
             self._do_chat_with_schema, model,
             messages=messages, response_model=response_model, system=system,
             temperature=temperature, max_tokens=max_tokens, schema=schema,
-        )
+        ))
 
     @circuit_protected("llm_anthropic")
     def _do_call_api_with_tools(
@@ -248,11 +248,11 @@ class AnthropicProvider(BaseLLMProvider):
         temperature: float,
         max_tokens: int,
     ) -> tuple[Any, Any]:
-        return self._retry_with_backoff(
+        return cast(tuple[Any, Any], self._retry_with_backoff(
             self._do_call_api_with_tools, model,
             messages=messages, tools=tools, tool_choice=tool_choice,
             temperature=temperature, max_tokens=max_tokens,
-        )
+        ))
 
     def _extract_text_and_tool_calls(
         self, response: Any,

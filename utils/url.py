@@ -236,7 +236,7 @@ def _resolve_and_check(hostname: str) -> list[str]:
                     raise UnsafeURLError(
                         f"Hostname {hostname} resolves to private/reserved IP {ip} mapped to {ipv4_mapped} ({network})",
                     )
-        safe_ips.append(ip_str)
+        safe_ips.append(str(ip_str))
 
     _get_dns_cache().set(hostname, safe_ips)
     return safe_ips

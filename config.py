@@ -1,6 +1,7 @@
 import os
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from constants import (
 from constants import (
     PIPELINE_TIMEOUT_SECONDS as _DEFAULT_PIPELINE_TIMEOUT_SECONDS,
 )
+from schemas.pipeline import PipelineRootConfig
 from services.config_unified import safe_int
 
 load_dotenv()
@@ -112,14 +114,14 @@ class Config:
     CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
 
     # DEPRECATED: Use get_beat_schedule() instead. Actual schedule is loaded from pipeline.yaml.
-    CELERY_BEAT_SCHEDULE = {}
+    CELERY_BEAT_SCHEDULE: dict[str, Any] = {}
 
     @classmethod
-    def get_beat_schedule(cls, pipeline_cfg: dict | None = None) -> dict:
+    def get_beat_schedule(cls, pipeline_cfg: PipelineRootConfig | None = None) -> dict:
         """Build beat schedule from pipeline.yaml config.
 
         Args:
-            pipeline_cfg: Optional pipeline config dict from pipeline.yaml.
+            pipeline_cfg: Optional pipeline config object from pipeline.yaml.
                          If None, reads from file.
 
         Returns:
@@ -214,7 +216,7 @@ class Config:
         """
         from schemas.pipeline import load_pipeline_config
 
-        pipeline_cfg = load_pipeline_config()
+        pipeline_cfg: PipelineRootConfig = load_pipeline_config()
         new_schedule = cls.get_beat_schedule(pipeline_cfg)
         celery_app.conf.beat_schedule = new_schedule
         return new_schedule
@@ -222,11 +224,12 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SECRET_KEY = os.environ.get("SECRET_KEY")
-    if SECRET_KEY is None:
+    _secret_key_val: str | None = os.environ.get("SECRET_KEY")
+    if _secret_key_val is None:
         raise RuntimeError("SECRET_KEY environment variable must be set")
-    if SECRET_KEY == "dev-secret-key-change-me":
+    if _secret_key_val == "dev-secret-key-change-me":
         raise RuntimeError("SECRET_KEY must be changed from default value")
+    SECRET_KEY: str = _secret_key_val
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
 

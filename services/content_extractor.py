@@ -93,14 +93,15 @@ def extract_article(url: str) -> ExtractionResult:
     paywall = _detect_paywall(downloaded)
 
     result = trafilatura.bare_extraction(downloaded, url=url, with_metadata=True)
-    if result and result.get("text") and len(result["text"]) >= MIN_CONTENT_LENGTH:
+    if isinstance(result, dict) and result.get("text") and len(result["text"]) >= MIN_CONTENT_LENGTH:
+        text_val: str = result["text"]
         return ExtractionResult(
             url=url,
-            text=result["text"],
+            text=text_val,
             title=result.get("title"),
             author=result.get("author"),
             status=(ExtractionStatus.PAYWALL if paywall else ExtractionStatus.SUCCESS),
-            content_length=len(result["text"]),
+            content_length=len(text_val),
         )
 
     try:

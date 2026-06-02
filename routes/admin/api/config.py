@@ -51,7 +51,7 @@ def reload_config() -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/metrics")
 @require_auth
-def app_metrics() -> Response:
+def app_metrics() -> tuple[Response, int]:
     from services.metrics import get_metrics
 
     return api_response(data=get_metrics().get_metrics())

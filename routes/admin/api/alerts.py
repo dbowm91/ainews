@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/alerts")
 @require_auth
-def list_alerts() -> Response:
+def list_alerts() -> tuple[Response, int]:
     """Return active alerts grouped by severity.
 
     GET /api/v1/alerts

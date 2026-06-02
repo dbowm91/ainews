@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class AuditLog(db.Model):
+class AuditLog(db.Model):  # type: ignore[name-defined]
     __tablename__ = "audit_logs"
 
     id = db.Column(db.Integer, primary_key=True)

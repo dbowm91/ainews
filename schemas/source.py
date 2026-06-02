@@ -145,7 +145,7 @@ def _load_sources_from_file(path: Path) -> list[SourceConfig]:
 
 
 def load_sources(path: str | Path = BASE_DIR / "sources.yaml") -> list[SourceConfig]:
-    return cached_config_with_mtime(
+    return cached_config_with_mtime(  # type: ignore[type-var]
         key="sources",
         loader_fn=lambda: _load_sources_from_file(Path(path)),
         config_path=Path(path),

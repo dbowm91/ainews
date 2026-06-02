@@ -118,8 +118,8 @@ class MetricsCollector:
             except redis.exceptions.RedisError:
                 pass
 
-    def _get_counters_from_redis(self) -> dict:
-        result = {}
+    def _get_counters_from_redis(self) -> dict[str, int]:
+        result: dict[str, int] = {}
         if self._redis is None:
             return result
         try:
@@ -133,8 +133,8 @@ class MetricsCollector:
             pass
         return result
 
-    def _get_gauges_from_redis(self) -> dict:
-        result = {}
+    def _get_gauges_from_redis(self) -> dict[str, float]:
+        result: dict[str, float] = {}
         if self._redis is None:
             return result
         try:
@@ -150,8 +150,8 @@ class MetricsCollector:
             pass
         return result
 
-    def _get_histograms_from_redis(self) -> dict:
-        result = {}
+    def _get_histograms_from_redis(self) -> dict[str, list[float]]:
+        result: dict[str, list[float]] = {}
         if self._redis is None:
             return result
         try:
@@ -163,7 +163,7 @@ class MetricsCollector:
                     values = [float(v) for v in self._redis.lrange(key, 0, -1)]
                     if values:
                         sorted_vals = sorted(values)
-                        result[metric_name] = {
+                        result[metric_name] = {  # type: ignore[assignment]
                             "count": len(values),
                             "min": sorted_vals[0],
                             "max": sorted_vals[-1],
@@ -251,13 +251,13 @@ class MetricsCollector:
                 lines.append(f"# TYPE {base} counter")
             lines.append(f"{key} {value}")
         # Gauges
-        for key, value in gauges.items():
+        for key, gval in gauges.items():
             base = _base_name(key)
             if base not in seen_types:
                 seen_types.add(base)
                 lines.append(f"# HELP {base} Current gauge value")
                 lines.append(f"# TYPE {base} gauge")
-            lines.append(f"{key} {value}")
+            lines.append(f"{key} {gval}")
         # Histograms
         for key, values in histograms.items():
             if values:

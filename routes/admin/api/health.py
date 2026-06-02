@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from flask import Response
 from pydantic import ValidationError
@@ -16,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/health")
 @require_auth
-def health() -> Response:
+def health() -> tuple[Response, int]:
     health_result = run_health_checks(include_celery=True)
-    status = {
+    status: dict[str, Any] = {
         "flask": "ok",
         "database": "unknown",
         "redis": "unknown",
@@ -53,7 +54,7 @@ def health() -> Response:
 
 @admin_api_bp.route("/workers/health")
 @require_auth
-def workers_health() -> Response:
+def workers_health() -> tuple[Response, int]:
     """Detailed Celery worker health check for admin monitoring."""
     from celery_app import celery_app
 
@@ -101,7 +102,7 @@ def workers_health() -> Response:
 
 @admin_api_bp.route("/task/<task_id>")
 @require_auth
-def task_status(task_id: str) -> Response:
+def task_status(task_id: str) -> tuple[Response, int]:
     try:
         validated = TaskStatusParams(task_id=task_id)
         task_id = validated.task_id

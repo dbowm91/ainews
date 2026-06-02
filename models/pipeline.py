@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class PipelineRun(db.Model):
+class PipelineRun(db.Model):  # type: ignore[name-defined]
     __tablename__ = "pipeline_runs"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -33,7 +33,7 @@ class PipelineRun(db.Model):
         return f"<PipelineRun {self.id} {self.run_type} {self.status}>"
 
 
-class PipelineLog(db.Model):
+class PipelineLog(db.Model):  # type: ignore[name-defined]
     __tablename__ = "pipeline_logs"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -60,7 +60,7 @@ class PipelineLog(db.Model):
         return f"<PipelineLog {self.stage} {self.level}>"
 
 
-class ArticleVersion(db.Model):
+class ArticleVersion(db.Model):  # type: ignore[name-defined]
     __tablename__ = "article_versions"
 
     id = db.Column(db.Integer, primary_key=True)

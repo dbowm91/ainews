@@ -38,7 +38,7 @@ def _track_stage_failure(article_id: int, stage: str) -> int:
         key = f"{_STAGE_FAILURE_PREFIX}{article_id}:{stage}"
         count = redis_client.hincrby(key, "count", 1)
         redis_client.expire(key, 86400 * 7)
-        return count
+        return int(count)
     except redis.exceptions.RedisError:
         return 0
 

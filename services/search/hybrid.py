@@ -106,7 +106,7 @@ class HybridSearchProvider(SearchProvider):
 
         For true hybrid search, use hybrid_search() method.
         """
-        return self._fts_provider.search(query, limit=limit, **kwargs)
+        return list(self._fts_provider.search(query, limit=limit, **kwargs))
 
     @circuit_protected("search_hybrid")
     def hybrid_search(
@@ -332,7 +332,7 @@ class HybridSearchProvider(SearchProvider):
         self, query: str, limit: int = 1000, **kwargs
     ) -> list[int]:
         """Delegate to FTS provider for admin search."""
-        return self._fts_provider.search_admin(query, limit=limit, **kwargs)
+        return list(self._fts_provider.search_admin(query, limit=limit, **kwargs))
 
 
 def search_articles(

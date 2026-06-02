@@ -38,9 +38,10 @@ def _render_feed_or_page(ctx: dict, full_template: str) -> str:
 def _get_categories() -> list[str]:
     from schemas.topic import load_topics
 
-    return get_config_cache().get(
+    result: list[str] = get_config_cache().get(
         "categories", lambda: list(load_topics().topics.keys()), ttl=300,
     )
+    return result
 
 
 def _get_topic_icons() -> dict[str, str]:
@@ -54,7 +55,8 @@ def _get_topic_icons() -> dict[str, str]:
             logger.exception("Failed to load topic icons")
             return {}
 
-    return get_config_cache().get("topic_icons", _load, ttl=300)
+    result: dict[str, str] = get_config_cache().get("topic_icons", _load, ttl=300)
+    return result
 
 
 def _get_tag_cloud() -> list[dict]:
@@ -82,7 +84,8 @@ def _get_tag_cloud() -> list[dict]:
             for r in results
         ]
 
-    return get_config_cache().get("tag_cloud", _load, ttl=600)
+    result: list[dict] = get_config_cache().get("tag_cloud", _load, ttl=600)
+    return result
 
 
 def _get_share_configs() -> list[dict]:
@@ -105,7 +108,8 @@ def _get_share_configs() -> list[dict]:
             for c in configs
         ]
 
-    return get_config_cache().get("share_configs", _load, ttl=300)
+    result: list[dict] = get_config_cache().get("share_configs", _load, ttl=300)
+    return result
 
 
 @public_bp.route("/health")

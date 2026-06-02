@@ -196,7 +196,8 @@ def _check_and_record_attempt(ip: str) -> bool:
             str(_get_login_lockout_seconds()),
             str(_get_login_max_attempts()),
         )
-        return result == 1
+        is_locked: bool = result == 1
+        return is_locked
     except redis.exceptions.RedisError as e:
         logger.warning("Redis error in check_and_record for %s: %s", ip, e)
         _record_failed_attempt_memory(ip)

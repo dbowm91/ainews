@@ -202,7 +202,7 @@ def sliding_window_truncate(
 def importance_weighted_truncate(
     text: str,
     max_chars: int = 8000,
-    key_topics: list[str] = None,
+    key_topics: list[str] | None = None,
 ) -> str:
     """Truncate text by keeping highest-scoring segments based on key topics.
 
@@ -247,7 +247,7 @@ def importance_weighted_truncate(
     scored_segments.sort(key=lambda x: (x[0], x[1]))
 
     # Select segments up to max_chars, preserving original order
-    selected = []
+    selected: list[tuple[int, str]] = []
     total_len = 0
     sep = "\n\n"
     for _neg_score, idx, seg in scored_segments:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dc_field
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError as PydanticValidationError
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from models.article import Article
+    from models.quality import QualityReport
 
 
 @dataclass
@@ -33,7 +34,7 @@ class QualityFinding:
     code: str  # unsupported_claim|missing_citation|unknown_citation_url|quote_mismatch|stale_date|unsafe_content|schema_error
     message: str
     field: str  # body|citations|key_points|headline|research_brief
-    evidence: dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = dc_field(default_factory=dict)
 
 
 @dataclass
@@ -110,7 +111,7 @@ def _parse_research_brief(research_brief: str | None) -> tuple[ResearchBrief | N
 
     Returns parsed ResearchBrief and any parse findings.
     """
-    findings = []
+    findings: list[QualityFinding] = []
     if not research_brief:
         return None, findings
 
@@ -343,7 +344,7 @@ def _check_direct_quotes(
     Looks for text enclosed in double quotes in article body and checks if they
     appear in the research brief's direct quotes.
     """
-    findings = []
+    findings: list[QualityFinding] = []
     if not research_brief:
         return findings
 
@@ -470,7 +471,7 @@ def build_quality_report(article: "Article") -> QualityReportResult:
 
     existing_citations = [
         {"url": c.url}
-        for c in article.citations
+        for c in article.citations  # type: ignore[attr-defined]
         if hasattr(c, "url")
     ]
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class ApiToken(db.Model):
+class ApiToken(db.Model):  # type: ignore[name-defined]
     __tablename__ = "api_tokens"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -28,7 +28,7 @@ class ApiToken(db.Model):
         return f"<ApiToken {self.name or self.id}>"
 
 
-class AdminUser(db.Model):
+class AdminUser(db.Model):  # type: ignore[name-defined]
     __tablename__ = "admin_users"
 
     id = db.Column(db.Integer, primary_key=True)

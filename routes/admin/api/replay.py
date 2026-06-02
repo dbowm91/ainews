@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline/history", methods=["GET"])
 @require_auth
-def get_pipeline_history(article_id: int) -> Response:
+def get_pipeline_history(article_id: int) -> tuple[Response, int]:
     """Get pipeline history for an article.
 
     Returns pipeline log entries for the article, sorted by creation time descending.
@@ -32,7 +32,7 @@ def get_pipeline_history(article_id: int) -> Response:
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline/replay", methods=["POST"])
 @require_auth
-def replay_article_stage(article_id: int) -> Response:
+def replay_article_stage(article_id: int) -> tuple[Response, int]:
     """Replay an article from a specific stage.
 
     Request body:
@@ -106,7 +106,7 @@ def replay_article_stage(article_id: int) -> Response:
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline/restore-version", methods=["POST"])
 @require_auth
-def restore_article_version(article_id: int) -> Response:
+def restore_article_version(article_id: int) -> tuple[Response, int]:
     """Restore an article to a previous version.
 
     Request body:

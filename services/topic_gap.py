@@ -35,9 +35,9 @@ def _get_configured_topics() -> list[str]:
 
 def _get_article_counts_by_topic(
     topics: list[str], days: int
-) -> dict[str, tuple[int, float]]:
+) -> dict[str, int]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    results = {}
+    results: dict[str, int] = {}
     for topic in topics:
         count = (
             db.session.query(func.count(Article.id))
@@ -156,7 +156,7 @@ def _get_zero_result_queries_by_topic(
         .order_by(SearchQuery.created_at.desc())
         .all()
     )
-    queries_by_topic = {topic: [] for topic in topics}
+    queries_by_topic: dict[str, list[str]] = {topic: [] for topic in topics}
     for query, _ in zero_results:
         for topic in topics:
             if topic.lower() in query.lower():

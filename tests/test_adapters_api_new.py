@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 
 from adapters.api import APIAdapter
 from adapters.base import RawItem
@@ -33,7 +33,7 @@ def _make_source_config(**overrides) -> SourceConfig:
         },
     }
     cfg.update(overrides)
-    return SourceConfig(**cfg)
+    return SourceConfig(**cfg)  # type: ignore[arg-type]
 
 
 def _make_adapter(**cfg_overrides) -> APIAdapter:

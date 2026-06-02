@@ -38,7 +38,7 @@ def sources() -> str:
 
 @admin_bp.route("/sources/add", methods=["POST"])
 @require_auth
-def add_source() -> str:
+def add_source() -> str | tuple[str, int]:
     from extensions import db
     from models import Source
 

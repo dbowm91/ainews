@@ -104,12 +104,13 @@ def get_dead_lettered_articles(limit: int = 50) -> list:
     """
     from models import Article
 
-    return (
+    result: list = (
         Article.query.filter_by(pipeline_status=PipelineStatus.FAILED)
         .order_by(Article.updated_at.desc())
         .limit(limit)
         .all()
     )
+    return result
 
 
 def retry_dead_letter(article) -> bool:

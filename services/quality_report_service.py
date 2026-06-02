@@ -39,7 +39,7 @@ def get_quality_report(article_id: int) -> Optional[dict]:
         if not report:
             return None
 
-        findings_by_severity = {"error": [], "warning": [], "info": []}
+        findings_by_severity: dict[str, list[dict]] = {"error": [], "warning": [], "info": []}
         for f in report.findings:
             severity = f.get("severity", "info")
             if severity in findings_by_severity:

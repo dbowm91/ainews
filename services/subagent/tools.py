@@ -33,7 +33,7 @@ def _context_tool_get_topic_note(topic: str, source: str | None = None) -> str:
 
     cache = get_response_cache()
     cache_key = f"topic_note:{topic}:{source or 'none'}"
-    return cache.get_or_set(cache_key, _fetch_note, ttl=120)
+    return cache.get_or_set(cache_key, _fetch_note, ttl=120)  # type: ignore[no-any-return]
 
 
 def _context_tool_get_topic_notes_for_topics(topics: list[str]) -> str:
@@ -78,7 +78,7 @@ def _context_tool_get_related_articles(
 
     cache = get_response_cache()
     cache_key = f"related_articles:{','.join(sorted(topics))}:{exclude_id}:{limit}"
-    return cache.get_or_set(cache_key, _fetch_articles, ttl=120)
+    return cache.get_or_set(cache_key, _fetch_articles, ttl=120)  # type: ignore[no-any-return]
 
 
 def _context_tool_get_trend_memory(
@@ -221,7 +221,7 @@ def _context_tool_get_source_performance(
     from services.source_intelligence import get_source_performance
 
     try:
-        results = get_source_performance(source_key=source_key, days=days)
+        results = get_source_performance(days=days)
         if not results:
             return "No source performance data available."
         return "\n".join(

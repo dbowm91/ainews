@@ -74,7 +74,7 @@ class GoogleSearchProvider(BaseSearchProvider):
             from services.search import record_search_failure, record_search_success
 
             future = _EXECUTOR.submit(_search_impl, self, query, max_results)
-            results = future.result(timeout=20)
+            results: list[SearchResult] = future.result(timeout=20)
             record_search_success(self.provider_id)
             return results
         except (FuturesTimeoutError, TimeoutError):

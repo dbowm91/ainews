@@ -39,8 +39,8 @@ def article_detail(article_id: int) -> Response:
         return resp
 
     article = Article.query.options(
-        joinedload(Article.tags),
-        joinedload(Article.source),
+        joinedload(Article.tags),  # type: ignore[arg-type]
+        joinedload(Article.source),  # type: ignore[arg-type]
     ).get_or_404(article_id)
     parse_article_json(article)
 
@@ -97,7 +97,7 @@ def short_url_redirect(short_id: str) -> Response:
         abort(404)
     article = db.first_or_404(select(Article).filter_by(short_id=short_id))
     track_metric(article.id, ArticleMetric.share_link_views)
-    return redirect(f"/article/{article.id}")
+    return redirect(f"/article/{article.id}")  # type: ignore[return-value]
 
 
 @public_bp.route("/a/<short_id>")
@@ -130,4 +130,4 @@ def track_share_click(article_id: int) -> tuple[dict, int]:
 @public_bp.route("/track/newsletter-click/<int:article_id>")
 def track_newsletter_click(article_id: int) -> Response:
     track_metric(article_id, ArticleMetric.newsletter_clicks)
-    return redirect(f"/article/{article_id}", code=302)
+    return redirect(f"/article/{article_id}", code=302)  # type: ignore[return-value]

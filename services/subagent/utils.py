@@ -22,7 +22,8 @@ def _is_task_revoked() -> bool:
         from celery import current_task
 
         if current_task and not current_task.request.called_directly:
-            return current_task.request.is_effectively_revoked()
+            is_revoked: bool = current_task.request.is_effectively_revoked()
+            return is_revoked
     except ImportError:
         pass
     return False

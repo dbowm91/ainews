@@ -11,7 +11,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
-import bleach
+import bleach  # type: ignore[import-untyped]
 from sqlalchemy import Column, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -125,16 +125,19 @@ def track_metric(article_id: int, column: Column) -> None:
         raise
 
 
-def _get_sort_order(sort: str) -> ColumnElement:
+def _get_sort_order(sort: str) -> ColumnElement[Any]:
     """Return sort column and direction for article listing."""
     from sqlalchemy import desc
 
     if sort == "impact":
-        return Article.impact_score.desc()
+        result: ColumnElement[Any] = Article.impact_score.desc()
+        return result
     elif sort == "published":
-        return desc(Article.original_published_at)
+        result = desc(Article.original_published_at)
+        return result
     else:  # "recent" or default
-        return Article.created_at.desc()
+        result = Article.created_at.desc()
+        return result
 
 
 def get_articles_paginated(
@@ -179,23 +182,24 @@ def get_articles_paginated(
             if results_page.items:
                 article_ids = [r.id for r in results_page.items]
                 id_order = {id_: i for i, id_ in enumerate(article_ids)}
-                articles = (
+                articles_result = (
                     db.session.execute(
                         select(Article)
                         .options(
-                            joinedload(Article.source),
-                            joinedload(Article.tags),
-                            joinedload(Article.metrics),
+                            joinedload(Article.source),  # type: ignore[arg-type]
+                            joinedload(Article.tags),  # type: ignore[arg-type]
+                            joinedload(Article.metrics),  # type: ignore[arg-type]
                         )
                         .where(Article.id.in_(article_ids))
                     )
                     .scalars()
                     .all()
                 )
-                articles.sort(key=lambda a: id_order.get(a.id, 999))
-                parse_articles(articles)
+                articles_list: list[Article] = list(articles_result)
+                articles_list.sort(key=lambda a: id_order.get(a.id, 999))
+                parse_articles(articles_list)
                 has_next = results_page.total >= per_page
-                return articles, has_next, page + 1
+                return articles_list, has_next, page + 1
         except SQLAlchemyError:
             # FTS5 table may not exist yet (e.g., tests, fresh install)
             logger.debug("Search failed, falling back to ILIKE", exc_info=True)
@@ -204,9 +208,9 @@ def get_articles_paginated(
     q = (
         select(Article)
         .options(
-            joinedload(Article.source),
-            joinedload(Article.tags),
-            joinedload(Article.metrics),
+            joinedload(Article.source),  # type: ignore[arg-type]
+            joinedload(Article.tags),  # type: ignore[arg-type]
+            joinedload(Article.metrics),  # type: ignore[arg-type]
         )
         .where(Article.pipeline_status.in_(["done", "skipped"]))
         .order_by(_get_sort_order(sort))
@@ -223,18 +227,19 @@ def get_articles_paginated(
     if status_filter:
         q = q.where(Article.pipeline_status == status_filter)
 
-    articles = (
+    fallback_result = (
         db.session.execute(q.offset((page - 1) * per_page).limit(per_page + 1))
         .scalars()
         .all()
     )
-    has_next = len(articles) > per_page
+    fallback_articles: list[Article] = list(fallback_result)
+    has_next = len(fallback_articles) > per_page
     if has_next:
-        articles = articles[:per_page]
+        fallback_articles = fallback_articles[:per_page]
 
-    parse_articles(articles)
+    parse_articles(fallback_articles)
 
-    return articles, has_next, page + 1
+    return fallback_articles, has_next, page + 1
 
 
 def create_article_version(
@@ -299,11 +304,11 @@ def create_article_version(
             )
 
 
-def get_article_versions(article_id: int, limit: int = 20) -> list:
+def get_article_versions(article_id: int, limit: int = 20) -> list[Any]:
     """Get version history for an article, newest first."""
     from models import ArticleVersion
 
-    return (
+    result = (
         db.session.execute(
             select(ArticleVersion)
             .where(ArticleVersion.article_id == article_id)
@@ -313,6 +318,7 @@ def get_article_versions(article_id: int, limit: int = 20) -> list:
         .scalars()
         .all()
     )
+    return list(result)
 
 
 def _title_word_set(title: str | None) -> set[str]:
@@ -398,11 +404,12 @@ def find_duplicate_titles(
             break
 
     if matched_ids:
-        return (
+        result = (
             db.session.execute(
                 select(Article).where(Article.id.in_(matched_ids))
             )
             .scalars()
             .all()
         )
+        return list(result)
     return []

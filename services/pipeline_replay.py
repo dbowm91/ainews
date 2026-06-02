@@ -123,7 +123,7 @@ def replay_article_stage(
 
     # Set pre-stage status
     from constants import PipelineStatus
-    article.pipeline_status = PipelineStatus(PRE_STAGE_STATUS[stage])
+    article.pipeline_status = getattr(PipelineStatus, PRE_STAGE_STATUS[stage].upper())
 
     # Clear last_error since we're re-running
     article.last_error = None
@@ -328,4 +328,4 @@ def _dispatch_stage_task(
 
     # Dispatch with no run_id for manual replay (creates fresh run context)
     result = task_func.apply_async(args=[article_id], kwargs={"run_id": None})
-    return result.id
+    return str(result.id)

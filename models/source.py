@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class Source(db.Model):
+class Source(db.Model):  # type: ignore[name-defined]
     __tablename__ = "sources"
 
     id = db.Column(db.Integer, primary_key=True)

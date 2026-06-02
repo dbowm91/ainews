@@ -180,7 +180,7 @@ def generate_executive_summary(articles, topic_key="main") -> dict:
     nlp = config.newsletter_pipeline
 
     used_fallback = False
-    fallback_stages = []
+    fallback_stages: list[str] = []
 
     topic_context = _get_topic_context(topic_key)
 

@@ -23,7 +23,7 @@ newsletter_subscribers = db.Table(
 )
 
 
-class Newsletter(db.Model):
+class Newsletter(db.Model):  # type: ignore[name-defined]
     __tablename__ = "newsletters"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -47,7 +47,7 @@ class Newsletter(db.Model):
         return f"<Newsletter {self.newsletter_type} {self.generated_at}>"
 
 
-class Subscriber(db.Model):
+class Subscriber(db.Model):  # type: ignore[name-defined]
     __tablename__ = "subscribers"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -98,7 +98,7 @@ class Subscriber(db.Model):
     )
 
 
-class ArticleMetric(db.Model):
+class ArticleMetric(db.Model):  # type: ignore[name-defined]
     __tablename__ = "article_metrics"
 
     id = db.Column(db.Integer, primary_key=True)

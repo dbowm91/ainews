@@ -35,19 +35,20 @@ def _encrypt_new_secret() -> str:
     return f"enc:{_encrypt_secret(plaintext)}"
 
 
-def _get_webhook_secret(webhook) -> str:
+def _get_webhook_secret(webhook: object) -> str:
     """Decrypt webhook secret for use in dispatch. Handles legacy plaintext."""
-    secret = webhook.secret
+    secret: str = getattr(webhook, "secret", "") or ""
     if not secret:
         return ""
     if secret.startswith("enc:"):
         try:
             from services.webhooks import _decrypt_secret
 
-            return _decrypt_secret(secret[4:])
+            decrypted: str = _decrypt_secret(secret[4:])
+            return decrypted
         except Exception:  # noqa: BLE001 non-critical fallback
             logger.warning(
-                "Failed to decrypt webhook secret %s, using fallback", webhook.id,
+                "Failed to decrypt webhook secret %s, using fallback", getattr(webhook, "id", None),
             )
             return secret[4:]
     return secret
@@ -55,7 +56,7 @@ def _get_webhook_secret(webhook) -> str:
 
 @admin_api_bp.route("/webhooks", methods=["GET"])
 @require_auth
-def list_webhooks() -> Response:
+def list_webhooks() -> tuple[Response, int]:
     """List all webhooks."""
     from models import Webhook
 
@@ -164,7 +165,7 @@ def create_webhook() -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["GET"])
 @require_auth
-def get_webhook(webhook_id: int) -> Response:
+def get_webhook(webhook_id: int) -> tuple[Response, int]:
     """Get a specific webhook."""
     from extensions import db
     from models import Webhook
@@ -320,7 +321,7 @@ def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>/events", methods=["GET"])
 @require_auth
-def list_webhook_events(webhook_id: int) -> Response:
+def list_webhook_events(webhook_id: int) -> tuple[Response, int] | str:
     """List delivery events for a webhook."""
     from flask import request
 
@@ -340,7 +341,8 @@ def list_webhook_events(webhook_id: int) -> Response:
     if request.headers.get("HX-Request"):
         from flask import render_template
 
-        return render_template("admin/partials/webhook_events.html", events=events)
+        rendered: str = render_template("admin/partials/webhook_events.html", events=events)
+        return rendered
 
     return api_response(
         data={

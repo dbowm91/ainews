@@ -7,7 +7,7 @@ from extensions import db
 from .tag import article_tags
 
 
-class Article(db.Model):
+class Article(db.Model):  # type: ignore[name-defined]
     __tablename__ = "articles"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -83,7 +83,7 @@ def _article_before_update(mapper, connection, target):
     target.updated_at = datetime.now(timezone.utc)
 
 
-class Citation(db.Model):
+class Citation(db.Model):  # type: ignore[name-defined]
     __tablename__ = "citations"
 
     id = db.Column(db.Integer, primary_key=True)

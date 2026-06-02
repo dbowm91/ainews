@@ -19,11 +19,12 @@ def slugify(name: str) -> str:
 
 
 def encode_short_url(article_id: int) -> str:
-    return _short_encoder.encode_url(article_id, min_length=6)
+    return str(_short_encoder.encode_url(article_id, min_length=6))
 
 
 def decode_short_url(code: str) -> int | None:
     try:
-        return _short_encoder.decode_url(code)
+        result = _short_encoder.decode_url(code)
+        return int(result)
     except (ValueError, TypeError):
         return None

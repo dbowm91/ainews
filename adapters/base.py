@@ -36,14 +36,14 @@ def get_adapter_class(source_type: str) -> type[BaseSourceAdapter]:
 
 
 class BaseSourceAdapter(abc.ABC):
-    config_class: ClassVar = None
+    config_class: ClassVar[type | None] = None
 
     def __init__(self, source_config: SourceConfig):
         self.source_config = source_config
         self.source_id = source_config.id
         self.topic_config = source_config.topics
         if self.config_class and source_config.config:
-            self.adapter_config = self.config_class(**source_config.config)
+            self.adapter_config: Any = self.config_class(**source_config.config)
         else:
             self.adapter_config = None
 
@@ -95,7 +95,7 @@ class BaseSourceAdapter(abc.ABC):
         return " ".join(parts)
 
     @staticmethod
-    def _hash_ext_id(url: str = None, title: str = None) -> str:
+    def _hash_ext_id(url: str | None = None, title: str | None = None) -> str:
         """Generate a stable external ID from URL or title."""
         source = normalize_url(url) if url else (title or "")
         return hashlib.sha256(source.encode()).hexdigest()[:16]

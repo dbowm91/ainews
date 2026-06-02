@@ -41,7 +41,8 @@ def get_min_content_length() -> int:
     try:
         from flask import current_app
 
-        return current_app.config.get("MIN_CONTENT_LENGTH", MIN_CONTENT_LENGTH)
+        result: int = current_app.config.get("MIN_CONTENT_LENGTH", MIN_CONTENT_LENGTH)
+        return result
     except RuntimeError:
         return MIN_CONTENT_LENGTH
 
@@ -51,9 +52,10 @@ def get_stuck_threshold_minutes() -> int:
     try:
         from flask import current_app
 
-        return current_app.config.get(
+        result: int = current_app.config.get(
             "STUCK_THRESHOLD_MINUTES", STUCK_THRESHOLD_MINUTES,
         )
+        return result
     except RuntimeError:
         return STUCK_THRESHOLD_MINUTES
 
@@ -63,9 +65,10 @@ def get_retry_soft_cutoff_minutes() -> int:
     try:
         from flask import current_app
 
-        return current_app.config.get(
+        result: int = current_app.config.get(
             "RETRY_SOFT_CUTOFF_MINUTES", RETRY_SOFT_CUTOFF_MINUTES,
         )
+        return result
     except RuntimeError:
         return RETRY_SOFT_CUTOFF_MINUTES
 
@@ -202,7 +205,7 @@ def _fmt_yaml_error(e) -> str:
 
 def _validate_config_section(import_path, func_name, section_name, errors):
     from pydantic import ValidationError
-    import yaml
+    import yaml  # type: ignore[import-untyped]
     try:
         module = __import__(import_path, fromlist=[func_name])
         loader_fn = getattr(module, func_name)
@@ -223,7 +226,7 @@ def validate_config() -> tuple[bool, list[str]]:
     Returns:
         (is_valid, errors) tuple. errors is empty if valid.
     """
-    errors = []
+    errors: list[str] = []
     _validate_config_section('schemas.pipeline', 'load_pipeline_config', 'Pipeline', errors)
     _validate_config_section('schemas.topic', 'load_topics', 'Topic', errors)
     _validate_config_section('schemas.source', 'load_sources', 'Source', errors)

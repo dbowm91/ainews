@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic import BaseModel, Field
 
@@ -196,8 +196,8 @@ def get_role_config(role: str) -> RoleConfig:
     if len(parts) == 2:
         section = getattr(config, parts[0], None)
         if section is not None:
-            return getattr(section, parts[1])
-    return getattr(config.pipeline, role)
+            return cast(RoleConfig, getattr(section, parts[1]))
+    return cast(RoleConfig, getattr(config.pipeline, role))
 
 
 def resolve_subagent_config(
@@ -230,5 +230,5 @@ def resolve_subagent_config(
             kwargs["task_template"] = stage_config.task_template
         if stage_config.tools:
             kwargs["tools"] = stage_config.tools
-        return SubagentStageConfig(**kwargs)
+        return SubagentStageConfig(**kwargs)  # type: ignore[arg-type]
     return SubagentStageConfig(enabled=False)

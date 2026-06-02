@@ -27,7 +27,7 @@ def get_article_quality_report(article_id: int) -> tuple[Response, int] | Respon
     if not report:
         return api_response(error="No quality report found for this article", status=404)
 
-    findings_by_severity = {"error": [], "warning": [], "info": []}
+    findings_by_severity: dict[str, list[dict]] = {"error": [], "warning": [], "info": []}
     for f in report.findings:
         severity = f.get("severity", "info")
         if severity in findings_by_severity:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
+from typing import cast
 
 from services.provider_base import BaseProvider, ProviderManager
 
@@ -31,7 +32,7 @@ register_search_provider = _manager.register
 
 
 def get_search_provider_class(provider_type: str) -> type[BaseSearchProvider]:
-    return _manager.get_class(provider_type)
+    return cast(type[BaseSearchProvider], _manager.get_class(provider_type))
 
 
 # ---------------------------------------------------------------------------

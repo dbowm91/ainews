@@ -47,9 +47,9 @@ def _is_degenerate_write(article_obj: CondensedArticle) -> bool:
 )
 def write_article(self, article_id: int, run_id=None):
     from extensions import db
+    from schemas.llm_responses import CondensedArticle
     from schemas.pipeline import get_role_config
     from services.writer import (
-        CondensedArticle,
         build_writer_prompt,
         get_writer_system_prompt,
     )

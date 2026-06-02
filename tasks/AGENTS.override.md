@@ -33,7 +33,7 @@ These error dicts are returned directly without proper error handling - callers 
 ## Known Issues
 - **`_STAGE_TASKS`:** Contains `review` status mapping to `tasks/edit.edit_article` - verified present as of 2026-05-07.
 - **PipelineLog meta field:** The model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
-- **`publish_scheduled_articles` has NO `autoretry_for`:** Unlike other pipeline tasks, this task at `tasks/scheduler.py:10` has no `autoretry_for` parameter. It uses Redis locks and SQLAlchemy error handling internally. Adding `max_retries` is recommended for consistency.
+- **`publish_scheduled_articles` now has `autoretry_for`:** ✅ FIXED in Wave 5A.1 - The task at `tasks/scheduler.py:17-18` now has `autoretry_for=(ConnectionError, TimeoutError)` and `max_retries=CELERY_TASK_MAX_RETRIES`.
 
 ## run_stage Signature
 The `run_stage()` function in `tasks/pipeline.py:353-362` has 8 parameters:

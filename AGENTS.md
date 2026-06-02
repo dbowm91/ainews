@@ -454,7 +454,8 @@ The following are documented as intentional and should NOT be "fixed":
 See `plans/plan.md` for the full consolidated implementation plan with parallelization waves.
 
 ### Current Priorities (from plans/plan.md)
-- **Wave 5A:** Code reliability fixes — ✅ COMPLETED (max_retries, experiments field, degradation docs)
+- **Wave 9:** Architecture review follow-up — ACTIVE (SITE_URL fix, ResearchBrief schema, etc.)
+- **Wave 5A:** Code reliability fixes — ✅ COMPLETED
 - **Wave 5B:** Documentation accuracy fixes — ✅ COMPLETED
 - **Wave 5C:** Documentation gap fills — ✅ COMPLETED
 - **Wave 6:** Quality, typing & docs (test coverage 80%, 0 Mypy errors, OpenAPI sync) — ✅ COMPLETED
@@ -471,6 +472,8 @@ These are awareness items for agents — some are already fixed, others need att
 - Subagent YAML config example in docs has non-existent fields (`tool_timeout`, `default_model`) — ✅ COMPLETED (5B.9)
 - Search providers YAML example in docs shows wrong structure (nested vs flat list) — ✅ COMPLETED (5B.10)
 - `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py` — ✅ COMPLETED (5B.8)
+- SITE_URL env var at `pipeline.yaml:116` resolves to empty string when unset (Pydantic default not used) — ⚠️ WAVE 9 item
+- ResearchBrief schema at `architecture/pipeline.md:88` shows wrong fields (`key_findings`, etc.) — ⚠️ WAVE 9 item (architecture/prompts.md has correct schema)
 
 ### Key Constant Locations (Verified)
 - `CELERY_TASK_MAX_RETRIES`: `constants.py:6` (default: 3, configurable via env var)

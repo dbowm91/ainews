@@ -482,6 +482,133 @@ Wave 8:
 - Wave 5B: Documentation Accuracy Fixes (2026-06-02)
 - Wave 5C: Documentation Gaps (2026-06-02)
 - Wave 6: Quality, Typing & Docs (2026-06-02)
+- Wave 7: Infrastructure & Polish (2026-06-02)
+- Wave 8: Adapter Bug Fixes (2026-06-02)
+
+---
+
+## Wave 9: Architecture Review Follow-up — ACTIVE
+
+*Focus: Fix remaining issues identified in architecture reviews (infrastructure, prompts, config, llm_providers, subagent, search_providers, services, routes, pipeline, tasks, schemas, utils, models, adapters).*
+
+**Verification Notes:** Many items in the review plans were already fixed. This wave addresses only items verified as still needing action.
+
+### 9.1 SITE_URL Empty String Fallback (CRITICAL)
+
+- **File:** `pipeline.yaml:116`
+- **Issue:** `site_url: "${SITE_URL}"` resolves to `""` when `SITE_URL` env var is not set, instead of using the Pydantic default `https://ainews.dev`
+- **Impact:** Broken newsletter unsubscribe links and article tracking URLs
+- **Fix:** Remove the env var override and use the Pydantic default:
+  ```yaml
+  newsletter:
+    site_url: "https://ainews.dev"  # Use default, override via SITE_URL env var if needed
+  ```
+- **Verification:** `grep -n "site_url" pipeline.yaml` and test with missing SITE_URL env var
+
+### 9.2 ResearchBrief Schema Documentation Wrong (HIGH)
+
+- **File:** `architecture/pipeline.md:88`
+- **Issue:** Shows `{key_findings, context, citations, related_trends}` but actual `ResearchBrief` schema has `{source_summary, key_claims, direct_quotes, external_sources, related_articles, context_notes, newsworthiness, impact_score}`
+- **Actual location:** `schemas/llm_responses.py:53-79`
+- **Note:** `architecture/prompts.md:109` already has the correct schema
+- **Fix:** Update `architecture/pipeline.md:88` to match `architecture/prompts.md:109`
+- **Verification:** `grep -A 20 "class ResearchBrief" schemas/llm_responses.py`
+
+### 9.3 Writer Prompt Target Documentation (MEDIUM)
+
+- **Files:** `architecture/prompts.md:117`, `prompts/writer.txt:7`
+- **Issue:** Doc says "Target: 200-400 words, 3-5 key points" but actual prompt says "3-5 tight paragraphs" with no explicit word count
+- **Fix:** Update `architecture/prompts.md:117` to match actual prompt:
+  ```
+  Target: 3-5 tight paragraphs (Smart Brevity format)
+  ```
+- **Verification:** Compare `prompts/writer.txt` with `architecture/prompts.md:114-118`
+
+### 9.4 Request Delay Scope Documentation (MEDIUM)
+
+- **File:** `architecture/adapters.md:188-190`
+- **Issue:** Doesn't clarify delay applies to: listing pages, pagination links, AND individual article pages
+- **Fix:** Clarify that `request_delay` applies to all three contexts
+- **Verification:** Check `schemas/source.py:95-96` for field definitions
+
+### 9.5 TopicNote.topic Index Documentation (LOW)
+
+- **File:** `architecture/models.md`
+- **Issue:** Index on `TopicNote.topic` (`models/context.py:12`) is undocumented
+- **Fix:** Add index documentation for `TopicNote.topic`
+- **Verification:** `grep -n "index=True" models/context.py`
+
+### 9.6 TrendMemory.last_accessed_at Auto-Update (LOW)
+
+- **File:** `architecture/models.md`
+- **Issue:** `onupdate=lambda: datetime.now(timezone.utc)` behavior at `models/context.py:40-45` is undocumented
+- **Fix:** Document the auto-update behavior
+- **Verification:** Check `models/context.py:40-45`
+
+### 9.7 WebConfig Field Descriptions (LOW)
+
+- **File:** `schemas/source.py:94-96`
+- **Issue:** `max_items`, `request_delay_min`, `request_delay_max` lack field descriptions
+- **Fix:** Add field descriptions to WebConfig schema
+- **Verification:** `grep -B 2 -A 5 "max_items\|request_delay" schemas/source.py`
+
+### 9.8 Missing API Endpoints Documentation (LOW)
+
+- **File:** `architecture/routes.md`
+- **Issue:** These endpoints exist but aren't documented:
+  - `GET /api/v1/sources/health`
+  - `GET /api/v1/workers/health`
+  - `GET /api/v1/task/<task_id>`
+  - `GET /api/v1/newsletters/performance`
+- **Fix:** Add missing endpoints to API documentation
+- **Verification:** `grep -r "route.*sources/health\|route.*workers/health\|route.*task/.*\|route.*newsletters/performance" routes/`
+
+### 9.9 DeepSeek API Key Environment Variable (LOW)
+
+- **File:** `architecture/config.md`
+- **Issue:** `${DEEPSEEK_API_KEY}` at `providers.yaml:39` is undocumented
+- **Fix:** Add `DEEPSEEK_API_KEY` to environment variables table
+- **Verification:** `grep -n "DEEPSEEK" providers.yaml`
+
+### 9.10 cleanup_interval_minutes Unused (LOW)
+
+- **File:** `pipeline.yaml:297`
+- **Issue:** Defined but never used in code
+- **Fix:** Remove from config or implement usage
+- **Verification:** `grep -r "cleanup_interval" .` (should only find in pipeline.yaml)
+
+### 9.11 REDIS_MAX_CONNECTIONS Inconsistent Defaults (LOW)
+
+- **Files:** `services/config_cache.py:315` (20), `extensions.py:107` (100)
+- **Issue:** Two different default values for Redis max connections
+- **Fix:** Document the inconsistency or harmonize defaults
+- **Verification:** Compare defaults in both files
+
+### 9.12 format_date() Docstring Incomplete (LOW)
+
+- **File:** `utils/datetime.py:52-53`
+- **Issue:** Docstring doesn't enumerate specific return formats
+- **Fix:** Update docstring to list all supported return format strings
+- **Verification:** Read `utils/datetime.py:40-65` and compare docstring to actual behavior
+
+---
+
+## Previously Verified as Already Fixed
+
+The following items from architecture reviews were verified as **already correctly implemented**:
+
+| Item | Verification |
+|------|--------------|
+| cleanup_inactive_subscribers verify_task() | `tasks/subscribers.py:29` has verify_task call |
+| Content drift in edit contextualization | Both templates say "and trend memory" |
+| Edit quality gate 3 conditions | `architecture/tasks.md:74` shows all 3 |
+| No types.py reference in docs | grep found no matches |
+| CELERY_BROKER_URL correct | `architecture/config.md:508` correct |
+| SEARXNG_BASE_URL not in docs | grep found no matches |
+| Self-correction mechanism correct | `architecture/subagent.md:150-166` correct |
+| Disabled stage routing correct | `architecture/pipeline.md:268-277` correct |
+| last_crawled correct field name | `architecture/models.md:162` correct |
+| WebAdapter trafilatura fallback | `architecture/adapters.md:169` correct |
 
 ---
 

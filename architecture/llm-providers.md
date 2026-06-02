@@ -88,6 +88,16 @@ class BaseLLMProvider(ABC):
 | `chat_streaming()` | Streaming text output |
 | `health_check()` | Provider readiness probe |
 
+## Key Types
+
+| Type | Location | Purpose |
+|------|----------|---------|
+| `BatchError` | `services/llm/base.py:28` | Exception for batch LLM failures. Fields: `errors` (list of per-request exceptions), `results` (list of partial results) |
+| `chat_structured_batch()` | `services/llm/base.py:341` | Batch LLM operations via `ThreadPoolExecutor`. Takes list of request dicts, returns `list[T]` of validated Pydantic models |
+| `ToolCall` | `schemas/llm_responses.py:186` | Tool call dataclass with `id`, `name`, `arguments` fields |
+| `ToolResult` | `schemas/llm_responses.py:192` | Tool result dataclass with `id`, `name`, `content` fields |
+| `ToolCallingResponse` | `schemas/llm_responses.py:198` | Response from `chat_with_tools()` with `text`, `model`, `tool_calls`, `tokens_used` fields |
+
 ## ToolDefinition Dataclass
 
 ```python

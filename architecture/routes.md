@@ -146,6 +146,7 @@ Serves JSON REST API at `/api/v1/*`. Detailed endpoint table with HTTP methods:
 | `/articles/<id>/pipeline/replay` | POST | Replay article from specific stage |
 | `/articles/<id>/pipeline/restore-version` | POST | Restore article to previous version |
 | `/newsletters/stats` | GET | Newsletter performance metrics |
+| `/newsletter/preview` | POST | Generate newsletter HTML preview without sending (file: `routes/admin/newsletters.py:221`) |
 | `/search/articles` | GET | Article search with hybrid mode |
 
 **Note:** The `api_tokens_bp` blueprint is registered in `app.py` without a `url_prefix` — routes include the full `/api-tokens` path.
@@ -250,6 +251,7 @@ JSON REST API at `/api/v1/*`:
 
 #### Newsletters
 - `GET /api/v1/newsletters/stats` - Newsletter performance metrics (sent/failed/click counts, top articles, subscriber counts by type)
+- `POST /api/v1/newsletter/preview` - Generate newsletter HTML preview without sending emails (file: `routes/admin/newsletters.py:221`)
 
 #### Quality
 - `GET /api/v1/articles/<id>/quality` - Latest quality report for an article (scores, findings by severity)

@@ -137,7 +137,7 @@ class SubagentChainConfig(BaseModel):
     steps: list[SubagentChainStep] = Field(default_factory=list)
 ```
 
-**Location**: These schemas are defined in `schemas/pipeline.py`, not in `runner.py` or `chain.py`.
+**Location**: `SubagentChainStep` at `schemas/pipeline.py:108`, `SubagentChainConfig` at `schemas/pipeline.py:115`.
 
 ### Features
 

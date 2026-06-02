@@ -29,3 +29,15 @@ The logout endpoint at `/admin/logout` requires POST method only (not GET). This
 
 ## api_tokens Blueprint IS Registered
 The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
+
+## Architecture Review Findings (From Wave 9 Review)
+
+### Trend Memory Semantic Search Endpoint Registration
+The `/admin/api/trend-memory/semantic-search` endpoint at `routes/admin/trend_memory.py:117` is registered on `admin_bp` rather than `admin_api_bp`. This is inconsistent with other API endpoints which use `admin_api_bp`. The endpoint returns JSON but is on the HTML blueprint.
+
+### Missing API Endpoints Are Already Documented
+The following endpoints that were thought to be undocumented are actually documented in `architecture/routes.md`:
+- `/api/v1/sources/health` - lines 122, 249
+- `/api/v1/workers/health` - line 296
+- `/api/v1/task/<task_id>` - line 297
+- `/api/v1/newsletters/performance` - lines 148, 253

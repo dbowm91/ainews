@@ -38,4 +38,16 @@ When reviewing or updating `architecture/schemas.md`:
 - **`SubagentStageConfig` fields not enumerated** - 13 fields at `schemas/pipeline.py:93-105` with `max_iterations: int = Field(default=5, ge=1, le=20)`
 - **Role-specific optional fields** at `schemas/pipeline.py:24-32` include: `system_prompt`, `min_score` (selector), `web_search`, `web_search_max_results`, `web_search_provider`, `db_related_max`, `max_article_text_length` (researcher), `max_key_points` (writer), `max_tags` (editor)
 
-When updating architecture documentation, verify claims against `schemas/pipeline.py` directly.
+## Wave 9 Review Findings
+
+### WebConfig Field Descriptions Missing
+`schemas/source.py:94-96` has `max_items`, `request_delay_min`, `request_delay_max` fields without field descriptions. Add descriptions for developer experience.
+
+### SearchConfig YAML Key Mapping
+`schemas/search.py:12,23` - Schema field is `default_provider` but YAML key is `default_search_provider`. Add clarifying comment.
+
+### ResearchBrief Schema Fields Verified
+Actual fields at `schemas/llm_responses.py:53-79`:
+- `source_summary`, `key_claims`, `direct_quotes`, `external_sources`, `related_articles`, `context_notes`, `newsworthiness`, `impact_score`
+
+The architecture docs at `architecture/pipeline.md:88` incorrectly show `{key_findings, context, citations, related_trends}`. `architecture/prompts.md:109` has the correct schema.

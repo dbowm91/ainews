@@ -1,7 +1,7 @@
 # Master Implementation Plan (Consolidated)
 
-**Status:** ACTIVE  
-**Last Updated:** 2026-06-02  
+**Status:** IN PROGRESS (Wave 9 execution)
+**Last Updated:** 2026-06-02 (Wave 9 items verified and expanded)  
 **Goal:** Address code quality, security gaps, performance, documentation accuracy, and technical debt.
 
 ---
@@ -484,6 +484,7 @@ Wave 8:
 - Wave 6: Quality, Typing & Docs (2026-06-02)
 - Wave 7: Infrastructure & Polish (2026-06-02)
 - Wave 8: Adapter Bug Fixes (2026-06-02)
+- Wave 9: Architecture Review Follow-up (2026-06-02) - Items verified, expanded from 12 to 22 sub-items, incorrect items removed
 
 ---
 
@@ -493,7 +494,9 @@ Wave 8:
 
 **Verification Notes:** Many items in the review plans were already fixed. This wave addresses only items verified as still needing action.
 
-### 9.1 SITE_URL Empty String Fallback (CRITICAL)
+---
+
+### Wave 9.1: SITE_URL Empty String Fallback (CRITICAL)
 
 - **File:** `pipeline.yaml:116`
 - **Issue:** `site_url: "${SITE_URL}"` resolves to `""` when `SITE_URL` env var is not set, instead of using the Pydantic default `https://ainews.dev`
@@ -505,7 +508,9 @@ Wave 8:
   ```
 - **Verification:** `grep -n "site_url" pipeline.yaml` and test with missing SITE_URL env var
 
-### 9.2 ResearchBrief Schema Documentation Wrong (HIGH)
+---
+
+### Wave 9.2: ResearchBrief Schema Documentation Wrong (HIGH)
 
 - **File:** `architecture/pipeline.md:88`
 - **Issue:** Shows `{key_findings, context, citations, related_trends}` but actual `ResearchBrief` schema has `{source_summary, key_claims, direct_quotes, external_sources, related_articles, context_notes, newsworthiness, impact_score}`
@@ -514,7 +519,9 @@ Wave 8:
 - **Fix:** Update `architecture/pipeline.md:88` to match `architecture/prompts.md:109`
 - **Verification:** `grep -A 20 "class ResearchBrief" schemas/llm_responses.py`
 
-### 9.3 Writer Prompt Target Documentation (MEDIUM)
+---
+
+### Wave 9.3: Writer Prompt Target Documentation (MEDIUM)
 
 - **Files:** `architecture/prompts.md:117`, `prompts/writer.txt:7`
 - **Issue:** Doc says "Target: 200-400 words, 3-5 key points" but actual prompt says "3-5 tight paragraphs" with no explicit word count
@@ -524,72 +531,227 @@ Wave 8:
   ```
 - **Verification:** Compare `prompts/writer.txt` with `architecture/prompts.md:114-118`
 
-### 9.4 Request Delay Scope Documentation (MEDIUM)
+---
 
-- **File:** `architecture/adapters.md:188-190`
-- **Issue:** Doesn't clarify delay applies to: listing pages, pagination links, AND individual article pages
-- **Fix:** Clarify that `request_delay` applies to all three contexts
-- **Verification:** Check `schemas/source.py:95-96` for field definitions
-
-### 9.5 TopicNote.topic Index Documentation (LOW)
+### Wave 9.4: TopicNote.topic Index Documentation (LOW)
 
 - **File:** `architecture/models.md`
 - **Issue:** Index on `TopicNote.topic` (`models/context.py:12`) is undocumented
 - **Fix:** Add index documentation for `TopicNote.topic`
 - **Verification:** `grep -n "index=True" models/context.py`
 
-### 9.6 TrendMemory.last_accessed_at Auto-Update (LOW)
+---
+
+### Wave 9.5: TrendMemory.last_accessed_at Auto-Update (LOW)
 
 - **File:** `architecture/models.md`
 - **Issue:** `onupdate=lambda: datetime.now(timezone.utc)` behavior at `models/context.py:40-45` is undocumented
 - **Fix:** Document the auto-update behavior
 - **Verification:** Check `models/context.py:40-45`
 
-### 9.7 WebConfig Field Descriptions (LOW)
+---
+
+### Wave 9.6: WebConfig Field Descriptions (LOW)
 
 - **File:** `schemas/source.py:94-96`
 - **Issue:** `max_items`, `request_delay_min`, `request_delay_max` lack field descriptions
 - **Fix:** Add field descriptions to WebConfig schema
 - **Verification:** `grep -B 2 -A 5 "max_items\|request_delay" schemas/source.py`
 
-### 9.8 Missing API Endpoints Documentation (LOW)
+---
 
-- **File:** `architecture/routes.md`
-- **Issue:** These endpoints exist but aren't documented:
-  - `GET /api/v1/sources/health`
-  - `GET /api/v1/workers/health`
-  - `GET /api/v1/task/<task_id>`
-  - `GET /api/v1/newsletters/performance`
-- **Fix:** Add missing endpoints to API documentation
-- **Verification:** `grep -r "route.*sources/health\|route.*workers/health\|route.*task/.*\|route.*newsletters/performance" routes/`
-
-### 9.9 DeepSeek API Key Environment Variable (LOW)
+### Wave 9.7: DeepSeek API Key Environment Variable (LOW)
 
 - **File:** `architecture/config.md`
 - **Issue:** `${DEEPSEEK_API_KEY}` at `providers.yaml:39` is undocumented
 - **Fix:** Add `DEEPSEEK_API_KEY` to environment variables table
 - **Verification:** `grep -n "DEEPSEEK" providers.yaml`
 
-### 9.10 cleanup_interval_minutes Unused (LOW)
+---
+
+### Wave 9.8: cleanup_interval_minutes Unused (LOW)
 
 - **File:** `pipeline.yaml:297`
 - **Issue:** Defined but never used in code
+- **Status:** Verified - `grep -r "cleanup_interval" .` shows only `pipeline.yaml:297`
 - **Fix:** Remove from config or implement usage
 - **Verification:** `grep -r "cleanup_interval" .` (should only find in pipeline.yaml)
 
-### 9.11 REDIS_MAX_CONNECTIONS Inconsistent Defaults (LOW)
+---
+
+### Wave 9.9: REDIS_MAX_CONNECTIONS Inconsistent Defaults (LOW)
 
 - **Files:** `services/config_cache.py:315` (20), `extensions.py:107` (100)
 - **Issue:** Two different default values for Redis max connections
 - **Fix:** Document the inconsistency or harmonize defaults
 - **Verification:** Compare defaults in both files
 
-### 9.12 format_date() Docstring Incomplete (LOW)
+---
+
+### Wave 9.10: format_date() Docstring Incomplete (LOW)
 
 - **File:** `utils/datetime.py:52-53`
 - **Issue:** Docstring doesn't enumerate specific return formats
-- **Fix:** Update docstring to list all supported return format strings
+- **Fix:** Update docstring to list all supported return format strings: "just now", "X minutes ago", "1 hour ago", "X hours ago", "yesterday", "X days ago", "%b %d", "%b %d, %Y"
 - **Verification:** Read `utils/datetime.py:40-65` and compare docstring to actual behavior
+
+---
+
+### Wave 9.11: Edit Quality Gate Documentation Incomplete (MEDIUM)
+
+- **File:** `architecture/tasks.md:70`
+- **Issue:** Edit quality gate table shows only 1 routing condition ("Validation fails → review"), but actual code has 3 conditions:
+  1. Validation failure (`tasks/edit.py:161-185`)
+  2. `_should_route_to_review()` returns True (`tasks/edit.py:189-206`)
+  3. Quality report `passed=False` (`tasks/edit.py:328-349`)
+- **Fix:** Update quality gates table to list all three conditions
+- **Verification:** Compare `architecture/tasks.md:70` with `tasks/edit.py:147-349`
+
+---
+
+### Wave 9.12: Subagent Self-Correction Documentation Wrong (MEDIUM)
+
+- **File:** `architecture/subagent.md:151-167`
+- **Issue:** References non-existent code at lines 401-417, describes incorrect `self_corrected` flag and `for attempt in range(max_attempts)` pattern
+- **Actual location:** `services/subagent/runner.py:88-109` - uses `corrected` flag in `_run_subagent_core` inside `_attempt()`
+- **Fix:** Update documentation to reflect actual implementation:
+  - Self-correction happens in `_run_subagent_core` inside `_attempt()` (lines 72-109)
+  - Uses `corrected` flag (not `self_corrected`)
+  - Validation failure triggers a single retry by appending correction message and raising
+  - The retry loop is in `_retry_with_backoff`, not an explicit `for attempt in range`
+- **Verification:** Read `services/subagent/runner.py:88-109`
+
+---
+
+### Wave 9.13: Subagent Tool Signatures Missing Parameters (LOW)
+
+- **File:** `architecture/subagent.md`
+- **Issue:** Several tool signatures in doc are missing parameters that exist in actual implementations:
+  - `_context_tool_get_topic_gap_report` missing `days: int = 30` parameter (`services/subagent/tools.py:165-167`)
+  - `_context_tool_get_source_performance` missing `days: int = 7` parameter (`services/subagent/tools.py:218-220`)
+- **Fix:** Update signatures to show all parameters including defaults
+- **Verification:** Compare doc signatures with `services/subagent/tools.py`
+
+---
+
+### Wave 9.14: Middleware Chain Description Misleading (LOW)
+
+- **File:** `architecture/subagent.md:228-235`
+- **Issue:** Description "LoggingMiddleware (outermost)" is ambiguous about how the chain is constructed
+- **Actual:** Middleware are applied in reverse order via `reversed(middleware_chain)` at `services/subagent/runner.py:83-90`. The first middleware in the list ends up as the outermost wrapper after the reversal.
+- **Fix:** Clarify that middleware are applied in reverse order, so the first middleware in the list ends up as the outermost wrapper after the reversal
+- **Verification:** Check `services/subagent/runner.py:83-90`
+
+---
+
+### Wave 9.15: Content Extractor Fallback Documentation Wrong (LOW)
+
+- **File:** `architecture/services.md:279-281`
+- **Issue:** Doc claims "Final fallback: Raw HTML with boilerplate removal". This is FALSE.
+- **Actual behavior** (`services/content_extractor.py:123`): Returns `ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)`. No raw HTML extraction occurs.
+- **Full chain:** trafilatura → readability + BeautifulSoup → EMPTY status.
+- **Fix:** Remove false claim. Document actual behavior.
+- **Verification:** Check `services/content_extractor.py:123`
+
+---
+
+### Wave 9.16: WebAdapter Trafilatura Fallback Missing (LOW)
+
+- **File:** `architecture/adapters.md:169`
+- **Issue:** Doc says "fallback to CSS selectors" but actual fallback is trafilatura
+- **Actual behavior** (`adapters/web.py:108-119`): If body is too short or missing, tries trafilatura first
+- **Fix:** Update to say "fallback to trafilatura content extraction"
+- **Verification:** Check `adapters/web.py:108-119`
+
+---
+
+### Wave 9.17: SearchConfig YAML Key Mismatch (LOW)
+
+- **File:** `architecture/schemas.md` and `schemas/search.py`
+- **Issue:** Schema field is `default_provider` but YAML key is `default_search_provider`
+- **Fix:** Add note clarifying that `SearchConfig.default_provider` maps to `default_search_provider` in YAML
+- **Verification:** Check `schemas/search.py:12,23`
+
+---
+
+### Wave 9.18: services/llm/types.py Does Not Exist (LOW)
+
+- **File:** `architecture/llm-providers.md:17` and `architecture/services.md:17`
+- **Issue:** Both docs list `services/llm/types.py` but this file doesn't exist
+- **Actual types:** `ToolCall`, `ToolResult`, `ToolCallingResponse` exist as both dataclasses in `services/llm/base.py` and Pydantic models in `schemas/llm_responses.py`
+- **Fix:** Remove `types.py` from file inventory. Add note clarifying dual type definitions
+- **Verification:** `ls services/llm/` to confirm no types.py exists
+
+---
+
+### Wave 9.19: Subagent Edit Contextualization Content Drift (LOW)
+
+- **Files:** `prompts/subagent_edit_contextualization.txt:17` vs `services/subagent/prompt_templates.py:40`
+- **Issue:** File says "Review the draft in light of the research brief, topic notes, and related articles"
+- **Inline template** says "Review the draft in light of the research brief, topic notes, related articles, and trend memory"
+- **Fix:** Sync the two - update file to include "and trend memory"
+- **Verification:** Compare both sources
+
+---
+
+### Wave 9.20: Request ID Propagation Documentation (LOW)
+
+- **File:** `architecture/infrastructure.md`
+- **Issue:** Doc says "Request ID propagation: g.request_id → Celery task headers"
+- **Actual:** Request ID is stored in `request_id_var` (a ContextVar), NOT in `g.request_id`. The Flask middleware sets `g.request_id` from `get_request_id()` (which reads from `request_id_var`), but the actual propagation to Celery uses `request_id_var` directly.
+- **Fix:** Update documentation to say "Request ID propagation: request_id_var (ContextVar) → Celery task headers"
+- **Verification:** Check `services/logging_utils.py:34` and `celery_app.py:48-56`
+
+---
+
+### Wave 9.21: cleanup_inactive_subscribers Missing verify_task (HIGH)
+
+- **File:** `tasks/subscribers.py:15`
+- **Issue:** `cleanup_inactive_subscribers` task has no `verify_task()` call while all other cleanup tasks do
+- **Impact:** Unauthorized callers could invoke this task
+- **Fix:** Add `verify_task()` call to the task
+- **Verification:** Check `tasks/subscribers.py:15` and compare with other cleanup tasks
+
+---
+
+## Wave 9 Parallelization Map
+
+Wave 9 contains 21 sub-items (22 minus 1 duplicate removed). They can be parallelized as follows:
+
+### Group A: Critical/High Priority (Sequential within group, but group can run in parallel with other groups)
+```
+Wave 9:
+├── 9.1 SITE_URL Empty String Fallback (CRITICAL)
+├── 9.21 cleanup_inactive_subscribers verify_task (HIGH)
+└── 9.2 ResearchBrief Schema Documentation Wrong (HIGH)
+```
+
+### Group B: Medium Priority Documentation Fixes (Can run 4-6 agents in parallel)
+```
+├── 9.3 Writer Prompt Target Documentation
+├── 9.11 Edit Quality Gate Documentation Incomplete
+├── 9.12 Subagent Self-Correction Documentation Wrong
+└── 9.13 Subagent Tool Signatures Missing Parameters
+```
+
+### Group C: Low Priority Doc Fixes (Can run 4-6 agents in parallel)
+```
+├── 9.4 TopicNote.topic Index Documentation
+├── 9.5 TrendMemory.last_accessed_at Auto-Update
+├── 9.6 WebConfig Field Descriptions
+├── 9.7 DeepSeek API Key Environment Variable
+├── 9.9 REDIS_MAX_CONNECTIONS Inconsistent Defaults
+├── 9.10 cleanup_interval_minutes Unused
+├── 9.14 Middleware Chain Description Misleading
+├── 9.15 Content Extractor Fallback Documentation Wrong
+├── 9.16 WebAdapter Trafilatura Fallback Missing
+├── 9.17 SearchConfig YAML Key Mismatch
+├── 9.18 services/llm/types.py Does Not Exist
+├── 9.19 Subagent Edit Contextualization Content Drift
+└── 9.20 Request ID Propagation Documentation
+```
+
+**Note:** Items 9.4-9.20 are all independent and can be executed by separate agents in parallel. Item 9.1 must be done first (critical). Items 9.2, 9.3, and 9.21 should be done early (high/medium priority).
 
 ---
 
@@ -609,6 +771,13 @@ The following items from architecture reviews were verified as **already correct
 | Disabled stage routing correct | `architecture/pipeline.md:268-277` correct |
 | last_crawled correct field name | `architecture/models.md:162` correct |
 | WebAdapter trafilatura fallback | `architecture/adapters.md:169` correct |
+| Request delay scope clarified | `architecture/adapters.md:188-190` already mentions listing, pagination, and article fetches |
+| Missing API endpoints documented | `/api/v1/sources/health`, `/api/v1/workers/health`, `/api/v1/task/<task_id>`, `/api/v1/newsletters/performance` all in `architecture/routes.md` |
+| DuckDuckGo provider uses library | Uses `duckduckgo_search` library's internal HTTP client (not our session) - documented in search_providers review |
+| Newsletter two-endpoint pattern | Both `/newsletters/performance` and `/newsletters/stats` exist - correctly documented |
+| chat_structured signature correct | Has `max_validation_retries` and `stage` params - architecture docs updated |
+| Subagent YAML config fixed | `tool_timeout` and `default_model` fields removed from example |
+| Search providers YAML fixed | Uses flat list with `default_search_provider` key |
 
 ---
 

@@ -454,26 +454,23 @@ The following are documented as intentional and should NOT be "fixed":
 See `plans/plan.md` for the full consolidated implementation plan with parallelization waves.
 
 ### Current Priorities (from plans/plan.md)
-- **Wave 9:** Architecture review follow-up — ACTIVE (SITE_URL fix, ResearchBrief schema, etc.)
-- **Wave 5A:** Code reliability fixes — ✅ COMPLETED
-- **Wave 5B:** Documentation accuracy fixes — ✅ COMPLETED
-- **Wave 5C:** Documentation gap fills — ✅ COMPLETED
-- **Wave 6:** Quality, typing & docs (test coverage 80%, 0 Mypy errors, OpenAPI sync) — ✅ COMPLETED
-- **Wave 7:** Infrastructure & polish (Docker hardening, observability) — ✅ COMPLETED
-- **Wave 8:** Adapter bug fixes (WebAdapter pagination) — ✅ COMPLETED
+- **Wave 9:** Architecture review follow-up — IN PROGRESS (22 sub-items, 3 critical/high priority)
+  - 9.1 SITE_URL empty string fallback (CRITICAL)
+  - 9.2 ResearchBrief schema wrong (HIGH)
+  - 9.21 cleanup_inactive_subscribers missing verify_task (HIGH)
 
 ### Quick Reference: Known Doc Inaccuracies (from architecture reviews)
-These are awareness items for agents — some are already fixed, others need attention:
-- `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`) — ✅ ALREADY FIXED in docs
-- Disabled pipeline stages route through `_finalize()` to DONE (default), NOT directly to next stage (`tasks/pipeline.py:260-267`). REVIEW is conditional via `_should_route_to_review()`. — ✅ COMPLETED (5A.4)
-- `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`) — ✅ COMPLETED (5B.1)
-- Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files) — ✅ Already correct
-- `publish_scheduled_articles` has `autoretry_for` and `max_retries` (`tasks/scheduler.py:17`) — ✅ COMPLETED (5A.1)
-- Subagent YAML config example in docs has non-existent fields (`tool_timeout`, `default_model`) — ✅ COMPLETED (5B.9)
-- Search providers YAML example in docs shows wrong structure (nested vs flat list) — ✅ COMPLETED (5B.10)
-- `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py` — ✅ COMPLETED (5B.8)
-- SITE_URL env var at `pipeline.yaml:116` resolves to empty string when unset (Pydantic default not used) — ⚠️ WAVE 9 item
-- ResearchBrief schema at `architecture/pipeline.md:88` shows wrong fields (`key_findings`, etc.) — ⚠️ WAVE 9 item (architecture/prompts.md has correct schema)
+These are awareness items for agents working on documentation:
+- `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`)
+- `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`)
+- Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files)
+- `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py`
+- SITE_URL env var at `pipeline.yaml:116` resolves to empty string when unset — ⚠️ WAVE 9 item
+- ResearchBrief schema at `architecture/pipeline.md:88` shows wrong fields — ⚠️ WAVE 9 item
+- Edit quality gate has 3 conditions (validation, _should_route_to_review, quality report) — only 1 documented
+- Subagent self-correction documentation references wrong line numbers and pattern
+- `services/llm/types.py` does NOT exist — types are in `services/llm/base.py` and `schemas/llm_responses.py`
+- `cleanup_inactive_subscribers` task missing `verify_task()` call — ⚠️ WAVE 9 item
 
 ### Key Constant Locations (Verified)
 - `CELERY_TASK_MAX_RETRIES`: `constants.py:6` (default: 3, configurable via env var)

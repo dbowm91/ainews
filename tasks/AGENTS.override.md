@@ -35,6 +35,22 @@ These error dicts are returned directly without proper error handling - callers 
 - **PipelineLog meta field:** The model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
 - **`publish_scheduled_articles` now has `autoretry_for`:** ✅ FIXED in Wave 5A.1 - The task at `tasks/scheduler.py:17-18` now has `autoretry_for=(ConnectionError, TimeoutError)` and `max_retries=CELERY_TASK_MAX_RETRIES`.
 
+## Architecture Review Findings (From Wave 9 Review)
+
+### cleanup_inactive_subscribers Missing verify_task (HIGH PRIORITY)
+- `tasks/subscribers.py:15` - The `cleanup_inactive_subscribers` task has no `verify_task()` call while all other cleanup tasks do
+- Impact: Unauthorized callers could invoke this task
+- This is a security gap that needs to be fixed
+
+### Edit Stage Quality Gate Has 3 Conditions
+The edit quality gate table in `architecture/tasks.md:70` shows only 1 routing condition ("Validation fails → review"), but actual code has 3 conditions:
+1. Validation failure (`tasks/edit.py:161-185`)
+2. `_should_route_to_review()` returns True (`tasks/edit.py:189-206`)
+3. Quality report `passed=False` (`tasks/edit.py:328-349`)
+
+### _degrade_and_advance Location
+`_degrade_and_advance` is defined ONLY in `services/pipeline_degradation.py:183`. It does NOT exist in `tasks/pipeline.py`. When degrading select stage, ensure `selector_result` dict is set: `{"selected": True, "score": 6, "reason": "auto-selected after failure"}`
+
 ## run_stage Signature
 The `run_stage()` function in `tasks/pipeline.py:353-362` has 8 parameters:
 ```python

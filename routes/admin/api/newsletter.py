@@ -19,11 +19,12 @@ def _build_newsletter_type_list() -> list[str]:
 def _load_newsletters_in_window(cutoff: datetime) -> list:
     from models import Newsletter
 
-    return (
+    result: list = (
         Newsletter.query.filter(Newsletter.generated_at >= cutoff)
         .order_by(Newsletter.generated_at.desc())
         .all()
     )
+    return result
 
 
 def _compute_sent_failed_counts(newsletters: list) -> tuple[int, int, dict[str, int], dict[str, int]]:

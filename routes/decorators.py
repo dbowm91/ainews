@@ -3,8 +3,10 @@
 import logging
 from contextlib import contextmanager
 from functools import wraps
+from typing import Any
 
-from flask import jsonify, redirect, request, session, url_for
+from flask import Response, jsonify, redirect, request, session, url_for
+from sqlalchemy.exc import SQLAlchemyError
 
 from logging_config import get_request_id
 
@@ -94,7 +96,7 @@ def validate_csrf_json(f):
     return decorated
 
 
-def commit(db, error_message="Operation failed"):
+def commit(db: Any, error_message: str = "Operation failed") -> tuple[Response, int] | None:
     """Commit the database session, rolling back on error.
 
     Returns None on success, or a JSON error response tuple on failure.

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/sources", methods=["GET"])
 @require_auth
-def list_sources() -> Response:
+def list_sources() -> tuple[Response, int]:
     """List all sources."""
     from models import Source
 
@@ -122,7 +122,7 @@ def create_source() -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/sources/<int:source_id>", methods=["GET"])
 @require_auth
-def get_source(source_id: int) -> Response:
+def get_source(source_id: int) -> tuple[Response, int]:
     """Get a specific source."""
     from extensions import db
     from models import Source
@@ -348,13 +348,19 @@ def refresh_source(source_id: int) -> tuple[Response, int] | Response:
 
     from extensions import db
     from models import Source
-    from services.config_unified import get_source_config
-    from routes.admin.api.webhooks import get_request_id
+    from logging_config import get_request_id
 
     source = db.get_or_404(Source, source_id)
-    source_config = get_source_config(source)
+    # Convert Source model to config dict for crawl_source task
+    source_config: dict[str, object] = {
+        "id": source.source_key,
+        "name": source.name,
+        "type": source.source_type,
+        "enabled": source.active,
+        "config": {},
+    }
 
-    headers = {}
+    headers: dict[str, str] = {}
     request_id = get_request_id()
     if request_id:
         headers["request_id"] = request_id

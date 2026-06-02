@@ -21,7 +21,7 @@ BASE_DELAY_SECONDS = 2
 MAX_DELAY_SECONDS = 300
 
 _ENCRYPTION_KEY: bytes | None = None
-_FALLBACK_KEYS: list[bytes] = []
+_FALLBACK_KEYS: list = []
 
 
 class WebhookSecretDecryptionError(Exception):
@@ -85,17 +85,20 @@ def _decrypt_secret(ciphertext: str) -> str:
 
     if ciphertext.startswith("v2:enc:"):
         actual_cipher = ciphertext[7:]
-        return f.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+        decrypted: str = f.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+        return decrypted
     elif ciphertext.startswith("v1:enc:"):
         actual_cipher = ciphertext[6:]
         for fallback in _FALLBACK_KEYS:
             try:
-                return fallback.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+                decrypted_v1: str = fallback.decrypt(actual_cipher.encode("utf-8")).decode("utf-8")
+                return decrypted_v1
             except (ValueError, TypeError):
                 continue
         raise ValueError("Failed to decrypt v1 ciphertext with fallback keys")
 
-    return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+    decrypted_default: str = f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+    return decrypted_default
 
 
 def _sign_payload(payload: str, secret: str, timestamp: int | None = None) -> str:

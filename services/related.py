@@ -35,7 +35,7 @@ def find_related_articles_cached(article, limit: int = 5) -> list:
         articles = (
             db.session.execute(
                 select(Article)
-                .options(joinedload(Article.tags), joinedload(Article.source))
+                .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
                 .where(Article.id.in_(article_ids))
             )
             .scalars()
@@ -47,7 +47,7 @@ def find_related_articles_cached(article, limit: int = 5) -> list:
     result = find_related_articles(article, limit)
     article_ids = [a.id for a in result]
     cache.set(cache_key, article_ids, _RELATED_CACHE_TTL)
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def find_related_articles(article, limit: int = 5):
@@ -84,7 +84,7 @@ def find_related_articles(article, limit: int = 5):
         candidates = (
             db.session.execute(
                 select(Article)
-                .options(joinedload(Article.tags), joinedload(Article.source))
+                .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
                 .outerjoin(
                     tag_count_subq,
                     Article.id == tag_count_subq.c.article_id,
@@ -109,7 +109,7 @@ def find_related_articles(article, limit: int = 5):
         candidates = (
             db.session.execute(
                 select(Article)
-                .options(joinedload(Article.tags), joinedload(Article.source))
+                .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
                 .where(
                     Article.id != article.id,
                     Article.pipeline_status == PipelineStatus.DONE,
@@ -134,7 +134,7 @@ def find_related_articles(article, limit: int = 5):
 
         # Tag overlap (already pushed to SQL, but need count for scoring)
         if article_tag_ids:
-            cand_tag_ids = {t.id for t in cand.tags} if cand.tags else set()
+            cand_tag_ids = {t.id for t in cand.tags} if cand.tags else set()  # type: ignore[attr-defined]
             shared_tags = len(article_tag_ids & cand_tag_ids)
             score += shared_tags * 2.0
 
@@ -174,7 +174,7 @@ def find_related_articles_dicts(
     candidates = (
         db.session.execute(
             select(Article)
-            .options(joinedload(Article.tags), joinedload(Article.source))
+            .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
             .where(
                 Article.id != exclude_id,
                 Article.pipeline_status == PipelineStatus.DONE,

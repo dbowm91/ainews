@@ -41,7 +41,7 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         from sqlalchemy.orm import joinedload
         articles = (
             Article.query
-            .options(joinedload(Article.source), joinedload(Article.tags))
+            .options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(Article.id.in_(cached_ids))
             .all()
         )
@@ -67,7 +67,8 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
     )
     if articles:
         cache.set(cache_key, [a.id for a in articles], ttl=300)
-    return articles
+    result_articles: list[Article] = articles
+    return result_articles
 
 
 @public_bp.route("/")
@@ -85,7 +86,8 @@ def index() -> str:
 
     cached = cache.get(cache_key)
     if cached is not None:
-        return cached
+        result: str = cached
+        return result
 
     articles, has_next, next_page = get_articles_paginated(
         page=page,
@@ -134,7 +136,8 @@ def topic_feed(category: str) -> str:
 
     cached = cache.get(cache_key)
     if cached is not None:
-        return cached
+        result: str = cached
+        return result
 
     from schemas.topic import load_topics
 
@@ -183,12 +186,13 @@ def tag_feed(slug: str) -> str:
 
     cached = cache.get(cache_key)
     if cached is not None:
-        return cached
+        result: str = cached
+        return result
 
     tag = db.first_or_404(select(Tag).filter_by(slug=slug))
 
     q = (
-        Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+        Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
         .filter(
             Article.tags.any(Tag.id == tag.id),
             Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
@@ -234,7 +238,7 @@ def feed_all() -> Response:
     xml = cache.get(cache_key)
     if xml is None:
         articles = (
-            Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+            Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(
                 Article.pipeline_status.in_(
                     [PipelineStatus.DONE, PipelineStatus.SKIPPED],
@@ -281,7 +285,7 @@ def feed_topic(category: str) -> Response:
         topic_name = topic_def.display_name if topic_def else category
 
         articles = (
-            Article.query.options(joinedload(Article.source), joinedload(Article.tags))
+            Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(
                 Article.category == category,
                 Article.pipeline_status.in_(
@@ -331,7 +335,7 @@ def sitemap() -> Response:
             .all()
         )
 
-        _SitemapEntry = namedtuple("SitemapEntry", ["id", "created_at"])
+        _SitemapEntry = namedtuple("_SitemapEntry", ["id", "created_at"])
         articles = [_SitemapEntry(id=r.id, created_at=r.created_at) for r in rows]
 
         site_url = request.host_url.rstrip("/")

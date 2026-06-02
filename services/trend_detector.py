@@ -93,11 +93,12 @@ def _load_patterns() -> dict[str, list[str]]:
     try:
         from services.config_cache import get_config_cache
 
-        return get_config_cache().get(
+        result: dict[str, list[str]] = get_config_cache().get(
             key="trend_patterns",
             loader_fn=_load_patterns_from_file,
             ttl=300,
         )
+        return result
     except (ImportError, KeyError, AttributeError, ValueError) as e:
         logger.debug("Config cache failed for trend patterns: %s", e)
         return _load_patterns_from_file()

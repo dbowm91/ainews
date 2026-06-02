@@ -6,6 +6,7 @@ import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from collections import deque
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,9 @@ class SMTPConnectionPool:
         self._pool: deque[smtplib.SMTP] = deque()
         self._lock = threading.Lock()
         self._closed = False
-        self._cfg_hash = None
+        self._cfg_hash: str | None = None
 
-    def _get_config(self) -> dict:
+    def _get_config(self) -> dict[str, Any]:
         """Get current SMTP config."""
         return get_smtp_config()
 
@@ -156,7 +157,7 @@ _FOOTER_WITH_AGENTS_RE = re.compile(
 _CLOSING_TABLE_RE = re.compile(r"(</table>\s*</td></tr>\s*</table>)", flags=re.DOTALL)
 
 
-def get_smtp_config():
+def get_smtp_config() -> dict[str, Any]:
     """Get SMTP settings from Flask app config or env."""
     try:
         from flask import current_app

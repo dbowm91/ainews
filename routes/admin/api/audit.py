@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/audit-logs", methods=["GET"])
 @require_auth
-def list_audit_logs() -> Response:
+def list_audit_logs() -> tuple[Response, int]:
     """List audit log entries with optional filtering."""
     from datetime import datetime, timedelta, timezone
 

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class QualityReport(db.Model):
+class QualityReport(db.Model):  # type: ignore[name-defined]
     __tablename__ = "quality_reports"
 
     id = db.Column(db.Integer, primary_key=True)

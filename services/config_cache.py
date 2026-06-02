@@ -46,11 +46,11 @@ def _deserialize(raw: str) -> Any:
 
     if data_type == "pydantic":
         cls = _import_class(wrapper["_class"])
-        return cls.model_validate(data)
+        return cls.model_validate(data)  # type: ignore[union-attr,attr-defined]
 
     if data_type == "pydantic_list":
         cls = _import_class(wrapper["_class"])
-        return [cls.model_validate(item) for item in data]
+        return [cls.model_validate(item) for item in data]  # type: ignore[union-attr,attr-defined]
 
     return data
 

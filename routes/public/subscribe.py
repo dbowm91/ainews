@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from flask import Response, current_app, redirect, render_template, request
+from werkzeug.wrappers.response import Response as WerkzeugResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
@@ -30,7 +31,7 @@ def _validate_token(token: str) -> bool:
 
 @public_bp.route("/subscribe", methods=["POST"])
 @limit_content_length(1024)
-def subscribe() -> Response:
+def subscribe() -> str | Response | WerkzeugResponse:
     email = request.form.get("email", "").strip().lower()
     newsletter_type = request.form.get("newsletter_type", "main").strip()
 
@@ -40,7 +41,7 @@ def subscribe() -> Response:
         newsletter_type = "main"
 
     # Parse topic preferences
-    preferences = {"topics": []}
+    preferences: dict[str, list[str]] = {"topics": []}
     topics_raw = request.form.getlist("topics")
     if topics_raw:
         valid_topic_keys = set(_get_categories())

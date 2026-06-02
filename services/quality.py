@@ -55,7 +55,7 @@ class LLMQualityAssessor(QualityAssessor):
         self.model = model
         self.provider_id = provider_id
 
-    def assess(
+    def assess(  # type: ignore[override]
         self,
         content: str,
         sources: list[dict[str, Any]] | None = None,
@@ -68,7 +68,7 @@ class LLMQualityAssessor(QualityAssessor):
             provider, model, max_tokens, provider_id = get_provider_for_role("editor")
             sources_text = self._format_sources(sources or [])
             prompt = self._build_assessment_prompt(content, sources_text, context)
-            response = provider.complete(
+            response = provider.complete(  # type: ignore[attr-defined]
                 prompt=prompt,
                 system_prompt="You are a quality assessment expert. Evaluate content objectively.",
                 model=model or self.model or "gpt-4o-mini",

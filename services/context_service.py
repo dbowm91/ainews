@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from typing import Optional
+
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
@@ -15,11 +17,13 @@ def get_topic_note(topic: str, source: Optional[str] = None) -> Optional[TopicNo
     query = TopicNote.query.filter(TopicNote.topic == topic)
     if source:
         query = query.filter(TopicNote.source == source)
-    return query.first()
+    result: Optional[TopicNote] = query.first()
+    return result
 
 
 def get_all_topic_notes(topic: str) -> list[TopicNote]:
-    return TopicNote.query.filter(TopicNote.topic == topic).all()
+    result: list[TopicNote] = TopicNote.query.filter(TopicNote.topic == topic).all()
+    return result
 
 
 def create_topic_note(topic: str, note: str, source: Optional[str] = None) -> TopicNote:
@@ -63,7 +67,7 @@ def delete_topic_note(topic: str, source: Optional[str] = None) -> bool:
 def get_topic_notes_for_topics(topics: list[str]) -> dict[str, list[str]]:
     if not topics:
         return {}
-    notes_by_topic = {}
+    notes_by_topic: dict[str, list[str]] = {}
     topic_notes = TopicNote.query.filter(TopicNote.topic.in_(topics)).all()
     for tn in topic_notes:
         if tn.topic not in notes_by_topic:

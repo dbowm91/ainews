@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Tuple
+from typing import Any, Tuple, cast
 
 import redis.exceptions
 
@@ -39,7 +39,7 @@ def clear_provider_cache() -> None:
 
 
 def get_provider_by_id(provider_id: str) -> BaseLLMProvider:
-    return _manager.get_cached(provider_id, _get_providers_config_cached)
+    return cast(BaseLLMProvider, _manager.get_cached(provider_id, _get_providers_config_cached))
 
 
 def get_provider_for_role(role: str) -> Tuple[BaseLLMProvider, str, int, str]:
@@ -150,7 +150,7 @@ def record_provider_failure(
 
 
 def get_provider() -> BaseLLMProvider:
-    return _manager.get_with_fallback(load_providers_config)
+    return cast(BaseLLMProvider, _manager.get_with_fallback(load_providers_config))
 
 
 def get_provider_info() -> dict:
@@ -162,11 +162,11 @@ def get_provider_info() -> dict:
         return provider.health_check()
 
     try:
-        return cache.get_or_set("llm:provider:info", _fetch, ttl=300)
+        return cast(dict[str, Any], cache.get_or_set("llm:provider:info", _fetch, ttl=300))
     except (KeyboardInterrupt, SystemExit):
         raise
     except (ImportError, redis.exceptions.RedisError, CircuitOpenError,
             ProviderServerError, ProviderTimeoutError,
             ConnectionError) as e:
         logger.debug("Cache fallback for provider info: %s", e)
-        return _fetch()
+        return cast(dict[str, Any], _fetch())

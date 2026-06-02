@@ -11,7 +11,7 @@ import time
 from enum import Enum
 from functools import wraps
 from threading import Lock
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
 
 import os
 import redis
@@ -141,7 +141,7 @@ class CircuitBreaker:
             self._prune_old_failures()
 
             if self._failure_count >= self.failure_threshold:
-                old = self._state
+                prev_state: State = self._state  # type: ignore[assignment]
                 self._state = State.OPEN
                 self._opened_at = now
                 logger.warning(
@@ -150,7 +150,7 @@ class CircuitBreaker:
                     self._failure_count,
                     self.window_seconds,
                 )
-                self._on_state_change(old, self._state)
+                self._on_state_change(prev_state, self._state)
 
     def can_execute(self) -> bool:
         """Check whether a call is permitted under the current circuit state."""
@@ -273,7 +273,7 @@ class RedisCircuitBreaker(CircuitBreaker):
             r.zremrangebyscore(fail_key, "-inf", now - self.window_seconds)
             r.expire(fail_key, int(self.window_seconds * 2))
 
-            count = r.zcard(fail_key)
+            count: int = int(r.zcard(fail_key))  # type: ignore[arg-type]
             if count >= self.failure_threshold:
                 r.hset(key, "state", "open")
                 r.hset(key, "opened_at", str(now))
@@ -301,10 +301,10 @@ class RedisCircuitBreaker(CircuitBreaker):
                 return super().can_execute()
 
             if state == "open":
-                opened_at = r.hget(key, "opened_at")
-                if opened_at is None:
-                    opened_at = "-1"
-                opened_at = float(opened_at)
+                opened_at_val = cast("str | None", r.hget(key, "opened_at"))
+                if opened_at_val is None:
+                    opened_at_val = "-1"
+                opened_at = float(opened_at_val)
 
                 if now - opened_at >= self.recovery_timeout:
                     r.hset(key, "state", "half_open")
@@ -313,10 +313,10 @@ class RedisCircuitBreaker(CircuitBreaker):
                     return False
 
             if state == "half_open":
-                calls = r.hget(key, "half_open_calls")
-                if calls is None:
-                    calls = "0"
-                calls = int(calls)
+                calls_val = cast("str | None", r.hget(key, "half_open_calls"))
+                if calls_val is None:
+                    calls_val = "0"
+                calls = int(calls_val)
 
                 if calls < self.half_open_max_calls:
                     r.hincrby(key, "half_open_calls", 1)

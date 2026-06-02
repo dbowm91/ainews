@@ -154,7 +154,7 @@ def _generate_newsletter(
     base_query = Article.query.filter(
         Article.pipeline_status == PipelineStatus.DONE,
         Article.created_at >= cutoff,
-    ).options(joinedload(Article.source), joinedload(Article.tags))
+    ).options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
     query = articles_filter(base_query)
     articles = query.order_by(Article.impact_score.desc()).limit(max_articles).all()
 
@@ -321,7 +321,7 @@ def generate_personalized_newsletter(
         )
 
     topic_names = [
-        topics.get(t).display_name if topics.get(t) else t for t in preferred_topics
+        topics.get(t).display_name if topics.get(t) else t for t in preferred_topics  # type: ignore[union-attr]
     ]
     title = "Your Personalized: " + ", ".join(topic_names[:3])
 

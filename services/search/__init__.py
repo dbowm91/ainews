@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import services.search.duckduckgo
 import services.search.google
@@ -31,14 +32,14 @@ def _load_search_config():
     return load_search_config()
 
 
-def get_search_provider(provider_id: str = None) -> BaseSearchProvider:
+def get_search_provider(provider_id: str | None = None) -> BaseSearchProvider:
     if provider_id is None:
-        return _manager.get_with_fallback(_load_search_config)
-    return _manager.get_cached(provider_id, _load_search_config)
+        return cast(BaseSearchProvider, _manager.get_with_fallback(_load_search_config))
+    return cast(BaseSearchProvider, _manager.get_cached(provider_id, _load_search_config))
 
 
 def get_search_provider_with_fallback() -> BaseSearchProvider:
-    return _manager.get_with_fallback(_load_search_config)
+    return cast(BaseSearchProvider, _manager.get_with_fallback(_load_search_config))
 
 
 def search_web(query: str, max_results: int = 5) -> list[SearchResult]:

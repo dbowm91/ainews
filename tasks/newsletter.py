@@ -126,7 +126,7 @@ def _fetch_articles_for_newsletter(
         q = q.filter(Article.impact_score > 0)
     else:
         q = q.filter(Article.category == topic_key)
-    return q.order_by(Article.impact_score.desc()).limit(max_articles).all()
+    return q.order_by(Article.impact_score.desc()).limit(max_articles).all()  # type: ignore[no-any-return]
 
 
 def _generate_topic_newsletter_impl(
@@ -200,7 +200,7 @@ def _generate_topic_newsletter_impl(
     if is_dry_run:
         unsub_url = f"{site_url}/unsubscribe/test"
         try:
-            send_newsletter_email(dry_run_email, subject, html, unsub_url)
+            send_newsletter_email(dry_run_email, subject, html, unsub_url)  # type: ignore[arg-type]
             sent = 1
             logger.info("Dry run: sent main newsletter to %s", dry_run_email)
         except smtplib.SMTPException as e:

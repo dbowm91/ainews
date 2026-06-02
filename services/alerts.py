@@ -353,7 +353,7 @@ def get_active_alerts(
         if include_checks and name not in include_checks:
             continue
         try:
-            alert = check_fn(thresholds)
+            alert = check_fn(thresholds)  # type: ignore[call-arg]
             if alert:
                 alerts.append(alert)
         except Exception:

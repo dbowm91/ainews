@@ -31,6 +31,11 @@ def _degrade_research(article):
     article.impact_score = 30
 
 
+def _degrade_write_fields(article) -> None:
+    article.draft_article = _build_fallback_article(article)
+    article.writer_model = "fallback"
+
+
 _STAGE_DEGRADE_MAP = {
     "select": {
         "next_status": PipelineStatus.RESEARCHING,
@@ -49,10 +54,7 @@ _STAGE_DEGRADE_MAP = {
     "write": {
         "next_status": PipelineStatus.EDITING,
         "log_message": "Degraded: minimal draft for %s",
-        "set_fields": lambda article: (
-            setattr(article, "draft_article", _build_fallback_article(article)),
-            setattr(article, "writer_model", "fallback"),
-        )[-1],
+        "set_fields": _degrade_write_fields,
     },
 }
 

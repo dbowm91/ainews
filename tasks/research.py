@@ -19,7 +19,7 @@ def _is_degenerate_research(brief: ResearchBrief) -> bool:
     """
     if not brief.key_claims:
         return True
-    if any(claim.content.strip() for claim in brief.key_claims):
+    if any(claim.claim.strip() for claim in brief.key_claims):
         has_valid_claims = True
     else:
         has_valid_claims = False

@@ -1,7 +1,9 @@
 import logging
 from urllib.parse import urlparse
 
-from flask import Response, current_app, redirect, render_template, request, session, url_for
+from flask import current_app, redirect, render_template, request, session, url_for
+from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.wrappers import Response
 
 from extensions import limiter
 from models import AdminUser
@@ -82,7 +84,7 @@ def login() -> str | Response:
                 log_admin_action("admin_login_failed_locked", user="admin", details={"ip": ip})
             except (SQLAlchemyError, RuntimeError) as e:
                 logger.error("Failed to log admin login failure: %s", e)
-            return render_template("admin/login.html", error=error), 429
+            return render_template("admin/login.html", error=error), 429  # type: ignore[return-value]
         else:
             error = "Invalid password"
             try:

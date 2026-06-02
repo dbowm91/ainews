@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class TopicNote(db.Model):
+class TopicNote(db.Model):  # type: ignore[name-defined]
     __tablename__ = "topic_notes"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -24,7 +24,7 @@ class TopicNote(db.Model):
         return f"<TopicNote {self.topic}>"
 
 
-class TrendMemory(db.Model):
+class TrendMemory(db.Model):  # type: ignore[name-defined]
     __tablename__ = "trend_memory"
 
     id = db.Column(db.Integer, primary_key=True)

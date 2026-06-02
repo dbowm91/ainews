@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class SearchQuery(db.Model):
+class SearchQuery(db.Model):  # type: ignore[name-defined]
     __tablename__ = "search_queries"
 
     id = db.Column(db.Integer, primary_key=True)

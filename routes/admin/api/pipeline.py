@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/pipeline/stats")
 @require_auth
-def pipeline_stats() -> Response:
+def pipeline_stats() -> tuple[Response, int]:
     """Get pipeline stage success/failure statistics."""
     from services.metrics import get_metrics
     from services.pipeline_monitor import get_all_stages_stats
@@ -47,14 +47,14 @@ def pipeline_stats() -> Response:
 
 @admin_api_bp.route("/pipeline/dead-letter/stats")
 @require_auth
-def dead_letter_stats() -> Response:
+def dead_letter_stats() -> tuple[Response, int]:
     """Get dead letter queue statistics."""
     from datetime import datetime, timedelta, timezone
 
-    from constants import _get_stuck_threshold_minutes
     from models import Article
+    from services.config_unified import get_stuck_threshold_minutes
 
-    threshold = _get_stuck_threshold_minutes()
+    threshold = get_stuck_threshold_minutes()
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold)
     stuck = Article.query.filter(
         Article.pipeline_status.in_(
@@ -86,14 +86,14 @@ def dead_letter_stats() -> Response:
 
 @admin_api_bp.route("/pipeline/backlog")
 @require_auth
-def pipeline_backlog() -> Response:
+def pipeline_backlog() -> tuple[Response, int]:
     """Get pipeline backlog - articles currently being processed or pending."""
     from datetime import datetime, timedelta, timezone
 
-    from constants import _get_stuck_threshold_minutes
     from models import Article
+    from services.config_unified import get_stuck_threshold_minutes
 
-    threshold = _get_stuck_threshold_minutes()
+    threshold = get_stuck_threshold_minutes()
 
     active_statuses = [
         PipelineStatus.PENDING,
@@ -134,7 +134,7 @@ def pipeline_backlog() -> Response:
 
 @admin_api_bp.route("/costs")
 @require_auth
-def cost_summary() -> Response:
+def cost_summary() -> tuple[Response, int]:
     """Get LLM cost summary from token usage metrics."""
     from services.cost_tracker import get_cost_summary
 
@@ -166,7 +166,7 @@ def cost_summary() -> Response:
 
 @admin_api_bp.route("/sources/health")
 @require_auth
-def sources_health() -> Response:
+def sources_health() -> tuple[Response, int]:
     """Get health status of all sources."""
     from models import Source
 
@@ -192,7 +192,7 @@ def sources_health() -> Response:
 
 @admin_api_bp.route("/pipeline/sla")
 @require_auth
-def pipeline_sla() -> Response:
+def pipeline_sla() -> tuple[Response, int]:
     """Return SLA metrics for article processing."""
     from datetime import datetime, timedelta, timezone
 

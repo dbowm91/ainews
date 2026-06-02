@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, cast
 
 import httpx
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
@@ -33,7 +33,7 @@ def _handle_ollama_error(e: Exception) -> Exception:
     return make_error_handler(
         "Ollama",
         rate_limit_exc=(ResponseError,),
-        auth_exc=(),
+        auth_exc=type(None),
         timeout_exc=(ConnectionError, TimeoutError),
     )(e)
 
@@ -55,10 +55,10 @@ class OllamaProvider(BaseLLMProvider):
         return ollama.Client(host=self.host, timeout=DEFAULT_LLM_TIMEOUT_SECONDS, client=http_client)
 
     def _extract_text(self, resp, return_thinking: bool = False) -> str:
-        message = resp.get("message", {})
-        content = message.get("content")
+        message: dict[str, Any] = resp.get("message", {})
+        content: str = message.get("content", "")
         if not content and return_thinking:
-            thinking = message.get("thinking")
+            thinking: str = message.get("thinking", "")
             if thinking:
                 return thinking
         return content or ""
@@ -109,10 +109,10 @@ class OllamaProvider(BaseLLMProvider):
         max_tokens: int = 4096,
         **kwargs: Any,
     ) -> LLMResponse:
-        return self._retry_with_backoff(
+        return cast(LLMResponse, self._retry_with_backoff(
             self._do_chat, model,
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
-        )
+        ))
 
     @circuit_protected("llm_ollama")
     def chat_streaming(
@@ -180,11 +180,11 @@ class OllamaProvider(BaseLLMProvider):
         schema: dict,
         model: Optional[str] = None,
     ) -> str:
-        return self._retry_with_backoff(
+        return cast(str, self._retry_with_backoff(
             self._do_chat_with_schema, model,
             messages=messages, response_model=response_model, system=system,
             temperature=temperature, max_tokens=max_tokens, schema=schema,
-        )
+        ))
 
     @circuit_protected("llm_ollama")
     def _do_call_api_with_tools(
@@ -231,11 +231,11 @@ class OllamaProvider(BaseLLMProvider):
         temperature: float,
         max_tokens: int,
     ) -> tuple[Any, Any]:
-        return self._retry_with_backoff(
+        return cast(tuple[Any, Any], self._retry_with_backoff(
             self._do_call_api_with_tools, model,
             messages=messages, tools=tools, tool_choice=tool_choice,
             temperature=temperature, max_tokens=max_tokens,
-        )
+        ))
 
     def _extract_text_and_tool_calls(
         self, response: Any,

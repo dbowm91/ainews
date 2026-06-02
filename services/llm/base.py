@@ -153,7 +153,9 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     delay,
                 )
                 time.sleep(delay)
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Unexpected: no exception recorded after retries")
 
     def _record_success(
         self,
@@ -275,7 +277,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         )
         t0 = time.monotonic()
         resp = self._chat_with_schema(
-            messages, response_model, system, temperature, max_tokens, schema, model,
+            messages, response_model, system, temperature, max_tokens, schema, model=model,
         )
         latency_ms = (time.monotonic() - t0) * 1000
         try:
@@ -330,7 +332,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     temperature,
                     max_tokens,
                     schema,
-                    model,
+                    model=model,
                 )
                 resp = extract_json(resp)
                 result = response_model.model_validate_json(resp)
@@ -412,18 +414,18 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
         if any(e is not None for e in errors):
             raise BatchError(errors, results)
-        return results
+        return [r for r in results if r is not None]
 
     @abc.abstractmethod
     def _chat_with_schema(
         self,
         messages: list[dict[str, str]],
-        response_model: Type[T],
-        model: Optional[str],
+        response_model: Any,
         system: Optional[str],
         temperature: float,
         max_tokens: int,
         schema: dict,
+        model: Optional[str] = None,
     ) -> str:
         """Provider-specific schema-guided chat, returns raw JSON string."""
         ...
@@ -612,4 +614,4 @@ register_provider = _manager.register
 
 
 def get_provider_class(provider_type: str) -> type[BaseLLMProvider]:
-    return _manager.get_class(provider_type)
+    return _manager.get_class(provider_type)  # type: ignore[return-value]

@@ -68,7 +68,8 @@ def should_skip_source(source: Source, schedule_minutes: int) -> bool:
         elapsed = (
             datetime.now(timezone.utc) - source.last_crawled
         ).total_seconds() / 60
-        return elapsed < schedule_minutes
+        should_skip: bool = elapsed < schedule_minutes
+        return should_skip
     return False
 
 
@@ -137,7 +138,7 @@ def get_or_create_source(
     """
     source = Source.query.filter_by(source_key=source_key).first()
     if source:
-        return source
+        return source  # type: ignore[return-value,no-any-return]
 
     try:
         source = Source(
@@ -155,7 +156,7 @@ def get_or_create_source(
         if not source:
             raise
 
-    return source
+    return source  # type: ignore[return-value,no-any-return]
 
 
 def update_source_crawl_time(source: Optional[Source], cfg: SourceConfig) -> Source:

@@ -497,7 +497,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     articles = (
         Article.query
         .filter(Article.id.in_(article_ids))
-        .options(joinedload(Article.source), joinedload(Article.tags))
+        .options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
         .all()
     )
     if not articles:
@@ -561,7 +561,7 @@ def trigger_article_pipeline(article_id: int) -> tuple[Response, int] | Response
     module_path, task_name = stage_to_task[target_stage]
     task_fn = getattr(__import__(module_path, fromlist=[task_name]), task_name)
 
-    from routes.admin.api.webhooks import get_request_id
+    from logging_config import get_request_id
 
     headers = {}
     request_id = get_request_id()

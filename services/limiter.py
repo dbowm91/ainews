@@ -133,7 +133,8 @@ class ModelLimiter:
         """Get active slot count. Returns None if Redis is unavailable."""
         key = f"{self._prefix}:{provider_id}:{model}"
         try:
-            return int(self._redis.get(key) or 0)
+            val = self._redis.get(key)
+            return int(val) if val is not None else 0  # type: ignore[arg-type]
         except redis.exceptions.RedisError:
             logger.warning("Redis error getting active limiter slots for %s/%s", provider_id, model)
             return None
@@ -148,8 +149,9 @@ class ModelLimiter:
             pattern = f"{self._prefix}:*"
             for key in self._redis.scan_iter(match=pattern, count=1000):
                 ttl = self._redis.ttl(key)
-                if 0 < ttl < 60:
-                    count = int(self._redis.get(key) or 0)
+                if 0 < ttl < 60:  # type: ignore[operator]
+                    val = self._redis.get(key)
+                    count = int(val) if val is not None else 0  # type: ignore[arg-type]
                     if count > 0:
                         self._redis.delete(key)
                         cleaned += 1

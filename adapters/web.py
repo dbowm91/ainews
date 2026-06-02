@@ -147,7 +147,7 @@ class WebAdapter(BaseSourceAdapter):
         link_sel = cfg.listing.link_selector
         link_attr = cfg.listing.link_attribute
 
-        urls = []
+        urls: list[str] = []
         for card in soup.select(card_sel):
             if len(urls) >= cfg.max_items:
                 break
@@ -205,7 +205,10 @@ class WebAdapter(BaseSourceAdapter):
         if not selector:
             return None
         el = soup.select_one(selector)
-        return el.get(attr) if el else None
+        if el is None:
+            return None
+        val = el.get(attr)
+        return str(val) if val is not None else None
 
     @staticmethod
     def _parse_date(dt_str: str) -> Optional[datetime]:

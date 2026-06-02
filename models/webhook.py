@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from extensions import db
 
 
-class Webhook(db.Model):
+class Webhook(db.Model):  # type: ignore[name-defined]
     __tablename__ = "webhooks"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -29,7 +29,7 @@ class Webhook(db.Model):
         return f"<Webhook {self.name}>"
 
 
-class WebhookEvent(db.Model):
+class WebhookEvent(db.Model):  # type: ignore[name-defined]
     __tablename__ = "webhook_events"
 
     id = db.Column(db.Integer, primary_key=True)

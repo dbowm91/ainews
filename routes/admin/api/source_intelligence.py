@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/sources/performance", methods=["GET"])
 @require_auth
-def source_performance() -> Response:
+def source_performance() -> tuple[Response, int]:
     """Get performance metrics for all sources within a time window."""
     days_param = request.args.get("days", "7")
     try:
@@ -73,7 +73,7 @@ def source_performance() -> Response:
 
 @admin_api_bp.route("/topics/coverage", methods=["GET"])
 @require_auth
-def topic_coverage() -> Response:
+def topic_coverage() -> tuple[Response, int]:
     """Get topic coverage distribution across sources."""
     days_param = request.args.get("days", "30")
     try:
@@ -103,7 +103,7 @@ def topic_coverage() -> Response:
 
 @admin_api_bp.route("/sources/recommendations", methods=["GET"])
 @require_auth
-def source_recommendations() -> Response:
+def source_recommendations() -> tuple[Response, int]:
     """Get actionable recommendations for sources."""
     days_param = request.args.get("days", "30")
     try:

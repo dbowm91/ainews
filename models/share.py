@@ -3,7 +3,7 @@ from __future__ import annotations
 from extensions import db
 
 
-class ShareConfig(db.Model):
+class ShareConfig(db.Model):  # type: ignore[name-defined]
     __tablename__ = "share_configs"
 
     id = db.Column(db.Integer, primary_key=True)

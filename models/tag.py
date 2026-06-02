@@ -21,7 +21,7 @@ article_tags = db.Table(
 )
 
 
-class Tag(db.Model):
+class Tag(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tags"
 
     id = db.Column(db.Integer, primary_key=True)

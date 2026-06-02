@@ -29,7 +29,7 @@ class APIAdapter(BaseSourceAdapter):
         cfg = self.adapter_config
         validate_url_safe(cfg.list_url)
 
-        all_items = []
+        all_items: list[Any] = []
         next_url = cfg.list_url
         pages_fetched = 0
 
@@ -82,7 +82,8 @@ class APIAdapter(BaseSourceAdapter):
 
     def _get_next_url(self, data: Any, pagination: Any) -> Optional[str]:
         if pagination.type == "next_link" and pagination.next_link_selector:
-            return self._resolve_path(data, pagination.next_link_selector)
+            result = self._resolve_path(data, pagination.next_link_selector)
+            return result if isinstance(result, str) else None
         return None
 
     def _increment_query_param(self, url: str, page: int) -> str:
@@ -165,7 +166,7 @@ class APIAdapter(BaseSourceAdapter):
             return f"{item.title} {item.text_content}"
         return item.title
 
-    def _fetch_item(self, item_id) -> Optional[dict]:
+    def _fetch_item(self, item_id: Any) -> Optional[dict[str, Any]]:
         # Note: Sequential fetching - could benefit from async/threaded fetching for large item counts
         cfg = self.adapter_config
         try:
@@ -179,7 +180,8 @@ class APIAdapter(BaseSourceAdapter):
                     headers["Authorization"] = f"Bearer {cfg.api_key}"
             resp = self._session.get(url, headers=headers, timeout=cfg.request_timeout)
             if resp.ok:
-                return resp.json()
+                result = resp.json()
+                return result if isinstance(result, dict) else None
         except requests.RequestException as e:
             logger.warning("Failed to fetch item from API: %s", type(e).__name__)
         return None

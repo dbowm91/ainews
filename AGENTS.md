@@ -264,6 +264,12 @@ Circuit breaker keys use the **role** convention: `llm:{provider}:{model}:{selec
 ### SSRFSafeRedirectHandler
 `SSRFSafeRedirectHandler.__call__` in `adapters/session.py` validates redirect URLs via `validate_url_safe(location)` and returns a new `PreparedRequest` with the redirect URL set. The handler uses thread-local storage for redirect counting to ensure per-request scoping.
 
+### Docker Security State
+Dockerfile uses single-stage build (no multi-stage). Non-root `ainews` user (uid/gid 1000) is implemented at `Dockerfile:39`. No `read_only: true` on any service in `docker-compose.yml`. Resource memory limits and healthchecks exist. Static volume mount is read-only (`./static:/app/static:ro`).
+
+### Health Check Property Name
+The `HealthResult` model at `services/health.py:27-29` has `is_healthy` property (NOT `is_fully_healthy`). It returns `True` for both `"ok"` and `"degraded"` statuses. If a strict health check is needed, check `status == "ok"` directly.
+
 ### Celery Timezone
 Celery uses UTC (`CELERY_TIMEZONE = "UTC"` in `config.py:102`). The `NewsletterConfig.timezone` setting is display-only for newsletter rendering. All beat schedule times are in UTC.
 
@@ -445,20 +451,22 @@ The following are documented as intentional and should NOT be "fixed":
 
 ## Remaining Work
 
-See `plan.md` for the full consolidated implementation plan with parallelization waves.
+See `plans/plan.md` for the full consolidated implementation plan with parallelization waves.
 
-### Current Priorities (from plan.md)
-- **Wave 5A:** Code reliability fixes (max_retries, return types, field docs, degradation behavior)
-- **Wave 5B:** Documentation accuracy fixes (12 independent tasks)
-- **Wave 5C:** Documentation gap fills (9 independent tasks)
+### Current Priorities (from plans/plan.md)
+- **Wave 5A:** Code reliability fixes — 2 tasks remaining (max_retries, degradation docs)
+- **Wave 5B:** Documentation accuracy fixes — 11 tasks remaining
+- **Wave 5C:** Documentation gap fills — 8 tasks remaining
 - **Wave 6:** Quality, typing & docs (test coverage 80%, 0 Mypy errors, OpenAPI sync)
 - **Wave 7:** Infrastructure & polish (Docker hardening, observability)
+- **Wave 8:** Adapter bug fixes (WebAdapter pagination)
 
 ### Quick Reference: Known Doc Inaccuracies (from architecture reviews)
-- `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`)
-- Disabled pipeline stages route through `_finalize()` to REVIEW/DONE, NOT directly to next stage (`tasks/pipeline.py:260-267`)
+- `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`) — ✅ ALREADY FIXED in docs
+- Disabled pipeline stages route through `_finalize()` to DONE (default), NOT directly to next stage (`tasks/pipeline.py:260-267`). REVIEW is conditional via `_should_route_to_review()`.
 - `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`)
 - Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files)
 - `publish_scheduled_articles` has NO `autoretry_for` (unlike other tasks) (`tasks/scheduler.py:10`)
 - Subagent YAML config example in docs has non-existent fields (`tool_timeout`, `default_model`)
 - Search providers YAML example in docs shows wrong structure (nested vs flat list)
+- `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py`

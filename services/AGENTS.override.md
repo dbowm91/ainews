@@ -83,6 +83,7 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 
 ## Known Bugs (OPEN)
 - **ResponseCache pubsub leak:** `ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, `pubsub.close()` is never called. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block. Fix: add `pubsub.close()` in the finally block.
+- **extract_json file path:** `extract_json()` is at `services/llm/json_utils.py:10`, NOT `utils/json_utils.py`. Architecture docs reference the wrong file path.
 
 ## Fixed Bug Patterns
 

@@ -39,3 +39,6 @@ if self.config_class and source_config.config:
     self.adapter_config = self.config_class(**source_config.config)
 ```
 The config_class varies by adapter type (RSSConfig, APIConfig, WebConfig).
+
+## Known Bugs (OPEN)
+- **WebAdapter `_scrape_listing` pagination:** `_scrape_listing` in `adapters/web.py` returns ALL article URLs across all pages with no `max_items` cap. Could cause excessive crawling. Needs `max_items` limit consistent with config field.

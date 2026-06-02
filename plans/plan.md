@@ -1,0 +1,476 @@
+# Master Implementation Plan (Consolidated)
+
+**Status:** ACTIVE  
+**Last Updated:** 2026-06-01  
+**Goal:** Address code quality, security gaps, performance, documentation accuracy, and technical debt.
+
+---
+
+## Executive Summary
+
+This consolidated plan merges the existing wave-based implementation plan with findings from 15 deep-dive architecture reviews (863 verified claims, 41 incorrect, 22 bugs). It prioritizes **code reliability fixes** first, followed by **documentation accuracy corrections**, then **comprehensive documentation gaps**. The ultimate goals are 100% test pass rate, 80% test coverage, 0 Mypy/Ruff errors, and significant throughput improvements.
+
+**Key Targets:**
+- **Test Coverage:** 80% (Current: ~61-62%)
+- **Mypy Errors:** 0 (Current: 423)
+- **Ruff Errors:** 0 (Current: 0, must maintain)
+- **Performance:** 2-4x throughput increase via bottleneck removal.
+
+---
+
+## Wave 1: Critical Fixes & Stability ✅ COMPLETED
+
+*Focus: Fixing CI blockers, resource leaks, and immediate security risks.*
+
+- 1.1 Fix share_configs Table Missing Error ✅
+- 1.2 Fix Extraction Fallback Test ✅
+- 1.3 Fix Failing Audit Test ✅
+- 1.4 Fix Limiter Slot Leak ✅
+- 1.5 Fix Thread-Blocking Polling in Limiter ✅
+- 1.6 Fix P1 Security: .env Permissions (Fail-Closed) ✅
+- 1.7 Fix P1 Security: Redis CVE-2025-49844 ✅
+- 1.8 Add Session Regeneration ✅
+
+---
+
+## Wave 2: Architecture & Reliability ✅ COMPLETED
+
+*Focus: Throughput, clean layering, and defense-in-depth.*
+
+- 2.1 Resolve Layer Violations & Move URL Utils ✅
+- 2.2 Increase Pipeline Throughput ✅
+- 2.3 SSRF Hardening (IP Normalization) ✅
+- 2.4 MultiFernet Webhooks ✅
+- 2.5 Semantic Search OOM Protection ✅
+- 2.6 Asset Bundling (CSS/JS) ✅
+
+---
+
+## Wave 3: Advanced Security ✅ COMPLETED
+
+*Focus: 2FA enhancements and secure storage.*
+
+- 3.1 2FA Backup Codes ✅
+- 3.2 2FA Rate Limiting ✅
+- 3.3 Encrypt TOTP Secrets ✅
+- 3.4 Fix CSP unsafe-inline ✅
+
+---
+
+## Wave 4: Performance & Optimization ✅ COMPLETED
+
+*Focus: Efficiency and maintainability.*
+
+- 4.1 Token Budgeting & LLM Caching ✅
+- 4.2 DB & Query Optimization ✅
+- 4.3 Refactor Large Files ✅
+
+---
+
+## Wave 5A: Code Reliability Fixes (HIGH Priority) — 3 tasks remaining
+
+*Focus: Fix code bugs that could cause runtime failures. All remaining tasks are independent and can be parallelized.*
+
+### 5A.1 Add `max_retries` to Celery Tasks
+- **Files:** `tasks/newsletter.py:476-487`, `tasks/retry.py:67-77`, `tasks/scheduler.py:10`
+- **Issue:** `generate_daily_newsletters` has `autoretry_for` but no `max_retries` (could retry indefinitely). `retry_stuck` has `autoretry_for` but no `max_retries`. `publish_scheduled_articles` has NO `autoretry_for` and NO `max_retries`.
+- **Fix:** Add `max_retries=CELERY_TASK_MAX_RETRIES` to all three `@shared_task` decorators. Import `CELERY_TASK_MAX_RETRIES` from `config.py` (value: 5). Consistent with pipeline tasks (select, research, write, edit).
+- **Verification:** `celery -A celery_app inspect active` to verify task registration.
+
+### 5A.2 ~~Fix `propose_trend_memory` Return Type Documentation~~ — COMPLETED
+- Already fixed per architecture pruning log. `architecture/services.md:258` now shows `-> SubagentResponse`.
+
+### 5A.3 Document `PipelineRootConfig.experiments` Field
+- **File:** `schemas/pipeline.py:167`
+- **Issue:** The `experiments: dict = Field(default_factory=dict)` field is functional and used by the A/B experiment system (`pipeline.yaml:265-292`), but is undocumented in architecture docs.
+- **Fix:** Add field documentation to `architecture/schemas.md` with note about A/B experiment configuration. Structure: `experiments.prompt_variants` maps stage names to variant dicts. Access via `load_pipeline_config()` from `schemas.pipeline`, NOT `get_config()`.
+- **Verification:** `grep -r "experiments" schemas/pipeline.py` to confirm field exists.
+
+### 5A.4 Fix Degradation Behavior Documentation
+- **File:** `architecture/pipeline.md` (lines 272-274)
+- **Issue:** Doc says "research disabled: Article goes directly to `writing`" and "write disabled: Article goes directly to `editing`". This is WRONG.
+- **Actual behavior** (`tasks/pipeline.py:260-267`): When a stage is disabled with `skip_next="finalize"`, the article routes through `_finalize()` in `services/pipeline_degradation.py:278-309`. `_finalize()` calls `_should_route_to_review()`:
+  - If `_should_route_to_review()` returns True → routes to `PipelineStatus.REVIEW`
+  - Otherwise → routes to `PipelineStatus.DONE` (this is the DEFAULT path)
+  - Articles do NOT go directly to the next stage when a stage is disabled.
+- **Fix:** Rewrite the degradation behavior table to accurately reflect that the default path from `_finalize()` is DONE, with REVIEW as a conditional escape hatch.
+- **Verification:** `grep -A 20 "skip_next" tasks/pipeline.py` to trace the actual code path.
+
+---
+
+## Wave 5B: Documentation Accuracy Fixes (MEDIUM Priority) — 11 tasks remaining
+
+*Focus: Correct inaccurate documentation that could mislead future agents. All tasks are independent and can be parallelized.*
+
+### 5B.1 Fix `chat_structured` Signature
+- **File:** `architecture/services.md`
+- **Issue:** Doc shows `chat_structured` with `**kwargs` parameter and returning `BaseModel`.
+- **Actual signature** (`services/llm/base.py:217-227`):
+  ```python
+  def chat_structured(
+      self, messages, response_model, model=None, system=None,
+      temperature=0.0, max_tokens=4096, max_validation_retries=2, stage=""
+  ) -> T:  # T is TypeVar bound to BaseModel
+  ```
+- **Fix:** Update documentation to show correct signature with `max_validation_retries: int = 2, stage: str = ""` params (no `**kwargs`), returns `T` (TypeVar).
+
+### 5B.2 Fix Stage Transitions Table
+- **File:** `architecture/tasks.md` (lines 45-51)
+- **Issue:** Stage transitions table is incomplete. Missing: PENDING→RESEARCHING, SELECTING→SELECTED, WRITTEN→EDITING, SKIPPED, FAILED transitions.
+- **Actual transitions** (`constants.py:52-64`):
+  ```
+  pending     → selecting, researching, review
+  selecting   → selected, failed
+  selected    → researching, failed
+  researching → writing, failed
+  writing     → editing, failed
+  written     → editing, failed
+  editing     → review, done, failed
+  review      → done, failed
+  done        → (terminal)
+  skipped     → (terminal)
+  failed      → pending
+  ```
+- **Fix:** Rewrite table with all 11 statuses and their transitions.
+
+### 5B.3 ~~Fix Newsletter Endpoint Name~~ — NO FIX NEEDED
+- Both endpoints exist: `/api/v1/newsletters/performance` and `/api/v1/newsletters/stats`.
+
+### 5B.4 Document `RawItem` Schema
+- **File:** `schemas/item.py:9-19`
+- **Issue:** `RawItem` schema is used by all adapters but is undocumented in architecture docs.
+- **Actual fields:**
+  ```python
+  class RawItem(BaseModel):
+      source_id: str
+      external_id: str
+      title: str
+      url: str | None = None
+      author: str | None = None
+      published_at: datetime | None = None
+      text_content: str | None = None
+      raw_score: float = 0.0
+      raw_metadata: dict[str, Any] = Field(default_factory=dict)
+      topics: list[str] = Field(default_factory=list)
+  ```
+- **Fix:** Add `RawItem` schema documentation to `architecture/schemas.md` with all 10 fields.
+
+### 5B.5 Fix Content Extractor Fallback Documentation
+- **File:** `architecture/services.md` (lines 279-281)
+- **Issue:** Doc claims "Final fallback: Raw HTML with boilerplate removal". This is FALSE.
+- **Actual behavior** (`services/content_extractor.py:123`): Returns `ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)`. No raw HTML extraction occurs.
+- **Full chain:** trafilatura → readability + BeautifulSoup → EMPTY status.
+- **Fix:** Remove false claim. Document actual behavior.
+
+### 5B.6 Fix `reload_beat_schedule` Documentation
+- **File:** `architecture/config.md` (line 638)
+- **Issue:** Doc implies `Config.reload_beat_schedule()` can be called without arguments.
+- **Actual signature** (`config.py:206`): `@classmethod def reload_beat_schedule(cls, celery_app) -> dict:` — requires `celery_app` parameter.
+- **Fix:** Update documentation to mention `celery_app` parameter.
+
+### 5B.7 Update Prompt File Count
+- **File:** `architecture/prompts.md` (lines 7-18)
+- **Issue:** Doc says "7 prompt template files" but 9 `.txt` files exist in `prompts/`.
+- **Actual files:** `selector.txt`, `researcher.txt`, `writer.txt`, `editor.txt`, `newsletter_reader.txt`, `newsletter_writer.txt`, `newsletter_editor.txt`, `subagent_research_synthesis.txt`, `subagent_edit_contextualization.txt`.
+- **Fix:** Update count from 7 to 9. Add the 2 subagent templates to the table.
+
+### 5B.8 Fix `extract_json` Function Name
+- **File:** `architecture/llm-providers.md` (line 248)
+- **Issue:** Doc references `_extract_json()` helper. Actual function is `extract_json()` (no leading underscore).
+- **Actual location:** `services/llm/json_utils.py:10` (NOT `utils/json_utils.py`).
+- **Fix:** Update reference to `extract_json()` and correct file path.
+
+### 5B.9 Fix Subagent YAML Config Example
+- **File:** `architecture/subagent.md` (lines 287-301)
+- **Issue:** YAML example includes `tool_timeout: 30.0` and `default_model: "ollama-local"` fields that don't exist in any schema.
+- **Actual `SubagentStageConfig` fields** (`schemas/pipeline.py:93-105`): `enabled`, `provider`, `model`, `max_tokens`, `temperature`, `timeout_seconds`, `max_retries`, `retry_delay`, `system_prompt`, `task_template`, `tools`, `max_iterations`.
+- **Fix:** Rewrite example using actual fields.
+
+### 5B.10 Fix Search Providers YAML Example
+- **File:** `architecture/search-providers.md` (lines 227-241)
+- **Issue:** YAML example shows nested `default:` + `providers:` dict structure.
+- **Actual format** (`providers.yaml:127-151`): Flat list with separate `default_search_provider:` key:
+  ```yaml
+  search_providers:
+    - id: duckduckgo
+      type: duckduckgo
+      enabled: true
+      config: {}
+    - id: google
+      type: google
+      enabled: false
+      config:
+        api_key: "${GOOGLE_API_KEY}"
+        cse_id: "${GOOGLE_CSE_ID}"
+  default_search_provider: duckduckgo
+  ```
+- **Fix:** Rewrite example to match actual format.
+
+### 5B.11 Clarify "Normal Flow" Doesn't Always Include Review
+- **File:** `architecture/tasks.md` (line 199)
+- **Issue:** Doc says "Normal flow: pending → select → research → write → edit → review → done". Review is NOT always in the normal flow — articles can go directly from edit to DONE without review.
+- **Actual behavior:** Review is only reached via quality gates (`_should_route_to_review()`) or when `_finalize()` determines review is needed. The `editing → done` transition exists in `constants.py:59`.
+- **Fix:** Update to clarify that review is a quality gate escape hatch, not a required step.
+
+### 5B.12 Document Newsletter Idempotency Key TTL
+- **File:** `architecture/pipeline.md` (lines 173-174)
+- **Issue:** Doc says idempotency key has "10-minute TTL". The 10-minute TTL is for the LOCK, not the idempotency key.
+- **Actual values** (`tasks/newsletter.py:433`): Lock TTL = 10 minutes, Idempotency key TTL = 2 days (86400*2 seconds).
+- **Fix:** Document separately: Lock TTL = 10 minutes, Idempotency key TTL = 2 days.
+
+---
+
+## Wave 5C: Documentation Gaps (LOW Priority) — 8 tasks remaining
+
+*Focus: Comprehensive documentation improvements. All tasks are independent and can be parallelized.*
+
+### 5C.1 Document Missing Models
+- **File:** `architecture/models.md`
+- **Models to document** (all verified at these locations):
+  - `ArticleVersion` (`models/pipeline.py:63-91`): `article_id`, `version_number`, `final_article`, `original_ai_article`, `source_fields`, `change_reason`, `changed_by`, `created_at` + unique constraint
+  - `Citation` (`models/article.py:86-100`): `article_id`, `url`, `title`, `author`, `context`, `position`
+  - `Tag` (`models/tag.py:24-33`): `name`, `slug`, `created_at`
+  - `AuditLog` (`models/audit.py:8-24`): `action`, `category`, `target_type`, `target_id`, `user`, `details`, `ip_address`, `created_at`
+  - `ApiToken` (`models/auth.py:8-28`): `token_hash`, `token_prefix`, `name`, `created_at`, `last_used_at`, `expires_at`
+  - `ShareConfig` (`models/share.py:6-18`): `platform_key`, `label`, `url_template`, `icon_name`, `active`, `sort_order`
+- **Fix:** Add field-level documentation for each model with types, constraints, and relationships.
+
+### 5C.2 ~~Add Missing Model Attributes~~ — REMOVED (INACCURATE)
+- All five "missing attribute" claims were verified as already present in the codebase. No action needed.
+
+### 5C.3 Document ThreadPoolExecutors
+- **File:** `architecture/infrastructure.md`
+- **Executors to document:**
+  - `services/subagent/config.py:11` — `_subagent_executor = ThreadPoolExecutor(max_workers=SUBAGENT_WORKERS, ...)` for subagent LLM calls
+  - `services/llm/base.py:396` — `executor = ThreadPoolExecutor(max_workers=max_workers)` for batch LLM operations (`chat_structured_batch`)
+  - `services/timeout.py:49` — `executor = ThreadPoolExecutor(max_workers=1)` inside `wrapper()` for cross-platform timeout support
+- **Fix:** Add documentation for each executor with pool sizes and usage patterns.
+
+### 5C.4 Show Context Managers Correctly
+- **File:** `architecture/infrastructure.md`
+- **Issue:** `traced_llm_call` and `traced_stage` shown as standalone functions, but they're `@contextmanager` functions.
+- **Actual** (`services/logging_utils.py:250,278`): Both decorated with `@contextmanager`. Used as `with traced_llm_call(...):` and `with traced_stage(...):`.
+- **Fix:** Update signatures and usage examples to show context manager pattern.
+
+### 5C.5 Document Missing API Endpoint
+- **File:** `architecture/routes.md`
+- **Issue:** `/newsletter/preview` POST endpoint exists but is undocumented.
+- **Actual location:** `routes/admin/newsletters.py:221` (NOT `routes/admin/api/newsletters.py`). Route is `@admin_api_bp.route("/newsletter/preview", methods=["POST"])` with `@require_auth` and `@validate_csrf_json`.
+- **Fix:** Add to Admin API endpoints table with correct file path.
+
+### 5C.6 Document LLM Types
+- **File:** `architecture/llm-providers.md`
+- **Types to document:**
+  - `chat_structured_batch()` (`services/llm/base.py:341`) — batch LLM operations
+  - `BatchError` (`services/llm/base.py:28`) — exception for batch failures
+  - `ToolCall` (`schemas/llm_responses.py:186`) — tool call dataclass
+  - `ToolResult` (`schemas/llm_responses.py:192`) — tool result dataclass
+  - `ToolCallingResponse` (`schemas/llm_responses.py:198`) — tool calling response dataclass
+- **Fix:** Add to Key Types section.
+
+### 5C.7 Fix Schema Location Contradiction
+- **File:** `architecture/subagent.md` (line 140)
+- **Issue:** Doc says Chain schemas are in `runner.py` (line 140) then correctly says they're in `schemas/pipeline.py` (line 204). The line 140 claim is incorrect.
+- **Actual location:** `SubagentChainStep` at `schemas/pipeline.py:108`, `SubagentChainConfig` at `schemas/pipeline.py:115`.
+- **Fix:** Update line 140 to reference `schemas/pipeline.py:108-118`.
+
+### 5C.8 Document Subagent Package Structure
+- **File:** `architecture/overview.md`
+- **Issue:** `services/subagent/` package structure not documented in module index.
+- **Actual files:** `__init__.py`, `runner.py`, `config.py`, `chain.py`, `utils.py`, `tools.py`, `registry.py`, `conditions.py`, `prompt_templates.py`, `middleware.py` (10 files).
+- **Fix:** Add package structure with file purposes.
+
+---
+
+## Wave 6: Quality, Typing & Docs (Medium Priority) — 3 tasks remaining
+
+*Focus: Long-term health and documentation.*
+
+### 6.1 Boost Test Coverage to 80%
+- **Target Modules:** `tasks/newsletter.py`, `tasks/edit.py`, `tasks/research.py`, `adapters/api.py`.
+- **Action:** Write unit tests for missing branches/statements identified in coverage report.
+- **Current:** ~62% coverage, 1241 tests collected.
+- **Status:** NOT DONE
+
+### 6.2 Mypy Resolution
+- **Goal:** Fix all 423 Mypy errors.
+- **Current:** `mypy . --ignore-missing-imports` reports 423 errors in 92 files.
+- **Strategy:** Use `isinstance()` for AST narrowing in `conditions.py`; add `cast()` for `Any` returns; fix implicit `Optional` in `logging_utils.py`.
+- **Status:** NOT DONE
+
+### 6.3 OpenAPI & Documentation Sync
+- **OpenAPI:** `openapi.yaml` exists (481 lines, OpenAPI 3.0.3). Sync with actual routes (fix `/api/v1/` prefixes). Already contains `/newsletter/preview` endpoint.
+- **Docs:** Update `trend-memory.md` (topic column size), `security.md` (scrypt), and create `key_rotation.md`.
+- **Status:** PARTIALLY DONE
+
+---
+
+## Wave 7: Infrastructure & Polish (Long-term) — 2 tasks remaining
+
+*Focus: Containerization and observability.*
+
+### 7.1 Docker Hardening
+- **Current state:** Non-root user (`Dockerfile:39`) is implemented. Resource memory limits exist. Healthchecks exist.
+- **Missing:**
+  - No multi-stage build (single stage, build deps remain in final image)
+  - No `read_only: true` on any service in `docker-compose.yml`
+- **Action:** Implement multi-stage builds, add `read_only` filesystem where possible (excluding volume mounts).
+- **Status:** PARTIALLY DONE
+
+### 7.2 Observability Fixes
+- **Current state:** OTel configured in `services/logging_utils.py:40-58` with conditional setup (`OTLPSpanExporter` when `OTEL_EXPORTER_OTLP_ENDPOINT` set). `opentelemetry-exporter-otlp==1.35.0` in `pyproject.toml:37`.
+- **Missing:**
+  - Health check property is `is_healthy` (at `services/health.py:27-29`), NOT `is_fully_healthy`. It considers degraded as healthy. Need to add `is_fully_healthy` property that returns True only for `"ok"` status.
+- **Fix:** Add `is_fully_healthy` property to `HealthResult` that returns `self.status == "ok"`.
+- **Status:** PARTIALLY DONE
+
+---
+
+## Wave 8: Adapter Bug Fixes (NEW — from architecture reviews)
+
+*Focus: Bugs found during architecture review that weren't in original plan.*
+
+### 8.1 Fix WebAdapter `_scrape_listing` Pagination
+- **File:** `adapters/web.py`
+- **Issue:** `_scrape_listing` returns ALL article URLs across all pages with no `max_items` cap. Could cause excessive crawling.
+- **Source:** `review_adapters.md` — 1 MEDIUM severity bug.
+- **Fix:** Add `max_items` limit to `_scrape_listing` consistent with `max_items` config field.
+
+---
+
+## Parallelization Map
+
+### Wave 5A (Code Bugs — 2 independent tasks, 1 completed)
+```
+Wave 5A:
+├── 5A.1 Add max_retries to Celery tasks (newsletter, retry, scheduler)
+├── 5A.2 ~~Fix propose_trend_memory return type~~ — COMPLETED
+├── 5A.3 Document PipelineRootConfig.experiments field
+└── 5A.4 Fix degradation behavior documentation
+```
+**Sub-agent allocation:** 2 agents max (5A.1 + one of 5A.3/5A.4). Each task touches different files.
+
+### Wave 5B (Doc Accuracy — 11 independent tasks)
+```
+Wave 5B:
+├── 5B.1 Fix chat_structured signature
+├── 5B.2 Fix stage transitions table
+├── 5B.3 ~~Newsletter endpoint~~ — NO FIX NEEDED
+├── 5B.4 Document RawItem schema
+├── 5B.5 Fix content extractor fallback doc
+├── 5B.6 Fix reload_beat_schedule doc
+├── 5B.7 Update prompt file count
+├── 5B.8 Fix extract_json function name + path
+├── 5B.9 Fix subagent YAML config example
+├── 5B.10 Fix search providers YAML example
+├── 5B.11 Clarify normal flow doesn't include review
+└── 5B.12 Document newsletter idempotency key TTL
+```
+**Sub-agent allocation:** Up to 6 agents in parallel. Group by target doc file:
+- Agent 1: `architecture/services.md` (5B.1, 5B.5)
+- Agent 2: `architecture/tasks.md` (5B.2, 5B.11)
+- Agent 3: `architecture/llm-providers.md` (5B.8)
+- Agent 4: `architecture/subagent.md` (5B.9)
+- Agent 5: `architecture/search-providers.md` (5B.10)
+- Agent 6: Remaining docs (5B.4, 5B.6, 5B.7, 5B.12)
+
+### Wave 5C (Doc Gaps — 8 independent tasks)
+```
+Wave 5C:
+├── 5C.1 Document missing models (ArticleVersion, Citation, Tag, AuditLog, ApiToken, ShareConfig)
+├── 5C.3 Document ThreadPoolExecutors
+├── 5C.4 Show context managers correctly
+├── 5C.5 Document missing API endpoint (/newsletter/preview)
+├── 5C.6 Document LLM types
+├── 5C.7 Fix schema location contradiction
+├── 5C.8 Document subagent package structure
+└── 5C.9 Document WebhookCreate/WebhookResponse schemas
+```
+**Sub-agent allocation:** Up to 4 agents in parallel. Group by target doc file:
+- Agent 1: `architecture/models.md` (5C.1)
+- Agent 2: `architecture/infrastructure.md` (5C.3, 5C.4)
+- Agent 3: `architecture/routes.md` + `architecture/schemas.md` (5C.5, 5C.9)
+- Agent 4: Remaining docs (5C.6, 5C.7, 5C.8)
+
+### Wave 6 (Quality — 3 independent tasks)
+```
+Wave 6:
+├── 6.1 Boost test coverage to 80%
+├── 6.2 Fix Mypy errors (423 errors in 92 files)
+└── 6.3 Sync OpenAPI docs
+```
+**Sub-agent allocation:** 3 agents in parallel. Each task is fully independent.
+
+### Wave 7 (Infrastructure — 2 independent tasks)
+```
+Wave 7:
+├── 7.1 Docker hardening (multi-stage, read_only)
+└── 7.2 Observability fixes (is_fully_healthy property)
+```
+**Sub-agent allocation:** 2 agents in parallel.
+
+### Wave 8 (Adapter Bugs — 1 task)
+```
+Wave 8:
+└── 8.1 Fix WebAdapter _scrape_listing pagination
+```
+
+**Dependency Notes:**
+- Waves 5A, 5B, 5C can all run in parallel (no dependencies between them)
+- Wave 6 can run after Wave 5 (documentation fixes won't conflict with test/type work)
+- Wave 7 is independent of all other waves
+- Wave 8 is independent of all other waves
+- Within each wave, all tasks are fully parallelizable (use subagents)
+- All sub-agents must be given the specific file paths, line numbers, and actual code content from this plan to avoid needing to do their own research
+
+---
+
+## Success Metrics
+
+| Metric | Baseline | Target | Status |
+|--------|----------|--------|--------|
+| Test Pass Rate | 99% | 100% | ✅ 100% |
+| Test Coverage | 62% | 80% | ⏳ 62% |
+| Mypy Errors | 423 | 0 | ❌ 423 |
+| Ruff Errors | 0 | 0 | ✅ 0 |
+| Layer Violations | ~6 | 0 | ✅ 0 |
+| P1 Security Issues | 3 | 0 | ✅ 0 |
+| Architecture Doc Bugs | 21 | 0 | ⏳ 19 remaining |
+| Architecture Doc Accuracy | 864/905 | 905/905 | ⏳ 864 verified |
+
+---
+
+## Implementation History (Completed)
+- Wave 1: Critical Fixes & Stability (2026-05-31)
+- Wave 2: Architecture & Reliability (2026-05-31)
+- Wave 3: Advanced Security (2026-05-31)
+- Wave 4: Performance & Optimization (2026-05-31)
+
+---
+
+## Architecture Review Summary
+
+From 15 architecture document reviews (863 verified claims):
+
+| Document | Verified | Incorrect | Bugs | Priority |
+|----------|----------|-----------|------|----------|
+| overview.md | 138 | 0 | 1 (LOW) | ✅ Accurate |
+| config.md | 92 | 0 | 1 (MED) | ⏳ Minor fix |
+| infrastructure.md | 68 | 2 | 3 (LOW) | ⏳ Minor fixes |
+| schemas.md | 58 | 6 | 3 (1H, 1M, 1L) | ❌ Needs work |
+| adapters.md | 48 | 3 | 1 (MED) | ⏳ Minor fix |
+| routes.md | 47 | 1 | 1 (LOW) | ⏳ Minor fix |
+| models.md | 42 | 6 | 6 (1M, 5L) | ⏳ Missing docs |
+| utils.md | 42 | 0 | 0 | ✅ Accurate |
+| services.md | 38 | 3 | 1 (HIGH) | ❌ Wrong return type |
+| pipeline.md | 38 | 6 | 1 (MED) | ❌ Wrong degradation |
+| tasks.md | 35 | 5 | 3 (2M, 1L) | ❌ Incomplete |
+| subagent.md | 35 | 4 | 2 (HIGH) | ❌ Wrong YAML example |
+| llm_providers.md | 32 | 6 | 0 | ⏳ Minor fixes |
+| search_providers.md | 28 | 3 | 1 (HIGH) | ❌ Wrong YAML example |
+| prompts.md | 22 | 3 | 1 (LOW) | ⏳ Minor fix |
+
+**Top 3 Critical Documentation Issues:**
+1. `propose_trend_memory` returns `SubagentResponse`, not `list[TrendMemory]` — ✅ ALREADY FIXED
+2. Degradation behavior table wrong — disabled stages route through `_finalize()` to DONE (default), NOT directly to next stage
+3. Subagent YAML config example has non-existent fields (`tool_timeout`, `default_model`)

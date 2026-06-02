@@ -105,32 +105,111 @@ paths:
       responses:
         '200':
           description: Source deleted
-  /articles:
-    get:
-      summary: List articles
-      tags: [Articles]
+  /sources/{id}/refresh:
+    post:
+      summary: Refresh source
+      tags: [Sources]
       parameters:
-        - in: query
-          name: page
+        - in: path
+          name: id
+          required: true
           schema:
             type: integer
-            default: 1
-        - in: query
-          name: per_page
-          schema:
-            type: integer
-            default: 50
-        - in: query
-          name: status
-          schema:
-            type: string
-        - in: query
-          name: category
-          schema:
-            type: string
       responses:
         '200':
-          description: Paginated article list
+          description: Source refresh triggered
+        '404':
+          description: Source not found
+  /articles/{id}:
+    get:
+      summary: Get article
+      tags: [Articles]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Article details
+        '404':
+          description: Article not found
+    put:
+      summary: Update article
+      tags: [Articles]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateArticleRequest'
+      responses:
+        '200':
+          description: Article updated
+        '404':
+          description: Article not found
+    delete:
+      summary: Delete article
+      tags: [Articles]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Article deleted
+        '404':
+          description: Article not found
+  /articles/{id}/pipeline:
+    post:
+      summary: Trigger article pipeline
+      tags: [Articles]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stage:
+                  type: string
+                  enum: [select, research, write, edit]
+      responses:
+        '200':
+          description: Pipeline stage triggered
+        '400':
+          description: Invalid stage
+        '404':
+          description: Article not found
+  /articles/{id}/quality:
+    get:
+      summary: Get article quality report
+      tags: [Quality]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Quality report for article
+        '404':
+          description: No quality report found
   /articles/ids:
     get:
       summary: Get articles by IDs
@@ -172,113 +251,86 @@ paths:
       responses:
         '200':
           description: Bulk operation result
-  /webhooks:
+  /sources/performance:
     get:
-      summary: List webhooks
-      tags: [Webhooks]
+      summary: Source performance metrics
+      tags: [Sources]
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 7
+        - in: query
+          name: limit
+          schema:
+            type: integer
       responses:
         '200':
-          description: Webhook list
-    post:
-      summary: Create webhook
-      tags: [Webhooks]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateWebhookRequest'
-      responses:
-        '201':
-          description: Webhook created
-  /webhooks/{id}:
+          description: Source performance metrics
+  /topics/coverage:
     get:
-      summary: Get webhook
-      tags: [Webhooks]
+      summary: Topic coverage analysis
+      tags: [Sources]
       parameters:
-        - in: path
-          name: id
-          required: true
+        - in: query
+          name: days
           schema:
             type: integer
+            default: 30
       responses:
         '200':
-          description: Webhook details
-    put:
-      summary: Update webhook
-      tags: [Webhooks]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Webhook updated
-    patch:
-      summary: Patch webhook
-      tags: [Webhooks]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Webhook patched
-    delete:
-      summary: Delete webhook
-      tags: [Webhooks]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Webhook deleted
-  /webhooks/{id}/test:
-    post:
-      summary: Test webhook
-      tags: [Webhooks]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Test result
-  /webhooks/{id}/events:
+          description: Topic coverage distribution
+  /sources/recommendations:
     get:
-      summary: List webhook events
-      tags: [Webhooks]
+      summary: Source recommendations
+      tags: [Sources]
       parameters:
-        - in: path
-          name: id
-          required: true
+        - in: query
+          name: days
           schema:
             type: integer
+            default: 30
       responses:
         '200':
-          description: Webhook events
-  /webhooks/events/{event_id}/resend:
-    post:
-      summary: Resend webhook event
-      tags: [Webhooks]
+          description: Actionable source recommendations
+  /sources/health:
+    get:
+      summary: Source health status
+      tags: [Sources]
+      responses:
+        '200':
+          description: Source health list
+  /quality/recent:
+    get:
+      summary: Recent quality reports
+      tags: [Quality]
       parameters:
-        - in: path
-          name: event_id
-          required: true
+        - in: query
+          name: passed
+          schema:
+            type: string
+          description: Filter by passed status (true/false)
+        - in: query
+          name: needs_review
+          schema:
+            type: string
+          description: Filter by needs_review (true)
+        - in: query
+          name: limit
           schema:
             type: integer
+            default: 50
       responses:
         '200':
-          description: Resend result
+          description: Recent quality reports
+  /alerts:
+    get:
+      summary: Active alerts
+      tags: [Alerts]
+      responses:
+        '200':
+          description: Active alerts grouped by severity
   /pipeline/stats:
     get:
       summary: Pipeline stage statistics
@@ -314,13 +366,6 @@ paths:
       responses:
         '200':
           description: Cost summary
-  /sources/health:
-    get:
-      summary: Source health status
-      tags: [Sources]
-      responses:
-        '200':
-          description: Source health list
   /newsletters/stats:
     get:
       summary: Newsletter delivery stats
@@ -439,6 +484,15 @@ components:
           type: array
           items:
             type: string
+    UpdateArticleRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        impact_score:
+          type: integer
+        pipeline_status:
+          type: string
     CreateWebhookRequest:
       type: object
       required:

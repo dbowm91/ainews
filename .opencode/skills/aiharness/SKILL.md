@@ -5,7 +5,7 @@ description: "AI harness, subagent system, and trend memory — covering LLM pro
 
 ## Overview
 
-This codebase has a layered AI pipeline: pipeline stages (selector → researcher → writer → editor) run as Celery tasks with circuit breakers and rate limiting. Within stages, lightweight subagents run synchronously via `services/subagent.py` to handle specific tasks like contextualization and research synthesis. A tiered trend memory system (`services/trend_memory.py`) gives the editor persistent, LLM-judged memory across articles.
+This codebase has a layered AI pipeline: pipeline stages (selector → researcher → writer → editor) run as Celery tasks with circuit breakers and rate limiting. Within stages, lightweight subagents run synchronously via `services/subagent/` to handle specific tasks like contextualization and research synthesis. A tiered trend memory system (`services/trend_memory.py`) gives the editor persistent, LLM-judged memory across articles.
 
 ## LLM Provider Architecture
 
@@ -25,18 +25,18 @@ Providers are registered in `providers.yaml` and loaded via `services/llm/__init
 
 ## Subagent System
 
-`services/subagent.py` runs lightweight agentic tasks synchronously inside Celery workers. It is NOT a general-purpose agent framework — it is designed for pipeline-specific tasks.
+`services/subagent/` runs lightweight agentic tasks synchronously inside Celery workers. It is NOT a general-purpose agent framework — it is designed for pipeline-specific tasks.
 
 **Core functions:**
 - `run_subagent(task_type, stage, prompt_data, response_model, article_id)` — single-step subagent
 - `run_subagent_with_tools(task_type, stage, prompt_data, response_model, tools, article_id)` — with tool calling (max 5 iterations)
 - `run_subagent_chain(chain_name, steps, initial_prompt_data, article_id)` — multi-step chains with conditional execution
-- `initialize_tool_registry(selector=None)` — registers built-in tools; call once at startup. Now supports `ToolSelector` for stage-aware tool selection.
+- `initialize_tool_registry(selector=None)` — registers built-in tools; call once at startup. Accepts optional `ToolSelector` for stage-aware tool selection (via `services/tool_selection.py`).
 
 **Built-in tools** (`_build_context_tools()` + `_build_search_tools()`):
 - `get_topic_note(topic, source)` — single topic note lookup
-- `get_topic_notes_for_topics(topics)` — batch topic note lookup
-- `get_related_articles(topics, exclude_id, limit)` — related article search
+- `context_notes(topics)` — batch topic note lookup
+- `related_articles(topics, exclude_id, limit)` — related article search
 - `get_trend_memory(topics, min_importance, max_age_days)` — tiered trend memory retrieval
 - `get_article_by_id(article_id)` — fetch article metadata by ID
 - `search_articles(query, limit)` — search articles by query
@@ -46,7 +46,7 @@ Providers are registered in `providers.yaml` and loaded via `services/llm/__init
 - `get_quality_report()` — get article quality report
 - `find_dedupe_candidates()` — find potential duplicate articles
 - `estimate_stage_cost()` — estimate LLM cost for a pipeline stage
-- `search_web(query, max_results)` — external web search
+- `web_search(query, max_results)` — external web search
 - `get_search_provider()` — get configured search provider
 
 **Tool registration pattern:**
@@ -68,7 +68,7 @@ After defining tools, call `register_tool()` in `initialize_tool_registry()` and
 **Prompt templates** are defined in `_SUBAGENT_TASK_TEMPLATES` and resolved at call time. The `edit_contextualization` template receives: `{draft}`, `{brief}`, `{topic_notes}`, `{related_articles}`, `{trend_memory}`.
 
 **Adding a new tool to the subagent:**
-1. Define the tool function and `ToolDefinition` in `services/subagent.py:_build_context_tools()` or a new `_build_*_tools()` function
+1. Define the tool function and `ToolDefinition` in `services/subagent/tools.py:_build_context_tools()` or a new `_build_*_tools()` function
 2. Register it in `initialize_tool_registry()`
 3. Add the tool name to `pipeline.yaml: subagent.<stage>.tools`
 
@@ -119,7 +119,7 @@ memory:
 
 **Tool calling iteration limit**: `run_subagent_with_tools()` caps at 5 iterations to prevent infinite loops. If the limit is reached, the accumulated text is returned as the synthesis.
 
-**Prompt template resolution**: `_get_task_template()` checks `stage_config.task_template` first (can reference a file in `prompts/`), then falls back to `_SUBAGENT_TASK_TEMPLATES` in `subagent.py`. Missing template keys are caught and logged — no crash.
+**Prompt template resolution**: `_get_task_template()` checks `stage_config.task_template` first (can reference a file in `prompts/`), then falls back to `SUBAGENT_TASK_TEMPLATES` in `services/subagent/prompt_templates.py`. Missing template keys are caught and logged — no crash.
 
 **Security — prompt data escaping**: All prompt_data passed to subagent templates is automatically escaped via `_escape_prompt_data()`. This helper recursively escapes string values using `esc_xml_text()` before `template.format()` is called. This prevents XML structure injection (e.g., `</source_article>` closing tags in malicious content).
 
@@ -133,10 +133,10 @@ memory:
 |------|---------|
 | `services/llm/__init__.py` | Provider registry, `get_provider_for_role()`, circuit breaker integration |
 | `services/llm/base.py` | `BaseLLMProvider`, `LLMResponse`, `ToolDefinition`, `ToolCall` |
-| `services/subagent.py` | `run_subagent()`, tool registry, `initialize_tool_registry()`, prompt templates |
+| `services/subagent/` | Package: runner, tool registry, middleware, prompt templates, conditions |
 | `services/trend_memory.py` | `propose_trend_memory()`, `get_memory_for_topics()`, `consolidate_all_topics()`, `purge_expired()` |
 | `services/context_service.py` | `TopicNote` CRUD (manual notes), `get_related_articles_for_edit()` |
-| `models.py` | `TrendMemory` and `TopicNote` SQLAlchemy models |
+| `models/` | SQLAlchemy models package (`TrendMemory` in `models/context.py`, `TopicNote` in `models/context.py`) |
 | `schemas/pipeline.py` | `MemoryConfig`, `SubagentConfig`, `SubagentStageConfig` Pydantic models |
 | `pipeline.yaml` | `memory:` section, `subagent:` section with `tools:` lists |
 | `tasks/edit.py` | Editor Celery task — injects trend memory into contextualization prompt, calls `propose_trend_memory()` |

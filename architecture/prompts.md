@@ -65,7 +65,7 @@ def smart_truncate_context(text: str, max_chars: int = 8000, model: str | None =
     Returns `tuple[str, bool]` — (truncated_text, was_truncated)."""
 
 def summarize_context(text: str, llm_provider=None, max_tokens: int = 512, temperature: float = 0.0) -> str:
-    """Summarize context using LLM with in-memory cache (10-minute TTL, `services/prompts.py:25-26`).
+    """Summarize context using LLM with in-memory cache (10-minute TTL, `services/prompts.py:28`).
     Cache key is SHA-256 of first 500 chars + max_tokens + temperature."""
 
 def _budget_tokens(text: str, model: str, max_output_tokens: int = 512) -> str:
@@ -106,7 +106,7 @@ Evaluates article newsworthiness:
 
 Builds research context:
 - Input: Article content, web search results, related articles, topic notes, trend memory
-- Output: `{key_findings, context, citations, related_trends}`
+- Output: ResearchBrief with `{source_summary, key_claims, direct_quotes, external_sources, related_articles, context_notes, newsworthiness, impact_score}`
 - Uses subagent tools: `web_search`, `related_articles`, `get_trend_memory`
 
 ### Writer (`writer.txt`)

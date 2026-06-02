@@ -14,7 +14,6 @@ services/
 │   ├── gemini.py            # Google Gemini provider
 │   ├── ollama.py            # Ollama local provider
 │   ├── errors.py            # Error classification (AuthError, RateLimitError, etc.)
-│   ├── types.py             # Type definitions
 │   └── json_utils.py        # JSON extraction helpers
 ├── subagent/                # Tool-enabled LLM agents
 ├── search/                  # Search provider implementations

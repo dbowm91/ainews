@@ -7,6 +7,7 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | File | Task | Stage | Description |
 |------|------|-------|-------------|
 | `crawl.py` | `run_all_sources` | `crawl` | Orchestrates parallel crawling via Celery group/chord |
+| | `crawl_source` | `crawl` | Leaf task that performs actual source crawling |
 | | `aggregate_crawl_results` | `crawl` | Chord callback that aggregates results after parallel crawling |
 | `extract.py` | `process_item` | `extract` | Extracts content, deduplicates, creates Article |
 | `select.py` | `select_article` | `select` | LLM scores article 1-10 for newsworthiness |
@@ -14,9 +15,12 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | `write.py` | `write_article` | `write` | LLM writes condensed article (Smart Brevity) |
 | `edit.py` | `edit_article` | `edit` | LLM edits with contextualization, assigns tags |
 | `newsletter.py` | `generate_daily_newsletters` | `newsletter` | Builds + sends newsletters with executive summary |
+| | `send_single_email` | `newsletter` | Sends individual newsletter emails |
+| | `retry_failed_newsletter_deliveries` | `newsletter` | Retries failed newsletter email deliveries |
 | `scheduler.py` | `publish_scheduled_articles` | `publish` | Publishes articles at scheduled time |
 | `cleanup.py` | Multiple: `cleanup_old_pipeline_logs`, `cleanup_expired_verifications`, `cleanup_stale_limiter_slots`, `consolidate_trend_memory`, `recalculate_impact_scores`, `purge_trend_memory`, `cleanup_old_article_versions` | - | Cleanup old logs, verifications, limiter slots, trend memory, impact scores, article versions |
-| `embeddings.py` | `backfill_embeddings` | `embeddings` | Generates embeddings for articles and trend memory |
+| `embeddings.py` | `backfill_embeddings` | `embeddings` | Batch generates embeddings for articles and trend memory |
+| | `generate_article_embedding` | `embeddings` | Generates embedding for a single article |
 | `retry.py` | `retry_stuck` | - | Retry/dead-letter stuck articles |
 | `subscribers.py` | `cleanup_inactive_subscribers` | - | Flag inactive subscribers |
 | `webhook.py` | `dispatch_webhook_task` | - | Dispatch webhook events |
@@ -67,7 +71,7 @@ Beyond simple success/failure, each stage has quality gates that can route artic
 | select | confidence="low" | Route to `review` |
 | research | `_is_degenerate_research(brief)` returns True | Route to `review` |
 | write | `_is_degenerate_write(draft)` returns True | Route to `review` |
-| edit | Validation fails | Route to `review` |
+| edit | Validation fails OR `_should_route_to_review(article)` returns True OR quality report `passed=False` | Route to `review` |
 
 ## Core Tasks
 

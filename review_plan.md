@@ -1,7 +1,7 @@
 # Review Plan: Implementation Status
 
-**Date:** 2026-05-06
-**Goal:** Address critical bugs, high-priority issues, and documentation discrepancies identified in architecture review plans 00-09.
+**Date:** 2026-06-02
+**Goal:** Address critical bugs, high-priority issues, and documentation discrepancies identified in architecture review (14 module reviews completed 2026-06-02).
 
 ---
 
@@ -12,7 +12,69 @@
 | Critical (C-*) | 2 | 2 | Syntax corruption fixed, layering violation fixed |
 | High (H-*) | 18 | 18 | All high-priority items addressed |
 | Medium (M-*) | 6 | 3 | 3 items not addressed (scope management) |
-| Low (L-*) | 0 | 0 | Not tracked |
+| Architecture Review (AR-*) | 12 | 12 | Additional fixes from 14 module reviews |
+
+---
+
+## Architecture Review Additional Fixes (AR-*)
+
+These items were identified during the comprehensive architecture review of 14 modules:
+
+### AR-1: cleanup_inactive_subscribers Missing verify_task() ✅
+**Issue:** Task had no verify_task() call while all other cleanup tasks do
+**Fix:** Added verify_task("cleanup_inactive_subscribers", (), {}) to tasks/subscribers.py:28
+
+### AR-2: Remove Non-Existent types.py from Documentation ✅
+**Issue:** services.md and llm-providers.md listed services/llm/types.py which doesn't exist
+**Fix:** Removed types.py from architecture/services.md:16 and architecture/llm-providers.md:16
+
+### AR-3: Fix REDIS_URL to CELERY_BROKER_URL in Config Docs ✅
+**Issue:** architecture/config.md listed REDIS_URL but codebase uses CELERY_BROKER_URL
+**Fix:** Updated architecture/config.md:507-510 to use CELERY_BROKER_URL
+
+### AR-4: Remove SEARXNG_BASE_URL from Config Docs ✅
+**Issue:** architecture/config.md listed SEARXNG_BASE_URL env var which doesn't exist
+**Fix:** Removed SEARXNG_BASE_URL line from architecture/config.md
+
+### AR-5: Fix tasks.md File Inventory ✅
+**Issue:** Missing tasks: crawl_source, generate_article_embedding, send_single_email, retry_failed_newsletter_deliveries
+**Fix:** Added all missing tasks to architecture/tasks.md file inventory table
+
+### AR-6: Fix Edit Quality Gate Table in tasks.md ✅
+**Issue:** Edit stage quality gate showed only 1 condition (validation fails) but actual has 3
+**Fix:** Updated architecture/tasks.md:70 to show all 3 conditions
+
+### AR-7: Fix Disabled Stage Routing in pipeline.md ✅
+**Issue:** Documentation claimed all disabled stages route through _finalize() but select/research/write bypass it
+**Fix:** Updated architecture/pipeline.md:266-275 to accurately describe conditional behavior
+
+### AR-8: Fix topics.yaml name Field to display_name in config.md ✅
+**Issue:** architecture/config.md showed topics.yaml using `name` field but actual uses `display_name`
+**Fix:** Updated architecture/config.md:426 to show display_name
+
+### AR-9: Fix sources.yaml JSONPath Format in config.md ✅
+**Issue:** architecture/config.md showed simple field names but actual uses JSONPath format ($.title, etc.)
+**Fix:** Updated architecture/config.md:381-385 to show JSONPath format
+
+### AR-10: Fix hacker-news ID in config.md ✅
+**Issue:** architecture/config.md showed id: "hacker-news" but actual is "hackernews"
+**Fix:** Updated architecture/config.md:372 to show id: "hackernews"
+
+### AR-11: Fix Subagent Self-Correction Documentation ✅
+**Issue:** architecture/subagent.md:155-167 referenced non-existent lines and incorrect implementation
+**Fix:** Updated to reflect actual implementation at runner.py:88-109 with corrected flag
+
+### AR-12: Fix prompts.md Line Reference and ResearchBrief Output ✅
+**Issue:** Wrong line reference for _SUMMARIZE_CACHE_TTL, incorrect ResearchBrief output description
+**Fix:** Updated architecture/prompts.md:68 and :109 with correct information
+
+### AR-13: Sync subagent_edit_contextualization.txt Template ✅
+**Issue:** File missing "and trend memory" in review instruction
+**Fix:** Updated prompts/subagent_edit_contextualization.txt:17 to match inline template
+
+### AR-14: Fix WebAdapter Body Extraction Documentation ✅
+**Issue:** architecture/adapters.md said "trafilatura with fallback to CSS selectors" but it's reversed
+**Fix:** Updated architecture/adapters.md:169 to show CSS selectors first, then trafilatura
 
 ---
 

@@ -24,6 +24,10 @@ def cleanup_inactive_subscribers(self):
     """
     from extensions import db
     from services.subscribers import cleanup_inactive_subscribers as _cleanup
+    from services.task_security import verify_task
+
+    if not verify_task("cleanup_inactive_subscribers", (), {}):
+        return {"flagged": 0, "removed": 0}
 
     try:
         flagged, removed = _cleanup(db.session)

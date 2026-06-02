@@ -166,7 +166,7 @@ Features:
 - CSS selector-based extraction via `ListingConfig` and `ArticleSelectors`
 - Pagination link following via `PaginationConfig`
 - Link URL resolution via `base_url` (used with `urljoin()` at `adapters/web.py:160,166` to resolve relative hrefs)
-- Trafilatura content extraction with fallback to CSS selectors
+- Content extraction: CSS selectors first, then trafilatura if body is too short or missing
 
 ## SSRF Protection
 

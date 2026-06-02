@@ -145,23 +145,22 @@ class SubagentChainConfig(BaseModel):
 - **Task revocation checking**: Stops if Celery task is revoked
 - **Tool-calling support**: Via `chat_with_tools()`
 - **Self-correction**: Re-validates output and retries on failure
-- **`copy.deepcopy()` for tool functions**: Prevents middleware compounding on cached tool definitions. Each invocation wraps the tool function fresh rather than re-wrapping an already-wrapped function.
+- **New ToolDefinition objects**: Prevents middleware compounding on cached tool definitions. Each invocation creates a fresh ToolDefinition with the wrapped function rather than re-wrapping an already-wrapped function.
 - **max_iterations default**: `max_iterations` defaults to 5 (ge=1, le=20)
 
 ### Self-Correction Mechanism
 
-The subagent runner uses a `self_corrected` flag to track whether the LLM output required self-correction:
+The subagent runner uses a `corrected` flag to track whether the LLM output required self-correction. Self-correction occurs when structured output validation fails - the runner appends a correction message and raises to trigger retry via `_retry_with_backoff`:
 
 ```python
-# At runner.py:401-417:
-self_corrected = False
-for attempt in range(max_attempts):
-    response = llm_provider.chat_with_tools(...)
-    if validation_success:
-        return response
-    # Adjust prompt with correction hint
-    self_corrected = True
-# Return fallback or raise
+# At runner.py:88-109 (_run_subagent_core inside _attempt):
+corrected = False
+response = llm_provider.chat_with_tools(...)
+if validation_success:
+    return response
+# Append correction hint and raise to trigger retry
+corrected = True
+raise ValidationError("Correction needed")
 ```
 
 Self-correction occurs when structured output validation fails. The runner adjusts the prompt with correction hints and retries with `max_retries + 1` total attempts.

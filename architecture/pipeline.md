@@ -265,14 +265,16 @@ When experiments are enabled in `pipeline.yaml`, articles are assigned to experi
 
 ## Degradation Behavior
 
-When stages are disabled via `pipeline.yaml`, articles bypass that stage by routing through `_finalize()`. The `_finalize()` function applies the standard finalization logic: it checks `_should_route_to_review()` (when `review.enabled` AND `auto_publish_threshold` is None OR `impact_score < auto_publish_threshold`) and routes to `review` or `done` accordingly:
+When stages are disabled via `pipeline.yaml`, articles bypass that stage. The behavior differs by stage:
+- **select, research, write**: When disabled, articles dispatch directly to the next stage (skipping `_finalize()`)
+- **edit**: When disabled, articles route through `_finalize()` which checks `_should_route_to_review()` and routes to `review` or `done`
 
 | Stage Disabled | Behavior |
 |----------------|----------|
-| select | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
-| research | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
-| write | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
-| edit | Article routes through `_finalize()` — may go to `review` or `done` (default path) |
+| select | Article dispatches directly to `researching` (bypasses `_finalize()`) |
+| research | Article dispatches directly to `writing` (bypasses `_finalize()`) |
+| write | Article dispatches directly to `editing` (bypasses `_finalize()`) |
+| edit | Article routes through `_finalize()` — checks `_should_route_to_review()` and routes to `review` or `done` (default path) |
 
 When stages fail persistently (after max retries), articles degrade to the next stage:
 

@@ -13,7 +13,6 @@ services/llm/
 ├── gemini.py         # Google Gemini (native API)
 ├── ollama.py         # Local Ollama models
 ├── errors.py         # Error classification (AuthError, RateLimitError, etc.)
-├── types.py          # LLM response types
 └── json_utils.py     # JSON parsing for structured LLM output
 ```
 

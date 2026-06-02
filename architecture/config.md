@@ -369,7 +369,7 @@ default_search_provider: duckduckgo
 ```yaml
 sources:
   - name: "Hacker News"
-    id: "hacker-news"
+    id: "hackernews"
     type: "api"
     enabled: true
     schedule_minutes: 30
@@ -379,10 +379,11 @@ sources:
       item_url: "https://hacker-news.firebaseio.com/v0/item/{id}.json"
       max_items: 30
       fields:
-        title: "title"
-        url: "url"
-        author: "by"
-        published_at: "time"
+        external_id: "$.id"
+        title: "$.title"
+        url: "$.url"
+        author: "$.by"
+        published_at: "$.time"
 
   - name: "TechCrunch"
     id: "techcrunch"
@@ -423,22 +424,22 @@ class SourceConfig(BaseModel):
 ```yaml
 topics:
   ai:
-    name: "AI & Machine Learning"
+    display_name: "AI & Machine Learning"
     description: "Artificial intelligence, machine learning, and neural networks"
     color: "#3B82F6"
     icon: "brain"
   privacy:
-    name: "Privacy & Security"
+    display_name: "Privacy & Security"
     description: "Digital privacy, cybersecurity, and data protection"
     color: "#EF4444"
     icon: "shield"
   programming:
-    name: "Programming"
+    display_name: "Programming"
     description: "Software development, languages, and tools"
     color: "#10B981"
     icon: "code"
   hardware:
-    name: "Hardware"
+    display_name: "Hardware"
     description: "Computer hardware, chips, and devices"
     color: "#F59E0B"
     icon: "cpu"
@@ -504,17 +505,16 @@ Key environment variables used across the codebase:
 | `FLASK_CONFIG` | Flask config class (development/production/testing) |
 | `SECRET_KEY` | Flask session signing key |
 | `DATABASE_URL` | Database connection string |
-| `REDIS_URL` | Redis connection string |
+| `CELERY_BROKER_URL` | Redis connection string (Celery broker) |
 | `REDIS_SSL` | Enable Redis SSL |
 | `REDIS_MAX_CONNECTIONS` | Redis pool size (default: 100) |
-| `CONFIG_CACHE_REDIS_URL` | Dedicated Redis for config cache (default: derived from `REDIS_URL`) |
+| `CONFIG_CACHE_REDIS_URL` | Dedicated Redis for config cache (default: derived from `CELERY_BROKER_URL`) |
 | `CONFIG_CACHE_REDIS_PASSWORD` | Redis password for config cache auth (default: none) |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `GOOGLE_API_KEY` | Google Custom Search API key |
 | `GOOGLE_CSE_ID` | Google Custom Search engine ID |
-| `SEARXNG_BASE_URL` | SearxNG instance URL |
 | `WEBHOOK_SECRET_KEY` | Fernet key for webhook secret encryption |
 | `CELERY_TASK_SECRET` | HMAC secret for task signing |
 | `EXPERIMENT_SALT` | Salt for A/B experiment group assignment |

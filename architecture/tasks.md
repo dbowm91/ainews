@@ -42,16 +42,21 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 
 ### Stage Transitions
 
-| Current | Next (success) | Next (review) | Next (fail) |
-|---------|----------------|--------------|-------------|
-| `pending` | `selecting`, `researching` | - | `failed` |
+All transitions defined in `constants.py:52-64`:
+
+| Current | Next (success) | Next (quality gate) | Next (fail) |
+|---------|----------------|---------------------|-------------|
+| `pending` | `selecting`, `researching` | `review` | `failed` |
 | `selecting` | `selected` | - | `failed` |
 | `selected` | `researching` | - | `failed` |
-| `select` | `research` | `review` | `failed` |
-| `research` | `writing` | `review` | `failed` |
-| `writing` | `editing` | `review` | `failed` |
+| `researching` | `writing` | - | `failed` |
+| `writing` | `editing` | - | `failed` |
 | `written` | `editing` | - | `failed` |
-| `edit` | `done` | `review` | `failed` |
+| `editing` | `done` | `review` | `failed` |
+| `review` | `done` | - | `failed` |
+| `done` | *(terminal)* | - | - |
+| `skipped` | *(terminal)* | - | - |
+| `failed` | `pending` | - | - |
 
 ### Quality Gates
 
@@ -199,7 +204,9 @@ When pipeline degradation occurs, articles can be routed directly to `review`:
 pending → review → done
 ```
 
-**Normal flow:** `pending → select → research → write → edit → review → done`
+**Normal flow:** `pending → selecting → selected → researching → writing → editing → done`
+
+Review is NOT a required step — articles can transition directly from `editing → done` via the normal success path. Review is only reached via quality gate escape hatches (low confidence, degenerate outputs, validation failures) or pipeline degradation.
 
 **Degraded flow:** When stages fail persistently (degradation_count >= 2), articles bypass remaining stages and go directly to `review` for manual processing.
 

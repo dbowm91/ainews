@@ -380,7 +380,7 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **SoftTimeLimitExceeded work persistence**: When soft timeout occurs in pipeline stages, `tasks/pipeline.py` persists failure state (last_error, retry_count, total_retries) to DB before re-raising. The article retains its current `pipeline_status` so it retries in-place from the stage where it timed out, not from the beginning.
 - **ThreadPoolExecutor pattern**: Services use bounded pools with `submit()` + `future.result(timeout=N)` instead of spawning unbounded daemon threads. `services/article.py` uses 2-worker pool for search logging, `services/content_extractor.py` uses configurable pool (default 8 workers via `CONTENT_EXTRACTOR_WORKERS` env var).
 - **Exponential backoff**: Subagent retries use `min(1.0 * (2 ** attempt) + random.uniform(0, 0.5), retry_delay)` instead of fixed delays.
-- **LLM structured output**: `ChatModel.chat_structured()` uses `_extract_json()` helper to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
+- **LLM structured output**: `ChatModel.chat_structured()` uses `extract_json()` helper from `services/llm/json_utils.py` to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
 - **Plain-text email fallback**: `_send_smtp()` creates `multipart/alternative` message with both plain-text (via `html_to_plain_text()`) and HTML parts for RFC-compliant email delivery.
 - **Client-side bookmarking**: Articles support localStorage-based bookmark toggle via `.bookmark-btn` element in cards and detail views. State managed in `static/js/app.js` with `bookmarked_articles` key.
 

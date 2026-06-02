@@ -87,13 +87,14 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
     def chat_structured(
         self,
         messages: list[dict[str, str]],
-        response_model: Type[BaseModel],
+        response_model: Type[T],
         model: Optional[str] = None,
         system: Optional[str] = None,
         temperature: float = 0.0,
         max_tokens: int = 4096,
-        **kwargs,
-    ) -> BaseModel: ...
+        max_validation_retries: int = 2,
+        stage: str = "",
+    ) -> T: ...
 
     def chat_with_tools(
         self,
@@ -277,8 +278,8 @@ Finds related articles by topics and content similarity.
 ### Content Extractor (`content_extractor.py`)
 
 Primary: `trafilatura` for main content extraction
-Fallback: `readability` for article parsing
-If both fail: Returns `ExtractionStatus.EMPTY` (no content extracted)
+Fallback: `readability` + `BeautifulSoup` for article parsing
+If both fail: Returns `ExtractionResult` with `ExtractionStatus.EMPTY` (no raw HTML extraction)
 
 ## Search Providers
 

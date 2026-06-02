@@ -170,8 +170,8 @@ Per-topic newsletters generated similarly:
 
 Newsletter generation uses a Redis‑based lock to prevent concurrent runs. The `_check_newsletter_lock` function:
 
-1. Checks an idempotency key (`idempotency:newsletter:{YYYY-MM-DD}`) with a 2-day TTL to skip if already completed today.
-2. Acquires a distributed lock (`ainews:newsletter_lock`) with a 10‑minute TTL using a Lua script.
+1. Checks an idempotency key (`idempotency:newsletter:{YYYY-MM-DD}`) with a 2-day TTL (86400×2 seconds) to skip if already completed today.
+2. Acquires a distributed lock (`ainews:newsletter_lock`) with a 10‑minute TTL (600 seconds) using a Lua script.
 3. If the lock is held by another task, the current task skips (returns `skipped`).
 4. If acquisition fails due to Redis error, the task raises (cannot proceed safely).
 

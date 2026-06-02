@@ -8,7 +8,7 @@ Contextual conventions for agents working in the `services/llm/` directory.
 
 ## LLM Structured Output
 
-`BaseLLMProvider.chat_structured()` in `base.py` uses `_extract_json()` helper to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
+`BaseLLMProvider.chat_structured()` in `base.py` uses `extract_json()` helper from `json_utils.py` to handle markdown-wrapped JSON from Ollama, includes schema in retry messages, defaults to 2 validation retries.
 
 ## Streaming Support
 

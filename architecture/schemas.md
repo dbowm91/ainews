@@ -253,6 +253,24 @@ class PaginationConfig(BaseModel):
         return v
 ```
 
+## Raw Item (`item.py`)
+
+`RawItem` is the standard schema produced by all adapters (RSS, API, Web) and consumed by the ingestion pipeline. Adapters return `RawItem` instances from their `fetch()` method.
+
+```python
+class RawItem(BaseModel):
+    source_id: str                                  # Source identifier (matches Source.id)
+    external_id: str                                # Unique ID from the external source
+    title: str                                      # Article title
+    url: str | None = None                          # Article URL
+    author: str | None = None                       # Article author
+    published_at: datetime | None = None            # Publication timestamp
+    text_content: str | None = None                 # Extracted article text
+    raw_score: float = 0.0                          # Adapter-provided relevance score (0.0-1.0)
+    raw_metadata: dict[str, Any] = Field(default_factory=dict)  # Adapter-specific metadata
+    topics: list[str] = Field(default_factory=list) # Adapter-detected topic tags
+```
+
 ## LLM Responses (`llm_responses.py`)
 
 ### Selection Result

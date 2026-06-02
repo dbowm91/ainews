@@ -32,6 +32,9 @@ services:
     volumes:
       - app-data:/app/instance
       - ./static:/app/static:ro
+    tmpfs:
+      - /tmp
+    read_only: true
     depends_on:
       redis:
         condition: service_healthy
@@ -55,6 +58,9 @@ services:
       - CELERY_CONCURRENCY=4
     volumes:
       - app-data:/app/instance
+    tmpfs:
+      - /tmp
+    read_only: true
     depends_on:
       redis:
         condition: service_healthy
@@ -83,6 +89,9 @@ services:
       - DATABASE_URL=${DATABASE_URL:-sqlite:///app/instance/prod.db}
     volumes:
       - app-data:/app/instance
+    tmpfs:
+      - /tmp
+    read_only: true
     depends_on:
       redis:
         condition: service_healthy

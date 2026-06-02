@@ -28,6 +28,10 @@ class HealthResult:
     def is_healthy(self) -> bool:
         return self.status in ("ok", "degraded")
 
+    @property
+    def is_fully_healthy(self) -> bool:
+        return self.status == "ok"
+
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"status": self.status, "checks": self.checks}
         if self.version:

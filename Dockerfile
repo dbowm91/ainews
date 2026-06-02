@@ -1,31 +1,43 @@
-FROM python:3.12-slim AS base
+# Stage 1: Builder - install dependencies with build tools
+FROM python:3.12-slim AS builder
 
-# System dependencies for lxml, trafilatura, redis-cli healthchecks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libxml2-dev \
     libxslt1-dev \
     libffi-dev \
-    redis-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for fast, reproducible dependency installation
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Install Python dependencies (layer cached unless lockfile changes)
 COPY uv.lock pyproject.toml ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Install granian (not in core dependencies)
 RUN uv pip install --system "granian>=1.0.0,<2"
 
-# Copy application code
 COPY . .
-
-# Install the project itself (after copying code for editable-like behavior)
 RUN uv sync --frozen --no-dev
+
+# Stage 2: Runtime - minimal image without build tools
+FROM python:3.12-slim AS runtime
+
+# Runtime libraries for lxml and trafilatura (no dev headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxml2 \
+    libxslt1.1 \
+    redis-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+WORKDIR /app
+
+# Copy application code
+COPY --from=builder /app /app
 
 # Create non-root user
 RUN groupadd --gid 1000 ainews \

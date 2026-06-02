@@ -149,6 +149,8 @@ class WebAdapter(BaseSourceAdapter):
 
         urls = []
         for card in soup.select(card_sel):
+            if len(urls) >= cfg.max_items:
+                break
             link_el = card.select_one(link_sel)
             if not link_el:
                 continue
@@ -157,11 +159,13 @@ class WebAdapter(BaseSourceAdapter):
                 urls.append(urljoin(cfg.base_url, href))
 
         # Pagination
-        if pag.enabled and pag.next_link_selector and depth < pag.max_pages:
+        if pag.enabled and pag.next_link_selector and depth < pag.max_pages and len(urls) < cfg.max_items:
             next_el = soup.select_one(pag.next_link_selector)
             if next_el and next_el.get("href"):
                 next_url = urljoin(cfg.base_url, next_el["href"])
-                urls.extend(self._scrape_listing(next_url, depth + 1))
+                remaining = cfg.max_items - len(urls)
+                next_urls = self._scrape_listing(next_url, depth + 1)
+                urls.extend(next_urls[:remaining])
 
         return urls
 

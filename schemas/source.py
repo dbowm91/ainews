@@ -91,6 +91,7 @@ class WebConfig(BaseModel):
     listing_url: str = Field(..., min_length=1)
     listing: ListingConfig
     article: ArticleSelectors
+    max_items: int = Field(default=50, ge=1, le=200)
     request_delay_min: float = 1.5
     request_delay_max: float = 4.0
     max_retries: int = 3

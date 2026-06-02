@@ -55,7 +55,7 @@ Each pipeline stage has quality gates that route articles to `review` for manual
 - **select:** Low confidence (score OK but confidence="low") → `review`
 - **research:** Degenerate brief (fails `_is_degenerate_research()`) → `review`
 - **write:** Degenerate draft (fails `_is_degenerate_write()`) → `review`
-- **edit:** Validation failure OR `_should_route_to_review()` → `review`
+- **edit:** Validation failure OR `_should_route_to_review()` OR quality report `passed=False` → `review`
 
 ## Fixed Bug Patterns
 

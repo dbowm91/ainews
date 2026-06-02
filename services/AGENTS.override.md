@@ -78,35 +78,6 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 ## Layer Violation Note
 - **schemas/common.py:** This module imports from `services.config_cache`, violating the principle that schemas should have minimal dependencies. This is a known architectural issue requiring decision - either move config caching to utils or accept the violation.
 
-## Known Bugs (RESOLVED)
-- **SearchConfig caching bug:** FIXED - `load_search_config()` in `schemas/search.py:31` now uses `config_path = Path(path)` for proper mtime-based cache invalidation when custom paths are passed.
-
-## Known Bugs (OPEN)
-- **ResponseCache pubsub leak:** `ResponseCache.get_or_set()` in `services/cache.py:172-183` leaks Redis pubsub connections. When `set(nx=True)` fails, `pubsub.close()` is never called. Compare with `ModelLimiter.acquire()` at `services/limiter.py:81-85` which correctly closes in a `finally` block. Fix: add `pubsub.close()` in the finally block.
-- **extract_json file path:** `extract_json()` is at `services/llm/json_utils.py:10`, NOT `utils/json_utils.py`. Architecture docs reference the wrong file path.
-
-## Architecture Review Findings (From Wave 9 Review)
-
-### services/llm/types.py Does Not Exist
-Both `architecture/llm-providers.md:17` and `architecture/services.md:17` list `services/llm/types.py` but this file doesn't exist. The types `ToolCall`, `ToolResult`, `ToolCallingResponse` exist as:
-- Dataclasses in `services/llm/base.py:56-79` (for internal use)
-- Pydantic models in `schemas/llm_responses.py:186-202` (for pipeline responses)
-
-### format_date() Docstring Incomplete
-`utils/datetime.py:52-53` docstring says "Format datetime as human-readable relative or absolute date" without enumerating formats. Actual return formats at lines 67-95:
-- "just now", "X minutes ago", "1 hour ago", "X hours ago", "yesterday", "X days ago", "%b %d", "%b %d, %Y"
-
-### REDIS_MAX_CONNECTIONS Inconsistent Defaults
-- `services/config_cache.py:315`: default 20
-- `extensions.py:107`: default 100
-Document or harmonize these defaults.
-
-### Content Extractor Fallback Behavior
-`architecture/services.md:279-281` claims "Final fallback: Raw HTML with boilerplate removal" but this is FALSE. Actual behavior at `services/content_extractor.py:123`: Returns `ExtractionResult(url, None, None, None, ExtractionStatus.EMPTY)`. No raw HTML extraction occurs.
-
-### WebAdapter Trafilatura Fallback
-`architecture/adapters.md:169` says "fallback to CSS selectors" but actual fallback is trafilatura at `adapters/web.py:108-119`.
-
 ## Fixed Bug Patterns
 
 The following bugs were previously encountered and fixed - do not re-fix these:

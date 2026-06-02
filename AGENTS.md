@@ -411,12 +411,12 @@ The following are documented as intentional and should NOT be "fixed":
 
 ### 2FA System
 - **Backup Codes:** 8 alphanumeric codes stored as JSON in `AdminUser.backup_codes`
-- **TOTP Encryption:** Secrets encrypted at rest using Fernet (AES-128-CBC)
+- **TOTP Secrets:** Stored in database (NOT encrypted at rest - potential future enhancement)
 - **Rate Limiting:** 5 failed 2FA attempts triggers 15-minute lockout
 - **Session Regeneration:** `session.clear()` called on all login paths
 
 ### CSP Configuration
-- `style-src`: `'self'` (no `unsafe-inline`)
+- `style-src`: `'self' 'unsafe-inline'` — allows dynamic CSS custom properties (e.g., `--bar-width`)
 - `script-src`: `'self'` with nonce support
 - Nonce support for inline styles via `csp_nonce()` function
 
@@ -449,11 +449,11 @@ The following are documented as intentional and should NOT be "fixed":
 - `summarize_context()` results cached for 10 minutes
 - Token counting cached to avoid repeated computation
 
-## Remaining Work
+## Plan Completion Status
 
-See `plans/plan.md` for the full consolidated implementation plan with parallelization waves.
+The implementation plan (`plans/plan.md`) is fully complete. All waves (1-9) have been implemented and verified.
 
-All waves are complete. The plan is fully implemented.
+Historical reference: `plans/plan.md` contains the full implementation history with success metrics.
 
 ### Key Constant Locations (Verified)
 - `CELERY_TASK_MAX_RETRIES`: `constants.py:6` (default: 3, configurable via env var)

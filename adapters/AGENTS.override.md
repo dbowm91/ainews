@@ -39,24 +39,3 @@ if self.config_class and source_config.config:
     self.adapter_config = self.config_class(**source_config.config)
 ```
 The config_class varies by adapter type (RSSConfig, APIConfig, WebConfig).
-
-## Known Bugs (OPEN)
-- **WebAdapter `_scrape_listing` pagination:** `_scrape_listing` in `adapters/web.py` returns ALL article URLs across all pages with no `max_items` cap. Could cause excessive crawling. Needs `max_items` limit consistent with config field.
-
-## Architecture Review Findings (From Wave 9 Review)
-
-### WebAdapter Body Extraction Fallback Order
-`adapters/web.py:108-119` shows the body extraction fallback order:
-1. Try CSS selectors first (via `parse_article_body()`)
-2. If body is too short/missing, try trafilatura
-3. If trafilatura fails, return EMPTY status (no raw HTML fallback)
-
-The documentation at `architecture/adapters.md:169` incorrectly says "fallback to CSS selectors" when it should say "fallback to trafilatura".
-
-### Request Delay Applies to All Request Types
-The `request_delay_min`/`request_delay_max` config in WebConfig applies to:
-1. Listing page fetches
-2. Pagination link pages
-3. Individual article page fetches
-
-This is correctly documented in `architecture/adapters.md:188-190`.

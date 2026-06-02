@@ -449,12 +449,16 @@ ainews/
 │   │   ├── errors.py       # Error classification
 │   │   └── json_utils.py   # JSON parsing for LLM responses
 │   ├── subagent/           # Tool-enabled LLM agents (14 tools)
-│   │   ├── runner.py       # run_subagent(), tool loop
+│   │   ├── __init__.py     # Package init, re-exports run_subagent
+│   │   ├── runner.py       # run_subagent(), run_subagent_with_tools(), tool loop
+│   │   ├── config.py       # Executor setup, provider config
 │   │   ├── chain.py        # Multi-step chains with conditions
-│   │   ├── tools.py        # Built-in tool implementations
-│   │   ├── registry.py     # Tool registry
-│   │   ├── middleware.py    # Logging, timing, error handling
-│   │   └── conditions.py   # AST-based condition evaluation
+│   │   ├── tools.py        # Built-in tool implementations (14 tools)
+│   │   ├── registry.py     # _TOOL_REGISTRY with cached tool definitions
+│   │   ├── middleware.py    # Logging, timing, error handling middleware
+│   │   ├── conditions.py   # AST-based condition evaluation
+│   │   ├── prompt_templates.py # Task prompt templates
+│   │   └── utils.py        # Retry, task revocation helpers
 │   ├── search/             # Search providers
 │   │   ├── duckduckgo.py   # DuckDuckGo (default)
 │   │   ├── hybrid.py       # FTS5 + vector similarity

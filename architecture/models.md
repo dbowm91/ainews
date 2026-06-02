@@ -127,6 +127,23 @@ Actual statuses used in code: `pending`, `selecting`/`selected`, `researching`, 
 
 See `constants.py:VALID_TRANSITIONS` for the complete transition map.
 
+## Citation Model
+
+External references linked to articles with positional ordering:
+
+```python
+class Citation(db.Model):
+    __tablename__ = "citations"
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), nullable=False, index=True)
+    url = Column(String(2048), nullable=False)    # Cited source URL
+    title = Column(String(512))                   # Title of cited resource
+    author = Column(String(128))                  # Author of cited resource
+    context = Column(Text)                        # Surrounding text or justification
+    position = Column(Integer, nullable=False, default=1)  # Order within article
+```
+
 ## Source Model
 
 Health tracking for source reliability:
@@ -230,6 +247,31 @@ class PipelineLog(db.Model):
     meta = Column(JSON, nullable=True)              # Additional structured data
 ```
 
+## ArticleVersion Model
+
+Per-article edit history with version tracking:
+
+```python
+class ArticleVersion(db.Model):
+    __tablename__ = "article_versions"
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, ForeignKey("articles.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number = Column(Integer, nullable=False, default=1)  # Sequential version counter
+    final_article = Column(Text)          # Published content at this version
+    original_ai_article = Column(Text)    # AI-generated content before human edits
+    source_fields = Column(JSON, nullable=True)  # Source-specific metadata snapshot
+    change_reason = Column(String(256))   # Human-readable edit description
+    changed_by = Column(String(64))       # Editor identifier
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Unique constraint on (article_id, version_number)
+    __table_args__ = (UniqueConstraint("article_id", "version_number", name="uq_article_version"),)
+
+    # Relationship
+    article = relationship("Article", backref=backref("versions", lazy="dynamic", cascade="all, delete-orphan"))
+```
+
 ## SearchQuery Model
 
 Search analytics with article click tracking:
@@ -249,6 +291,23 @@ class SearchQuery(db.Model):
 ```
 
 **Note:** `clicked_article` uses explicit `foreign_keys` because `SearchQuery` has a nullable FK to `Article` but Article doesn't have a corresponding backref defined on this model.
+
+## ShareConfig Model
+
+Social sharing platform configuration:
+
+```python
+class ShareConfig(db.Model):
+    __tablename__ = "share_configs"
+
+    id = Column(Integer, primary_key=True)
+    platform_key = Column(String(32), unique=True, nullable=False)  # Platform identifier (e.g., "twitter")
+    label = Column(String(64), nullable=False)                      # Display name (e.g., "Twitter / X")
+    url_template = Column(String(512), nullable=False)              # URL template with {url} placeholder
+    icon_name = Column(String(32), nullable=False)                  # Icon class name
+    active = Column(Boolean, default=True)                          # Whether platform is enabled
+    sort_order = Column(Integer, default=0)                         # Display ordering
+```
 
 ## ArticleMetric Model
 
@@ -318,6 +377,20 @@ article_tags = db.Table(
 
 **Note:** `Article` model has a `tags` relationship and a `newsletters` dynamic backref (`db.backref("newsletters", lazy="dynamic")`) established in `models/newsletter.py:43`.
 
+## Tag Model
+
+Topic/category tags with slug-based lookup:
+
+```python
+class Tag(db.Model):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64), unique=True, nullable=False)        # Display name
+    slug = Column(String(64), unique=True, nullable=False, index=True)  # URL-friendly identifier
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+```
+
 ## Newsletter & Subscriber Models
 
 Newsletter and subscriber tracking for email delivery:
@@ -382,6 +455,45 @@ class AdminUser(Base):
 
     # Session security fields (ip_binding, user_agent_hash) do NOT exist
     # Session hijacking protection is handled in routes/admin/__init__.py
+```
+
+## ApiToken Model
+
+API authentication tokens with hashing and expiration:
+
+```python
+class ApiToken(db.Model):
+    __tablename__ = "api_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), unique=True, nullable=False)    # SHA-256 hash of raw token
+    token_prefix = Column(String(16), nullable=False, index=True)   # First 16 chars for identification
+    name = Column(String(128))                                      # Human-readable label
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_used_at = Column(DateTime)                                 # Last successful auth
+    expires_at = Column(DateTime)                                   # Optional expiration
+```
+
+## AuditLog Model
+
+Admin action audit trail for security and debugging:
+
+```python
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True)
+    action = Column(String(64), nullable=False, index=True)     # Action performed (e.g., "create_source")
+    category = Column(String(32), nullable=True, index=True)    # Action category (e.g., "source", "article")
+    target_type = Column(String(32))                            # Target entity type
+    target_id = Column(Integer)                                 # Target entity ID
+    user = Column(String(64), default="admin")                  # Actor identifier
+    details = Column(JSON, nullable=True)                       # Structured action metadata
+    ip_address = Column(String(45), nullable=True)              # Client IP (IPv4/IPv6)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Composite index on (target_type, target_id)
+    __table_args__ = (Index("ix_audit_logs_target", "target_type", "target_id"),)
 ```
 
 ## TrendMemory

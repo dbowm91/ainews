@@ -383,11 +383,24 @@ def trigger_event(event_type, event_data, idempotency_key=None) -> None:
 def get_tracer() -> Optional[Tracer]:
     """Returns tracer (noop exporter when OTel unavailable)."""
 
+@contextmanager
 def traced_llm_call(provider: str, model: str, stage: str):
-    """Context manager for LLM spans."""
+    """Context manager for tracing LLM calls.
+    Creates an OpenTelemetry span with llm.provider, llm.model, llm.stage attributes.
+    No-op when OpenTelemetry is not installed."""
 
+@contextmanager
 def traced_stage(stage: str, operation: str = "execute"):
-    """Context manager for pipeline stage spans."""
+    """Context manager for tracing pipeline stage execution.
+    Creates an OpenTelemetry span with pipeline.stage, pipeline.operation attributes.
+    No-op when OpenTelemetry is not installed."""
+
+# Usage:
+with traced_llm_call("ollama", "qwen3:8b", "selector"):
+    result = provider.chat_structured(...)
+
+with traced_stage("selector", "evaluate_article"):
+    result = work_fn(article, provider, model, max_tokens)
 
 def log_pipeline_event(stage: str, event: str, article_id=None, run_id=None, level="info", **extra):
     """Structured pipeline event logging."""
@@ -428,21 +441,55 @@ class MetricsCollector:
 
 ## ThreadPoolExecutor Pattern
 
-Blocking I/O must use bounded thread pools:
+Blocking I/O must use bounded thread pools. The codebase uses three distinct `ThreadPoolExecutor` instances:
+
+### 1. Subagent Executor (`services/subagent/config.py:11`)
+
+Module-level executor for subagent LLM calls. Default 8 workers, configurable via `SUBAGENT_WORKERS` env var. Shut down gracefully via `atexit` handler.
 
 ```python
-_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="my_service")
-
-def blocking_api(arg):
-    try:
-        future = _EXECUTOR.submit(_do_blocking_work, arg)
-        return future.result(timeout=30)
-    except (FuturesTimeoutError, TimeoutError):
-        future.cancel()
-        raise
+SUBAGENT_WORKERS = int(os.environ.get("SUBAGENT_WORKERS", "8"))
+_subagent_executor = ThreadPoolExecutor(max_workers=SUBAGENT_WORKERS, thread_name_prefix="subagent")
 ```
 
-**Important**: In `finally` block, use `executor.shutdown(wait=False, cancel_futures=True)` — not a `with` context manager.
+### 2. Batch LLM Executor (`services/llm/base.py:396`)
+
+Per-call executor inside `chat_structured_batch()`. Default 4 workers. Each batch call creates a fresh executor to avoid sharing across concurrent batches.
+
+```python
+executor = ThreadPoolExecutor(max_workers=max_workers)
+try:
+    futures = [executor.submit(_call_one, i, req) for i, req in enumerate(requests)]
+    ...
+finally:
+    executor.shutdown(wait=False, cancel_futures=True)
+```
+
+### 3. Timeout Executor (`services/timeout.py:49`)
+
+Single-worker executor inside the `timeout()` decorator's `wrapper()`. Provides cross-platform timeout support by running the decorated function in a separate thread.
+
+```python
+executor = ThreadPoolExecutor(max_workers=1)
+try:
+    future = executor.submit(func, *args, **kwargs)
+    return future.result(timeout=seconds)
+finally:
+    executor.shutdown(wait=False, cancel_futures=True)
+```
+
+### General Pattern
+
+```python
+try:
+    future = executor.submit(_do_blocking_work, arg)
+    return future.result(timeout=30)
+except (FuturesTimeoutError, TimeoutError):
+    future.cancel()
+    raise
+```
+
+**Important**: Always use `executor.shutdown(wait=False, cancel_futures=True)` in a `finally` block — never use a `with` context manager for these executors.
 
 Used in: `services/content_extractor.py`, `services/search/*.py`, `services/subagent/config.py`.
 

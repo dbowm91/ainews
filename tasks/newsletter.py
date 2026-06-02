@@ -481,6 +481,7 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
     time_limit=360,
     autoretry_for=(smtplib.SMTPException, TimeoutError, ConnectionError),
     dont_autoretry_for=(smtplib.SMTPResponseException,),
+    max_retries=CELERY_TASK_MAX_RETRIES,
     retry_backoff=True,
     retry_backoff_max=300,
     retry_jitter=True,

@@ -7,7 +7,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from constants import PipelineStatus
+from constants import CELERY_TASK_MAX_RETRIES, PipelineStatus
 from models import Article
 from services.task_security import verify_task
 from services.config_unified import (
@@ -71,6 +71,7 @@ def _process_retry_batch(articles):
     soft_time_limit=300,
     time_limit=360,
     autoretry_for=(ConnectionError, TimeoutError),
+    max_retries=CELERY_TASK_MAX_RETRIES,
     retry_backoff=True,
     retry_backoff_max=300,
     retry_jitter=True,

@@ -453,24 +453,7 @@ The following are documented as intentional and should NOT be "fixed":
 
 See `plans/plan.md` for the full consolidated implementation plan with parallelization waves.
 
-### Current Priorities (from plans/plan.md)
-- **Wave 9:** Architecture review follow-up — IN PROGRESS (22 sub-items, 3 critical/high priority)
-  - 9.1 SITE_URL empty string fallback (CRITICAL)
-  - 9.2 ResearchBrief schema wrong (HIGH)
-  - 9.21 cleanup_inactive_subscribers missing verify_task (HIGH)
-
-### Quick Reference: Known Doc Inaccuracies (from architecture reviews)
-These are awareness items for agents working on documentation:
-- `propose_trend_memory()` returns `SubagentResponse`, NOT `list[TrendMemory]` (`services/trend_memory.py:217`)
-- `chat_structured()` has `max_validation_retries` and `stage` params, NOT `**kwargs` (`services/llm/base.py:217`)
-- Newsletter has TWO endpoints: `/newsletters/performance` AND `/newsletters/stats` (different files)
-- `extract_json()` is at `services/llm/json_utils.py`, NOT `utils/json_utils.py`
-- SITE_URL env var at `pipeline.yaml:116` resolves to empty string when unset — ⚠️ WAVE 9 item
-- ResearchBrief schema at `architecture/pipeline.md:88` shows wrong fields — ⚠️ WAVE 9 item
-- Edit quality gate has 3 conditions (validation, _should_route_to_review, quality report) — only 1 documented
-- Subagent self-correction documentation references wrong line numbers and pattern
-- `services/llm/types.py` does NOT exist — types are in `services/llm/base.py` and `schemas/llm_responses.py`
-- `cleanup_inactive_subscribers` task missing `verify_task()` call — ⚠️ WAVE 9 item
+All waves are complete. The plan is fully implemented.
 
 ### Key Constant Locations (Verified)
 - `CELERY_TASK_MAX_RETRIES`: `constants.py:6` (default: 3, configurable via env var)

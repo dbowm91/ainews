@@ -160,7 +160,7 @@ def _get_something() -> int:
 | `app.py` | Flask app factory |
 | `config.py` | Flask config classes, Celery beat schedule |
 | `extensions.py` | Flask extensions (db, redis, limiter) |
-| `models.py` | SQLAlchemy models |
+| `models/` | SQLAlchemy models package (article, source, newsletter, pipeline, context, etc.) |
 | `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
@@ -243,7 +243,7 @@ Blocking I/O (HTTP calls, content extraction) must use ThreadPoolExecutor to avo
 - `services/search/searxng.py` — SearXNG search (20s timeout)
 - `services/search/google.py` — Google search (20s timeout)
 - `services/search/duckduckgo.py` — DuckDuckGo search (20s timeout)
-- `services/subagent.py` — subagent chain LLM calls (per-stage timeout)
+- `services/subagent/` — subagent package: runner, tool registry, middleware, prompt templates
 
 The executor should be a module-level singleton:
 
@@ -412,7 +412,7 @@ The `safe_href` Jinja2 filter (defined at `app.py`) validates http/https scheme,
 
 ## Source Health Indexes
 
-`models.py` Source class has `index=True` on `consecutive_failures` and `disabled_at` columns. Migration `029_sources_health_indexes.py` creates these indexes. Optimizes admin health endpoint queries (`consecutive_failures >= 10`, `disabled_at is not None`).
+`models/source.py` Source class has `index=True` on `consecutive_failures` and `disabled_at` columns. Migration `029_sources_health_indexes.py` creates these indexes. Optimizes admin health endpoint queries (`consecutive_failures >= 10`, `disabled_at is not None`).
 
 ## Related Articles Caching
 

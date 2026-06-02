@@ -7,7 +7,7 @@ description: "Testing conventions for the ainews codebase — pytest, fixtures, 
 
 Tests live in `tests/` with subdirectories mirroring the main codebase:
 - `tests/test_*.py` — top-level test files
-- `tests/test_subagent.py` — subagent package tests
+- `tests/test_subagent_*.py` — subagent package tests (runner, tools, chain, templates, middleware, responses)
 - `tests/test_llm_adapters/` — per-provider LLM tests
 - `tests/test_routes/` — route/blueprint tests
 
@@ -21,7 +21,7 @@ Tests live in `tests/` with subdirectories mirroring the main codebase:
 .venv/bin/pytest tests/ --cov --cov-report=term-missing
 
 # Run specific test class
-.venv/bin/pytest tests/test_subagent.py::TestBuiltInTools -v
+.venv/bin/pytest tests/test_subagent_tools.py::TestBuiltInTools -v
 
 # Run with timeout (prevents hanging)
 .venv/bin/pytest tests/ --timeout=120

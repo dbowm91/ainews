@@ -421,8 +421,8 @@ The following are documented as intentional and should NOT be "fixed":
 ### CSRF Protection Architecture
 Three-layer CSRF protection with API exemptions:
 - **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions. No decorator needed for form-based routes. API blueprints (`admin_api_bp`, `api_tokens_bp`) are exempted from global CSRF.
-- **`@validate_csrf_json`** decorator: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions).
-- **`@csrf_for_session_auth`** decorator: Like `@validate_csrf_json` but skips CSRF for bearer-token requests. Use on routes accepting both session and bearer auth.
+- **`@validate_csrf_json`** decorator: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions). Used on HTML form/HTMX routes.
+- **`@csrf_for_session_auth`** decorator: Like `@validate_csrf_json` but skips CSRF for verified bearer-token requests (uses `g.auth_mode` set by `authenticate_request()`). Returns 401 if auth has not run. Used on all JSON API mutating routes.
 - Templates expose CSRF via `<meta name="csrf-token">` for JS and `csrf_token()` for forms/HTMX.
 - Bearer-token requests bypass CSRF — intentional and tested.
 - Invalid bearer tokens return 401 immediately and do NOT fall back to session auth.

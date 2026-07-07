@@ -430,16 +430,16 @@ API blueprints (`admin_api_bp` at `/api/v1/*`, `api_tokens_bp` at `/api-tokens/*
 
 For non-exempted routes, per-route decorators handle CSRF policy:
 
-- **`@validate_csrf_json`**: Validates `X-CSRFToken` header for session-authenticated JSON endpoints. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions).
-- **`@csrf_for_session_auth`**: Like `@validate_csrf_json` but skips CSRF for valid Bearer-token requests. Use on routes accepting both session and Bearer auth.
+- **`@validate_csrf_json`**: Validates `X-CSRFToken` header for session-authenticated JSON endpoints. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions). Used on HTML form/HTMX routes.
+- **`@csrf_for_session_auth`**: Like `@validate_csrf_json` but skips CSRF for verified bearer-token requests (uses `g.auth_mode` set by `authenticate_request()`). Returns 401 if auth has not run. Used on all JSON API mutating routes.
 - **Form-based routes**: Flask-WTF's built-in CSRF handles forms automatically.
 
 `api_tokens_bp` uses blueprint-level `before_request` for auth — no duplicate `@require_auth` on individual routes.
 
 ```python
 # Header: X-CSRFToken: <token>
-# Decorator: @validate_csrf_json (routes/decorators.py)
-# Respects WTF_CSRF_ENABLED = False in TestingConfig
+# Decorator: @csrf_for_session_auth (routes/decorators.py)
+# Uses g.auth_mode from authenticate_request() to determine auth mode
 ```
 
 ### Rate Limiting

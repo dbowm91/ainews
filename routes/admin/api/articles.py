@@ -12,7 +12,7 @@ from constants import VALID_PIPELINE_STATUSES, VALID_TRANSITIONS, PipelineStatus
 from routes import limit_content_length
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
-from routes.decorators import validate_csrf_json
+from routes.decorators import csrf_for_session_auth
 from schemas.admin import ArticleIdsParams, BulkArticleRequest
 from services.task_security import get_signed_kwargs
 
@@ -469,7 +469,7 @@ def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, in
 
 @admin_api_bp.route("/articles/bulk", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 @limit_content_length(32768)
 def bulk_article_operations() -> tuple[Response, int] | Response:
     """Bulk operations on articles: delete, change status, change category, reprocess, add tags."""
@@ -527,7 +527,7 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def trigger_article_pipeline(article_id: int) -> tuple[Response, int] | Response:
     """Trigger a pipeline stage for a specific article."""
     from models import Article
@@ -619,7 +619,7 @@ def get_article(article_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/articles/<int:article_id>", methods=["PUT"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def update_article(article_id: int) -> tuple[Response, int] | Response:
     """Update an article."""
     from models import Article
@@ -672,7 +672,7 @@ def update_article(article_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/articles/<int:article_id>", methods=["DELETE"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def delete_article(article_id: int) -> tuple[Response, int] | Response:
     """Delete an article."""
     from models import Article

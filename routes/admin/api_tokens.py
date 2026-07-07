@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models import ApiToken
-from routes.decorators import authenticate_request, validate_csrf_json
+from routes.decorators import authenticate_request, csrf_for_session_auth
 from services.api_tokens import (
     generate_api_token,
     hash_api_token_secret,
@@ -42,7 +42,7 @@ def list_tokens():
 
 
 @api_tokens_bp.route("/api-tokens", methods=["POST"])
-@validate_csrf_json
+@csrf_for_session_auth
 def create_token():
     """Create a new API token and return the plain text token."""
     data = request.get_json() or {}
@@ -90,7 +90,7 @@ def create_token():
 
 
 @api_tokens_bp.route("/api-tokens/<int:token_id>", methods=["DELETE"])
-@validate_csrf_json
+@csrf_for_session_auth
 def delete_token(token_id):
     """Hard delete an API token."""
     api_token = ApiToken.query.get_or_404(token_id)

@@ -237,12 +237,12 @@ API blueprints (`admin_api_bp` at `/api/v1/*`, `api_tokens_bp` at `/api-tokens/*
 
 ### Per-Route CSRF Decorators
 
-- **`@validate_csrf_json`**: Validates `X-CSRFToken` header for session-authenticated JSON endpoints. Invalid CSRF returns a controlled JSON 400 response (never propagates exceptions).
-- **`@csrf_for_session_auth`**: Like `@validate_csrf_json` but skips CSRF for valid Bearer-token requests. Used on routes accepting both session and Bearer auth.
+- **`@validate_csrf_json`**: Validates `X-CSRFToken` header for session-authenticated JSON endpoints. Invalid CSRF returns a controlled JSON 400 response (never propagates exceptions). Used on HTML form/HTMX routes.
+- **`@csrf_for_session_auth`**: Like `@validate_csrf_json` but skips CSRF for verified bearer-token requests (uses `g.auth_mode` set by `authenticate_request()`). Returns 401 if auth has not run. Used on all JSON API mutating routes.
 
 ### Bearer-Token CSRF Bypass
 
-Bearer-token API requests do NOT require CSRF. Invalid Bearer tokens return 401 immediately and do NOT fall back to session auth.
+Bearer-token API requests bypass CSRF entirely via `@csrf_for_session_auth`. Invalid Bearer tokens return 401 immediately and do NOT fall back to session auth.
 
 ---
 

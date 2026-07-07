@@ -13,7 +13,7 @@ On successful admin login, ALWAYS call `session.clear()` before setting authenti
 - **Login Lockout TOCTOU Fix:** The login lockout mechanism uses an atomic Lua script (`services/login_lockout.lua`) to prevent TOCTOU (Time-of-check to time-of-use) race conditions when checking and incrementing failed login attempts.
 - **API Token Support:** Admin API supports Bearer token authentication via `routes/admin/api_tokens.py`. Token format: `ak_<prefix>.<secret>`. Full token returned once at creation; only hashed secret stored. Verification in `verify_api_token()` (`routes/admin/__init__.py:16`) checks prefix lookup, `revoked_at`, `expires_at`, then constant-time secret comparison. `services/api_tokens.py` has helper functions.
 - **HMAC Task Signing:** All Celery tasks called externally (beat-scheduled) must verify HMAC signature via `verify_task()`.
-- **CSRF Validation:** `routes/decorators.py:validate_csrf_json` uses `except CSRFError` for proper error handling.
+- **CSRF Validation:** `routes/decorators.py:csrf_for_session_auth` validates CSRF for session-authenticated requests, skips for bearer tokens. Uses `g.auth_mode` set by `authenticate_request()`.
 - **Blueprint-Level Auth Guard:** `api_tokens_bp` uses `before_request` calling `authenticate_request()` as defense-in-depth. All routes in this blueprint require auth. Individual `@require_auth` decorators are retained for defense-in-depth.
 
 ## Admin API

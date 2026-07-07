@@ -38,19 +38,20 @@ Auth is enforced via two mechanisms in `routes/decorators.py`:
 
 ## CSRF Protection Architecture
 
-Two-layer CSRF protection:
+Three-layer CSRF protection with API exemptions:
 
-1. **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions (`form` or `multipart` content types). No decorator needed for form-based routes.
+1. **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions. No decorator needed for form-based routes. API blueprints (`admin_api_bp`, `api_tokens_bp`) are exempted from global CSRF.
 
-2. **`@validate_csrf_json` decorator**: Required for JSON API endpoints that accept session authentication. Validates `X-CSRFToken` header. Respects `WTF_CSRF_ENABLED=False` in TestingConfig.
+2. **`@validate_csrf_json` decorator**: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions).
 
-3. **`@csrf_for_session_auth` decorator**: Like `validate_csrf_json` but skips CSRF for bearer-token authenticated requests (browsers don't auto-attach bearer credentials). Use on routes that accept both session and bearer auth.
+3. **`@csrf_for_session_auth` decorator**: Like `@validate_csrf_json` but skips CSRF for bearer-token requests. Uses `g.auth_mode` (set by `authenticate_request()`) to determine auth mode. If `g.auth_mode` is not set, returns 401.
 
 **Key rules:**
-- All JSON mutating endpoints with `@require_auth` must have `@validate_csrf_json` (or `@csrf_for_session_auth` for mixed auth).
-- HTML form routes are protected by Flask-WTF automatically — no `@validate_csrf_json` needed.
+- All JSON mutating API endpoints use `@csrf_for_session_auth` (bearer bypass + session CSRF).
+- HTML form routes use `@validate_csrf_json` or rely on Flask-WTF's global CSRFProtect.
 - Bearer-token requests bypass CSRF — this is intentional and tested.
 - Templates expose CSRF via `<meta name="csrf-token">` for JS and `csrf_token()` for forms/HTMX.
+- `@require_auth` must run BEFORE `@csrf_for_session_auth` (auth closer to `def` = runs first in Flask's bottom-up application) so `g.auth_mode` is set.
 
 ## Architecture Documentation Review Findings
 

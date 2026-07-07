@@ -8,7 +8,7 @@ from extensions import db
 from models import Article
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
-from routes.decorators import validate_csrf_json
+from routes.decorators import csrf_for_session_auth
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ def get_pipeline_history(article_id: int) -> tuple[Response, int]:
 
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline/replay", methods=["POST"])
-@validate_csrf_json
 @require_auth
+@csrf_for_session_auth
 def replay_article_stage(article_id: int) -> tuple[Response, int]:
     """Replay an article from a specific stage.
 
@@ -107,8 +107,8 @@ def replay_article_stage(article_id: int) -> tuple[Response, int]:
 
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline/restore-version", methods=["POST"])
-@validate_csrf_json
 @require_auth
+@csrf_for_session_auth
 def restore_article_version(article_id: int) -> tuple[Response, int]:
     """Restore an article to a previous version.
 

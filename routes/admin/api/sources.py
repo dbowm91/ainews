@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
-from routes.decorators import commit, validate_csrf_json
+from routes.decorators import commit, csrf_for_session_auth
 from schemas.admin import CreateSourceRequest, UpdateSourceRequest
 from services.audit import log_admin_action
 from services.url import UnsafeURLError
@@ -47,7 +47,7 @@ def list_sources() -> tuple[Response, int]:
 
 @admin_api_bp.route("/sources", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def create_source() -> tuple[Response, int] | Response:
     """Create a new source."""
     from extensions import db
@@ -153,7 +153,7 @@ def get_source(source_id: int) -> tuple[Response, int]:
 
 @admin_api_bp.route("/sources/<int:source_id>", methods=["PUT"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def update_source(source_id: int) -> tuple[Response, int] | Response:
     """Update a source."""
     from extensions import db
@@ -224,7 +224,7 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/sources/<int:source_id>", methods=["PATCH"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
     """Partially update a source."""
     from extensions import db
@@ -313,7 +313,7 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/sources/<int:source_id>", methods=["DELETE"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def delete_source(source_id: int) -> tuple[Response, int] | Response:
     """Delete a source."""
     from extensions import db
@@ -341,7 +341,7 @@ def delete_source(source_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/sources/<int:source_id>/refresh", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def refresh_source(source_id: int) -> tuple[Response, int] | Response:
     """Trigger an immediate crawl of a specific source."""
     from tasks.crawl import crawl_source

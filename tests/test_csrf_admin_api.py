@@ -187,8 +187,9 @@ class TestCsrfBearerBypass:
     Flask-WTF's global CSRFProtect. This means bearer requests bypass the
     global CSRF check and flow through to per-route auth-aware decorators.
 
-    Routes using csrf_for_session_auth skip CSRF entirely for bearer requests.
-    Routes using validate_csrf_json still require CSRF (no bearer bypass).
+    Routes using csrf_for_session_auth skip CSRF entirely for bearer requests
+    (g.auth_mode == "bearer"). Routes using validate_csrf_json still require
+    CSRF (no bearer bypass).
     """
 
     @pytest.fixture
@@ -208,15 +209,15 @@ class TestCsrfBearerBypass:
         assert resp.status_code == 201
         return resp.get_json()["token"]
 
-    def test_bearer_without_csrf_returns_400_at_decorator_level(
+    def test_bearer_without_csrf_succeeds(
         self, csrf_app, csrf_client, api_token
     ):
-        """Bearer without CSRF: passes global CSRF but blocked by validate_csrf_json."""
+        """Bearer without CSRF: passes global CSRF and csrf_for_session_auth skips CSRF."""
         resp = csrf_client.post(
             "/api/v1/config/reload",
             headers={"Authorization": f"Bearer {api_token}"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
 
     def test_session_without_csrf_returns_400(self, csrf_app, csrf_client):
         _setup_csrf_session(csrf_client, "")
@@ -264,16 +265,24 @@ class TestCsrfForSessionAuthDecorator:
 
     Uses minimal Flask apps WITHOUT CSRFProtect initialized, so the
     decorator handles CSRF validation directly and returns JSON responses.
+
+    Sets g.auth_mode via before_request to simulate authenticate_request()
+    behavior (csrf_for_session_auth requires g.auth_mode to be set).
     """
 
     @staticmethod
-    def _make_app(monkeypatch, csrf_enabled: bool):
-        from flask import Flask
+    def _make_app(monkeypatch, csrf_enabled: bool, auth_mode: str | None = None):
+        from flask import Flask, g
 
         app = Flask(__name__)
         app.config["SECRET_KEY"] = "test"
         app.config["WTF_CSRF_ENABLED"] = csrf_enabled
         app.config["TESTING"] = True
+
+        @app.before_request
+        def _set_auth_mode():
+            if auth_mode is not None:
+                g.auth_mode = auth_mode
 
         @app.route("/protected", methods=["POST"])
         @csrf_for_session_auth
@@ -293,13 +302,13 @@ class TestCsrfForSessionAuthDecorator:
         return signed, raw
 
     def test_csrf_disabled_passes_through(self, monkeypatch):
-        app = self._make_app(monkeypatch, csrf_enabled=False)
+        app = self._make_app(monkeypatch, csrf_enabled=False, auth_mode="session")
         client = app.test_client()
         resp = client.post("/protected")
         assert resp.status_code == 200
 
     def test_csrf_enabled_bearer_bypasses(self, monkeypatch):
-        app = self._make_app(monkeypatch, csrf_enabled=True)
+        app = self._make_app(monkeypatch, csrf_enabled=True, auth_mode="bearer")
         client = app.test_client()
         resp = client.post(
             "/protected",
@@ -308,7 +317,7 @@ class TestCsrfForSessionAuthDecorator:
         assert resp.status_code == 200
 
     def test_csrf_enabled_session_no_header_returns_400(self, monkeypatch):
-        app = self._make_app(monkeypatch, csrf_enabled=True)
+        app = self._make_app(monkeypatch, csrf_enabled=True, auth_mode="session")
         client = app.test_client()
         with client.session_transaction() as sess:
             sess["admin"] = True
@@ -318,7 +327,7 @@ class TestCsrfForSessionAuthDecorator:
         assert "CSRF" in data["error"]
 
     def test_csrf_enabled_session_valid_header_passes(self, monkeypatch):
-        app = self._make_app(monkeypatch, csrf_enabled=True)
+        app = self._make_app(monkeypatch, csrf_enabled=True, auth_mode="session")
         client = app.test_client()
         signed, raw = self._generate_token(app)
         with client.session_transaction() as sess:
@@ -331,7 +340,7 @@ class TestCsrfForSessionAuthDecorator:
         assert resp.status_code == 200
 
     def test_csrf_enabled_session_invalid_header_returns_400(self, monkeypatch):
-        app = self._make_app(monkeypatch, csrf_enabled=True)
+        app = self._make_app(monkeypatch, csrf_enabled=True, auth_mode="session")
         client = app.test_client()
         with client.session_transaction() as sess:
             sess["admin"] = True
@@ -343,6 +352,15 @@ class TestCsrfForSessionAuthDecorator:
         assert resp.status_code == 400
         data = resp.get_json()
         assert "CSRF token invalid" in data["error"]
+
+    def test_csrf_enabled_no_auth_mode_returns_401(self, monkeypatch):
+        """Without g.auth_mode set, csrf_for_session_auth returns 401."""
+        app = self._make_app(monkeypatch, csrf_enabled=True, auth_mode=None)
+        client = app.test_client()
+        resp = client.post("/protected")
+        assert resp.status_code == 401
+        data = resp.get_json()
+        assert "Authentication required" in data["error"]
 
 
 # ---------------------------------------------------------------------------

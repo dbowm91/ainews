@@ -642,7 +642,7 @@ Admin endpoints use session-based authentication via `/admin/login` or Bearer to
 
 ### CSRF Policy
 
-API blueprints (`/api/v1/*`, `/api-tokens/*`) are exempted from Flask-WTF's global CSRF. Bearer-token requests bypass CSRF entirely. Session-authenticated unsafe requests (POST/PUT/DELETE) on non-exempted routes require CSRF via `@validate_csrf_json` or `@csrf_for_session_auth`. Invalid Bearer tokens return 401 immediately — no fallback to session auth.
+API blueprints (`/api/v1/*`, `/api-tokens/*`) are exempted from Flask-WTF's global CSRF. Bearer-token requests bypass CSRF entirely via `@csrf_for_session_auth` (which uses `g.auth_mode` from `authenticate_request()`). Session-authenticated unsafe requests (POST/PUT/DELETE) require CSRF via `@csrf_for_session_auth`. HTML form routes use `@validate_csrf_json`. Invalid Bearer tokens return 401 immediately — no fallback to session auth.
 
 ### API Token Authentication
 

@@ -7,7 +7,7 @@ from flask import Response, request
 
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
-from routes.decorators import commit, validate_csrf_json
+from routes.decorators import commit, csrf_for_session_auth
 from services.audit import log_admin_action
 from services.url import UnsafeURLError
 
@@ -90,7 +90,7 @@ def list_webhooks() -> tuple[Response, int]:
 
 @admin_api_bp.route("/webhooks", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def create_webhook() -> tuple[Response, int] | Response:
     """Create a new webhook."""
     from extensions import db
@@ -209,7 +209,7 @@ def get_webhook(webhook_id: int) -> tuple[Response, int]:
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["PUT", "PATCH"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Update a webhook."""
     from extensions import db
@@ -269,7 +269,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>", methods=["DELETE"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Delete a webhook."""
     from extensions import db
@@ -297,7 +297,7 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
 
 @admin_api_bp.route("/webhooks/<int:webhook_id>/test", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def test_webhook(webhook_id: int) -> tuple[Response, int] | Response:
     """Send a test event to a webhook."""
     from extensions import db
@@ -364,7 +364,7 @@ def list_webhook_events(webhook_id: int) -> tuple[Response, int] | str:
 
 @admin_api_bp.route("/webhooks/events/<int:event_id>/resend", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def resend_webhook_event(event_id: int) -> tuple[Response, int] | Response:
     """Resend a webhook event using the stored payload."""
     from extensions import db

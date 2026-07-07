@@ -4,7 +4,7 @@ from flask import Response
 
 from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
-from routes.decorators import validate_csrf_json
+from routes.decorators import csrf_for_session_auth
 from services.audit import log_admin_action
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @admin_api_bp.route("/config/reload", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@csrf_for_session_auth
 def reload_config() -> tuple[Response, int] | Response:
     from celery_support import clear_app_cache
     from services.config_cache import get_config_cache

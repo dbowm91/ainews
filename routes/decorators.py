@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Literal
 
-from flask import Response, jsonify, redirect, request, session, url_for
+from flask import Response, g, jsonify, redirect, request, session, url_for
 from sqlalchemy.exc import SQLAlchemyError
 from wtforms.validators import ValidationError
 
@@ -39,6 +39,7 @@ def authenticate_request():
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
         if verify_api_token(token):
+            g.auth_mode = "bearer"
             request_id = get_request_id()
             logger.info(
                 "Admin API access via token: %s %s",
@@ -82,6 +83,7 @@ def authenticate_request():
             "admin": True,
         },
     )
+    g.auth_mode = "session"
     return None
 
 
@@ -124,8 +126,10 @@ def validate_csrf_json(f):
 def csrf_for_session_auth(f):
     """Decorator to validate CSRF token for session-authenticated requests.
 
-    Skips CSRF validation for bearer-token authenticated requests since
-    browsers do not automatically attach bearer credentials.
+    Skips CSRF validation for verified bearer-token authenticated requests
+    (browsers do not automatically attach bearer credentials). Requires
+    ``g.auth_mode`` to be set by ``authenticate_request()`` — if auth
+    has not run, returns 401.
 
     Respects WTF_CSRF_ENABLED = False in TestingConfig.
     """
@@ -137,10 +141,11 @@ def csrf_for_session_auth(f):
         if not current_app.config.get("WTF_CSRF_ENABLED", True):
             return f(*args, **kwargs)
 
-        # Skip CSRF for bearer-token authenticated requests
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
+        mode = getattr(g, "auth_mode", None)
+        if mode == "bearer":
             return f(*args, **kwargs)
+        if mode != "session":
+            return jsonify({"error": "Authentication required before CSRF validation"}), 401
 
         # Validate CSRF for session-authenticated requests
         token = request.headers.get("X-CSRFToken")

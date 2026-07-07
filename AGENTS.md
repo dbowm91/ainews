@@ -70,6 +70,9 @@ The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlch
 ### Tasks→Services Layer
 Tasks layer IS allowed to import from services layer. This is not a layer violation - tasks are orchestrators that use business logic. The layer restriction is: Adapters cannot import from Services.
 
+### Production Config Validation
+`ProductionConfig.validate()` (config.py:320-336) uses `ConfigValidationResult` to accumulate all validation errors and raise a single `RuntimeError`. Helpers: `_validate_debug()`, `_validate_session_security()`, `_validate_secrets()`, `_validate_llm_providers()`. LLM provider validation is fail-closed — catches `FileNotFoundError` and generic `Exception` as validation issues (not silent warnings). Tests in `tests/test_production_config.py` (40 tests). To add new validation: add a helper function that calls `result.add(field, message, fix_hint)` and call it from `ProductionConfig.validate()`.
+
 ## Architecture Conventions
 
 ### Type Checking Pattern
@@ -381,10 +384,11 @@ The following are documented as intentional and should NOT be "fixed":
 |------|---------|
 | `run.py` | WSGI/ASGI app entry point |
 | `app.py` | Flask app factory |
-| `config.py` | Flask config classes, Celery beat schedule |
+| `config.py` | Flask config classes, Celery beat schedule, ProductionConfig.validate() |
 | `extensions.py` | Flask extensions (db, redis, limiter) |
 | `models/` | SQLAlchemy models package (article, source, newsletter, pipeline, context, etc.) |
 | `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
+| `tests/test_production_config.py` | 40 tests for ProductionConfig validation, fail-closed provider checks |
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
 | `services/url.py` | URL validation (SSRF prevention), DNS cache |

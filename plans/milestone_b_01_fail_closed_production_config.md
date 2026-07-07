@@ -157,3 +157,19 @@ uv run ruff check .
 - Do not weaken the existing strict `SECRET_KEY` policy without an explicit product decision.
 - Keep production validation deterministic. Startup should not depend on transient external network state.
 - Ensure tests isolate env vars and do not depend on the developer's real `.env`.
+
+## Status: COMPLETE
+
+All 6 steps implemented and verified:
+
+1. **ConfigValidationIssue** dataclass introduced with `field`, `message`, `fix_hint`, `severity` fields
+2. **ProductionConfig.validate()** refactored into focused helpers: `_validate_debug()`, `_validate_session_security()`, `_validate_secrets()`, `_validate_llm_providers()`
+3. **Fail-closed provider validation** — `_validate_llm_providers()` catches `FileNotFoundError` and generic `Exception` as validation issues (not silent warnings)
+4. **Actionable error messages** with fix hints (e.g., `python -c 'import secrets; print(secrets.token_hex(32))'`)
+5. **40 tests** in `tests/test_production_config.py` covering all helpers, validation result, and app factory smoke tests
+6. **App factory smoke test** proving `create_app("production")` fails on bad config and succeeds on valid config
+
+### Test Results
+- `tests/test_production_config.py`: 40/40 pass
+- `tests/test_celery_config.py + test_config_cache.py + test_config_unified.py`: 84/84 pass
+- `ruff check`: 0 issues

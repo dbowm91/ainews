@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,69 @@ from services.config_unified import safe_int
 load_dotenv()
 
 BASE_DIR = Path(__file__).parent
+
+
+@dataclass
+class ConfigValidationIssue:
+    """A single configuration validation issue."""
+
+    field: str
+    message: str
+    fix_hint: str = ""
+    severity: str = "error"  # "error" | "warning"
+
+
+@dataclass
+class ConfigValidationResult:
+    """Collects validation issues from production config checks."""
+
+    issues: list[ConfigValidationIssue] = field(default_factory=list)
+
+    def add(
+        self,
+        field: str,
+        message: str,
+        fix_hint: str = "",
+        severity: str = "error",
+    ) -> None:
+        self.issues.append(
+            ConfigValidationIssue(
+                field=field,
+                message=message,
+                fix_hint=fix_hint,
+                severity=severity,
+            )
+        )
+
+    @property
+    def errors(self) -> list[ConfigValidationIssue]:
+        return [i for i in self.issues if i.severity == "error"]
+
+    @property
+    def warnings(self) -> list[ConfigValidationIssue]:
+        return [i for i in self.issues if i.severity == "warning"]
+
+    @property
+    def has_errors(self) -> bool:
+        return bool(self.errors)
+
+    def raise_on_errors(self) -> None:
+        """Raise RuntimeError if any error-severity issues exist.
+
+        Includes all error messages and fix hints in the exception so
+        operators see every problem at once instead of fixing one at a time.
+        """
+        if not self.has_errors:
+            return
+        lines: list[str] = []
+        for issue in self.errors:
+            line = f"  - {issue.field}: {issue.message}"
+            if issue.fix_hint:
+                line += f"\n    Fix: {issue.fix_hint}"
+            lines.append(line)
+        raise RuntimeError(
+            "Production config validation failed:\n" + "\n".join(lines)
+        )
 
 
 def _is_strong_secret_key(key: str) -> bool:
@@ -254,70 +318,181 @@ class ProductionConfig(Config):
     }
 
     @classmethod
-    def validate(cls):
-        if cls.DEBUG:
-            raise RuntimeError("DEBUG must be False in production")
-        if not cls.SECRET_KEY:
-            raise RuntimeError("SECRET_KEY must be set in production")
-        if len(cls.SECRET_KEY) < 32:
-            raise RuntimeError("SECRET_KEY must be at least 32 characters")
-        if not _is_strong_secret_key(cls.SECRET_KEY):
-            raise ValueError("SECRET_KEY must be a 64-character hex string (32 bytes)")
-        if not cls.SESSION_COOKIE_SECURE:
-            raise RuntimeError("SESSION_COOKIE_SECURE must be True in production")
-        if not cls.ADMIN_PASSWORD:
-            raise RuntimeError("ADMIN_PASSWORD must be set in production")
+    def validate(cls) -> ConfigValidationResult:
+        """Validate all production requirements.
+
+        Returns:
+            ConfigValidationResult with collected issues.
+
+        Raises:
+            RuntimeError: If any error-severity issues are found.
+        """
+        result = ConfigValidationResult()
+        _validate_debug(result)
+        _validate_session_security(result)
+        _validate_secrets(result)
+        _validate_llm_providers(result)
+        result.raise_on_errors()
+        return result
+
+
+def _validate_debug(result: ConfigValidationResult) -> None:
+    """Check DEBUG is disabled in production."""
+    if ProductionConfig.DEBUG:
+        result.add(
+            field="DEBUG",
+            message="DEBUG must be False in production",
+            fix_hint="Set DEBUG=False in your environment or remove it entirely",
+        )
+
+
+def _validate_session_security(result: ConfigValidationResult) -> None:
+    """Check session cookie security settings."""
+    if not ProductionConfig.SESSION_COOKIE_SECURE:
+        result.add(
+            field="SESSION_COOKIE_SECURE",
+            message="SESSION_COOKIE_SECURE must be True in production",
+            fix_hint="Set SESSION_COOKIE_SECURE=true in your .env file",
+        )
+
+
+def _validate_secrets(result: ConfigValidationResult) -> None:
+    """Validate SECRET_KEY, ADMIN_PASSWORD, and CELERY_TASK_SECRET."""
+    # SECRET_KEY
+    sk = ProductionConfig.SECRET_KEY
+    if not sk:
+        result.add(
+            field="SECRET_KEY",
+            message="SECRET_KEY must be set in production",
+            fix_hint="Generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+        )
+    elif len(sk) < 32:
+        result.add(
+            field="SECRET_KEY",
+            message=f"SECRET_KEY is {len(sk)} characters; must be at least 32",
+            fix_hint="Generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+        )
+    elif not _is_strong_secret_key(sk):
+        result.add(
+            field="SECRET_KEY",
+            message="SECRET_KEY must be a 64-character hex string (32 bytes)",
+            fix_hint="Generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+        )
+
+    # ADMIN_PASSWORD
+    pw = ProductionConfig.ADMIN_PASSWORD
+    if not pw:
+        result.add(
+            field="ADMIN_PASSWORD",
+            message="ADMIN_PASSWORD must be set in production",
+            fix_hint="Run: python scripts/hash_password.py",
+        )
+    else:
         from services.validation import _is_password_hash
 
-        if not _is_password_hash(cls.ADMIN_PASSWORD):
-            raise RuntimeError(
-                "ADMIN_PASSWORD must be a hashed password. "
-                "Run: python scripts/hash_password.py"
+        if not _is_password_hash(pw):
+            result.add(
+                field="ADMIN_PASSWORD",
+                message="ADMIN_PASSWORD must be a hashed password (scrypt/pbkdf2/argon2)",
+                fix_hint="Run: python scripts/hash_password.py",
             )
-        if not cls.CELERY_TASK_SECRET:
-            raise RuntimeError("CELERY_TASK_SECRET must be set in production")
-        if len(cls.CELERY_TASK_SECRET) < 32:
-            raise RuntimeError("CELERY_TASK_SECRET must be at least 32 characters")
-        _validate_llm_providers()
+
+    # CELERY_TASK_SECRET
+    cs = ProductionConfig.CELERY_TASK_SECRET
+    if not cs:
+        result.add(
+            field="CELERY_TASK_SECRET",
+            message="CELERY_TASK_SECRET must be set in production",
+            fix_hint="Generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+        )
+    elif len(cs) < 32:
+        result.add(
+            field="CELERY_TASK_SECRET",
+            message=f"CELERY_TASK_SECRET is {len(cs)} characters; must be at least 32",
+            fix_hint="Generate with: python -c \"import secrets; print(secrets.token_hex(32))\"",
+        )
 
 
-def _validate_llm_providers():
+def _validate_llm_providers(result: ConfigValidationResult) -> None:
     """Validate LLM provider configuration at startup.
 
-    Raises RuntimeError if enabled providers are missing required config.
+    In production, missing/invalid provider config is an error that prevents
+    startup. All exceptions from provider loading are surfaced as validation
+    issues rather than silently logged warnings.
     """
     import logging
 
     logger = logging.getLogger(__name__)
-    enabled_providers = []
+    enabled_providers: list[str] = []
+
     try:
         from schemas.common import resolve_env_var
-        from schemas.llm import load_providers_config
+        from schemas.llm import ADAPTER_CONFIGS, load_providers_config
 
         config = load_providers_config()
+
         for pdef in config.providers:
             if not pdef.enabled:
                 continue
             enabled_providers.append(pdef.id)
-            # Check for required config based on provider type
             provider_type = pdef.type
+
+            # Check required api_key for cloud providers
             if provider_type in ("openai", "anthropic", "gemini"):
                 api_key = pdef.config.get("api_key", "")
-                if not api_key or api_key.startswith("${") and not resolve_env_var(api_key):
-                    raise RuntimeError(f"Provider '{pdef.id}': missing api_key")
+                missing_key = not api_key or (
+                    api_key.startswith("${") and not resolve_env_var(api_key)
+                )
+                if missing_key:
+                    result.add(
+                        field=f"providers.{pdef.id}.api_key",
+                        message=f"Provider '{pdef.id}' ({provider_type}) is missing api_key",
+                        fix_hint=f"Set {api_key} in your environment or update providers.yaml",
+                    )
+                    continue
+
+            # Check required model for ollama
             if provider_type == "ollama" and not pdef.config.get("model"):
-                raise RuntimeError(f"Provider '{pdef.id}': missing model")
-            # Validate the provider config with Pydantic (includes field validators)
-            from schemas.llm import ADAPTER_CONFIGS
+                result.add(
+                    field=f"providers.{pdef.id}.model",
+                    message=f"Provider '{pdef.id}' (ollama) is missing model",
+                    fix_hint="Set 'model' in providers.yaml for this provider",
+                )
+                continue
+
+            # Validate the provider config with Pydantic schema
             config_cls = ADAPTER_CONFIGS.get(provider_type)
             if config_cls:
-                config_cls(**pdef.config)
-    except (ImportError, RuntimeError, KeyError, ValueError) as e:
-        logger.warning("Could not validate LLM providers: %s", e)
+                try:
+                    config_cls(**pdef.config)
+                except ValueError as e:
+                    result.add(
+                        field=f"providers.{pdef.id}.config",
+                        message=f"Provider '{pdef.id}' config invalid: {e}",
+                        fix_hint="Check providers.yaml and environment variables",
+                    )
+
+    except FileNotFoundError as e:
+        result.add(
+            field="providers.yaml",
+            message=f"LLM providers config file not found: {e}",
+            fix_hint="Create providers.yaml or set LLM_PROVIDERS_FILE env var",
+        )
+    except Exception as e:
+        # Catch-all for unexpected errors during config loading.
+        # Log full traceback for debugging but surface a clean message.
+        logger.exception("Unexpected error loading LLM provider config")
+        result.add(
+            field="providers.yaml",
+            message=f"Failed to load LLM provider config: {e}",
+            fix_hint="Check providers.yaml syntax and environment variables",
+        )
 
     if not enabled_providers:
-        raise RuntimeError(
-            "No LLM providers enabled. Configure at least one in providers.yaml"
+        result.add(
+            field="providers",
+            message="No LLM providers enabled",
+            fix_hint="Enable at least one provider in providers.yaml",
         )
 
 

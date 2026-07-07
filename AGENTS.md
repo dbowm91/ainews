@@ -409,6 +409,12 @@ The following are documented as intentional and should NOT be "fixed":
 
 ## Security Features (Implemented)
 
+### Route Auth Architecture
+- **`authenticate_request()`** in `routes/decorators.py` — standalone helper returning `None` on success or a Flask response tuple on failure. Used by both `require_auth` decorator and blueprint `before_request` hooks.
+- **`require_auth` decorator** — must be placed AFTER `@blueprint.route(...)` (innermost). Wrong order means Flask registers the unwrapped function.
+- **Blueprint-level `before_request`** — defense-in-depth on `api_tokens_bp`. Catches missing per-route decorators.
+- **Route classification test** — `tests/test_admin_route_auth.py:test_all_admin_routes_classified` fails if any `/admin`, `/api/v1`, or `/api-tokens` route is added without auth classification.
+
 ### 2FA System
 - **Backup Codes:** 8 alphanumeric codes stored as JSON in `AdminUser.backup_codes`
 - **TOTP Secrets:** Stored in database (NOT encrypted at rest - potential future enhancement)

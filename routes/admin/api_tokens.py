@@ -4,13 +4,21 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models import ApiToken
-from routes.decorators import require_auth
+from routes.decorators import authenticate_request, require_auth
 
 api_tokens_bp = Blueprint("api_tokens", __name__)
 
 
-@require_auth
+@api_tokens_bp.before_request
+def _require_api_token_auth():
+    """Blueprint-level auth guard — all routes in this blueprint require auth."""
+    auth_result = authenticate_request()
+    if auth_result is not None:
+        return auth_result
+
+
 @api_tokens_bp.route("/api-tokens", methods=["GET"])
+@require_auth
 def list_tokens():
     """List all API tokens (without exposing hashes)."""
     tokens = ApiToken.query.all()
@@ -26,8 +34,8 @@ def list_tokens():
     ])
 
 
-@require_auth
 @api_tokens_bp.route("/api-tokens", methods=["POST"])
+@require_auth
 def create_token():
     """Create a new API token and return the plain text token."""
     data = request.get_json() or {}
@@ -62,8 +70,8 @@ def create_token():
     }), 201
 
 
-@require_auth
 @api_tokens_bp.route("/api-tokens/<int:token_id>", methods=["DELETE"])
+@require_auth
 def delete_token(token_id):
     """Delete an API token."""
     api_token = ApiToken.query.get_or_404(token_id)

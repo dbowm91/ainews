@@ -337,6 +337,13 @@ def logout(): ...
 - Session hijacking protection (IP + User-Agent binding)
 - Login lockout via Redis (with in-memory fallback)
 
+**Auth enforcement architecture (`routes/decorators.py`):**
+- `authenticate_request()` — standalone helper returning `None` on success or a Flask response tuple on failure. Used by both the decorator and blueprint `before_request` hooks.
+- `require_auth` decorator — wraps individual route functions. Must be placed AFTER `@blueprint.route(...)` (innermost) so Flask registers the authenticated wrapper.
+- Blueprint-level `before_request` — defense-in-depth guard on blueprints where ALL routes require auth (e.g., `api_tokens_bp`).
+
+**Decorator ordering rule:** `@blueprint.route(...)` must always be outermost (closest to `def`), followed by auth/CSRF decorators. Wrong order means Flask sees the unwrapped function and the endpoint is unprotected.
+
 ### API Endpoints (`admin/api/`)
 
 Note: Endpoints are registered at `/api/v1/` prefix (e.g., `/api/v1/articles`, not `/articles`).

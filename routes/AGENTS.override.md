@@ -24,6 +24,18 @@ The logout endpoint at `/admin/logout` requires POST method only. This is intent
 
 The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
 
+## Auth Architecture
+
+Auth is enforced via two mechanisms in `routes/decorators.py`:
+
+1. **`require_auth` decorator** — wraps individual route functions. Must be placed AFTER `@blueprint.route(...)` (innermost) so Flask registers the authenticated wrapper. Wrong order (`@require_auth` above `@route`) means Flask sees the unwrapped function and the endpoint is unprotected.
+
+2. **`authenticate_request()` helper** — standalone function that returns `None` on success or a Flask response tuple on failure. Used by both `require_auth` and blueprint `before_request` hooks to avoid duplicating auth logic.
+
+3. **Blueprint-level `before_request`** — defense-in-depth guard on blueprints where ALL routes require auth (e.g., `api_tokens_bp`). Catches missing per-route decorators.
+
+**Decorator ordering rule:** `@blueprint.route(...)` must always be outermost (closest to `def`), followed by auth/CSRF decorators. Flask applies decorators bottom-up — the route decorator registers whatever function it receives.
+
 ## Architecture Documentation Review Findings
 
 When reviewing or updating `architecture/routes.md`:

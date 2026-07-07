@@ -2,8 +2,9 @@
 
 import logging
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import wraps
-from typing import Any
+from typing import Any, Literal
 
 from flask import Response, jsonify, redirect, request, session, url_for
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,6 +12,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from logging_config import get_request_id
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AuthResult:
+    """Result of authentication check."""
+
+    ok: bool
+    mode: Literal["session", "bearer"] | None = None
+    response: Response | tuple[Response, int] | None = None
 
 
 def authenticate_request():
@@ -107,6 +117,40 @@ def validate_csrf_json(f):
         except CSRFError:
             return jsonify({"error": "CSRF token invalid"}), 400
         return f(*args, **kwargs)
+    return decorated
+
+
+def csrf_for_session_auth(f):
+    """Decorator to validate CSRF token for session-authenticated requests.
+
+    Skips CSRF validation for bearer-token authenticated requests since
+    browsers do not automatically attach bearer credentials.
+
+    Respects WTF_CSRF_ENABLED = False in TestingConfig.
+    """
+    from flask import current_app
+    from flask_wtf.csrf import CSRFError, validate_csrf
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_app.config.get("WTF_CSRF_ENABLED", True):
+            return f(*args, **kwargs)
+
+        # Skip CSRF for bearer-token authenticated requests
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return f(*args, **kwargs)
+
+        # Validate CSRF for session-authenticated requests
+        token = request.headers.get("X-CSRFToken")
+        if not token:
+            return jsonify({"error": "CSRF token missing"}), 400
+        try:
+            validate_csrf(token)
+        except CSRFError:
+            return jsonify({"error": "CSRF token invalid"}), 400
+        return f(*args, **kwargs)
+
     return decorated
 
 

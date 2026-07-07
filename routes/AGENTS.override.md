@@ -36,6 +36,22 @@ Auth is enforced via two mechanisms in `routes/decorators.py`:
 
 **Decorator ordering rule:** `@blueprint.route(...)` must always be outermost (closest to `def`), followed by auth/CSRF decorators. Flask applies decorators bottom-up — the route decorator registers whatever function it receives.
 
+## CSRF Protection Architecture
+
+Two-layer CSRF protection:
+
+1. **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions (`form` or `multipart` content types). No decorator needed for form-based routes.
+
+2. **`@validate_csrf_json` decorator**: Required for JSON API endpoints that accept session authentication. Validates `X-CSRFToken` header. Respects `WTF_CSRF_ENABLED=False` in TestingConfig.
+
+3. **`@csrf_for_session_auth` decorator**: Like `validate_csrf_json` but skips CSRF for bearer-token authenticated requests (browsers don't auto-attach bearer credentials). Use on routes that accept both session and bearer auth.
+
+**Key rules:**
+- All JSON mutating endpoints with `@require_auth` must have `@validate_csrf_json` (or `@csrf_for_session_auth` for mixed auth).
+- HTML form routes are protected by Flask-WTF automatically — no `@validate_csrf_json` needed.
+- Bearer-token requests bypass CSRF — this is intentional and tested.
+- Templates expose CSRF via `<meta name="csrf-token">` for JS and `csrf_token()` for forms/HTMX.
+
 ## Architecture Documentation Review Findings
 
 When reviewing or updating `architecture/routes.md`:

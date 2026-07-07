@@ -418,6 +418,14 @@ The following are documented as intentional and should NOT be "fixed":
 - **Blueprint-level `before_request`** — defense-in-depth on `api_tokens_bp`. Catches missing per-route decorators.
 - **Route classification test** — `tests/test_admin_route_auth.py:test_all_admin_routes_classified` fails if any `/admin`, `/api/v1`, or `/api-tokens` route is added without auth classification.
 
+### CSRF Protection Architecture
+Two-layer CSRF protection:
+- **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions. No decorator needed for form-based routes.
+- **`@validate_csrf_json`** decorator: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header.
+- **`@csrf_for_session_auth`** decorator: Like `@validate_csrf_json` but skips CSRF for bearer-token requests. Use on routes accepting both session and bearer auth.
+- Templates expose CSRF via `<meta name="csrf-token">` for JS and `csrf_token()` for forms/HTMX.
+- Bearer-token requests bypass CSRF — intentional and tested.
+
 ### 2FA System
 - **Backup Codes:** 8 alphanumeric codes stored as JSON in `AdminUser.backup_codes`
 - **TOTP Secrets:** Stored in database (NOT encrypted at rest - potential future enhancement)

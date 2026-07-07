@@ -16,6 +16,7 @@
   <meta property="twitter:card" content="summary">
   {% endblock %}
   <title>{% block title %}ainews//{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <style>
 {% include "partials/critical_css.html" %}
   </style>

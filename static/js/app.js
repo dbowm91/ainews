@@ -49,7 +49,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     var articleId = details.getAttribute("data-article-id");
     if (articleId) {
-      fetch("/api/track/share-click/" + articleId, { method: "POST" });
+      var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      var csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
+      fetch("/api/track/share-click/" + articleId, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrfToken },
+      });
     }
   });
 

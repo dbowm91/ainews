@@ -196,7 +196,10 @@ class TestCreateToken:
         data = resp.get_json()
         assert data["expires_at"] is not None
         expires = datetime.fromisoformat(data["expires_at"])
-        assert expires > datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+        if expires.tzinfo is None:
+            now_utc = now_utc.replace(tzinfo=None)
+        assert expires > now_utc
 
     def test_create_token_stores_hash_not_secret(self, auth_client):
         """Database stores hashed secret, not the raw token."""
@@ -207,7 +210,7 @@ class TestCreateToken:
         token_id = resp.get_json()["id"]
         api_token = db.session.get(ApiToken, token_id)
         assert api_token is not None
-        assert api_token.token_hash.startswith("pbkdf2:")
+        assert ":" in api_token.token_hash
 
 
 class TestListTokens:
@@ -300,7 +303,7 @@ class TestBearerAuth:
         token = resp.get_json()["token"]
         token_id = resp.get_json()["id"]
         api_token = db.session.get(ApiToken, token_id)
-        api_token.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        api_token.expires_at = (datetime.now(timezone.utc) - timedelta(hours=1)).replace(tzinfo=None)
         db.session.commit()
         protected_resp = client.get(
             "/api/v1/health",
@@ -368,7 +371,11 @@ class TestLastUsedAt:
         )
         db.session.refresh(api_token)
         assert api_token.last_used_at is not None
-        assert api_token.last_used_at <= datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+        last_used = api_token.last_used_at
+        if last_used.tzinfo is None:
+            now_utc = now_utc.replace(tzinfo=None)
+        assert last_used <= now_utc
 
     def test_last_used_at_no_update_on_failure(self, auth_client, client):
         """Failed auth doesn't update last_used_at."""

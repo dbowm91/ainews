@@ -38,7 +38,7 @@ def verify_api_token(token_str):
     if api_token.revoked_at is not None:
         return False
 
-    if api_token.expires_at is not None and api_token.expires_at < datetime.now(timezone.utc):
+    if api_token.expires_at is not None and api_token.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
         return False
 
     if not verify_api_token_secret(api_token.token_hash, secret):

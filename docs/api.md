@@ -638,7 +638,16 @@ Articles can be searched via the admin interface with URL search, source filteri
 
 ## Authentication
 
-Admin endpoints use session-based authentication via `/admin/login`.
+Admin endpoints use session-based authentication via `/admin/login` or Bearer token authentication via API tokens.
+
+### API Token Authentication
+
+API tokens use the format `ak_<prefix>.<secret>`. Pass via `Authorization: Bearer ak_<prefix>.<secret>` header.
+
+- Tokens are returned once at creation time and never stored in plaintext
+- Only the hashed secret is persisted in the database
+- Tokens can have optional expiration and can be revoked
+- Existing tokens from before the API token redesign are invalid — regeneration required
 
 Rate limiting on admin login prevents brute-force attacks. After 5 failed attempts within 15 minutes, the IP is locked out for 15 minutes.
 

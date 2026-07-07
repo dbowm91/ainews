@@ -11,7 +11,7 @@ On successful admin login, ALWAYS call `session.clear()` before setting authenti
 ## Admin Security
 
 - **Login Lockout TOCTOU Fix:** The login lockout mechanism uses an atomic Lua script (`services/login_lockout.lua`) to prevent TOCTOU (Time-of-check to time-of-use) race conditions when checking and incrementing failed login attempts.
-- **API Token Support:** Admin API supports Bearer token authentication via `routes/admin/api_tokens.py`. ApiToken model in `models.py` with token_hash, name, created_at, last_used_at, expires_at fields.
+- **API Token Support:** Admin API supports Bearer token authentication via `routes/admin/api_tokens.py`. Token format: `ak_<prefix>.<secret>`. Full token returned once at creation; only hashed secret stored. Verification in `verify_api_token()` (`routes/admin/__init__.py:16`) checks prefix lookup, `revoked_at`, `expires_at`, then constant-time secret comparison. `services/api_tokens.py` has helper functions.
 - **HMAC Task Signing:** All Celery tasks called externally (beat-scheduled) must verify HMAC signature via `verify_task()`.
 - **CSRF Validation:** `routes/decorators.py:validate_csrf_json` uses `except CSRFError` for proper error handling.
 - **Blueprint-Level Auth Guard:** `api_tokens_bp` uses `before_request` calling `authenticate_request()` as defense-in-depth. All routes in this blueprint require auth. Individual `@require_auth` decorators are retained for defense-in-depth.
@@ -29,7 +29,7 @@ On successful admin login, ALWAYS call `session.clear()` before setting authenti
 The logout endpoint at `/admin/logout` requires POST method only (not GET). This is intentional CSRF protection. Document in user-facing admin documentation.
 
 ## api_tokens Blueprint IS Registered
-The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
+The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect. Token creation returns the full `ak_<prefix>.<secret>` token once; it is never retrievable afterward.
 
 ## API Endpoint Registration Notes
 

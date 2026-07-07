@@ -303,9 +303,11 @@ JSON REST API at `/api/v1/*`:
 ### API Tokens (`api_tokens_bp`)
 
 Note: This blueprint is registered in `app.py` and provides `/api-tokens` endpoints (not `/api/v1`):
-- `GET /api-tokens` - List API tokens
-- `POST /api-tokens` - Create API token
-- `DELETE /api-tokens/<id>` - Revoke API token
+- `GET /api-tokens` - List non-revoked API tokens
+- `POST /api-tokens` - Create API token (returns full token once, accepts optional `name` and `expires_in`)
+- `DELETE /api-tokens/<id>` - Delete API token (hard delete)
+
+Token format: `ak_<prefix>.<secret>`. Only the hashed secret is stored. Tokens are returned once at creation and cannot be retrieved again.
 
 **Note:** `/share/<platform>/<article_id>` is not implemented as a server endpoint. Social sharing is handled client-side via JavaScript.
 
@@ -412,12 +414,14 @@ if session['ip'] != request.ip or session['user_agent'] != request.user_agent:
 
 ### API Token Authentication
 
-Admin API supports token auth:
+Admin API supports Bearer token auth:
 
 ```python
-# Header: Authorization: Bearer <token>
-# Token stored as: prefix + hash (never plaintext)
-# Prefix is first 16 characters of the hash for lookup
+# Header: Authorization: Bearer ak_<prefix>.<secret>
+# Token format: ak_<prefix>.<secret>
+# Only hashed secret stored — raw token returned once at creation
+# Prefix (first 12 chars of secret) used for DB lookup
+# Expiration and revocation enforced during verification
 ```
 
 ### CSRF Protection

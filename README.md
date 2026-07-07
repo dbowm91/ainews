@@ -63,7 +63,7 @@ Nginx → Granian (ASGI) → Flask
 - **Webhook Events** — article.published, article.failed, newsletter.sent, newsletter.failed with HMAC signatures and retry
 - **Hybrid Search** — SQLite FTS5 + vector similarity (sentence transformers) for article search
 - **Metrics, Health & Cost** — Prometheus metrics, public/admin health checks, per-article cost tracking
-- **Admin API & 2FA** — API tokens with expiry, TOTP 2FA with backup codes
+- **Admin API & 2FA** — API tokens (`ak_<prefix>.<secret>`) with expiry and revocation, TOTP 2FA with backup codes
 - **Newsletter Generation** — Daily newsletters with per-subscriber topic filtering and delivery tracking
 - **RSS Output** — Published feed at `/feed` for downstream consumption
 

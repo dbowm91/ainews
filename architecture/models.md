@@ -459,20 +459,23 @@ class AdminUser(Base):
 
 ## ApiToken Model
 
-API authentication tokens with hashing and expiration:
+API authentication tokens with hashing, expiration, and revocation:
 
 ```python
 class ApiToken(db.Model):
     __tablename__ = "api_tokens"
 
     id = Column(Integer, primary_key=True)
-    token_hash = Column(String(64), unique=True, nullable=False)    # SHA-256 hash of raw token
-    token_prefix = Column(String(16), nullable=False, index=True)   # First 16 chars for identification
+    token_hash = Column(String(255), unique=True, nullable=False)   # Werkzeug password hash of secret
+    token_prefix = Column(String(16), nullable=False, index=True)   # First 12 chars of secret for lookup
     name = Column(String(128))                                      # Human-readable label
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     last_used_at = Column(DateTime)                                 # Last successful auth
     expires_at = Column(DateTime)                                   # Optional expiration
+    revoked_at = Column(DateTime, nullable=True, default=None)      # Soft revocation timestamp
 ```
+
+Token format: `ak_<prefix>.<secret>`. Full token returned once at creation; only hashed secret stored. Verification uses prefix lookup, then constant-time secret comparison.
 
 ## AuditLog Model
 

@@ -182,7 +182,9 @@ The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're a
 
 ### api_tokens Blueprint IS Registered
 The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
-`run_subagent_with_tools()` in `services/subagent/runner.py` makes a single `chat_with_tools()` call. Tool results ARE re-injected into messages for subsequent LLM calls within the `max_iterations` loop (`services/llm/base.py:475`). This creates a multi-turn conversation pattern where the LLM can call tools, see results, and call more tools.
+
+### API Token Lifecycle
+API tokens use the format `ak_<prefix>.<secret>`. The full token is returned once at creation time and never stored. Only the hashed secret (via werkzeug password hashing) is persisted in `ApiToken.token_hash`. Verification in `verify_api_token()` (`routes/admin/__init__.py:16`) parses the token, looks up by prefix, checks `revoked_at` and `expires_at`, then verifies the secret against the stored hash. Expired and revoked tokens are rejected. `services/api_tokens.py` contains `generate_api_token()`, `hash_api_token_secret()`, `verify_api_token_secret()`, and `parse_api_token()`. Existing tokens from before the redesign are invalid — regeneration is required.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -394,6 +396,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `services/pipeline_monitor.py` | Redis minute-bucket stage metrics |
 | `services/health.py` | Health check with degradation |
 | `services/logging_utils.py` | PipelineLogger, `log_pipeline_event()`, `log_article_event()` |
+| `services/api_tokens.py` | `generate_api_token()`, `hash_api_token_secret()`, `verify_api_token_secret()`, `parse_api_token()` |
 | `services/article_validation.py` | `ValidationError(ValueError)`, `validate_final_article()` |
 | `routes/admin/__init__.py` | Admin blueprint, login lockout |
 | `routes/admin/api/` | Admin API endpoints (health, config, pipeline, articles, webhooks, search) |

@@ -29,7 +29,7 @@ This document describes all 19 models (plus 1 association table) defined in `mod
 | `WebhookEvent` | `webhook_events` | Webhook delivery attempts with status and idempotency |
 | `AuditLog` | `audit_logs` | Admin action audit trail with category and target tracking |
 | `SearchQuery` | `search_queries` | Search query logging with click tracking |
-| `ApiToken` | `api_tokens` | API authentication tokens with prefix and expiry |
+| `ApiToken` | `api_tokens` | API tokens with hashed secret, prefix, expiry, and revocation |
 | `AdminUser` | `admin_users` | Admin users with TOTP 2FA support |
 
 ## Model Details
@@ -406,12 +406,13 @@ This document describes all 19 models (plus 1 association table) defined in `mod
 | Field | Type | Attributes |
 |-------|------|------------|
 | `id` | Integer | Primary key |
-| `token_hash` | String(64) | Unique, not null |
-| `token_prefix` | String(16) | Not null, indexed |
+| `token_hash` | String(255) | Unique, not null (werkzeug password hash) |
+| `token_prefix` | String(16) | Not null, indexed (first 12 chars of secret for lookup) |
 | `name` | String(128) | |
 | `created_at` | DateTime | Default: UTC now |
-| `last_used_at` | DateTime | |
-| `expires_at` | DateTime | |
+| `last_used_at` | DateTime | Updated on successful verification |
+| `expires_at` | DateTime | Optional expiration |
+| `revoked_at` | DateTime | Nullable, soft revocation timestamp |
 
 ---
 

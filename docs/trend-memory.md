@@ -62,7 +62,7 @@ All application models are defined in `models.py` (not a `models/` directory). T
 | WebhookEvent | Delivery logs for webhook events, including status codes and error messages |
 | AuditLog | Admin action audit trail with action, category, target, and user details |
 | SearchQuery | Search query logs with result counts and clicked article tracking |
-| ApiToken | API tokens for programmatic access, with hash, prefix, and expiration |
+| ApiToken | API tokens for programmatic access, with hashed secret, prefix, expiration, and revocation |
 | AdminUser | Admin users with password hash, 2FA secret, and session management |
 
 ### Pydantic Models

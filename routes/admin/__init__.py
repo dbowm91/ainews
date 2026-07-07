@@ -14,44 +14,42 @@ admin_api_bp = Blueprint("admin_api", __name__, url_prefix="/api/v1")
 
 
 def verify_api_token(token_str):
-    """Verify an API token and return True if valid."""
-    from werkzeug.security import check_password_hash
+    """Verify an API token and return True if valid.
+
+    Uses constant-time comparison via services.api_tokens. Does not leak
+    whether the prefix exists — returns False on any failure.
+    """
+    from datetime import datetime, timezone
+
+    from extensions import db
     from models import ApiToken
+    from services.api_tokens import parse_api_token, verify_api_token_secret
 
-    # Token format: plain_token.hash
-    if "." not in token_str:
+    parsed = parse_api_token(token_str)
+    if parsed is None:
         return False
 
-    parts = token_str.split(".", 1)
-    if len(parts) != 2:
+    prefix, secret = parsed
+
+    api_token = ApiToken.query.filter(ApiToken.token_prefix == prefix).first()
+    if api_token is None:
         return False
 
-    provided_hash = parts[1]
-    prefix = provided_hash[:16]
+    if api_token.revoked_at is not None:
+        return False
 
-    # Find tokens by prefix, then verify full hash
-    tokens = ApiToken.query.filter(ApiToken.token_prefix == prefix).all()
-    for api_token in tokens:
-        if check_password_hash(api_token.token_hash, provided_hash):
-            # Update last_used_at
-            from datetime import datetime, timezone
-            from extensions import db
-            api_token.last_used_at = datetime.now(timezone.utc)
-            db.session.commit()
-            return True
-    return False
+    if api_token.expires_at is not None and api_token.expires_at < datetime.now(timezone.utc):
+        return False
+
+    if not verify_api_token_secret(api_token.token_hash, secret):
+        return False
+
+    api_token.last_used_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return True
 
 
 from routes.decorators import require_auth  # noqa: F401, E402
-
-# Import all sub-modules to register routes with the blueprint
-# These must come after Blueprint creation to avoid circular imports
-from routes.admin import (  # noqa: E402
-    api as api,
-)
-from routes.admin import (  # noqa: E402
-    api_tokens as api_tokens,
-)
 
 # Login attempt lockout
 _LOGIN_MAX_ATTEMPTS = 5

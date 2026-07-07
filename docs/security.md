@@ -122,6 +122,35 @@ is_locked = _is_locked_out(ip_address)
 
 ---
 
+## API Token Security
+
+### Token Format
+
+API tokens use the format `ak_<prefix>.<secret>`:
+- `prefix`: First 12 characters of the random secret, used for database lookup (non-secret)
+- `secret`: Random URL-safe string (32 bytes) used for authentication
+
+### Token Lifecycle
+
+1. **Creation:** Token is generated, only the hashed secret (via werkzeug password hashing) is stored in `ApiToken.token_hash`. The full token is returned once in the creation response and never stored.
+2. **Verification:** Bearer token is parsed, looked up by prefix, checked for revocation and expiration, then the secret is verified against the stored hash using constant-time comparison.
+3. **Revocation:** Tokens can be soft-revoked (sets `revoked_at` timestamp) or hard-deleted. Revoked tokens are rejected during verification.
+4. **Expiration:** Optional `expires_at` timestamp enforced during verification. Expired tokens are rejected.
+
+### Storage Guarantees
+
+- **Never stored:** Raw token secret material
+- **Stored:** Hashed secret (`token_hash`), lookup prefix (`token_prefix`), metadata
+- **Token returned once:** Full token appears only in the creation response
+
+### Key Implementation Details
+
+- `services/api_tokens.py`: Token generation, hashing, verification, parsing helpers
+- `verify_api_token()` in `routes/admin/__init__.py`: Full verification flow with prefix lookup, expiry/revocation checks, and constant-time secret comparison
+- Tokens from before the API token redesign are invalid — regeneration required
+
+---
+
 ## Session Security
 
 ### Cookie Configuration

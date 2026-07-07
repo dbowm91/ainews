@@ -58,8 +58,23 @@ def resolve_env_var(val: str, required: bool = False) -> str:
 
 
 def resolve_env_vars(config: dict) -> dict:
-    """Resolve ${ENV_VAR} placeholders in a config dict."""
-    return {key: resolve_env_var(val) for key, val in config.items()}
+    """Resolve ${ENV_VAR} placeholders in a config dict, including nested dicts and lists."""
+    resolved: dict = {}
+    for key, val in config.items():
+        if isinstance(val, dict):
+            resolved[key] = resolve_env_vars(val)
+        elif isinstance(val, list):
+            resolved[key] = [
+                resolve_env_vars(item) if isinstance(item, dict)
+                else resolve_env_var(item) if isinstance(item, str)
+                else item
+                for item in val
+            ]
+        elif isinstance(val, str):
+            resolved[key] = resolve_env_var(val)
+        else:
+            resolved[key] = val
+    return resolved
 
 
 def load_yaml_file(path: str | Path) -> dict[str, Any]:

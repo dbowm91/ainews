@@ -259,6 +259,13 @@ default_provider: ollama-local
 
 Any `openai`-type provider is handled by the OpenAI-compatible adapter and works with MiniMax, DeepSeek, Zai (BigModel.cn), Groq, TogetherAI, and similar providers.
 
+**Production validation:** In production (`FLASK_CONFIG=production`), provider config is validated at startup:
+- Unknown provider types are rejected (must be `ollama`, `openai`, or `anthropic`)
+- Enabled cloud providers (`openai`, `anthropic`) must have valid `api_key` (non-empty, resolved from env vars)
+- `default_provider` must point to an existing, enabled provider
+- Disabled providers with malformed config are silently skipped
+- Validation errors raise `RuntimeError` and prevent startup (fail-closed)
+
 ### `subagent:` — Subagent Configuration
 
 Subagents are lightweight AI tasks that run within pipeline stages. Configuration lives under `subagent:` in `pipeline.yaml`:

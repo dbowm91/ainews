@@ -37,6 +37,17 @@ docker compose ps
 curl http://localhost:5000/health
 ```
 
+### Production Config Validation
+
+In production mode (`FLASK_CONFIG=production`), `ProductionConfig.validate()` runs at startup and **prevents the app from starting** if any check fails:
+
+- **LLM Providers:** Enabled providers must have valid config (non-empty model, valid credentials). `default_provider` must exist and be enabled. Unknown provider types are rejected.
+- **Debug mode:** Must be disabled
+- **Session security:** SECRET_KEY must not be the default dev value
+- **Required secrets:** SECRET_KEY, ADMIN_PASSWORD must be set
+
+Fix the reported issue and restart. See [docs/configuration.md](docs/configuration.md) for provider config reference.
+
 ### Docker Services
 
 | Service | Description |

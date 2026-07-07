@@ -299,7 +299,7 @@ class TestValidateLLMProviders:
             r = ConfigValidationResult()
             _validate_llm_providers(r)
             assert r.has_errors
-            assert any("api_key" in i.field for i in r.errors)
+            assert any("openai" in i.field and "config" in i.field for i in r.errors)
 
     def test_ollama_missing_model_fails(self, monkeypatch):
         cfg = _make_provider_config(
@@ -348,6 +348,105 @@ class TestValidateLLMProviders:
         _validate_llm_providers(r)
         assert r.has_errors
         assert any("Failed to load" in i.message for i in r.errors)
+
+    def test_valid_ollama_provider_passes(self, monkeypatch):
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b", "host": "http://localhost:11434"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert not r.has_errors
+
+    def test_unknown_provider_type_fails(self, monkeypatch):
+        cfg = _make_provider_config(
+            [{"id": "bad-provider", "type": "nonexistent", "enabled": True, "config": {}}],
+            default_provider="bad-provider",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            assert any("unknown type" in i.message.lower() for i in r.errors)
+
+    def test_invalid_config_shape_fails(self, monkeypatch):
+        # ollama requires 'model' but we provide an invalid value
+        cfg = _make_provider_config(
+            [{"id": "bad-ollama", "type": "ollama", "enabled": True, "config": {"model": ""}}],
+            default_provider="bad-ollama",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            assert any("config" in i.field for i in r.errors)
+
+    def test_default_provider_nonexistent_fails(self, monkeypatch):
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b"}}],
+            default_provider="nonexistent-provider",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            assert any("default_provider" in i.field for i in r.errors)
+            assert any("does not exist" in i.message for i in r.errors)
+
+    def test_default_provider_disabled_fails(self, monkeypatch):
+        cfg = _make_provider_config(
+            [
+                {"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b"}},
+                {"id": "openai", "type": "openai", "enabled": False, "config": {"api_key": "sk-test", "model": "gpt-4o"}},
+            ],
+            default_provider="openai",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            assert any("default_provider" in i.field for i in r.errors)
+            assert any("disabled" in i.message for i in r.errors)
+
+    def test_default_provider_missing_when_no_providers_fails(self, monkeypatch):
+        cfg = _make_provider_config([], default_provider="missing")
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            # Should have both "No LLM providers" and "default_provider" errors
+            assert any("No LLM providers" in i.message for i in r.errors)
+            assert any("default_provider" in i.field for i in r.errors)
+
+    def test_multi_provider_one_invalid_fails(self, monkeypatch):
+        cfg = _make_provider_config(
+            [
+                {"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b"}},
+                {"id": "bad-anthropic", "type": "anthropic", "enabled": True, "config": {"model": "claude-sonnet"}},
+            ],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            # Bad anthropic should fail (missing api_key), ollama should pass
+            assert any("bad-anthropic" in i.field for i in r.errors)
+            # ollama should NOT be in errors
+            assert not any("ollama-local" in i.field for i in r.errors)
+
+    def test_disabled_provider_missing_key_passes(self, monkeypatch):
+        cfg = _make_provider_config(
+            [{"id": "openai", "type": "openai", "enabled": False, "config": {"api_key": "", "model": "gpt-4o"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            # No enabled providers -> "No LLM providers" error, but openai should not be flagged
+            assert r.has_errors
+            assert not any("openai" in i.field for i in r.errors)
 
 
 # ---------------------------------------------------------------------------

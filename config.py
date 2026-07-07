@@ -413,23 +413,178 @@ def _validate_secrets(result: ConfigValidationResult) -> None:
         )
 
 
+def _validate_provider_type(
+    result: ConfigValidationResult,
+    pdef: object,
+    provider_type: str,
+    adapter_configs: dict,
+) -> bool:
+    """Check provider type is known. Returns True if valid."""
+    if provider_type in adapter_configs:
+        return True
+    known_types = ", ".join(sorted(adapter_configs.keys()))
+    result.add(
+        field=f"providers.{pdef.id}.type",
+        message=(
+            f"Provider '{pdef.id}' has unknown type '{provider_type}'. "
+            f"Known types: {known_types}"
+        ),
+        fix_hint=(
+            f"Set type to one of: {known_types}. "
+            "Use 'openai' for OpenAI-compatible providers"
+        ),
+    )
+    return False
+
+
+def _validate_provider_config(
+    result: ConfigValidationResult,
+    pdef: object,
+    provider_type: str,
+    adapter_configs: dict,
+) -> bool:
+    """Validate provider config with Pydantic schema. Returns True if valid."""
+    config_cls = adapter_configs[provider_type]
+    try:
+        config_cls(**pdef.config)
+    except ValueError as e:
+        error_str = str(e)
+        if "api_key" in error_str and "required" in error_str.lower():
+            result.add(
+                field=f"providers.{pdef.id}.config.api_key",
+                message=(
+                    f"Provider '{pdef.id}' ({provider_type}) is missing "
+                    "required field 'api_key'"
+                ),
+                fix_hint=(
+                    f"Set api_key in providers.yaml or via env var "
+                    f"(e.g., ${{UPPERCASE_PROVIDER_ID}}_API_KEY)"
+                ),
+            )
+        elif "model" in error_str and "required" in error_str.lower():
+            result.add(
+                field=f"providers.{pdef.id}.config.model",
+                message=(
+                    f"Provider '{pdef.id}' ({provider_type}) is missing "
+                    "required field 'model'"
+                ),
+                fix_hint="Set 'model' in providers.yaml for this provider",
+            )
+        else:
+            result.add(
+                field=f"providers.{pdef.id}.config",
+                message=(
+                    f"Provider '{pdef.id}' ({provider_type}) config "
+                    f"validation failed: {error_str}"
+                ),
+                fix_hint="Check providers.yaml and environment variables",
+            )
+        return False
+    return True
+
+
+def _validate_cloud_api_key(
+    result: ConfigValidationResult,
+    pdef: object,
+    provider_type: str,
+) -> None:
+    """Check cloud provider api_key env var is set."""
+    from schemas.common import resolve_env_var
+
+    api_key = pdef.config.get("api_key", "")
+    if api_key.startswith("${"):
+        resolved_key = resolve_env_var(api_key)
+        if not resolved_key:
+            result.add(
+                field=f"providers.{pdef.id}.config.api_key",
+                message=(
+                    f"Provider '{pdef.id}' ({provider_type}) api_key "
+                    f"env var {api_key} is not set"
+                ),
+                fix_hint=(
+                    f"Set {api_key} in your environment or update "
+                    "providers.yaml"
+                ),
+            )
+
+
+def _validate_default_provider(
+    result: ConfigValidationResult,
+    config: object,
+    all_provider_ids: list[str],
+    provider_by_id: dict[str, object],
+    enabled_providers: list[str],
+) -> None:
+    """Validate default_provider exists, is enabled, and is valid."""
+    if not config or not config.default_provider:
+        if not enabled_providers:
+            return  # Already reported "no providers enabled"
+        result.add(
+            field="default_provider",
+            message="default_provider is not set",
+            fix_hint="Set default_provider in providers.yaml",
+        )
+        return
+
+    dp = config.default_provider
+    if dp not in all_provider_ids:
+        result.add(
+            field="default_provider",
+            message=(
+                f"default_provider '{dp}' does not exist in providers list. "
+                f"Available: {', '.join(all_provider_ids) or '(none)'}"
+            ),
+            fix_hint=(
+                f"Set default_provider to one of: "
+                f"{', '.join(all_provider_ids) or '(none)'}"
+            ),
+        )
+    else:
+        dp_def = provider_by_id[dp]
+        if not getattr(dp_def, "enabled", False):
+            result.add(
+                field="default_provider",
+                message=(
+                    f"default_provider '{dp}' exists but is disabled. "
+                    "A pipeline cannot use a disabled provider as default"
+                ),
+                fix_hint=(
+                    f"Enable '{dp}' in providers.yaml or set "
+                    "default_provider to an enabled provider"
+                ),
+            )
+
+
 def _validate_llm_providers(result: ConfigValidationResult) -> None:
     """Validate LLM provider configuration at startup.
 
     In production, missing/invalid provider config is an error that prevents
     startup. All exceptions from provider loading are surfaced as validation
     issues rather than silently logged warnings.
+
+    Validates:
+    - Provider type is known (in ADAPTER_CONFIGS)
+    - Enabled providers have valid config for their type
+    - Cloud providers have api_key set
+    - Ollama providers have model set
+    - default_provider is set, exists in providers, is enabled, and passes validation
     """
     import logging
 
     logger = logging.getLogger(__name__)
     enabled_providers: list[str] = []
+    all_provider_ids: list[str] = []
+    provider_by_id: dict[str, object] = {}
+    config = None
 
     try:
-        from schemas.common import resolve_env_var
         from schemas.llm import ADAPTER_CONFIGS, load_providers_config
 
         config = load_providers_config()
+
+        for pdef in config.providers:
+            all_provider_ids.append(pdef.id)
+            provider_by_id[pdef.id] = pdef
 
         for pdef in config.providers:
             if not pdef.enabled:
@@ -437,40 +592,14 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
             enabled_providers.append(pdef.id)
             provider_type = pdef.type
 
-            # Check required api_key for cloud providers
-            if provider_type in ("openai", "anthropic", "gemini"):
-                api_key = pdef.config.get("api_key", "")
-                missing_key = not api_key or (
-                    api_key.startswith("${") and not resolve_env_var(api_key)
-                )
-                if missing_key:
-                    result.add(
-                        field=f"providers.{pdef.id}.api_key",
-                        message=f"Provider '{pdef.id}' ({provider_type}) is missing api_key",
-                        fix_hint=f"Set {api_key} in your environment or update providers.yaml",
-                    )
-                    continue
-
-            # Check required model for ollama
-            if provider_type == "ollama" and not pdef.config.get("model"):
-                result.add(
-                    field=f"providers.{pdef.id}.model",
-                    message=f"Provider '{pdef.id}' (ollama) is missing model",
-                    fix_hint="Set 'model' in providers.yaml for this provider",
-                )
+            if not _validate_provider_type(result, pdef, provider_type, ADAPTER_CONFIGS):
                 continue
 
-            # Validate the provider config with Pydantic schema
-            config_cls = ADAPTER_CONFIGS.get(provider_type)
-            if config_cls:
-                try:
-                    config_cls(**pdef.config)
-                except ValueError as e:
-                    result.add(
-                        field=f"providers.{pdef.id}.config",
-                        message=f"Provider '{pdef.id}' config invalid: {e}",
-                        fix_hint="Check providers.yaml and environment variables",
-                    )
+            if not _validate_provider_config(result, pdef, provider_type, ADAPTER_CONFIGS):
+                continue
+
+            if provider_type in ("openai", "anthropic", "gemini"):
+                _validate_cloud_api_key(result, pdef, provider_type)
 
     except FileNotFoundError as e:
         result.add(
@@ -479,8 +608,6 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
             fix_hint="Create providers.yaml or set LLM_PROVIDERS_FILE env var",
         )
     except Exception as e:
-        # Catch-all for unexpected errors during config loading.
-        # Log full traceback for debugging but surface a clean message.
         logger.exception("Unexpected error loading LLM provider config")
         result.add(
             field="providers.yaml",
@@ -494,6 +621,8 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
             message="No LLM providers enabled",
             fix_hint="Enable at least one provider in providers.yaml",
         )
+
+    _validate_default_provider(result, config, all_provider_ids, provider_by_id, enabled_providers)
 
 
 config = {

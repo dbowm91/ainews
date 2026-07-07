@@ -1,4 +1,3 @@
-import pytest
 
 from utils.hash import generate_hash, verify_hash
 

@@ -15,8 +15,6 @@ from services.dedup_service import find_dedupe_candidates
 from services.quality_report_service import get_quality_report
 from services.stage_cost import estimate_stage_cost
 
-import services.dedup_service
-import services.quality_report_service
 
 
 # ---------------------------------------------------------------------------

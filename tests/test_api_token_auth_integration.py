@@ -303,3 +303,36 @@ class TestBearerVsSessionAuth:
         token = resp.get_json()["token"]
         r = client.get("/api/v1/health", headers=_get_auth_header(token))
         assert r.status_code == 200
+
+    def test_bearer_get_api_tokens_no_csrf_succeeds(self, auth_client, client):
+        """Bearer auth on GET /api-tokens works without CSRF header."""
+        resp = _create_token_via_api(auth_client, name="no-csrf-get")
+        token = resp.get_json()["token"]
+        r = client.get("/api-tokens", headers=_get_auth_header(token))
+        assert r.status_code == 200
+        assert "error" not in r.get_json()
+
+    def test_bearer_post_api_tokens_without_csrf_succeeds(self, auth_client, client):
+        """Bearer auth on POST /api-tokens without CSRF succeeds (CSRF disabled in testing)."""
+        resp = _create_token_via_api(auth_client, name="no-csrf-post")
+        token = resp.get_json()["token"]
+        r = client.post(
+            "/api-tokens",
+            headers=_get_auth_header(token),
+            json={"name": "new-token"},
+        )
+        assert r.status_code == 201
+        assert "error" not in r.get_json()
+
+    def test_bearer_post_api_tokens_no_session_fallback(self, auth_client, client):
+        """Bearer auth on POST /api-tokens authenticates via token, not session."""
+        resp = _create_token_via_api(auth_client, name="token-only")
+        token = resp.get_json()["token"]
+        with client.session_transaction() as sess:
+            sess.pop("admin", None)
+        r = client.post(
+            "/api-tokens",
+            headers=_get_auth_header(token),
+            json={"name": "session-free"},
+        )
+        assert r.status_code == 201

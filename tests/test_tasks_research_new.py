@@ -1,6 +1,5 @@
 """Tests for tasks/research.py - Research pipeline stage task."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest

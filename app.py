@@ -191,6 +191,13 @@ def _register_blueprints(app):
     from routes.admin.api_tokens import api_tokens_bp
     from routes.public import public_bp
 
+    # Exempt API blueprints from global Flask-WTF CSRF protection.
+    # These blueprints use auth-aware decorators (csrf_for_session_auth,
+    # validate_csrf_json) that handle CSRF policy correctly, including
+    # bypassing CSRF for bearer-token requests.
+    csrf.exempt(admin_api_bp)
+    csrf.exempt(api_tokens_bp)
+
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_api_bp)

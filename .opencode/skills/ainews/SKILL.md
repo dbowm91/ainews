@@ -361,6 +361,8 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 ## Security Notes
 
 - **Route auth architecture:** `authenticate_request()` in `routes/decorators.py` returns `None` on success or a Flask response tuple on failure. Used by both `require_auth` decorator and blueprint `before_request` hooks. `@require_auth` must be placed AFTER `@blueprint.route(...)` (innermost) — wrong order means Flask registers the unwrapped function. Blueprint-level `before_request` on `api_tokens_bp` provides defense-in-depth. Route classification test in `tests/test_admin_route_auth.py` fails if any admin route is added without auth classification.
+- **CSRF policy:** API blueprints (`admin_api_bp`, `api_tokens_bp`) are exempted from Flask-WTF's global CSRF. Bearer-token requests bypass CSRF entirely. `@csrf_for_session_auth` skips CSRF for valid Bearer tokens. Invalid Bearer tokens return 401 immediately (no session fallback). Invalid CSRF returns controlled JSON 400 (never propagates exceptions). `api_tokens_bp` uses blueprint-level `before_request` auth only — no duplicate `@require_auth` on individual routes.
+- **API token prefix collisions:** Verification iterates all candidates matching the prefix, so collisions cannot cause valid-token auth failure. Token creation retries on collision.
 - **XSS**: LLM-generated content in templates must use `|e` filter
 - **Prompt injection**: Prompt data auto-escaped via `_escape_prompt_data()`
 - **SSRF**: All URLs validated via `validate_url_safe()` before fetching

@@ -14,7 +14,6 @@ import hashlib
 import os
 
 from flask import jsonify
-from wtforms.validators import ValidationError
 
 from routes.decorators import csrf_for_session_auth, validate_csrf_json
 
@@ -145,8 +144,9 @@ class TestCsrfSkippedInTestingConfig:
 class TestCsrfEnforcedWithConfig:
     """Verify CSRF is enforced when WTF_CSRF_ENABLED=True.
 
-    Flask-WTF's CSRFProtect intercepts mutating requests and validates
-    the X-CSRFToken header (via WTF_CSRF_HEADERS config).
+    For non-exempted routes, Flask-WTF's CSRFProtect intercepts mutating
+    requests and validates the X-CSRFToken header. API blueprints are
+    exempted from global CSRF and use per-route decorators instead.
     """
 
     def test_config_is_true(self, csrf_app):
@@ -181,13 +181,14 @@ class TestCsrfEnforcedWithConfig:
 
 
 class TestCsrfBearerBypass:
-    """Verify bearer-token requests bypass CSRF for the custom decorators.
+    """Verify bearer-token requests bypass global CSRF for API blueprints.
 
-    Flask-WTF's global CSRFProtect does NOT exempt bearer requests — it
-    checks the X-CSRFToken header regardless of auth method. Bearer bypass
-    is handled by the csrf_for_session_auth decorator, which runs AFTER
-    Flask-WTF's global check. These tests document the real behavior:
-    Flask-WTF blocks bearer requests without CSRF at the global level.
+    API blueprints (admin_api_bp, api_tokens_bp) are exempted from
+    Flask-WTF's global CSRFProtect. This means bearer requests bypass the
+    global CSRF check and flow through to per-route auth-aware decorators.
+
+    Routes using csrf_for_session_auth skip CSRF entirely for bearer requests.
+    Routes using validate_csrf_json still require CSRF (no bearer bypass).
     """
 
     @pytest.fixture
@@ -207,9 +208,10 @@ class TestCsrfBearerBypass:
         assert resp.status_code == 201
         return resp.get_json()["token"]
 
-    def test_bearer_without_csrf_returns_400_at_global_level(
+    def test_bearer_without_csrf_returns_400_at_decorator_level(
         self, csrf_app, csrf_client, api_token
     ):
+        """Bearer without CSRF: passes global CSRF but blocked by validate_csrf_json."""
         resp = csrf_client.post(
             "/api/v1/config/reload",
             headers={"Authorization": f"Bearer {api_token}"},
@@ -233,6 +235,24 @@ class TestCsrfBearerBypass:
         )
         assert resp.status_code == 200
 
+    def test_invalid_bearer_does_not_fall_back_to_session(self, csrf_app, csrf_client):
+        """Invalid bearer token returns 401, not a CSRF error or session fallback."""
+        _setup_csrf_session(csrf_client, "")
+        resp = csrf_client.post(
+            "/api/v1/config/reload",
+            headers={"Authorization": "Bearer ak_faketokenfaket.notarealsecret"},
+        )
+        assert resp.status_code == 401
+        data = resp.get_json()
+        assert "CSRF" not in data.get("error", "")
+
+    def test_unauthenticated_returns_401_not_csrf_error(self, csrf_app, csrf_client):
+        """Unauthenticated request returns 401, not a misleading CSRF error."""
+        resp = csrf_client.post("/api/v1/config/reload")
+        assert resp.status_code == 401
+        data = resp.get_json()
+        assert "CSRF" not in data.get("error", "")
+
 
 # ---------------------------------------------------------------------------
 # 4. TestCsrfForSessionAuthDecorator
@@ -244,11 +264,6 @@ class TestCsrfForSessionAuthDecorator:
 
     Uses minimal Flask apps WITHOUT CSRFProtect initialized, so the
     decorator handles CSRF validation directly and returns JSON responses.
-
-    Note: validate_csrf() raises wtforms.validators.ValidationError,
-    NOT flask_wtf.csrf.CSRFError. The decorator catches CSRFError, so
-    invalid tokens propagate as unhandled ValidationError exceptions.
-    This is a bug in the decorator — it should catch ValidationError.
     """
 
     @staticmethod
@@ -315,17 +330,19 @@ class TestCsrfForSessionAuthDecorator:
         )
         assert resp.status_code == 200
 
-    def test_csrf_enabled_session_invalid_header_raises_error(self, monkeypatch):
+    def test_csrf_enabled_session_invalid_header_returns_400(self, monkeypatch):
         app = self._make_app(monkeypatch, csrf_enabled=True)
         client = app.test_client()
         with client.session_transaction() as sess:
             sess["admin"] = True
             sess["csrf_token"] = "some-raw-value"
-        with pytest.raises(ValidationError, match="CSRF token is invalid"):
-            client.post(
-                "/protected",
-                headers={"X-CSRFToken": "bad-token-value"},
-            )
+        resp = client.post(
+            "/protected",
+            headers={"X-CSRFToken": "bad-token-value"},
+        )
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "CSRF token invalid" in data["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -338,10 +355,6 @@ class TestValidateCsrfJsonDecorator:
 
     Uses minimal Flask apps WITHOUT CSRFProtect initialized, so the
     decorator handles CSRF validation directly and returns JSON responses.
-
-    Note: Same bug as csrf_for_session_auth — catches CSRFError but
-    validate_csrf() raises ValidationError. Invalid tokens cause an
-    unhandled ValidationError to propagate.
     """
 
     @staticmethod
@@ -384,16 +397,18 @@ class TestValidateCsrfJsonDecorator:
         data = resp.get_json()
         assert "CSRF token missing" in data["error"]
 
-    def test_csrf_enabled_invalid_header_raises_error(self, monkeypatch):
+    def test_csrf_enabled_invalid_header_returns_400(self, monkeypatch):
         app = self._make_app(monkeypatch, csrf_enabled=True)
         client = app.test_client()
         with client.session_transaction() as sess:
             sess["csrf_token"] = "some-raw-value"
-        with pytest.raises(ValidationError, match="CSRF token is invalid"):
-            client.post(
-                "/endpoint",
-                headers={"X-CSRFToken": "invalid-token"},
-            )
+        resp = client.post(
+            "/endpoint",
+            headers={"X-CSRFToken": "invalid-token"},
+        )
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "CSRF token invalid" in data["error"]
 
     def test_csrf_enabled_valid_header_passes(self, monkeypatch):
         app = self._make_app(monkeypatch, csrf_enabled=True)

@@ -426,13 +426,19 @@ Admin API supports Bearer token auth:
 
 ### CSRF Protection
 
-All state-changing routes protected via Flask-WTF tokens. JSON API endpoints use the `@validate_csrf_json` decorator (for JSON endpoints only — form-based routes use Flask-WTF's built-in CSRF):
+API blueprints (`admin_api_bp` at `/api/v1/*`, `api_tokens_bp` at `/api-tokens/*`) are exempted from Flask-WTF's global CSRF. Bearer-token requests bypass CSRF entirely.
+
+For non-exempted routes, per-route decorators handle CSRF policy:
+
+- **`@validate_csrf_json`**: Validates `X-CSRFToken` header for session-authenticated JSON endpoints. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions).
+- **`@csrf_for_session_auth`**: Like `@validate_csrf_json` but skips CSRF for valid Bearer-token requests. Use on routes accepting both session and Bearer auth.
+- **Form-based routes**: Flask-WTF's built-in CSRF handles forms automatically.
+
+`api_tokens_bp` uses blueprint-level `before_request` for auth — no duplicate `@require_auth` on individual routes.
 
 ```python
 # Header: X-CSRFToken: <token>
-# Decorator: @validate_csrf_json (routes/decorators.py:72-94)
-# Validates X-CSRFToken header for JSON API endpoints only (not form-based routes)
-# Flask-WTF handles CSRF for form/multipart requests automatically
+# Decorator: @validate_csrf_json (routes/decorators.py)
 # Respects WTF_CSRF_ENABLED = False in TestingConfig
 ```
 

@@ -146,7 +146,8 @@ API tokens use the format `ak_<prefix>.<secret>`:
 ### Key Implementation Details
 
 - `services/api_tokens.py`: Token generation, hashing, verification, parsing helpers
-- `verify_api_token()` in `routes/admin/__init__.py`: Full verification flow with prefix lookup, expiry/revocation checks, and constant-time secret comparison
+- `verify_api_token()` in `routes/admin/__init__.py`: Full verification flow with prefix lookup, expiry/revocation checks, and constant-time secret comparison. Iterates all candidates matching the prefix, so prefix collisions cannot cause valid-token auth failure.
+- Token creation retries on prefix collision to guarantee uniqueness.
 - Tokens from before the API token redesign are invalid — regeneration required
 
 ---
@@ -230,9 +231,18 @@ All forms use Flask-WTF with CSRF tokens:
 </form>
 ```
 
-### API CSRF
+### API CSRF Exemptions
 
-Admin API routes use `@require_auth` decorator. Session-based auth is protected by CSRF.
+API blueprints (`admin_api_bp` at `/api/v1/*`, `api_tokens_bp` at `/api-tokens/*`) are exempted from Flask-WTF's global CSRF protection. This is intentional — API routes accept Bearer tokens which should not require CSRF.
+
+### Per-Route CSRF Decorators
+
+- **`@validate_csrf_json`**: Validates `X-CSRFToken` header for session-authenticated JSON endpoints. Invalid CSRF returns a controlled JSON 400 response (never propagates exceptions).
+- **`@csrf_for_session_auth`**: Like `@validate_csrf_json` but skips CSRF for valid Bearer-token requests. Used on routes accepting both session and Bearer auth.
+
+### Bearer-Token CSRF Bypass
+
+Bearer-token API requests do NOT require CSRF. Invalid Bearer tokens return 401 immediately and do NOT fall back to session auth.
 
 ---
 

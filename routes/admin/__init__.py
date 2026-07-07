@@ -18,6 +18,8 @@ def verify_api_token(token_str):
 
     Uses constant-time comparison via services.api_tokens. Does not leak
     whether the prefix exists — returns False on any failure.
+
+    Handles prefix collisions by checking all matching rows.
     """
     from datetime import datetime, timezone
 
@@ -31,22 +33,27 @@ def verify_api_token(token_str):
 
     prefix, secret = parsed
 
-    api_token = ApiToken.query.filter(ApiToken.token_prefix == prefix).first()
-    if api_token is None:
+    candidates = ApiToken.query.filter(ApiToken.token_prefix == prefix).all()
+    if not candidates:
         return False
 
-    if api_token.revoked_at is not None:
-        return False
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    if api_token.expires_at is not None and api_token.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
-        return False
+    for api_token in candidates:
+        if api_token.revoked_at is not None:
+            continue
 
-    if not verify_api_token_secret(api_token.token_hash, secret):
-        return False
+        if api_token.expires_at is not None and api_token.expires_at < now:
+            continue
 
-    api_token.last_used_at = datetime.now(timezone.utc)
-    db.session.commit()
-    return True
+        if not verify_api_token_secret(api_token.token_hash, secret):
+            continue
+
+        api_token.last_used_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return True
+
+    return False
 
 
 from routes.decorators import require_auth  # noqa: F401, E402

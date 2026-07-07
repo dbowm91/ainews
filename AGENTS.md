@@ -184,7 +184,7 @@ The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're a
 The `api_tokens_bp` blueprint IS registered in `app.py` WITHOUT `url_prefix`. The routes themselves include the full `/api-tokens` path (e.g., `/api-tokens/`, `/api-tokens/<id>`). Any documentation claiming it is "not registered" or has `url_prefix="/api-tokens"` is incorrect.
 
 ### API Token Lifecycle
-API tokens use the format `ak_<prefix>.<secret>`. The full token is returned once at creation time and never stored. Only the hashed secret (via werkzeug password hashing) is persisted in `ApiToken.token_hash`. Verification in `verify_api_token()` (`routes/admin/__init__.py:16`) parses the token, looks up by prefix, checks `revoked_at` and `expires_at`, then verifies the secret against the stored hash. Expired and revoked tokens are rejected. `services/api_tokens.py` contains `generate_api_token()`, `hash_api_token_secret()`, `verify_api_token_secret()`, and `parse_api_token()`. Existing tokens from before the redesign are invalid — regeneration is required.
+API tokens use the format `ak_<prefix>.<secret>`. The full token is returned once at creation time and never stored. Only the hashed secret (via werkzeug password hashing) is persisted in `ApiToken.token_hash`. Verification in `verify_api_token()` (`routes/admin/__init__.py:16`) parses the token, looks up by prefix, checks `revoked_at` and `expires_at`, then verifies the secret against the stored hash. Expired and revoked tokens are rejected. Prefix collision handling iterates all candidates matching the prefix, so collisions cannot break valid tokens. `services/api_tokens.py` contains `generate_api_token()`, `hash_api_token_secret()`, `verify_api_token_secret()`, and `parse_api_token()`. Existing tokens from before the redesign are invalid — regeneration is required.
 
 ### StageConfig is a Stub
 The `StageConfig` schema in `schemas/pipeline.py` is an empty stub (only has `tools` field). The actual stage configuration is handled by `SubagentStageConfig` and `RoleConfig`.
@@ -419,12 +419,13 @@ The following are documented as intentional and should NOT be "fixed":
 - **Route classification test** — `tests/test_admin_route_auth.py:test_all_admin_routes_classified` fails if any `/admin`, `/api/v1`, or `/api-tokens` route is added without auth classification.
 
 ### CSRF Protection Architecture
-Two-layer CSRF protection:
-- **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions. No decorator needed for form-based routes.
-- **`@validate_csrf_json`** decorator: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header.
+Three-layer CSRF protection with API exemptions:
+- **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions. No decorator needed for form-based routes. API blueprints (`admin_api_bp`, `api_tokens_bp`) are exempted from global CSRF.
+- **`@validate_csrf_json`** decorator: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions).
 - **`@csrf_for_session_auth`** decorator: Like `@validate_csrf_json` but skips CSRF for bearer-token requests. Use on routes accepting both session and bearer auth.
 - Templates expose CSRF via `<meta name="csrf-token">` for JS and `csrf_token()` for forms/HTMX.
 - Bearer-token requests bypass CSRF — intentional and tested.
+- Invalid bearer tokens return 401 immediately and do NOT fall back to session auth.
 
 ### 2FA System
 - **Backup Codes:** 8 alphanumeric codes stored as JSON in `AdminUser.backup_codes`

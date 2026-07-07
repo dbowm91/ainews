@@ -1,6 +1,5 @@
 from datetime import datetime, timezone, timedelta
 
-import pytest
 
 from utils.datetime import parse_date, format_date, time_ago
 

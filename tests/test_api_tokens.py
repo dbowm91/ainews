@@ -394,6 +394,33 @@ class TestLastUsedAt:
         db.session.refresh(api_token)
         assert api_token.last_used_at is None
 
+    def test_last_used_at_updates_on_repeated_requests(self, auth_client, client):
+        """Repeated bearer requests update last_used_at, not create duplicates."""
+        from extensions import db
+        from models import ApiToken
+
+        resp = _create_token_via_api(auth_client, name="dedup-track")
+        token = resp.get_json()["token"]
+        token_id = resp.get_json()["id"]
+        api_token = db.session.get(ApiToken, token_id)
+        assert api_token.last_used_at is None
+
+        client.get("/api/v1/health", headers=_get_auth_header(token))
+        db.session.refresh(api_token)
+        first_used = api_token.last_used_at
+        assert first_used is not None
+
+        client.get("/api/v1/health", headers=_get_auth_header(token))
+        db.session.refresh(api_token)
+        second_used = api_token.last_used_at
+        assert second_used is not None
+        assert second_used >= first_used
+
+        token_count = ApiToken.query.filter(
+            ApiToken.token_prefix == api_token.token_prefix
+        ).count()
+        assert token_count == 1
+
 
 class TestTokenPrefix:
     """Tests for token_prefix storage and lookup."""
@@ -453,6 +480,37 @@ class TestTokenUniqueness:
         t1 = db.session.get(ApiToken, resp1.get_json()["id"])
         t2 = db.session.get(ApiToken, resp2.get_json()["id"])
         assert t1.token_prefix != t2.token_prefix
+
+    def test_prefix_collision_retries_and_succeeds(self, auth_client):
+        """When prefix collides, create endpoint retries and succeeds."""
+        from models import ApiToken
+
+        existing_token = ApiToken.query.first()
+        if existing_token is None:
+            _create_token_via_api(auth_client, name="seed-token")
+            existing_token = ApiToken.query.first()
+        existing_prefix = existing_token.token_prefix
+
+        call_count = 0
+        original_generate = generate_api_token
+
+        def collision_then_ok():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ("ak_" + existing_prefix + ".secretonly", existing_prefix, "secretonly")
+            return original_generate()
+
+        import routes.admin.api_tokens as token_routes
+
+        original_fn = token_routes.generate_api_token
+        token_routes.generate_api_token = collision_then_ok
+        try:
+            resp = _create_token_via_api(auth_client, name="collision-retry")
+            assert resp.status_code == 201
+            assert call_count == 2
+        finally:
+            token_routes.generate_api_token = original_fn
 
 
 class TestSessionAuthStillWorks:

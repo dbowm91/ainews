@@ -47,6 +47,13 @@ def verify_api_token_secret(stored_hash: str, provided_secret: str) -> bool:
     return check_password_hash(stored_hash, provided_secret)
 
 
+def prefix_exists(prefix: str) -> bool:
+    """Check if a token prefix already exists in the database."""
+    from models import ApiToken
+
+    return ApiToken.query.filter(ApiToken.token_prefix == prefix).first() is not None
+
+
 def parse_api_token(token: str) -> tuple[str, str] | None:
     """Parse an API token string into (prefix, secret).
 

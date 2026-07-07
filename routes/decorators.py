@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from flask import Response, jsonify, redirect, request, session, url_for
 from sqlalchemy.exc import SQLAlchemyError
+from wtforms.validators import ValidationError
 
 from logging_config import get_request_id
 
@@ -114,7 +115,7 @@ def validate_csrf_json(f):
             return jsonify({"error": "CSRF token missing"}), 400
         try:
             validate_csrf(token)
-        except CSRFError:
+        except (CSRFError, ValidationError):
             return jsonify({"error": "CSRF token invalid"}), 400
         return f(*args, **kwargs)
     return decorated
@@ -147,7 +148,7 @@ def csrf_for_session_auth(f):
             return jsonify({"error": "CSRF token missing"}), 400
         try:
             validate_csrf(token)
-        except CSRFError:
+        except (CSRFError, ValidationError):
             return jsonify({"error": "CSRF token invalid"}), 400
         return f(*args, **kwargs)
 

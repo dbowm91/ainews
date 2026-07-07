@@ -4,10 +4,11 @@ from flask import Blueprint, jsonify, request
 
 from extensions import db
 from models import ApiToken
-from routes.decorators import authenticate_request, require_auth, validate_csrf_json
+from routes.decorators import authenticate_request, validate_csrf_json
 from services.api_tokens import (
     generate_api_token,
     hash_api_token_secret,
+    prefix_exists,
 )
 
 api_tokens_bp = Blueprint("api_tokens", __name__)
@@ -25,7 +26,6 @@ def _require_api_token_auth():
 
 
 @api_tokens_bp.route("/api-tokens", methods=["GET"])
-@require_auth
 def list_tokens():
     """List all non-revoked API tokens (without exposing hashes)."""
     tokens = ApiToken.query.filter(ApiToken.revoked_at.is_(None)).all()
@@ -43,7 +43,6 @@ def list_tokens():
 
 @api_tokens_bp.route("/api-tokens", methods=["POST"])
 @validate_csrf_json
-@require_auth
 def create_token():
     """Create a new API token and return the plain text token."""
     data = request.get_json() or {}
@@ -60,6 +59,14 @@ def create_token():
             return jsonify({"error": "expires_in must not exceed 366 days"}), 400
 
     public_token, prefix, raw_secret = generate_api_token()
+
+    _MAX_PREFIX_RETRIES = 5
+    for _ in range(_MAX_PREFIX_RETRIES):
+        if not prefix_exists(prefix):
+            break
+        public_token, prefix, raw_secret = generate_api_token()
+    else:
+        return jsonify({"error": "Failed to generate unique token prefix"}), 500
 
     api_token = ApiToken(
         token_hash=hash_api_token_secret(raw_secret),
@@ -84,7 +91,6 @@ def create_token():
 
 @api_tokens_bp.route("/api-tokens/<int:token_id>", methods=["DELETE"])
 @validate_csrf_json
-@require_auth
 def delete_token(token_id):
     """Hard delete an API token."""
     api_token = ApiToken.query.get_or_404(token_id)

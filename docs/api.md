@@ -640,6 +640,10 @@ Articles can be searched via the admin interface with URL search, source filteri
 
 Admin endpoints use session-based authentication via `/admin/login` or Bearer token authentication via API tokens.
 
+### CSRF Policy
+
+API blueprints (`/api/v1/*`, `/api-tokens/*`) are exempted from Flask-WTF's global CSRF. Bearer-token requests bypass CSRF entirely. Session-authenticated unsafe requests (POST/PUT/DELETE) on non-exempted routes require CSRF via `@validate_csrf_json` or `@csrf_for_session_auth`. Invalid Bearer tokens return 401 immediately — no fallback to session auth.
+
 ### API Token Authentication
 
 API tokens use the format `ak_<prefix>.<secret>`. Pass via `Authorization: Bearer ak_<prefix>.<secret>` header.
@@ -647,6 +651,8 @@ API tokens use the format `ak_<prefix>.<secret>`. Pass via `Authorization: Beare
 - Tokens are returned once at creation time and never stored in plaintext
 - Only the hashed secret is persisted in the database
 - Tokens can have optional expiration and can be revoked
+- Verification iterates all candidates matching the prefix, so prefix collisions cannot cause valid-token auth failure
+- Token creation retries on prefix collision
 - Existing tokens from before the API token redesign are invalid — regeneration required
 
 Rate limiting on admin login prevents brute-force attacks. After 5 failed attempts within 15 minutes, the IP is locked out for 15 minutes.

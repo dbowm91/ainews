@@ -65,13 +65,14 @@ Some pipeline tests fail due to MagicMock objects being JSON serialized - this i
 Tests in `tests/test_safe_fetch.py` use `_patch_for_local_server()` to bypass SSRF validation for local test servers (since loopback IPs are blocked by default). The `_patch_for_redirect_test()` variant lets `validate_url_safe()` run for redirect targets while bypassing initial URL validation. DNS cache is cleared before/after each test via the `_clear_dns_cache` autouse fixture in `conftest.py`.
 
 ### Safe Fetch Coding Guidance
-All HTTP fetching for untrusted URLs must go through `safe_fetch_url()` in `services/safe_fetch.py`. Never call `trafilatura.fetch_url()`, `requests.get()`, `httpx.get()`, `urlopen()`, or `urllib.request` directly for untrusted content. The release checklist `rg` pattern catches violations. `services/content_extractor.py` demonstrates the correct integration pattern: lazy import of `safe_fetch_url`, custom timeout and byte limits passed via kwargs, and proper exception handling for `UnsafeFetchError` and `SafeFetchError`.
+All HTTP fetching for untrusted URLs must go through `safe_fetch_url()` in `services/safe_fetch.py`. Never call `trafilatura.fetch_url()`, `requests.get()`, `httpx.get()`, `urlopen()`, or `urllib.request` directly for untrusted content. Never monkeypatch `socket.create_connection` or `urllib3.util.connection.create_connection` — safe fetch uses thread-safe custom urllib3 connection classes (`PinnedHTTPConnection`, `PinnedHTTPSConnection`) instead. The release checklist `rg` pattern catches violations. `services/content_extractor.py` demonstrates the correct integration pattern: lazy import of `safe_fetch_url`, custom timeout and byte limits passed via kwargs, and proper exception handling for `UnsafeFetchError` and `SafeFetchError`.
 
 ### Safe Fetch DNS Resolution Policy
 The safe fetch client uses a fail-closed DNS resolution policy:
 - ALL resolved IPs must pass validation (no partial acceptance)
 - DNS is resolved once per request and cached with TTL
 - Connection pinning prevents TOCTOU DNS rebinding attacks
+- Thread-safe custom urllib3 connection classes (`PinnedHTTPConnection`, `PinnedHTTPSConnection`) connect to validated IPs without process-global socket monkeypatching
 - All resolved IPs are recorded for audit trail
 - See `services/safe_fetch.py` module docstring for full details
 

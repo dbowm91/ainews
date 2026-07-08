@@ -670,3 +670,77 @@ class TestValidateDockerOllamaHost:
             from config import _validate_docker_ollama_host
             _validate_docker_ollama_host(r)
             assert len(r.warnings) == 1
+
+
+# ---------------------------------------------------------------------------
+# Safe-fetch env validation (Workstream 4)
+# ---------------------------------------------------------------------------
+
+
+class TestSafeFetchEnvValidation:
+    """Tests that malformed SAFE_FETCH_* env vars produce structured validation errors."""
+
+    def test_malformed_max_bytes_raises_runtime_error(self, monkeypatch):
+        """SAFE_FETCH_MAX_BYTES=abc produces structured validation error."""
+        monkeypatch.setenv("SAFE_FETCH_MAX_BYTES", "abc")
+        with pytest.raises(RuntimeError, match="SAFE_FETCH_MAX_BYTES"):
+            from config import _validate_safe_fetch
+            r = ConfigValidationResult()
+            _validate_safe_fetch(r)
+            r.raise_on_errors()
+
+    def test_malformed_connect_timeout_raises_runtime_error(self, monkeypatch):
+        """SAFE_FETCH_CONNECT_TIMEOUT=bad produces structured validation error."""
+        monkeypatch.setenv("SAFE_FETCH_CONNECT_TIMEOUT", "bad")
+        with pytest.raises(RuntimeError, match="SAFE_FETCH_CONNECT_TIMEOUT"):
+            from config import _validate_safe_fetch
+            r = ConfigValidationResult()
+            _validate_safe_fetch(r)
+            r.raise_on_errors()
+
+    def test_max_redirects_zero_raises_runtime_error(self, monkeypatch):
+        """SAFE_FETCH_MAX_REDIRECTS=0 produces structured validation error."""
+        monkeypatch.setenv("SAFE_FETCH_MAX_REDIRECTS", "0")
+        with pytest.raises(RuntimeError, match="SAFE_FETCH_MAX_REDIRECTS"):
+            from config import _validate_safe_fetch
+            r = ConfigValidationResult()
+            _validate_safe_fetch(r)
+            r.raise_on_errors()
+
+    def test_max_bytes_too_large_raises_runtime_error(self, monkeypatch):
+        """SAFE_FETCH_MAX_BYTES=20000001 produces upper-bound validation error."""
+        monkeypatch.setenv("SAFE_FETCH_MAX_BYTES", "20000001")
+        with pytest.raises(RuntimeError, match="SAFE_FETCH_MAX_BYTES"):
+            from config import _validate_safe_fetch
+            r = ConfigValidationResult()
+            _validate_safe_fetch(r)
+            r.raise_on_errors()
+
+    def test_malformed_total_timeout_raises_runtime_error(self, monkeypatch):
+        """SAFE_FETCH_TOTAL_TIMEOUT=xyz produces structured validation error."""
+        monkeypatch.setenv("SAFE_FETCH_TOTAL_TIMEOUT", "xyz")
+        with pytest.raises(RuntimeError, match="SAFE_FETCH_TOTAL_TIMEOUT"):
+            from config import _validate_safe_fetch
+            r = ConfigValidationResult()
+            _validate_safe_fetch(r)
+            r.raise_on_errors()
+
+    def test_total_timeout_below_connect_plus_read_raises(self, monkeypatch):
+        """Total timeout less than connect+read produces validation error."""
+        monkeypatch.setenv("SAFE_FETCH_CONNECT_TIMEOUT", "10")
+        monkeypatch.setenv("SAFE_FETCH_READ_TIMEOUT", "10")
+        monkeypatch.setenv("SAFE_FETCH_TOTAL_TIMEOUT", "5")
+        with pytest.raises(RuntimeError, match="SAFE_FETCH_TOTAL_TIMEOUT"):
+            from config import _validate_safe_fetch
+            r = ConfigValidationResult()
+            _validate_safe_fetch(r)
+            r.raise_on_errors()
+
+    def test_valid_env_values_pass(self, monkeypatch):
+        """Valid env values pass validation without errors."""
+        monkeypatch.setenv("SAFE_FETCH_MAX_BYTES", "5000000")
+        monkeypatch.setenv("SAFE_FETCH_CONNECT_TIMEOUT", "10")
+        from config import _validate_safe_fetch
+        r = ConfigValidationResult()
+        _validate_safe_fetch(r)
+        assert len(r.errors) == 0

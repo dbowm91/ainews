@@ -217,7 +217,7 @@ safe_html = escape_newsletter_content(llm_output)
 
 All untrusted URL fetches use the first-party safe fetch client (`services/safe_fetch.py`) which validates URLs, resolves DNS, blocks private/reserved IPs, handles redirects manually, and enforces byte/content-type limits. The content extractor (`services/content_extractor.py`) uses `safe_fetch_url()` for all untrusted URL fetches instead of `trafilatura.fetch_url()`.
 
-DNS rebinding TOCTOU (time-of-check-time-of-use) attacks are mitigated via a `PinnedIPAdapter` that monkeypatches `socket.create_connection` to connect to pre-validated IPs. DNS is resolved once per fetch; all resolved IPs are validated (fail-closed — any blocked IP rejects the entire resolution). The validated IP is pinned for the TCP connection while the original hostname is preserved for TLS SNI and certificate verification. Each redirect hop is independently validated and pinned.
+DNS rebinding TOCTOU (time-of-check-time-of-use) attacks are mitigated via thread-safe custom urllib3 connection classes (`PinnedHTTPConnection`, `PinnedHTTPSConnection`) that connect to pre-validated IPs without mutating process-global socket functions. DNS is resolved once per fetch; all resolved IPs are validated (fail-closed — any blocked IP rejects the entire resolution). The validated IP is pinned for the TCP connection while the original hostname is preserved for TLS SNI and certificate verification. Each redirect hop is independently validated and pinned via a fresh session.
 
 ```python
 from services.safe_fetch import safe_fetch_url, UnsafeFetchError, SafeFetchError

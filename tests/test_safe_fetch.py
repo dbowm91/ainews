@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
 import time
+import urllib3.util.connection
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from unittest.mock import patch
 
@@ -1344,5 +1346,239 @@ class TestPinnedIPAdapter:
                 result = safe_fetch_url(f"{base}/start")
                 assert result.status_code == 200
                 assert len(result.redirect_chain) == 1
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Concurrency and transport-layer tests (Workstream 3)
+# ---------------------------------------------------------------------------
+
+
+class TestNoGlobalSocketMonkeypatch:
+    """Verify safe_fetch never mutates socket.create_connection or
+    urllib3.util.connection.create_connection globally."""
+
+    def test_socket_create_connection_not_patched(self):
+        import socket
+        import urllib3.util.connection as uconn
+
+        before_sc = socket.create_connection
+        before_uc = uconn.create_connection
+        try:
+            class Hdl(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+                def log_message(self, format, *args):
+                    pass
+
+            server, _, base = _run_server(Hdl)
+            try:
+                with _patch_for_local_server(f"{base}/test"):
+                    safe_fetch_url(f"{base}/test")
+            finally:
+                server.shutdown()
+
+            assert socket.create_connection is before_sc, (
+                "socket.create_connection was mutated by safe_fetch"
+            )
+            assert uconn.create_connection is before_uc, (
+                "urllib3.util.connection.create_connection was mutated by safe_fetch"
+            )
+        finally:
+            socket.create_connection = before_sc
+            uconn.create_connection = before_uc
+
+
+class TestConcurrentFetchIsolation:
+    """Concurrent fetches to different servers with different IPs must not
+    cross-contaminate pin assignments."""
+
+    def test_concurrent_different_ips(self):
+        import threading
+
+        class OkHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server1, _, base1 = _run_server(OkHandler)
+        server2, _, base2 = _run_server(OkHandler)
+
+        connection_targets = []
+        lock = threading.Lock()
+
+        original_create = urllib3.util.connection.create_connection
+
+        def tracking_create(addr, *args, **kwargs):
+            with lock:
+                connection_targets.append(addr[0])
+            return original_create(addr, *args, **kwargs)
+
+        results = {}
+        errors = {}
+
+        def fetch(key, url, target_ip):
+            try:
+                with (
+                    patch("urllib3.util.connection.create_connection", side_effect=tracking_create),
+                    patch(
+                        "services.safe_fetch._validate_and_resolve",
+                        side_effect=lambda u: (u, ["127.0.0.1", target_ip]),
+                    ),
+                ):
+                    r = safe_fetch_url(url)
+                    results[key] = r
+            except Exception as e:  # noqa: BLE001
+                errors[key] = e
+
+        threads = []
+        for i in range(20):
+            t = threading.Thread(target=fetch, args=(f"s1_{i}", f"{base1}/test", "10.0.0.1"))
+            threads.append(t)
+        for i in range(20):
+            t = threading.Thread(target=fetch, args=(f"s2_{i}", f"{base2}/test", "10.0.0.2"))
+            threads.append(t)
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        try:
+            server1.shutdown()
+            server2.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
+
+        assert len(errors) == 0, f"Errors: {errors}"
+        assert len(results) == 40, f"Expected 40 results, got {len(results)}"
+        for key, r in results.items():
+            assert r.status_code == 200, f"{key}: status {r.status_code}"
+
+        s1_results = {k: r for k, r in results.items() if k.startswith("s1_")}
+        s2_results = {k: r for k, r in results.items() if k.startswith("s2_")}
+        for key, r in s1_results.items():
+            assert "10.0.0.1" in r.resolved_ips, f"{key}: missing 10.0.0.1 in resolved_ips"
+        for key, r in s2_results.items():
+            assert "10.0.0.2" in r.resolved_ips, f"{key}: missing 10.0.0.2 in resolved_ips"
+
+        for target in connection_targets:
+            assert target == "127.0.0.1", f"Connect to wrong target: {target}"
+
+
+class TestSocketTargetEqualsSelectedIP:
+    """Verify that the actual TCP connect targets the validated IP, not the hostname."""
+
+    def test_connect_goes_to_validated_ip(self):
+        import urllib3.util.connection as uconn
+
+        original_create = uconn.create_connection
+        captured_targets = []
+
+        def tracking_create(addr, *args, **kwargs):
+            captured_targets.append(addr)
+            return original_create(addr, *args, **kwargs)
+
+        class Hdl(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(Hdl)
+        try:
+            with (
+                patch("urllib3.util.connection.create_connection", side_effect=tracking_create),
+                _patch_for_local_server(f"{base}/test"),
+            ):
+                result = safe_fetch_url(f"{base}/test")
+                assert result.status_code == 200
+                assert len(captured_targets) > 0
+                for target in captured_targets:
+                    ip = target[0]
+                    assert ip == "127.0.0.1", f"Expected connect to 127.0.0.1, got {ip}"
+        finally:
+            server.shutdown()
+
+
+class TestRedirectHopSelectedIPs:
+    """Each redirect hop records its validated IP in selected_ips."""
+
+    def test_redirect_records_selected_ips(self):
+        class RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/start":
+                    self.send_response(302)
+                    self.send_header("Location", "/end")
+                    self.end_headers()
+                elif self.path == "/end":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"done")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(RedirectHandler)
+        try:
+            with _patch_for_local_server(f"{base}/start"):
+                result = safe_fetch_url(f"{base}/start")
+                assert result.status_code == 200
+                assert len(result.selected_ips) >= 1, (
+                    f"Expected at least 1 selected_ip, got {result.selected_ips}"
+                )
+                for ip in result.selected_ips:
+                    assert ip, f"Empty selected_ip in {result.selected_ips}"
+        finally:
+            server.shutdown()
+
+
+class TestProxyBlocked:
+    """Verify that proxy env vars are ignored by safe_fetch_url."""
+
+    def test_fetch_succeeds_with_proxy_env_set(self):
+        class Hdl(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(Hdl)
+        try:
+            with (
+                _patch_for_local_server(f"{base}/test"),
+                patch.dict(os.environ, {
+                    "HTTP_PROXY": "http://evil-proxy:8080",
+                    "HTTPS_PROXY": "http://evil-proxy:8443",
+                    "http_proxy": "http://evil-proxy:8080",
+                    "https_proxy": "http://evil-proxy:8443",
+                    "ALL_PROXY": "http://evil-proxy:8080",
+                }),
+            ):
+                result = safe_fetch_url(f"{base}/test")
+                assert result.status_code == 200
+                assert result.body == b"ok"
         finally:
             server.shutdown()

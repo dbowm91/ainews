@@ -269,7 +269,7 @@ docker run --rm ollama/ollama:latest sh -lc 'command -v curl || command -v wget 
 
 #### `UnsafeFetchError` — URL targets private/reserved IP
 
-The safe fetch client blocks requests to private, loopback, link-local, and reserved IP ranges. This prevents SSRF attacks. DNS rebinding protection ensures the TCP connection uses the pre-validated IP (via `PinnedIPAdapter`) rather than re-resolving DNS, closing TOCTOU race conditions.
+The safe fetch client blocks requests to private, loopback, link-local, and reserved IP ranges. This prevents SSRF attacks. DNS rebinding protection ensures the TCP connection uses a pre-validated IP via custom urllib3 connection classes (`PinnedHTTPConnection`, `PinnedHTTPSConnection`) rather than re-resolving DNS, closing TOCTOU race conditions. No process-global socket monkeypatching is used — each connection pins the validated IP at the connection-class level.
 
 ```bash
 # Check the URL for private IPs or hostnames that resolve locally
@@ -330,6 +330,29 @@ curl -sLv <url> 2>&1 | grep -i "location:"
 SAFE_FETCH_MAX_REDIRECTS=10
 
 # If it's a loop, fix the URL or server configuration
+```
+
+#### HTTPS pinning — SNI and certificate verification
+
+For HTTPS URLs, the safe fetch client connects to the pre-validated IP but preserves the original hostname for TLS SNI and certificate verification. If you see TLS errors on HTTPS URLs, the issue is typically certificate-related, not pinning-related.
+
+```bash
+# Check if the target has a valid certificate:
+openssl s_client -connect <host>:443 -servername <host> </dev/null 2>/dev/null | openssl x509 -noout -dates
+
+# If using self-signed certs in development, ensure the target is accessible via HTTP
+# or configure the system trust store appropriately
+```
+
+#### Proxy bypass — environment proxies are ignored
+
+The safe fetch client sets `trust_env=False` and passes `proxies={}` on every request. Environment variables like `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` are ignored for untrusted URL fetches. This prevents proxies from bypassing SSRF controls. If you need proxy support for safe fetch, a separate `SAFE_FETCH_PROXY_URL` configuration with its own validation would be required.
+
+```bash
+# If your fetch is failing and you expect it to go through a proxy,
+# note that safe fetch bypasses proxies by design.
+# Check direct connectivity instead:
+curl -sf --max-time 10 <url>
 ```
 
 ---

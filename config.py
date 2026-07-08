@@ -639,66 +639,95 @@ def _validate_docker_ollama_host(result: ConfigValidationResult) -> None:
         pass  # Don't fail startup on Docker detection issues
 
 
+def _parse_env_int_for_validation(
+    result: ConfigValidationResult,
+    name: str,
+    default: int,
+    min_value: int | None = None,
+    max_value: int | None = None,
+) -> int:
+    """Parse an int env var for production validation, reporting issues via result."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (ValueError, TypeError):
+        result.add(
+            field=name,
+            message=f"{name} must be an integer, got {raw!r}",
+            fix_hint=f"Set {name} to a valid integer (default: {default})",
+        )
+        return default
+    if min_value is not None and value < min_value:
+        result.add(
+            field=name,
+            message=f"{name} must be >= {min_value}, got {value}",
+            fix_hint=f"Set {name} to {min_value} or higher (default: {default})",
+        )
+    if max_value is not None and value > max_value:
+        result.add(
+            field=name,
+            message=f"{name} must be <= {max_value}, got {value}",
+            fix_hint=f"Set {name} to {max_value} or lower (default: {default})",
+        )
+    return value
+
+
+def _parse_env_float_for_validation(
+    result: ConfigValidationResult,
+    name: str,
+    default: float,
+    min_value: float | None = None,
+    max_value: float | None = None,
+) -> float:
+    """Parse a float env var for production validation, reporting issues via result."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except (ValueError, TypeError):
+        result.add(
+            field=name,
+            message=f"{name} must be a number, got {raw!r}",
+            fix_hint=f"Set {name} to a valid number (default: {default})",
+        )
+        return default
+    if min_value is not None and value < min_value:
+        result.add(
+            field=name,
+            message=f"{name} must be >= {min_value}, got {value}",
+            fix_hint=f"Set {name} to {min_value} or higher (default: {default})",
+        )
+    if max_value is not None and value > max_value:
+        result.add(
+            field=name,
+            message=f"{name} must be <= {max_value}, got {value}",
+            fix_hint=f"Set {name} to {max_value} or lower (default: {default})",
+        )
+    return value
+
+
 def _validate_safe_fetch(result: ConfigValidationResult) -> None:
     """Validate safe-fetch configuration values."""
-    from services.safe_fetch import SafeFetchLimits
+    max_redirects = _parse_env_int_for_validation(
+        result, "SAFE_FETCH_MAX_REDIRECTS", 5, min_value=1
+    )
+    max_bytes = _parse_env_int_for_validation(
+        result, "SAFE_FETCH_MAX_BYTES", 2_000_000, min_value=1, max_value=10_000_000
+    )
+    connect_timeout = _parse_env_float_for_validation(
+        result, "SAFE_FETCH_CONNECT_TIMEOUT", 5.0, min_value=0.1, max_value=30
+    )
+    read_timeout = _parse_env_float_for_validation(
+        result, "SAFE_FETCH_READ_TIMEOUT", 10.0, min_value=0.1, max_value=60
+    )
+    total_timeout = _parse_env_float_for_validation(
+        result, "SAFE_FETCH_TOTAL_TIMEOUT", 20.0, min_value=0.1
+    )
 
-    limits = SafeFetchLimits()
-    max_redirects = limits.max_redirects
-    max_bytes = limits.max_bytes
-    connect_timeout = limits.connect_timeout
-    read_timeout = limits.read_timeout
-    total_timeout = limits.total_timeout
-
-    if max_redirects <= 0:
-        result.add(
-            field="SAFE_FETCH_MAX_REDIRECTS",
-            message="SAFE_FETCH_MAX_REDIRECTS must be a positive integer",
-            fix_hint="Set to a positive value (default: 5)",
-        )
-    if max_bytes <= 0:
-        result.add(
-            field="SAFE_FETCH_MAX_BYTES",
-            message="SAFE_FETCH_MAX_BYTES must be a positive integer",
-            fix_hint="Set to a positive value (default: 2000000)",
-        )
-    elif max_bytes > 10_000_000:
-        result.add(
-            field="SAFE_FETCH_MAX_BYTES",
-            message=f"SAFE_FETCH_MAX_BYTES is {max_bytes}; must be <= 10000000 (10MB)",
-            fix_hint="Reduce to a reasonable upper bound (default: 2000000)",
-        )
-    if connect_timeout <= 0:
-        result.add(
-            field="SAFE_FETCH_CONNECT_TIMEOUT",
-            message="SAFE_FETCH_CONNECT_TIMEOUT must be a positive integer",
-            fix_hint="Set to a positive value (default: 5)",
-        )
-    elif connect_timeout > 30:
-        result.add(
-            field="SAFE_FETCH_CONNECT_TIMEOUT",
-            message=f"SAFE_FETCH_CONNECT_TIMEOUT is {connect_timeout}; must be <= 30",
-            fix_hint="Reduce to a reasonable timeout (default: 5)",
-        )
-    if read_timeout <= 0:
-        result.add(
-            field="SAFE_FETCH_READ_TIMEOUT",
-            message="SAFE_FETCH_READ_TIMEOUT must be a positive integer",
-            fix_hint="Set to a positive value (default: 10)",
-        )
-    elif read_timeout > 60:
-        result.add(
-            field="SAFE_FETCH_READ_TIMEOUT",
-            message=f"SAFE_FETCH_READ_TIMEOUT is {read_timeout}; must be <= 60",
-            fix_hint="Reduce to a reasonable timeout (default: 10)",
-        )
-    if total_timeout <= 0:
-        result.add(
-            field="SAFE_FETCH_TOTAL_TIMEOUT",
-            message="SAFE_FETCH_TOTAL_TIMEOUT must be a positive integer",
-            fix_hint="Set to a positive value (default: 20)",
-        )
-    elif total_timeout < connect_timeout + read_timeout:
+    if total_timeout < connect_timeout + read_timeout:
         result.add(
             field="SAFE_FETCH_TOTAL_TIMEOUT",
             message=(

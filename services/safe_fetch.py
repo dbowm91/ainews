@@ -11,9 +11,12 @@ DNS Resolution Policy:
 Anti-Rebinding Protection:
     To prevent TOCTOU (time-of-check-time-of-use) DNS rebinding attacks:
     - DNS validation and connection use the SAME IP address
-    - A custom HTTPAdapter (PinnedIPAdapter) connects to the validated IP
+    - Thread-safe custom urllib3 connection classes (PinnedHTTPConnection,
+      PinnedHTTPSConnection) connect directly to the validated IP via
+      ``urllib3.util.connection.create_connection`` — no global monkeypatch
     - The original hostname is preserved for TLS SNI and certificate verification
-    - Each redirect hop is independently validated and pinned
+    - Each redirect hop gets a fresh session, independently resolved/pinned
+    - ``session.trust_env = False`` and ``proxies={}`` block proxy env vars
 
 Provides a single ``safe_fetch_url`` function that fetches untrusted URLs
 with DNS-level SSRF blocking, manual redirect validation, streaming byte
@@ -27,7 +30,6 @@ from __future__ import annotations
 
 import logging
 import os
-import socket
 import time
 import urllib.parse
 from collections.abc import Mapping
@@ -36,6 +38,10 @@ from urllib.parse import urljoin
 
 import requests
 import requests.adapters
+import urllib3.connection
+import urllib3.connectionpool
+import urllib3.poolmanager
+import urllib3.util.connection
 
 from services.url import UnsafeURLError, _resolve_and_check, validate_url_safe
 
@@ -53,17 +59,111 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# IP-pinned adapter (DNS rebinding TOCTOU fix)
+# Thread-safe IP-pinned transport (DNS rebinding TOCTOU fix)
 # ---------------------------------------------------------------------------
 
 
-class PinnedIPAdapter(requests.adapters.HTTPAdapter):
-    """HTTPAdapter that connects to a pre-validated IP, closing DNS rebinding TOCTOU.
+class PinnedHTTPConnection(urllib3.connection.HTTPConnection):
+    """HTTPConnection that TCP-connects to a pre-validated IP.
 
-After DNS validation, both ``socket.create_connection`` and
-``urllib3.util.connection.create_connection`` are monkeypatched so the
-actual TCP connection targets the validated IP while TLS SNI and certificate
-verification use the original hostname.
+    Overrides ``_new_conn()`` to call ``urllib3.util.connection.create_connection``
+    with the pinned IP address instead of doing DNS resolution.  Thread-safe:
+    each instance holds its own ``_pinned_ip`` — no global state mutation.
+    """
+
+    def __init__(self, *args, pinned_ip: str = "", **kwargs):
+        self._pinned_ip = pinned_ip
+        super().__init__(*args, **kwargs)
+
+    def _new_conn(self):
+        conn = urllib3.util.connection.create_connection(
+            (self._pinned_ip, self.port or (443 if self.scheme == "https" else 80)),
+            self.timeout,
+        )
+        return conn
+
+
+class PinnedHTTPSConnection(urllib3.connection.HTTPSConnection):
+    """HTTPSConnection that TCP-connects to a pre-validated IP.
+
+    Like ``PinnedHTTPConnection`` but for HTTPS.  The parent's ``connect()``
+    wraps the socket with TLS using ``self.host`` for SNI — correct since
+    ``host`` is the original hostname, not the pinned IP.
+    """
+
+    def __init__(self, *args, pinned_ip: str = "", **kwargs):
+        self._pinned_ip = pinned_ip
+        super().__init__(*args, **kwargs)
+
+    def _new_conn(self):
+        conn = urllib3.util.connection.create_connection(
+            (self._pinned_ip, self.port or 443),
+            self.timeout,
+        )
+        return conn
+
+
+class PinnedHTTPConnectionPool(urllib3.connectionpool.HTTPConnectionPool):
+    """Connection pool that uses PinnedHTTPConnection."""
+
+    ConnectionCls = PinnedHTTPConnection
+
+    def _new_conn(self):
+        conn = self.ConnectionCls(
+            host=self.host,
+            port=self.port,
+            timeout=self.timeout,
+            pinned_ip=getattr(self, "pinned_ip", ""),
+        )
+        return conn
+
+
+class PinnedHTTPSConnectionPool(urllib3.connectionpool.HTTPSConnectionPool):
+    """Connection pool that uses PinnedHTTPSConnection."""
+
+    ConnectionCls = PinnedHTTPSConnection
+
+    def _new_conn(self):
+        conn = self.ConnectionCls(
+            host=self.host,
+            port=self.port,
+            timeout=self.timeout,
+            pinned_ip=getattr(self, "pinned_ip", ""),
+        )
+        return conn
+
+
+class PinnedPoolManager(urllib3.poolmanager.PoolManager):
+    """PoolManager that injects pinned_ip into connection kwargs.
+
+    Overrides ``_new_pool()`` to pass ``pinned_ip`` and ``original_host``
+    to connection pool constructors, which forward them to connection objects.
+    """
+
+    def __init__(self, pinned_ip: str = "", original_host: str = "", **kwargs):
+        super().__init__(**kwargs)
+        self._pinned_ip = pinned_ip
+        self._original_host = original_host
+        # Override pool classes set by super().__init__() (which uses module defaults)
+        self.pool_classes_by_scheme = {
+            "http": PinnedHTTPConnectionPool,
+            "https": PinnedHTTPSConnectionPool,
+        }
+
+    def _new_pool(self, scheme, host, port, **kwargs):
+        pool = super()._new_pool(scheme, host, port, **kwargs)
+        # Inject pinned_ip into the pool so connections use it
+        pool.pinned_ip = self._pinned_ip
+        pool.original_host = self._original_host
+        return pool
+
+
+class PinnedIPAdapter(requests.adapters.HTTPAdapter):
+    """HTTPAdapter that uses PinnedPoolManager for thread-safe IP pinning.
+
+    After DNS validation, the adapter creates a PinnedPoolManager that
+    injects the validated IP into each connection.  No global state is
+    mutated — each connection object carries its own pinned IP.
     """
 
     def __init__(self, pinned_ip: str, original_host: str, **kwargs):
@@ -71,72 +171,15 @@ verification use the original hostname.
         self.original_host = original_host
         super().__init__(**kwargs)
 
+    def init_poolmanager(self, *args, **kwargs):
+        self.poolmanager = PinnedPoolManager(
+            pinned_ip=self.pinned_ip,
+            original_host=self.original_host,
+        )
+
     def send(self, request, **kwargs):  # type: ignore[override]
-        _orig_socket_cc = socket.create_connection
-        _orig_util_cc = None
-
-        try:
-            import urllib3.util.connection
-            _orig_util_cc = urllib3.util.connection.create_connection
-        except (ImportError, AttributeError):
-            pass
-
-        def _pinned_socket_cc(address, *args, **kw):  # type: ignore[no-untyped-def]
-            host, port = address
-            return _orig_socket_cc((self.pinned_ip, port), *args, **kw)
-
-        def _pinned_util_cc(address, *args, **kw):  # type: ignore[no-untyped-def]
-            host, port = address
-            kw.pop("socket_options", None)
-            return _orig_socket_cc((self.pinned_ip, port), *args, **kw)
-
-        socket.create_connection = _pinned_socket_cc
-        if _orig_util_cc is not None:
-            urllib3.util.connection.create_connection = _pinned_util_cc
-        try:
-            request.headers["Host"] = self.original_host
-            return super().send(request, **kwargs)
-        finally:
-            socket.create_connection = _orig_socket_cc
-            if _orig_util_cc is not None:
-                urllib3.util.connection.create_connection = _orig_util_cc
-
-    def proxy_manager_for(self, proxy, **proxy_kwargs):
-        manager = super().proxy_manager_for(proxy, **proxy_kwargs)
-        orig_send = manager.send
-
-        def _pinned_send(request, *args, **kwargs):  # type: ignore[no-untyped-def]
-            _orig_socket_cc = socket.create_connection
-            _orig_util_cc = None
-
-            try:
-                import urllib3.util.connection
-                _orig_util_cc = urllib3.util.connection.create_connection
-            except (ImportError, AttributeError):
-                pass
-
-            def _pinned_socket_cc(address, *a, **kw):  # type: ignore[no-untyped-def]
-                host, port = address
-                return _orig_socket_cc((self.pinned_ip, port), *a, **kw)
-
-            def _pinned_util_cc(address, *a, **kw):  # type: ignore[no-untyped-def]
-                host, port = address
-                kw.pop("socket_options", None)
-                return _orig_socket_cc((self.pinned_ip, port), *a, **kw)
-
-            socket.create_connection = _pinned_socket_cc
-            if _orig_util_cc is not None:
-                urllib3.util.connection.create_connection = _pinned_util_cc
-            try:
-                request.headers["Host"] = self.original_host
-                return orig_send(request, *args, **kwargs)
-            finally:
-                socket.create_connection = _orig_socket_cc
-                if _orig_util_cc is not None:
-                    urllib3.util.connection.create_connection = _orig_util_cc
-
-        manager.send = _pinned_send  # type: ignore[assignment]
-        return manager
+        request.headers["Host"] = self.original_host
+        return super().send(request, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +240,7 @@ class SafeFetchResult:
     content_type: str | None
     redirect_chain: tuple[str, ...]
     resolved_ips: tuple[str, ...]
+    selected_ips: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -390,10 +434,12 @@ def safe_fetch_url(
         timeout = _timeout_tuple(limits)
         redirect_chain: list[str] = []
         all_resolved_ips: list[str] = []
+        all_selected_ips: list[str] = []
         current_url = url
-        session = requests.Session()
 
         for _ in range(limits.max_redirects + 1):
+            _check_timeout(_start, limits.total_timeout, "pre-request")
+
             # Validate + DNS-resolve the current URL
             try:
                 validated_url, ips = _validate_and_resolve(current_url)
@@ -406,14 +452,22 @@ def safe_fetch_url(
                     f"Failed to resolve {current_url!r}"
                 ) from exc
 
+            _check_timeout(_start, limits.total_timeout, "dns-resolution")
+
             all_resolved_ips.extend(ips)
+            selected_ip = ips[0]
+            all_selected_ips.append(selected_ip)
             current_url = validated_url
 
             parsed_current = requests.utils.urlparse(current_url)
             adapter = PinnedIPAdapter(
-                pinned_ip=ips[0],
+                pinned_ip=selected_ip,
                 original_host=parsed_current.hostname or "",
             )
+
+            # Fresh session per hop to avoid cross-hop state leakage
+            session = requests.Session()
+            session.trust_env = False
             session.mount(f"{parsed_current.scheme}://", adapter)
 
             try:
@@ -423,6 +477,7 @@ def safe_fetch_url(
                     timeout=timeout,
                     allow_redirects=False,
                     cookies={},
+                    proxies={},
                 )
             except requests.Timeout as exc:
                 _error_type = "timeout"
@@ -464,9 +519,11 @@ def safe_fetch_url(
                 redirect_chain.append(current_url)
                 current_url = next_url
                 _check_timeout(_start, limits.total_timeout, "redirect")
+                session.close()
                 continue
 
-            # Non-redirect response
+            # Non-redirect response — close session after use
+            session.close()
             break
         else:
             _error_type = "other"
@@ -529,6 +586,7 @@ def safe_fetch_url(
             content_type=_content_type_hdr,
             redirect_chain=tuple(redirect_chain),
             resolved_ips=tuple(all_resolved_ips),
+            selected_ips=tuple(all_selected_ips),
         )
 
     except SafeFetchError:

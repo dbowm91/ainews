@@ -406,10 +406,11 @@ The following are documented as intentional and should NOT be "fixed":
 | `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
 | `tests/test_production_config.py` | 56 tests for ProductionConfig validation, fail-closed provider checks |
 | `tests/test_smoke_production_config.py` | Production config validation smoke tests (Layer 1) |
-| `tests/test_smoke_migrations.py` | Database migration smoke tests (Layer 2) |
+| `tests/test_smoke_migrations.py` | Database migration smoke tests — real `flask db upgrade` via subprocess, verifies Alembic migration chain and table schemas (Layer 2) |
 | `tests/test_smoke_celery.py` | Celery app import/config smoke tests (Layer 3) |
 | `tests/test_docs_env_consistency.py` | Docs/env variable consistency smoke tests (Layer 7) |
 | `scripts/ci_compose_smoke.sh` | Docker Compose boot smoke test script (Layer 6) |
+| `tests/fixtures/providers.ci.yaml` | Minimal valid Ollama provider config for CI image smoke and production app-factory tests |
 | `scripts/wait_for_health.sh` | Reusable health check poller for CI scripts |
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |

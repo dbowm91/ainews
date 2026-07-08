@@ -48,9 +48,12 @@ def upgrade() -> None:
     op.create_index(
         "ix_article_versions_article_id", "article_versions", ["article_id"]
     )
-    op.create_unique_constraint(
-        "uq_article_version", "article_versions", ["article_id", "version_number"]
-    )
+    # Use batch mode for SQLite constraint creation (ALTER TABLE constraint
+    # operations are not supported in SQLite dialect).
+    with op.batch_alter_table("article_versions") as batch_op:
+        batch_op.create_unique_constraint(
+            "uq_article_version", ["article_id", "version_number"]
+        )
 
 
 def downgrade() -> None:

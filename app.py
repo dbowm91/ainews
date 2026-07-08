@@ -15,7 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 def _seed_share_configs():
+    from sqlalchemy import inspect as sa_inspect
+
     from models import ShareConfig
+
+    # Skip seeding if the table doesn't exist yet (e.g., during flask db upgrade
+    # before migrations have run). Alembic migrations will create the table.
+    try:
+        inspector = sa_inspect(db.engine)
+        if "share_configs" not in inspector.get_table_names():
+            return
+    except Exception:  # noqa: BLE001
+        return
 
     defaults = [
         {

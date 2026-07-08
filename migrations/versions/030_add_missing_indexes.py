@@ -12,7 +12,8 @@ down_revision = '029_sources_health_indexes'
 
 
 def upgrade():
-    op.create_index('ix_webhook_active', 'webhooks', ['active'])
+    # webhooks table and ix_webhook_active are created
+    # in 000_create_audit_logs (table was missing from earlier migrations).
     op.create_index('ix_source_active', 'sources', ['active'])
     op.create_index('ix_source_source_type', 'sources', ['source_type'])
     op.create_index('ix_subscriber_newsletter_type', 'subscribers', ['newsletter_type'])

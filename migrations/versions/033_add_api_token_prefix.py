@@ -18,7 +18,10 @@ def upgrade():
         WHERE token_prefix IS NULL
     """)
 
-    op.alter_column('api_tokens', 'token_prefix', nullable=False)
+    # Use batch mode for SQLite alter_column (ALTER COLUMN
+    # operations are not supported in SQLite dialect).
+    with op.batch_alter_table('api_tokens') as batch_op:
+        batch_op.alter_column('token_prefix', nullable=False)
     op.create_index('ix_api_tokens_token_prefix', 'api_tokens', ['token_prefix'], unique=False)
 
 

@@ -1,5 +1,7 @@
 # Milestone B Remaining Corrective Plan
 
+**Status: COMPLETE** — All six workstreams have been implemented and verified. See `plans/milestone_b_05_ci_deployment_smoke.md` closure note for details.
+
 ## Purpose
 
 This plan closes the remaining Milestone B gaps found after the first production-startup/deployment implementation pass. The repo now has substantially stronger production validation, recursive env-var resolution, Docker/Ollama guidance, docs alignment, and CI smoke jobs. The remaining work is narrower: ensure the smoke tests prove the intended deployment paths rather than approximating them, verify the Ollama Compose healthcheck, and add one integrated production app-factory path that does not bypass provider validation.

@@ -27,7 +27,8 @@ def upgrade() -> None:
     op.create_index("ix_newsletters_newsletter_type", "newsletters", ["newsletter_type"])
     op.create_index("ix_pipeline_runs_finished_at", "pipeline_runs", ["finished_at"])
     op.create_index("ix_subscribers_confirmed_at", "subscribers", ["confirmed_at"])
-    op.create_index("ix_search_queries_clicked_article_id", "search_queries", ["clicked_article_id"])
+    # search_queries table and ix_search_queries_clicked_article_id are created
+    # in 000_create_audit_logs (table was missing from earlier migrations).
 
 
 def downgrade() -> None:

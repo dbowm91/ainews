@@ -257,6 +257,14 @@ docker compose logs ollama
 # - GPU not available (CPU-only is fine, just slower)
 ```
 
+#### Ollama healthcheck uses `ollama list` instead of `curl`
+
+The `ollama/ollama` Docker image ships the `ollama` binary but does **not** include `curl` or `wget`. The Compose healthcheck therefore uses `["CMD", "ollama", "list"]` rather than a curl-based check. If you replace or customize the healthcheck, verify the tool is present:
+
+```bash
+docker run --rm ollama/ollama:latest sh -lc 'command -v curl || command -v wget || command -v ollama'
+```
+
 ---
 
 ## Diagnostic Commands

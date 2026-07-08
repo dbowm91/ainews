@@ -8,6 +8,7 @@ Create Date: 2026-04-21
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "021_article_sla_timestamps"
@@ -18,13 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column(
-        "articles", op.Column("crawled_at", op.DateTime(), nullable=True)
+        "articles", sa.Column("crawled_at", sa.DateTime(), nullable=True)
     )
     op.add_column(
-        "articles", op.Column("selected_at", op.DateTime(), nullable=True)
+        "articles", sa.Column("selected_at", sa.DateTime(), nullable=True)
     )
     op.add_column(
-        "articles", op.Column("published_at", op.DateTime(), nullable=True)
+        "articles", sa.Column("published_at", sa.DateTime(), nullable=True)
     )
     op.create_index("ix_articles_crawled_at", "articles", ["crawled_at"])
     op.create_index("ix_articles_selected_at", "articles", ["selected_at"])

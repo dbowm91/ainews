@@ -159,16 +159,20 @@ Tests run in `.github/workflows/ci.yml`:
 
 | File | Layer | What it validates |
 |------|-------|-------------------|
-| `tests/test_smoke_production_config.py` | 1 | `ProductionConfig.validate()` rejects bad configs, accepts valid ones |
-| `tests/test_smoke_migrations.py` | 2 | DB tables create cleanly on fresh SQLite |
+| `tests/test_smoke_production_config.py` | 1 | `ProductionConfig.validate()` rejects bad configs, accepts valid ones; `TestIntegratedProductionAppFactory` exercises real provider validation via subprocess |
+| `tests/test_smoke_migrations.py` | 2 | Real `flask db upgrade` via subprocess, verifies Alembic migration chain, `alembic_version` table, and schema (including `api_tokens` columns) |
 | `tests/test_smoke_celery.py` | 3 | Celery app imports, tasks registered, config set |
 | `tests/test_docs_env_consistency.py` | 7 | Required env vars documented in README and docs |
+| `tests/fixtures/providers.ci.yaml` | — | Minimal valid Ollama provider config for CI image smoke and production app-factory tests |
 
 ### Local Smoke Validation
 
 ```bash
 # Run all smoke tests
 .venv/bin/pytest tests/test_smoke_*.py tests/test_docs_env_consistency.py -v
+
+# Production-mode smoke (subprocess, no Docker)
+.venv/bin/pytest tests/test_smoke_production_config.py -v -k "Integrated"
 
 # Docker Compose boot smoke (requires Docker)
 ./scripts/ci_compose_smoke.sh

@@ -231,3 +231,15 @@ If Compose boot smoke is implemented:
 - Do not print generated secrets in logs.
 - Do not make smoke jobs depend on a developer's local `.env`.
 - Keep scripts idempotent and ensure Compose teardown runs on failure.
+
+## Closure Note
+
+**Status: COMPLETE** (2026-07-08)
+
+Milestone B corrective work is done. The following gaps have been addressed:
+
+- **Migration smoke** (`tests/test_smoke_migrations.py`): Now runs real `flask db upgrade` via subprocess against a fresh SQLite DB, verifies `alembic_version` table and schema (including `api_tokens` columns).
+- **Production app-factory smoke** (`tests/test_smoke_production_config.py`): `TestIntegratedProductionAppFactory` exercises `create_app("production")` via subprocess with real provider validation (no noop patching).
+- **Ollama healthcheck** (`docker-compose.ollama.yml`): Changed from `curl -sf http://localhost:11434/api/tags` to `["CMD", "ollama", "list"]` since the ollama image ships the `ollama` binary but not `curl`.
+- **CI docker-build** (`.github/workflows/ci.yml`): Added "Production mode image smoke" step that uses `FLASK_CONFIG=production` with proper secrets and `tests/fixtures/providers.ci.yaml`.
+- **Compose boot smoke** (`scripts/ci_compose_smoke.sh`): Hardened (password hashing, web log dumping, `.env.ci` cleanup in trap, password validation). Remains a manual gate — requires a Docker daemon and is not wired into CI.

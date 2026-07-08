@@ -96,6 +96,23 @@ jobs:
             ainews-ci \
             python -c "from app import create_app; print('App factory OK')"
 
+      - name: Production mode image smoke
+        run: |
+          SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+          HASHED_PW=$(python3 -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('ci-test-password-123'))")
+          CELERY_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+          docker run --rm \
+            -e FLASK_CONFIG=production \
+            -e SECRET_KEY="$SECRET_KEY" \
+            -e ADMIN_PASSWORD="$HASHED_PW" \
+            -e CELERY_TASK_SECRET="$CELERY_SECRET" \
+            -e DATABASE_URL=sqlite:////tmp/prod-smoke.db \
+            -e CELERY_BROKER_URL=redis://localhost:6379/0 \
+            -e CELERY_RESULT_BACKEND=redis://localhost:6379/1 \
+            -e LLM_PROVIDERS_FILE=/app/tests/fixtures/providers.ci.yaml \
+            ainews-ci \
+            python -c "from app import create_app; create_app('production'); print('Production app factory OK')"
+
   smoke-tests:
     runs-on: ubuntu-latest
 

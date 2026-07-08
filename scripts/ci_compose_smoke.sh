@@ -13,6 +13,7 @@ cleanup() {
     echo ""
     echo "=== Cleaning up ==="
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down -v --remove-orphans 2>/dev/null || true
+    rm -f "$ENV_FILE"
 }
 trap cleanup EXIT
 
@@ -65,7 +66,7 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "=== Step 0: Generating $ENV_FILE ==="
     SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-    HASHED_ADMIN_PW=$(python3 scripts/hash_password.py ci-test-password-123 2>/dev/null | grep "^  ADMIN_PASSWORD=" | sed 's/^  ADMIN_PASSWORD=//')
+    HASHED_ADMIN_PW=$(python3 scripts/hash_password.py ci-test-password-123 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
 
     cat > "$ENV_FILE" <<EOF
 FLASK_CONFIG=production
@@ -79,6 +80,10 @@ OLLAMA_MODEL=llama3.1
 OLLAMA_HOST=http://ollama:11434
 LOG_FORMAT=text
 EOF
+    if [ -z "$HASHED_ADMIN_PW" ]; then
+        echo "ERROR: Failed to hash admin password"
+        exit 1
+    fi
     echo "  Generated $ENV_FILE with throwaway credentials"
     chmod 600 "$ENV_FILE"
 else
@@ -121,6 +126,8 @@ while [ "$DB_MIGRATE_ELAPSED" -lt "$DB_MIGRATE_TIMEOUT" ]; do
             echo ""
             echo "=== db-migrate logs ==="
             docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs db-migrate
+            echo "=== web logs ==="
+            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs web
             exit 1
         fi
     fi
@@ -133,6 +140,8 @@ if [ "$DB_MIGRATE_ELAPSED" -ge "$DB_MIGRATE_TIMEOUT" ]; then
     echo ""
     echo "=== db-migrate logs ==="
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs db-migrate
+    echo "=== web logs ==="
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs web
     exit 1
 fi
 
@@ -145,7 +154,12 @@ HEALTH_URL="http://${WEB_PORT}/health"
 
 echo ""
 echo "=== Step 5: Waiting for /health (${HEALTH_TIMEOUT}s timeout) ==="
-bash "$SCRIPT_DIR/wait_for_health.sh" "$HEALTH_URL" "$HEALTH_TIMEOUT"
+if ! bash "$SCRIPT_DIR/wait_for_health.sh" "$HEALTH_URL" "$HEALTH_TIMEOUT"; then
+    echo ""
+    echo "=== Web logs on health failure ==="
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs web
+    exit 1
+fi
 
 echo ""
 echo "=== Step 6: Verifying health response ==="

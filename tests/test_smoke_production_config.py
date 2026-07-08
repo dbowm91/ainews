@@ -105,6 +105,7 @@ class TestProductionConfigRejectsCloudProviderMissingApiKey:
     def test_raises_runtime_error(self, monkeypatch):
         monkeypatch.delenv("MISSING_KEY_API_KEY", raising=False)
         import schemas.common
+
         monkeypatch.setattr(schemas.common, "_warned_missing_vars", set())
         _patch_validators(monkeypatch, except_names=["_validate_llm_providers"])
         cfg = _make_provider_config(
@@ -144,3 +145,66 @@ class TestProductionConfigRejectsDisabledDefaultProvider:
         with _patch_load_providers(cfg):
             with pytest.raises(RuntimeError, match="default_provider"):
                 ProductionConfig.validate()
+
+
+ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
+
+
+class TestIntegratedProductionAppFactory:
+    """Exercise create_app('production') with real provider validation.
+
+    Uses subprocess to avoid class-attribute env capture issues with
+    ProductionConfig. This proves the complete production startup path.
+    """
+
+    def test_production_app_factory_with_valid_providers(self, tmp_path):
+        """create_app('production') succeeds with valid Ollama provider config."""
+        import os
+        import subprocess
+        import sys
+
+        providers_yaml = """\
+default_provider: ollama-local
+providers:
+  - id: ollama-local
+    type: ollama
+    enabled: true
+    config:
+      model: qwen3:8b
+"""
+        providers_path = tmp_path / "providers.yaml"
+        providers_path.write_text(providers_yaml)
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "FLASK_CONFIG": "production",
+                "SECRET_KEY": "a" * 64,
+                "ADMIN_PASSWORD": generate_password_hash("ci-test-password-123"),
+                "CELERY_TASK_SECRET": "b" * 32,
+                "DATABASE_URL": f"sqlite:///{tmp_path / 'prod.db'}",
+                "CELERY_BROKER_URL": "redis://localhost:6379/15",
+                "CELERY_RESULT_BACKEND": "redis://localhost:6379/15",
+                "LLM_PROVIDERS_FILE": str(providers_path),
+            }
+        )
+        env.pop("AINEWS_RUNNING_IN_DOCKER", None)
+
+        script = (
+            "from app import create_app; "
+            "app = create_app('production'); "
+            'print(f\'FLASK_CONFIG={app.config.get("FLASK_CONFIG", "")}\'); '
+            'print(f\'SQLALCHEMY_DATABASE_URI={app.config.get("SQLALCHEMY_DATABASE_URI", "")}\'); '
+            "print('Production app factory OK')"
+        )
+
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"Production app factory failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        assert "Production app factory OK" in result.stdout

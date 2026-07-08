@@ -37,7 +37,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_topic_notes_topic", "topic_notes", ["topic"])
-    op.create_unique_constraint("uq_topic_source", "topic_notes", ["topic", "source"])
+    # Use batch mode for SQLite constraint creation (ALTER TABLE constraint
+    # operations are not supported in SQLite dialect).
+    with op.batch_alter_table("topic_notes") as batch_op:
+        batch_op.create_unique_constraint("uq_topic_source", ["topic", "source"])
 
 
 def downgrade() -> None:

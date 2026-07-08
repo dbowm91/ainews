@@ -1,0 +1,7 @@
+default_provider: ollama-local
+providers:
+  - id: ollama-local
+    type: ollama
+    enabled: true
+    config:
+      model: qwen3:8b

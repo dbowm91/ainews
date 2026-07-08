@@ -103,7 +103,7 @@ All providers implement `BaseLLMProvider` from `services/llm/base.py`. Registere
 
 **Timeouts:** All LLM providers use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from `constants.py`. Provider files should import and use this constant rather than hardcoding values.
 
-**Production Validation:** Enabled providers are validated at startup in production. Unknown types, missing credentials, and invalid `default_provider` cause fail-closed startup rejection. See `config.py:_validate_llm_providers()`.
+**Production Validation:** Enabled providers are validated at startup in production. Unknown types, missing credentials, and invalid `default_provider` cause fail-closed startup rejection. `_validate_llm_providers()` tracks `valid_provider_ids` and `_validate_default_provider()` verifies the default provider's config is valid (not just enabled). See `config.py:_validate_llm_providers()`.
 
 **LLM Retry with Backoff:** `BaseLLMProvider._retry_with_backoff()` retries on `RateLimitError`, `ProviderTimeoutError`, `ProviderServerError` with exponential backoff (base=1s, max=30s). Does NOT retry on `AuthError` or `CircuitOpenError`. When `RateLimitError` carries a `retry_after` attribute (from server's Retry-After header), that value is used instead of exponential backoff. Applied to all provider methods via `_do_*` / `_*` internal method pattern.
 

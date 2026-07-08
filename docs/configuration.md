@@ -276,7 +276,7 @@ Any `openai`-type provider is handled by the OpenAI-compatible adapter and works
 
 **Production validation:** In production (`FLASK_CONFIG=production`), provider config is validated at startup:
 - At least one provider must be enabled
-- `default_provider` must point to an existing, enabled provider
+- `default_provider` must point to an existing, enabled provider with valid configuration
 - Enabled cloud providers (`openai`, `anthropic`, `gemini`) must have valid `api_key` (non-empty, resolved from env vars)
 - Unknown provider types are rejected (must be `ollama`, `openai`, `anthropic`, or `gemini`)
 - Disabled providers with placeholder keys are silently skipped

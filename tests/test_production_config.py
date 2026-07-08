@@ -449,6 +449,21 @@ class TestValidateLLMProviders:
             assert r.has_errors
             assert not any("openai" in i.field for i in r.errors)
 
+    def test_default_provider_invalid_config_fails(self, monkeypatch):
+        cfg = _make_provider_config(
+            [
+                {"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b"}},
+                {"id": "openai", "type": "openai", "enabled": True, "config": {"model": "gpt-4o"}},
+            ],
+            default_provider="openai",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            _validate_llm_providers(r)
+            assert r.has_errors
+            assert any("default_provider" in i.field for i in r.errors)
+            assert any("invalid" in i.message.lower() for i in r.errors)
+
 
 # ---------------------------------------------------------------------------
 # ProductionConfig.validate() integration

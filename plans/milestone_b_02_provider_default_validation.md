@@ -176,3 +176,19 @@ Update `docs/configuration.md` and `.env.example` to explain:
 - Do not require API keys for disabled providers.
 - Avoid implicit default-provider fallback in production.
 - Keep provider validation compatible with future provider additions by centralizing provider type metadata.
+
+## Status: COMPLETE
+
+All 6 steps implemented and verified:
+
+1. **Recursive env-var resolution** — `schemas/common.py:resolve_env_vars()` already handles nested dicts/lists (B.2 Step 1 done in B.1)
+2. **Structured provider validation** — `_validate_llm_providers()` tracks `valid_provider_ids` set, `_validate_provider_type()`, `_validate_provider_config()`, `_validate_cloud_api_key()` return structured results
+3. **Provider type and config validation** — Each enabled provider validated against `ADAPTER_CONFIGS` Pydantic schema
+4. **`default_provider` validation** — `_validate_default_provider()` now checks existence, enabled status, AND config validity via `valid_provider_ids` set
+5. **Multi-provider and edge cases** — Tests cover: no providers, one invalid, disabled provider, missing default, disabled default, invalid config default
+6. **Actionable error messages** — Provider ID and field name in all errors, no secrets leaked
+
+### Test Results
+- `tests/test_production_config.py`: 56/56 pass (including new `test_default_provider_invalid_config_fails`)
+- All smoke tests: 73/73 pass
+- `ruff check`: 0 new issues

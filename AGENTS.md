@@ -71,7 +71,7 @@ The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlch
 Tasks layer IS allowed to import from services layer. This is not a layer violation - tasks are orchestrators that use business logic. The layer restriction is: Adapters cannot import from Services.
 
 ### Production Config Validation
-`ProductionConfig.validate()` (config.py:320-336) uses `ConfigValidationResult` to accumulate all validation errors and raise a single `RuntimeError`. Helpers: `_validate_debug()`, `_validate_session_security()`, `_validate_secrets()`, `_validate_llm_providers()`. LLM provider validation is fail-closed — catches `FileNotFoundError` and generic `Exception` as validation issues (not silent warnings). Tests in `tests/test_production_config.py` (48 tests). To add new validation: add a helper function that calls `result.add(field, message, fix_hint)` and call it from `ProductionConfig.validate()`.
+`ProductionConfig.validate()` (config.py:320-336) uses `ConfigValidationResult` to accumulate all validation errors and raise a single `RuntimeError`. Helpers: `_validate_debug()`, `_validate_session_security()`, `_validate_secrets()`, `_validate_llm_providers()`. LLM provider validation is fail-closed — catches `FileNotFoundError` and generic `Exception` as validation issues (not silent warnings). `_validate_llm_providers()` tracks `valid_provider_ids` and `_validate_default_provider()` verifies the default provider's config is valid (not just enabled). Tests in `tests/test_production_config.py` (56 tests). To add new validation: add a helper function that calls `result.add(field, message, fix_hint)` and call it from `ProductionConfig.validate()`.
 
 ## Architecture Conventions
 
@@ -404,7 +404,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `extensions.py` | Flask extensions (db, redis, limiter) |
 | `models/` | SQLAlchemy models package (article, source, newsletter, pipeline, context, etc.) |
 | `constants.py` | Constants including `PipelineStatus` enum, `DEFAULT_LLM_TIMEOUT_SECONDS` |
-| `tests/test_production_config.py` | 40 tests for ProductionConfig validation, fail-closed provider checks |
+| `tests/test_production_config.py` | 56 tests for ProductionConfig validation, fail-closed provider checks |
 | `tests/test_smoke_production_config.py` | Production config validation smoke tests (Layer 1) |
 | `tests/test_smoke_migrations.py` | Database migration smoke tests (Layer 2) |
 | `tests/test_smoke_celery.py` | Celery app import/config smoke tests (Layer 3) |

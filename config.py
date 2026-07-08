@@ -515,8 +515,12 @@ def _validate_default_provider(
     all_provider_ids: list[str],
     provider_by_id: dict[str, object],
     enabled_providers: list[str],
+    valid_provider_ids: set[str] | None = None,
 ) -> None:
     """Validate default_provider exists, is enabled, and is valid."""
+    if valid_provider_ids is None:
+        valid_provider_ids = set()
+
     if not config or not config.default_provider:
         if not enabled_providers:
             return  # Already reported "no providers enabled"
@@ -552,6 +556,18 @@ def _validate_default_provider(
                 fix_hint=(
                     f"Enable '{dp}' in providers.yaml or set "
                     "default_provider to an enabled provider"
+                ),
+            )
+        elif valid_provider_ids is not None and dp not in valid_provider_ids:
+            result.add(
+                field="default_provider",
+                message=(
+                    f"default_provider '{dp}' is enabled but has invalid "
+                    "configuration (e.g., missing api_key or model)"
+                ),
+                fix_hint=(
+                    f"Fix the configuration for '{dp}' in providers.yaml "
+                    "or set default_provider to a valid provider"
                 ),
             )
 
@@ -635,6 +651,7 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
     enabled_providers: list[str] = []
     all_provider_ids: list[str] = []
     provider_by_id: dict[str, object] = {}
+    valid_provider_ids: set[str] = set()
     config = None
 
     try:
@@ -661,6 +678,8 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
             if provider_type in ("openai", "anthropic", "gemini"):
                 _validate_cloud_api_key(result, pdef, provider_type)
 
+            valid_provider_ids.add(pdef.id)
+
     except FileNotFoundError as e:
         result.add(
             field="providers.yaml",
@@ -682,7 +701,10 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
             fix_hint="Enable at least one provider in providers.yaml",
         )
 
-    _validate_default_provider(result, config, all_provider_ids, provider_by_id, enabled_providers)
+    _validate_default_provider(
+        result, config, all_provider_ids, provider_by_id, enabled_providers,
+        valid_provider_ids=valid_provider_ids,
+    )
 
 
 config = {

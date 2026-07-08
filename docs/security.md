@@ -215,7 +215,7 @@ safe_html = escape_newsletter_content(llm_output)
 
 ### SSRF Prevention
 
-All untrusted URL fetches use the first-party safe fetch client (`services/safe_fetch.py`) which validates URLs, resolves DNS, blocks private/reserved IPs, handles redirects manually, and enforces byte/content-type limits:
+All untrusted URL fetches use the first-party safe fetch client (`services/safe_fetch.py`) which validates URLs, resolves DNS, blocks private/reserved IPs, handles redirects manually, and enforces byte/content-type limits. The content extractor (`services/content_extractor.py`) uses `safe_fetch_url()` for all untrusted URL fetches instead of `trafilatura.fetch_url()`.
 
 ```python
 from services.safe_fetch import safe_fetch_url, UnsafeFetchError, SafeFetchError

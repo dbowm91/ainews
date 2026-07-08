@@ -9,19 +9,22 @@ When BLE001 (blind exception catch) was narrowed to specific exception types, so
 
 ## Key Lessons Learned
 
-### 1. trafilatura Can Raise Generic Exceptions
+### 1. safe_fetch Can Raise Diverse Exceptions
 
 ```python
-# services/content_extractor.py - trafilatura.fetch_url raises diverse exceptions
+# services/content_extractor.py - uses safe_fetch_url for network I/O
 def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
+    from services.safe_fetch import safe_fetch_url, SafeFetchError, SafeFetchLimits
+    limits = SafeFetchLimits(...)
     try:
-        return trafilatura.fetch_url(url, config=cfg)
-    except (urllib3.exceptions.HTTPError, ValueError, Exception):  # noqa: BLE001
-        # trafilatura raises many exception types beyond HTTPError
+        result = safe_fetch_url(url, limits=limits)
+        return result.text
+    except SafeFetchError as e:
+        logger.warning("Content fetch failed for %s: %s", url, e)
         return None
 ```
 
-**Lesson:** External libraries like trafilatura can raise generic `Exception` from their network operations. Tests using plain `Exception("message")` will fail if you narrow too much.
+**Lesson:** External libraries like safe_fetch can raise specific exception types (e.g., `SafeFetchError`). Tests using plain `Exception("message")` will fail if you narrow too much — always catch the actual exception hierarchy.
 
 ### 2. Flask current_app Raises RuntimeError Outside Context
 
@@ -70,7 +73,7 @@ except (ImportError, httpx.HTTPError, ConnectionError, TimeoutError, ValueError,
 ### 5. Always Add noqa Comments for Intentional Broad Catches
 
 ```python
-except Exception:  # noqa: BLE001 - trafilatura raises diverse network exceptions
+except Exception:  # noqa: BLE001 - safe_fetch raises diverse network exceptions
 except Exception:  # noqa: BLE001 - Flask current_app raises RuntimeError outside context
 ```
 

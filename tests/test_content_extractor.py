@@ -147,3 +147,41 @@ class TestContentExtractor:
             result = extract_article("https://example.com/article")
             assert result.status == ExtractionStatus.EMPTY
             assert result.text is None
+
+    @patch("services.content_extractor.trafilatura.bare_extraction")
+    @patch("services.content_extractor.trafilatura.fetch_url", side_effect=AssertionError("trafilatura.fetch_url must not be called"))
+    @patch("services.safe_fetch.safe_fetch_url")
+    def test_extract_article_never_calls_trafilatura_fetch_url(self, mock_safe_fetch, mock_traf_fetch, mock_bare_extract):
+        """Regression: extract_article must use safe_fetch_url, never trafilatura.fetch_url."""
+        from services.content_extractor import ExtractionResult, extract_article
+
+        html = "<html><body>Article content for testing purposes</body></html>"
+        mock_safe_result = MagicMock()
+        mock_safe_result.text = html
+        mock_safe_fetch.return_value = mock_safe_result
+        mock_bare_extract.return_value = {
+            "text": "This is a long article text that should be at least 200 characters long. " * 5,
+            "title": "Test Article",
+            "author": "Test Author",
+        }
+
+        result = extract_article("https://example.com/article")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.status.value == "success"
+        mock_safe_fetch.assert_called_once()
+        mock_traf_fetch.assert_not_called()
+
+    @patch("services.content_extractor.trafilatura.fetch_url", side_effect=AssertionError("trafilatura.fetch_url must not be called"))
+    @patch("services.safe_fetch.safe_fetch_url", return_value=None)
+    def test_extract_article_from_html_no_network(self, mock_safe_fetch, mock_traf_fetch):
+        """Regression: when safe_fetch returns no content, must not fall back to trafilatura.fetch_url."""
+        from services.content_extractor import ExtractionResult, ExtractionStatus, extract_article
+
+        result = extract_article("https://example.com/article")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.status == ExtractionStatus.FETCH_ERROR
+        assert result.text is None
+        mock_safe_fetch.assert_called_once()
+        mock_traf_fetch.assert_not_called()

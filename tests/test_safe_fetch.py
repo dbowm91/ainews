@@ -1141,90 +1141,167 @@ class TestRejectZip:
 # ---------------------------------------------------------------------------
 class TestPinnedIPAdapter:
     def test_adapter_connects_to_pinned_ip(self):
-        """PinnedIPAdapter patches socket.create_connection to use the pinned IP."""
-        import socket as _socket
+        """PinnedIPAdapter stores pinned_ip and original_host, and connects via PinnedPoolManager."""
+        adapter = PinnedIPAdapter(
+            pinned_ip="127.0.0.1",
+            original_host="fake-hostname.example.com",
+        )
+        assert adapter.pinned_ip == "127.0.0.1"
+        assert adapter.original_host == "fake-hostname.example.com"
 
-        original_create_connection = _socket.create_connection
-        connection_targets = []
+        class OkHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
 
-        def tracking_create_connection(address, *args, **kwargs):
-            connection_targets.append(address)
-            return original_create_connection(address, *args, **kwargs)
+            def log_message(self, format, *args):
+                pass
 
-        _socket.create_connection = tracking_create_connection
+        server, _, base = _run_server(OkHandler)
+        try:
+            from requests import Request
+
+            req = Request("GET", f"{base}/test")
+            prepared = req.prepare()
+            adapter.send(prepared, timeout=(5, 10))
+        finally:
+            server.shutdown()
+
+    def test_adapter_sets_host_header(self):
+        """PinnedIPAdapter sets Host header to the original hostname for TLS SNI."""
+        received_hosts = []
+
+        class HostCaptureHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received_hosts.append(self.headers.get("Host", ""))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(HostCaptureHandler)
         try:
             adapter = PinnedIPAdapter(
                 pinned_ip="127.0.0.1",
                 original_host="fake-hostname.example.com",
             )
-            assert adapter.pinned_ip == "127.0.0.1"
-            assert adapter.original_host == "fake-hostname.example.com"
+            from requests import Request
 
-            class OkHandler(BaseHTTPRequestHandler):
-                def do_GET(self):
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/plain")
-                    self.end_headers()
-                    self.wfile.write(b"ok")
-
-                def log_message(self, format, *args):
-                    pass
-
-            server, _, base = _run_server(OkHandler)
-            try:
-                from requests import Request
-
-                req = Request("GET", f"{base}/test")
-                prepared = req.prepare()
-                adapter.send(prepared, timeout=(5, 10))
-            finally:
-                server.shutdown()
+            req = Request("GET", f"{base}/test")
+            prepared = req.prepare()
+            response = adapter.send(prepared, timeout=(5, 10))
+            assert response.status_code == 200
+            assert received_hosts[0] == "fake-hostname.example.com"
         finally:
-            _socket.create_connection = original_create_connection
+            server.shutdown()
 
-    def test_adapter_sets_host_header(self):
-        """PinnedIPAdapter sets Host header to the original hostname for TLS SNI."""
-        import socket as _socket
-
-        original_create_connection = _socket.create_connection
+    def test_adapter_preserves_non_default_port_in_host_header(self):
+        """PinnedIPAdapter includes port in Host header for non-default ports."""
         received_hosts = []
 
-        def tracking_create_connection(address, *args, **kwargs):
-            return original_create_connection(address, *args, **kwargs)
+        class HostCaptureHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received_hosts.append(self.headers.get("Host", ""))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
 
-        _socket.create_connection = tracking_create_connection
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(HostCaptureHandler)
         try:
-            class HostCaptureHandler(BaseHTTPRequestHandler):
-                def do_GET(self):
-                    received_hosts.append(self.headers.get("Host", ""))
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/plain")
-                    self.end_headers()
-                    self.wfile.write(b"ok")
+            adapter = PinnedIPAdapter(
+                pinned_ip="127.0.0.1",
+                original_host="example.com",
+                original_port=8080,
+                scheme="http",
+            )
+            from requests import Request
 
-                def log_message(self, format, *args):
-                    pass
-
-            server, _, base = _run_server(HostCaptureHandler)
-            try:
-                adapter = PinnedIPAdapter(
-                    pinned_ip="127.0.0.1",
-                    original_host="fake-hostname.example.com",
-                )
-                from requests import Request
-
-                req = Request("GET", f"{base}/test")
-                prepared = req.prepare()
-                response = adapter.send(prepared, timeout=(5, 10))
-                assert response.status_code == 200
-                assert received_hosts[0] == "fake-hostname.example.com"
-            finally:
-                server.shutdown()
+            req = Request("GET", f"{base}/test")
+            prepared = req.prepare()
+            response = adapter.send(prepared, timeout=(5, 10))
+            assert response.status_code == 200
+            assert received_hosts[0] == "example.com:8080"
         finally:
-            _socket.create_connection = original_create_connection
+            server.shutdown()
 
-    def test_patching_is_scoped_to_request(self):
-        """PinnedIPAdapter patches socket.create_connection during send and restores it after."""
+    def test_adapter_omits_default_port_from_host_header(self):
+        """PinnedIPAdapter omits port in Host header for default ports."""
+        received_hosts = []
+
+        class HostCaptureHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received_hosts.append(self.headers.get("Host", ""))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(HostCaptureHandler)
+        try:
+            adapter = PinnedIPAdapter(
+                pinned_ip="127.0.0.1",
+                original_host="example.com",
+                original_port=80,
+                scheme="http",
+            )
+            from requests import Request
+
+            req = Request("GET", f"{base}/test")
+            prepared = req.prepare()
+            response = adapter.send(prepared, timeout=(5, 10))
+            assert response.status_code == 200
+            assert received_hosts[0] == "example.com"
+        finally:
+            server.shutdown()
+
+    def test_adapter_omits_default_https_port_from_host_header(self):
+        """PinnedIPAdapter omits port 443 in Host header for HTTPS."""
+        received_hosts = []
+
+        class HostCaptureHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received_hosts.append(self.headers.get("Host", ""))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(HostCaptureHandler)
+        try:
+            adapter = PinnedIPAdapter(
+                pinned_ip="127.0.0.1",
+                original_host="example.com",
+                original_port=443,
+                scheme="https",
+            )
+            from requests import Request
+
+            req = Request("GET", f"{base}/test")
+            prepared = req.prepare()
+            response = adapter.send(prepared, timeout=(5, 10))
+            assert response.status_code == 200
+            assert received_hosts[0] == "example.com"
+        finally:
+            server.shutdown()
+
+    def test_adapter_does_not_mutate_global_socket_state(self):
+        """PinnedIPAdapter uses per-connection pinning (PinnedPoolManager) and never
+        mutates global socket.create_connection."""
         import socket as _socket
 
         original = _socket.create_connection
@@ -1356,8 +1433,9 @@ class TestPinnedIPAdapter:
 
 
 class TestNoGlobalSocketMonkeypatch:
-    """Verify safe_fetch never mutates socket.create_connection or
-    urllib3.util.connection.create_connection globally."""
+    """Regression test: safe_fetch uses per-connection IP pinning (PinnedHTTPConnection /
+    PinnedHTTPSConnection) and must never mutate global socket.create_connection or
+    urllib3.util.connection.create_connection."""
 
     def test_socket_create_connection_not_patched(self):
         import socket
@@ -1582,3 +1660,81 @@ class TestProxyBlocked:
                 assert result.body == b"ok"
         finally:
             server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 36. HTTPS connection-layer pinning (mocked, no TLS handshake needed)
+# ---------------------------------------------------------------------------
+class TestHttpsConnectionLayerPinning:
+    """Verify that PinnedHTTPSConnection connects TCP to the pinned IP while
+    preserving the original hostname for TLS SNI (server_hostname).
+
+    A full TLS handshake test is out of scope (requires cert generation and a
+    local HTTPS server). Instead, we verify the two invariants that make the
+    transport-layer pinning correct:
+
+    1. ``_new_conn()`` is called with the pinned IP (TCP goes to the validated IP).
+    2. ``self.host`` remains the original hostname (used as ``server_hostname``
+       by the parent ``HTTPSConnection.connect()`` for TLS SNI).
+    """
+
+    def test_https_connects_to_pinned_ip_preserves_sni(self):
+        """TCP connects to pinned_ip; self.host retains original hostname for SNI."""
+        from services.safe_fetch import PinnedHTTPSConnection
+
+        conn = PinnedHTTPSConnection(
+            host="example.com",
+            pinned_ip="93.184.216.34",
+            port=443,
+        )
+
+        # Invariant 1: self.host is the original hostname (TLS SNI source)
+        assert conn.host == "example.com"
+
+        # Invariant 2: _new_conn() connects to the pinned IP, not self.host
+        original_new_conn = PinnedHTTPSConnection._new_conn
+        captured_args = []
+        def tracking_new_conn(self_conn):
+            captured_args.append((self_conn._pinned_ip, self_conn.host))
+            # Return a mock socket so connect() can proceed (or fail gracefully)
+            import socket
+            return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        with patch.object(PinnedHTTPSConnection, "_new_conn", tracking_new_conn):
+            try:
+                conn.connect()
+            except (OSError, ValueError):
+                # TLS wrapping will fail on a plain socket — that's expected.
+                # The important thing is _new_conn was called with the right args.
+                pass
+
+        assert len(captured_args) == 1
+        pinned_ip, hostname = captured_args[0]
+        assert pinned_ip == "93.184.216.34", f"TCP should connect to pinned IP, got {pinned_ip}"
+        assert hostname == "example.com", f"self.host should be original hostname, got {hostname}"
+
+    def test_https_host_header_uses_original_hostname(self):
+        """PinnedIPAdapter._host_header() returns original hostname for HTTPS scheme."""
+        from services.safe_fetch import PinnedIPAdapter
+
+        adapter = PinnedIPAdapter(
+            pinned_ip="93.184.216.34",
+            original_host="example.com",
+            original_port=443,
+            scheme="https",
+        )
+
+        assert adapter._host_header() == "example.com"
+
+    def test_https_non_default_port_in_host_header(self):
+        """PinnedIPAdapter._host_header() includes non-default port for HTTPS."""
+        from services.safe_fetch import PinnedIPAdapter
+
+        adapter = PinnedIPAdapter(
+            pinned_ip="93.184.216.34",
+            original_host="example.com",
+            original_port=8443,
+            scheme="https",
+        )
+
+        assert adapter._host_header() == "example.com:8443"

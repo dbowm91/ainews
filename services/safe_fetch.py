@@ -166,10 +166,26 @@ class PinnedIPAdapter(requests.adapters.HTTPAdapter):
     mutated — each connection object carries its own pinned IP.
     """
 
-    def __init__(self, pinned_ip: str, original_host: str, **kwargs):
+    def __init__(
+        self,
+        pinned_ip: str,
+        original_host: str,
+        original_port: int | None = None,
+        scheme: str = "https",
+        **kwargs,
+    ):
         self.pinned_ip = pinned_ip
         self.original_host = original_host
+        self.original_port = original_port
+        self.scheme = scheme
         super().__init__(**kwargs)
+
+    def _host_header(self) -> str:
+        """Return the Host header value, including port for non-default ports."""
+        default_port = 443 if self.scheme == "https" else 80
+        if self.original_port is not None and self.original_port != default_port:
+            return f"{self.original_host}:{self.original_port}"
+        return self.original_host
 
     def init_poolmanager(self, *args, **kwargs):
         self.poolmanager = PinnedPoolManager(
@@ -178,7 +194,7 @@ class PinnedIPAdapter(requests.adapters.HTTPAdapter):
         )
 
     def send(self, request, **kwargs):  # type: ignore[override]
-        request.headers["Host"] = self.original_host
+        request.headers["Host"] = self._host_header()
         return super().send(request, **kwargs)
 
 
@@ -463,6 +479,8 @@ def safe_fetch_url(
             adapter = PinnedIPAdapter(
                 pinned_ip=selected_ip,
                 original_host=parsed_current.hostname or "",
+                original_port=parsed_current.port,
+                scheme=parsed_current.scheme or "https",
             )
 
             # Fresh session per hop to avoid cross-hop state leakage
@@ -471,26 +489,29 @@ def safe_fetch_url(
             session.mount(f"{parsed_current.scheme}://", adapter)
 
             try:
-                response = session.get(
-                    current_url,
-                    headers=_HEADERS,
-                    timeout=timeout,
-                    allow_redirects=False,
-                    cookies={},
-                    proxies={},
-                )
-            except requests.Timeout as exc:
-                _error_type = "timeout"
-                _log_rejection(current_url, "timeout")
-                raise SafeFetchTimeoutError(
-                    f"Request timed out: {current_url}"
-                ) from exc
-            except requests.ConnectionError as exc:
-                _error_type = "connection"
-                _log_rejection(current_url, f"connection error: {exc}")
-                raise SafeFetchError(
-                    f"Connection failed: {current_url}"
-                ) from exc
+                try:
+                    response = session.get(
+                        current_url,
+                        headers=_HEADERS,
+                        timeout=timeout,
+                        allow_redirects=False,
+                        cookies={},
+                        proxies={},
+                    )
+                except requests.Timeout as exc:
+                    _error_type = "timeout"
+                    _log_rejection(current_url, "timeout")
+                    raise SafeFetchTimeoutError(
+                        f"Request timed out: {current_url}"
+                    ) from exc
+                except requests.ConnectionError as exc:
+                    _error_type = "connection"
+                    _log_rejection(current_url, f"connection error: {exc}")
+                    raise SafeFetchError(
+                        f"Connection failed: {current_url}"
+                    ) from exc
+            finally:
+                session.close()
 
             status = response.status_code
 
@@ -519,11 +540,9 @@ def safe_fetch_url(
                 redirect_chain.append(current_url)
                 current_url = next_url
                 _check_timeout(_start, limits.total_timeout, "redirect")
-                session.close()
                 continue
 
-            # Non-redirect response — close session after use
-            session.close()
+            # Non-redirect response
             break
         else:
             _error_type = "other"

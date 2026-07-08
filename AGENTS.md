@@ -64,8 +64,12 @@ Some pipeline tests fail due to MagicMock objects being JSON serialized - this i
 ### Safe Fetch Test Mocking
 Tests in `tests/test_safe_fetch.py` use `_patch_for_local_server()` to bypass SSRF validation for local test servers (since loopback IPs are blocked by default). The `_patch_for_redirect_test()` variant lets `validate_url_safe()` run for redirect targets while bypassing initial URL validation. DNS cache is cleared before/after each test via the `_clear_dns_cache` autouse fixture in `conftest.py`.
 
+Obsolete `socket.create_connection` monkeypatch tests have been renamed/updated to verify transport-layer pinning directly (e.g., `test_adapter_does_not_mutate_global_socket_state`, `test_socket_create_connection_not_patched`). Connection-layer HTTPS tests (`test_https_connects_to_pinned_ip_preserves_sni`, `test_https_host_header_uses_original_hostname`, `test_https_non_default_port_in_host_header`) verify that HTTPS connections use pinned IPs while preserving the original hostname for SNI.
+
 ### Safe Fetch Coding Guidance
 All HTTP fetching for untrusted URLs must go through `safe_fetch_url()` in `services/safe_fetch.py`. Never call `trafilatura.fetch_url()`, `requests.get()`, `httpx.get()`, `urlopen()`, or `urllib.request` directly for untrusted content. Never monkeypatch `socket.create_connection` or `urllib3.util.connection.create_connection` — safe fetch uses thread-safe custom urllib3 connection classes (`PinnedHTTPConnection`, `PinnedHTTPSConnection`) instead. The release checklist `rg` pattern catches violations. `services/content_extractor.py` demonstrates the correct integration pattern: lazy import of `safe_fetch_url`, custom timeout and byte limits passed via kwargs, and proper exception handling for `UnsafeFetchError` and `SafeFetchError`.
+
+`PinnedIPAdapter` stores `original_port` and `scheme` alongside the pinned IP and original hostname. The `Host` header is set per-request in `send()`: non-default ports (e.g., `example.com:8080`) are included; default ports (80 for HTTP, 443 for HTTPS) are omitted. Each redirect hop creates a fresh `requests.Session` that is closed in a `finally` block to prevent resource leaks.
 
 ### Safe Fetch DNS Resolution Policy
 The safe fetch client uses a fail-closed DNS resolution policy:

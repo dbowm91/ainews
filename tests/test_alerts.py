@@ -131,7 +131,7 @@ class TestCheckPipelineBacklog:
             source = Source(source_key="test", name="Test", source_type="rss", url="http://test.com")
             db.session.add(source)
             db.session.commit()
-            for i in range(55):
+            for _i in range(55):
                 article = Article(
                     source_id=source.id,
                     pipeline_status="pending",
@@ -153,7 +153,7 @@ class TestCheckPipelineBacklog:
             source = Source(source_key="test2", name="Test2", source_type="rss", url="http://test2.com")
             db.session.add(source)
             db.session.commit()
-            for i in range(5):
+            for _i in range(5):
                 article = Article(
                     source_id=source.id,
                     pipeline_status="pending",
@@ -175,7 +175,7 @@ class TestCheckStuckArticles:
             source = Source(source_key="test3", name="Test3", source_type="rss", url="http://test3.com")
             db.session.add(source)
             db.session.commit()
-            for i in range(15):
+            for _i in range(15):
                 article = Article(
                     source_id=source.id,
                     pipeline_status="pending",
@@ -286,7 +286,7 @@ class TestCheckQualityGateFailures:
             db.session.add(source)
             db.session.commit()
             now = datetime.now(timezone.utc)
-            for i in range(6):
+            for _i in range(6):
                 article = Article(source_id=source.id, pipeline_status="published")
                 db.session.add(article)
             db.session.commit()

@@ -153,7 +153,8 @@ Tests run in `.github/workflows/ci.yml`:
 3. **pip-audit** — dependency scanning
 4. **trivy** — container vulnerability scanning
 5. **smoke-tests** — dedicated job running production config, Celery, migration, and docs consistency smoke tests
-6. **docker-build** — builds image, validates Compose config (base + Ollama override), runs image smoke test
+6. **compose-smoke** — full Docker Compose boot: Redis, db-migrate, web, /health endpoint (Layer 6)
+7. **docker-build** — builds image, validates Compose config (base + Ollama override), runs image smoke test
 
 ### Smoke Test Files
 
@@ -163,6 +164,7 @@ Tests run in `.github/workflows/ci.yml`:
 | `tests/test_smoke_migrations.py` | 2 | Real `flask db upgrade` via subprocess, verifies Alembic migration chain, `alembic_version` table, and schema (including `api_tokens` columns) |
 | `tests/test_smoke_celery.py` | 3 | Celery app imports, tasks registered, config set |
 | `tests/test_docs_env_consistency.py` | 7 | Required env vars documented in README and docs |
+| `scripts/ci_compose_smoke.sh` | 6 | Full Docker Compose boot: Redis, db-migrate, web, /health endpoint |
 | `tests/fixtures/providers.ci.yaml` | — | Minimal valid Ollama provider config for CI image smoke and production app-factory tests |
 
 ### Local Smoke Validation

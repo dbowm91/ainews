@@ -409,7 +409,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `tests/test_smoke_migrations.py` | Database migration smoke tests — real `flask db upgrade` via subprocess, verifies Alembic migration chain and table schemas (Layer 2) |
 | `tests/test_smoke_celery.py` | Celery app import/config smoke tests (Layer 3) |
 | `tests/test_docs_env_consistency.py` | Docs/env variable consistency smoke tests (Layer 7) |
-| `scripts/ci_compose_smoke.sh` | Docker Compose boot smoke test script (Layer 6) |
+| `scripts/ci_compose_smoke.sh` | Docker Compose boot smoke test script (Layer 6) — wired into CI as `compose-smoke` job |
 | `tests/fixtures/providers.ci.yaml` | Minimal valid Ollama provider config for CI image smoke and production app-factory tests |
 | `scripts/wait_for_health.sh` | Reusable health check poller for CI scripts |
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
@@ -497,6 +497,18 @@ Three-layer CSRF protection with API exemptions:
 ## Plan Completion Status
 
 The implementation plan (`plans/plan.md`) is fully complete. All waves (1-9) have been implemented and verified.
+
+Milestone B is closed. All acceptance criteria met:
+- Production config validation fails closed on missing/weak secrets and invalid enabled providers
+- `default_provider` must exist, be enabled, and validate
+- Nested env-var placeholders resolve correctly
+- Docker/Ollama deployment path is documented and Compose config validates
+- Real Alembic migration smoke runs against fresh SQLite
+- Integrated production app-factory smoke runs without provider-validation bypass
+- Production-mode Docker image smoke runs in CI
+- Full Compose boot smoke is CI-required (Option A)
+- Ollama override healthcheck uses `ollama list` (verified)
+- CI and docs accurately state what is automated versus manual
 
 Historical reference: `plans/plan.md` contains the full implementation history with success metrics.
 

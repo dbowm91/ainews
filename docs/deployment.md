@@ -662,6 +662,10 @@ FLASK_CONFIG=production alembic upgrade head
 deactivate
 ```
 
+### Migration History Note
+
+The migration chain was normalized before public release. A root migration (`000_create_audit_logs`) was added to create tables that existed in models but were missing from the original migration chain (`admin_users`, `audit_logs`, `webhooks`, `webhook_events`, `search_queries`, `quality_reports`). The original `001_initial` migration was rewired to depend on this root. This rewrite is safe because no databases have been deployed yet. If deploying to an existing database created before this normalization, run `flask db upgrade` from the previous head revision before updating.
+
 ### Rollback
 
 ```bash
@@ -675,6 +679,21 @@ sudo systemctl stop ainews-web ainews-celery-worker ainews-celery-beat
 sudo -u ainews git checkout <previous-commit>
 sudo systemctl start ainews-web ainews-celery-worker ainews-celery-beat
 ```
+
+---
+
+## Release Checklist
+
+Before tagging a release, verify the following:
+
+1. **All CI checks pass** — lint, tests, smoke tests, Docker build, and Compose boot smoke
+2. **Compose boot smoke** runs automatically in CI on every push to `main` and on PRs. Locally, run:
+   ```bash
+   bash scripts/ci_compose_smoke.sh
+   ```
+3. **Production config validation** — `ProductionConfig.validate()` rejects missing/weak secrets and invalid providers
+4. **Migration smoke** — `flask db upgrade` passes from a fresh database
+5. **Ollama healthcheck** — if using the Ollama Compose override, verify `ollama list` works as healthcheck
 
 ---
 

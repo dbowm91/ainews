@@ -142,6 +142,15 @@ jobs:
       - name: Run docs consistency smoke tests
         run: .venv/bin/python -m pytest tests/test_docs_env_consistency.py -v
 
+  compose-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Docker Compose boot smoke
+        run: bash scripts/ci_compose_smoke.sh
+
   gitleaks:
     runs-on: ubuntu-latest
 

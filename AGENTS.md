@@ -272,6 +272,15 @@ Circuit breaker keys use the **role** convention: `llm:{provider}:{model}:{selec
 ### Docker Security State
 Dockerfile uses single-stage build (no multi-stage). Non-root `ainews` user (uid/gid 1000) is implemented at `Dockerfile:39`. No `read_only: true` on any service in `docker-compose.yml`. Resource memory limits and healthchecks exist. Static volume mount is read-only (`./static:/app/static:ro`).
 
+### Docker Deployment Modes
+Four deployment modes are documented in `docs/deployment.md#docker-with-ollama`:
+- **Mode A (Cloud provider):** Simplest. Set API key in `.env`, enable provider in `providers.yaml`.
+- **Mode B (Ollama Compose service):** Use `docker-compose.ollama.yml` override. Provider host: `http://ollama:11434`.
+- **Mode C (Host Ollama):** Provider host: `http://host.docker.internal:11434`. Linux requires `extra_hosts: ["host.docker.internal:host-gateway"]`.
+- **Mode D (Bare metal):** Provider host: `http://localhost:11434` is correct.
+
+**Critical:** `localhost` inside Docker containers refers to the container itself, NOT the host. Using `http://localhost:11434` from Docker will silently fail at LLM call time. `AINEWS_RUNNING_IN_DOCKER=1` env var is set in Dockerfile and compose services. `ProductionConfig.validate()` emits a warning when Ollama uses localhost inside Docker (see `_validate_docker_ollama_host()` in `config.py`).
+
 ### Health Check Property Name
 The `HealthResult` model at `services/health.py:27-29` has `is_healthy` property (NOT `is_fully_healthy`). It returns `True` for both `"ok"` and `"degraded"` statuses. If a strict health check is needed, check `status == "ok"` directly.
 

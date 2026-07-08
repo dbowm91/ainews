@@ -208,6 +208,7 @@ topics:
 ### `providers.yaml` — LLM Providers
 
 ```yaml
+# Bare-metal Ollama (app runs on same host as Ollama):
 providers:
   - id: ollama-local
     type: ollama
@@ -220,7 +221,7 @@ providers:
     type: openai
     enabled: false
     config:
-      api_key: "${OPENAI_API_KEY}"     # Resolved from env at runtime
+      api_key: "${OPENAI_API_KEY}"
       model: "gpt-4o-mini"
 
   - id: anthropic
@@ -258,6 +259,16 @@ default_provider: ollama-local
 | `anthropic` | `api_key`, `model`, `max_tokens` |
 
 Any `openai`-type provider is handled by the OpenAI-compatible adapter and works with MiniMax, DeepSeek, Zai (BigModel.cn), Groq, TogetherAI, and similar providers.
+
+**Docker Ollama host values:**
+
+| Deployment | Ollama `host` value |
+|------------|---------------------|
+| Bare metal | `http://localhost:11434` |
+| Docker Compose Ollama service | `http://ollama:11434` |
+| Host Ollama from container | `http://host.docker.internal:11434` |
+
+> **Warning:** `localhost` inside a Docker container refers to the container itself, not the host. Using `http://localhost:11434` from Docker containers will silently fail at LLM call time. See [Deployment Guide](deployment.md#docker-with-ollama).
 
 **Production validation:** In production (`FLASK_CONFIG=production`), provider config is validated at startup:
 - Unknown provider types are rejected (must be `ollama`, `openai`, or `anthropic`)

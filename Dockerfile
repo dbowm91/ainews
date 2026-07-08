@@ -36,6 +36,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 WORKDIR /app
 
+ENV AINEWS_RUNNING_IN_DOCKER=1
+
 # Copy application code
 COPY --from=builder /app /app
 

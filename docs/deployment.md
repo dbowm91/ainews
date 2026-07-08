@@ -9,6 +9,14 @@ Deploy ainews to a production server using Docker (recommended) or bare metal wi
 - Docker and Docker Compose
 - A `.env` file with production settings
 
+### Required Secrets
+
+| Variable | How to generate |
+|----------|----------------|
+| `SECRET_KEY` | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ADMIN_PASSWORD` | `python scripts/hash_password.py` |
+| `CELERY_TASK_SECRET` | `python -c "import secrets; print(secrets.token_hex(32))"` |
+
 ### Quick Deploy
 
 ```bash
@@ -20,19 +28,64 @@ cp .env.example .env
 Edit `.env`:
 ```bash
 FLASK_CONFIG=production
-SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
-ADMIN_PASSWORD=<run: python scripts/hash_password.py>
+SECRET_KEY=<64-char hex string>
+ADMIN_PASSWORD=<hashed password from hash_password.py>
+CELERY_TASK_SECRET=<64-char hex string>
 CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/1
 ```
 
-Start:
+#### Choose an LLM Provider
+
+**Option 1: Cloud provider (simplest)**
+```yaml
+# providers.yaml
+default_provider: openai
+providers:
+  - id: openai
+    type: openai
+    enabled: true
+    config:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+```
+Set `OPENAI_API_KEY=sk-...` in `.env`.
+
+**Option 2: Ollama as a Compose service**
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+```
+This adds an Ollama container accessible at `http://ollama:11434`. Update `providers.yaml`:
+```yaml
+default_provider: ollama-local
+providers:
+  - id: ollama-local
+    type: ollama
+    enabled: true
+    config:
+      host: "http://ollama:11434"
+      model: "qwen3:8b"
+```
+Pull the model on first run: `docker compose exec ollama ollama pull qwen3:8b`
+
+**Option 3: Host Ollama (advanced)**
+If Ollama runs on the host machine, use `host.docker.internal`:
+```yaml
+config:
+  host: "http://host.docker.internal:11434"
+```
+On Linux, this may require `extra_hosts` in `docker-compose.yml`:
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
 ```
 
-Verify:
+> **Warning:** `http://localhost:11434` does NOT work from inside Docker containers. The app will start but LLM calls will fail. Use one of the options above.
+
+### Start and Verify
+
 ```bash
+docker compose up -d
 docker compose ps
 curl http://localhost:5000/health
 ```
@@ -47,6 +100,34 @@ In production mode (`FLASK_CONFIG=production`), `ProductionConfig.validate()` ru
 - **Required secrets:** SECRET_KEY, ADMIN_PASSWORD must be set
 
 Fix the reported issue and restart. See [docs/configuration.md](docs/configuration.md) for provider config reference.
+
+### Docker with Ollama
+
+**Important:** `localhost` inside a Docker container refers to the container itself, not the host machine. If Ollama runs on the host, the app containers cannot reach it at `localhost:11434`.
+
+#### Mode A: Ollama as Compose service (recommended for self-hosted)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+docker compose exec ollama ollama pull qwen3:8b
+```
+
+Set `providers.yaml` host to `http://ollama:11434`. The Ollama container joins the same Docker network and is accessible by service name.
+
+#### Mode B: Host Ollama
+
+If you prefer Ollama on the host, configure `providers.yaml` with `http://host.docker.internal:11434`.
+
+- **macOS/Windows:** Docker Desktop supports `host.docker.internal` by default.
+- **Linux:** Add `extra_hosts: ["host.docker.internal:host-gateway"]` to each service that needs host access.
+
+#### Mode C: Cloud provider
+
+No Ollama needed. Set an API key for OpenAI, Anthropic, or another cloud provider in `.env` and enable it in `providers.yaml`.
+
+#### Mode D: Bare metal
+
+`http://localhost:11434` is correct when running the app directly on the host with Ollama.
 
 ### Docker Services
 

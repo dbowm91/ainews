@@ -138,6 +138,17 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 
 `run.py` exports `WsgiToAsgi(flask_app)` as module-level `app` for Granian. Flask remains WSGI internally. Do NOT remove the wrapper.
 
+## Docker Deployment
+
+Four deployment modes (see `docs/deployment.md#docker-with-ollama`):
+
+- **Mode A (Cloud provider):** Set API key in `.env`, enable provider in `providers.yaml`. Simplest.
+- **Mode B (Ollama Compose service):** `docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d`. Provider host: `http://ollama:11434`.
+- **Mode C (Host Ollama):** Provider host: `http://host.docker.internal:11434`. Linux requires `extra_hosts: ["host.docker.internal:host-gateway"]`.
+- **Mode D (Bare metal):** Provider host: `http://localhost:11434` is correct.
+
+**Critical:** `localhost` inside Docker containers refers to the container itself, NOT the host. `AINEWS_RUNNING_IN_DOCKER=1` env var is set in Dockerfile/compose. `ProductionConfig.validate()` warns when Ollama uses localhost inside Docker (see `_validate_docker_ollama_host()` in `config.py`).
+
 ## Config System
 
 **Config access pattern (Celery-safe):**

@@ -10,6 +10,7 @@ Covers:
 
 import os
 import textwrap
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -562,3 +563,95 @@ class TestProductionAppFactorySmoke:
 
         with pytest.raises(RuntimeError, match="ADMIN_PASSWORD"):
             create_app("production")
+
+
+# ---------------------------------------------------------------------------
+# Docker environment detection and Ollama host validation
+# ---------------------------------------------------------------------------
+
+
+class TestDockerDetection:
+    def test_detects_docker_env_var(self, monkeypatch):
+        from config import _detect_docker_environment
+        monkeypatch.setenv("AINEWS_RUNNING_IN_DOCKER", "1")
+        assert _detect_docker_environment() is True
+
+    def test_no_docker_env_var(self, monkeypatch):
+        from config import _detect_docker_environment
+        monkeypatch.delenv("AINEWS_RUNNING_IN_DOCKER", raising=False)
+        # Mock Path to simulate no /.dockerenv
+        import config as config_mod
+        original_path = Path
+        def mock_path(p):
+            if str(p) == "/.dockerenv":
+                class FakePath:
+                    def exists(self):
+                        return False
+                return FakePath()
+            return original_path(p)
+        monkeypatch.setattr(config_mod, "Path", mock_path)
+        # Also mock /proc/1/cgroup
+        assert _detect_docker_environment() is False
+
+
+class TestValidateDockerOllamaHost:
+    def test_warns_localhost_in_docker(self, monkeypatch):
+        monkeypatch.setenv("AINEWS_RUNNING_IN_DOCKER", "1")
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b", "host": "http://localhost:11434"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            from config import _validate_docker_ollama_host
+            _validate_docker_ollama_host(r)
+            assert len(r.warnings) == 1
+            assert "localhost" in r.warnings[0].message
+
+    def test_no_warning_compose_ollama_host(self, monkeypatch):
+        monkeypatch.setenv("AINEWS_RUNNING_IN_DOCKER", "1")
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b", "host": "http://ollama:11434"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            from config import _validate_docker_ollama_host
+            _validate_docker_ollama_host(r)
+            assert len(r.warnings) == 0
+
+    def test_no_warning_not_in_docker(self, monkeypatch):
+        monkeypatch.delenv("AINEWS_RUNNING_IN_DOCKER", raising=False)
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b", "host": "http://localhost:11434"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            from config import _validate_docker_ollama_host
+            _validate_docker_ollama_host(r)
+            assert len(r.warnings) == 0
+
+    def test_no_warning_disabled_ollama_in_docker(self, monkeypatch):
+        monkeypatch.setenv("AINEWS_RUNNING_IN_DOCKER", "1")
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": False, "config": {"model": "qwen3:8b", "host": "http://localhost:11434"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            from config import _validate_docker_ollama_host
+            _validate_docker_ollama_host(r)
+            assert len(r.warnings) == 0
+
+    def test_warns_127_0_0_1_in_docker(self, monkeypatch):
+        monkeypatch.setenv("AINEWS_RUNNING_IN_DOCKER", "1")
+        cfg = _make_provider_config(
+            [{"id": "ollama-local", "type": "ollama", "enabled": True, "config": {"model": "qwen3:8b", "host": "http://127.0.0.1:11434"}}],
+            default_provider="ollama-local",
+        )
+        with _patch_load_providers(cfg):
+            r = ConfigValidationResult()
+            from config import _validate_docker_ollama_host
+            _validate_docker_ollama_host(r)
+            assert len(r.warnings) == 1

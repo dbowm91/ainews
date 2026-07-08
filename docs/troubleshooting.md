@@ -219,6 +219,44 @@ sqlite3 /opt/ainews/instance/prod.db "VACUUM;"
 sqlite3 /opt/ainews/instance/prod.db ".indices"
 ```
 
+### Docker Ollama Issues
+
+#### LLM calls fail with connection error in Docker
+
+The most common Docker issue: `localhost` inside a container refers to the container itself, not the host machine.
+
+```bash
+# Check what the container can reach:
+docker compose exec web curl -sf http://localhost:11434/api/tags  # Will fail if Ollama is on host
+docker compose exec web curl -sf http://ollama:11434/api/tags     # Works with Compose Ollama service
+docker compose exec web curl -sf http://host.docker.internal:11434/api/tags  # Works with host Ollama
+```
+
+**Fix:** Update `providers.yaml` host to match your deployment:
+- Compose Ollama service: `http://ollama:11434`
+- Host Ollama: `http://host.docker.internal:11434`
+
+Then restart: `docker compose restart web celery-worker`
+
+#### Ollama model not found
+
+```bash
+# List available models in the Ollama container:
+docker compose exec ollama ollama list
+
+# Pull the model:
+docker compose exec ollama ollama pull qwen3:8b
+```
+
+#### Ollama container healthcheck failing
+
+```bash
+docker compose logs ollama
+# Common causes:
+# - Insufficient memory (Ollama needs 4GB+ for qwen3:8b)
+# - GPU not available (CPU-only is fine, just slower)
+```
+
 ---
 
 ## Diagnostic Commands

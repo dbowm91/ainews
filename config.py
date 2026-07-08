@@ -332,6 +332,7 @@ class ProductionConfig(Config):
         _validate_session_security(result)
         _validate_secrets(result)
         _validate_llm_providers(result)
+        _validate_docker_ollama_host(result)
         result.raise_on_errors()
         return result
 
@@ -553,6 +554,65 @@ def _validate_default_provider(
                     "default_provider to an enabled provider"
                 ),
             )
+
+
+def _detect_docker_environment() -> bool:
+    """Detect if running inside a Docker container."""
+    # Explicit env var (set in Dockerfile/Compose)
+    if os.environ.get("AINEWS_RUNNING_IN_DOCKER") == "1":
+        return True
+    # Standard Docker indicator file
+    if Path("/.dockerenv").exists():
+        return True
+    # Check cgroup for Docker/containerd
+    try:
+        cgroup = Path("/proc/1/cgroup")
+        if cgroup.exists():
+            text = cgroup.read_text()
+            if "docker" in text or "containerd" in text:
+                return True
+    except (OSError, PermissionError):
+        pass
+    return False
+
+
+def _validate_docker_ollama_host(result: ConfigValidationResult) -> None:
+    """Warn when Ollama uses localhost inside Docker containers.
+
+    Inside a Docker container, localhost refers to the container itself,
+    not the host machine. The LLM pipeline will fail at call time if
+    Ollama is running on the host but the provider points to localhost.
+    """
+    if not _detect_docker_environment():
+        return
+
+    try:
+        from schemas.llm import load_providers_config
+
+        config = load_providers_config()
+        for pdef in config.providers:
+            if not pdef.enabled or pdef.type != "ollama":
+                continue
+            host = pdef.config.get("host", "http://localhost:11434")
+            if "localhost" in host or "127.0.0.1" in host:
+                result.add(
+                    field=f"providers.{pdef.id}.config.host",
+                    message=(
+                        f"Ollama provider '{pdef.id}' host is '{host}' "
+                        "but the app appears to be running inside Docker. "
+                        "localhost inside a container refers to the container "
+                        "itself, not the host machine."
+                    ),
+                    fix_hint=(
+                        "Use 'http://ollama:11434' if Ollama runs as a Compose "
+                        "service (see docker-compose.ollama.yml), or "
+                        "'http://host.docker.internal:11434' if Ollama runs "
+                        "on the host machine."
+                    ),
+                    severity="warning",
+                )
+    except Exception:  # noqa: BLE001
+        pass  # Don't fail startup on Docker detection issues
 
 
 def _validate_llm_providers(result: ConfigValidationResult) -> None:

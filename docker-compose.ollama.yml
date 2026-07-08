@@ -1,0 +1,42 @@
+# Docker Compose override for running Ollama as a Compose service.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+#
+# This adds an Ollama service accessible at http://ollama:11434 from
+# the app containers. Update your providers.yaml to use:
+#   host: "http://ollama:11434"
+#
+# For host-machine access (debugging), the port is exposed on 127.0.0.1 only.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  web:
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  celery-worker:
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama-data:

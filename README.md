@@ -12,11 +12,13 @@ AI-powered news aggregation and newsletter platform. Discovers, summarizes, and 
 git clone https://github.com/dbowm91/ainews.git
 cd ainews
 cp .env.example .env
-# Edit .env — set SECRET_KEY and at least one LLM provider
+# Edit .env — set SECRET_KEY, ADMIN_PASSWORD, CELERY_TASK_SECRET, and an LLM provider API key
 docker compose up -d
 ```
 
 App at `http://localhost:5000`. Admin at `http://localhost:5000/admin/login`.
+
+> **Ollama in Docker:** The default Ollama provider at `localhost:11434` does not work from inside Docker containers. See [Deployment Guide](docs/deployment.md#docker-with-ollama) for Docker-compatible Ollama setup.
 
 ### Bare Metal
 
@@ -81,6 +83,7 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 
 ## Known Limitations
 
+- Docker containers cannot reach `localhost` on the host machine — use `host.docker.internal` or run Ollama as a Compose service (see `docker-compose.ollama.yml`)
 - Requires Redis for background task processing
 - SQLite is suitable for single-node deployments; multi-node may need a different DB strategy
 - LLM quality depends on provider/model configuration

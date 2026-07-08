@@ -231,9 +231,14 @@ If you prefer Docker over local setup:
 
 ```bash
 cp .env.example .env
-# Edit .env
-docker compose up -d
+# Edit .env — set SECRET_KEY, ADMIN_PASSWORD, CELERY_TASK_SECRET
+# For cloud LLM: set OPENAI_API_KEY in .env and enable openai in providers.yaml
+# For Ollama in Docker: use the override file
+docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+docker compose exec ollama ollama pull qwen3:8b
 ```
+
+> **Note:** The default `localhost:11434` Ollama host does not work inside Docker. Use the Compose override or a cloud provider. See [Deployment Guide](deployment.md#docker-with-ollama) for details.
 
 ## Troubleshooting
 

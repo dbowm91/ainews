@@ -512,6 +512,7 @@ Used in: `services/content_extractor.py`, `services/search/*.py`, `services/suba
 | `services/cost_tracker.py` | LLM cost tracking |
 | `services/task_security.py` | HMAC task signing |
 | `services/url.py` | URL validation with config support (SSRF prevention) |
+| `services/safe_fetch.py` | Safe HTTP fetch client (SSRF, redirects, byte limits, content-type) |
 | `services/alerts.py` | Alerting system |
 | `services/quality_report.py` | Quality report generation |
 | `services/stage_cost.py` | LLM cost estimation per stage |
@@ -522,5 +523,6 @@ The codebase has two URL validation implementations:
 
 - **`utils/url.py`**: SSRF protection for adapters (clean layering). Adapters import from here.
 - **`services/url.py`**: URL validation with config support for services. Re-exports `TRACKING_PARAMS`, `normalize_title`, `normalize_url` from `utils/url.py` but has its own `validate_url_safe()` implementation with config support.
+- **`services/safe_fetch.py`**: First-party safe fetch client for untrusted URLs. Delegates SSRF validation to `services.url.validate_url_safe()`. Handles manual redirect validation, streaming byte limits, and content-type allowlist. Used by `services/content_extractor.py`.
 
-Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support).
+Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support), `services/safe_fetch.py` for all untrusted URL fetches.

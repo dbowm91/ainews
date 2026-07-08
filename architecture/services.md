@@ -24,7 +24,8 @@ services/
 ├── researcher.py            # Article research logic
 ├── writer.py                # Article writing logic
 ├── editor.py                # Article editing logic
-├── content_extractor.py    # trafilatura + readability extraction
+├── content_extractor.py    # trafilatura + readability extraction (uses safe_fetch)
+├── safe_fetch.py           # First-party safe HTTP fetch with SSRF protection
 ├── crawling.py             # Crawling utilities
 ├── trend_detector.py        # Trend detection logic
 ├── embeddings.py            # Embedding generation

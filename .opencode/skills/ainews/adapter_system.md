@@ -157,3 +157,4 @@ class RawItem(BaseModel):
 | `schemas/source.py` | `SourceConfig`, `RSSConfig`, `APIConfig`, `WebConfig` |
 | `schemas/item.py` | `RawItem` schema |
 | `utils/url.py` | SSRF protection for adapters |
+| `services/safe_fetch.py` | Safe HTTP fetch client (SSRF, redirects, byte limits, content-type) |

@@ -103,6 +103,7 @@ Nginx → Granian (ASGI) → Flask
 - **Hybrid Search** — SQLite FTS5 + vector similarity (sentence transformers) for article search
 - **Metrics, Health & Cost** — Prometheus metrics, public/admin health checks, per-article cost tracking
 - **Admin API & 2FA** — API tokens (`ak_<prefix>.<secret>`) with expiry and revocation, TOTP 2FA with backup codes
+- **Safe Fetch Client** — First-party SSRF-protected HTTP client with manual redirect validation, streaming byte limits, and content-type allowlist
 - **Newsletter Generation** — Daily newsletters with per-subscriber topic filtering and delivery tracking
 - **RSS Output** — Published feed at `/feed` for downstream consumption
 

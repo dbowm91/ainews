@@ -215,15 +215,30 @@ safe_html = escape_newsletter_content(llm_output)
 
 ### SSRF Prevention
 
-All outbound URLs are validated against private IP ranges:
+All untrusted URL fetches use the first-party safe fetch client (`services/safe_fetch.py`) which validates URLs, resolves DNS, blocks private/reserved IPs, handles redirects manually, and enforces byte/content-type limits:
 
 ```python
-from services.url import validate_url_safe
+from services.safe_fetch import safe_fetch_url, UnsafeFetchError, SafeFetchError
+
+try:
+    result = safe_fetch_url(untrusted_url)
+    html = result.text
+except UnsafeFetchError:
+    # Blocked: private IP, bad scheme, etc.
+    pass
+except SafeFetchError:
+    # Fetch failed: timeout, too large, bad status, etc.
+    pass
+```
+
+For URL validation without fetching (e.g., webhook URLs), use `validate_url_safe()`:
+
+```python
+from services.url import validate_url_safe, UnsafeURLError
 
 try:
     safe_url = validate_url_safe(user_provided_url)
 except UnsafeURLError:
-    # Handle blocked URL
     pass
 ```
 

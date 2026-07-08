@@ -32,6 +32,11 @@ Production startup fails without these.
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API URL |
 | `OPENAI_API_KEY` | | OpenAI API key |
 | `ANTHROPIC_API_KEY` | | Anthropic API key |
+| `SAFE_FETCH_MAX_REDIRECTS` | `5` | Maximum redirect hops for safe fetch client |
+| `SAFE_FETCH_MAX_BYTES` | `2000000` | Maximum response body size (bytes) |
+| `SAFE_FETCH_CONNECT_TIMEOUT` | `5` | TCP connection timeout (seconds) |
+| `SAFE_FETCH_READ_TIMEOUT` | `10` | Read timeout (seconds) |
+| `SAFE_FETCH_TOTAL_TIMEOUT` | `20` | Total timeout (seconds) |
 
 ### Generate a hashed admin password
 

@@ -415,6 +415,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
 | `services/url.py` | URL validation (SSRF prevention), DNS cache |
+| `services/safe_fetch.py` | Safe HTTP fetch client with SSRF protection, manual redirects, streaming byte limits, content-type allowlist |
 | `services/cache.py` | ResponseCache (L1 in-memory + L2 Redis) with LRU eviction and stampede protection |
 | `services/limiter.py` | ModelLimiter (Redis-based rate limiting) |
 | `services/config_utils.py` | `get_config_with_default()` for Celery-safe config |
@@ -469,6 +470,11 @@ Three-layer CSRF protection with API exemptions:
 - **MultiFernet:** Key rotation support via `WEBHOOK_SECRET_KEY_PREVIOUS_1/2` env vars
 - **HMAC Signing:** Payloads signed with timestamp for replay protection
 - **SSRF Protection:** All webhook URLs validated via `validate_url_safe()`
+
+### Safe Fetch Client
+- **`services/safe_fetch.py`:** First-party safe fetch for untrusted URLs with SSRF protection, manual redirect handling, streaming byte limits, and content-type allowlist
+- **Content extractor integration:** `services/content_extractor.py` uses `safe_fetch_url()` instead of `trafilatura.fetch_url()` for network I/O
+- **Config:** `SAFE_FETCH_MAX_REDIRECTS`, `SAFE_FETCH_MAX_BYTES`, `SAFE_FETCH_CONNECT_TIMEOUT`, `SAFE_FETCH_READ_TIMEOUT`, `SAFE_FETCH_TOTAL_TIMEOUT`
 
 ### Rate Limiting
 - **Login:** 5 attempts per 15 minutes (Redis-backed with in-memory fallback)

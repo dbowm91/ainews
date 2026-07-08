@@ -50,16 +50,17 @@ class TestContentExtractor:
         html = "<html><body><p>This is free content</p></body></html>"
         assert _detect_paywall(html) is False
 
-    @patch("services.content_extractor.trafilatura.fetch_url")
+    @patch("services.safe_fetch.safe_fetch_url")
     def test_extract_article_fetch_error(self, mock_fetch):
         from services.content_extractor import ExtractionStatus, extract_article
+        from services.safe_fetch import SafeFetchError
 
-        mock_fetch.side_effect = Exception("Network error")
+        mock_fetch.side_effect = SafeFetchError("Network error")
         result = extract_article("https://example.com/article")
         assert result.status == ExtractionStatus.FETCH_ERROR
         assert result.text is None
 
-    @patch("services.content_extractor.trafilatura.fetch_url")
+    @patch("services.safe_fetch.safe_fetch_url")
     def test_extract_article_empty_response(self, mock_fetch):
         from services.content_extractor import ExtractionStatus, extract_article
 
@@ -69,11 +70,13 @@ class TestContentExtractor:
         assert result.text is None
 
     @patch("services.content_extractor.trafilatura.bare_extraction")
-    @patch("services.content_extractor.trafilatura.fetch_url")
+    @patch("services.safe_fetch.safe_fetch_url")
     def test_extract_article_success_trafilatura(self, mock_fetch, mock_extract):
         from services.content_extractor import ExtractionStatus, extract_article
 
-        mock_fetch.return_value = "<html><body>Article content</body></html>"
+        mock_result = MagicMock()
+        mock_result.text = "<html><body>Article content</body></html>"
+        mock_fetch.return_value = mock_result
         mock_extract.return_value = {
             "text": "This is a long article text that should be at least 200 characters long. "
             * 5,
@@ -87,13 +90,13 @@ class TestContentExtractor:
         assert len(result.text) >= 200
 
     @patch("services.content_extractor.trafilatura.bare_extraction")
-    @patch("services.content_extractor.trafilatura.fetch_url")
+    @patch("services.safe_fetch.safe_fetch_url")
     def test_extract_article_paywall_detected(self, mock_fetch, mock_extract):
         from services.content_extractor import ExtractionStatus, extract_article
 
-        mock_fetch.return_value = (
-            "<html><body>Subscribe to continue reading</body></html>"
-        )
+        mock_result = MagicMock()
+        mock_result.text = "<html><body>Subscribe to continue reading</body></html>"
+        mock_fetch.return_value = mock_result
         mock_extract.return_value = {
             "text": "This is a long article text that should be at least 200 characters long. "
             * 5,
@@ -104,11 +107,13 @@ class TestContentExtractor:
         assert result.status == ExtractionStatus.PAYWALL
 
     @patch("services.content_extractor.trafilatura.bare_extraction")
-    @patch("services.content_extractor.trafilatura.fetch_url")
+    @patch("services.safe_fetch.safe_fetch_url")
     def test_extract_article_fallback_to_readability(self, mock_fetch, mock_extract):
         from services.content_extractor import ExtractionStatus, extract_article
 
-        mock_fetch.return_value = "<html><body>Short content</body></html>"
+        mock_result = MagicMock()
+        mock_result.text = "<html><body>Short content</body></html>"
+        mock_fetch.return_value = mock_result
         mock_extract.return_value = {"text": "Short"}  # Too short for trafilatura
 
         # Mock readability to return longer content
@@ -124,11 +129,13 @@ class TestContentExtractor:
             assert len(result.text) >= 200
 
     @patch("services.content_extractor.trafilatura.bare_extraction")
-    @patch("services.content_extractor.trafilatura.fetch_url")
+    @patch("services.safe_fetch.safe_fetch_url")
     def test_extract_article_empty_when_all_fail(self, mock_fetch, mock_extract):
         from services.content_extractor import ExtractionStatus, extract_article
 
-        mock_fetch.return_value = "<html><body>Short</body></html>"
+        mock_result = MagicMock()
+        mock_result.text = "<html><body>Short</body></html>"
+        mock_fetch.return_value = mock_result
         mock_extract.return_value = {"text": "Short"}  # Too short
 
         with patch("services.content_extractor.Document") as mock_doc_class:

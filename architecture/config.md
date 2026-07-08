@@ -519,6 +519,11 @@ Key environment variables used across the codebase:
 | `CELERY_TASK_SECRET` | HMAC secret for task signing |
 | `EXPERIMENT_SALT` | Salt for A/B experiment group assignment |
 | `CONTENT_EXTRACTOR_WORKERS` | Thread pool size for content extraction (default: 8) |
+| `SAFE_FETCH_MAX_REDIRECTS` | Maximum redirect hops for safe fetch client (default: 5) |
+| `SAFE_FETCH_MAX_BYTES` | Maximum response body size in bytes (default: 2000000) |
+| `SAFE_FETCH_CONNECT_TIMEOUT` | TCP connection timeout in seconds (default: 5) |
+| `SAFE_FETCH_READ_TIMEOUT` | Read timeout in seconds (default: 10) |
+| `SAFE_FETCH_TOTAL_TIMEOUT` | Total timeout in seconds (default: 20) |
 | `RELATED_CANDIDATE_LIMIT` | Candidate limit for related articles (default: 50) |
 
 ## Config Validation

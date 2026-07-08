@@ -178,6 +178,7 @@ def _get_something() -> int:
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
 | `services/url.py` | URL validation (SSRF prevention), DNS cache |
+| `services/safe_fetch.py` | Safe HTTP fetch client with SSRF protection, manual redirects, streaming byte limits, content-type allowlist |
 | `services/cache.py` | ResponseCache (L1 in-memory + L2 Redis) with LRU eviction and stampede protection |
 | `services/limiter.py` | ModelLimiter (Redis-based rate limiting) |
 | `services/config_utils.py` | `get_config_with_default()` for Celery-safe config |

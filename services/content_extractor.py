@@ -7,7 +7,6 @@ from enum import Enum
 from typing import Optional
 
 import trafilatura
-import urllib3
 from bs4 import BeautifulSoup
 from readability import Document
 
@@ -55,24 +54,31 @@ def _detect_paywall(html: str) -> bool:
 
 
 def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
-    cfg = trafilatura.settings.use_config()
-    cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", str(timeout))
+    """Fetch URL content using the safe fetch client.
+
+    Returns the raw HTML string on success, ``None`` on failure.
+    """
+    from services.safe_fetch import (
+        SafeFetchError,
+        SafeFetchLimits,
+        safe_fetch_url,
+    )
+
+    limits = SafeFetchLimits(
+        connect_timeout=min(timeout / 3, 10.0),
+        read_timeout=min(timeout, 30.0),
+        total_timeout=timeout + 5.0,
+    )
     try:
-        return trafilatura.fetch_url(url, config=cfg)
-    except (urllib3.exceptions.HTTPError, ValueError, Exception):  # noqa: BLE001 - trafilatura raises diverse HTTP/network exceptions beyond HTTPError, fallback requires broad catch
-        logger.warning("Content fetch failed for %s", url)
+        result = safe_fetch_url(url, limits=limits)
+        return result.text
+    except SafeFetchError as e:
+        logger.warning("Content fetch failed for %s: %s", url, e)
         return None
 
 
 def extract_article(url: str) -> ExtractionResult:
     from services.config_unified import MIN_CONTENT_LENGTH
-    from services.url import UnsafeURLError, validate_url_safe
-
-    try:
-        validate_url_safe(url)
-    except UnsafeURLError as e:
-        logger.warning("Blocked unsafe URL %s: %s", url, e)
-        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 
     timeout = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
     try:

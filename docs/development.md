@@ -438,6 +438,45 @@ If a stage fails after retries:
 
 ---
 
+## CI Gates
+
+All pull requests and pushes to `main`/`develop` run the CI pipeline (`.github/workflows/ci.yml`). The following jobs **must** pass before merge:
+
+| Job | What it checks |
+|-----|---------------|
+| `lint-and-test` | ruff lint + pytest with coverage |
+| `pip-audit` | Known dependency vulnerabilities |
+| `trivy` | Filesystem vulnerability scan |
+| `docker-build` | Image build + testing/prod smoke |
+| `smoke-tests` | Production config, Celery import, migration, docs consistency |
+| `compose-smoke` | Full Docker Compose boot + health check |
+| `gitleaks` | Secret scanning |
+
+**mypy is advisory only** — it runs with `|| true` and is not a required check. It will become required in Milestone D.4.
+
+For branch protection setup and the full release checklist, see `docs/release_checklist.md`.
+
+### Running CI Checks Locally
+
+```bash
+# Lint
+.venv/bin/ruff check . --exclude .venv
+
+# Tests with coverage
+.venv/bin/python -m pytest tests/ -x -q --cov
+
+# Type checking (advisory)
+.venv/bin/mypy . --exclude .venv
+
+# Production config smoke
+.venv/bin/python -m pytest tests/test_smoke_production_config.py -v
+
+# Compose smoke (requires Docker)
+bash scripts/ci_compose_smoke.sh
+```
+
+---
+
 ## Contributing
 
 1. Create a feature branch: `git checkout -b feature/my-feature`

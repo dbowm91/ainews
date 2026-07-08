@@ -6,6 +6,28 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Cancel in-progress runs for the same branch/PR to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ---------------------------------------------------------------------------
+# Required checks for protected `main`
+# ---------------------------------------------------------------------------
+# Branch protection must require ALL of these jobs to pass before merge:
+#
+#   lint-and-test        — ruff lint + pytest + coverage
+#   pip-audit            — dependency vulnerability scan
+#   trivy                — filesystem vulnerability scan
+#   docker-build         — image build + testing/prod smoke
+#   smoke-tests          — production config, Celery, migration, docs consistency
+#   compose-smoke        — full Docker Compose boot + health check
+#   gitleaks             — secret scanning
+#
+# mypy is intentionally allow-fail (`|| true`) and is NOT a required check.
+# It is advisory only until Milestone D.4 when type-coverage goals are set.
+# ---------------------------------------------------------------------------
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -30,7 +52,23 @@ jobs:
       - name: Run tests with coverage
         run: .venv/bin/python -m pytest tests/ -x -q --cov --cov-report=html --cov-report=xml
 
-      - name: Run mypy (allow failures)
+      - name: Upload coverage on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 7
+
+      - name: Upload pytest XML on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: coverage.xml
+          retention-days: 7
+
+      - name: Run mypy (advisory — not a required check)
         run: .venv/bin/mypy . --exclude .venv || true
 
   pip-audit:

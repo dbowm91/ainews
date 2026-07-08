@@ -147,14 +147,23 @@ assert wrapped(5) == 10
 
 ## CI Pipeline
 
-Tests run in `.github/workflows/ci.yml`:
-1. **pytest with coverage** — HTML and XML reports generated
-2. **mypy** — type checking (allows failures)
-3. **pip-audit** — dependency scanning
-4. **trivy** — container vulnerability scanning
-5. **smoke-tests** — dedicated job running production config, Celery, migration, and docs consistency smoke tests
-6. **compose-smoke** — full Docker Compose boot: Redis, db-migrate, web, /health endpoint (Layer 6)
-7. **docker-build** — builds image, validates Compose config (base + Ollama override), runs image smoke test
+Tests run in `.github/workflows/ci.yml`. The workflow uses concurrency control (`cancel-in-progress: true`) and uploads coverage artifacts on failure.
+
+### Required Checks (branch protection)
+
+These 7 jobs must pass before merge to `main`:
+
+| Job | Purpose |
+|-----|---------|
+| `lint-and-test` | ruff lint + pytest with coverage |
+| `pip-audit` | dependency vulnerability scan |
+| `trivy` | filesystem vulnerability scan |
+| `docker-build` | image build + testing/prod app-factory smoke |
+| `smoke-tests` | production config, Celery import, migration, docs consistency |
+| `compose-smoke` | full Docker Compose boot + `/health` endpoint |
+| `gitleaks` | secret scanning |
+
+**Advisory:** mypy runs with `|| true` (not required) until Milestone D.4.
 
 ### Smoke Test Files
 

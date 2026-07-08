@@ -460,6 +460,38 @@ The following are documented as intentional and should NOT be "fixed":
 | `services/pipeline_degradation.py` | `post_finalize_article()`, `degrade_stage()`, `_finalize()` |
 | `adapters/api.py` | API source adapter with error logging in `_fetch_item` |
 
+## CI Gates
+
+### Required Checks for Protected `main`
+
+The following CI jobs must pass before merge. These are configured as required status checks in GitHub branch protection (see `docs/release_checklist.md`):
+
+| Job | Purpose |
+|-----|---------|
+| `lint-and-test` | ruff lint + pytest + coverage |
+| `pip-audit` | Dependency vulnerability scan |
+| `trivy` | Filesystem vulnerability scan |
+| `docker-build` | Image build + testing/prod app-factory smoke |
+| `smoke-tests` | Production config, Celery import, migration, docs/env consistency |
+| `compose-smoke` | Full Docker Compose boot + `/health` endpoint |
+| `gitleaks` | Secret scanning |
+
+### Advisory Checks
+
+- **mypy**: Runs with `|| true` (allow-fail). Advisory only until Milestone D.4 when type-coverage goals are set.
+
+### Concurrency
+
+CI uses `concurrency.group = ${{ github.workflow }}-${{ github.ref }}` with `cancel-in-progress: true` to save runner minutes on rapid pushes.
+
+### Determinism Audit
+
+All Python smoke tests are fully deterministic — no network, DNS, LLM, or external service dependencies. `compose-smoke` boots a real Docker Compose stack (inherently timing-sensitive but acceptable for integration testing).
+
+### Artifacts on Failure
+
+`lint-and-test` uploads coverage reports and pytest XML as GitHub artifacts on failure for triage.
+
 ## Security Features (Implemented)
 
 ### Route Auth Architecture

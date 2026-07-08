@@ -6,20 +6,22 @@ All configuration is managed through YAML files in the project root and environm
 
 ### Required
 
+Production startup fails without these.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `SECRET_KEY` | Flask session signing key (64-char hex) | `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `ADMIN_PASSWORD` | Admin dashboard password (hashed) | `scrypt:32768:8:1$salt$hash...` |
 | `CELERY_TASK_SECRET` | HMAC signing secret for Celery tasks (>=32 chars) | `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `CELERY_BROKER_URL` | Redis URL for Celery | `redis://localhost:6379/0` |
+| `CELERY_RESULT_BACKEND` | Redis URL for Celery results | `redis://localhost:6379/1` |
+| `DATABASE_URL` | SQLite database URL | `sqlite:///instance/ainews.db` |
+| `FLASK_CONFIG` | Set to `production` for production deployments | `production` |
 
 ### Optional
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLASK_CONFIG` | `development` | Flask config name (`development`, `production`) |
-| `DATABASE_URL` | `sqlite:///instance/ainews.db` | SQLite database URL (Docker: `sqlite:///app/instance/prod.db`) |
-| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Redis URL for Celery results |
 | `SMTP_HOST` | `localhost` | SMTP server hostname |
 | `SMTP_PORT` | `587` | SMTP port |
 | `SMTP_USER` | | SMTP username |

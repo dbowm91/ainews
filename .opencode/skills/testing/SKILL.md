@@ -152,3 +152,24 @@ Tests run in `.github/workflows/ci.yml`:
 2. **mypy** — type checking (allows failures)
 3. **pip-audit** — dependency scanning
 4. **trivy** — container vulnerability scanning
+5. **smoke-tests** — dedicated job running production config, Celery, migration, and docs consistency smoke tests
+6. **docker-build** — builds image, validates Compose config (base + Ollama override), runs image smoke test
+
+### Smoke Test Files
+
+| File | Layer | What it validates |
+|------|-------|-------------------|
+| `tests/test_smoke_production_config.py` | 1 | `ProductionConfig.validate()` rejects bad configs, accepts valid ones |
+| `tests/test_smoke_migrations.py` | 2 | DB tables create cleanly on fresh SQLite |
+| `tests/test_smoke_celery.py` | 3 | Celery app imports, tasks registered, config set |
+| `tests/test_docs_env_consistency.py` | 7 | Required env vars documented in README and docs |
+
+### Local Smoke Validation
+
+```bash
+# Run all smoke tests
+.venv/bin/pytest tests/test_smoke_*.py tests/test_docs_env_consistency.py -v
+
+# Docker Compose boot smoke (requires Docker)
+./scripts/ci_compose_smoke.sh
+```

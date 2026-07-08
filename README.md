@@ -36,19 +36,25 @@ AI-powered news aggregation and newsletter platform. Discovers, summarizes, and 
    ```
    Paste the output into `CELERY_TASK_SECRET=` in `.env`.
 
-6. Configure at least one LLM provider and set `default_provider` in `providers.yaml`. For cloud providers, add the API key to `.env`.
+6. Ensure these are set in `.env` (defaults work for local development):
+   - `FLASK_CONFIG=production`
+   - `CELERY_BROKER_URL=redis://localhost:6379/0`
+   - `CELERY_RESULT_BACKEND=redis://localhost:6379/1`
+   - `DATABASE_URL=sqlite:///instance/ainews.db`
 
-7. Start services:
+7. Configure at least one LLM provider and set `default_provider` in `providers.yaml`. For cloud providers, add the API key to `.env`.
+
+8. Start services:
    ```bash
    docker compose up -d
    ```
 
-8. Verify the app is running:
+9. Verify the app is running:
    ```bash
    curl http://localhost:5000/health
    ```
 
-9. Log in at `http://localhost:5000/admin/login` (username: `admin`).
+10. Log in at `http://localhost:5000/admin/login` (username: `admin`).
 
 > **Ollama in Docker:** The default Ollama provider at `localhost:11434` does not work from inside Docker containers. See [Deployment Guide](docs/deployment.md#docker-with-ollama) for Docker-compatible Ollama setup.
 

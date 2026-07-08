@@ -75,8 +75,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate Compose config
+        run: docker compose config --quiet
+
+      - name: Validate Ollama Compose override
+        run: docker compose -f docker-compose.yml -f docker-compose.ollama.yml config --quiet
+
       - name: Build Docker image
         run: docker build -t ainews-ci .
+
+      - name: Smoke test image starts
+        run: |
+          docker run --rm --name ainews-smoke \
+            -e FLASK_CONFIG=testing \
+            -e SECRET_KEY=test-smoke-key-for-ci-only-000000000000000000000000000000 \
+            -e ADMIN_PASSWORD="" \
+            -e CELERY_TASK_SECRET=test-smoke-secret-for-ci-only-0000000000000000000 \
+            -e CELERY_BROKER_URL=redis://localhost:6379/0 \
+            -e CELERY_RESULT_BACKEND=redis://localhost:6379/1 \
+            ainews-ci \
+            python -c "from app import create_app; print('App factory OK')"
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Run production config smoke tests
+        run: .venv/bin/python -m pytest tests/test_smoke_production_config.py -v
+
+      - name: Run Celery smoke tests
+        run: .venv/bin/python -m pytest tests/test_smoke_celery.py -v
+
+      - name: Run migration smoke tests
+        run: .venv/bin/python -m pytest tests/test_smoke_migrations.py -v
+
+      - name: Run docs consistency smoke tests
+        run: .venv/bin/python -m pytest tests/test_docs_env_consistency.py -v
 
   gitleaks:
     runs-on: ubuntu-latest

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urljoin
@@ -174,6 +175,20 @@ def _log_rejection(url: str, reason: str) -> None:
     logger.warning("safe_fetch rejected %s: %s", safe, reason)
 
 
+def _record_fetch_metrics(
+    success: bool,
+    error_type: str | None,
+    duration: float,
+) -> None:
+    from services.metrics import get_metrics
+
+    m = get_metrics()
+    m.counter_inc("safe_fetch.calls", labels={"success": str(success).lower()})
+    if error_type is not None:
+        m.counter_inc("safe_fetch.errors", labels={"error_type": error_type})
+    m.histogram_observe("safe_fetch.duration_seconds", duration)
+
+
 def _redact_url(url: str) -> str:
     """Return URL with query string stripped for logging."""
     try:
@@ -225,119 +240,155 @@ def safe_fetch_url(
     if limits is None:
         limits = SafeFetchLimits()
 
-    timeout = _timeout_tuple(limits)
-    redirect_chain: list[str] = []
-    resolved_ips: tuple[str, ...] = ()
-    current_url = url
-    session = requests.Session()
+    _start = time.monotonic()
+    _error_type: str | None = None
+    _success = False
+    _content_type_hdr: str | None = None
 
-    for _ in range(limits.max_redirects + 1):
-        # Validate + DNS-resolve the current URL
-        try:
-            validated_url, ips = _validate_and_resolve(current_url)
-        except UnsafeFetchError:
-            raise
-        except Exception as exc:
-            raise SafeFetchError(
-                f"Failed to resolve {current_url!r}"
-            ) from exc
+    try:
+        timeout = _timeout_tuple(limits)
+        redirect_chain: list[str] = []
+        resolved_ips: tuple[str, ...] = ()
+        current_url = url
+        session = requests.Session()
 
-        resolved_ips = tuple(ips)
-        current_url = validated_url
-
-        try:
-            response = session.get(
-                current_url,
-                headers=_HEADERS,
-                timeout=timeout,
-                allow_redirects=False,
-                cookies={},
-            )
-        except requests.Timeout as exc:
-            _log_rejection(current_url, "timeout")
-            raise SafeFetchTimeoutError(
-                f"Request timed out: {current_url}"
-            ) from exc
-        except requests.ConnectionError as exc:
-            _log_rejection(current_url, f"connection error: {exc}")
-            raise SafeFetchError(
-                f"Connection failed: {current_url}"
-            ) from exc
-
-        status = response.status_code
-
-        # Handle redirects
-        if status in _REDIRECT_STATUSES:
-            location = response.headers.get("Location")
-            if not location:
-                _log_rejection(current_url, "redirect with no Location header")
-                raise SafeFetchError(
-                    f"Redirect {status} without Location header"
-                )
-
-            next_url = urljoin(current_url, location)
-
-            # Validate the redirect target
+        for _ in range(limits.max_redirects + 1):
+            # Validate + DNS-resolve the current URL
             try:
-                validate_url_safe(next_url)
-            except UnsafeURLError as exc:
-                _log_rejection(next_url, f"unsafe redirect: {exc}")
-                raise UnsafeFetchError(
-                    f"Unsafe redirect to {next_url}: {exc}"
+                validated_url, ips = _validate_and_resolve(current_url)
+            except UnsafeFetchError:
+                _error_type = "ssrf"
+                raise
+            except Exception as exc:
+                _error_type = "other"
+                raise SafeFetchError(
+                    f"Failed to resolve {current_url!r}"
                 ) from exc
 
-            redirect_chain.append(current_url)
-            current_url = next_url
-            continue
+            resolved_ips = tuple(ips)
+            current_url = validated_url
 
-        # Non-redirect response
-        break
-    else:
-        raise SafeFetchError(
-            f"Too many redirects (exceeded {limits.max_redirects})"
+            try:
+                response = session.get(
+                    current_url,
+                    headers=_HEADERS,
+                    timeout=timeout,
+                    allow_redirects=False,
+                    cookies={},
+                )
+            except requests.Timeout as exc:
+                _error_type = "timeout"
+                _log_rejection(current_url, "timeout")
+                raise SafeFetchTimeoutError(
+                    f"Request timed out: {current_url}"
+                ) from exc
+            except requests.ConnectionError as exc:
+                _error_type = "connection"
+                _log_rejection(current_url, f"connection error: {exc}")
+                raise SafeFetchError(
+                    f"Connection failed: {current_url}"
+                ) from exc
+
+            status = response.status_code
+
+            # Handle redirects
+            if status in _REDIRECT_STATUSES:
+                location = response.headers.get("Location")
+                if not location:
+                    _error_type = "other"
+                    _log_rejection(current_url, "redirect with no Location header")
+                    raise SafeFetchError(
+                        f"Redirect {status} without Location header"
+                    )
+
+                next_url = urljoin(current_url, location)
+
+                # Validate the redirect target
+                try:
+                    validate_url_safe(next_url)
+                except UnsafeURLError as exc:
+                    _error_type = "ssrf"
+                    _log_rejection(next_url, f"unsafe redirect: {exc}")
+                    raise UnsafeFetchError(
+                        f"Unsafe redirect to {next_url}: {exc}"
+                    ) from exc
+
+                redirect_chain.append(current_url)
+                current_url = next_url
+                continue
+
+            # Non-redirect response
+            break
+        else:
+            _error_type = "other"
+            raise SafeFetchError(
+                f"Too many redirects (exceeded {limits.max_redirects})"
+            )
+
+        # Check status code
+        if not (200 <= status < 300):
+            _error_type = "other"
+            _log_rejection(current_url, f"HTTP {status}")
+            raise SafeFetchError(f"HTTP {status} for {current_url}")
+
+        # Check content type
+        _content_type_hdr = response.headers.get("Content-Type")
+        try:
+            _check_content_type(_content_type_hdr, limits.allowed_content_types)
+        except SafeFetchContentTypeError:
+            _error_type = "content_type"
+            _log_rejection(current_url, f"content-type {_content_type_hdr!r}")
+            raise
+
+        # Stream body with byte limit
+        chunks: list[bytes] = []
+        total_bytes = 0
+        for chunk in response.iter_content(chunk_size=8192):
+            total_bytes += len(chunk)
+            if total_bytes > limits.max_bytes:
+                _error_type = "too_large"
+                _log_rejection(current_url, f"body exceeded {limits.max_bytes} bytes")
+                raise SafeFetchTooLargeError(
+                    f"Response exceeded {limits.max_bytes} bytes"
+                )
+            chunks.append(chunk)
+
+        body = b"".join(chunks)
+
+        # Decode text
+        charset = _extract_charset(_content_type_hdr) or "utf-8"
+        text = body.decode(charset, errors="replace")
+
+        # Normalise headers to plain dict
+        resp_headers: dict[str, str] = dict(response.headers)
+
+        _success = True
+        logger.info(
+            "safe_fetch ok url=%s status=%d duration=%.3fs content_type=%s",
+            _redact_url(current_url),
+            status,
+            time.monotonic() - _start,
+            _content_type_hdr or "none",
+        )
+        return SafeFetchResult(
+            final_url=response.url or current_url,
+            status_code=status,
+            headers=resp_headers,
+            body=body,
+            text=text,
+            content_type=_content_type_hdr,
+            redirect_chain=tuple(redirect_chain),
+            resolved_ips=resolved_ips,
         )
 
-    # Check status code
-    if not (200 <= status < 300):
-        _log_rejection(current_url, f"HTTP {status}")
-        raise SafeFetchError(f"HTTP {status} for {current_url}")
-
-    # Check content type
-    content_type = response.headers.get("Content-Type")
-    try:
-        _check_content_type(content_type, limits.allowed_content_types)
-    except SafeFetchContentTypeError:
-        _log_rejection(current_url, f"content-type {content_type!r}")
+    except SafeFetchError:
+        logger.warning(
+            "safe_fetch fail url=%s error=%s duration=%.3fs",
+            _redact_url(url),
+            _error_type or "other",
+            time.monotonic() - _start,
+        )
         raise
 
-    # Stream body with byte limit
-    chunks: list[bytes] = []
-    total_bytes = 0
-    for chunk in response.iter_content(chunk_size=8192):
-        total_bytes += len(chunk)
-        if total_bytes > limits.max_bytes:
-            _log_rejection(current_url, f"body exceeded {limits.max_bytes} bytes")
-            raise SafeFetchTooLargeError(
-                f"Response exceeded {limits.max_bytes} bytes"
-            )
-        chunks.append(chunk)
-
-    body = b"".join(chunks)
-
-    # Decode text
-    charset = _extract_charset(content_type) or "utf-8"
-    text = body.decode(charset, errors="replace")
-
-    # Normalise headers to plain dict
-    resp_headers: dict[str, str] = dict(response.headers)
-
-    return SafeFetchResult(
-        final_url=response.url or current_url,
-        status_code=status,
-        headers=resp_headers,
-        body=body,
-        text=text,
-        content_type=content_type,
-        redirect_chain=tuple(redirect_chain),
-        resolved_ips=resolved_ips,
-    )
+    finally:
+        _record_fetch_metrics(_success, _error_type, time.monotonic() - _start)

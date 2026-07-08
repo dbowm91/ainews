@@ -384,6 +384,8 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **Prompt injection**: Prompt data auto-escaped via `_escape_prompt_data()`
 - **SSRF**: All URLs validated via `validate_url_safe()` before fetching
 - **Safe fetch tests**: `tests/test_safe_fetch.py` (SSRF, redirects, limits, content-type, timeouts), `tests/test_url_security.py` (URL parser edge cases), `tests/test_content_extractor_safe_fetch.py` (extraction integration) — all deterministic, no internet required
+- **Safe fetch observability**: `safe_fetch_url()` records `safe_fetch.calls` (counter, `success` label), `safe_fetch.errors` (counter, `error_type` label), `safe_fetch.duration_seconds` (histogram). Structured logging on success (URL, status, duration) and failure (URL, error type, duration).
+- **Safe fetch config**: `SAFE_FETCH_*` env vars validated in production (`_validate_safe_fetch()` in `config.py`). Limits: MAX_BYTES ≤ 10MB, CONNECT_TIMEOUT ≤ 30s, READ_TIMEOUT ≤ 60s, TOTAL_TIMEOUT ≥ CONNECT + READ.
 - **Session fixation**: Admin login uses `session.clear()` before setting `session["admin"]` (Flask 3.x `SecureCookieSession` does not have `regenerate_id()`)
 - **eval() replacement**: Subagent conditions use AST-based parser
 - **Webhook secrets**: Masked in API responses via `_mask_secret()`; encrypted at rest with Fernet (AES-128-CBC) keyed by `WEBHOOK_SECRET_KEY`

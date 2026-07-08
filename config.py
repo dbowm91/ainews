@@ -340,6 +340,7 @@ class ProductionConfig(Config):
         _validate_secrets(result)
         _validate_llm_providers(result)
         _validate_docker_ollama_host(result)
+        _validate_safe_fetch(result)
         result.raise_on_errors()
         return result
 
@@ -636,6 +637,75 @@ def _validate_docker_ollama_host(result: ConfigValidationResult) -> None:
                 )
     except Exception:  # noqa: BLE001
         pass  # Don't fail startup on Docker detection issues
+
+
+def _validate_safe_fetch(result: ConfigValidationResult) -> None:
+    """Validate safe-fetch configuration values."""
+    import os
+
+    max_redirects = int(os.environ.get("SAFE_FETCH_MAX_REDIRECTS", 5))
+    max_bytes = int(os.environ.get("SAFE_FETCH_MAX_BYTES", 2_000_000))
+    connect_timeout = int(os.environ.get("SAFE_FETCH_CONNECT_TIMEOUT", 5))
+    read_timeout = int(os.environ.get("SAFE_FETCH_READ_TIMEOUT", 10))
+    total_timeout = int(os.environ.get("SAFE_FETCH_TOTAL_TIMEOUT", 20))
+
+    if max_redirects <= 0:
+        result.add(
+            field="SAFE_FETCH_MAX_REDIRECTS",
+            message="SAFE_FETCH_MAX_REDIRECTS must be a positive integer",
+            fix_hint="Set to a positive value (default: 5)",
+        )
+    if max_bytes <= 0:
+        result.add(
+            field="SAFE_FETCH_MAX_BYTES",
+            message="SAFE_FETCH_MAX_BYTES must be a positive integer",
+            fix_hint="Set to a positive value (default: 2000000)",
+        )
+    elif max_bytes > 10_000_000:
+        result.add(
+            field="SAFE_FETCH_MAX_BYTES",
+            message=f"SAFE_FETCH_MAX_BYTES is {max_bytes}; must be <= 10000000 (10MB)",
+            fix_hint="Reduce to a reasonable upper bound (default: 2000000)",
+        )
+    if connect_timeout <= 0:
+        result.add(
+            field="SAFE_FETCH_CONNECT_TIMEOUT",
+            message="SAFE_FETCH_CONNECT_TIMEOUT must be a positive integer",
+            fix_hint="Set to a positive value (default: 5)",
+        )
+    elif connect_timeout > 30:
+        result.add(
+            field="SAFE_FETCH_CONNECT_TIMEOUT",
+            message=f"SAFE_FETCH_CONNECT_TIMEOUT is {connect_timeout}; must be <= 30",
+            fix_hint="Reduce to a reasonable timeout (default: 5)",
+        )
+    if read_timeout <= 0:
+        result.add(
+            field="SAFE_FETCH_READ_TIMEOUT",
+            message="SAFE_FETCH_READ_TIMEOUT must be a positive integer",
+            fix_hint="Set to a positive value (default: 10)",
+        )
+    elif read_timeout > 60:
+        result.add(
+            field="SAFE_FETCH_READ_TIMEOUT",
+            message=f"SAFE_FETCH_READ_TIMEOUT is {read_timeout}; must be <= 60",
+            fix_hint="Reduce to a reasonable timeout (default: 10)",
+        )
+    if total_timeout <= 0:
+        result.add(
+            field="SAFE_FETCH_TOTAL_TIMEOUT",
+            message="SAFE_FETCH_TOTAL_TIMEOUT must be a positive integer",
+            fix_hint="Set to a positive value (default: 20)",
+        )
+    elif total_timeout < connect_timeout + read_timeout:
+        result.add(
+            field="SAFE_FETCH_TOTAL_TIMEOUT",
+            message=(
+                f"SAFE_FETCH_TOTAL_TIMEOUT ({total_timeout}) must be >= "
+                f"connect + read ({connect_timeout} + {read_timeout})"
+            ),
+            fix_hint=f"Set SAFE_FETCH_TOTAL_TIMEOUT >= {connect_timeout + read_timeout}",
+        )
 
 
 def _validate_llm_providers(result: ConfigValidationResult) -> None:

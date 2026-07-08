@@ -242,6 +242,18 @@ except UnsafeURLError:
     pass
 ```
 
+### Safe Fetch Policy
+
+All outbound HTTP requests from the application must use `safe_fetch_url()` from `services/safe_fetch.py`. Direct calls to `trafilatura.fetch_url()`, `requests.get()`, `httpx.get()`, or `urlopen()` are forbidden for untrusted URLs.
+
+Policy requirements:
+
+- **SSRF protection**: Every redirect hop is validated via `validate_url_safe()`. Private and reserved IPs are blocked.
+- **Content-type allowlist**: Only HTML and XML content types are accepted. Binary and JSON responses are rejected to prevent processing of unexpected payloads.
+- **Streaming byte limits**: Response bodies are streamed with a configurable maximum size, preventing memory exhaustion on large responses.
+- **Configurable timeouts**: Connect, read, and total timeouts are tunable via `SAFE_FETCH_*` environment variables (see [Configuration Reference](configuration.md)).
+- **Deterministic tests**: The safe fetch test suite runs without internet access using local HTTP server fixtures and mocked DNS.
+
 ---
 
 ## CSRF Protection

@@ -48,6 +48,24 @@ python scripts/hash_password.py
 python scripts/hash_password.py mypassword
 ```
 
+## Safe Fetch Configuration
+
+All outbound HTTP requests go through the safe fetch client (`services/safe_fetch.py`). The following environment variables control its behavior:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SAFE_FETCH_MAX_REDIRECTS` | `5` | Maximum redirect hops before aborting |
+| `SAFE_FETCH_MAX_BYTES` | `2000000` | Maximum response body size (bytes) |
+| `SAFE_FETCH_CONNECT_TIMEOUT` | `5` | TCP connect timeout (seconds) |
+| `SAFE_FETCH_READ_TIMEOUT` | `10` | Read timeout per chunk (seconds) |
+| `SAFE_FETCH_TOTAL_TIMEOUT` | `20` | Total timeout including all redirects (seconds) |
+
+**Production notes:**
+
+- These values are read at process start and cached. Changing them requires a service restart.
+- The byte limit prevents memory exhaustion when fetching untrusted content. Increase only if you have verified the source returns large but legitimate responses (e.g., full article HTML).
+- The total timeout is a hard ceiling. If `SAFE_FETCH_TOTAL_TIMEOUT` is less than `SAFE_FETCH_CONNECT_TIMEOUT + SAFE_FETCH_READ_TIMEOUT`, the connect timeout takes precedence.
+
 ## Configuration Files
 
 ### `pipeline.yaml` — Processing Pipeline

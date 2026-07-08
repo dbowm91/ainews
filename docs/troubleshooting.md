@@ -265,6 +265,73 @@ The `ollama/ollama` Docker image ships the `ollama` binary but does **not** incl
 docker run --rm ollama/ollama:latest sh -lc 'command -v curl || command -v wget || command -v ollama'
 ```
 
+### Safe Fetch Errors
+
+#### `UnsafeFetchError` — URL targets private/reserved IP
+
+The safe fetch client blocks requests to private, loopback, link-local, and reserved IP ranges. This prevents SSRF attacks.
+
+```bash
+# Check the URL for private IPs or hostnames that resolve locally
+# Common cause: URL points to an internal service or localhost
+# Fix: Verify the URL is correct and points to a public host
+
+# If testing locally, use the test helper to bypass SSRF validation
+# (see tests/test_safe_fetch.py for examples)
+```
+
+#### `SafeFetchTimeoutError` — target too slow
+
+The request exceeded the configured timeout. This can indicate a slow or unreachable target.
+
+```bash
+# Increase timeouts in .env if the target is known to be slow:
+SAFE_FETCH_CONNECT_TIMEOUT=10
+SAFE_FETCH_READ_TIMEOUT=30
+SAFE_FETCH_TOTAL_TIMEOUT=60
+
+# Or check network connectivity to the target
+curl -sf --max-time 10 <url>
+```
+
+#### `SafeFetchTooLargeError` — response exceeds `SAFE_FETCH_MAX_BYTES`
+
+The response body exceeds the maximum allowed size. This prevents memory exhaustion on unexpectedly large responses.
+
+```bash
+# Increase the byte limit if needed:
+SAFE_FETCH_MAX_BYTES=5000000  # 5MB
+
+# Or verify the URL returns the expected content type and size
+curl -sI <url> | grep -i content-length
+```
+
+#### `SafeFetchContentTypeError` — response not in allowlist
+
+The response `Content-Type` is not in the allowlist (HTML/XML only). Binary or JSON responses are rejected.
+
+```bash
+# Check what content type the URL returns:
+curl -sI <url> | grep -i content-type
+
+# Ensure the URL returns HTML or XML content
+# If the URL redirects to a login page or API endpoint, the content type may change
+```
+
+#### `SafeFetchError` with redirect chain — redirect loop or too many hops
+
+The request hit a redirect loop or exceeded `SAFE_FETCH_MAX_REDIRECTS`.
+
+```bash
+# Trace the redirect chain manually:
+curl -sLv <url> 2>&1 | grep -i "location:"
+
+# If it's a legitimate redirect chain, increase the limit:
+SAFE_FETCH_MAX_REDIRECTS=10
+
+# If it's a loop, fix the URL or server configuration
+```
+
 ---
 
 ## Diagnostic Commands

@@ -73,7 +73,7 @@ DuckDuckGo is the default for web search; Hybrid is for internal article search 
 ## services/url.py vs utils/url.py
 - **`utils/url.py`:** For adapters (clean layering). Contains SSRF protection implementation.
 - **`services/url.py`:** For services (has config support). Re-exports `TRACKING_PARAMS`, `normalize_title`, `normalize_url` from `utils/url.py`.
-- **`services/safe_fetch.py`:** First-party safe fetch client for untrusted URLs. Delegates SSRF validation to `services.url.validate_url_safe()`. Handles manual redirect validation, streaming byte limits, content-type allowlist. Used by `services/content_extractor.py` instead of `trafilatura.fetch_url()`.
+- **`services/safe_fetch.py`:** First-party safe fetch client for untrusted URLs. Delegates SSRF validation to `services.url.validate_url_safe()`. Handles manual redirect validation, streaming byte limits, content-type allowlist. Used by `services/content_extractor.py` instead of `trafilatura.fetch_url()`. Metrics: `safe_fetch.calls` (counter), `safe_fetch.errors` (counter), `safe_fetch.duration_seconds` (histogram). Structured logging on success and failure.
 - **Config support:** `_get_dns_cache_config()` function in `services/url.py:60-63` IS called at line 123 via the `_get_dns_cache()` call chain within `validate_url_safe()`. Both `utils/url.py` and `services/url.py` initialize `_TTLCache` with hardcoded values (`_DNS_CACHE_TTL`, `_DNS_CACHE_MAX`), not from config.
 
 ## Layer Violation Note

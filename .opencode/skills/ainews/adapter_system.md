@@ -44,6 +44,8 @@ Validates redirect URLs via `validate_url_safe()` before allowing redirect:
 - Blocks scheme-relative URLs (`//evil.com`)
 - Uses thread-local storage for `_redirect_count` to prevent cross-request accumulation
 
+**Redirect handler tests**: `tests/test_services_search_session.py` covers redirect counting, thread-local storage, UnsafeURLError propagation, and max-redirect enforcement.
+
 ## Adapter Configuration
 
 ### SourceConfig Validation

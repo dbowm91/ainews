@@ -207,6 +207,8 @@ Each adapter type manages HTTP sessions differently based on its requirements:
 
 The global session handler shares state per-request (via thread-local storage for redirect counting). This means redirect counting is reset per-request but the handler instance is shared across all adapter types.
 
+The `SSRFSafeRedirectHandler` redirect validation is tested in `tests/test_services_search_session.py` (20+ tests covering count tracking, thread-local storage, UnsafeURLError propagation, and edge cases).
+
 ## Adapter Constants vs Service Configuration
 
 Adapters use **hardcoded constants** (e.g., `MAX_TEXT_LENGTH = 3000` in `base.py`, `MIN_CONTENT_LENGTH = 200` in `web.py`, `_max_redirects = 30` in `session.py`), while services use **configurable values** from Flask config or environment variables. This is intentional:

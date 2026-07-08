@@ -131,6 +131,8 @@ class UnsafeURLError(ValueError):
 The 14 tracked parameters are: `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `utm_id`, `fbclid`, `gclid`, `ref`, `source`, `mc_cid`, `mc_eid`, `twclid`, `yclid`. These are stripped during URL normalization to prevent deduplication issues with tracking-heavy URLs.
 ```
 
+**Test coverage**: URL parser edge cases (credentials, host confusion, IPv6 brackets, trailing dots, percent-encoding, decimal/octal/hex IPv4 forms) are tested in `tests/test_url_security.py`.
+
 ## Design Principles
 
 1. **Pure functions**: Most functions are pure, but `validate_url_safe()` and related DNS functions in `url.py` perform DNS resolution with caching using global state (`_dns_cache`, `_dns_executor`, `_TTLCache`). These are intentionally not pure for performance.

@@ -179,6 +179,9 @@ def _get_something() -> int:
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
 | `services/url.py` | URL validation (SSRF prevention), DNS cache |
 | `services/safe_fetch.py` | Safe HTTP fetch client with SSRF protection, manual redirects, streaming byte limits, content-type allowlist |
+| `tests/test_safe_fetch.py` | Safe fetch SSRF, redirect, byte-limit, content-type, timeout tests |
+| `tests/test_url_security.py` | URL parser edge cases: credentials, host confusion, IPv6, encoded hosts |
+| `tests/test_content_extractor_safe_fetch.py` | Content extractor ↔ safe fetch integration tests |
 | `services/cache.py` | ResponseCache (L1 in-memory + L2 Redis) with LRU eviction and stampede protection |
 | `services/limiter.py` | ModelLimiter (Redis-based rate limiting) |
 | `services/config_utils.py` | `get_config_with_default()` for Celery-safe config |
@@ -380,6 +383,7 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **XSS**: LLM-generated content in templates must use `|e` filter
 - **Prompt injection**: Prompt data auto-escaped via `_escape_prompt_data()`
 - **SSRF**: All URLs validated via `validate_url_safe()` before fetching
+- **Safe fetch tests**: `tests/test_safe_fetch.py` (SSRF, redirects, limits, content-type, timeouts), `tests/test_url_security.py` (URL parser edge cases), `tests/test_content_extractor_safe_fetch.py` (extraction integration) — all deterministic, no internet required
 - **Session fixation**: Admin login uses `session.clear()` before setting `session["admin"]` (Flask 3.x `SecureCookieSession` does not have `regenerate_id()`)
 - **eval() replacement**: Subagent conditions use AST-based parser
 - **Webhook secrets**: Masked in API responses via `_mask_secret()`; encrypted at rest with Fernet (AES-128-CBC) keyed by `WEBHOOK_SECRET_KEY`

@@ -61,6 +61,9 @@ Admin users with 2FA enabled have 8 backup codes stored as JSON. Use `verify_bac
 ### MagicMock in Tests
 Some pipeline tests fail due to MagicMock objects being JSON serialized - this is a test infrastructure issue, not a code bug. When patching functions, patch where they're looked up at runtime, not where they're defined.
 
+### Safe Fetch Test Mocking
+Tests in `tests/test_safe_fetch.py` use `_patch_for_local_server()` to bypass SSRF validation for local test servers (since loopback IPs are blocked by default). The `_patch_for_redirect_test()` variant lets `validate_url_safe()` run for redirect targets while bypassing initial URL validation. DNS cache is cleared before/after each test via the `_clear_dns_cache` autouse fixture in `conftest.py`.
+
 ### PipelineLog meta field
 The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
 
@@ -416,6 +419,9 @@ The following are documented as intentional and should NOT be "fixed":
 | `services/prompts.py` | `esc_xml_text()`, `esc_xml_attr()` for LLM prompt escaping |
 | `services/url.py` | URL validation (SSRF prevention), DNS cache |
 | `services/safe_fetch.py` | Safe HTTP fetch client with SSRF protection, manual redirects, streaming byte limits, content-type allowlist |
+| `tests/test_safe_fetch.py` | Safe fetch SSRF, redirect, byte-limit, content-type, timeout tests |
+| `tests/test_url_security.py` | URL parser edge cases: credentials, host confusion, IPv6, encoded hosts |
+| `tests/test_content_extractor_safe_fetch.py` | Content extractor ↔ safe fetch integration tests |
 | `services/cache.py` | ResponseCache (L1 in-memory + L2 Redis) with LRU eviction and stampede protection |
 | `services/limiter.py` | ModelLimiter (Redis-based rate limiting) |
 | `services/config_utils.py` | `get_config_with_default()` for Celery-safe config |
@@ -475,6 +481,9 @@ Three-layer CSRF protection with API exemptions:
 - **`services/safe_fetch.py`:** First-party safe fetch for untrusted URLs with SSRF protection, manual redirect handling, streaming byte limits, and content-type allowlist
 - **Content extractor integration:** `services/content_extractor.py` uses `safe_fetch_url()` instead of `trafilatura.fetch_url()` for network I/O
 - **Config:** `SAFE_FETCH_MAX_REDIRECTS`, `SAFE_FETCH_MAX_BYTES`, `SAFE_FETCH_CONNECT_TIMEOUT`, `SAFE_FETCH_READ_TIMEOUT`, `SAFE_FETCH_TOTAL_TIMEOUT`
+
+### Safe Fetch Test Suite
+Deterministic SSRF/redirect/DNS-rebinding tests (`tests/test_safe_fetch.py`, `tests/test_url_security.py`, `tests/test_content_extractor_safe_fetch.py`) cover: blocked destinations, URL parser edge cases (credentials, host confusion, IPv6, trailing dots, percent-encoding, decimal/octal/hex IPv4), DNS resolution policy, redirect validation, response byte limits, timeout enforcement, content-type allowlisting, and content extractor integration. All tests run without internet using local HTTP server fixtures and mocked DNS.
 
 ### Rate Limiting
 - **Login:** 5 attempts per 15 minutes (Redis-backed with in-memory fallback)

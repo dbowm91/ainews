@@ -63,6 +63,8 @@ from utils.url import (
 )
 ```
 
+**Test coverage**: URL parser edge cases tested in `tests/test_url_security.py` (credentials, host confusion, IPv6, trailing dots, percent-encoding, decimal/octal/hex IPv4).
+
 ## Design Principles
 
 1. **Most functions are pure**: No side effects, no global state (except `validate_url_safe()`)

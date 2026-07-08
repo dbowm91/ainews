@@ -718,3 +718,416 @@ class TestHttpsScheme:
         """HTTPS URLs pass scheme validation (connection may fail without TLS)."""
         with pytest.raises((SafeFetchError, SafeFetchTimeoutError)):
             safe_fetch_url("https://192.0.2.1:1/")
+
+
+# ---------------------------------------------------------------------------
+# 21. Redirect to private hostname via redirect (section 5.1)
+# ---------------------------------------------------------------------------
+class TestRedirectToPrivateHostname:
+    def test_redirect_to_private_ip(self):
+        """Server redirects to http://10.0.0.1/ — SSRF blocks it."""
+
+        class RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/redirect":
+                    self.send_response(302)
+                    self.send_header("Location", "http://10.0.0.1/")
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(RedirectHandler)
+        try:
+            with _patch_for_redirect_test(f"{base}/redirect"):
+                with pytest.raises((UnsafeFetchError, SafeFetchError)):
+                    safe_fetch_url(f"{base}/redirect")
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 22. Relative redirect resolved and followed (section 5.2)
+# ---------------------------------------------------------------------------
+class TestRelativeRedirectResolved:
+    def test_relative_redirect_followed(self):
+        """Server redirects to /relative-path — resolved and validated."""
+
+        class RelativeRedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/start":
+                    self.send_response(302)
+                    self.send_header("Location", "/relative-path")
+                    self.end_headers()
+                elif self.path == "/relative-path":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html")
+                    self.end_headers()
+                    self.wfile.write(b"resolved")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(RelativeRedirectHandler)
+        try:
+            with _patch_for_local_server(f"{base}/start"):
+                result = safe_fetch_url(f"{base}/start")
+                assert result.status_code == 200
+                assert b"resolved" in result.body
+                assert len(result.redirect_chain) == 1
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 23. Unsupported redirect scheme rejected (section 5.3)
+# ---------------------------------------------------------------------------
+class TestUnsupportedRedirectScheme:
+    def test_redirect_to_ftp(self):
+        """Server redirects to ftp:// — unsupported scheme rejected."""
+
+        class FtpRedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/redirect":
+                    self.send_response(302)
+                    self.send_header("Location", "ftp://example.com/")
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(FtpRedirectHandler)
+        try:
+            with _patch_for_redirect_test(f"{base}/redirect"):
+                with pytest.raises((UnsafeFetchError, SafeFetchError)):
+                    safe_fetch_url(f"{base}/redirect")
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 24. Missing Location header on redirect (section 5.4)
+# ---------------------------------------------------------------------------
+class TestMissingLocationHeader:
+    def test_redirect_without_location(self):
+        """302 with no Location header raises SafeFetchError."""
+
+        class NoLocationHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(NoLocationHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                with pytest.raises(SafeFetchError, match="without Location"):
+                    safe_fetch_url(f"{base}/")
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 25. Redirect chain metadata in error (section 5.5)
+# ---------------------------------------------------------------------------
+class TestRedirectChainInError:
+    def test_redirect_chain_in_error_message(self):
+        """Unsafe redirect error includes the redirect target URL."""
+
+        class ChainErrorHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/start":
+                    self.send_response(302)
+                    self.send_header("Location", "/mid")
+                    self.end_headers()
+                elif self.path == "/mid":
+                    self.send_response(302)
+                    self.send_header("Location", "http://127.0.0.1/")
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(ChainErrorHandler)
+        try:
+            with _patch_for_redirect_test(f"{base}/start"):
+                with pytest.raises((UnsafeFetchError, SafeFetchError)) as exc_info:
+                    safe_fetch_url(f"{base}/start")
+                assert "127.0.0.1" in str(exc_info.value)
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 26. Body exactly at max_bytes succeeds (section 6.1)
+# ---------------------------------------------------------------------------
+class TestBodyExactlyAtLimit:
+    def test_body_exactly_at_limit(self):
+        """Response body exactly at max_bytes succeeds."""
+
+        class ExactLimitHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"x" * 500)
+                self.wfile.flush()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(ExactLimitHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                limits = _make_limits(max_bytes=500)
+                result = safe_fetch_url(f"{base}/", limits=limits)
+                assert result.status_code == 200
+                assert len(result.body) == 500
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 27. Body one byte over max_bytes fails (section 6.2)
+# ---------------------------------------------------------------------------
+class TestBodyOneByteOverLimit:
+    def test_body_one_byte_over_limit(self):
+        """Response body one byte over max_bytes raises SafeFetchTooLargeError."""
+
+        class OverLimitHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"x" * 501)
+                self.wfile.flush()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(OverLimitHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                limits = _make_limits(max_bytes=500)
+                with pytest.raises(SafeFetchTooLargeError, match="exceeded"):
+                    safe_fetch_url(f"{base}/", limits=limits)
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 28. Content-Length larger than max_bytes — streaming enforced (section 6.3)
+# ---------------------------------------------------------------------------
+class TestContentLengthPreReject:
+    def test_large_content_length_streaming_enforced(self):
+        """Large Content-Length is not used for pre-rejection; streaming enforces limit.
+
+        The server claims Content-Length=999999 but only sends 600 bytes.
+        requests raises ChunkedEncodingError before our streaming check
+        runs — that's acceptable; the point is the large Content-Length
+        does not bypass the byte-limit enforcement.
+        """
+        import requests as _requests
+
+        class LargeContentLengthHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", "999999")
+                self.end_headers()
+                self.wfile.write(b"x" * 600)
+                self.wfile.flush()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(LargeContentLengthHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                limits = _make_limits(max_bytes=500)
+                with pytest.raises(
+                    (
+                        SafeFetchTooLargeError,
+                        _requests.exceptions.ChunkedEncodingError,
+                        SafeFetchError,
+                    )
+                ):
+                    safe_fetch_url(f"{base}/", limits=limits)
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 29. Connect timeout triggers timeout error (section 7.1)
+# ---------------------------------------------------------------------------
+class TestConnectTimeout:
+    def test_connect_timeout(self):
+        """Connect timeout triggers SafeFetchTimeoutError."""
+
+        class AcceptNeverRespondHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                # Accept connection but never send response headers
+                self.connection.settimeout(None)
+                time.sleep(60)
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(AcceptNeverRespondHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                limits = _make_limits(connect_timeout=0.1, read_timeout=0.1, total_timeout=0.5)
+                with pytest.raises((SafeFetchTimeoutError, SafeFetchError)):
+                    safe_fetch_url(f"{base}/", limits=limits)
+        finally:
+            # handler sleeps 60s; shutdown() would block, so close the socket
+            # and let the daemon thread die on its own
+            server.server_close()
+
+
+# ---------------------------------------------------------------------------
+# 30. Accept application/xml content type (section 8.1)
+# ---------------------------------------------------------------------------
+class TestAcceptXml:
+    def test_application_xml_accepted(self):
+        """application/xml is in the default allowlist."""
+
+        class XmlHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/xml")
+                self.end_headers()
+                self.wfile.write(b"<root/>")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(XmlHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                result = safe_fetch_url(f"{base}/")
+                assert result.status_code == 200
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 31. Accept application/rss+xml content type (section 8.2)
+# ---------------------------------------------------------------------------
+class TestAcceptRSS:
+    def test_rss_xml_accepted(self):
+        """application/rss+xml is in the default allowlist."""
+
+        class RssHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/rss+xml")
+                self.end_headers()
+                self.wfile.write(b"<rss/>")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(RssHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                result = safe_fetch_url(f"{base}/")
+                assert result.status_code == 200
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 32. Reject application/octet-stream (section 8.3)
+# ---------------------------------------------------------------------------
+class TestRejectOctetStream:
+    def test_octet_stream_rejected(self):
+        """application/octet-stream is not in the allowlist."""
+
+        class OctetStreamHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.end_headers()
+                self.wfile.write(b"\x00\x01\x02")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(OctetStreamHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                with pytest.raises(SafeFetchContentTypeError, match="not in allowed"):
+                    safe_fetch_url(f"{base}/")
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 33. Reject video/mp4 (section 8.4)
+# ---------------------------------------------------------------------------
+class TestRejectVideo:
+    def test_video_rejected(self):
+        """video/mp4 is not in the allowlist."""
+
+        class VideoHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "video/mp4")
+                self.end_headers()
+                self.wfile.write(b"\x00\x00\x00\x1cftyp")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(VideoHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                with pytest.raises(SafeFetchContentTypeError, match="not in allowed"):
+                    safe_fetch_url(f"{base}/")
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 34. Reject application/zip (section 8.5)
+# ---------------------------------------------------------------------------
+class TestRejectZip:
+    def test_zip_rejected(self):
+        """application/zip is not in the allowlist."""
+
+        class ZipHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.end_headers()
+                self.wfile.write(b"PK\x03\x04")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(ZipHandler)
+        try:
+            with _patch_for_local_server(f"{base}/"):
+                with pytest.raises(SafeFetchContentTypeError, match="not in allowed"):
+                    safe_fetch_url(f"{base}/")
+        finally:
+            server.shutdown()

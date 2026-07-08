@@ -40,9 +40,10 @@ ainews implements defense-in-depth security with multiple layers:
 All secrets are stored in environment variables:
 
 ```bash
-# Required for production
-SECRET_KEY=<32+ character random string>
+# Required for production (app won't start without these)
+SECRET_KEY=<64-char hex string>
 ADMIN_PASSWORD=<hashed password from scripts/hash_password.py>
+CELERY_TASK_SECRET=<32+ char random string>
 
 # Optional with defaults
 CELERY_BROKER_URL=redis://localhost:6379/0
@@ -51,9 +52,10 @@ SMTP_PASSWORD=your-smtp-password
 
 ### Secret Key Requirements
 
-- Minimum 32 characters
+- Must be a 64-character hex string (32 bytes of entropy)
 - Use `python -c "import secrets; print(secrets.token_hex(32))"` to generate
 - Must be unique per environment
+- Production validation rejects keys that are not 64-char hex
 
 ### Hashed Passwords
 
@@ -61,13 +63,13 @@ Admin passwords must be hashed using werkzeug's password hasher:
 
 ```bash
 python scripts/hash_password.py
-# Enter password when prompted
-# Output: pbkdf2:sha256:600000$<hash>
+# Enter password when prompted (interactive mode recommended)
+# Output: scrypt:32768:8:1$salt$hash...
 ```
 
 Add the hash to `.env`:
 ```
-ADMIN_PASSWORD=scrypt:sha256:<hash>
+ADMIN_PASSWORD=scrypt:32768:8:1$salt$hash...
 ```
 
 ### Docker Secrets
@@ -119,6 +121,18 @@ Lockout tracking:
 from routes.admin.auth import _is_locked_out
 is_locked = _is_locked_out(ip_address)
 ```
+
+### Production Fail-Closed Validation
+
+In production mode (`FLASK_CONFIG=production`), the app validates all secrets at startup and **refuses to start** if any check fails:
+
+- `SECRET_KEY` must be a 64-character hex string
+- `ADMIN_PASSWORD` must be a hashed password (scrypt/pbkdf2/argon2)
+- `CELERY_TASK_SECRET` must be at least 32 characters
+- At least one LLM provider must be enabled with valid credentials
+- `default_provider` must exist and be enabled
+
+This prevents common deployment mistakes like running with default dev secrets.
 
 ---
 

@@ -8,15 +8,47 @@ AI-powered news aggregation and newsletter platform. Discovers, summarizes, and 
 
 ### Docker (fastest)
 
-```bash
-git clone https://github.com/dbowm91/ainews.git
-cd ainews
-cp .env.example .env
-# Edit .env — set SECRET_KEY, ADMIN_PASSWORD, CELERY_TASK_SECRET, and an LLM provider API key
-docker compose up -d
-```
+1. Clone and enter the repo:
+   ```bash
+   git clone https://github.com/dbowm91/ainews.git && cd ainews
+   ```
 
-App at `http://localhost:5000`. Admin at `http://localhost:5000/admin/login`.
+2. Copy the environment template:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Generate a `SECRET_KEY` (64-char hex):
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+   Paste the output into `SECRET_KEY=` in `.env`.
+
+4. Generate a hashed `ADMIN_PASSWORD`:
+   ```bash
+   python scripts/hash_password.py
+   ```
+   Paste the output into `ADMIN_PASSWORD=` in `.env`.
+
+5. Generate a `CELERY_TASK_SECRET`:
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+   Paste the output into `CELERY_TASK_SECRET=` in `.env`.
+
+6. Configure at least one LLM provider and set `default_provider` in `providers.yaml`. For cloud providers, add the API key to `.env`.
+
+7. Start services:
+   ```bash
+   docker compose up -d
+   ```
+
+8. Verify the app is running:
+   ```bash
+   curl http://localhost:5000/health
+   ```
+
+9. Log in at `http://localhost:5000/admin/login` (username: `admin`).
 
 > **Ollama in Docker:** The default Ollama provider at `localhost:11434` does not work from inside Docker containers. See [Deployment Guide](docs/deployment.md#docker-with-ollama) for Docker-compatible Ollama setup.
 
@@ -25,10 +57,9 @@ App at `http://localhost:5000`. Admin at `http://localhost:5000/admin/login`.
 Requires Python 3.12+, Redis, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```bash
-git clone https://github.com/dbowm91/ainews.git
-cd ainews
+git clone https://github.com/dbowm91/ainews.git && cd ainews
 uv sync
-cp .env.example .env          # Edit .env
+cp .env.example .env          # Edit .env (see steps 3-6 above)
 redis-server &                # Start Redis
 bash scripts/dev.sh           # Start Flask + Celery
 ```

@@ -8,8 +8,9 @@ All configuration is managed through YAML files in the project root and environm
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `SECRET_KEY` | Flask session signing key | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SECRET_KEY` | Flask session signing key (64-char hex) | `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `ADMIN_PASSWORD` | Admin dashboard password (hashed) | `scrypt:32768:8:1$salt$hash...` |
+| `CELERY_TASK_SECRET` | HMAC signing secret for Celery tasks (>=32 chars) | `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `CELERY_BROKER_URL` | Redis URL for Celery | `redis://localhost:6379/0` |
 
 ### Optional
@@ -17,8 +18,8 @@ All configuration is managed through YAML files in the project root and environm
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FLASK_CONFIG` | `development` | Flask config name (`development`, `production`) |
-| `DATABASE_URL` | `sqlite:///instance/ainews.db` | SQLite database URL |
-| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Redis URL for results |
+| `DATABASE_URL` | `sqlite:///instance/ainews.db` | SQLite database URL (Docker: `sqlite:///app/instance/prod.db`) |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Redis URL for Celery results |
 | `SMTP_HOST` | `localhost` | SMTP server hostname |
 | `SMTP_PORT` | `587` | SMTP port |
 | `SMTP_USER` | | SMTP username |
@@ -257,6 +258,7 @@ default_provider: ollama-local
 | `ollama` | `host`, `model`, `max_tokens` |
 | `openai` | `api_key`, `base_url`, `model`, `max_tokens` |
 | `anthropic` | `api_key`, `model`, `max_tokens` |
+| `gemini` | `api_key`, `model`, `max_tokens` |
 
 Any `openai`-type provider is handled by the OpenAI-compatible adapter and works with MiniMax, DeepSeek, Zai (BigModel.cn), Groq, TogetherAI, and similar providers.
 
@@ -271,10 +273,11 @@ Any `openai`-type provider is handled by the OpenAI-compatible adapter and works
 > **Warning:** `localhost` inside a Docker container refers to the container itself, not the host. Using `http://localhost:11434` from Docker containers will silently fail at LLM call time. See [Deployment Guide](deployment.md#docker-with-ollama).
 
 **Production validation:** In production (`FLASK_CONFIG=production`), provider config is validated at startup:
-- Unknown provider types are rejected (must be `ollama`, `openai`, or `anthropic`)
-- Enabled cloud providers (`openai`, `anthropic`) must have valid `api_key` (non-empty, resolved from env vars)
+- At least one provider must be enabled
 - `default_provider` must point to an existing, enabled provider
-- Disabled providers with malformed config are silently skipped
+- Enabled cloud providers (`openai`, `anthropic`, `gemini`) must have valid `api_key` (non-empty, resolved from env vars)
+- Unknown provider types are rejected (must be `ollama`, `openai`, `anthropic`, or `gemini`)
+- Disabled providers with placeholder keys are silently skipped
 - Validation errors raise `RuntimeError` and prevent startup (fail-closed)
 
 ### `subagent:` — Subagent Configuration
@@ -353,7 +356,7 @@ If a stage is skipped, the article advances to the next stage with default conte
 
 ## Celery Beat Schedule
 
-Nine scheduled tasks run via Celery Beat:
+Scheduled tasks run via Celery Beat:
 
 ```python
 Config.get_beat_schedule()  # reads from pipeline.yaml schedule: section
@@ -370,13 +373,10 @@ Config.get_beat_schedule()  # reads from pipeline.yaml schedule: section
 | `consolidate-trend-memory` | Daily 3:30 AM | Promote low-importance memory |
 | `cleanup-old-article-versions` | Daily 3:45 AM | Purge old article versions |
 | `publish-scheduled-articles` | Every 5 min | Publish time-scheduled articles |
-
-Additional tasks (if enabled via feature flags):
-
-| Task | Schedule | Purpose |
-|------|---------|---------|
+| `backfill-embeddings` | Daily 2:00 AM | Backfill missing article embeddings |
 | `retry-failed-newsletter-deliveries` | Every 2 hours | Retry permanently failed newsletter emails |
 | `recalculate-impact-scores` | Daily 4:00 AM | Recalculate article impact scores |
+| `cleanup-inactive-subscribers` | Daily 1:00 AM | Remove inactive subscribers |
 
 ### Reloading Schedule
 
@@ -406,9 +406,14 @@ schedule:
   generate_newsletters_hour: 8
   cleanup_old_logs_hour: 3
   cleanup_old_versions_hour: 3
+  cleanup_old_versions_days_to_keep: 90
   cleanup_expired_verifications_interval_minutes: 15
   publish_scheduled_interval_minutes: 5
   cleanup_stale_limiter_interval_minutes: 5
   consolidate_trend_memory_hour: 3
-  cleanup_old_versions_days_to_keep: 90
+  cleanup_old_versions_minute: 45
+  backfill_embeddings_hour: 2
+  retry_failed_newsletter_interval_hours: 2
+  recalculate_impact_scores_hour: 4
+  cleanup_inactive_subscribers_hour: 1
 ```

@@ -94,12 +94,12 @@ curl http://localhost:5000/health
 
 In production mode (`FLASK_CONFIG=production`), `ProductionConfig.validate()` runs at startup and **prevents the app from starting** if any check fails:
 
-- **LLM Providers:** Enabled providers must have valid config (non-empty model, valid credentials). `default_provider` must exist and be enabled. Unknown provider types are rejected.
-- **Debug mode:** Must be disabled
-- **Session security:** SECRET_KEY must not be the default dev value
-- **Required secrets:** SECRET_KEY, ADMIN_PASSWORD must be set
+- **Required secrets:** SECRET_KEY (64-char hex), ADMIN_PASSWORD (hashed), CELERY_TASK_SECRET (>=32 chars)
+- **LLM Providers:** At least one provider enabled. `default_provider` must exist and be enabled. Enabled cloud providers must have valid API keys. Unknown provider types are rejected.
+- **Debug mode:** Must be disabled (`DEBUG=False`)
+- **Session security:** `SESSION_COOKIE_SECURE` must be True
 
-Fix the reported issue and restart. See [docs/configuration.md](docs/configuration.md) for provider config reference.
+Fix the reported issue and restart. See [docs/configuration.md](docs/configuration.md) for full reference.
 
 ### Docker with Ollama
 
@@ -133,6 +133,7 @@ No Ollama needed. Set an API key for OpenAI, Anthropic, or another cloud provide
 
 | Service | Description |
 |---------|-------------|
+| `db-migrate` | Runs `flask db upgrade` on startup (exits after) |
 | `web` | Flask app via Granian |
 | `celery-worker` | Background task processor |
 | `celery-beat` | Scheduled task runner |
@@ -401,8 +402,12 @@ sudo systemctl start ainews-web ainews-celery-worker ainews-celery-beat
 # Public (no auth)
 curl http://localhost:5000/health
 
-# Admin (requires auth)
-curl -u admin:password http://localhost:5000/admin/api/health
+# Admin (requires session auth or API token)
+# Option 1: API token (recommended for scripts)
+curl -H "Authorization: Bearer ak_<prefix>.<secret>" http://localhost:5000/admin/api/health
+
+# Option 2: Session auth (log in via browser, then use browser cookies)
+curl -b cookies.txt http://localhost:5000/admin/api/health
 ```
 
 ### Service status
@@ -512,108 +517,46 @@ sudo systemctl daemon-reload
 
 ## Docker Compose Production Example
 
-Create `docker-compose.prod.yml`:
+The project's `docker-compose.yml` is already production-ready. It includes:
+
+- Multi-stage Dockerfile (builder + runtime)
+- Non-root `ainews` user (uid 1000)
+- Read-only containers with `tmpfs` for `/tmp`
+- Memory limits on all services
+- Database migration on startup (`db-migrate` service)
+- Redis health checks and volume persistence
+- `AINEWS_RUNNING_IN_DOCKER=1` environment variable
+
+To customize for your environment, create a `docker-compose.override.yml`:
 
 ```yaml
-version: "3.8"
-
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: always
+    ports:
+      - "127.0.0.1:5000:5000"  # Bind to localhost only (use Nginx reverse proxy)
     environment:
       - FLASK_CONFIG=production
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CELERY_TASK_SECRET=${CELERY_TASK_SECRET}
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - DATABASE_URL=sqlite:////data/ainews.db
-      - REDIS_URL=redis://redis:6379/2
-    volumes:
-      - ./data:/data
-      - ./instance:/opt/ainews/instance
-    ports:
-      - "127.0.0.1:5000:5000"
-    depends_on:
-      - redis
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///app/instance/prod.db}
 
   celery-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: always
-    command: celery -A celery_app worker --loglevel=info --concurrency=4
-    environment:
-      - FLASK_CONFIG=production
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - DATABASE_URL=sqlite:////data/ainews.db
-      - REDIS_URL=redis://redis:6379/2
-    volumes:
-      - ./data:/data
-      - ./instance:/opt/ainews/instance
-    depends_on:
-      - redis
+    command: celery -A celery_app:celery_app worker -l info --concurrency=4
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1G  # Increase for heavy LLM workloads
 
   celery-beat:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: always
-    command: celery -A celery_app beat --loglevel=info
-    environment:
-      - FLASK_CONFIG=production
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-      - DATABASE_URL=sqlite:////data/ainews.db
-      - REDIS_URL=redis://redis:6379/2
-    volumes:
-      - ./data:/data
-      - ./instance:/opt/ainews/instance
-    depends_on:
-      - redis
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  redis:
-    image: redis:7-alpine
-    restart: always
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-
-volumes:
-  redis_data:
-  data:
-
-networks:
-  default:
-    name: anews_network
+    command: celery -A celery_app:celery_app beat -l info --schedule=/app/instance/celerybeat-schedule
 ```
 
 Deploy with:
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d
 ```
 
 ---
@@ -872,9 +815,9 @@ LLM provider slot limiting is handled separately via `services/limiter.py`:
 
 ## Security
 
-1. **Secrets:** Never commit `.env` to version control. Use `chmod 600 .env`.
+1. **Secrets:** Never commit `.env` to version control. Use `chmod 600 .env`. All production secrets (`SECRET_KEY`, `ADMIN_PASSWORD`, `CELERY_TASK_SECRET`) are validated at startup.
 2. **Firewall:** Expose only ports 80/443. Block direct access to port 5000.
 3. **SSL:** Always use HTTPS. Use Let's Encrypt for free certificates.
-4. **Password:** Use `python scripts/hash_password.py` to generate a hashed admin password.
+4. **Password:** Use `python scripts/hash_password.py` to generate a hashed admin password. Plaintext passwords are rejected in production.
 5. **Redis:** Bind to localhost and disable external access.
 6. **Database:** SQLite file should be owned by `ainews` user only.

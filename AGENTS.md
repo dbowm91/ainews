@@ -174,6 +174,13 @@ Additional newsletter endpoints:
 
 ## Design Notes for Future Agents
 
+### Documentation Alignment Rules
+- Never put production-required env vars (`SECRET_KEY`, `ADMIN_PASSWORD`, `CELERY_TASK_SECRET`) under "optional" documentation sections.
+- Never document `localhost` Ollama as Docker-compatible without caveats — `localhost` inside Docker refers to the container itself.
+- Do not add enabled providers without corresponding validation tests in `tests/test_production_config.py`.
+- Keep `.env.example`, README quickstart, and `docs/configuration.md` in sync when changing production requirements.
+- The canonical source of truth for production requirements is `ProductionConfig.validate()` in `config.py`.
+
 ### Middleware Chain Order
 The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.
 
@@ -270,7 +277,7 @@ Circuit breaker keys use the **role** convention: `llm:{provider}:{model}:{selec
 `SSRFSafeRedirectHandler.__call__` in `adapters/session.py` validates redirect URLs via `validate_url_safe(location)` and returns a new `PreparedRequest` with the redirect URL set. The handler uses thread-local storage for redirect counting to ensure per-request scoping.
 
 ### Docker Security State
-Dockerfile uses single-stage build (no multi-stage). Non-root `ainews` user (uid/gid 1000) is implemented at `Dockerfile:39`. No `read_only: true` on any service in `docker-compose.yml`. Resource memory limits and healthchecks exist. Static volume mount is read-only (`./static:/app/static:ro`).
+Dockerfile uses multi-stage build (builder + runtime). Non-root `ainews` user (uid/gid 1000) is implemented at `Dockerfile:45-47`. `read_only: true` on `web`, `celery-worker`, and `celery-beat` services in `docker-compose.yml` with `tmpfs: /tmp`. Resource memory limits and healthchecks exist. Static volume mount is read-only (`./static:/app/static:ro`). `db-migrate` service runs `flask db upgrade` on startup.
 
 ### Docker Deployment Modes
 Four deployment modes are documented in `docs/deployment.md#docker-with-ollama`:

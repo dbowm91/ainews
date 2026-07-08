@@ -269,7 +269,7 @@ docker run --rm ollama/ollama:latest sh -lc 'command -v curl || command -v wget 
 
 #### `UnsafeFetchError` — URL targets private/reserved IP
 
-The safe fetch client blocks requests to private, loopback, link-local, and reserved IP ranges. This prevents SSRF attacks.
+The safe fetch client blocks requests to private, loopback, link-local, and reserved IP ranges. This prevents SSRF attacks. DNS rebinding protection ensures the TCP connection uses the pre-validated IP (via `PinnedIPAdapter`) rather than re-resolving DNS, closing TOCTOU race conditions.
 
 ```bash
 # Check the URL for private IPs or hostnames that resolve locally
@@ -282,7 +282,7 @@ The safe fetch client blocks requests to private, loopback, link-local, and rese
 
 #### `SafeFetchTimeoutError` — target too slow
 
-The request exceeded the configured timeout. This can indicate a slow or unreachable target.
+The request exceeded the configured timeout. Total timeout is enforced as a hard ceiling across all redirect hops and streaming chunk reads — the request is aborted if the cumulative time exceeds `SAFE_FETCH_TOTAL_TIMEOUT`.
 
 ```bash
 # Increase timeouts in .env if the target is known to be slow:

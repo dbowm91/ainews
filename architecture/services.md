@@ -283,7 +283,7 @@ If both fail: Returns `ExtractionResult` with `ExtractionStatus.EMPTY` (no raw H
 
 ### Safe Fetch Test Coverage
 The safe fetch client has comprehensive deterministic tests:
-- `tests/test_safe_fetch.py` — SSRF blocking, redirect validation, byte limits, content-type allowlist, timeouts, charset handling
+- `tests/test_safe_fetch.py` — SSRF blocking, redirect validation, byte limits, content-type allowlist, timeouts, charset handling, DNS rebinding TOCTOU (PinnedIPAdapter pinning, fail-closed resolution)
 - `tests/test_url_security.py` — URL parser edge cases (credentials, host confusion, IPv6, trailing dots, encoded hosts, decimal/octal/hex IPv4)
 - `tests/test_content_extractor_safe_fetch.py` — extraction integration with safe_fetch_url, exception mapping
 All tests use local HTTP server fixtures and mocked DNS — no internet required.

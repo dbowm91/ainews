@@ -217,6 +217,8 @@ safe_html = escape_newsletter_content(llm_output)
 
 All untrusted URL fetches use the first-party safe fetch client (`services/safe_fetch.py`) which validates URLs, resolves DNS, blocks private/reserved IPs, handles redirects manually, and enforces byte/content-type limits. The content extractor (`services/content_extractor.py`) uses `safe_fetch_url()` for all untrusted URL fetches instead of `trafilatura.fetch_url()`.
 
+DNS rebinding TOCTOU (time-of-check-time-of-use) attacks are mitigated via a `PinnedIPAdapter` that monkeypatches `socket.create_connection` to connect to pre-validated IPs. DNS is resolved once per fetch; all resolved IPs are validated (fail-closed — any blocked IP rejects the entire resolution). The validated IP is pinned for the TCP connection while the original hostname is preserved for TLS SNI and certificate verification. Each redirect hop is independently validated and pinned.
+
 ```python
 from services.safe_fetch import safe_fetch_url, UnsafeFetchError, SafeFetchError
 
@@ -248,10 +250,14 @@ All outbound HTTP requests from the application must use `safe_fetch_url()` from
 
 Policy requirements:
 
-- **SSRF protection**: Every redirect hop is validated via `validate_url_safe()`. Private and reserved IPs are blocked.
+- **SSRF protection**: Every redirect hop is independently validated via `validate_url_safe()`. Private and reserved IPs are blocked.
+- **DNS rebinding mitigation**: `PinnedIPAdapter` connects to pre-validated IPs, preventing TOCTOU rebinding. Each redirect hop is independently resolved, validated, and pinned.
+- **Fail-closed DNS resolution**: ALL resolved IPs must pass validation — if any IP is blocked, the entire fetch is rejected.
 - **Content-type allowlist**: Only HTML and XML content types are accepted. Binary and JSON responses are rejected to prevent processing of unexpected payloads.
 - **Streaming byte limits**: Response bodies are streamed with a configurable maximum size, preventing memory exhaustion on large responses.
+- **Total timeout enforcement**: A hard total timeout ceiling is enforced before each redirect follow and each chunk read in the streaming loop (see `SAFE_FETCH_TOTAL_TIMEOUT`).
 - **Configurable timeouts**: Connect, read, and total timeouts are tunable via `SAFE_FETCH_*` environment variables (see [Configuration Reference](configuration.md)).
+- **Credential stripping in logs**: Log redaction via `_redact_url()` strips credentials, port, query string, and fragment from URLs before logging.
 - **Deterministic tests**: The safe fetch test suite runs without internet access using local HTTP server fixtures and mocked DNS.
 
 ---

@@ -39,12 +39,11 @@ class TestCredentialsInUrl:
     def test_redact_url_strips_query(self):
         url = "http://user:pass@example.com/path?secret=abc&token=xyz"
         redacted = _redact_url(url)
-        assert "?" not in redacted
-        assert redacted == "http://user:pass@example.com/path"
+        assert redacted == "http://example.com/path"
 
     def test_redact_url_no_query(self):
         url = "http://user:pass@example.com/path"
-        assert _redact_url(url) == url
+        assert _redact_url(url) == "http://example.com/path"
 
 
 class TestHostConfusionUserinfoBeforeAt:

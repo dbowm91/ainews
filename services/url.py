@@ -134,6 +134,19 @@ class UnsafeURLError(ValueError):
 
 
 def _resolve_and_check(hostname: str) -> list[str]:
+    """Resolve hostname to IP addresses and validate all against blocked networks.
+
+    DNS Resolution Policy (fail-closed):
+    - Resolves ALL A records for the hostname
+    - Validates EACH resolved IP against blocked networks
+    - If ANY IP resolves to a blocked address, the entire resolution is REJECTED
+    - Returns list of validated IPs in deterministic order (sorted by IP)
+    - Records all resolved IPs for audit trail
+    - Results are cached with TTL to prevent repeated lookups
+
+    This policy prevents DNS rebinding attacks where an attacker alternates
+    between safe and malicious IPs across multiple lookups.
+    """
     cached = _get_dns_cache().get(hostname)
     if cached is not None:
         return cached

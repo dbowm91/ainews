@@ -67,6 +67,14 @@ Tests in `tests/test_safe_fetch.py` use `_patch_for_local_server()` to bypass SS
 ### Safe Fetch Coding Guidance
 All HTTP fetching for untrusted URLs must go through `safe_fetch_url()` in `services/safe_fetch.py`. Never call `trafilatura.fetch_url()`, `requests.get()`, `httpx.get()`, `urlopen()`, or `urllib.request` directly for untrusted content. The release checklist `rg` pattern catches violations. `services/content_extractor.py` demonstrates the correct integration pattern: lazy import of `safe_fetch_url`, custom timeout and byte limits passed via kwargs, and proper exception handling for `UnsafeFetchError` and `SafeFetchError`.
 
+### Safe Fetch DNS Resolution Policy
+The safe fetch client uses a fail-closed DNS resolution policy:
+- ALL resolved IPs must pass validation (no partial acceptance)
+- DNS is resolved once per request and cached with TTL
+- Connection pinning prevents TOCTOU DNS rebinding attacks
+- All resolved IPs are recorded for audit trail
+- See `services/safe_fetch.py` module docstring for full details
+
 ### PipelineLog meta field
 The PipelineLog model uses `meta` (not `metadata`) for JSON field due to SQLAlchemy reserved name restriction.
 

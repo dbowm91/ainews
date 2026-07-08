@@ -63,8 +63,9 @@ All outbound HTTP requests go through the safe fetch client (`services/safe_fetc
 **Production notes:**
 
 - These values are read at process start and cached. Changing them requires a service restart.
+- Malformed environment variables (e.g., non-numeric strings) produce safe defaults via `_safe_int_env()` / `_safe_float_env()` helpers instead of raising `ValueError` at construction time. The default values are logged for visibility.
 - The byte limit prevents memory exhaustion when fetching untrusted content. Increase only if you have verified the source returns large but legitimate responses (e.g., full article HTML).
-- The total timeout is a hard ceiling. If `SAFE_FETCH_TOTAL_TIMEOUT` is less than `SAFE_FETCH_CONNECT_TIMEOUT + SAFE_FETCH_READ_TIMEOUT`, the connect timeout takes precedence.
+- The total timeout is a hard ceiling enforced before each redirect follow and each chunk read in the streaming loop. If `SAFE_FETCH_TOTAL_TIMEOUT` is less than `SAFE_FETCH_CONNECT_TIMEOUT + SAFE_FETCH_READ_TIMEOUT`, the connect timeout takes precedence.
 
 ## Configuration Files
 

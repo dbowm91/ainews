@@ -523,9 +523,9 @@ The codebase has two URL validation implementations:
 
 - **`utils/url.py`**: SSRF protection for adapters (clean layering). Adapters import from here.
 - **`services/url.py`**: URL validation with config support for services. Re-exports `TRACKING_PARAMS`, `normalize_title`, `normalize_url` from `utils/url.py` but has its own `validate_url_safe()` implementation with config support.
-- **`services/safe_fetch.py`**: First-party safe fetch client for untrusted URLs. Delegates SSRF validation to `services.url.validate_url_safe()`. Handles manual redirect validation, streaming byte limits, and content-type allowlist. Used by `services/content_extractor.py`.
+- **`services/safe_fetch.py`**: First-party safe fetch client for untrusted URLs. Delegates SSRF validation to `services.url.validate_url_safe()`. Handles manual redirect validation, streaming byte limits, content-type allowlist, and DNS rebinding TOCTOU mitigation via `PinnedIPAdapter` (connects to pre-validated IP, each redirect hop independently validated and pinned). Fail-closed DNS resolution: ALL resolved IPs must pass validation. Total timeout enforced across redirects and streaming. Used by `services/content_extractor.py`.
 
 Use `utils/url.py` for adapters (clean layering), `services/url.py` for services (has config support), `services/safe_fetch.py` for all untrusted URL fetches.
 
 ### Safe Fetch Test Infrastructure
-Tests use `http.server.HTTPServer` on loopback with daemon threads. SSRF validation is bypassed for local servers via `_patch_for_local_server()` (patches `_validate_and_resolve`, `_timeout_tuple`, and `_resolve_and_check`). Redirect tests use `_patch_for_redirect_test()` which lets redirect target validation run. DNS cache is cleared between tests via autouse fixture.
+Tests use `http.server.HTTPServer` on loopback with daemon threads. SSRF validation is bypassed for local servers via `_patch_for_local_server()` (patches `_validate_and_resolve`, `_timeout_tuple`, and `_resolve_and_check`). Redirect tests use `_patch_for_redirect_test()` which lets redirect target validation run. DNS cache is cleared between tests via autouse fixture. Tests verify `PinnedIPAdapter` connection pinning, fail-closed DNS resolution, and per-redirect independent validation.

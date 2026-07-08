@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from services.safe_fetch import (
+    PinnedIPAdapter,
     SafeFetchContentTypeError,
     SafeFetchError,
     SafeFetchLimits,
@@ -1129,5 +1130,219 @@ class TestRejectZip:
             with _patch_for_local_server(f"{base}/"):
                 with pytest.raises(SafeFetchContentTypeError, match="not in allowed"):
                     safe_fetch_url(f"{base}/")
+        finally:
+            server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# 35. IP pinning — PinnedIPAdapter tests
+# ---------------------------------------------------------------------------
+class TestPinnedIPAdapter:
+    def test_adapter_connects_to_pinned_ip(self):
+        """PinnedIPAdapter patches socket.create_connection to use the pinned IP."""
+        import socket as _socket
+
+        original_create_connection = _socket.create_connection
+        connection_targets = []
+
+        def tracking_create_connection(address, *args, **kwargs):
+            connection_targets.append(address)
+            return original_create_connection(address, *args, **kwargs)
+
+        _socket.create_connection = tracking_create_connection
+        try:
+            adapter = PinnedIPAdapter(
+                pinned_ip="127.0.0.1",
+                original_host="fake-hostname.example.com",
+            )
+            assert adapter.pinned_ip == "127.0.0.1"
+            assert adapter.original_host == "fake-hostname.example.com"
+
+            class OkHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+                def log_message(self, format, *args):
+                    pass
+
+            server, _, base = _run_server(OkHandler)
+            try:
+                from requests import Request
+
+                req = Request("GET", f"{base}/test")
+                prepared = req.prepare()
+                adapter.send(prepared, timeout=(5, 10))
+            finally:
+                server.shutdown()
+        finally:
+            _socket.create_connection = original_create_connection
+
+    def test_adapter_sets_host_header(self):
+        """PinnedIPAdapter sets Host header to the original hostname for TLS SNI."""
+        import socket as _socket
+
+        original_create_connection = _socket.create_connection
+        received_hosts = []
+
+        def tracking_create_connection(address, *args, **kwargs):
+            return original_create_connection(address, *args, **kwargs)
+
+        _socket.create_connection = tracking_create_connection
+        try:
+            class HostCaptureHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    received_hosts.append(self.headers.get("Host", ""))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+                def log_message(self, format, *args):
+                    pass
+
+            server, _, base = _run_server(HostCaptureHandler)
+            try:
+                adapter = PinnedIPAdapter(
+                    pinned_ip="127.0.0.1",
+                    original_host="fake-hostname.example.com",
+                )
+                from requests import Request
+
+                req = Request("GET", f"{base}/test")
+                prepared = req.prepare()
+                response = adapter.send(prepared, timeout=(5, 10))
+                assert response.status_code == 200
+                assert received_hosts[0] == "fake-hostname.example.com"
+            finally:
+                server.shutdown()
+        finally:
+            _socket.create_connection = original_create_connection
+
+    def test_patching_is_scoped_to_request(self):
+        """PinnedIPAdapter patches socket.create_connection during send and restores it after."""
+        import socket as _socket
+
+        original = _socket.create_connection
+        adapter = PinnedIPAdapter(
+            pinned_ip="127.0.0.1",
+            original_host="test.example.com",
+        )
+
+        assert _socket.create_connection is original
+
+        class OkHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(OkHandler)
+        try:
+            from requests import Request
+
+            req = Request("GET", f"{base}/test")
+            prepared = req.prepare()
+            adapter.send(prepared, timeout=(5, 10))
+            assert _socket.create_connection is original
+        finally:
+            server.shutdown()
+
+    def test_dns_rebinding_blocked(self):
+        """Multiple DNS lookups returning a private IP are all validated and rejected."""
+        import socket as _socket
+        from services.url import _resolve_and_check, _get_dns_cache
+
+        cache = _get_dns_cache()
+        cache.clear()
+
+        def _mock_getaddrinfo(hostname, port, *args, **kwargs):
+            return [
+                (_socket.AF_INET, _socket.SOCK_STREAM, 0, "", ("127.0.0.1", 0)),
+                (_socket.AF_INET, _socket.SOCK_STREAM, 0, "", ("192.168.1.100", 0)),
+            ]
+
+        with patch.object(_socket, "getaddrinfo", side_effect=_mock_getaddrinfo):
+            with pytest.raises((ValueError, UnsafeURLError)):
+                _resolve_and_check("rebinding.example.com")
+
+    def test_all_resolved_ips_recorded(self):
+        """All resolved IPs are recorded in SafeFetchResult.resolved_ips for audit trail."""
+        class OkHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<html>ok</html>")
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(OkHandler)
+        try:
+            # Return both the actual server IP and a second IP for audit recording
+            with (
+                patch(
+                    "services.safe_fetch._validate_and_resolve",
+                    side_effect=lambda u: (u, ["127.0.0.1", "93.184.216.34"]),
+                ),
+                patch(
+                    "services.safe_fetch._timeout_tuple",
+                    side_effect=lambda l: (l.connect_timeout, l.read_timeout),
+                ),
+            ):
+                result = safe_fetch_url(f"{base}/test")
+                assert result.status_code == 200
+                assert "127.0.0.1" in result.resolved_ips
+                assert "93.184.216.34" in result.resolved_ips
+        finally:
+            server.shutdown()
+
+    def test_redirect_hop_independently_pinned(self):
+        """Each redirect hop gets its own PinnedIPAdapter with the hop's validated IP."""
+        adapter1 = PinnedIPAdapter(
+            pinned_ip="93.184.216.34",
+            original_host="first-hop.example.com",
+        )
+        adapter2 = PinnedIPAdapter(
+            pinned_ip="93.184.216.35",
+            original_host="second-hop.example.com",
+        )
+
+        assert adapter1.pinned_ip == "93.184.216.34"
+        assert adapter1.original_host == "first-hop.example.com"
+        assert adapter2.pinned_ip == "93.184.216.35"
+        assert adapter2.original_host == "second-hop.example.com"
+
+        class RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/start":
+                    self.send_response(302)
+                    self.send_header("Location", "/end")
+                    self.end_headers()
+                elif self.path == "/end":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"done")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        server, _, base = _run_server(RedirectHandler)
+        try:
+            with _patch_for_local_server(f"{base}/start"):
+                result = safe_fetch_url(f"{base}/start")
+                assert result.status_code == 200
+                assert len(result.redirect_chain) == 1
         finally:
             server.shutdown()

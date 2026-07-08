@@ -1,4 +1,19 @@
-"""Safe HTTP fetch client with SSRF protection.
+"""Safe URL fetching with SSRF protection and DNS rebinding mitigation.
+
+DNS Resolution Policy:
+    The safe fetch client implements a fail-closed DNS resolution policy:
+    1. DNS resolution is performed ONCE per fetch operation
+    2. ALL resolved IPs are validated against blocked networks (RFC 1918, etc.)
+    3. If ANY resolved IP is blocked, the entire fetch is rejected
+    4. The FIRST safe IP is used for connection pinning
+    5. All resolved IPs are recorded in the result for audit trail
+
+Anti-Rebinding Protection:
+    To prevent TOCTOU (time-of-check-time-of-use) DNS rebinding attacks:
+    - DNS validation and connection use the SAME IP address
+    - A custom HTTPAdapter (PinnedIPAdapter) connects to the validated IP
+    - The original hostname is preserved for TLS SNI and certificate verification
+    - Each redirect hop is independently validated and pinned
 
 Provides a single ``safe_fetch_url`` function that fetches untrusted URLs
 with DNS-level SSRF blocking, manual redirect validation, streaming byte
@@ -12,12 +27,15 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import time
+import urllib.parse
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urljoin
 
 import requests
+import requests.adapters
 
 from services.url import UnsafeURLError, _resolve_and_check, validate_url_safe
 
@@ -35,18 +53,127 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
+# IP-pinned adapter (DNS rebinding TOCTOU fix)
+# ---------------------------------------------------------------------------
+
+
+class PinnedIPAdapter(requests.adapters.HTTPAdapter):
+    """HTTPAdapter that connects to a pre-validated IP, closing DNS rebinding TOCTOU.
+
+After DNS validation, both ``socket.create_connection`` and
+``urllib3.util.connection.create_connection`` are monkeypatched so the
+actual TCP connection targets the validated IP while TLS SNI and certificate
+verification use the original hostname.
+    """
+
+    def __init__(self, pinned_ip: str, original_host: str, **kwargs):
+        self.pinned_ip = pinned_ip
+        self.original_host = original_host
+        super().__init__(**kwargs)
+
+    def send(self, request, **kwargs):  # type: ignore[override]
+        _orig_socket_cc = socket.create_connection
+        _orig_util_cc = None
+
+        try:
+            import urllib3.util.connection
+            _orig_util_cc = urllib3.util.connection.create_connection
+        except (ImportError, AttributeError):
+            pass
+
+        def _pinned_socket_cc(address, *args, **kw):  # type: ignore[no-untyped-def]
+            host, port = address
+            return _orig_socket_cc((self.pinned_ip, port), *args, **kw)
+
+        def _pinned_util_cc(address, *args, **kw):  # type: ignore[no-untyped-def]
+            host, port = address
+            kw.pop("socket_options", None)
+            return _orig_socket_cc((self.pinned_ip, port), *args, **kw)
+
+        socket.create_connection = _pinned_socket_cc
+        if _orig_util_cc is not None:
+            urllib3.util.connection.create_connection = _pinned_util_cc
+        try:
+            request.headers["Host"] = self.original_host
+            return super().send(request, **kwargs)
+        finally:
+            socket.create_connection = _orig_socket_cc
+            if _orig_util_cc is not None:
+                urllib3.util.connection.create_connection = _orig_util_cc
+
+    def proxy_manager_for(self, proxy, **proxy_kwargs):
+        manager = super().proxy_manager_for(proxy, **proxy_kwargs)
+        orig_send = manager.send
+
+        def _pinned_send(request, *args, **kwargs):  # type: ignore[no-untyped-def]
+            _orig_socket_cc = socket.create_connection
+            _orig_util_cc = None
+
+            try:
+                import urllib3.util.connection
+                _orig_util_cc = urllib3.util.connection.create_connection
+            except (ImportError, AttributeError):
+                pass
+
+            def _pinned_socket_cc(address, *a, **kw):  # type: ignore[no-untyped-def]
+                host, port = address
+                return _orig_socket_cc((self.pinned_ip, port), *a, **kw)
+
+            def _pinned_util_cc(address, *a, **kw):  # type: ignore[no-untyped-def]
+                host, port = address
+                kw.pop("socket_options", None)
+                return _orig_socket_cc((self.pinned_ip, port), *a, **kw)
+
+            socket.create_connection = _pinned_socket_cc
+            if _orig_util_cc is not None:
+                urllib3.util.connection.create_connection = _pinned_util_cc
+            try:
+                request.headers["Host"] = self.original_host
+                return orig_send(request, *args, **kwargs)
+            finally:
+                socket.create_connection = _orig_socket_cc
+                if _orig_util_cc is not None:
+                    urllib3.util.connection.create_connection = _orig_util_cc
+
+        manager.send = _pinned_send  # type: ignore[assignment]
+        return manager
+
+
+# ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
+def _safe_int_env(name: str, default: int) -> int:
+    """Parse an integer env var safely, returning default on any error."""
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float_env(name: str, default: float) -> float:
+    """Parse a float env var safely, returning default on any error."""
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 
 @dataclass(frozen=True)
 class SafeFetchLimits:
     """Configurable limits for a single fetch operation."""
 
-    max_redirects: int = int(os.environ.get("SAFE_FETCH_MAX_REDIRECTS", 5))
-    max_bytes: int = int(os.environ.get("SAFE_FETCH_MAX_BYTES", 2_000_000))
-    connect_timeout: float = float(os.environ.get("SAFE_FETCH_CONNECT_TIMEOUT", 5.0))
-    read_timeout: float = float(os.environ.get("SAFE_FETCH_READ_TIMEOUT", 10.0))
-    total_timeout: float = float(os.environ.get("SAFE_FETCH_TOTAL_TIMEOUT", 20.0))
+    max_redirects: int = field(default_factory=lambda: _safe_int_env("SAFE_FETCH_MAX_REDIRECTS", 5))
+    max_bytes: int = field(default_factory=lambda: _safe_int_env("SAFE_FETCH_MAX_BYTES", 2_000_000))
+    connect_timeout: float = field(default_factory=lambda: _safe_float_env("SAFE_FETCH_CONNECT_TIMEOUT", 5.0))
+    read_timeout: float = field(default_factory=lambda: _safe_float_env("SAFE_FETCH_READ_TIMEOUT", 10.0))
+    total_timeout: float = field(default_factory=lambda: _safe_float_env("SAFE_FETCH_TOTAL_TIMEOUT", 20.0))
     allowed_content_types: tuple[str, ...] = (
         "text/html",
         "application/xhtml+xml",
@@ -121,6 +248,15 @@ def _timeout_tuple(limits: SafeFetchLimits) -> tuple[float, float]:
     return (limits.connect_timeout, limits.read_timeout)
 
 
+def _check_timeout(start: float, total_timeout: float, phase: str = "request") -> None:
+    """Raise if total timeout exceeded."""
+    elapsed = time.monotonic() - start
+    if elapsed > total_timeout:
+        raise SafeFetchTimeoutError(
+            f"Total timeout ({total_timeout}s) exceeded during {phase} after {elapsed:.1f}s"
+        )
+
+
 def _extract_charset(content_type: str | None) -> str | None:
     """Pull ``charset=...`` from a Content-Type header value."""
     if content_type is None:
@@ -190,14 +326,19 @@ def _record_fetch_metrics(
 
 
 def _redact_url(url: str) -> str:
-    """Return URL with query string stripped for logging."""
+    """Redact credentials and sensitive query params from URL for logging."""
     try:
-        parsed = requests.utils.urlparse(url)
-        if parsed.query:
-            return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        parsed = urllib.parse.urlparse(url)
+        return urllib.parse.urlunparse((
+            parsed.scheme,
+            parsed.hostname or "",
+            parsed.path,
+            "",
+            "",
+            "",
+        ))
     except (ValueError, AttributeError):
-        pass
-    return url
+        return "<redacted>"
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +389,7 @@ def safe_fetch_url(
     try:
         timeout = _timeout_tuple(limits)
         redirect_chain: list[str] = []
-        resolved_ips: tuple[str, ...] = ()
+        all_resolved_ips: list[str] = []
         current_url = url
         session = requests.Session()
 
@@ -265,8 +406,15 @@ def safe_fetch_url(
                     f"Failed to resolve {current_url!r}"
                 ) from exc
 
-            resolved_ips = tuple(ips)
+            all_resolved_ips.extend(ips)
             current_url = validated_url
+
+            parsed_current = requests.utils.urlparse(current_url)
+            adapter = PinnedIPAdapter(
+                pinned_ip=ips[0],
+                original_host=parsed_current.hostname or "",
+            )
+            session.mount(f"{parsed_current.scheme}://", adapter)
 
             try:
                 response = session.get(
@@ -315,6 +463,7 @@ def safe_fetch_url(
 
                 redirect_chain.append(current_url)
                 current_url = next_url
+                _check_timeout(_start, limits.total_timeout, "redirect")
                 continue
 
             # Non-redirect response
@@ -344,6 +493,7 @@ def safe_fetch_url(
         chunks: list[bytes] = []
         total_bytes = 0
         for chunk in response.iter_content(chunk_size=8192):
+            _check_timeout(_start, limits.total_timeout, "streaming")
             total_bytes += len(chunk)
             if total_bytes > limits.max_bytes:
                 _error_type = "too_large"
@@ -378,7 +528,7 @@ def safe_fetch_url(
             text=text,
             content_type=_content_type_hdr,
             redirect_chain=tuple(redirect_chain),
-            resolved_ips=resolved_ips,
+            resolved_ips=tuple(all_resolved_ips),
         )
 
     except SafeFetchError:

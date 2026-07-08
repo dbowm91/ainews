@@ -382,7 +382,7 @@ Beat schedule is loaded from `pipeline.yaml` `schedule:` section via `Config.get
 - **API token prefix collisions:** Verification iterates all candidates matching the prefix, so collisions cannot cause valid-token auth failure. Token creation retries on collision.
 - **XSS**: LLM-generated content in templates must use `|e` filter
 - **Prompt injection**: Prompt data auto-escaped via `_escape_prompt_data()`
-- **SSRF**: All URLs validated via `validate_url_safe()` before fetching
+- **SSRF**: All URLs validated via `validate_url_safe()` before fetching. DNS rebinding TOCTOU mitigated via `PinnedIPAdapter` — connects to pre-validated IP, each redirect hop independently validated and pinned. Fail-closed: ALL resolved IPs must pass validation.
 - **Safe fetch tests**: `tests/test_safe_fetch.py` (SSRF, redirects, limits, content-type, timeouts), `tests/test_url_security.py` (URL parser edge cases), `tests/test_content_extractor_safe_fetch.py` (extraction integration) — all deterministic, no internet required
 - **Safe fetch observability**: `safe_fetch_url()` records `safe_fetch.calls` (counter, `success` label), `safe_fetch.errors` (counter, `error_type` label), `safe_fetch.duration_seconds` (histogram). Structured logging on success (URL, status, duration) and failure (URL, error type, duration).
 - **Safe fetch config**: `SAFE_FETCH_*` env vars validated in production (`_validate_safe_fetch()` in `config.py`). Limits: MAX_BYTES ≤ 10MB, CONNECT_TIMEOUT ≤ 30s, READ_TIMEOUT ≤ 60s, TOTAL_TIMEOUT ≥ CONNECT + READ.

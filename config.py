@@ -641,13 +641,14 @@ def _validate_docker_ollama_host(result: ConfigValidationResult) -> None:
 
 def _validate_safe_fetch(result: ConfigValidationResult) -> None:
     """Validate safe-fetch configuration values."""
-    import os
+    from services.safe_fetch import SafeFetchLimits
 
-    max_redirects = int(os.environ.get("SAFE_FETCH_MAX_REDIRECTS", 5))
-    max_bytes = int(os.environ.get("SAFE_FETCH_MAX_BYTES", 2_000_000))
-    connect_timeout = int(os.environ.get("SAFE_FETCH_CONNECT_TIMEOUT", 5))
-    read_timeout = int(os.environ.get("SAFE_FETCH_READ_TIMEOUT", 10))
-    total_timeout = int(os.environ.get("SAFE_FETCH_TOTAL_TIMEOUT", 20))
+    limits = SafeFetchLimits()
+    max_redirects = limits.max_redirects
+    max_bytes = limits.max_bytes
+    connect_timeout = limits.connect_timeout
+    read_timeout = limits.read_timeout
+    total_timeout = limits.total_timeout
 
     if max_redirects <= 0:
         result.add(

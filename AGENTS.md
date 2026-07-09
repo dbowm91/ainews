@@ -501,6 +501,8 @@ Run `scripts/validate_release.sh` to replicate CI gates locally. Agents should r
 - `--security` — pip-audit + gitleaks + trivy
 - `--with-mypy` — include mypy type-checking
 
+**Agents MUST NOT claim release readiness without `--full` mode passing.** The full checklist is in `docs/release_checklist.md`.
+
 Agents must not claim release readiness without `--full` mode passing. The script generates throwaway `.env.ci` secrets, uses `COMPOSE_PROJECT_NAME=ainews-validation` for Docker isolation, and cleans up on exit.
 
 ## Security Features (Implemented)

@@ -2,7 +2,7 @@
 
 AI-powered news aggregation and newsletter platform. Discovers, summarizes, and curates articles from configurable RSS/API sources using a multi-stage LLM pipeline with quality gates, subagent tool calling, and trend memory.
 
-> **Status:** Alpha / experimental but functional. Designed for single-node self-hosted use.
+> **Status:** Release candidate. Designed for single-node self-hosted use. See [Release Checklist](docs/release_checklist.md) for validation requirements.
 
 ## Quick Start
 

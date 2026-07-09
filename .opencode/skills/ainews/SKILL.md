@@ -149,6 +149,19 @@ Four deployment modes (see `docs/deployment.md#docker-with-ollama`):
 
 **Critical:** `localhost` inside Docker containers refers to the container itself, NOT the host. `AINEWS_RUNNING_IN_DOCKER=1` env var is set in Dockerfile/compose. `ProductionConfig.validate()` warns when Ollama uses localhost inside Docker (see `_validate_docker_ollama_host()` in `config.py`).
 
+## Release Checklist
+
+Agents MUST reference `docs/release_checklist.md` before claiming release readiness. The checklist defines 10 sections: source tree state, Python/test validation, security validation, Docker/deployment validation, migration validation, safe-fetch validation, documentation validation, release artifact/version validation, rollback/restore readiness, and final human signoff.
+
+**One-command local validation:**
+```bash
+bash scripts/validate_release.sh              # Full: lint + tests + smoke + Docker + Compose
+bash scripts/validate_release.sh --fast       # Quick pre-push check
+bash scripts/validate_release.sh --security   # Security gates only
+```
+
+**Acceptance criteria:** Agents MUST NOT claim release readiness without `--full` mode passing on `scripts/validate_release.sh`.
+
 ## Config System
 
 **Config access pattern (Celery-safe):**

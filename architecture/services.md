@@ -43,7 +43,39 @@ services/
 ├── cache.py                 # Redis caching (ResponseCache L1+L2)
 ├── limiter.py               # Redis-based rate limiting (ModelLimiter)
 ├── cost_tracker.py          # LLM cost tracking
-└── ...                      # Additional modules (see `ls services/` for full list; includes health.py, totp.py, prompts.py, url.py, topic_gap.py, stage_cost.py, source_intelligence.py, quality_report.py, alerts.py, config_utils.py, config_unified.py, audit.py, subscribers.py, redis_utils.py, task_security.py, timeout.py, etc.)
+├── logging_utils.py         # PipelineLogger, log_pipeline_event, log_article_event
+├── prompts.py               # Prompt builder, esc_xml_text, esc_xml_attr
+├── newsletter.py            # Newsletter service (delivery, SMTP)
+├── rss.py                   # RSS/Atom feed utilities
+├── redis_utils.py           # Redis helper functions
+├── date_utils.py            # Date parsing and formatting
+├── pagination.py            # Pagination helpers
+├── timeout.py               # Timeout utilities
+├── tracing.py               # OpenTelemetry tracing helpers
+├── utils.py                 # General utility functions
+├── validation.py            # Validation utilities
+├── stage_cost.py            # Stage cost calculation
+├── tool_selection.py        # Tool selection for subagents
+├── health.py                # Health check with degradation
+├── metrics.py               # Application metrics (Prometheus)
+├── alerts.py                # Deterministic health alerting
+├── quality.py               # Quality assessment (LLM-as-judge)
+├── quality_report.py        # Citation + claim verification
+├── quality_report_service.py # Quality report persistence
+├── source_intelligence.py   # Source health analytics
+├── topic_gap.py             # Topic gap detection
+├── dedup_service.py         # Deduplication candidate finding
+├── subscribers.py           # Subscriber management
+├── audit.py                 # Audit logging
+├── task_security.py         # HMAC task signing
+├── totp.py                  # TOTP 2FA
+├── api_tokens.py            # API token generation/verification
+├── article.py               # Article service helpers
+├── pipeline_replay.py       # Pipeline rescue/replay
+├── config_cache.py          # Redis config cache (mtime-based)
+├── config_unified.py        # Unified config access
+├── config_utils.py          # Celery-safe config helper
+└── url.py                   # URL validation (SSRF prevention)
 ```
 
 ## LLM Provider System

@@ -24,6 +24,7 @@ The `tasks/` package contains Celery tasks implementing the newsletter pipeline.
 | `retry.py` | `retry_stuck` | - | Retry/dead-letter stuck articles |
 | `subscribers.py` | `cleanup_inactive_subscribers` | - | Flag inactive subscribers |
 | `webhook.py` | `dispatch_webhook_task` | - | Dispatch webhook events |
+| `__init__.py` | — | — | Task exports, autoretry defaults |
 
 ## Pipeline Stages
 

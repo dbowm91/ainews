@@ -12,6 +12,7 @@ The `utils/` package contains pure utility functions with minimal dependencies.
 | `hash.py` | `generate_hash`, `verify_hash` | Hashing utilities |
 | `html.py` | `strip_tags`, `linkify`, `extract_text` | HTML processing |
 | `security.py` | `generate_token`, `constant_time_compare` | Security utilities |
+| `__init__.py` | — | Package init |
 
 ## Text Utilities (`text.py`)
 

@@ -18,6 +18,8 @@ The `models/` package contains SQLAlchemy database models defining the data laye
 | `audit.py` | `AuditLog` | Admin action audit trail |
 | `quality.py` | `QualityReport` | Persisted editorial quality verification reports |
 | `share.py` | `ShareConfig` | Social sharing platform configuration |
+| `utils.py` | — | Model utility functions |
+| `__init__.py` | — | Model exports (import order matters for db.create_all) |
 
 ## Key Relationships
 

@@ -402,9 +402,11 @@ ainews/
 ├── constants.py            # PipelineStatus enum, shared constants
 ├── extensions.py           # Flask extensions (db, redis, limiter)
 ├── run.py                  # WSGI/ASGI entry point (Granian)
+├── celery_support.py       # Celery support utilities
 ├── logging_config.py       # Structured JSON logging + OpenTelemetry
 │
 ├── models/                 # SQLAlchemy models
+│   ├── __init__.py         # Model exports, import order matters for db.create_all()
 │   ├── article.py          # Article, Citation
 │   ├── source.py           # Source (health tracking)
 │   ├── newsletter.py       # Newsletter, Subscriber, ArticleMetric
@@ -420,8 +422,10 @@ ainews/
 │   └── utils.py            # Model utility functions
 ├── models.py               # Re-exports from models package
 ├── schemas/                # Pydantic models
+│   ├── __init__.py         # Package init
 │   ├── pipeline.py         # PipelineRootConfig, RoleConfig, SubagentConfig
 │   ├── source.py           # SourceConfig, RSSConfig, APIConfig, WebConfig
+│   ├── common.py           # Shared provider definitions (imports services.config_cache)
 │   ├── llm.py              # Provider definitions
 │   ├── llm_responses.py    # SelectionResult, ResearchBrief, CondensedArticle
 │   ├── tasks.py            # Celery task input validation
@@ -432,13 +436,14 @@ ainews/
 │   └── item.py             # RawItem (adapter output)
 │
 ├── adapters/               # Source data fetchers
+│   ├── __init__.py         # Exports APIAdapter, RSSAdapter, WebAdapter, get_adapter_class
 │   ├── base.py             # BaseSourceAdapter + registry
 │   ├── rss.py              # RSS/Atom feed adapter
 │   ├── api.py              # REST API adapter
 │   ├── web.py              # Web scraping adapter
 │   └── session.py          # Shared HTTP session + SSRF protection
 │
-├── services/               # Business logic layer (65+ files)
+├── services/               # Business logic layer (89 .py files)
 │   ├── llm/                # LLM provider implementations
 │   │   ├── __init__.py     # Provider registry + fallback chain
 │   │   ├── base.py         # BaseLLMProvider + ToolDefinition
@@ -460,16 +465,36 @@ ainews/
 │   │   ├── prompt_templates.py # Task prompt templates
 │   │   └── utils.py        # Retry, task revocation helpers
 │   ├── search/             # Search providers
+│   │   ├── __init__.py     # Search provider registry
+│   │   ├── base.py         # BaseSearchProvider, SearchProvider ABCs
 │   │   ├── duckduckgo.py   # DuckDuckGo (default)
 │   │   ├── hybrid.py       # FTS5 + vector similarity
 │   │   ├── google.py       # Google Custom Search
-│   │   └── searxng.py      # Self-hosted SearxNG
+│   │   ├── searxng.py      # Self-hosted SearxNG
+│   │   ├── sqlite_fts.py   # SQLite FTS5 article search
+│   │   └── session.py      # Shared requests.Session with SSRF-safe redirect handler
+│   ├── __init__.py         # Package init
+│   ├── logging_utils.py    # PipelineLogger, log_pipeline_event, log_article_event
+│   ├── prompts.py          # Prompt builder, esc_xml_text, esc_xml_attr
+│   ├── safe_fetch.py       # Safe HTTP fetch with SSRF protection, PinnedIPAdapter
+│   ├── newsletter.py       # Newsletter service (delivery, SMTP)
+│   ├── rss.py              # RSS/Atom feed utilities
+│   ├── redis_utils.py      # Redis helper functions
+│   ├── date_utils.py       # Date parsing and formatting
+│   ├── pagination.py       # Pagination helpers
+│   ├── timeout.py          # Timeout utilities
+│   ├── tracing.py          # OpenTelemetry tracing helpers
+│   ├── utils.py            # General utility functions
+│   ├── validation.py       # Validation utilities
+│   ├── stage_cost.py       # Stage cost calculation
+│   ├── tool_selection.py   # Tool selection for subagents
 │   ├── researcher.py       # Research prompt builder
 │   ├── writer.py           # Writer prompt builder
 │   ├── editor.py           # Editor prompt builder
 │   ├── crawling.py         # Source management, dedup
 │   ├── content_extractor.py# trafilatura + readability
 │   ├── trend_memory.py     # LLM-judged trend insights
+│   ├── trend_detector.py   # Trend detection logic
 │   ├── embeddings.py       # Vector embeddings
 │   ├── cache.py            # ResponseCache (L1 + L2 Redis)
 │   ├── limiter.py          # ModelLimiter (Redis concurrency)
@@ -481,12 +506,14 @@ ainews/
 │   ├── pipeline_failure.py # Stage failure handling
 │   ├── pipeline_replay.py  # Pipeline rescue/replay
 │   ├── pipeline_utils.py   # Shared stage dispatch
+│   ├── newsletter_pipeline.py # Newsletter generation pipeline
 │   ├── health.py           # Health check with degradation
 │   ├── metrics.py          # Application metrics (Prometheus)
 │   ├── cost_tracker.py     # LLM cost tracking
 │   ├── alerts.py           # Deterministic health alerting
 │   ├── quality.py          # Quality assessment (LLM-as-judge)
 │   ├── quality_report.py   # Citation + claim verification
+│   ├── quality_report_service.py # Quality report persistence
 │   ├── related.py          # Related article finding
 │   ├── source_intelligence.py # Source health analytics
 │   ├── topic_gap.py        # Topic gap detection
@@ -495,11 +522,22 @@ ainews/
 │   ├── audit.py            # Audit logging
 │   ├── task_security.py    # HMAC task signing
 │   ├── totp.py             # TOTP 2FA
+│   ├── api_tokens.py       # API token generation/verification
+│   ├── article.py          # Article service helpers
+│   ├── article_validation.py # Article quality validation
+│   ├── article_fallback.py # Fallback content extraction
+│   ├── article_parser.py   # Article content parsing
+│   ├── dead_letter.py      # Dead letter queue handling
+│   ├── degradation.py      # Degradation service
+│   ├── context_service.py  # Context service
+│   ├── provider_base.py    # Base provider, provider manager
+│   ├── url.py              # URL validation (SSRF prevention)
 │   ├── config_cache.py     # Redis config cache (mtime-based)
 │   ├── config_unified.py   # Unified config access
 │   └── config_utils.py     # Celery-safe config helper
 │
 ├── tasks/                  # Celery tasks
+│   ├── __init__.py         # Task exports, autoretry defaults
 │   ├── crawl.py            # run_all_sources, crawl_source
 │   ├── extract.py          # process_item (content extraction)
 │   ├── select.py           # select_article (LLM scoring)
@@ -516,6 +554,8 @@ ainews/
 │   └── subscribers.py      # cleanup_inactive_subscribers
 │
 ├── routes/                 # Flask blueprints
+│   ├── __init__.py         # Blueprint registration
+│   ├── decorators.py       # @require_auth, commit(), commit_or_rollback()
 │   ├── public/             # Public-facing routes
 │   │   ├── feeds.py        # Article feeds, RSS, search
 │   │   ├── subscribe.py    # Subscription management
@@ -553,9 +593,9 @@ ainews/
 │       ├── topic_gap.py    # Topic gap analysis API
 │       ├── utils.py        # API utility functions
 │       └── __init__.py
-│   └── decorators.py       # @require_auth, commit(), commit_or_rollback()
 │
 ├── utils/                  # Pure utility functions
+│   ├── __init__.py         # Package init
 │   ├── url.py              # SSRF protection, URL normalization, DNS cache
 │   ├── text.py             # XML escaping, truncation, HTML sanitization
 │   ├── datetime.py         # Date parsing and formatting
@@ -564,18 +604,28 @@ ainews/
 │   └── security.py         # Token generation, constant-time compare
 │
 ├── prompts/                # LLM prompt templates
+│   ├── README.md           # Prompt template documentation
 │   ├── selector.txt        # Article selection/scoring
 │   ├── researcher.txt      # Research brief compilation
 │   ├── writer.txt          # Smart Brevity article writing
 │   ├── editor.txt          # Editorial review
 │   ├── newsletter_reader.txt  # Newsletter theme analysis
 │   ├── newsletter_writer.txt  # Newsletter summary writing
-│   └── newsletter_editor.txt  # Newsletter review
+│   ├── newsletter_editor.txt  # Newsletter review
+│   ├── subagent_research_synthesis.txt  # Subagent research context synthesis
+│   └── subagent_edit_contextualization.txt  # Subagent editorial contextualization
 │
 ├── templates/              # Jinja2 templates
 │   ├── base.html           # Public site layout
 │   ├── base_admin.html     # Admin layout
-│   ├── admin/              # Admin templates
+│   ├── index.html          # Home page
+│   ├── article.html        # Article detail page
+│   ├── tag.html            # Tag page
+│   ├── topic.html          # Topic page
+│   ├── share_redirect.html # Share redirect page
+│   ├── unsubscribe.html    # Unsubscribe page
+│   ├── verify.html         # Email verification page
+│   ├── admin/              # Admin templates (20 files)
 │   ├── partials/           # Reusable components (HTMX partials)
 │   ├── macros/             # Jinja macros
 │   └── errors/             # Error pages (404, 500, 429)
@@ -583,25 +633,28 @@ ainews/
 ├── static/                 # Static assets
 │   ├── css/                # Stylesheets (CSS custom properties, dark/light theme)
 │   ├── js/                 # JavaScript (HTMX, theme, toast, app)
-│   └── svg/                # Topic icons and UI icons
+│   ├── svg/                # Topic icons and UI icons
+│   └── manifest.json       # PWA manifest
 │
-├── tests/                  # Test suite (97+ files)
+├── tests/                  # Test suite (120+ files)
 │   ├── conftest.py         # Shared fixtures
 │   ├── factories.py        # Test data factories
 │   ├── mock_redis.py       # MockRedis for testing
 │   ├── helpers/            # Pipeline test helpers
 │   └── test_*.py           # Test modules by component
 │
-├── migrations/             # Alembic database migrations (36 versions)
+├── migrations/             # Alembic database migrations (37 versions)
 ├── scripts/                # Utility scripts (backup, deploy, dev)
-├── docs/                   # Additional documentation (37 files)
+├── docs/                   # Additional documentation (38 files)
 ├── architecture/           # Architecture documentation (this directory)
 │
 ├── providers.yaml          # LLM + search provider definitions
 ├── pipeline.yaml           # Pipeline stage + newsletter + subagent config
 ├── sources.yaml            # News source definitions
 ├── topics.yaml             # Topic definitions for classification
-└── openapi.yaml            # API specification
+├── openapi.yaml            # API specification
+├── docker-compose.yml      # Docker Compose configuration
+└── docker-compose.ollama.yml  # Docker Compose override for Ollama
 ```
 
 ---

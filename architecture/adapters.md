@@ -22,6 +22,7 @@ class RSSAdapter(BaseSourceAdapter):
 | `api.py` | `APIAdapter` | REST API fetching with JSONPath field extraction |
 | `web.py` | `WebAdapter` | Web page scraping with CSS selectors |
 | `session.py` | `SSRFSafeRedirectHandler` | SSRF protection for redirects |
+| `__init__.py` | — | Exports APIAdapter, RSSAdapter, WebAdapter, get_adapter_class |
 
 ## Base Source Adapter
 

@@ -6,42 +6,46 @@ The `routes/` package contains Flask blueprints for public and admin interfaces.
 
 ```
 routes/
+├── __init__.py             # Blueprint registration
+├── decorators.py           # @require_auth, commit(), commit_or_rollback()
 ├── public/                 # Public-facing routes
-│   ├── feeds.py           # Article feeds, sitemap, RSS
+│   ├── __init__.py         # Public blueprint registration
+│   ├── feeds.py            # Article feeds, sitemap, RSS
 │   ├── subscribe.py        # Subscription management
-│   └── links.py           # Article detail, short URLs, share tracking
+│   └── links.py            # Article detail, short URLs, share tracking
 └── admin/                  # Admin interface
-    ├── __init__.py        # Dashboard, login, dead-letters
-    ├── auth.py            # Login with TOTP support
-    ├── articles.py        # Article management UI
-    ├── dashboard.py       # Dashboard + dead-letters page
-    ├── newsletters.py     # Newsletter UI + API
-    ├── pipelines.py       # Pipeline runs + trigger-crawl
-    ├── review.py          # Article review queue
-    ├── sources.py         # Source management UI
-    ├── subscribers.py     # Subscriber management
-    ├── shares.py          # Share config management
-    ├── topic_notes.py     # Topic notes CRUD
-    ├── webhooks.py        # Webhook UI
-    ├── metrics.py         # Metrics dashboard
-    ├── trend_memory.py    # Trend memory UI + API
-    ├── api_tokens.py      # API token management
-    └── api/               # Admin API endpoints
-        ├── articles.py    # Article CRUD and pipeline control
-        ├── sources.py     # Source management
-        ├── pipeline.py    # Pipeline run control
-        ├── search.py      # Search analytics
-        ├── webhooks.py    # Webhook management
-        ├── config.py      # Configuration management
-        ├── audit.py       # Audit log access
-        ├── health.py      # Health check endpoints
-        ├── alerts.py      # Alerting API
-        ├── newsletter.py  # Newsletter performance API
-        ├── quality.py     # Quality report API
-        ├── replay.py      # Pipeline replay API
+    ├── __init__.py         # Login, lockout, session mgmt
+    ├── auth.py             # Login with TOTP support
+    ├── articles.py         # Article management UI
+    ├── dashboard.py        # Dashboard + dead-letters page
+    ├── newsletters.py      # Newsletter UI + API
+    ├── pipelines.py        # Pipeline runs + trigger-crawl
+    ├── review.py           # Article review queue
+    ├── sources.py          # Source management UI
+    ├── subscribers.py      # Subscriber management
+    ├── shares.py           # Share config management
+    ├── topic_notes.py      # Topic notes CRUD
+    ├── webhooks.py         # Webhook management UI
+    ├── metrics.py          # Metrics dashboard
+    ├── trend_memory.py     # Trend memory UI + API
+    ├── api_tokens.py       # API token management
+    └── api/                # Admin API endpoints at /api/v1/*
+        ├── __init__.py     # API blueprint setup
+        ├── articles.py     # Article CRUD and pipeline control
+        ├── sources.py      # Source management
+        ├── pipeline.py     # Pipeline run control
+        ├── search.py       # Search analytics
+        ├── webhooks.py     # Webhook management
+        ├── config.py       # Configuration management
+        ├── audit.py        # Audit log access
+        ├── health.py       # Health check endpoints
+        ├── alerts.py       # Alerting API
+        ├── newsletter.py   # Newsletter performance API
+        ├── quality.py      # Quality report API
+        ├── replay.py       # Pipeline replay API
         ├── source_intelligence.py  # Source intelligence API
-        ├── topic_gap.py   # Topic gap analysis API
-        └── utils.py       # API utility functions
+        ├── topic_gap.py    # Topic gap analysis API
+        └── utils.py        # API utility functions
 ```
 
 ## Blueprint Structure

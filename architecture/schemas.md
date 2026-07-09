@@ -17,6 +17,7 @@ The `schemas/` package contains Pydantic models for validation and serialization
 | `item.py` | `RawItem` | Crawled item data from adapters |
 | `admin.py` | `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams` | Admin API request validation |
 | `search.py` | `SearchConfig` | Search provider configuration (loaded from providers.yaml) |
+| `__init__.py` | — | Package init |
 
 ## Pipeline Configuration (`pipeline.py`)
 

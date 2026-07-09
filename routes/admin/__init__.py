@@ -63,6 +63,11 @@ _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_LOCKOUT_SECONDS = 900  # 15 minutes
 _LOGIN_ATTEMPT_PREFIX = "ainews:login_attempts:"
 
+# 2FA attempt lockout
+_2FA_MAX_ATTEMPTS = 5
+_2FA_LOCKOUT_SECONDS = 900  # 15 minutes
+_2FA_ATTEMPT_PREFIX = "ainews:2fa_attempts:"
+
 
 def _get_login_max_attempts() -> int:
     """Get max login attempts from Flask config, falling back to default."""
@@ -259,6 +264,128 @@ def _clear_attempts(ip: str) -> None:
     # Always clear in-memory fallback (used when Redis is unavailable)
     with _memory_lock:
         _login_attempts_memory.pop(ip, None)
+
+
+# 2FA attempt tracking
+_2fa_attempts_memory: dict[str, tuple[int, float]] = {}
+_2fa_memory_lock = threading.Lock()
+
+
+def _get_2fa_max_attempts() -> int:
+    """Get max 2FA attempts from Flask config, falling back to default."""
+    from services.config_utils import get_config_with_default
+
+    return get_config_with_default("2FA_MAX_ATTEMPTS", _2FA_MAX_ATTEMPTS)
+
+
+def _get_2fa_lockout_seconds() -> int:
+    """Get 2FA lockout seconds from Flask config, falling back to default."""
+    from services.config_utils import get_config_with_default
+
+    return get_config_with_default("2FA_LOCKOUT_SECONDS", _2FA_LOCKOUT_SECONDS)
+
+
+def _cleanup_2fa_stale_entries() -> None:
+    """Remove expired 2FA entries from memory to prevent unbounded growth."""
+    with _2fa_memory_lock:
+        now = time.monotonic()
+        stale_keys = []
+        for ip, (_count, first_time) in _2fa_attempts_memory.items():
+            if now - first_time >= _get_2fa_lockout_seconds():
+                stale_keys.append(ip)
+
+        for ip in stale_keys:
+            del _2fa_attempts_memory[ip]
+
+        if len(_2fa_attempts_memory) > _MAX_MEMORY_ENTRIES:
+            sorted_entries = sorted(
+                _2fa_attempts_memory.items(),
+                key=lambda x: x[1][1],
+                reverse=True,
+            )
+            _2fa_attempts_memory.clear()
+            for ip, entry in sorted_entries[:_MAX_MEMORY_ENTRIES]:
+                _2fa_attempts_memory[ip] = entry
+
+
+def _is_2fa_locked_out(ip: str) -> bool:
+    """Check if an IP is locked out due to too many failed 2FA attempts."""
+    try:
+        r = _get_redis()
+        key = f"{_2FA_ATTEMPT_PREFIX}{ip}"
+        data = r.hgetall(key)
+        if not data:
+            return False
+        count = int(data.get(b"count", 0))
+        return count >= _get_2fa_max_attempts()
+    except redis.exceptions.RedisError as e:
+        logger.warning("Redis error checking 2FA lockout for %s: %s", ip, e)
+        # Fallback to in-memory tracking
+        return _is_2fa_locked_out_memory(ip)
+
+
+def _is_2fa_locked_out_memory(ip: str) -> bool:
+    """In-memory fallback for 2FA lockout check."""
+    _cleanup_2fa_stale_entries()
+    with _2fa_memory_lock:
+        entry = _2fa_attempts_memory.get(ip)
+        if entry is None:
+            return False
+        count, first_time = entry
+        if time.monotonic() - first_time >= _get_2fa_lockout_seconds():
+            del _2fa_attempts_memory[ip]
+            return False
+        return count >= _get_2fa_max_attempts()
+
+
+def _check_and_record_2fa_attempt(ip: str) -> bool:
+    """Atomically check if locked out AND record a failed 2FA attempt.
+
+    Returns True if locked out (attempt was recorded but threshold exceeded).
+    """
+    try:
+        r = _get_redis()
+        key = f"{_2FA_ATTEMPT_PREFIX}{ip}"
+        result = r.eval(
+            _LOCKOUT_LUA_SCRIPT,
+            1,
+            key,
+            str(time.time()),
+            str(_get_2fa_lockout_seconds()),
+            str(_get_2fa_max_attempts()),
+        )
+        return result == 1
+    except redis.exceptions.RedisError as e:
+        logger.warning("Redis error in 2FA check_and_record for %s: %s", ip, e)
+        _record_2fa_failed_attempt_memory(ip)
+        return _is_2fa_locked_out_memory(ip)
+
+
+def _record_2fa_failed_attempt_memory(ip: str) -> None:
+    """In-memory fallback for recording failed 2FA attempts."""
+    _cleanup_2fa_stale_entries()
+    with _2fa_memory_lock:
+        now = time.monotonic()
+        entry = _2fa_attempts_memory.get(ip)
+        if entry is None:
+            _2fa_attempts_memory[ip] = (1, now)
+        else:
+            count, first_time = entry
+            if now - first_time >= _get_2fa_lockout_seconds():
+                _2fa_attempts_memory[ip] = (1, now)
+            else:
+                _2fa_attempts_memory[ip] = (count + 1, first_time)
+
+
+def _clear_2fa_attempts(ip: str) -> None:
+    """Clear failed 2FA attempts for an IP after successful verification."""
+    try:
+        r = _get_redis()
+        r.delete(f"{_2FA_ATTEMPT_PREFIX}{ip}")
+    except redis.exceptions.RedisError as e:
+        logger.warning("Redis error clearing 2FA attempts for %s: %s", ip, e)
+    with _2fa_memory_lock:
+        _2fa_attempts_memory.pop(ip, None)
 
 
 # Import all sub-modules to register routes with the blueprint

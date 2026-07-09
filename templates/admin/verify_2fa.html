@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ainews// 2FA verification</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.bundled.css') }}">
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </head>
 <body class="admin-body">
@@ -27,9 +27,19 @@
           class="login-input"
           autocomplete="one-time-code"
           autofocus
-          required
           inputmode="numeric"
           pattern="[0-9]*"
+        >
+        <p class="login-or-text">or</p>
+        <label for="backup_code" class="sr-only">Backup Code</label>
+        <input
+          type="text"
+          name="backup_code"
+          id="backup_code"
+          placeholder="XXXXXXXX"
+          class="login-input"
+          autocomplete="off"
+          inputmode="text"
         >
         <button type="submit" class="login-btn">verify</button>
       </form>

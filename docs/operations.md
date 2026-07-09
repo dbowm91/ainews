@@ -2,19 +2,24 @@
 
 ## Celery Beat Tasks
 
-Nine scheduled tasks run via Celery Beat:
+Fourteen scheduled tasks run via Celery Beat:
 
 | Task | Schedule | Purpose |
 |------|----------|--------|
 | run-all-sources | Every 30 min | Crawl all active RSS/API sources |
-| retry-stuck-articles | Every 60 min | Retry articles stuck in pipeline |
+| retry-stuck | Every 60 min | Retry articles stuck in pipeline |
 | generate-newsletters | Daily 8:00 AM | Generate newsletter emails |
 | cleanup-old-logs | Daily 3:00 AM | Purge old pipeline logs |
 | cleanup-expired-verifications | Every 15 min | Clean expired subscriber tokens |
 | cleanup-stale-limiter-slots | Every 5 min | Release stale limiter slots |
 | consolidate-trend-memory | Daily 3:30 AM | Promote low-importance memory |
-| cleanup-old-article-versions | Daily 3:45 AM | Purge old article versions |
+| purge-trend-memory | Daily 3:45 AM | Delete expired memory entries |
+| cleanup-old-versions | Daily 3:45 AM | Purge old article versions |
 | publish-scheduled-articles | Every 5 min | Publish time-scheduled articles |
+| backfill-embeddings | Daily 2:00 AM | Backfill article embeddings |
+| retry-failed-newsletter-deliveries | Every 2 hours | Retry failed newsletter sends |
+| recalculate-impact-scores | Daily 4:00 AM | Recalculate article impact scores |
+| cleanup-inactive-subscribers | Daily 1:00 AM | Remove inactive subscribers |
 
 All schedules are configurable via `pipeline.yaml` `schedule:` section.
 

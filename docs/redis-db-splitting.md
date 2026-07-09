@@ -1,5 +1,7 @@
 # Redis DB Splitting Strategy
 
+> **Status:** This is a planned improvement, not yet implemented. Currently only DB 0 (Celery broker) and DB 1 (Celery results/config cache) are split.
+
 ## Current State
 
 Redis is used for multiple purposes in the application:

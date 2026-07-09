@@ -381,33 +381,6 @@ def test_my_feature(app):
 | `SEARCH_POOL_MAXSIZE` | `10` | Search HTTP pool size |
 | `SEARCH_POOL_CONNECTIONS` | `5` | Search HTTP connections |
 
-## Adding a New LLM Provider
-
-Providers are defined in `providers.yaml`. For OpenAI-compatible providers, add a new entry:
-
-```yaml
-  - id: myprovider
-    type: openai
-    enabled: false
-    config:
-      api_key: "${MYPROVIDER_API_KEY}"
-      base_url: "https://api.myprovider.com/v1"
-      model: "my-model"
-      max_tokens: 4096
-```
-
-For non-standard providers, create an adapter in `services/llm/`:
-
-```python
-# services/llm/myprovider.py
-from services.llm.base import BaseLLMProvider, LLMResponse
-
-class MyProviderAdapter(BaseLLMProvider):
-    def chat_structured(self, messages, response_model, **kwargs) -> LLMResponse:
-        # Implementation
-        pass
-```
-
 ## Pipeline Architecture
 
 Articles flow through stages:

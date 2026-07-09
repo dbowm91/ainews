@@ -4,7 +4,7 @@ The quality service (`services/quality.py`) provides content quality assessment 
 
 ## Purpose
 
-The quality service evaluates article content quality using both lightweight heuristic signals and LLM-based assessment. It integrates with the pipeline in **shadow mode** (from W2-Q1), meaning quality scores are computed and logged but do not yet block publication.
+The quality service evaluates article content quality using both lightweight heuristic signals and LLM-based assessment. It integrates with the pipeline to compute quality scores and route failed articles to `review` status for manual inspection.
 
 ## Data Structures
 
@@ -78,12 +78,12 @@ Fast heuristic quality assessment without LLM calls.
 - `_assess_completeness(content) -> float`: Scores based on word count
 - `_assess_safety(content) -> float`: Checks for harmful patterns (kill, bomb, terrorist, hate speech, etc.)
 
-## Pipeline Integration (Shadow Mode)
+## Pipeline Integration
 
-The quality service runs in **shadow mode** as implemented in W2-Q1:
-- Quality scores are computed during the pipeline (typically after writing)
-- Scores are logged/recorded but do NOT block publication
-- This allows gathering data on quality patterns before enforcing thresholds
+The quality service runs after the edit stage:
+- Quality scores are computed via `build_quality_report()` in `tasks/edit.py`
+- Reports are persisted to the `quality_reports` table via `persist_quality_report()`
+- Articles failing quality gates are routed to `review` status for manual inspection
 
 ## Configuration Options
 

@@ -247,7 +247,11 @@ Four deployment modes are documented in `docs/deployment.md#docker-with-ollama`:
 **Critical:** `localhost` inside Docker containers refers to the container itself, NOT the host. Using `http://localhost:11434` from Docker will silently fail at LLM call time. `AINEWS_RUNNING_IN_DOCKER=1` env var is set in Dockerfile and compose services. `ProductionConfig.validate()` emits a warning when Ollama uses localhost inside Docker (see `_validate_docker_ollama_host()` in `config.py`).
 
 ### Health Check Property Name
-The `HealthResult` model at `services/health.py:27-29` has `is_healthy` property (NOT `is_fully_healthy`). It returns `True` for both `"ok"` and `"degraded"` statuses. If a strict health check is needed, check `status == "ok"` directly.
+The `HealthResult` model at `services/health.py:27-33` has two properties:
+- `is_healthy`: Returns `True` for both `"ok"` and `"degraded"` statuses
+- `is_fully_healthy`: Returns `True` only for `"ok"` status
+
+Use `is_healthy` for general health checks, `is_fully_healthy` when degraded status should be treated as unhealthy.
 
 ### Celery Timezone
 Celery uses UTC (`CELERY_TIMEZONE = "UTC"` in `config.py:102`). The `NewsletterConfig.timezone` setting is display-only for newsletter rendering. All beat schedule times are in UTC.

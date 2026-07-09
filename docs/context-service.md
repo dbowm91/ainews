@@ -25,7 +25,7 @@ class TopicNote(db.Model):
 
 ## All Models Reference
 
-All application models are defined in `models.py` (not a `models/` directory). The 19 models are:
+All application models are defined in the `models/` package directory. The 19 models are:
 
 | Model Name | Brief Description |
 |------------|-------------------|

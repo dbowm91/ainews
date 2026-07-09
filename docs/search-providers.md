@@ -201,17 +201,22 @@ The fallback chain is managed by `ProviderManager` in `services/provider_base.py
 
 ### Configuration Structure
 
-In `providers.yaml`, define the search section:
+In `providers.yaml`, search providers are defined under the top-level `search_providers:` key:
 
 ```yaml
-search:
-  provider: "searxng"
-  fallback:
-    - "duckduckgo"
-    - "google"
-  searxng:
+search_providers:
+  - id: duckduckgo
+    type: duckduckgo
     enabled: true
-    # ... provider-specific config
+    config: {}
+  - id: google
+    type: google
+    enabled: false
+    config:
+      api_key: "${GOOGLE_API_KEY}"
+      cse_id: "${GOOGLE_CSE_ID}"
+
+default_search_provider: duckduckgo
 ```
 
 ## Backward Compatibility

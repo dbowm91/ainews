@@ -23,18 +23,23 @@ To retrieve all available tools, call `get_registered_tools()` which returns `li
 
 ### Available Tools
 
-The subagent system provides 9 built-in tools:
+The subagent system provides 14 built-in tools (12 context + 2 search):
 
 | Tool Name | Description |
 |-----------|-------------|
 | `get_topic_note` | Retrieve a topic note from the context service for a given topic and optional source |
-| `get_topic_notes_for_topics` | Batch retrieval of topic notes for multiple topics |
-| `get_related_articles` | Find related articles based on topics, excluding a specific article ID |
+| `context_notes` | Batch retrieval of topic notes for multiple topics |
+| `related_articles` | Find related articles based on topics, excluding a specific article ID |
 | `get_trend_memory` | Get trend memory entries for topics with optional importance filtering |
 | `get_article_by_id` | Get article details (ID, title, pipeline_status, impact_score, created_at) |
 | `search_articles` | Full-text search via ILIKE against article titles |
 | `get_source_health` | Get summary of all source health status |
-| `search_web` | Search the web for information on a topic |
+| `get_topic_gap_report` | Identify topic coverage gaps |
+| `get_source_performance` | Get source performance metrics |
+| `get_quality_report` | Get quality report for an article |
+| `find_dedupe_candidates` | Find potential duplicate articles |
+| `estimate_stage_cost` | Estimate LLM cost for a pipeline stage |
+| `web_search` | Search the web for information on a topic |
 | `get_search_provider` | Get the current search provider being used |
 
 ### Tool Function Signatures
@@ -43,10 +48,10 @@ The subagent system provides 9 built-in tools:
 def _get_topic_note(topic: str, source: str | None = None) -> str:
     """Returns note content or 'No note found for this topic.'"""
 
-def _get_topic_notes_for_topics(topics: list[str]) -> str:
+def _context_notes(topics: list[str]) -> str:
     """Returns formatted string of topic->notes mappings"""
 
-def _get_related_articles(topics: list[str], exclude_id: int, limit: int = 5) -> str:
+def _related_articles(topics: list[str], exclude_id: int, limit: int = 5) -> str:
     """Returns formatted list of related articles"""
 
 def _get_trend_memory(topics: list[str], min_importance: int = 1, max_age_days: int | None = None) -> str:
@@ -61,7 +66,7 @@ def _search_articles(query: str, limit: int = 5) -> str:
 def _get_source_health() -> str:
     """Returns JSON array of source health summaries"""
 
-def _search_web(query: str, max_results: int = 5) -> str:
+def _web_search(query: str, max_results: int = 5) -> str:
     """Returns formatted web search results"""
 
 def _get_search_provider(provider_id: str | None = None) -> str:
@@ -92,8 +97,8 @@ stages:
       timeout_seconds: 120
       retry_delay: 5
       tools:
-        - get_topic_notes_for_topics
-        - get_related_articles
+        - context_notes
+        - related_articles
         - get_trend_memory
 ```
 

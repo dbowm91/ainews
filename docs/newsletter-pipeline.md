@@ -134,7 +134,7 @@ Admin endpoint `GET /admin/api/newsletters/stats` returns:
 
 ## Celery Schedule
 
-`generate-newsletters` runs daily at 8:00 AMAmerica/New_York) via Celery Beat. The schedule is configurable in `pipeline.yaml` under `schedule:` section:
+`generate-newsletters` runs daily at 8:00 AM (America/New_York) via Celery Beat. The schedule is configurable in `pipeline.yaml` under `schedule:` section:
 
 ```yaml
 schedule:
@@ -183,4 +183,4 @@ Pass `dry_run_email=admin@example.com` to send to a single address instead of al
 
 Newsletter events can trigger webhooks. The `nl` parameter passed to webhooks is a `NewsletterConfig` object (not a `Newsletter` model), so `newsletter_id` is always NULL in webhook payloads.
 
-Known issue: `article.failed` and `newsletter.failed` events are defined in `services/webhooks.py:KOWN_WEBHOOK_EVENTS` but no code currently calls `trigger_event()` for these events.
+Known issue: `article.failed` and `newsletter.failed` events are defined in `services/webhooks.py:KNOWN_WEBHOOK_EVENTS` but no code currently calls `trigger_event()` for these events.

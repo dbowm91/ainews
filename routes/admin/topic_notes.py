@@ -10,7 +10,6 @@ from services.cache import get_response_cache
 from services.context_service import (
     create_topic_note,
     delete_topic_note,
-    get_all_topic_notes,
     get_topic_note,
 )
 
@@ -24,13 +23,26 @@ def topic_notes_list():
     topic = request.args.get("topic", "")
     source = request.args.get("source", "")
 
-    if topic:
-        notes = get_all_topic_notes(topic)
-    else:
-        from models import TopicNote
+    from models import TopicNote
 
+    notes: list
+    if topic or source:
+        query = TopicNote.query
+        if topic:
+            query = query.filter(TopicNote.topic == topic)
+        if source:
+            query = query.filter(TopicNote.source == source)
+        notes = query.order_by(TopicNote.updated_at.desc()).limit(100).all()
+    else:
         notes = TopicNote.query.order_by(TopicNote.updated_at.desc()).limit(100).all()
 
+    if request.headers.get("HX-Request"):
+        return render_template(
+            "admin/partials/topic_notes_table.html",
+            notes=notes,
+            topic=topic,
+            source=source,
+        )
     return render_template(
         "admin/topic_notes.html",
         notes=notes,

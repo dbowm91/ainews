@@ -12,7 +12,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-_VALID_SOURCE_TYPES = frozenset({"rss", "atom", "web", "twitter", "reddit"})
+_VALID_SOURCE_TYPES = frozenset({"rss", "api", "web"})
 _SOURCE_KEY_RE = re.compile(r"^[a-z0-9_]+$")
 
 

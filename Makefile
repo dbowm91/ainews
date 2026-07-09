@@ -4,10 +4,10 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 install: ## Create venv and install dependencies
-	python3.12 -m venv .venv
+	python3 -m venv .venv
 	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install -r requirements.txt
-	.venv/bin/pip install -r requirements-dev.txt
+	.venv/bin/pip install uv
+	.venv/bin/uv sync --frozen --all-extras
 	@test -f .env || (cp .env.example .env && echo "Created .env — edit it before running")
 	@chmod 600 .env
 

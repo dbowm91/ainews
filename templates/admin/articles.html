@@ -123,7 +123,12 @@
       </div>
     </div>
 
-    <div id="articles-table" class="table-responsive admin-table-wrapper" aria-live="polite" aria-atomic="true">
+    <div id="articles-table" class="table-responsive admin-table-wrapper" aria-live="polite" aria-atomic="true"
+         hx-trigger="articles-bulk-updated from:body"
+         hx-get="{{ request.path }}"
+         hx-target="#articles-table"
+         hx-swap="outerHTML"
+         hx-indicator="#articles-table-spinner">
       <span id="articles-table-spinner" class="htmx-indicator">&nbsp;&nbsp;loading...</span>
       {% include "admin/partials/articles_table.html" %}
     </div>

@@ -211,4 +211,4 @@ python scripts/backup.sh
 For high traffic:
 1. Add more Celery workers: `celery -A celery_app worker -l info`
 2. Use Redis cluster for caching
-3. Consider PostgreSQL for database (currently uses SQLite)
+3. The app currently uses SQLite (WAL mode) only; there is no PostgreSQL driver or connection configuration in this codebase. Do not attempt to set `DATABASE_URL=postgresql://...`.

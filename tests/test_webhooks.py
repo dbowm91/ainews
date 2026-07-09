@@ -92,11 +92,11 @@ class TestWebhooks:
 
             called_urls = []
 
-            def mock_dispatch(webhook_id, name, url, secret, event_type, event_data, idempotency_key=None):
-                called_urls.append(url)
-                return True, None
+            def mock_delay(**kwargs):
+                called_urls.append(kwargs["url"])
+                return None
 
-            with patch("services.webhooks.dispatch_webhook", side_effect=mock_dispatch):
+            with patch("tasks.webhook.dispatch_webhook_task.delay", side_effect=mock_delay):
                 trigger_event("article.published", {"article_id": 123})
 
             assert "https://example.com/a" in called_urls, "Webhook A should be called for article.published"

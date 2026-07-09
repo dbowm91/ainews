@@ -319,6 +319,24 @@ def trigger_event(
         if event_type in (webhook.events or []):
             try:
                 secret = _get_webhook_secret_from_db(webhook.secret)
+                try:
+                    from tasks.webhook import dispatch_webhook_task
+
+                    dispatch_webhook_task.delay(
+                        webhook_id=webhook.id,
+                        name=webhook.name,
+                        url=webhook.url,
+                        secret=secret,
+                        event_type=event_type,
+                        event_data=event_data,
+                        idempotency_key=idempotency_key,
+                    )
+                    continue
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Falling back to inline webhook dispatch for '%s' (broker unavailable)",
+                        webhook.name,
+                    )
                 dispatch_webhook(
                     webhook_id=webhook.id,
                     name=webhook.name,

@@ -45,7 +45,7 @@ def _is_degenerate_write(article_obj: CondensedArticle) -> bool:
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def write_article(self, article_id: int, run_id=None):
+def write_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
     from extensions import db
     from schemas.llm_responses import CondensedArticle
     from schemas.pipeline import get_role_config

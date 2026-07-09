@@ -188,6 +188,124 @@ class TestSourcesHealth:
         assert data["data"][0]["disabled_at"].startswith("2026-04-01")
 
 
+class TestSourceRefresh:
+    def test_refresh_rss_source_enqueues_signed_task(
+        self, auth_client, create_source, app, mock_celery_tasks
+    ):
+        """RSS source refresh should enqueue crawl_source with valid kwargs and signature."""
+        from extensions import db
+
+        with app.app_context():
+            source = create_source(
+                source_key="refresh-rss",
+                name="Refresh RSS",
+                source_type="rss",
+                feed_url="https://example.com/feed.xml",
+            )
+            sid = source.id
+            db.session.commit()
+
+        resp = auth_client.post(f"/api/v1/sources/{sid}/refresh")
+        assert resp.status_code == 200
+        crawl_task = mock_celery_tasks["crawl"]
+        crawl_task.apply_async.assert_called_once()
+        call_kwargs = crawl_task.apply_async.call_args.kwargs
+        assert "source_config" in call_kwargs["kwargs"]
+        assert call_kwargs["kwargs"]["source_config"]["type"] == "rss"
+        assert (
+            call_kwargs["kwargs"]["source_config"]["config"]["feed_url"]
+            == "https://example.com/feed.xml"
+        )
+        assert "_signature" in call_kwargs["kwargs"]
+        assert "task_name" in call_kwargs["kwargs"]
+        assert call_kwargs["kwargs"]["task_name"] == "crawl_source"
+
+    def test_refresh_web_source_rejected(self, auth_client, create_source, app):
+        """Web sources cannot be refreshed without sources.yaml (selector config unavailable)."""
+        from extensions import db
+
+        with app.app_context():
+            source = create_source(
+                source_key="refresh-web",
+                name="Refresh Web",
+                source_type="web",
+                url="https://example.com",
+            )
+            db.session.commit()
+            sid = source.id
+        resp = auth_client.post(f"/api/v1/sources/{sid}/refresh")
+        assert resp.status_code == 400
+        assert "requires sources.yaml" in resp.json["error"]
+
+    def test_refresh_rss_without_feed_url_rejected(self, auth_client, create_source, app):
+        """RSS refresh without feed_url should be rejected with a 400."""
+        from extensions import db
+
+        with app.app_context():
+            source = create_source(
+                source_key="refresh-rss-empty",
+                name="Refresh RSS Empty",
+                source_type="rss",
+            )
+            db.session.commit()
+            sid = source.id
+        resp = auth_client.post(f"/api/v1/sources/{sid}/refresh")
+        assert resp.status_code == 400
+        assert "feed_url" in resp.json["error"].lower()
+
+    def test_refresh_unknown_source_type_rejected(
+        self, auth_client, create_source, app
+    ):
+        from extensions import db
+        from models import Source
+
+        with app.app_context():
+            source = create_source(
+                source_key="refresh-bogus",
+                name="Refresh Bogus",
+                source_type="rss",
+                feed_url="https://example.com/feed",
+            )
+            db.session.commit()
+            sid = source.id
+            existing = db.session.get(Source, sid)
+            existing.source_type = "atom"
+            db.session.commit()
+        resp = auth_client.post(f"/api/v1/sources/{sid}/refresh")
+        assert resp.status_code == 400
+
+
+class TestCreateSourceTypes:
+    def test_create_api_source_accepted(self, auth_client, app):
+        """The admin source API must accept the implemented 'api' source type."""
+        resp = auth_client.post(
+            "/api/v1/sources",
+            json={
+                "source_key": "demo_api",
+                "name": "Demo API",
+                "url": "https://example.com",
+                "source_type": "api",
+                "active": True,
+            },
+        )
+        assert resp.status_code in (200, 201)
+
+    def test_create_atom_source_rejected(self, auth_client, app):
+        """The admin source API must reject unimplemented source types like 'atom'."""
+        resp = auth_client.post(
+            "/api/v1/sources",
+            json={
+                "source_key": "demo_atom",
+                "name": "Demo Atom",
+                "url": "https://example.com",
+                "source_type": "atom",
+                "active": True,
+            },
+        )
+        assert resp.status_code == 400
+
+
+
 class TestArticleEdit:
     def test_edit_requires_auth(self, client):
         resp = client.get("/admin/articles/1/edit")

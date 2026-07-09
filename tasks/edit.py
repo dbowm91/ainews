@@ -376,7 +376,7 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def edit_article(self, article_id: int, run_id=None):
+def edit_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
     from tasks.pipeline import run_stage
     return run_stage(
         "editor", article_id, _execute_editor_work, task_self=self, run_id=run_id, skip_next="finalize",

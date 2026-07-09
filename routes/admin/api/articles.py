@@ -467,6 +467,23 @@ def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, in
     )
 
 
+def _hx_trigger(
+    result: tuple[Response, int] | Response, event: str = "articles-bulk-updated"
+) -> tuple[Response, int] | Response:
+    """Annotate a JSON api_response with HTMX trigger headers for table refresh."""
+    if not request.headers.get("HX-Request") or not isinstance(result, tuple):
+        return result
+    if len(result) != 2:
+        return result
+    resp, status_code = result
+    try:
+        resp.headers["HX-Trigger"] = event
+        resp.headers["HX-Reswap"] = "none"
+    except (AttributeError, TypeError):
+        return result
+    return resp, status_code
+
+
 @admin_api_bp.route("/articles/bulk", methods=["POST"])
 @require_auth
 @csrf_for_session_auth
@@ -477,8 +494,22 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     from models import Article
 
     data = request.get_json(silent=True)
+    if data is None:
+        # Allow form-encoded HTMX submissions for the bulk-action UI.
+        data = request.form.to_dict()
     if not data:
-        return api_response(error="Invalid JSON body", status=400)
+        return api_response(error="Invalid request body", status=400)
+
+    # HTMX submissions encode article_ids as repeated fields or comma-separated.
+    if "article_ids" in data and isinstance(data["article_ids"], str):
+        raw = data["article_ids"]
+        if "," in raw:
+            data["article_ids"] = [int(x) for x in raw.split(",") if x.strip()]
+        else:
+            try:
+                data["article_ids"] = [int(raw)]
+            except (TypeError, ValueError):
+                data["article_ids"] = []
 
     try:
         validated = BulkArticleRequest(**data)
@@ -503,26 +534,21 @@ def bulk_article_operations() -> tuple[Response, int] | Response:
     if not articles:
         return api_response(error="No articles found", status=404)
 
-    if action == "delete":
-        return _bulk_delete(articles, article_ids, db)
-
-    elif action == "set_status":
-        return _bulk_set_status(articles, validated, article_ids, db)
-
-    elif action == "set_category":
-        return _bulk_set_category(articles, validated, db)
-
-    elif action == "reprocess":
-        return _bulk_reprocess(articles, db)
-
-    elif action == "add_tags":
-        return _bulk_add_tags(articles, validated, db)
-
-    else:
+    actions = {
+        "delete": lambda: _bulk_delete(articles, article_ids, db),
+        "set_status": lambda: _bulk_set_status(articles, validated, article_ids, db),
+        "set_category": lambda: _bulk_set_category(articles, validated, db),
+        "reprocess": lambda: _bulk_reprocess(articles, db),
+        "add_tags": lambda: _bulk_add_tags(articles, validated, db),
+    }
+    if action not in actions:
         return api_response(
             error="Invalid action. Must be one of: delete, set_status, set_category, reprocess, add_tags",
             status=400,
         )
+
+    result = actions[action]()
+    return _hx_trigger(result)
 
 
 @admin_api_bp.route("/articles/<int:article_id>/pipeline", methods=["POST"])
@@ -573,7 +599,7 @@ def trigger_article_pipeline(article_id: int) -> tuple[Response, int] | Response
     except Exception:  # noqa: BLE001 - use unsigned if security not configured
         signed_kwargs = {"article_id": article_id, "run_id": None}
 
-    task_fn.apply_async(args=[article_id], kwargs={"run_id": None}, headers=headers)
+    task_fn.apply_async(args=[article_id], kwargs=signed_kwargs, headers=headers)
 
     try:
         from services.audit import log_admin_action

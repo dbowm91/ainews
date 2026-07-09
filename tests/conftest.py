@@ -121,12 +121,14 @@ def mock_celery_tasks():
         patch("tasks.research.research_article") as mock_research,
         patch("tasks.write.write_article") as mock_write,
         patch("tasks.edit.edit_article") as mock_edit,
+        patch("tasks.crawl.crawl_source") as mock_crawl,
     ):
         yield {
             "select": mock_select,
             "research": mock_research,
             "write": mock_write,
             "edit": mock_edit,
+            "crawl": mock_crawl,
         }
 
 

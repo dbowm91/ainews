@@ -41,46 +41,38 @@ The `health_check()` method returns a dict with:
 
 ## Available Providers
 
-### SearXNG (`services/search/searxng.py`)
+Search providers are configured under the top-level `search_providers:` key in
+`providers.yaml` (loaded by `schemas/search.py`). Each entry has the same shape
+as the LLM providers (`id`, `type`, `enabled`, `config`), and the active
+provider is selected by the `default_search_provider:` key.
 
-Self-hosted meta-search engine that aggregates results from multiple search backends.
-
-**Configuration** (`providers.yaml`):
 ```yaml
-search:
-  searxng:
+search_providers:
+  - id: duckduckgo
+    type: duckduckgo
     enabled: true
-    host: "http://localhost:8888"
-    categories: "general"
-    engines: ""  # optional, comma-separated
-    request_timeout: 15
-    max_results: 10
-```
+    config: {}
 
-**Features**:
-- Most privacy-friendly option (self-hosted)
-- Uses `/healthz` endpoint for health checks
-- Validates search URL before calling
+  - id: google
+    type: google
+    enabled: false
+    config:
+      api_key: "${GOOGLE_API_KEY}"
+      cse_id: "${GOOGLE_CSE_ID}"
 
-### Google (`services/search/google.py`)
+  - id: searxng
+    type: searxng
+    enabled: false
+    config:
+      host: "http://localhost:8888"
 
-Uses Google Custom Search API.
-
-**Configuration** (`providers.yaml`):
-```yaml
-search:
-  google:
+  - id: hybrid
+    type: hybrid
     enabled: true
-    api_key: "${GOOGLE_API_KEY}"
-    cse_id: "${GOOGLE_SEARCH_ENGINE_ID}"
-    base_url: "https://www.googleapis.com/customsearch/v1"
-    request_timeout: 15
-    max_results: 10
-```
+    config: {}  # FTS5 + vector similarity search
 
-**Environment Variables**:
-- `GOOGLE_API_KEY`: Google API key with Custom Search API enabled
-- `GOOGLE_SEARCH_ENGINE_ID`: Google Search Engine ID (CSE)
+default_search_provider: duckduckgo
+```
 
 ### DuckDuckGo (`services/search/duckduckgo.py`)
 
@@ -88,16 +80,67 @@ Uses the `duckduckgo_search` library. No API key required.
 
 **Configuration** (`providers.yaml`):
 ```yaml
-search:
-  duckduckgo:
+search_providers:
+  - id: duckduckgo
+    type: duckduckgo
     enabled: true
-    request_timeout: 15
-    max_results: 10
+    config: {}
 ```
 
 **Features**:
 - No API key needed
-- Uses `DDGS().text()` for text search with 15s timeout
+- Uses `DDGS().text()` for text search
+
+### Google (`services/search/google.py`)
+
+Uses Google Custom Search API.
+
+**Configuration** (`providers.yaml`):
+```yaml
+search_providers:
+  - id: google
+    type: google
+    enabled: true
+    config:
+      api_key: "${GOOGLE_API_KEY}"
+      cse_id: "${GOOGLE_CSE_ID}"
+```
+
+**Environment Variables**:
+- `GOOGLE_API_KEY`: Google API key with Custom Search API enabled
+- `GOOGLE_CSE_ID`: Google Custom Search Engine ID (CSE)
+
+### SearXNG (`services/search/searxng.py`)
+
+Self-hosted meta-search engine that aggregates results from multiple search backends.
+
+**Configuration** (`providers.yaml`):
+```yaml
+search_providers:
+  - id: searxng
+    type: searxng
+    enabled: true
+    config:
+      host: "http://localhost:8888"
+```
+
+**Features**:
+- Most privacy-friendly option (self-hosted)
+- Uses `/healthz` endpoint for health checks
+- Validates search URL before calling
+
+### Hybrid (`services/search/hybrid.py`)
+
+Internal full-text and vector search across published articles (SQLite FTS5 + vector similarity).
+Always available with no external API key.
+
+```yaml
+search_providers:
+  - id: hybrid
+    type: hybrid
+    enabled: true
+    config: {}
+```
 
 ## SSRF Validation
 

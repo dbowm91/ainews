@@ -21,8 +21,8 @@
       <summary class="btn-primary inline-block cursor-pointer mb-1">+ add source</summary>
       <div id="add-source-form">
         <form hx-post="/admin/sources/add"
-              hx-target="#source-add-result"
-              hx-swap="innerHTML"
+              hx-target="#sources-body"
+              hx-swap="beforeend"
               hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
               hx-on::after-request="if(event.detail.successful)this.reset()"
               class="edit-form">

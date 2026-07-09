@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (articleId) {
       var csrfMeta = document.querySelector('meta[name="csrf-token"]');
       var csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
-      fetch("/api/track/share-click/" + articleId, {
+      fetch("/api/v1/track/share-click/" + articleId, {
         method: "POST",
         headers: { "X-CSRFToken": csrfToken },
       });

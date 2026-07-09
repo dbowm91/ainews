@@ -1,0 +1,20 @@
+<table class="admin-table">
+  <thead>
+    <tr>
+      <th>topic</th>
+      <th>source</th>
+      <th>note preview</th>
+      <th>updated</th>
+      <th>actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for note in notes %}
+      {% include "admin/partials/topic_note_row.html" %}
+    {% else %}
+      <tr>
+        <td colspan="5" class="text-center text-muted">No topic notes found.</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

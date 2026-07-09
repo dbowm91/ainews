@@ -138,8 +138,18 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
     SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" "$APP_DIR/.env"
 
-    # Generate and hash admin password
-    ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
+    # Generate admin password that satisfies scripts/hash_password.py complexity rules
+    # (uppercase, lowercase, digit, special character, >=12 chars).
+    ADMIN_PASS=$(python3 -c "
+import secrets, string
+alphabet = string.ascii_letters + string.digits + '!@#\$%^&*(),.?\":{}|<>'
+ADMIN_PASS = ''.join(secrets.choice(alphabet) for _ in range(20))
+assert any(c.isupper() for c in ADMIN_PASS)
+assert any(c.islower() for c in ADMIN_PASS)
+assert any(c.isdigit() for c in ADMIN_PASS)
+assert any(c in '!@#\$%^&*(),.?\":{}|<>' for c in ADMIN_PASS)
+print(ADMIN_PASS)
+")
     ADMIN_PASS_HASHED=$(sudo -u "$APP_USER" "$APP_DIR/.venv/bin/python" "$APP_DIR/scripts/hash_password.py" "$ADMIN_PASS" 2>/dev/null | grep "ADMIN_PASSWORD=" | cut -d= -f2-)
     if [[ -n "$ADMIN_PASS_HASHED" ]]; then
         sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$ADMIN_PASS_HASHED|" "$APP_DIR/.env"
@@ -194,7 +204,13 @@ fi
 # -------------------------------------------------------
 # 11. Initialize database
 # -------------------------------------------------------
-log_info "Initializing database..."
+log_info "Running database migrations..."
+if ! sudo -u "$APP_USER" env $(grep -v '^#' "$APP_DIR/.env" | xargs) \
+    "$APP_DIR/.venv/bin/flask" --app app:create_app db upgrade; then
+    log_error "Database migration failed — refusing to start services against an inconsistent schema"
+    exit 1
+fi
+log_info "Applying runtime schema checks..."
 sudo -u "$APP_USER" env $(grep -v '^#' "$APP_DIR/.env" | xargs) \
     "$APP_DIR/.venv/bin/python" -c "from app import create_app; app = create_app(); app.app_context().__enter__()"
 log_info "Database initialized at $APP_DIR/instance/ainews.db"

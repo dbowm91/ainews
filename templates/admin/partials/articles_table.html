@@ -110,7 +110,8 @@
 
     var bulkForm = document.getElementById('bulk-form');
     document.querySelectorAll('.bulk-action-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
+      btn.addEventListener('click', function(evt) {
+        if (btn.dataset.dispatching === '1') return;
         var checked = document.querySelectorAll('.article-checkbox:checked');
         var ids = Array.from(checked).map(function(c) { return parseInt(c.value, 10); });
         if (ids.length === 0) return;
@@ -119,9 +120,14 @@
         var vals = JSON.parse(hxVals);
         vals.article_ids = ids;
         vals.csrf_token = '{{ csrf_token() }}';
-        btn.setAttribute('hx-vals', JSON.stringify(vals));
-        htmx.process(btn);
-        htmx.trigger(btn, 'click');
+        btn.dataset.dispatching = '1';
+        htmx.ajax('POST', btn.getAttribute('hx-post'), {
+          target: btn.getAttribute('hx-target'),
+          swap: btn.getAttribute('hx-swap'),
+          values: vals,
+          headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
+        setTimeout(function() { delete btn.dataset.dispatching; }, 1000);
       });
     });
   })();

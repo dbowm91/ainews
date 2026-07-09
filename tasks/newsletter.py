@@ -486,7 +486,7 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
+def generate_daily_newsletters(self, dry_run_email=None, run_id=None, _signature=None, task_name=None):
     try:
         from schemas.tasks import GenerateNewsletterTask
         validated = GenerateNewsletterTask(dry_run_email=dry_run_email, run_id=run_id)
@@ -494,7 +494,15 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None):
         logger.warning("Invalid generate_daily_newsletters input: %s", e)
         raise TypeError(f"Invalid generate_daily_newsletters input: {e}") from e
 
-    if not verify_task("generate_daily_newsletters", (), {"dry_run_email": validated.dry_run_email, "run_id": validated.run_id}):
+    verify_kwargs: dict[str, object] = {
+        "dry_run_email": validated.dry_run_email,
+        "run_id": validated.run_id,
+    }
+    if _signature is not None:
+        verify_kwargs["_signature"] = _signature
+    if task_name is not None:
+        verify_kwargs["task_name"] = task_name
+    if not verify_task("generate_daily_newsletters", (), verify_kwargs):
         logger.error("Invalid signature for generate_daily_newsletters task")
         raise ValueError("Invalid task signature")
 

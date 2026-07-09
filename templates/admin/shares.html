@@ -21,8 +21,8 @@
       <summary class="btn-primary inline-block cursor-pointer mb-1">+ add platform</summary>
       <div id="add-share-form">
         <form hx-post="/admin/shares/add"
-              hx-target="#share-add-result"
-              hx-swap="innerHTML"
+              hx-target="#shares-body"
+              hx-swap="beforeend"
               hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
               hx-on::after-request="if(event.detail.successful)this.reset()"
               class="edit-form">
@@ -70,7 +70,7 @@
         <thead>
           <tr><th>platform</th><th>label</th><th>url template</th><th>icon</th><th>status</th><th>actions</th></tr>
         </thead>
-        <tbody>
+        <tbody id="shares-body">
           {% for config in configs %}
             {% include "admin/partials/share_row.html" %}
           {% endfor %}

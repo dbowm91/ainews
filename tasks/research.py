@@ -264,7 +264,7 @@ def _handle_quality_gate_and_transition(brief, article, run_id, article_id, db):
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def research_article(self, article_id: int, run_id=None):
+def research_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
     from extensions import db
     from schemas.pipeline import get_role_config
     from tasks.pipeline import run_stage

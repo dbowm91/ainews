@@ -351,13 +351,51 @@ def refresh_source(source_id: int) -> tuple[Response, int] | Response:
     from logging_config import get_request_id
 
     source = db.get_or_404(Source, source_id)
-    # Convert Source model to config dict for crawl_source task
+    # Reconstruct adapter config from persisted Source fields. The stored
+    # Source model only retains URL fields (feed_url / url); full adapter
+    # config (API list_url, Web selectors) lives in sources.yaml. We rebuild
+    # what we can and skip refresh otherwise.
+    from schemas.source import ADAPTER_CONFIGS
+
+    adapter_cfg_schema = ADAPTER_CONFIGS.get(source.source_type)
+    if adapter_cfg_schema is None:
+        return api_response(
+            error=f"Unknown source type: {source.source_type}",
+            status=400,
+        )
+
+    adapter_config: dict[str, object]
+    if source.source_type == "rss":
+        if not source.feed_url:
+            return api_response(
+                error="RSS source has no feed_url; cannot refresh",
+                status=400,
+            )
+        adapter_config = {"feed_url": source.feed_url}
+    elif source.source_type == "api":
+        # API adapter requires list_url and field mappings not stored on Source.
+        return api_response(
+            error="API source refresh requires sources.yaml configuration",
+            status=400,
+        )
+    elif source.source_type == "web":
+        # Web adapter requires selectors not stored on Source.
+        return api_response(
+            error="Web source refresh requires sources.yaml configuration",
+            status=400,
+        )
+    else:
+        return api_response(
+            error=f"Refresh not supported for source type: {source.source_type}",
+            status=400,
+        )
+
     source_config: dict[str, object] = {
         "id": source.source_key,
         "name": source.name,
         "type": source.source_type,
         "enabled": source.active,
-        "config": {},
+        "config": adapter_config,
     }
 
     headers: dict[str, str] = {}
@@ -365,13 +403,14 @@ def refresh_source(source_id: int) -> tuple[Response, int] | Response:
     if request_id:
         headers["request_id"] = request_id
 
+    task_kwargs = {"source_config": source_config, "run_id": None}
     try:
         signed_kwargs = (
             __import__("services.task_security", fromlist=["get_signed_kwargs"])
-            .get_signed_kwargs("crawl_source", (source_config, None), {})
+            .get_signed_kwargs("crawl_source", (), task_kwargs)
         )
     except Exception:  # noqa: BLE001 - use unsigned if security not configured
-        signed_kwargs = {"source_config": source_config, "run_id": None}
+        signed_kwargs = task_kwargs
 
     crawl_source.apply_async(kwargs=signed_kwargs, headers=headers)
 

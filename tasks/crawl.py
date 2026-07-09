@@ -29,7 +29,7 @@ logger = get_task_logger(__name__)
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def crawl_source(self, source_config: dict, run_id: int) -> dict:
+def crawl_source(self, source_config: dict, run_id: int, _signature: str | None = None, task_name: str | None = None) -> dict:
     """Crawl a single source. Called by run_all_sources for parallel execution."""
     from adapters.base import get_adapter_class
     from extensions import db, get_redis
@@ -266,9 +266,14 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def run_all_sources(self, run_id=None):
+def run_all_sources(self, run_id=None, _signature=None, task_name=None):
     """Orchestrate crawling of all sources using parallel task execution."""
-    if not verify_task("run_all_sources", (), {"run_id": run_id}):
+    verify_kwargs: dict[str, object] = {"run_id": run_id}
+    if _signature is not None:
+        verify_kwargs["_signature"] = _signature
+    if task_name is not None:
+        verify_kwargs["task_name"] = task_name
+    if not verify_task("run_all_sources", (), verify_kwargs):
         logger.error("Invalid signature for run_all_sources task")
         raise ValueError("Invalid task signature")
 

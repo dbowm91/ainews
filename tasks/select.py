@@ -56,7 +56,7 @@ def _assign_experiment_group(article_id: int, salt: str = "") -> str:
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def select_article(self, article_id: int, run_id=None):
+def select_article(self, article_id: int, run_id=None, _signature=None, task_name=None):  # noqa: C901
     try:
         from schemas.tasks import SelectArticleTask
         validated = SelectArticleTask(article_id=article_id, run_id=run_id)
@@ -64,7 +64,12 @@ def select_article(self, article_id: int, run_id=None):
         logger.warning("Invalid select_article input: %s", e)
         raise TypeError(f"Invalid select_article input: {e}") from e
 
-    if not verify_task("select_article", (validated.article_id,), {"run_id": validated.run_id}):
+    verify_kwargs: dict[str, object] = {"run_id": validated.run_id}
+    if _signature is not None:
+        verify_kwargs["_signature"] = _signature
+    if task_name is not None:
+        verify_kwargs["task_name"] = task_name
+    if not verify_task("select_article", (validated.article_id,), verify_kwargs):
         logger.error("Invalid signature for select_article task")
         raise ValueError("Invalid task signature")
 

@@ -158,7 +158,7 @@ def sanitize_html(html: str) -> str:
         parser.feed(html)
     except ValueError:
         return html
-    except (ValueError, TypeError, AttributeError):
+    except (TypeError, AttributeError):
         return html
     result = "".join(parser.result)
     for pat in _JAVASCRIPT_PATTERNS:

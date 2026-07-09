@@ -23,9 +23,7 @@ concurrency:
 #   smoke-tests          — production config, Celery, migration, docs consistency
 #   compose-smoke        — full Docker Compose boot + health check
 #   gitleaks             — secret scanning
-#
-# mypy is intentionally allow-fail (`|| true`) and is NOT a required check.
-# It is advisory only until Milestone D.4 when type-coverage goals are set.
+#   mypy                 — static type checking (required since Milestone D.4)
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -68,8 +66,8 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
-      - name: Run mypy (advisory — not a required check)
-        run: .venv/bin/mypy . --exclude .venv || true
+      - name: Run mypy
+        run: .venv/bin/mypy . --exclude .venv
 
   pip-audit:
     runs-on: ubuntu-latest

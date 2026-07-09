@@ -88,8 +88,7 @@ def extract_article(url: str) -> ExtractionResult:
         future.cancel()
         logger.warning("Content extraction timeout for %s", url)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
-    except (ImportError, ConnectionError, TimeoutError,
-            ValueError, AttributeError) as e:
+    except (ImportError, ConnectionError, ValueError, AttributeError) as e:
         logger.warning("Fetch failed for %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
 

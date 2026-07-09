@@ -27,7 +27,7 @@ def _context_tool_get_topic_note(topic: str, source: str | None = None) -> str:
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_topic_note failed for topic=%s: %s", topic, e)
             return f"Error retrieving topic note: {type(e).__name__}"
-        except (ImportError, ValueError, TypeError, AttributeError) as e:
+        except (ImportError, ValueError, TypeError) as e:
             logger.error("Unexpected error in get_topic_note for %s: %s", topic, e)
             return f"Error retrieving topic note: {type(e).__name__}"
 
@@ -49,7 +49,7 @@ def _context_tool_get_topic_notes_for_topics(topics: list[str]) -> str:
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_topic_notes_for_topics failed: %s", e)
         return f"Error retrieving topic notes: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_topic_notes_for_topics: %s", e)
         return f"Error retrieving topic notes: {type(e).__name__}"
 
@@ -72,7 +72,7 @@ def _context_tool_get_related_articles(
         except (SQLAlchemyError, KeyError, AttributeError) as e:
             logger.error("Tool get_related_articles failed: %s", e)
             return f"Error retrieving related articles: {type(e).__name__}"
-        except (ImportError, ValueError, TypeError, AttributeError) as e:
+        except (ImportError, ValueError, TypeError) as e:
             logger.error("Unexpected error in get_related_articles: %s", e)
             return f"Error retrieving related articles: {type(e).__name__}"
 
@@ -96,7 +96,7 @@ def _context_tool_get_trend_memory(
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_trend_memory failed: %s", e)
         return f"Error retrieving trend memory: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_trend_memory: %s", e)
         return f"Error retrieving trend memory: {type(e).__name__}"
 
@@ -119,7 +119,7 @@ def _context_tool_get_article_by_id(article_id: int) -> str:
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_article_by_id failed for %s: %s", article_id, e)
         return f'{{"error": "{type(e).__name__}"}}'
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_article_by_id for %s: %s", article_id, e)
         return f'{{"error": "{type(e).__name__}"}}'
 
@@ -137,7 +137,7 @@ def _context_tool_search_articles(query: str, limit: int = 5) -> str:
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool search_articles failed: %s", e)
         return f'{{"error": "{type(e).__name__}"}}'
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in search_articles: %s", e)
         return f'{{"error": "{type(e).__name__}"}}'
 
@@ -157,7 +157,7 @@ def _context_tool_get_source_health() -> str:
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_source_health failed: %s", e)
         return f'{{"error": "{type(e).__name__}"}}'
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_source_health: %s", e)
         return f'{{"error": "{type(e).__name__}"}}'
 
@@ -180,7 +180,7 @@ def _context_tool_get_topic_gap_report(
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_topic_gap_report failed: %s", e)
         return f"Error retrieving topic gap report: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_topic_gap_report: %s", e)
         return f"Error retrieving topic gap report: {type(e).__name__}"
 
@@ -196,7 +196,7 @@ def _search_web(query: str, max_results: int = 5) -> str:
     except (ConnectionError, TimeoutError, ValueError) as e:
         logger.error("Tool search_web failed for '%s': %s", query, e)
         return f"Error performing web search: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, TypeError, AttributeError) as e:
         logger.error("Unexpected error in search_web for '%s': %s", query, e)
         return f"Error performing web search: {type(e).__name__}"
 
@@ -210,7 +210,7 @@ def _get_search_provider(provider_id: str | None = None) -> str:
     except (ValueError, KeyError, AttributeError) as e:
         logger.error("Tool get_search_provider failed: %s", e)
         return f"Error getting search provider: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, TypeError) as e:
         logger.error("Unexpected error in get_search_provider: %s", e)
         return f"Error getting search provider: {type(e).__name__}"
 
@@ -233,7 +233,7 @@ def _context_tool_get_source_performance(
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_source_performance failed: %s", e)
         return f"Error retrieving source performance: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_source_performance: %s", e)
         return f"Error retrieving source performance: {type(e).__name__}"
 
@@ -257,7 +257,7 @@ def _context_tool_get_quality_report(article_id: int) -> str:
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_quality_report failed for %s: %s", article_id, e)
         return f"Error retrieving quality report: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in get_quality_report for %s: %s", article_id, e)
         return f"Error retrieving quality report: {type(e).__name__}"
 
@@ -278,7 +278,7 @@ def _context_tool_find_dedupe_candidates(
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool find_dedupe_candidates failed: %s", e)
         return f"Error finding dedupe candidates: {type(e).__name__}"
-    except (ImportError, ValueError, TypeError, AttributeError) as e:
+    except (ImportError, ValueError, TypeError) as e:
         logger.error("Unexpected error in find_dedupe_candidates: %s", e)
         return f"Error finding dedupe candidates: {type(e).__name__}"
 

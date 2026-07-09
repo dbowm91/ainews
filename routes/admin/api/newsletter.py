@@ -207,7 +207,7 @@ def newsletter_performance():
     all_nl_ids = [nid for nids in newsletter_ids_by_type.values() for nid in nids]
     article_ids_by_nl = _load_article_ids_for_newsletters(all_nl_ids)
 
-    all_article_ids = list(set(aid for aids in article_ids_by_nl.values() for aid in aids))
+    all_article_ids = list({aid for aids in article_ids_by_nl.values() for aid in aids})
     click_totals = _load_click_totals(all_article_ids)
 
     click_count = sum(click_totals.values())

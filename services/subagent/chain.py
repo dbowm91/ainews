@@ -118,7 +118,14 @@ def run_subagent_chain(
             stage_config, default_role="editor",
         )
 
-        def _chain_call():
+        def _chain_call(
+            provider=provider,
+            prompt=prompt,
+            model=model,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ):
             return provider.chat(
                 messages=[{"role": "user", "content": prompt}],
                 model=model,
@@ -130,8 +137,8 @@ def run_subagent_chain(
         step_succeeded = False
         try:
             resp = _retry_with_backoff(
-                lambda: _subagent_executor.submit(_chain_call).result(
-                    timeout=stage_config.timeout_seconds
+                lambda sc=stage_config: _subagent_executor.submit(_chain_call).result(
+                    timeout=sc.timeout_seconds
                 ),
                 max_retries=stage_config.max_retries + 1,
                 base_delay=1.0,
@@ -151,8 +158,7 @@ def run_subagent_chain(
                 "synthesis": f"[Fallback: {e}]",
                 "used_fallback": True,
                 }
-        except (ImportError, TimeoutError, ProviderTimeoutError,
-                ValidationError, json.JSONDecodeError,
+        except (ImportError, ValidationError, json.JSONDecodeError,
                 ValueError, AttributeError) as e:
             logger.error(
                 "Chain %s step %d unexpected error: %s",

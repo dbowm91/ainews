@@ -57,8 +57,7 @@ class DuckDuckGoSearchProvider(BaseSearchProvider):
             logger.warning("DuckDuckGo search timed out for '%s'", query)
             record_search_failure(self.provider_id)
             return []
-        except (ImportError, ConnectionError, TimeoutError,
-                ValueError, AttributeError) as e:
+        except (ImportError, ConnectionError, ValueError, AttributeError) as e:
             logger.warning("DuckDuckGo search failed for '%s': %s", query, type(e).__name__)
             record_search_failure(self.provider_id)
             return []

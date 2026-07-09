@@ -33,13 +33,13 @@ class TestCircuitBreaker:
     def _make_breaker(self, **kwargs):
         from services.circuit_breaker import CircuitBreaker
 
-        defaults = dict(
-            name="test",
-            failure_threshold=3,
-            recovery_timeout=0.5,
-            half_open_max_calls=1,
-            window_seconds=10.0,
-        )
+        defaults = {
+            "name": "test",
+            "failure_threshold": 3,
+            "recovery_timeout": 0.5,
+            "half_open_max_calls": 1,
+            "window_seconds": 10.0,
+        }
         defaults.update(kwargs)
         return CircuitBreaker(**defaults)
 
@@ -250,13 +250,13 @@ class TestCircuitBreakerMetrics:
         from services.metrics import get_metrics, reset_metrics
 
         reset_metrics()
-        defaults = dict(
-            name="test-metric",
-            failure_threshold=2,
-            recovery_timeout=0.1,
-            half_open_max_calls=1,
-            window_seconds=10.0,
-        )
+        defaults = {
+            "name": "test-metric",
+            "failure_threshold": 2,
+            "recovery_timeout": 0.1,
+            "half_open_max_calls": 1,
+            "window_seconds": 10.0,
+        }
         defaults.update(kwargs)
         return CircuitBreaker(**defaults), get_metrics()
 

@@ -53,7 +53,7 @@ LLM prompts can grow large. Use the token budgeting and `summarize_context()` ca
 We use `ruff` for linting. Run `ruff check . --exclude .venv` before committing.
 
 ### Mypy
-Some complex type errors remain in `models/`, LLM providers, and metrics. Focus on new code, not legacy.
+We use `mypy` for type checking (required in CI). Legacy modules (`models/`, `adapters/`, `tasks/`, `routes/`, `services/subagent/`, `services/llm/`, `services/search/`) have `ignore_errors = true` overrides. Focus on new code and use explicit typing. Run `mypy . --exclude .venv` before committing.
 
 ### 2FA Backup Codes
 Admin users with 2FA enabled have 8 backup codes stored as JSON. Use `verify_backup_code()` and `consume_backup_code()` from `services/totp.py`.
@@ -468,7 +468,7 @@ The following CI jobs must pass before merge. These are configured as required s
 
 | Job | Purpose |
 |-----|---------|
-| `lint-and-test` | ruff lint + pytest + coverage |
+| `lint-and-test` | ruff lint + mypy type-check + pytest with coverage |
 | `pip-audit` | Dependency vulnerability scan |
 | `trivy` | Filesystem vulnerability scan |
 | `docker-build` | Image build + testing/prod app-factory smoke |
@@ -478,7 +478,7 @@ The following CI jobs must pass before merge. These are configured as required s
 
 ### Advisory Checks
 
-- **mypy**: Runs with `|| true` (allow-fail). Advisory only until Milestone D.4 when type-coverage goals are set.
+- None.
 
 ### Concurrency
 
@@ -499,7 +499,7 @@ Run `scripts/validate_release.sh` to replicate CI gates locally. Agents should r
 - `--fast` — ruff + targeted smoke tests (pre-push quick check)
 - `--full` (default) — lint + tests + smoke + Docker build + Compose smoke (release-equivalent)
 - `--security` — pip-audit + gitleaks + trivy
-- `--with-mypy` — include advisory mypy (non-blocking)
+- `--with-mypy` — include mypy type-checking
 
 Agents must not claim release readiness without `--full` mode passing. The script generates throwaway `.env.ci` secrets, uses `COMPOSE_PROJECT_NAME=ainews-validation` for Docker isolation, and cleans up on exit.
 

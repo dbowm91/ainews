@@ -27,7 +27,7 @@ def _eval_handle_unary_not(node: ast.UnaryOp, eval_node_fn) -> Any:
 
 def _eval_handle_compare(node: ast.Compare, eval_node_fn, allowed_ops) -> Any:
     left = eval_node_fn(node.left)
-    for op_node, comparator in zip(node.ops, node.comparators):
+    for op_node, comparator in zip(node.ops, node.comparators, strict=False):
         op = allowed_ops[type(op_node)]
         right = eval_node_fn(comparator)
         logger.debug("Compare: left=%s, right=%s, op=%s, result=%s", left, right, op, op(left, right))

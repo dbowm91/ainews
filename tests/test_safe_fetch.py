@@ -32,13 +32,13 @@ from services.url import UnsafeURLError
 
 def _make_limits(**overrides) -> SafeFetchLimits:
     """Build SafeFetchLimits with sane defaults for tests."""
-    defaults = dict(
-        max_redirects=5,
-        max_bytes=10_000,
-        connect_timeout=2.0,
-        read_timeout=5.0,
-        total_timeout=10.0,
-    )
+    defaults: dict[str, int | float] = {
+        "max_redirects": 5,
+        "max_bytes": 10_000,
+        "connect_timeout": 2.0,
+        "read_timeout": 5.0,
+        "total_timeout": 10.0,
+    }
     defaults.update(overrides)
     return SafeFetchLimits(**defaults)
 

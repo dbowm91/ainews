@@ -88,7 +88,7 @@ def _assign_tags(articles, tag_names: list[str], db):
     tag_ids = [t.id for t in tag_by_slug.values()]
     article_ids = [a.id for a in articles]
 
-    existing_links = set(
+    existing_links = {
         r[0]
         for r in db.session.execute(
             article_tags.select()
@@ -98,7 +98,7 @@ def _assign_tags(articles, tag_names: list[str], db):
             )
             .with_only_columns(article_tags.c.tag_id),
         ).all()
-    )
+    }
 
     for article in articles:
         for tag in tag_by_slug.values():

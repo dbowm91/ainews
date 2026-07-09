@@ -148,7 +148,7 @@ def _run_subagent_core(
         )
         used_fallback = True
         fallback_stages = [stage]
-    except (ValidationError, json.JSONDecodeError, ValueError, AttributeError) as e:
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
         last_exc = e
         logger.error(
             "Subagent %s/%s unexpected error: %s — using fallback",

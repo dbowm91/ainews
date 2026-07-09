@@ -444,7 +444,7 @@ All pull requests and pushes to `main`/`develop` run the CI pipeline (`.github/w
 
 | Job | What it checks |
 |-----|---------------|
-| `lint-and-test` | ruff lint + pytest with coverage |
+| `lint-and-test` | ruff lint + mypy type-check + pytest with coverage |
 | `pip-audit` | Known dependency vulnerabilities |
 | `trivy` | Filesystem vulnerability scan |
 | `docker-build` | Image build + testing/prod smoke |
@@ -452,7 +452,7 @@ All pull requests and pushes to `main`/`develop` run the CI pipeline (`.github/w
 | `compose-smoke` | Full Docker Compose boot + health check |
 | `gitleaks` | Secret scanning |
 
-**mypy is advisory only** — it runs with `|| true` and is not a required check. It will become required in Milestone D.4.
+**mypy is now a required CI check** — it runs as part of `lint-and-test` and must pass before merge. Legacy modules (`models/`, `adapters/`, `tasks/`, `routes/`, `services/subagent/`, `services/llm/`, `services/search/`) have `ignore_errors = true` overrides. Focus type-checking effort on new code.
 
 For branch protection setup and the full release checklist, see `docs/release_checklist.md`.
 
@@ -465,7 +465,7 @@ For branch protection setup and the full release checklist, see `docs/release_ch
 # Tests with coverage
 .venv/bin/python -m pytest tests/ -x -q --cov
 
-# Type checking (advisory)
+# Type checking
 .venv/bin/mypy . --exclude .venv
 
 # Production config smoke

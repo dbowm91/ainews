@@ -65,14 +65,14 @@ def article_detail(article_id: int) -> Response:
             word_count = 0
     reading_time = max(1, word_count // 200)
 
-    ctx = dict(
-        article=article,
-        topic_def=topic_def,
-        max_key_points=max_key_points,
-        related_articles=related,
-        share_configs=share_configs,
-        reading_time=reading_time,
-    )
+    ctx = {
+        "article": article,
+        "topic_def": topic_def,
+        "max_key_points": max_key_points,
+        "related_articles": related,
+        "share_configs": share_configs,
+        "reading_time": reading_time,
+    }
     if request.headers.get("HX-Request"):
         response = render_template("partials/article_detail.html", **ctx)
     else:

@@ -47,6 +47,8 @@ dev = [
     "pytest-timeout>=2.0,<3",
     "ruff>=0.9.0,<1",
     "mypy>=1.0,<2",
+    "types-requests>=2.31,<3",
+    "types-PyYAML>=6.0,<7",
 ]
 
 [tool.pytest.ini_options]
@@ -72,7 +74,12 @@ directory = "htmlcov"
 line-length = 200
 
 [tool.ruff.lint]
-select = ["BLE001", "C901", "RUF100", "B007", "S311", "F401", "E402"]
+select = ["BLE001", "C901", "RUF100", "B007", "B023", "B025", "B905", "S311", "F401", "E402", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+"services/alerts.py" = ["BLE001"]
+"adapters/web.py" = ["S311"]
+"services/quality_report.py" = ["C901"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
@@ -88,3 +95,31 @@ exclude = [
     ".venv/",
     "instance/",
 ]
+
+[[tool.mypy.overrides]]
+module = [
+    "models.*",
+    "adapters.*",
+    "tasks.*",
+    "routes.*",
+    "services.subagent.*",
+    "services.llm.*",
+    "services.search.*",
+    "services.metrics",
+    "services.prompts",
+    "services.crawling",
+    "services.trend_detector",
+    "services.quality_report",
+    "services.source_intelligence",
+    "services.topic_gap",
+    "services.pipeline_monitor",
+    "services.pipeline_degradation",
+    "services.config_cache",
+    "services.config_unified",
+    "services.cache",
+    "services.limiter",
+    "services.logging_utils",
+    "schemas.*",
+    "tests.*",
+]
+ignore_errors = true

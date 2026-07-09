@@ -54,7 +54,7 @@ def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
         return 0.0
 
     # Compute dot product
-    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=False))
 
     # Compute norms
     norm_a = sum(a * a for a in vec1) ** 0.5

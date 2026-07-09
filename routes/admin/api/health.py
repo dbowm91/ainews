@@ -75,7 +75,7 @@ def workers_health() -> tuple[Response, int]:
             return api_response(data=result)
 
         result["status"] = "ok"
-        result["workers"] = {w: "alive" for w in ping}
+        result["workers"] = dict.fromkeys(ping, "alive")
 
         active = inspect.active() or {}
         result["active_tasks"] = {w: len(tasks) for w, tasks in active.items()}

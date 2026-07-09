@@ -181,7 +181,7 @@ def get_article_counts_by_status():
         .group_by(Article.pipeline_status)
         .all()
     )
-    counts = {status: count for status, count in results}
+    counts = dict(results)
     return api_response(data={"counts": counts, "total": sum(counts.values())})
 
 

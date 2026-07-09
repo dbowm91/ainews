@@ -207,7 +207,8 @@ class TestCsrfBearerBypass:
             headers={"X-CSRFToken": signed},
         )
         assert resp.status_code == 201
-        return resp.get_json()["token"]
+        token: str = resp.get_json()["token"]
+        return token
 
     def test_bearer_without_csrf_succeeds(
         self, csrf_app, csrf_client, api_token

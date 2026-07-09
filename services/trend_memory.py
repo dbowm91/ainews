@@ -24,7 +24,7 @@ def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     """Compute cosine similarity between two vectors."""
     if not vec1 or not vec2:
         return 0.0
-    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=False))
     norm_a = sum(a * a for a in vec1) ** 0.5
     norm_b = sum(b * b for b in vec2) ** 0.5
     if norm_a == 0 or norm_b == 0:

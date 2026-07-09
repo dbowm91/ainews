@@ -100,23 +100,23 @@ def index() -> str:
 
     share_configs = _get_share_configs()
 
-    ctx = dict(
-        articles=articles,
-        has_next=has_next,
-        next_page=next_page,
-        page=page,
-        category=category,
-        query=query,
-        sort=sort,
-        search_mode=search_mode,
-        categories=_get_categories(),
-        topic_icons=_get_topic_icons(),
-        top_impact=parse_articles(_get_top_impact())
+    ctx = {
+        "articles": articles,
+        "has_next": has_next,
+        "next_page": next_page,
+        "page": page,
+        "category": category,
+        "query": query,
+        "sort": sort,
+        "search_mode": search_mode,
+        "categories": _get_categories(),
+        "topic_icons": _get_topic_icons(),
+        "top_impact": parse_articles(_get_top_impact())
         if page == 1 and not category and not query
         else [],
-        newsletter_type="main",
-        share_configs=share_configs,
-    )
+        "newsletter_type": "main",
+        "share_configs": share_configs,
+    }
 
     result = _render_feed_or_page(ctx, "index.html")
     if page == 1 and not category and not query:
@@ -153,20 +153,20 @@ def topic_feed(category: str) -> str:
 
     share_configs = _get_share_configs()
 
-    ctx = dict(
-        articles=articles,
-        has_next=has_next,
-        next_page=next_page,
-        page=page,
-        category=category,
-        query="",
-        sort=sort,
-        categories=_get_categories(),
-        topic_icons=_get_topic_icons(),
-        topic_def=topic_def,
-        newsletter_type=category,
-        share_configs=share_configs,
-    )
+    ctx = {
+        "articles": articles,
+        "has_next": has_next,
+        "next_page": next_page,
+        "page": page,
+        "category": category,
+        "query": "",
+        "sort": sort,
+        "categories": _get_categories(),
+        "topic_icons": _get_topic_icons(),
+        "topic_def": topic_def,
+        "newsletter_type": category,
+        "share_configs": share_configs,
+    }
 
     result = _render_feed_or_page(ctx, "topic.html")
     if page == 1:
@@ -205,20 +205,20 @@ def tag_feed(slug: str) -> str:
 
     share_configs = _get_share_configs()
 
-    ctx = dict(
-        articles=articles,
-        has_next=has_next,
-        next_page=next_page,
-        page=page,
-        category="",
-        query="",
-        categories=_get_categories(),
-        topic_icons=_get_topic_icons(),
-        tag=tag,
-        all_tags=_get_tag_cloud(),
-        tag_slug=slug,
-        share_configs=share_configs,
-    )
+    ctx = {
+        "articles": articles,
+        "has_next": has_next,
+        "next_page": next_page,
+        "page": page,
+        "category": "",
+        "query": "",
+        "categories": _get_categories(),
+        "topic_icons": _get_topic_icons(),
+        "tag": tag,
+        "all_tags": _get_tag_cloud(),
+        "tag_slug": slug,
+        "share_configs": share_configs,
+    }
 
     result = _render_feed_or_page(ctx, "tag.html")
     if page == 1:

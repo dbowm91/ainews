@@ -102,7 +102,7 @@ with patch("services.search.get_search_provider"):
 
 ```toml
 [tool.ruff.lint]
-select = ["BLE001", "C901", "RUF100", "B007", "S311", "F401", "E402"]
+select = ["BLE001", "C901", "RUF100", "B007", "B023", "B025", "B905", "C4", "S311", "F401", "E402"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
@@ -110,10 +110,11 @@ max-complexity = 15
 
 ## MyPy
 
-- **Configured but allows failures**: `|| true` in CI
+- **Required in CI**: Part of `lint-and-test` job, must pass before merge
+- **Legacy overrides**: `models/`, `adapters/`, `tasks/`, `routes/`, `services/subagent/`, `services/llm/`, `services/search/` have `ignore_errors = true`
 - **Usage**: 
   ```bash
-  .venv/bin/mypy . --exclude .venv || true
+  .venv/bin/mypy . --exclude .venv
   ```
 
 ## Test Naming Conventions
@@ -155,7 +156,7 @@ These 7 jobs must pass before merge to `main`:
 
 | Job | Purpose |
 |-----|---------|
-| `lint-and-test` | ruff lint + pytest with coverage |
+| `lint-and-test` | ruff lint + mypy type-check + pytest with coverage |
 | `pip-audit` | dependency vulnerability scan |
 | `trivy` | filesystem vulnerability scan |
 | `docker-build` | image build + testing/prod app-factory smoke |
@@ -163,7 +164,7 @@ These 7 jobs must pass before merge to `main`:
 | `compose-smoke` | full Docker Compose boot + `/health` endpoint |
 | `gitleaks` | secret scanning |
 
-**Advisory:** mypy runs with `|| true` (not required) until Milestone D.4.
+**mypy is required** — runs in `lint-and-test` and must pass. Legacy modules have `ignore_errors = true` overrides. Focus on new code.
 
 ### Smoke Test Files
 
@@ -201,6 +202,6 @@ bash scripts/validate_release.sh --fast
 # Security scan (pip-audit + gitleaks + trivy)
 bash scripts/validate_release.sh --security
 
-# Include advisory mypy
+# Include mypy type-checking
 bash scripts/validate_release.sh --with-mypy
 ```

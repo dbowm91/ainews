@@ -355,7 +355,7 @@ def _validate_and_resolve(url: str) -> tuple[str, list[str]]:
         validate_url_safe(url)
     except UnsafeURLError as exc:
         raise UnsafeFetchError(str(exc)) from exc
-    parsed = requests.utils.urlparse(url)
+    parsed = urllib.parse.urlparse(url)
     hostname = parsed.hostname
     if not hostname:
         raise UnsafeFetchError("URL has no hostname")
@@ -475,7 +475,7 @@ def safe_fetch_url(
             all_selected_ips.append(selected_ip)
             current_url = validated_url
 
-            parsed_current = requests.utils.urlparse(current_url)
+            parsed_current = urllib.parse.urlparse(current_url)
             adapter = PinnedIPAdapter(
                 pinned_ip=selected_ip,
                 original_host=parsed_current.hostname or "",

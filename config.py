@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from schemas.common import ProviderDef
+    from schemas.llm import LLMProvidersConfig
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
@@ -424,7 +430,7 @@ def _validate_secrets(result: ConfigValidationResult) -> None:
 
 def _validate_provider_type(
     result: ConfigValidationResult,
-    pdef: object,
+    pdef: ProviderDef,
     provider_type: str,
     adapter_configs: dict,
 ) -> bool:
@@ -448,7 +454,7 @@ def _validate_provider_type(
 
 def _validate_provider_config(
     result: ConfigValidationResult,
-    pdef: object,
+    pdef: ProviderDef,
     provider_type: str,
     adapter_configs: dict,
 ) -> bool:
@@ -494,7 +500,7 @@ def _validate_provider_config(
 
 def _validate_cloud_api_key(
     result: ConfigValidationResult,
-    pdef: object,
+    pdef: ProviderDef,
     provider_type: str,
 ) -> None:
     """Check cloud provider api_key env var is set."""
@@ -519,9 +525,9 @@ def _validate_cloud_api_key(
 
 def _validate_default_provider(
     result: ConfigValidationResult,
-    config: object,
+    config: LLMProvidersConfig,
     all_provider_ids: list[str],
-    provider_by_id: dict[str, object],
+    provider_by_id: dict[str, ProviderDef],
     enabled_providers: list[str],
     valid_provider_ids: set[str] | None = None,
 ) -> None:
@@ -757,7 +763,7 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
     logger = logging.getLogger(__name__)
     enabled_providers: list[str] = []
     all_provider_ids: list[str] = []
-    provider_by_id: dict[str, object] = {}
+    provider_by_id: dict[str, ProviderDef] = {}
     valid_provider_ids: set[str] = set()
     config = None
 
@@ -808,10 +814,11 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
             fix_hint="Enable at least one provider in providers.yaml",
         )
 
-    _validate_default_provider(
-        result, config, all_provider_ids, provider_by_id, enabled_providers,
-        valid_provider_ids=valid_provider_ids,
-    )
+    if config is not None:
+        _validate_default_provider(
+            result, config, all_provider_ids, provider_by_id, enabled_providers,
+            valid_provider_ids=valid_provider_ids,
+        )
 
 
 config = {

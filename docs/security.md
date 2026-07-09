@@ -431,6 +431,19 @@ pip-audit
 
 ---
 
+## Security Scanning and Triage
+
+For the complete vulnerability triage policy, suppression format, license review, container scan policy, and secret scanning procedures, see [Security Triage Policy](security_triage.md).
+
+Key points:
+- Critical/high reachable vulnerabilities block release unless explicitly waived with documented justification
+- Secret leak findings block release until removed and rotated — no exceptions
+- Suppressions require vulnerability ID, reason, reachability assessment, and expiration date
+- License review is a pre-release step (see `docs/release_checklist.md`)
+- Container image scanning runs on `main` and release candidates, not every PR
+
+---
+
 ## Best Practices
 
 1. **Never commit secrets** - Use `.env` or Docker secrets

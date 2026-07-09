@@ -549,6 +549,14 @@ Deterministic SSRF/redirect/DNS-rebinding tests (`tests/test_safe_fetch.py`, `te
 - **2FA:** 5 attempts per 15 minutes (separate counter from login)
 - **Limiter Slots:** Provider/model-aware concurrency control with pub/sub waiting
 
+### Security Scanning and Triage Policy
+- **Vulnerability triage:** Critical/high reachable vulnerabilities block release unless waived with documented justification. Medium requires triage note. Low/informational can be deferred.
+- **Suppression policy:** Each suppression requires vulnerability ID, affected package, reason, reachability assessment, expiration date, and author. Recorded in `SECURITY_SUPPRESSIONS.md`. No blanket ignore lists.
+- **License review:** `uv run pip-licenses --format=markdown` generates a license report. AGPL is prohibited. LGPL/GPL require documented approval. Report committed to `docs/dependency_licenses.md`.
+- **Container image scanning:** Filesystem scan on every PR (required). Image scan on `main` and release candidates.
+- **Secret scanning:** Gitleaks on every push/PR. Any finding blocks release until removed and rotated.
+- Full policy: `docs/security_triage.md`
+
 ## Performance Features (Implemented)
 
 ### Token Budgeting

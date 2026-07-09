@@ -221,6 +221,10 @@ if [ "$MODE" = "security" ]; then
         warn "trivy not installed — skipping (install: https://github.com/aquasecurity/trivy)"
     fi
 
+    header "License review"
+    info "Generating dependency license report..."
+    uv run pip-licenses --format=markdown 2>/dev/null && pass "License report generated" || warn "pip-licenses not available — install with: uv pip install pip-licenses"
+
     echo ""
     if [ ${#failed_steps[@]} -eq 0 ]; then
         echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"

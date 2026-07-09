@@ -55,6 +55,9 @@ After CI passes and before deploying:
 3. **Check Docker Compose config** — `docker compose config --quiet`
 4. **Verify provider config** — `providers.yaml` has correct enabled providers
 5. **Review changelog** — all notable changes documented
+6. **Dependency license review** — `uv run pip-licenses --format=markdown` and verify no prohibited licenses (AGPL). See [Security Triage Policy](security_triage.md#license-review).
+7. **Security scan review** — `bash scripts/validate_release.sh --security` passes. Review any suppressions in `SECURITY_SUPPRESSIONS.md` for expiration.
+8. **Container image scan** (for releases) — `docker build -t ainews-ci . && trivy image ainews-ci` — no HIGH/CRITICAL findings
 
 ## Post-Deployment Verification
 

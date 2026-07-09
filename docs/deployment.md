@@ -719,7 +719,7 @@ make validate-release-fast     # Quick validation
 |------|-------|
 | `--full` (default) | ruff → pytest → production config smoke → migration smoke → Celery import smoke → docs/env consistency → Docker Compose config → Docker build → Compose smoke |
 | `--fast` | ruff → production config smoke → docs/env consistency |
-| `--security` | pip-audit → gitleaks (if installed) → trivy (if installed) |
+| `--security` | pip-audit → gitleaks (if installed) → trivy (if installed) → license review |
 
 ### Environment handling
 

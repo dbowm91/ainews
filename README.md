@@ -141,6 +141,7 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [Operations](docs/operations.md) | Health, metrics, Celery workers, failure recovery |
 | [Quality](docs/quality.md) | Quality report model, scoring, citation verification |
 | [Responsible Use](docs/responsible-use.md) | Source rights, attribution, AI content guidance |
+| [Security Triage](docs/security_triage.md) | Vulnerability triage, suppression policy, license review, container scanning |
 
 ## Release Validation
 

@@ -492,6 +492,17 @@ All Python smoke tests are fully deterministic — no network, DNS, LLM, or exte
 
 `lint-and-test` uploads coverage reports and pytest XML as GitHub artifacts on failure for triage.
 
+### Local Release Validation
+
+Run `scripts/validate_release.sh` to replicate CI gates locally. Agents should run the appropriate mode before claiming release readiness:
+
+- `--fast` — ruff + targeted smoke tests (pre-push quick check)
+- `--full` (default) — lint + tests + smoke + Docker build + Compose smoke (release-equivalent)
+- `--security` — pip-audit + gitleaks + trivy
+- `--with-mypy` — include advisory mypy (non-blocking)
+
+Agents must not claim release readiness without `--full` mode passing. The script generates throwaway `.env.ci` secrets, uses `COMPOSE_PROJECT_NAME=ainews-validation` for Docker isolation, and cleans up on exit.
+
 ## Security Features (Implemented)
 
 ### Route Auth Architecture

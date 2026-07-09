@@ -1,4 +1,4 @@
-.PHONY: install dev stop test test-cov lint docker-build docker-up docker-down backup clean help
+.PHONY: install dev stop test test-cov lint docker-build docker-up docker-down backup clean validate-release validate-release-fast help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -46,3 +46,9 @@ backup: ## Backup database
 
 clean: ## Remove generated files
 	rm -rf __pycache__ .pytest_cache .ruff_cache htmlcov .pids instance/*.db instance/*.db-* *.pyc
+
+validate-release: ## Run full release validation
+	bash scripts/validate_release.sh
+
+validate-release-fast: ## Run quick validation (lint + smoke tests)
+	bash scripts/validate_release.sh --fast

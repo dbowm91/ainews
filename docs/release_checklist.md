@@ -50,10 +50,11 @@ gitleaks
 
 After CI passes and before deploying:
 
-1. **Review deployment docs** — confirm `docs/deployment.md` matches current config
-2. **Check Docker Compose config** — `docker compose config --quiet`
-3. **Verify provider config** — `providers.yaml` has correct enabled providers
-4. **Review changelog** — all notable changes documented
+1. **Run local release validation** — `bash scripts/validate_release.sh` (replicates CI gates locally)
+2. **Review deployment docs** — confirm `docs/deployment.md` matches current config
+3. **Check Docker Compose config** — `docker compose config --quiet`
+4. **Verify provider config** — `providers.yaml` has correct enabled providers
+5. **Review changelog** — all notable changes documented
 
 ## Post-Deployment Verification
 

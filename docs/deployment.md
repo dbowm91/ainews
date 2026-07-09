@@ -695,6 +695,44 @@ Before tagging a release, verify the following:
 4. **Migration smoke** — `flask db upgrade` passes from a fresh database
 5. **Ollama healthcheck** — if using the Ollama Compose override, verify `ollama list` works as healthcheck
 
+## Release Validation
+
+Run one command to validate release-equivalent checks locally before pushing or tagging:
+
+```bash
+bash scripts/validate_release.sh          # Full validation
+bash scripts/validate_release.sh --fast   # Quick: ruff + targeted smoke tests
+bash scripts/validate_release.sh --security  # pip-audit + secret scanning
+bash scripts/validate_release.sh --with-mypy # Include advisory mypy
+```
+
+Or via Make:
+
+```bash
+make validate-release          # Full validation
+make validate-release-fast     # Quick validation
+```
+
+### What each mode runs
+
+| Mode | Steps |
+|------|-------|
+| `--full` (default) | ruff → pytest → production config smoke → migration smoke → Celery import smoke → docs/env consistency → Docker Compose config → Docker build → Compose smoke |
+| `--fast` | ruff → production config smoke → docs/env consistency |
+| `--security` | pip-audit → gitleaks (if installed) → trivy (if installed) |
+
+### Environment handling
+
+- Generates throwaway `.env.ci` with random secrets (cleaned up on exit)
+- Uses `COMPOSE_PROJECT_NAME=ainews-validation` to isolate from dev deployments
+- No real provider API keys required — CI fixture provider config is used where needed
+- Prints which environment files are being read
+
+### Prerequisites
+
+- Python 3.12+, `uv`, Docker and Docker Compose (for `--full` mode)
+- `gitleaks` and `trivy` are optional (for `--security` mode)
+
 ---
 
 ## Troubleshooting

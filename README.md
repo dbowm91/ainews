@@ -142,6 +142,26 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [Quality](docs/quality.md) | Quality report model, scoring, citation verification |
 | [Responsible Use](docs/responsible-use.md) | Source rights, attribution, AI content guidance |
 
+## Release Validation
+
+Run one command to validate your changes match CI gates:
+
+```bash
+bash scripts/validate_release.sh          # Full: lint + tests + smoke + Docker + Compose
+bash scripts/validate_release.sh --fast   # Quick: ruff + targeted smoke tests
+bash scripts/validate_release.sh --security  # pip-audit + secret scanning
+bash scripts/validate_release.sh --with-mypy # Include advisory mypy check
+```
+
+Or via Make:
+
+```bash
+make validate-release          # Full validation
+make validate-release-fast     # Quick validation
+```
+
+See [docs/deployment.md#release-validation](docs/deployment.md#release-validation) for details.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and PR process.

@@ -188,3 +188,19 @@ These 7 jobs must pass before merge to `main`:
 # Docker Compose boot smoke (requires Docker)
 ./scripts/ci_compose_smoke.sh
 ```
+
+### Release Validation Script
+
+```bash
+# Full release validation (lint + tests + smoke + Docker + Compose)
+bash scripts/validate_release.sh
+
+# Quick validation (ruff + targeted smoke tests)
+bash scripts/validate_release.sh --fast
+
+# Security scan (pip-audit + gitleaks + trivy)
+bash scripts/validate_release.sh --security
+
+# Include advisory mypy
+bash scripts/validate_release.sh --with-mypy
+```

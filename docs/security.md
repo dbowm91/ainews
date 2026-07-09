@@ -260,6 +260,8 @@ Policy requirements:
 - **Credential stripping in logs**: Log redaction via `_redact_url()` strips credentials, port, query string, and fragment from URLs before logging.
 - **Deterministic tests**: The safe fetch test suite runs without internet access using local HTTP server fixtures and mocked DNS.
 
+**HTTPS/SNI test coverage**: `TestHttpsConnectionLayerPinning` in `tests/test_safe_fetch.py` verifies that `PinnedHTTPSConnection._new_conn()` connects TCP to the pinned IP while `self.host` retains the original hostname for TLS SNI. Additional tests verify Host header behavior for default and non-default HTTPS ports. Full local TLS certificate verification with a test CA is deferred; current tests validate the connection-layer pinning and SNI hostname separation at the urllib3 level.
+
 ---
 
 ## CSRF Protection

@@ -193,15 +193,12 @@ These 7 jobs must pass before merge to `main`:
 ### Release Validation Script
 
 ```bash
-# Full release validation (lint + tests + smoke + Docker + Compose)
+# Full release validation (lint + mypy + tests + smoke + Docker + Compose)
 bash scripts/validate_release.sh
 
-# Quick validation (ruff + targeted smoke tests)
+# Quick validation (ruff + targeted smoke tests, no mypy)
 bash scripts/validate_release.sh --fast
 
 # Security scan (pip-audit + gitleaks + trivy)
 bash scripts/validate_release.sh --security
-
-# Include mypy type-checking
-bash scripts/validate_release.sh --with-mypy
 ```

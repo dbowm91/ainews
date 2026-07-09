@@ -496,10 +496,9 @@ All Python smoke tests are fully deterministic — no network, DNS, LLM, or exte
 
 Run `scripts/validate_release.sh` to replicate CI gates locally. Agents should run the appropriate mode before claiming release readiness:
 
-- `--fast` — ruff + targeted smoke tests (pre-push quick check)
-- `--full` (default) — lint + tests + smoke + Docker build + Compose smoke (release-equivalent)
+- `--fast` — ruff + targeted smoke tests (pre-push quick check, no mypy)
+- `--full` (default) — lint + mypy + tests + smoke + Docker build + Compose smoke (release-equivalent)
 - `--security` — pip-audit + gitleaks + trivy
-- `--with-mypy` — include mypy type-checking
 
 **Agents MUST NOT claim release readiness without `--full` mode passing.** The full checklist is in `docs/release_checklist.md`.
 

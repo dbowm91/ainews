@@ -23,20 +23,14 @@ git log --oneline -5
 ```bash
 uv run ruff check .
 uv run pytest tests/ -q
+uv run mypy . --exclude .venv
 uv run pytest tests/test_smoke_production_config.py tests/test_smoke_migrations.py tests/test_smoke_celery.py tests/test_docs_env_consistency.py -q
 ```
 
 - [ ] Ruff lint passes with zero errors
 - [ ] Full test suite passes (pre-existing failures documented and waived)
+- [ ] Mypy type-checking passes (legacy modules have `ignore_errors = true` overrides)
 - [ ] Smoke tests pass (production config, migrations, Celery, docs/env consistency)
-
-### Optional: Type Checking
-
-```bash
-uv run mypy . --exclude .venv
-```
-
-Mypy is advisory until Milestone D.4 type-coverage goals are set. **[Optional gate]**
 
 ## 3. Security Validation
 
@@ -104,6 +98,8 @@ rg "trafilatura\.fetch_url|requests\.get|httpx\.get|urlopen|urllib\.request" ser
 - [ ] No direct network calls outside `safe_fetch_url()` — every direct network call must be reviewed
 - [ ] Grep results for direct network calls reviewed and justified
 
+> **Note**: The direct-network-call grep must be run locally with `rg` — GitHub code search does not support the exact regex semantics needed. See `AGENTS.md` for the exact pattern.
+
 ## 7. Documentation Validation
 
 - [ ] README quickstart works for Docker path
@@ -145,6 +141,27 @@ Require a final note with:
 - [ ] Known waivers/deferred items
 - [ ] Release decision (proceed / block)
 
+### Validation Evidence Template
+
+Copy and fill this template for each release. Do not commit actual transient validation logs unless useful and sanitized.
+
+```
+## Release Validation Record
+
+- **Commit SHA**:
+- **Date/Time**:
+- **CI Run URL**:
+- **CI Status**: (pass/fail)
+- **Local Command**: `bash scripts/validate_release.sh --full`
+- **Local Result**: (pass/fail — include failed steps if any)
+- **Safe-Fetch Tests**: (pass/fail)
+- **Direct Network Call Audit**: (clean / justified exceptions listed)
+- **Known Waivers**:
+- **Release Decision**: (proceed / block)
+```
+
+> **Important**: Code inspection alone is insufficient for release readiness claims. Actual validation evidence from CI or local runs is required.
+
 ---
 
 ## One-Command Local Validation
@@ -153,16 +170,14 @@ Require a final note with:
 
 | Mode | Steps |
 |------|-------|
-| `--full` (default) | ruff lint → pytest → smoke tests → Docker build → Compose boot |
+| `--full` (default) | ruff lint → mypy → pytest → smoke tests → Docker build → Compose boot |
 | `--fast` | ruff lint → production config smoke → docs/env consistency |
 | `--security` | pip-audit → gitleaks → trivy → license report |
-| `--with-mypy` | Include advisory mypy (non-blocking) |
 
 ```bash
-bash scripts/validate_release.sh              # Full validation
-bash scripts/validate_release.sh --fast       # Quick pre-push check
+bash scripts/validate_release.sh              # Full validation (includes mypy)
+bash scripts/validate_release.sh --fast       # Quick pre-push check (no mypy)
 bash scripts/validate_release.sh --security   # Security gates only
-bash scripts/validate_release.sh --with-mypy  # Include mypy
 ```
 
 ## Required CI Gates
@@ -171,19 +186,13 @@ The following jobs must pass on `main` before any release. These are configured 
 
 | Job | What it covers |
 |-----|---------------|
-| `lint-and-test` | ruff lint, pytest suite, coverage report |
+| `lint-and-test` | ruff lint + mypy type-check + pytest with coverage |
 | `pip-audit` | Known dependency vulnerabilities |
 | `trivy` | Filesystem vulnerability scan |
 | `docker-build` | Image build, testing/prod app-factory smoke |
 | `smoke-tests` | Production config, Celery import, Alembic migration, docs/env consistency |
 | `compose-smoke` | Full Docker Compose boot + `/health` endpoint |
 | `gitleaks` | Secret scanning |
-
-### Advisory Checks
-
-| Job | Status | Notes |
-|-----|--------|-------|
-| `mypy` | Allow-fail (`\|\| true`) | Advisory until Milestone D.4 type-coverage goals are set |
 
 ## Post-Deployment Verification
 

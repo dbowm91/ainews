@@ -16,14 +16,13 @@ concurrency:
 # ---------------------------------------------------------------------------
 # Branch protection must require ALL of these jobs to pass before merge:
 #
-#   lint-and-test        — ruff lint + pytest + coverage
+#   lint-and-test        — ruff lint + mypy type-check + pytest with coverage
 #   pip-audit            — dependency vulnerability scan
 #   trivy                — filesystem vulnerability scan
 #   docker-build         — image build + testing/prod smoke
 #   smoke-tests          — production config, Celery, migration, docs consistency
 #   compose-smoke        — full Docker Compose boot + health check
 #   gitleaks             — secret scanning
-#   mypy                 — static type checking (required since Milestone D.4)
 # ---------------------------------------------------------------------------
 
 jobs:

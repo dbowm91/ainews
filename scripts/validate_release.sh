@@ -5,15 +5,12 @@
 # in a predictable order with actionable output.
 #
 # Usage:
-#   bash scripts/validate_release.sh [--fast|--full|--security] [--with-mypy]
+#   bash scripts/validate_release.sh [--fast|--full|--security]
 #
 # Modes:
-#   (default)  Full release validation: lint + tests + smoke + Docker build + Compose smoke
-#   --fast     Quick validation: ruff + targeted smoke tests, no Docker build
+#   (default)  Full release validation: lint + mypy + tests + smoke + Docker build + Compose smoke
+#   --fast     Quick validation: ruff + targeted smoke tests, no Docker build, no mypy
 #   --security pip-audit + gitleaks (if available) + trivy (if available)
-#
-# Flags:
-#   --with-mypy  Include mypy type checking (advisory, may fail without blocking)
 #
 # Environment:
 #   - Generates throwaway .env.ci with throwaway secrets
@@ -27,7 +24,6 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # --- Configuration ---
 MODE="full"
-WITH_MYPY=false
 COMPOSE_PROJECT_NAME="ainews-validation"
 ENV_CI=".env.ci"
 CI_FIXTURE_PROVIDER="$PROJECT_DIR/tests/fixtures/providers.ci.yaml"
@@ -83,19 +79,16 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --with-mypy)
-            WITH_MYPY=true
+            warn "--with-mypy is deprecated (mypy is now included in --full by default)"
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [--fast|--full|--security] [--with-mypy]"
+            echo "Usage: $0 [--fast|--full|--security]"
             echo ""
             echo "Modes:"
-            echo "  (default)  Full release validation"
-            echo "  --fast     Quick validation (no Docker build)"
+            echo "  (default)  Full release validation (includes mypy)"
+            echo "  --fast     Quick validation (no Docker build, no mypy)"
             echo "  --security Dependency + secret scanning"
-            echo ""
-            echo "Flags:"
-            echo "  --with-mypy  Include advisory mypy check"
             exit 0
             ;;
         *)
@@ -175,11 +168,6 @@ if [ "$MODE" = "fast" ]; then
     run_step "Production config smoke" uv run pytest tests/test_smoke_production_config.py -q || true
 
     run_step "Docs/env consistency" uv run pytest tests/test_docs_env_consistency.py -q || true
-
-    if [ "$WITH_MYPY" = true ]; then
-        info "Mypy is advisory — failures will not block"
-        run_step "Mypy (advisory)" uv run mypy . --exclude .venv || true
-    fi
 
     echo ""
     if [ ${#failed_steps[@]} -eq 0 ]; then
@@ -262,11 +250,8 @@ run_step "Migration smoke" uv run pytest tests/test_smoke_migrations.py -q || tr
 run_step "Celery import smoke" uv run pytest tests/test_smoke_celery.py -q || true
 run_step "Docs/env consistency" uv run pytest tests/test_docs_env_consistency.py -q || true
 
-# Step 4: Optional mypy
-if [ "$WITH_MYPY" = true ]; then
-    info "Mypy is advisory — failures will not block"
-    run_step "Mypy (advisory)" uv run mypy . --exclude .venv || true
-fi
+# Step 4: Mypy type checking (blocking)
+run_step "Mypy type-check" uv run mypy . --exclude .venv || true
 
 # Step 5: Docker Compose config validation
 if command -v docker &>/dev/null; then

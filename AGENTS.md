@@ -160,37 +160,6 @@ Note: Selector stage uses `retry_max=20` (hardcoded in `tasks/select.py:202`), n
 ### Logout Requires POST
 The logout endpoint at `/admin/logout` requires POST method only (not GET). This is intentional CSRF protection. Do not use GET for logout.
 
-## API Reference
-
-### Admin API Endpoints
-Admin API endpoints are at `/api/v1/` prefix (e.g., `/api/v1/articles`, `/api/v1/sources`). The `admin_api_bp` blueprint is registered with `url_prefix="/api/v1"`. The `admin_bp` provides HTML pages at `/admin`. Public routes are at root level.
-
-### Article API
-Individual article CRUD endpoints exist at `/admin/api/articles/<id>` with GET, PUT, DELETE methods. Pipeline trigger at `/admin/api/articles/<id>/pipeline` with POST.
-
-### Source Refresh
-Source refresh endpoint exists at `/admin/api/sources/<id>/refresh` with POST method.
-
-### Newsletter API Endpoints
-Additional newsletter endpoints:
-- `GET /api/v1/newsletters/stats` - Newsletter statistics
-- `POST /api/v1/newsletter/preview` - Preview a newsletter
-
-### Trend Memory API
-- `GET /admin/api/trend-memory/semantic-search` - Semantic search for trend memory entries (at `/admin/api/trend-memory/semantic-search`)
-
-### Alerting API
-`routes/admin/api/alerts.py` provides `GET /api/v1/alerts` endpoint that calls `get_active_alerts()` and `dispatch_alerts()` from `services/alerts.py`. Alerts are grouped by severity. This is a real implementation, not a stub.
-
-### Source Intelligence API
-`routes/admin/api/source_intelligence.py` provides: `GET /api/v1/sources/performance`, `GET /api/v1/topics/coverage`, `GET /api/v1/sources/recommendations`.
-
-### Topic Gap API
-`routes/admin/api/topic_gap.py` provides topic gap analysis endpoint.
-
-### Newsletter Performance API
-`routes/admin/api/newsletter.py` provides newsletter performance metrics.
-
 ## Design Notes for Future Agents
 
 ### Documentation Alignment Rules
@@ -199,12 +168,6 @@ Additional newsletter endpoints:
 - Do not add enabled providers without corresponding validation tests in `tests/test_production_config.py`.
 - Keep `.env.example`, README quickstart, and `docs/configuration.md` in sync when changing production requirements. `tests/test_docs_env_consistency.py` enforces this automatically.
 - The canonical source of truth for production requirements is `ProductionConfig.validate()` in `config.py`.
-
-### Middleware Chain Order
-The middleware chain order is `Logging -> Timing -> ErrorHandling` and they're applied in reverse via `apply_middleware()` in `services/subagent/runner.py`.
-
-### ErrorHandlingMiddleware
-`ErrorHandlingMiddleware` is applied in the middleware chain at `services/subagent/runner.py:344`. This middleware handles errors during tool execution. Note: It re-raises exceptions after logging, it does NOT return error dicts as some documentation suggests.
 
 ### SubagentConfig is NOT SubagentStageConfig
 `SubagentConfig` in `schemas/pipeline.py:121-125` is the container for subagent stage configs. It does NOT have an `enabled` field at the top level. The `enabled` field is on `SubagentStageConfig` (line 94).
@@ -244,12 +207,6 @@ Each pipeline stage has quality gates that can route articles to `review` for ma
 - `edit`: Validation failure → `review`
 - `edit`: Quality report failure (`build_quality_report()` in `tasks/edit.py:378-419`) → `review`
 
-### backfill_embeddings max_retries
-The `backfill_embeddings` task in `tasks/embeddings.py` has `max_retries=CELERY_TASK_MAX_RETRIES` in its decorator, consistent with other pipeline tasks.
-
-### TrendMemory last_accessed_at
-The `TrendMemory` model in `models/context.py` has a `last_accessed_at` field for tracking when trend memory entries were last accessed.
-
 ### Limiter Slot Leak Fix
 In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.provider` and `model or rc.model` as fallbacks to prevent slot leaks when `_run_stage_core` raises before returning provider info.
 
@@ -261,15 +218,6 @@ The subagent system has **14 tools** (not 9 as some docs claim). 12 context tool
 
 ### QualityReport Model
 The `QualityReport` model exists in `models/quality.py:10-51` with fields: `article_id`, `article_version_id`, `stage`, `overall_score`, `groundedness`, `coherence`, `completeness`, `safety`, `citation_score`, `claim_score`, `passed`, `needs_review`, `findings` (JSON), `meta` (JSON), `created_at`. The quality report service is in `services/quality_report.py` with `build_quality_report()` (line 438) and `persist_quality_report()` (line 531).
-
-### Source Intelligence Service
-`services/source_intelligence.py` provides: `get_source_performance()` (line 58), `get_topic_coverage()` (line 175), `get_source_recommendations()` (line 230). API endpoints in `routes/admin/api/source_intelligence.py`.
-
-### Topic Gap Service
-`services/topic_gap.py` provides topic gap analysis. API endpoint in `routes/admin/api/topic_gap.py`. Subagent tool `get_topic_gap_report` registered in `services/subagent/tools.py:451`.
-
-### Pipeline Replay API
-`routes/admin/api/replay.py` provides: `GET /articles/<id>/pipeline/history` (line 15), `POST /articles/<id>/pipeline/replay` (line 33), `POST /articles/<id>/pipeline/restore-version` (line 107).
 
 ### Hybrid Search Function Name
 The hybrid search function is `search_articles()` in `services/search/hybrid.py:329`, NOT `hybrid_search()`. Also has `cosine_similarity` (line 41) and `reciprocal_rank_fusion` (line 67).
@@ -283,20 +231,11 @@ Circuit breaker keys use the **role** convention: `llm:{provider}:{model}:{selec
 ### Post-Finalization Processing
 `post_finalize_article()` in `services/pipeline_degradation.py` handles: `published_at` timestamp, SLA metrics, trend memory, webhook dispatch, and embedding generation. Called by both `_finalize()` (degradation path) and `_post_finalize_article()` in `tasks/edit.py` (normal path).
 
-### Hybrid Search Candidate Cap
-`_get_vector_results()` in `services/search/hybrid.py` caps vector search candidates via `HYBRID_SEARCH_MAX_CANDIDATES` env var (default 500). Prevents excessive memory usage when loading all articles with embeddings.
-
 ### Adapter Per-Request Headers
 `APIAdapter` and `WebAdapter` pass headers via `headers=` parameter to `session.get()` instead of mutating the shared session's headers. This prevents race conditions when concurrent Celery workers use the same session.
 
-### Undocumented Schema Files
-`schemas/admin.py` contains: `ArticleIdsParams`, `CreateSourceRequest`, `UpdateSourceRequest`, `BulkArticleRequest`, `TaskStatusParams`. `schemas/llm.py` contains: `OllamaConfig`, `OpenAIConfig`, `AnthropicConfig`, `GeminiConfig`, `LLMProvidersConfig`, `load_providers_config()`.
-
 ### SSRFSafeRedirectHandler
 `SSRFSafeRedirectHandler.__call__` in `adapters/session.py` validates redirect URLs via `validate_url_safe(location)` and returns a new `PreparedRequest` with the redirect URL set. The handler uses thread-local storage for redirect counting to ensure per-request scoping.
-
-### Docker Security State
-Dockerfile uses multi-stage build (builder + runtime). Non-root `ainews` user (uid/gid 1000) is implemented at `Dockerfile:45-47`. `read_only: true` on `web`, `celery-worker`, and `celery-beat` services in `docker-compose.yml` with `tmpfs: /tmp`. Resource memory limits and healthchecks exist. Static volume mount is read-only (`./static:/app/static:ro`). `db-migrate` service runs `flask db upgrade` on startup.
 
 ### Docker Deployment Modes
 Four deployment modes are documented in `docs/deployment.md#docker-with-ollama`:
@@ -349,33 +288,21 @@ The health check function in `services/health.py`:
 - Function name: `run_health_checks(include_celery=True, detailed=False)` — NOT `check_health()`
 - `HealthResult` has fields: `status: str`, `checks: dict[str, Any]`, `version: dict[str, str] | None`
 
-## APIAdapter Specific Notes
-
-### Pagination
+### APIAdapter Specific Notes
 The `APIAdapter` in `adapters/api.py` has pagination support via `PaginationConfig`:
 - `next_link` type: extracts next URL from JSON response via JSONPath selector
 - `query_param` type: increments page/offset query parameter
 - `none` type: disables pagination
 - Respects `max_pages` limit (default 3) and `max_items` limit across all pages
 
-### Filter Operations
-APIAdapter supports these filter operations in `adapters/api.py:_passes_filters()`:
-- `equals`: Exact match
-- `min`: Numeric minimum
-- `exists`: Field existence check
-- `contains`: Substring match (case-insensitive)
-
-### Authentication
 APIAdapter only supports Bearer token authentication. No API key header support (e.g., `X-Api-Key`) is implemented.
 
-### Configuration Fields
 APIAdapter uses these configuration fields (NOT `item_path`):
 - `list_url`: URL to fetch items from
 - `list_method`: `"json_array"` or `"json_object_items"`
 - `list_items_path`: JSONPath to items array (optional)
 
-## Search Provider Notes
-
+### Search Provider Notes
 The search providers are:
 - `services/search/duckduckgo.py`: DuckDuckGo provider (default/enabled)
 - `services/search/google.py`: Google provider (disabled, requires API key)
@@ -383,10 +310,8 @@ The search providers are:
 - `services/search/hybrid.py`: Hybrid provider (FTS5 + vector similarity) - ENABLED
 - `services/search/sqlite_fts.py`: SQLite FTS provider (internal article search)
 
-### DeepSeek Provider Status
 DeepSeek is NOT a search provider - it only appears as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends and in `adapters/base.py` for URL sanitization. Do not add DeepSeek to search provider documentation without implementing `services/search/deepseek.py`.
 
-### Search Config Section Name
 The search provider configuration in `providers.yaml` uses the key `search_providers:` (plural), NOT `search:`. Google env vars are `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` (not `GOOGLE_SEARCH_API_KEY`/`GOOGLE_SEARCH_CX`).
 
 ## Shared Context
@@ -476,10 +401,6 @@ The following CI jobs must pass before merge. These are configured as required s
 | `compose-smoke` | Full Docker Compose boot + `/health` endpoint |
 | `gitleaks` | Secret scanning |
 
-### Advisory Checks
-
-- None.
-
 ### Concurrency
 
 CI uses `concurrency.group = ${{ github.workflow }}-${{ github.ref }}` with `cancel-in-progress: true` to save runner minutes on rapid pushes.
@@ -487,10 +408,6 @@ CI uses `concurrency.group = ${{ github.workflow }}-${{ github.ref }}` with `can
 ### Determinism Audit
 
 All Python smoke tests are fully deterministic — no network, DNS, LLM, or external service dependencies. `compose-smoke` boots a real Docker Compose stack (inherently timing-sensitive but acceptable for integration testing).
-
-### Artifacts on Failure
-
-`lint-and-test` uploads coverage reports and pytest XML as GitHub artifacts on failure for triage.
 
 ### Local Release Validation
 
@@ -502,100 +419,26 @@ Run `scripts/validate_release.sh` to replicate CI gates locally. Agents should r
 
 **Agents MUST NOT claim release readiness without `--full` mode passing.** The full checklist is in `docs/release_checklist.md`.
 
-Agents must not claim release readiness without `--full` mode passing. The script generates throwaway `.env.ci` secrets, uses `COMPOSE_PROJECT_NAME=ainews-validation` for Docker isolation, and cleans up on exit.
+The script generates throwaway `.env.ci` secrets, uses `COMPOSE_PROJECT_NAME=ainews-validation` for Docker isolation, and cleans up on exit.
 
-## Security Features (Implemented)
+## Security Architecture
 
-### Route Auth Architecture
+### Route Auth
 - **`authenticate_request()`** in `routes/decorators.py` — standalone helper returning `None` on success or a Flask response tuple on failure. Used by both `require_auth` decorator and blueprint `before_request` hooks.
 - **`require_auth` decorator** — must be placed AFTER `@blueprint.route(...)` (innermost). Wrong order means Flask registers the unwrapped function.
-- **Blueprint-level `before_request`** — defense-in-depth on `api_tokens_bp`. Catches missing per-route decorators.
 - **Route classification test** — `tests/test_admin_route_auth.py:test_all_admin_routes_classified` fails if any `/admin`, `/api/v1`, or `/api-tokens` route is added without auth classification.
 
-### CSRF Protection Architecture
-Three-layer CSRF protection with API exemptions:
-- **Flask-WTF `CSRFProtect`** (app-wide): Automatically validates CSRF on HTML form submissions. No decorator needed for form-based routes. API blueprints (`admin_api_bp`, `api_tokens_bp`) are exempted from global CSRF.
-- **`@validate_csrf_json`** decorator: Required for JSON API endpoints accepting session auth. Validates `X-CSRFToken` header. Returns controlled JSON 400 on invalid CSRF (never propagates exceptions). Used on HTML form/HTMX routes.
-- **`@csrf_for_session_auth`** decorator: Like `@validate_csrf_json` but skips CSRF for verified bearer-token requests (uses `g.auth_mode` set by `authenticate_request()`). Returns 401 if auth has not run. Used on all JSON API mutating routes.
-- Templates expose CSRF via `<meta name="csrf-token">` for JS and `csrf_token()` for forms/HTMX.
-- Bearer-token requests bypass CSRF — intentional and tested.
-- Invalid bearer tokens return 401 immediately and do NOT fall back to session auth.
+### CSRF
+Three layers: Flask-WTF `CSRFProtect` (app-wide, exempts API blueprints), `@validate_csrf_json` (session-auth JSON endpoints), `@csrf_for_session_auth` (skips CSRF for verified bearer tokens). Bearer tokens bypass CSRF intentionally.
 
-### 2FA System
-- **Backup Codes:** 8 alphanumeric codes stored as JSON in `AdminUser.backup_codes`
-- **TOTP Secrets:** Stored in database (NOT encrypted at rest - potential future enhancement)
-- **Rate Limiting:** 5 failed 2FA attempts triggers 15-minute lockout
-- **Session Regeneration:** `session.clear()` called on all login paths
-
-### CSP Configuration
-- `style-src`: `'self' 'unsafe-inline'` — allows dynamic CSS custom properties (e.g., `--bar-width`)
-- `script-src`: `'self'` with nonce support
-- Nonce support for inline styles via `csp_nonce()` function
+### 2FA
+8 backup codes stored as JSON. `session.clear()` on all login paths (no `regenerate_id()` in Flask 3.x).
 
 ### Webhook Security
-- **MultiFernet:** Key rotation support via `WEBHOOK_SECRET_KEY_PREVIOUS_1/2` env vars
-- **HMAC Signing:** Payloads signed with timestamp for replay protection
-- **SSRF Protection:** All webhook URLs validated via `validate_url_safe()`
+MultiFernet key rotation, HMAC signing with timestamps, SSRF protection on all webhook URLs.
 
-### Safe Fetch Client
-- **`services/safe_fetch.py`:** First-party safe fetch for untrusted URLs with SSRF protection, manual redirect handling, streaming byte limits, and content-type allowlist
-- **Content extractor integration:** `services/content_extractor.py` uses `safe_fetch_url()` instead of `trafilatura.fetch_url()` for network I/O
-- **Config:** `SAFE_FETCH_MAX_REDIRECTS`, `SAFE_FETCH_MAX_BYTES`, `SAFE_FETCH_CONNECT_TIMEOUT`, `SAFE_FETCH_READ_TIMEOUT`, `SAFE_FETCH_TOTAL_TIMEOUT`
+## Key Constant Locations
 
-### Safe Fetch Test Suite
-Deterministic SSRF/redirect/DNS-rebinding tests (`tests/test_safe_fetch.py`, `tests/test_url_security.py`, `tests/test_content_extractor_safe_fetch.py`) cover: blocked destinations, URL parser edge cases (credentials, host confusion, IPv6, trailing dots, percent-encoding, decimal/octal/hex IPv4), DNS resolution policy, redirect validation, response byte limits, timeout enforcement, content-type allowlisting, and content extractor integration. All tests run without internet using local HTTP server fixtures and mocked DNS.
-
-### Rate Limiting
-- **Login:** 5 attempts per 15 minutes (Redis-backed with in-memory fallback)
-- **2FA:** 5 attempts per 15 minutes (separate counter from login)
-- **Limiter Slots:** Provider/model-aware concurrency control with pub/sub waiting
-
-### Security Scanning and Triage Policy
-- **Vulnerability triage:** Critical/high reachable vulnerabilities block release unless waived with documented justification. Medium requires triage note. Low/informational can be deferred.
-- **Suppression policy:** Each suppression requires vulnerability ID, affected package, reason, reachability assessment, expiration date, and author. Recorded in `SECURITY_SUPPRESSIONS.md`. No blanket ignore lists.
-- **License review:** `uv run pip-licenses --format=markdown` generates a license report. AGPL is prohibited. LGPL/GPL require documented approval. Report committed to `docs/dependency_licenses.md`.
-- **Container image scanning:** Filesystem scan on every PR (required). Image scan on `main` and release candidates.
-- **Secret scanning:** Gitleaks on every push/PR. Any finding blocks release until removed and rotated.
-- Full policy: `docs/security_triage.md`
-
-## Performance Features (Implemented)
-
-### Token Budgeting
-- `_budget_tokens()` in `services/prompts.py` truncates prompts exceeding model context limits
-- Integrated into subagent runner before LLM calls
-
-### Database Optimization
-- `Article.metrics` relationship uses `lazy="selectin"` to prevent N+1 queries
-- Indexes on `PipelineRun.status`, `Article.pipeline_status`, `Article.created_at`
-
-### Asset Bundling
-- CSS: `style.bundled.css` (eliminates @import waterfall)
-- JS: `bundle.min.js` (minified app.js + theme.js + toast.js + admin.js)
-- Build script: `scripts/build_assets.py`
-
-### LLM Caching
-- `summarize_context()` results cached for 10 minutes
-- Token counting cached to avoid repeated computation
-
-## Plan Completion Status
-
-The implementation plan (`plans/plan.md`) is fully complete. All waves (1-9) have been implemented and verified.
-
-Milestone B is closed. All acceptance criteria met:
-- Production config validation fails closed on missing/weak secrets and invalid enabled providers
-- `default_provider` must exist, be enabled, and validate
-- Nested env-var placeholders resolve correctly
-- Docker/Ollama deployment path is documented and Compose config validates
-- Real Alembic migration smoke runs against fresh SQLite
-- Integrated production app-factory smoke runs without provider-validation bypass
-- Production-mode Docker image smoke runs in CI
-- Full Compose boot smoke is CI-required (Option A)
-- Ollama override healthcheck uses `ollama list` (verified)
-- CI and docs accurately state what is automated versus manual
-
-Historical reference: `plans/plan.md` contains the full implementation history with success metrics.
-
-### Key Constant Locations (Verified)
 - `CELERY_TASK_MAX_RETRIES`: `constants.py:6` (default: 3, configurable via env var)
 - `MAX_STAGE_RETRIES`: `constants.py:9` (value: 3)
 - `MAX_STAGE_FAILURES`: `constants.py:10` (value: 3)

@@ -182,28 +182,31 @@ class TestGetNextUrl:
         adapter = _make_adapter()
         pagination = MagicMock(type="next_link", next_link_selector="$.next")
         data = {"next": "https://api.example.com/items?page=2"}
-        assert adapter._get_next_url(data, pagination) == "https://api.example.com/items?page=2"
+        assert adapter._get_next_url(data, pagination, 0) == "https://api.example.com/items?page=2"
 
     def test_next_link_missing(self):
         adapter = _make_adapter()
         pagination = MagicMock(type="next_link", next_link_selector="$.next")
         data = {}
-        assert adapter._get_next_url(data, pagination) is None
+        assert adapter._get_next_url(data, pagination, 0) is None
 
-    def test_query_param_type_returns_none(self):
+    def test_query_param_type_returns_url(self):
         adapter = _make_adapter()
+        adapter._current_url = "https://api.example.com/items?page=0&limit=10"
         pagination = MagicMock(type="query_param")
-        assert adapter._get_next_url({}, pagination) is None
+        result = adapter._get_next_url({}, pagination, 0)
+        assert result is not None
+        assert "page=1" in result
 
     def test_none_type_returns_none(self):
         adapter = _make_adapter()
         pagination = MagicMock(type="none")
-        assert adapter._get_next_url({}, pagination) is None
+        assert adapter._get_next_url({}, pagination, 0) is None
 
     def test_no_selector_returns_none(self):
         adapter = _make_adapter()
         pagination = MagicMock(type="next_link", next_link_selector=None)
-        assert adapter._get_next_url({}, pagination) is None
+        assert adapter._get_next_url({}, pagination, 0) is None
 
 
 # ---------------------------------------------------------------------------
@@ -213,17 +216,20 @@ class TestGetNextUrl:
 class TestIncrementQueryParam:
     def test_increments_page(self):
         adapter = _make_adapter()
-        result = adapter._increment_query_param("https://example.com/items?page=1", 2)
+        adapter._current_url = "https://example.com/items?page=1"
+        result = adapter._increment_query_param(2)
         assert "page=3" in result
 
     def test_increments_offset(self):
         adapter = _make_adapter()
-        result = adapter._increment_query_param("https://example.com/items?offset=0", 1)
+        adapter._current_url = "https://example.com/items?offset=0"
+        result = adapter._increment_query_param(1)
         assert "offset=2" in result
 
     def test_preserves_existing_params(self):
         adapter = _make_adapter()
-        result = adapter._increment_query_param("https://example.com/items?limit=10&page=1", 2)
+        adapter._current_url = "https://example.com/items?limit=10&page=1"
+        result = adapter._increment_query_param(2)
         assert "limit=10" in result
         assert "page=3" in result
 
@@ -495,13 +501,14 @@ class TestFetchPagination:
 
 @patch("adapters.api.validate_url_safe")
 class TestFetchQueryParamPagination:
-    def test_single_page_when_no_next_url(self, mock_validate):
-        """query_param pagination only fetches one page since _get_next_url returns None for query_param type."""
+    def test_query_param_fetches_multiple_pages(self, mock_validate):
+        """query_param pagination fetches up to max_pages when _get_next_url returns URLs."""
         adapter = _make_adapter(pagination={"type": "query_param", "max_pages": 3})
+        adapter._current_url = "https://api.example.com/items?page=0"
         resp = _mock_response(json_data=[{"id": 1}])
         adapter._session.get.return_value = resp
-        adapter.fetch()
-        assert adapter._session.get.call_count == 1
+        items = adapter.fetch()
+        assert adapter._session.get.call_count == 3
 
 
 # ---------------------------------------------------------------------------
@@ -525,7 +532,9 @@ class TestFetchItemUrl:
         """When item_url is set but external_id defaults to $.id, a warning is logged."""
         cfg = {"item_url": "https://api.example.com/items/{id}"}
         adapter = _make_adapter(**cfg)
-        adapter._session.get.return_value = _mock_response(json_data=[{"id": 1}])
+        list_resp = _mock_response(json_data=[{"id": 1}])
+        item_resp = _mock_response(json_data={"id": 1, "name": "Item1"})
+        adapter._session.get.side_effect = [list_resp, item_resp]
         items = adapter.fetch()
         # Item is still fetched since $.id resolves to 1, but warning is logged
         assert len(items) == 1

@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from extensions import db
+
 
 class TestPipelineReplayService:
     """Tests for services/pipeline_replay.py."""
@@ -365,7 +367,7 @@ class TestPipelineReplayService:
             from models import ArticleVersion
 
             article1 = create_article(pipeline_status="done")
-            article2 = create_article(source=create_source(), pipeline_status="done")
+            article2 = create_article(source=create_source(source_key="test_source_2"), pipeline_status="done")
             db.session.commit()
 
             version = ArticleVersion(

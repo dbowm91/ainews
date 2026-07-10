@@ -184,7 +184,13 @@ def setup_2fa() -> str | Response:
         db.session.commit()
 
     qr_uri = get_provisioning_uri(admin_user.totp_secret, "admin", "ainews")
-    return render_template("admin/setup_2fa.html", qr_uri=qr_uri, error=error)
+    import base64
+    import segno
+
+    qr = segno.make(qr_uri)
+    qr_svg = qr.svg_inline(scale=6, dark="#000", light="#fff")
+    qr_svg_b64 = base64.b64encode(qr_svg.encode("utf-8")).decode("ascii")
+    return render_template("admin/setup_2fa.html", qr_svg_b64=qr_svg_b64, error=error)
 
 
 @admin_bp.route("/logout", methods=["POST"])

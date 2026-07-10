@@ -50,7 +50,7 @@ def replay_article_stage(article_id: int) -> tuple[Response, int]:
         return api_response(error=f"Article {article_id} not found", status=404)
 
     data = request.get_json()
-    if not data:
+    if data is None:
         return api_response(error="Request body is required", status=400)
 
     stage = data.get("stage")
@@ -122,7 +122,7 @@ def restore_article_version(article_id: int) -> tuple[Response, int]:
         return api_response(error=f"Article {article_id} not found", status=404)
 
     data = request.get_json()
-    if not data:
+    if data is None:
         return api_response(error="Request body is required", status=400)
 
     version_id = data.get("version_id")

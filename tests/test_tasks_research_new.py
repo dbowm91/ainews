@@ -6,9 +6,9 @@ import pytest
 
 
 def _make_brief(claims=None, impact_score=50):
-    """Helper to build a ResearchBrief with mock claims that have .content attr.
+    """Helper to build a ResearchBrief with mock claims that have .claim attr.
 
-    Note: _is_degenerate_research accesses claim.content but KeyClaim uses claim.
+    Note: _is_degenerate_research accesses claim.claim (KeyClaim.claim).
     We use MagicMock to match the actual attribute the code reads.
     """
     if claims is None:
@@ -16,7 +16,7 @@ def _make_brief(claims=None, impact_score=50):
     mock_claims = []
     for c in claims:
         m = MagicMock()
-        m.content = c
+        m.claim = c
         mock_claims.append(m)
     brief = MagicMock()
     brief.key_claims = mock_claims

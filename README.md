@@ -151,7 +151,6 @@ Run one command to validate your changes match CI gates:
 bash scripts/validate_release.sh          # Full: lint + tests + smoke + Docker + Compose
 bash scripts/validate_release.sh --fast   # Quick: ruff + targeted smoke tests
 bash scripts/validate_release.sh --security  # pip-audit + secret scanning
-bash scripts/validate_release.sh --with-mypy # Include advisory mypy check
 ```
 
 Or via Make:

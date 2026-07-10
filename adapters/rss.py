@@ -11,7 +11,7 @@ from adapters.base import BaseSourceAdapter, RawItem, register_adapter
 from schemas.source import RSSConfig
 from utils.url import validate_url_safe
 
-from .session import SSRFSafeRedirectHandler
+from .session import SSRFSafeSession
 
 
 def _validate_feed(feed: Any) -> bool:
@@ -44,12 +44,11 @@ class RSSAdapter(BaseSourceAdapter):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._session = requests.Session()
+        self._session = SSRFSafeSession()
         retry = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
         adapter = HTTPAdapter(max_retries=retry)
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
-        self._session.redirect_handler = SSRFSafeRedirectHandler()
 
     def close(self):
         self._session.close()

@@ -83,6 +83,8 @@ def create_article(
     research_brief: Optional[str] = None,
     topics: Optional[list] = None,
     published_at: Optional[datetime] = None,
+    selector_result: Optional[dict] = None,
+    draft_article: Optional[str] = None,
 ) -> Article:
     """Create a test article.
 
@@ -102,6 +104,8 @@ def create_article(
         research_brief: Research brief JSON string
         topics: List of topic strings
         published_at: Publication timestamp
+        selector_result: Selector stage result JSON
+        draft_article: Draft article content
 
     Returns:
         The created Article instance
@@ -131,6 +135,8 @@ def create_article(
         research_brief=research_brief,
         topics=topics,
         published_at=published_at,
+        selector_result=selector_result,
+        draft_article=draft_article,
     )
     db.session.add(article)
     db.session.flush()

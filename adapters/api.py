@@ -34,6 +34,7 @@ class APIAdapter(BaseSourceAdapter):
         pages_fetched = 0
 
         while next_url and pages_fetched < cfg.pagination.max_pages:
+            self._current_url = next_url
             resp = self._session.get(next_url, headers={"User-Agent": self._user_agent}, timeout=cfg.request_timeout)
             resp.raise_for_status()
             data = resp.json()
@@ -54,11 +55,10 @@ class APIAdapter(BaseSourceAdapter):
             if len(all_items) >= cfg.max_items:
                 break
 
-            next_url = self._get_next_url(data, cfg.pagination)
             pages_fetched += 1
-
-            if cfg.pagination.type == "query_param" and next_url:
-                next_url = self._increment_query_param(next_url, pages_fetched)
+            next_url = self._get_next_url(data, cfg.pagination, pages_fetched - 1)
+            if next_url:
+                validate_url_safe(next_url)
 
         if cfg.item_url:
             ext_id_path = cfg.fields.get("external_id", "$.id")
@@ -80,16 +80,18 @@ class APIAdapter(BaseSourceAdapter):
 
         return all_items
 
-    def _get_next_url(self, data: Any, pagination: Any) -> Optional[str]:
+    def _get_next_url(self, data: Any, pagination: Any, current_page: int) -> Optional[str]:
         if pagination.type == "next_link" and pagination.next_link_selector:
             result = self._resolve_path(data, pagination.next_link_selector)
             return result if isinstance(result, str) else None
+        if pagination.type == "query_param":
+            return self._increment_query_param(current_page)
         return None
 
-    def _increment_query_param(self, url: str, page: int) -> str:
-        from urllib.parse import parse_qs, urlparse, urlencode
+    def _increment_query_param(self, page: int) -> str:
+        from urllib.parse import parse_qs, urlencode, urlparse
 
-        parsed = urlparse(url)
+        parsed = urlparse(self._current_url)
         qs = parse_qs(parsed.query)
 
         page_param = "page" if "page" in qs else "offset"

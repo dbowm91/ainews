@@ -432,9 +432,7 @@ def smart_truncate_context(
             if summary:
                 result = f"{summary}\n\n{TRUNCATION_WARNING}"
                 return result, True
-        except (ImportError, json.JSONDecodeError, ValidationError,
-                AuthError, ProviderServerError, ProviderTimeoutError,
-                ConnectionError, ValueError, AttributeError) as e:
+        except Exception as e:  # noqa: BLE001 — safety net for any LLM failure
             logger.warning("TraceID=%s: LLM summarization failed, falling back to sliding window: %s", get_current_trace_id(), e)
 
     return sliding_window_truncate(text, max_chars, model=model), True

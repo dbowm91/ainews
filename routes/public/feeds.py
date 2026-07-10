@@ -3,7 +3,7 @@
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 
-from flask import Response, request
+from flask import Response, make_response, render_template, request
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -24,6 +24,13 @@ from services.article import (
 )
 
 PER_PAGE = PER_PAGE_PUBLIC
+
+
+@public_bp.route("/offline/")
+def offline() -> Response:
+    """Offline fallback page for service worker."""
+    html = render_template("offline.html")
+    return make_response(html, 503)
 
 
 def _get_top_impact(limit: int = 3) -> list[Article]:

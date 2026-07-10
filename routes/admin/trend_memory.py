@@ -4,7 +4,7 @@ from flask import flash, jsonify, redirect, render_template, request, url_for
 
 from extensions import db
 from models import TrendMemory
-from routes.admin import admin_bp, require_auth
+from routes.admin import admin_api_bp, admin_bp, require_auth
 from routes.decorators import validate_csrf_json
 from services.audit import log_admin_action
 from services.cache import get_response_cache
@@ -114,7 +114,7 @@ def trend_memory_delete_expired():
     return redirect(url_for("admin.trend_memory_list"))
 
 
-@admin_bp.route("/api/trend-memory/semantic-search", methods=["GET"])
+@admin_api_bp.route("/trend-memory/semantic-search", methods=["GET"])
 @require_auth
 def trend_memory_semantic_search():
     """Semantic search endpoint for trend memory."""

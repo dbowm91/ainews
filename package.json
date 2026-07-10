@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "npx --yes esbuild --version >/dev/null 2>&1 && echo 'JS toolchain ok' && exit 0 || (echo 'JS toolchain missing — install npm dependencies' && exit 0)"
+    "test": "npx --yes esbuild --version >/dev/null 2>&1 && echo 'JS toolchain ok' && exit 0 || (echo 'JS toolchain missing — install npm dependencies' && exit 1)"
   },
   "keywords": [],
   "author": "",

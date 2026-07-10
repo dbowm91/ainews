@@ -11,7 +11,7 @@ def _reset_singletons():
     for module_name, attr, default in [
         ("services.config_cache", "_cache_instance", None),
         ("services.cache", "_cache_instance", None),
-        ("schemas.common", "_warned_missing_vars", None),
+        ("schemas.common", "_warned_missing_vars", set),
         ("services.config_unified", "_instance", None),
     ]:
         try:

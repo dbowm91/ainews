@@ -244,9 +244,10 @@ class TestGetSession:
         https_adapter = session.get_adapter("https://example.com")
         assert http_adapter is https_adapter
 
-    def test_redirect_handler_attached(self):
+    def test_session_is_ssrfsafe(self):
         session = get_session()
-        assert isinstance(session.redirect_handler, SSRFSafeRedirectHandler)
+        from services.search.session import SSRFSafeSession
+        assert isinstance(session, SSRFSafeSession)
 
     def test_thread_safety(self):
         results = []

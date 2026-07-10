@@ -6,6 +6,14 @@
   </p>
   <div class="bulk-actions-bar hidden" id="bulk-actions-bar">
     <span class="bulk-count" id="bulk-count">0 selected</span>
+    <select id="bulk-status-select" class="btn btn-sm btn-secondary" aria-label="Select target status">
+      <option value="pending">pending</option>
+      <option value="researching">researching</option>
+      <option value="writing">writing</option>
+      <option value="editing">editing</option>
+      <option value="review">review</option>
+      <option value="done">done</option>
+    </select>
     <button type="button" class="btn btn-sm btn-secondary bulk-action-btn"
             data-action="set_status"
             hx-post="/api/v1/articles/bulk"
@@ -82,22 +90,23 @@
   </div>
   {{ pagination_nav(page, has_next, next_page, total_count, 20, "/admin/articles", {"q": query, "status": status, "category": category, "date_from": date_from, "date_to": date_to, "impact_min": impact_min, "impact_max": impact_max, "tag_slug": tag_slug}) }}
   <script nonce="{{ csp_nonce() }}">
-  (function() {
+  function updateBar() {
     var bar = document.getElementById('bulk-actions-bar');
     var count = document.getElementById('bulk-count');
+    var checked = document.querySelectorAll('.article-checkbox:checked');
+    var n = checked.length;
+    if (n > 0) {
+      bar.style.display = 'flex';
+      count.textContent = n + ' selected';
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  (function() {
+    var bar = document.getElementById('bulk-actions-bar');
     var checkboxes = document.querySelectorAll('.article-checkbox');
     var selectAll = document.getElementById('select-all-checkbox');
-
-    function updateBar() {
-      var checked = document.querySelectorAll('.article-checkbox:checked');
-      var n = checked.length;
-      if (n > 0) {
-        bar.style.display = 'flex';
-        count.textContent = n + ' selected';
-      } else {
-        bar.style.display = 'none';
-      }
-    }
 
     selectAll.addEventListener('change', function() {
       checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
@@ -108,7 +117,6 @@
       cb.addEventListener('change', updateBar);
     });
 
-    var bulkForm = document.getElementById('bulk-form');
     document.querySelectorAll('.bulk-action-btn').forEach(function(btn) {
       btn.addEventListener('click', function(evt) {
         if (btn.dataset.dispatching === '1') return;
@@ -120,6 +128,10 @@
         var vals = JSON.parse(hxVals);
         vals.article_ids = ids;
         vals.csrf_token = '{{ csrf_token() }}';
+        if (action === 'set_status') {
+          var statusSelect = document.getElementById('bulk-status-select');
+          vals.status = statusSelect ? statusSelect.value : '';
+        }
         btn.dataset.dispatching = '1';
         htmx.ajax('POST', btn.getAttribute('hx-post'), {
           target: btn.getAttribute('hx-target'),
@@ -162,7 +174,7 @@
                 var cb = document.querySelector('.article-checkbox[value="' + id + '"]');
                 if (cb) cb.checked = true;
               });
-              if (typeof updateBar === 'function') updateBar();
+              updateBar();
             }
           });
       });
@@ -171,7 +183,7 @@
     if (deselectAllBtn) {
       deselectAllBtn.addEventListener('click', function() {
         document.querySelectorAll('.article-checkbox').forEach(function(cb) { cb.checked = false; });
-        if (typeof updateBar === 'function') updateBar();
+        updateBar();
       });
     }
   })();

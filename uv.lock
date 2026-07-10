@@ -42,6 +42,7 @@ dependencies = [
     { name = "readability-lxml" },
     { name = "redis" },
     { name = "requests" },
+    { name = "segno" },
     { name = "sentence-transformers" },
     { name = "short-url" },
     { name = "trafilatura" },
@@ -97,6 +98,7 @@ requires-dist = [
     { name = "redis", specifier = ">=6.0.0,<6.5" },
     { name = "requests", specifier = "==2.33.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0,<1" },
+    { name = "segno", specifier = "==1.6.1" },
     { name = "sentence-transformers", specifier = "==5.1.0" },
     { name = "short-url", specifier = "==1.2.2" },
     { name = "trafilatura", specifier = "==2.0.0" },
@@ -2864,6 +2866,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/52/52/e57eceff0e342a1f50e274264ed47497b59e6a4e3118808ee58ddda7b74a/scipy-1.17.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:a77cbd07b940d326d39a1d1b37817e2ee4d79cb30e7338f3d0cddffae70fcaa2", size = 37682317, upload-time = "2026-02-23T00:22:18.513Z" },
     { url = "https://files.pythonhosted.org/packages/11/2f/b29eafe4a3fbc3d6de9662b36e028d5f039e72d345e05c250e121a230dd4/scipy-1.17.1-cp314-cp314t-win_amd64.whl", hash = "sha256:eb092099205ef62cd1782b006658db09e2fed75bffcae7cc0d44052d8aa0f484", size = 37345327, upload-time = "2026-02-23T00:22:24.442Z" },
     { url = "https://files.pythonhosted.org/packages/07/39/338d9219c4e87f3e708f18857ecd24d22a0c3094752393319553096b98af/scipy-1.17.1-cp314-cp314t-win_arm64.whl", hash = "sha256:200e1050faffacc162be6a486a984a0497866ec54149a01270adc8a59b7c7d21", size = 25489165, upload-time = "2026-02-23T00:22:29.563Z" },
+]
+
+[[package]]
+name = "segno"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/74/3896e205306a1b43d6b88326e5838572d97b4b74df8c9cd11acfcd9db503/segno-1.6.1.tar.gz", hash = "sha256:f23da78b059251c36e210d0cf5bfb1a9ec1604ae6e9f3d42f9a7c16d306d847e", size = 72531, upload-time = "2024-02-08T22:41:12.544Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/7c/abc460494640767edfce9c920da3e03df22327fc5e3d51c7857f50fd89c4/segno-1.6.1-py3-none-any.whl", hash = "sha256:e90c6ff82c633f757a96d4b1fb06cc932589b5237f33be653f52252544ac64df", size = 73927, upload-time = "2024-02-08T22:41:09.679Z" },
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 /* Service worker for ainews PWA — cache-first strategy with offline fallback. */
-var CACHE_NAME = 'ainews-v1';
+var CACHE_NAME = 'ainews-' + (self.__SW_VERSION || 'dev');
 var OFFLINE_URL = '/offline/';
 
 self.addEventListener('install', function(event) {

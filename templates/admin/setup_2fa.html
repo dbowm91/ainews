@@ -17,7 +17,7 @@
         <p class="login-error">{{ error|e }}</p>
       {% endif %}
       <div class="qr-container">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={{ qr_uri }}" alt="QR Code for 2FA setup">
+        <img src="data:image/svg+xml;base64,{{ qr_svg_b64 }}" alt="QR Code for 2FA setup">
       </div>
       <p class="setup-instruction">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
       <form method="POST">

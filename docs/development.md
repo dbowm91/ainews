@@ -18,7 +18,13 @@ cd ainews
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install --upgrade pip
-pip install -e .
+pip install -e ".[dev]"
+```
+
+Or with [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended):
+
+```bash
+uv sync --all-extras
 ```
 
 ### 2. Environment Configuration

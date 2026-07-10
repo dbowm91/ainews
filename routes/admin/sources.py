@@ -2,7 +2,7 @@ import logging
 import re
 import time
 
-from flask import Response, jsonify, render_template, request
+from flask import Response, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from routes.admin import admin_bp, require_auth
@@ -136,7 +136,7 @@ def enable_source(source_id: int) -> tuple[Response, int]:
     except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate source cache: %s", e)
 
-    return jsonify({"message": f"Source {source.name} enabled"}), 200
+    return render_template("admin/partials/source_row.html", s=source)
 
 
 @admin_bp.route("/sources/<int:source_id>/disable", methods=["POST"])
@@ -172,4 +172,4 @@ def disable_source(source_id: int) -> tuple[Response, int]:
     except Exception as e:  # noqa: BLE001
         logger.warning("Failed to invalidate source cache: %s", e)
 
-    return jsonify({"message": f"Source {source.name} disabled"}), 200
+    return render_template("admin/partials/source_row.html", s=source)

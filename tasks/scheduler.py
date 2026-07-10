@@ -56,32 +56,38 @@ def publish_scheduled_articles(self):
 
     try:
         now = datetime.now(timezone.utc)
-        due = (
-            Article.query.filter(
-                Article.scheduled_publish_at.isnot(None),
-                Article.scheduled_publish_at <= now,
-                Article.pipeline_status == PipelineStatus.REVIEW,
+        due_ids = [
+            id_
+            for id_, in (
+                Article.query.with_entities(Article.id)
+                .filter(
+                    Article.scheduled_publish_at.isnot(None),
+                    Article.scheduled_publish_at <= now,
+                    Article.pipeline_status == PipelineStatus.REVIEW,
+                )
+                .yield_per(100)
             )
-            .yield_per(100)
-            .all()
-        )
+        ]
 
         published = 0
-        for article in due:
-            article.pipeline_status = PipelineStatus.DONE
-            article.scheduled_publish_at = None
+        for article_id in due_ids:
             try:
+                article = db.session.get(Article, article_id)
+                if article is None:
+                    continue
+                article.pipeline_status = PipelineStatus.DONE
+                article.scheduled_publish_at = None
                 db.session.commit()
+                published += 1
+                logger.info(
+                    "Published scheduled article %s: %s",
+                    article.id,
+                    (article.original_title or "")[:50],
+                )
             except SQLAlchemyError:
                 db.session.rollback()
-                logger.error("Failed to publish scheduled article %s", article.id)
+                logger.error("Failed to publish scheduled article %s", article_id)
                 continue
-            published += 1
-            logger.info(
-                "Published scheduled article %s: %s",
-                article.id,
-                (article.original_title or "")[:50],
-            )
 
         if published:
             logger.info("Scheduled publishing: %d articles published", published)

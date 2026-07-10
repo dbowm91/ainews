@@ -46,6 +46,7 @@ PUBLIC_ROUTES = {
     "public.unsubscribe",
     "public.unsubscribe_confirm",
     "public.verify",
+    "public.offline",
 }
 
 # Routes that are intentionally public auth pages
@@ -83,7 +84,6 @@ ADMIN_ROUTES = {
     "admin.trend_memory_list",
     "admin.trend_memory_delete",
     "admin.trend_memory_delete_expired",
-    "admin.trend_memory_semantic_search",
     "admin.topic_notes_list",
     "admin.topic_notes_create",
     "admin.topic_notes_edit",
@@ -153,6 +153,7 @@ ADMIN_API_ROUTES = {
     "admin_api.source_performance",
     "admin_api.topic_coverage",
     "admin_api.source_recommendations",
+    "admin_api.trend_memory_semantic_search",
     "admin_api.topic_gap_reports",
     "admin_api.list_audit_logs",
 }

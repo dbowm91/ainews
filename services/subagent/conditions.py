@@ -152,6 +152,6 @@ def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
         if any(seg in str(e) for seg in ("Unsupported node type", "not allowed")):
             raise
         return False
-    except (TypeError, AttributeError) as e:
+    except (TypeError, AttributeError, KeyError) as e:
         logger.debug("Condition evaluation failed for '%s': %s", condition, e)
         return False

@@ -60,7 +60,7 @@
                         aria-label="View events for {{ w.name | e }}">events</button>
                 <button class="btn-sm"
                         hx-post="/api/v1/webhooks/{{ w.id }}/test"
-                        hx-target="#webhook-test-{{ w.id }}"
+                        hx-target="#webhook-events-{{ w.id }}"
                         hx-swap="innerHTML"
                         hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
                         aria-label="Test webhook {{ w.name | e }}">test</button>
@@ -68,7 +68,6 @@
             </tr>
             <tr id="webhook-events-{{ w.id }}" class="webhook-events-row hidden">
               <td colspan="7">
-                <div id="webhook-test-{{ w.id }}" class="mb-1"></div>
                 <div class="webhook-events-container">
                   <h4>delivery events</h4>
                   <div class="webhook-events-loading">loading events...</div>

@@ -65,12 +65,18 @@ cp .env.example .env
 Edit `.env` — at minimum, set these:
 
 ```bash
+# Use development mode for local setup (not production)
+FLASK_CONFIG=development
+
 # Generate a secret key
 SECRET_KEY=<run: python -c "import secrets; print(secrets.token_hex(32))">
 
 # Hash your admin password (recommended)
 # Run: python scripts/hash_password.py
 ADMIN_PASSWORD=<hashed password from script output>
+
+# Generate a Celery task secret
+CELERY_TASK_SECRET=<run: python -c "import secrets; print(secrets.token_hex(32))">
 ```
 
 Redis defaults (`redis://localhost:6379/0`) work out of the box.
@@ -233,12 +239,12 @@ If you prefer Docker over local setup:
 cp .env.example .env
 # Edit .env — set SECRET_KEY, ADMIN_PASSWORD, CELERY_TASK_SECRET
 # For cloud LLM: set OPENAI_API_KEY in .env and enable openai in providers.yaml
-# For Ollama in Docker: use the override file
+# For Ollama in Docker: use the override file and update providers.yaml
 docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
 docker compose exec ollama ollama pull qwen3:8b
 ```
 
-> **Note:** The default `localhost:11434` Ollama host does not work inside Docker. Use the Compose override or a cloud provider. See [Deployment Guide](deployment.md#docker-with-ollama) for details.
+> **Important:** When using Docker Ollama, update `providers.yaml` to use `http://ollama:11434` instead of `http://localhost:11434` for the Ollama provider host. The default `localhost` refers to the container itself, not the host machine. See [Deployment Guide](deployment.md#docker-with-ollama) for details.
 
 ## Troubleshooting
 

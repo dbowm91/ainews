@@ -1,6 +1,35 @@
 /* Shared UI behaviors — CSP-compliant (no inline scripts). */
 
 document.addEventListener("DOMContentLoaded", function () {
+  var focusSearchAfterSwap = false;
+
+  /* Keep the mobile navigation usable with keyboard and assistive technology. */
+  document.querySelectorAll(".nav-toggle-label").forEach(function (label) {
+    var inputId = label.getAttribute("for");
+    var checkbox = inputId ? document.getElementById(inputId) : null;
+    if (!checkbox) return;
+
+    function syncNavState() {
+      label.setAttribute("aria-expanded", checkbox.checked.toString());
+    }
+
+    label.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      checkbox.click();
+    });
+    checkbox.addEventListener("change", syncNavState);
+    syncNavState();
+  });
+
+  function syncSearchClear(input) {
+    var container = input.closest(".search-container");
+    var clearBtn = container && container.querySelector(".search-clear");
+    if (clearBtn) clearBtn.classList.toggle("visible", input.value.length > 0);
+  }
+
+  document.querySelectorAll('input[name="q"], input[type="search"]').forEach(syncSearchClear);
+
   /* Keyboard shortcut: '/' focuses search input */
   document.addEventListener("keydown", function (e) {
     if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
@@ -19,25 +48,29 @@ document.addEventListener("DOMContentLoaded", function () {
   document.addEventListener("click", function (e) {
     var clearBtn = e.target.closest(".search-clear");
     if (!clearBtn) return;
-    var searchInput = document.querySelector('input[name="q"], input[type="search"]');
+    var container = clearBtn.closest(".search-container");
+    var searchInput = container && container.querySelector('input[name="q"], input[type="search"]');
     if (!searchInput) return;
     searchInput.value = "";
-    clearBtn.classList.remove("visible");
+    syncSearchClear(searchInput);
+    searchInput.focus();
     htmx.trigger(searchInput, "search");
   });
 
   /* Show/hide clear button based on input value */
   document.addEventListener("input", function (e) {
     if (e.target.matches('input[name="q"], input[type="search"]')) {
-      var clearBtn = e.target.closest(".search-container").querySelector(".search-clear");
-      if (clearBtn) {
-        if (e.target.value.length > 0) {
-          clearBtn.classList.add("visible");
-        } else {
-          clearBtn.classList.remove("visible");
-        }
-      }
+      syncSearchClear(e.target);
     }
+  });
+
+  document.addEventListener("htmx:beforeRequest", function () {
+    var activeEl = document.activeElement;
+    focusSearchAfterSwap = Boolean(activeEl && (
+      activeEl.name === "q" ||
+      activeEl.classList.contains("search-input") ||
+      activeEl.getAttribute("type") === "search"
+    ));
   });
 
   /* Share button: track click + open dropdown via <details> */
@@ -123,12 +156,8 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!content) return;
 
     /* If search input was focused before swap, restore focus to it after */
-    var activeEl = document.activeElement;
-    var wasSearchFocused = activeEl && (
-      activeEl.name === 'q' ||
-      activeEl.classList.contains('search-input') ||
-      activeEl.getAttribute('type') === 'search'
-    );
+    var wasSearchFocused = focusSearchAfterSwap;
+    focusSearchAfterSwap = false;
 
     if (wasSearchFocused) {
       var searchInput = content.querySelector('input[name="q"], input.search-input, input[type="search"]');
@@ -357,8 +386,7 @@ document.addEventListener("DOMContentLoaded", function () {
     function initBookmarks() {
       var ids = getBookmarkedIds();
       ids.forEach(function (id) {
-        var btn = document.querySelector('.bookmark-btn[data-article-id="' + id + '"]');
-        if (btn) btn.classList.add("bookmarked");
+        updateBookmarkUI(id);
       });
     }
 

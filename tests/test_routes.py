@@ -69,6 +69,23 @@ class TestPublicRoutes:
         resp = client.get("/")
         assert resp.status_code == 200
 
+    def test_index_cache_separates_full_pages_and_htmx_fragments(self, client):
+        """The HTML cache must not serve a full document into an HTMX target."""
+        full = client.get("/")
+        fragment = client.get("/", headers={"HX-Request": "true"})
+
+        assert b"<!DOCTYPE html>" in full.data
+        assert b"<!DOCTYPE html>" not in fragment.data
+        assert b'class="feed-header"' in fragment.data
+
+    def test_index_article_cards_include_client_state_id(self, client, create_article):
+        """Read and bookmark state can target the rendered article card."""
+        article = create_article(original_title="Client state article")
+
+        response = client.get("/")
+
+        assert f'data-article-id="{article.id}"'.encode() in response.data
+
     def test_health_returns_ok(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200

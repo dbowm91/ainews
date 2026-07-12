@@ -12,6 +12,7 @@ from models import Article, ArticleMetric
 from routes.decorators import validate_csrf_json
 from routes.public import (
     _get_share_configs,
+    _request_variant,
     public_bp,
 )
 from services.article import parse_article_json, track_metric
@@ -29,7 +30,7 @@ def article_detail(article_id: int) -> Response:
     from services.related import find_related_articles_cached
 
     cache = get_response_cache()
-    cache_key = f"pub:article_detail:{article_id}"
+    cache_key = f"pub:article_detail:view:{_request_variant()}:{article_id}"
     cached = cache.get(cache_key)
     if cached is not None:
         resp = make_response(cached)

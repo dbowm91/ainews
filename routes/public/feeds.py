@@ -15,6 +15,7 @@ from routes.public import (
     _get_share_configs,
     _get_tag_cloud,
     _get_topic_icons,
+    _request_variant,
     _render_feed_or_page,
     public_bp,
 )
@@ -89,7 +90,10 @@ def index() -> str:
     search_mode = request.args.get("mode", "fts", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"pub:index:page:{page}:cat:{category}:q:{query}:sort:{sort}:mode:{search_mode}"
+    cache_key = (
+        f"pub:index:view:{_request_variant()}:page:{page}:cat:{category}:"
+        f"q:{query}:sort:{sort}:mode:{search_mode}"
+    )
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -139,7 +143,7 @@ def topic_feed(category: str) -> str:
     sort = request.args.get("sort", "recent", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"pub:topic:{category}:page:{page}:sort:{sort}"
+    cache_key = f"pub:topic:view:{_request_variant()}:{category}:page:{page}:sort:{sort}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -189,7 +193,7 @@ def tag_feed(slug: str) -> str:
     page = max(1, request.args.get("page", 1, type=int))
 
     cache = get_response_cache()
-    cache_key = f"pub:tag:{slug}:page:{page}"
+    cache_key = f"pub:tag:view:{_request_variant()}:{slug}:page:{page}"
 
     cached = cache.get(cache_key)
     if cached is not None:

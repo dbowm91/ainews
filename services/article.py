@@ -192,6 +192,7 @@ def get_articles_paginated(
                         )
                         .where(Article.id.in_(article_ids))
                     )
+                    .unique()
                     .scalars()
                     .all()
                 )
@@ -229,6 +230,7 @@ def get_articles_paginated(
 
     fallback_result = (
         db.session.execute(q.offset((page - 1) * per_page).limit(per_page + 1))
+        .unique()
         .scalars()
         .all()
     )

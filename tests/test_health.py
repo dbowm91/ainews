@@ -27,3 +27,17 @@ class TestHealth:
         name, status = check_database()
         assert name == "database"
         assert status["status"] == "ok"
+
+    def test_check_celery_connection_failure_is_degraded(self):
+        from unittest.mock import patch
+
+        from kombu.exceptions import OperationalError
+
+        from services.health import check_celery
+
+        with patch("celery_app.celery_app.control.inspect") as inspect:
+            inspect.return_value.ping.side_effect = OperationalError("Redis unavailable")
+            name, status = check_celery()
+
+        assert name == "celery"
+        assert status == "error"

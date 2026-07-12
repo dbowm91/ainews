@@ -14,6 +14,7 @@ from models import Article, Citation, Newsletter, PipelineRun, Source, Subscribe
 
 # Counter for generating unique IDs within a test session
 _counter = 0
+_UNSET = object()
 
 
 def _next_id() -> int:
@@ -179,7 +180,7 @@ def create_subscriber(
     newsletter_type: str = "main",
     active: bool = True,
     unsubscribe_token: Optional[str] = None,
-    confirmed_at: Optional[datetime] = None,  # defaults to now in function body
+    confirmed_at: Optional[datetime] | object = _UNSET,
     verification_token: Optional[str] = None,
 ) -> Subscriber:
     """Create a test subscriber.
@@ -189,7 +190,8 @@ def create_subscriber(
         newsletter_type: Newsletter type
         active: Whether subscription is active
         unsubscribe_token: Unsubscribe token (auto-generated if None)
-        confirmed_at: Verification timestamp (defaults to now; pass _UNSET for unverified)
+        confirmed_at: Verification timestamp. Omit it for a verified subscriber or
+            pass None for an unverified subscriber.
         verification_token: Verification token (auto-generated if unverified)
 
     Returns:
@@ -199,7 +201,7 @@ def create_subscriber(
         email = f"test-{_next_id()}@example.com"
     if unsubscribe_token is None:
         unsubscribe_token = f"token-{secrets.token_hex(8)}"
-    if confirmed_at is None:
+    if confirmed_at is _UNSET:
         confirmed_at = datetime.now(timezone.utc)
     if verification_token is None:
         verification_token = f"verify-{secrets.token_hex(8)}"

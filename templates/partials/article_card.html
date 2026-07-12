@@ -1,13 +1,12 @@
 {% from "partials/share_macro.html" import share_button %}
 {% from "partials/topic_icon.html" import topic_icon %}
 {% from "macros/badges.html" import pipeline_badge %}
-<article class="article-card">
+<article class="article-card" data-article-id="{{ article.id }}">
   <div class="card-header">
     {% if topic_icons and article.category in topic_icons %}
       {{ topic_icon(article.category) }}
     {% endif %}
     <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
-    <span class="card-time">{{ article.created_at|format_date if article.created_at }}</span>
     {% if article.pipeline_status and article.pipeline_status != 'pending' %}
       {{ pipeline_badge(article.pipeline_status) }}
     {% endif %}
@@ -52,7 +51,7 @@
     <span class="card-time-relative">{{ article.created_at|format_date if article.created_at }}</span>
   </div>
   <div class="card-footer">
-    <button class="bookmark-btn" data-article-id="{{ article.id }}" aria-label="Bookmark article">
+    <button type="button" class="bookmark-btn" data-article-id="{{ article.id }}" aria-label="Bookmark article">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
       </svg>

@@ -12,6 +12,7 @@
   </style>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script nonce="{{ csp_nonce() }}">
     htmx.config.inlineScriptNonce = "{{ csp_nonce() }}";
@@ -28,10 +29,11 @@
     <nav class="nav">
       <a href="/admin/" class="logo">ainews<span class="logo-slash">//</span> admin</a>
       <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox" hidden>
-      <label for="nav-toggle" class="nav-toggle-label" role="button" tabindex="0" aria-label="Toggle navigation" aria-expanded="false">
+      <label for="nav-toggle" class="nav-toggle-label" role="button" tabindex="0"
+             aria-controls="admin-nav-links" aria-label="Toggle navigation" aria-expanded="false">
         <span></span>
       </label>
-      <div class="nav-links">
+      <div class="nav-links" id="admin-nav-links">
         <a href="/" hx-boost="false" {% if request.path == '/' %}class="active"{% endif %}>public site</a>
         <a href="/admin/" {% if request.path == '/admin/' %}class="active"{% endif %}>dashboard</a>
         <a href="/admin/pipelines" {% if request.path.startswith('/admin/pipelines') %}class="active"{% endif %}>pipelines</a>

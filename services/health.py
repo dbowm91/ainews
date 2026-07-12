@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import redis.exceptions
+from celery.exceptions import TimeoutError as CeleryTimeoutError
+from kombu.exceptions import OperationalError as KombuOperationalError
 from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
@@ -102,7 +104,14 @@ def check_celery() -> tuple[str, Any]:
         if ping_response and any(ping_response.values()):
             return "celery", "ok"
         return "celery", "no_workers"
-    except (ImportError, AttributeError, ConnectionError):
+    except (
+        ImportError,
+        AttributeError,
+        OSError,
+        CeleryTimeoutError,
+        KombuOperationalError,
+        redis.exceptions.RedisError,
+    ):
         logger.exception("Health check: Celery inspect failed")
         return "celery", "error"
 

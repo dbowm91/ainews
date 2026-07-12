@@ -38,10 +38,11 @@
     <nav class="nav">
       <a href="/" class="logo">ainews<span class="logo-slash">//</span></a>
       <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox" hidden>
-      <label for="nav-toggle" class="nav-toggle-label" aria-label="Toggle navigation">
+      <label for="nav-toggle" class="nav-toggle-label" role="button" tabindex="0"
+             aria-controls="site-nav-links" aria-expanded="false" aria-label="Toggle navigation">
         <span></span>
       </label>
-      <div class="nav-links">
+      <div class="nav-links" id="site-nav-links">
         {% for cat in categories if categories is defined %}
           <a href="/topic/{{ cat }}"
              {% if request.path == '/topic/' + cat %}class="active"{% endif %}>{{ cat }}</a>

@@ -35,6 +35,15 @@ def _render_feed_or_page(ctx: dict, full_template: str) -> str:
     return render_template(full_template, **ctx)
 
 
+def _request_variant() -> str:
+    """Return the HTML representation requested by the client.
+
+    Full pages and HTMX fragments share the same route and query parameters,
+    but they are not interchangeable cache values.
+    """
+    return "fragment" if request.headers.get("HX-Request") else "page"
+
+
 def _get_categories() -> list[str]:
     from schemas.topic import load_topics
 

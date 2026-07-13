@@ -1,0 +1,50 @@
+<div class="theme-selector" role="group" aria-label="Theme selection">
+  <button type="button" class="theme-toggle theme-selector-trigger"
+          aria-label="Select theme"
+          aria-expanded="false"
+          aria-controls="theme-selector-panel">
+    <svg class="theme-icon-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"></circle>
+      <circle cx="12" cy="8" r="2" fill="currentColor"></circle>
+      <circle cx="8" cy="14" r="2" fill="currentColor"></circle>
+      <circle cx="16" cy="14" r="2" fill="currentColor"></circle>
+    </svg>
+    <span class="theme-selector-label">theme</span>
+  </button>
+  <div id="theme-selector-panel" class="theme-selector-panel" role="dialog" aria-label="Choose theme" hidden>
+    <div class="theme-selector-search-wrapper">
+      <input type="search" class="theme-selector-search" placeholder="Search themes..."
+             aria-label="Filter themes" autocomplete="off">
+    </div>
+    <div class="theme-selector-options" role="radiogroup" aria-label="Theme options">
+      <button type="button" class="theme-selector-option theme-selector-system"
+              role="radio" aria-checked="false"
+              data-theme-action="system">
+        system
+      </button>
+      {% set ns = namespace(has_bundled=false, has_custom=false) %}
+      {% if theme_metadata is defined and theme_metadata and theme_metadata.themes %}
+        {% for tid, tinfo in theme_metadata.themes.items()|sort %}
+          {% if tinfo.origin == 'bundled' %}
+            {% if not ns.has_bundled %}
+              {% set ns.has_bundled = true %}
+              <div class="theme-selector-group-label" role="presentation">built-in</div>
+            {% endif %}
+          {% elif tinfo.origin == 'external' %}
+            {% if not ns.has_custom %}
+              {% set ns.has_custom = true %}
+              <div class="theme-selector-group-label" role="presentation">custom</div>
+            {% endif %}
+          {% endif %}
+          <button type="button" class="theme-selector-option"
+                  role="radio" aria-checked="false"
+                  data-theme-id="{{ tid }}"
+                  data-theme-appearance="{{ tinfo.appearance }}"
+                  title="{{ tinfo.name }}">
+            {{ tinfo.name }}<span class="theme-selector-appearance">{{ tinfo.appearance }}</span>
+          </button>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</div>

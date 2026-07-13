@@ -6,11 +6,14 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <title>{% block title %}ainews// admin{% endblock %}</title>
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  {% if theme_metadata is defined and theme_metadata %}
+  <script id="ainews-theme-metadata" type="application/json">{{ theme_metadata|tojson }}</script>
+  {% endif %}
+  <link id="ainews-theme-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <style>
 {% include "partials/critical_css.html" %}
 {% include "partials/critical_css_admin.html" %}
   </style>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
@@ -44,7 +47,7 @@
         <a href="/admin/subscribers" {% if request.path.startswith('/admin/subscribers') %}class="active"{% endif %}>subscribers</a>
         <a href="/admin/shares" {% if request.path.startswith('/admin/shares') %}class="active"{% endif %}>shares</a>
         <a href="/admin/trend-memory" {% if request.path.startswith('/admin/trend-memory') %}class="active"{% endif %}>trend memory</a>
-        {% include "partials/theme_toggle.html" %}
+        {% include "partials/theme_selector.html" %}
       </div>
     </nav>
     <div class="nav-logout">

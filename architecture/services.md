@@ -378,6 +378,8 @@ Key invariants:
 
 See [Theme Inventory](../docs/themes-inventory.md) and [Halloy Theme Contract](../docs/halloy-theme-contract.md) for details.
 
+After Phase 4, the `routes/themes.py` blueprint also provides a context processor that injects `theme_metadata` into all template contexts, and a JSON metadata endpoint at `/api/v1/themes/metadata`.
+
 ## Known Layering Exceptions
 
 The following imports represent intentional deviations from clean layering:

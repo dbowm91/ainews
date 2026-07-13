@@ -1,122 +1,105 @@
-# Theme Toggle
+# Theme Selector
 
-The theme toggle switches between dark and light color schemes. It uses CSS custom properties and data attributes for theming.
+The theme selector switches between color schemes managed by the Halloy theme system. It replaces the legacy `theme_toggle.html` partial and provides an accessible, searchable popover for theme selection.
 
-## Structure
+## Legacy Fallback
 
-```html
-<button class="theme-toggle" aria-label="Toggle theme">
-  <!-- Sun icon (shown in dark mode) -->
-  <svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="12" cy="12" r="5"/>
-    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-  </svg>
-  <!-- Moon icon (shown in light mode) -->
-  <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-  </svg>
-</button>
-```
+`templates/partials/theme_toggle.html` is a legacy fallback. Base templates (`base.html`, `base_admin.html`) now use `templates/partials/theme_selector.html` instead. The legacy toggle only supports binary dark/light switching via `localStorage.theme`. The selector supports arbitrary themes, system mode, and cross-tab sync.
 
-## How Theming Works
+## Preference Schema
 
-1. Theme is stored in `document.documentElement.dataset.theme`
-2. CSS variables are defined for each theme using selectors:
+Theme preference is stored in `localStorage` under the key `ainews-theme-preference-v2`:
 
-```css
-:root {
-  --bg-primary: #0d1117;
-  --text-primary: #e6edf3;
-  /* ... */
-}
+- `"system"` — Follow OS preference via `matchMedia('(prefers-color-scheme: dark)')`
+- `"theme:<normalized-id>"` — Explicit theme selection (e.g., `"theme:catppuccin-mocha"`)
 
-[data-theme="light"] {
-  --bg-primary: #ffffff;
-  --text-primary: #1f2328;
-  /* ... */
-}
-```
+### Legacy Migration
 
-## Icon Visibility
+On first access, `theme.js` reads the legacy `ainews-theme` key (`"dark"` or `"light"`) and migrates it to the v2 schema by mapping to the configured default theme IDs:
 
-Icons are toggled via CSS based on the current theme:
+- `"dark"` → `"theme:<THEMES_DEFAULT_DARK>"`
+- `"light"` → `"theme:<THEMES_DEFAULT_LIGHT>"`
 
-```css
-.theme-icon-light,
-[data-theme="light"] .theme-icon-dark {
-  display: none;
-}
+The legacy key is then removed.
 
-[data-theme="light"] .theme-icon-light {
-  display: block;
+## Registry Metadata
+
+Templates receive `theme_metadata` via a context processor injected by `routes/themes.py`. This is embedded as a `<script id="ainews-theme-metadata" type="application/json">` tag (no nonce needed — `type="application/json"` is not executable).
+
+Structure:
+
+```json
+{
+  "defaults": {
+    "dark": "catppuccin-mocha",
+    "light": "catppuccin-latte"
+  },
+  "themes": [
+    {
+      "id": "catppuccin-mocha",
+      "name": "catppuccin mocha",
+      "appearance": "dark",
+      "css_url": "/assets/themes/catppuccin-mocha.css",
+      "origin": "bundled"
+    }
+  ]
 }
 ```
 
-## JavaScript
+Emergency themes are excluded from the metadata.
 
-The toggle button requires JavaScript to switch themes:
+## No-Flash Bootstrap
 
-```javascript
-document.querySelector('.theme-toggle').addEventListener('click', () => {
-  const html = document.documentElement;
-  const current = html.dataset.theme;
-  html.dataset.theme = current === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('theme', html.dataset.theme);
-});
-```
+`static/js/theme.js` runs synchronously as an IIFE before first paint:
 
-## Persistence
+1. Reads `ainews-theme-preference-v2` from localStorage (migrates legacy key if present)
+2. Parses `#ainews-theme-metadata` JSON
+3. Resolves active theme (explicit ID or OS-based via matchMedia)
+4. Sets `data-theme-id`, `data-theme-appearance`, and `data-theme` on `<html>`
+5. Updates `#ainews-theme-stylesheet` `<link>` `href` to the theme's CSS URL
+6. Falls back to static styling on any failure
 
-Theme preference is stored in `localStorage` and applied on page load:
+## Stylesheet Controller
 
-```javascript
-const saved = localStorage.getItem('theme');
-if (saved) {
-  document.documentElement.dataset.theme = saved;
-}
-```
+`window.AinewsTheme` public API:
 
-## Focus Styles
+| Method | Description |
+|--------|-------------|
+| `activate(themeId)` | Switch to an explicit theme. Preloads CSS, activates, removes old stylesheet. |
+| `setSystem()` | Switch to system mode (OS preference). |
+| `getActiveThemeId()` | Returns the currently active theme ID. |
+| `getPreference()` | Returns the stored preference (`"system"` or `"theme:<id>"`). |
+| `getRegistry()` | Returns the parsed registry metadata. |
+| `isSystemMode()` | Returns `true` if in system-follow mode. |
 
-```css
-.theme-toggle:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-```
+Atomic switching: preload new stylesheet → activate → remove old. Max 3 stylesheet error retries before clearing preference.
 
-## Styling
+## System Mode
 
-```css
-.theme-toggle {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
-  cursor: pointer;
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, border-color 0.15s;
-}
+When preference is `"system"`, `theme.js` uses `matchMedia('(prefers-color-scheme: dark)')` to map the OS preference to the configured default theme IDs (`defaults.dark` / `defaults.light`). An event listener tracks OS changes while in system mode; changes are ignored for explicit theme selections.
 
-.theme-toggle:hover {
-  color: var(--accent);
-  border-color: var(--accent-dim);
-}
+## Selector UI
 
-.theme-toggle svg {
-  width: 16px;
-  height: 16px;
-}
-```
+`templates/partials/theme_selector.html` provides an accessible popover with:
 
-## Partial Location
+- **Search:** Filter themes by name
+- **Grouped options:** System / Built-in / Custom sections
+- **Keyboard navigation:** Arrow keys, Enter to select, Escape to close
+- **Mobile:** Bottom-sheet layout on small screens
+- **ARIA:** `role="listbox"`, `aria-label`, `aria-activedescendant` for screen readers
 
-Located in `templates/partials/theme_toggle.html`
+## Cross-Tab Sync
+
+A `storage` event listener on the v2 key synchronizes preference changes across tabs. Incoming preferences are validated against the registry. Write-back loops are avoided by checking if the incoming value matches the current in-memory state. Unknown theme IDs fall back to the default.
+
+## Metadata Endpoint
+
+`GET /api/v1/themes/metadata` returns the same JSON structure as the context processor. Response: `Cache-Control: public, max-age=60`. No auth required.
 
 ## Related Files
 
-- `static/js/theme.js` - Theme persistence logic
-- `templates/partials/theme_toggle.html` - Reusable partial
+- `static/js/theme.js` — Bootstrap, controller, cross-tab sync
+- `templates/partials/theme_selector.html` — Selector popover partial
+- `templates/partials/theme_toggle.html` — Legacy fallback (binary dark/light only)
+- `routes/themes.py` — Context processor, metadata endpoint, CSS delivery
+- `tests/test_theme_preferences.py` — 22 tests for preference system

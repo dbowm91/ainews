@@ -490,3 +490,101 @@ hardcoded ``rgba()`` values. The 15% variant is for badge backgrounds; the
 - **Registry access:** Use ``get_app_registry()`` from
   ``services/themes/loader.py`` (or ``app.extensions['theme_registry']``)
   to access the prebuilt ``ThemeRegistry`` at request time.
+
+## 14. Browser preference system (Phase 4)
+
+Phase 4 adds client-side theme persistence, system mode, an accessible
+selector UI, and cross-tab synchronization. The server-side registry and
+CSS delivery (Phases 2–3) are unchanged.
+
+### 14.1 Preference schema
+
+The preference is stored in ``localStorage`` under the key
+``ainews-theme-preference-v2``. Accepted values:
+
+- ``"system"`` — follow the OS ``prefers-color-scheme`` media query.
+- ``"theme:<normalized-id>"`` — explicit selection (e.g.,
+  ``"theme:catppuccin-mocha"``).
+
+Any other value is treated as corrupt and cleared.
+
+### 14.2 Legacy migration
+
+On first read, ``theme.js`` checks the legacy key ``ainews-theme``
+(``"dark"`` or ``"light"``) and maps it to the configured default:
+
+- ``"dark"`` → ``"theme:<THEMES_DEFAULT_DARK>"``
+- ``"light"`` → ``"theme:<THEMES_DEFAULT_LIGHT>"``
+
+The legacy key is deleted after migration. Migration is idempotent.
+
+### 14.3 Registry metadata exposure
+
+Server-side injection uses two complementary paths:
+
+1. **Context processor** — ``inject_theme_metadata()`` in
+   ``routes/themes.py`` injects a ``theme_metadata`` dict into every
+   template context.
+2. **JSON script tag** — Templates embed the metadata as
+   ``<script id="ainews-theme-metadata" type="application/json">``. No
+   CSP nonce is required because ``type="application/json"`` is not
+   executable.
+
+Metadata structure:
+
+```json
+{
+  "defaults": { "dark": "<id>", "light": "<id>" },
+  "themes": [
+    { "id": "<id>", "name": "<display>", "appearance": "dark|light",
+      "css_url": "/assets/themes/<id>.css", "origin": "bundled|external" }
+  ]
+}
+```
+
+Emergency themes (``__emergency__``) are excluded from the metadata.
+
+### 14.4 System mode
+
+When preference is ``"system"``:
+
+- ``matchMedia('(prefers-color-scheme: dark)')`` determines the active
+  appearance.
+- The matching default theme ID (``defaults.dark`` or ``defaults.light``)
+  is resolved from the registry metadata.
+- An ``addEventListener('change', ...)`` on the media query updates the
+  active theme when the OS preference changes.
+- When an explicit theme is selected, OS change events are ignored.
+
+### 14.5 Selector UI
+
+``templates/partials/theme_selector.html`` replaces the legacy
+``theme_toggle.html`` partial. Requirements:
+
+- Accessible popover with ``role="listbox"`` and ``aria-label``.
+- Search input filters themes by display name.
+- Grouped sections: System, Built-in, Custom.
+- Keyboard navigation: Arrow keys, Enter to select, Escape to close.
+- Mobile: bottom-sheet layout via CSS media query.
+- Screen reader announcements via ``aria-live`` region.
+
+### 14.6 Cross-tab synchronization
+
+A ``storage`` event listener on the v2 key propagates preference changes
+across tabs:
+
+- Incoming values are validated against the registry.
+- Unknown theme IDs fall back to the configured default.
+- Write-back loops are prevented by comparing the incoming value to the
+  current in-memory preference before writing.
+
+### 14.7 Storage and privacy
+
+- Preference is stored entirely in browser ``localStorage``. No server
+  round-trip for reading or writing preferences.
+- No cookies are set for theme preference.
+- The metadata endpoint (``GET /api/v1/themes/metadata``) returns only
+  theme IDs, names, appearances, CSS URLs, and origins. No user data is
+  included.
+- ``Cache-Control: public, max-age=60`` on the metadata endpoint allows
+  CDN caching without user-specific variation.

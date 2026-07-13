@@ -534,6 +534,8 @@ The pure parser/translator was extended into a startup-built registry:
 - **Config:** `THEMES_ENABLED`, `THEMES_CUSTOM_DIR`, `THEMES_ALLOW_CUSTOM`, `THEMES_DEFAULT[_DARK|_LIGHT]`, `THEMES_MAX_FILE_BYTES`, `THEMES_STRICT_CONTRAST` in `config.py:_validate_themes()`. Restart required to pick up changes (no live watcher).
 - **Tests:** `tests/test_theme_registry.py` and `tests/test_theme_packaging.py`.
 
+- **2026-07 Phase 4 — Browser Selection:** Versioned preference schema (`ainews-theme-preference-v2`), legacy dark/light migration, registry metadata injection via context processor and JSON script tag, no-flash bootstrap, `window.AinewsTheme` controller with atomic stylesheet switching, system mode via matchMedia, accessible theme selector with search/keyboard/mobile, cross-tab sync via storage event, 22 new tests.
+
 ## Implementation History
 
 Key features implemented (2026-05):

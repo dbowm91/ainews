@@ -350,6 +350,13 @@ html {
   color: var(--text-primary);
 }
 
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

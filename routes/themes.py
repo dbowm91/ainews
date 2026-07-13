@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, Response, abort, request
+from flask import Blueprint, Response, abort, jsonify, request
+from markupsafe import escape
 
 from services.themes.loader import get_app_registry
 
@@ -56,4 +57,56 @@ def serve_theme_css(theme_id: str) -> Response:
         },
     )
 
+    return response
+
+
+def _build_safe_metadata() -> dict | None:
+    """Build safe theme metadata dict for browser consumption.
+
+    Returns None if the theme registry is not available.
+    Excludes emergency themes — they are internal fallbacks.
+    """
+    registry = get_app_registry()
+    if registry is None:
+        return None
+    return {
+        "defaults": {
+            "dark": registry.default_dark_id,
+            "light": registry.default_light_id,
+        },
+        "themes": {
+            theme_id: {
+                "name": str(escape(theme.display_name)),
+                "appearance": theme.appearance,
+                "css_url": f"/assets/themes/{theme_id}.css",
+                "origin": theme.origin.kind,
+            }
+            for theme_id, theme in registry.themes.items()
+            if theme.origin.kind != "emergency"
+        },
+    }
+
+
+@themes_bp.app_context_processor
+def inject_theme_metadata() -> dict:
+    """Inject safe theme metadata for browser consumption."""
+    metadata = _build_safe_metadata()
+    if metadata is None:
+        return {}
+    return {"theme_metadata": metadata}
+
+
+@themes_bp.route("/api/v1/themes/metadata")
+def theme_metadata() -> Response:
+    """Return safe theme metadata as JSON for browser consumption.
+
+    Excludes emergency themes and internal state. Only exposes safe fields
+    (id, name, appearance, css_url, origin).
+    """
+    metadata = _build_safe_metadata()
+    if metadata is None:
+        return jsonify({"error": "Theme system not available"}), 503
+
+    response = jsonify(metadata)
+    response.headers["Cache-Control"] = "public, max-age=60"
     return response

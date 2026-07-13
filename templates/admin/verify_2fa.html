@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ainews// 2FA verification</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% if theme_metadata is defined and theme_metadata %}
+  <script id="ainews-theme-metadata" type="application/json">{{ theme_metadata|tojson }}</script>
+  {% endif %}
+  <link id="ainews-theme-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </head>
 <body class="admin-body">

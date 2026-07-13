@@ -518,6 +518,14 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 
 See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract. See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
 
+### Theme Validation & Diagnostics (Phase 5)
+
+- **CLI:** `scripts/validate_themes.py` validates themes in bundled, directory, or single-file mode. Integrated into `scripts/validate_release.sh`. Use `--strict` to fail on warnings, `--format json` for machine output, `--print-css` to emit CSS.
+- **Admin diagnostics:** `GET /api/v1/themes/diagnostics` (admin-authenticated) returns registry health, per-theme validity, and aggregate diagnostic counts.
+- **Contrast policy:** `classify_contrast_findings()` checks 14 WCAG contrast pairings. `classify_accessibility_findings()` checks category badges (3:1) and status colors (4.5:1). Critical primary text < 4.5 raises `ThemeContrastError`.
+- **Diagnostic codes:** Stable codes in `THEME_DIAGNOSTIC_CODES` dict (`services/themes/errors.py`). Use in CLI output, logs, tests, and admin diagnostics.
+- **Documentation:** `docs/theme-authoring.md` (operators/contributors), `docs/theme-troubleshooting.md` (diagnostic codes), `docs/theme-preferences.md` (reader-facing), `docs/theme-provenance.md` (source licenses).
+
 ### Theme CSS Delivery (Phase 3)
 Theme CSS is served via `GET /assets/themes/<theme_id>.css` from the startup-built registry. Blueprint at `routes/themes.py` (`themes_bp`), registered before `public_bp`. Registry accessed via `get_app_registry()` (or `app.extensions['theme_registry']`). Response: `text/css; charset=utf-8`, `Cache-Control: public, max-age=300`, ETag-based 304. Unknown IDs return 404. CSS output includes both legacy (`--green`, `--accent-dim`) and semantic (`--success`, `--accent-active`) variable names. Category badges use `--category-{name}-alpha-{15,40}` variables.
 

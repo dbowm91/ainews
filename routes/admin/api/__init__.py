@@ -16,6 +16,7 @@ from routes.admin.api import (
     search as search,
     source_intelligence as source_intelligence,
     sources as sources,
+    theme_diagnostics as theme_diagnostics,
     topic_gap as topic_gap,
     webhooks as webhooks,
 )

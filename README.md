@@ -93,6 +93,10 @@ Nginx → Granian (ASGI) → Flask
 
 **Pipeline:** `pending → selected → researching → writing → editing → done`
 
+### Themes
+
+ainews ships with 48 built-in dark/light themes derived from Halloy IRC themes (Catppuccin, Dracula, Gruvbox, Nord, Rose Pine, Solarized, etc.). Operators can add custom themes via `THEMES_CUSTOM_DIR`. See [Theme Authoring Guide](docs/theme-authoring.md) for creating compatible themes.
+
 ## Features
 
 - **Multi-Provider LLM Pipeline** — Select, research, write, and edit stages with automatic fallback across providers

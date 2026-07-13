@@ -149,6 +149,18 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 - **Cross-tab sync:** `storage` event listener on the v2 key. Validates incoming preferences, avoids write-back loops, falls back on unknown IDs.
 - **Metadata endpoint:** `GET /api/v1/themes/metadata` returns same JSON as context processor, `Cache-Control: public, max-age=60`. No auth required.
 
+### Theme Validation CLI
+`scripts/validate_themes.py` validates themes using production helpers. Modes: `--bundled` (all packaged), `--directory DIR` (scan custom), `--file FILE` (single). Flags: `--strict` (warnings fail), `--format json` (machine-readable), `--print-css` (emit CSS). Integrated into `scripts/validate_release.sh`.
+
+### Theme Admin Diagnostics
+`GET /api/v1/themes/diagnostics` (admin-authenticated) returns registry health, per-theme validity, and aggregate diagnostic counts. Does not expose absolute paths, TOML content, or generated CSS. Uses `Cache-Control: no-store`.
+
+### Theme Contrast Policy
+`classify_contrast_findings()` checks 14 WCAG contrast pairings. `classify_accessibility_findings()` checks category badges (3:1) and status colors (4.5:1). Critical primary text < 4.5 raises `ThemeContrastError`. All other failures are warnings.
+
+### Theme Diagnostic Codes
+Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Use these in CLI output, logs, tests, and admin diagnostics. `get_diagnostic_description(code)` returns human-readable description.
+
 ## Architecture Conventions
 
 ### Type Checking Pattern
@@ -440,6 +452,12 @@ The following are documented as intentional and should NOT be "fixed":
 | `routes/public/feeds.py` | Public feed routes, RSS generation, search with analytics logging |
 | `routes/decorators.py` | `commit()` helper, `commit_or_rollback()` context manager, `@require_auth` decorator |
 | `routes/themes.py` | Theme CSS delivery route (public, no auth) |
+| `scripts/validate_themes.py` | Theme validation CLI (bundled/directory/file modes) |
+| `routes/admin/api/theme_diagnostics.py` | Admin theme diagnostics endpoint |
+| `docs/theme-authoring.md` | Theme authoring guide for operators and contributors |
+| `docs/theme-troubleshooting.md` | Theme troubleshooting guide with diagnostic codes |
+| `docs/theme-preferences.md` | Reader-facing theme preference help |
+| `docs/theme-provenance.md` | Theme source provenance and license documentation |
 | `templates/partials/theme_selector.html` | Accessible theme selector UI (Phase 4) |
 | `tests/test_theme_preferences.py` | Phase 4 preference system tests |
 | `tasks/newsletter.py` | Newsletter generation and email delivery |

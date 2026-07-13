@@ -588,3 +588,209 @@ across tabs:
   included.
 - ``Cache-Control: public, max-age=60`` on the metadata endpoint allows
   CDN caching without user-specific variation.
+
+## 15. Custom directory operational contract (Phase 5)
+
+Phase 5 extends the theme subsystem with operator-managed custom themes and
+comprehensive troubleshooting. The contract below governs runtime behavior of
+the ``THEMES_CUSTOM_DIR`` directory.
+
+### 15.1 Flat ``.toml`` file requirement
+
+Only direct child ``.toml`` files in the custom directory are discovered.
+Nested directories, subdirectories, and non-``.toml`` files are ignored.
+The discovery is flat — no recursive traversal.
+
+### 15.2 Read-only directory support
+
+The theme system never writes to the custom directory. Read-only mounts
+(``:ro`` in Docker) are fully supported and recommended for production
+deployments. File permissions must allow the application user (UID 1000 in
+the Dockerfile) to read all ``.toml`` files.
+
+### 15.3 Restart requirement
+
+Themes are parsed once per application process at startup. There is no live
+file watcher. Adding, removing, or modifying files in the custom directory
+requires a restart of the web and worker processes for changes to take effect.
+
+### 15.4 External-over-bundled precedence
+
+An external theme with the same normalized identifier as a bundled theme
+**completely replaces** the bundled entry. This is a wholesale replacement —
+not a field-level merge. The bundled version is discarded entirely from the
+registry.
+
+### 15.5 Duplicate-ID behavior
+
+If multiple files in the custom directory produce the same normalized
+identifier, only the first file encountered (sorted by filename) is loaded.
+Subsequent duplicates are skipped with a ``themes.external.duplicate``
+diagnostic.
+
+### 15.6 Invalid-file isolation
+
+A single invalid file does not abort registry construction. The file is
+skipped, a diagnostic is emitted, and all other valid files continue to be
+processed. This ensures one broken theme does not prevent other custom
+themes from loading.
+
+### 15.7 Maximum file size and count
+
+- **Per-file size**: Capped at ``THEMES_MAX_FILE_BYTES`` (default 256 KB,
+  validated range 1024–1048576). Enforced at both raw bytes length and file
+  stat size.
+- **File count**: Capped at ``MAX_EXTERNAL_FILES`` (200) to prevent resource
+  abuse. Files beyond the limit are skipped with a
+  ``themes.custom_file.count_limit`` diagnostic.
+
+### 15.8 Symlink policy
+
+Both directory-level and file-level symlinks are rejected before parsing.
+This prevents symlink-based path traversal and ensures the theme system
+operates on regular files only.
+
+- Directory root must not be a symlink (``themes.custom_dir.symlink``).
+- Individual ``.toml`` files must not be symlinks
+  (``themes.custom_file.unsafe_path``).
+- Path traversal (``../``, absolute paths, percent-encoded escapes) is
+  rejected.
+
+### 15.9 Filename-to-ID normalization
+
+Filenames are normalized to theme identifiers via ``normalize_identifier()``
+in ``services/themes/halloy.py``:
+
+1. NFKD Unicode normalization
+2. ASCII fold (non-ASCII characters dropped)
+3. Lowercase
+4. Runs of ``[^a-z0-9]`` replaced with single ``-``
+5. Leading/trailing ``-`` stripped
+
+If the result is empty, the file is skipped with a
+``themes.custom_file.invalid_id`` diagnostic.
+
+### 15.10 Removed themes and browser preferences
+
+When an external theme is removed from the custom directory:
+
+1. The theme no longer appears in the registry after restart.
+2. Browsers with the removed theme ID stored in ``localStorage`` fall back
+   to the configured default theme (``THEMES_DEFAULT_DARK`` or
+   ``THEMES_DEFAULT_LIGHT`` depending on appearance).
+3. The ``theme.js`` client-side bootstrap validates the stored preference
+   against the registry metadata on every page load. Unknown IDs trigger
+   automatic fallback.
+4. No user action is required — the fallback is seamless.
+
+### 15.11 Inspecting diagnostics
+
+**Human-readable output:**
+
+```bash
+python scripts/validate_themes.py --directory /path/to/themes
+```
+
+**Machine-readable output (JSON):**
+
+```bash
+python scripts/validate_themes.py --directory /path/to/themes --format json
+```
+
+**Runtime diagnostics:** Startup logs include diagnostics for every skipped
+or overridden theme. Search for diagnostic codes (e.g.,
+``themes.external.parse``, ``themes.custom_file.size_limit``) in the
+application log.
+
+**Browser-side metadata:** The embedded ``#ainews-theme-metadata`` JSON
+script tag on every page includes the full registry (IDs, names, appearances,
+CSS URLs, origins). Use DevTools console:
+
+```javascript
+JSON.parse(document.getElementById('ainews-theme-metadata').textContent)
+```
+
+### 15.12 Validating before restart
+
+Always validate custom themes before restarting the application:
+
+```bash
+# Validate a single file
+python scripts/validate_themes.py --file my-theme.toml
+
+# Validate an entire directory
+python scripts/validate_themes.py --directory /path/to/themes
+
+# Validate with CSS output for visual inspection
+python scripts/validate_themes.py --file my-theme.toml --print-css
+
+# Strict mode: warnings become errors
+python scripts/validate_themes.py --directory /path/to/themes --strict
+```
+
+The script exits nonzero on failure, making it safe for CI/CD pipelines.
+
+## 16. Troubleshooting
+
+### Custom theme does not appear
+
+| Check | Diagnostic | Resolution |
+|-------|------------|------------|
+| File is a direct child of `THEMES_CUSTOM_DIR` | — | Move file to the root of the directory |
+| `THEMES_CUSTOM_DIR` is set | `themes.custom_dir.missing` | Set the env var |
+| `THEMES_ALLOW_CUSTOM=true` | `themes.custom_dir.disabled` | Set to `true` |
+| File count ≤ 200 | `themes.custom_file.count_limit` | Remove unused themes |
+| File size ≤ 256 KB | `themes.custom_file.size_limit` | Reduce file size |
+| Not a symlink | `themes.custom_dir.symlink` | Use a regular file |
+| Unique normalized ID | `THEME_ID_COLLISION` | Rename the file |
+| Restart performed | — | Restart web and worker processes |
+
+### Theme rejected as invalid
+
+| Check | Diagnostic | Resolution |
+|-------|------------|------------|
+| Valid TOML syntax | `THEME_PARSE_INVALID_TOML` | Fix TOML syntax errors |
+| Colors are `#RRGGBB` or `#RRGGBBAA` | `THEME_COLOR_INVALID` | Replace invalid color values |
+| File has at least one recognized section | `THEME_PARSE_INVALID_TOML` | Add `[general]`, `[text]`, or `[buffer]` |
+| Primary text contrast ≥ 4.5:1 | `THEME_CONTRAST_CRITICAL` | Increase text/bg contrast |
+| File ≤ 256 KB | `themes.custom_file.size_limit` | Reduce file size |
+
+### Duplicate identifier
+
+Two files produce the same normalized ID. Rename one or remove the duplicate.
+
+### Stale browser preference
+
+Open DevTools → Application → Local Storage → delete
+`ainews-theme-preference-v2`. The selector will fall back to the configured
+default on next page load.
+
+### CSS appears cached after file replacement
+
+The CSS route uses `ETag` (content hash) and `Cache-Control: max-age=300`.
+Hard-refresh (`Ctrl+Shift+R`) to bypass. Confirm a new `ETag` in the
+Network tab.
+
+### Default light/dark misclassification
+
+Appearance auto-detection uses luminance of `general.background`. If the
+background is borderline, the classification may differ from intent. Ensure
+background luminance is clearly above 50% for light or below 50% for dark.
+
+### Missing mounted directory
+
+Verify the Docker volume mount and that the path exists inside the container.
+Use `docker exec -it <container> ls -la <path>`.
+
+### Permissions / read-only behavior
+
+Read-only mounts (`:ro`) are supported. Ensure the application user (UID
+1000) can read the files. Fix with `chmod -R 644` on files and `chmod 755`
+on the directory.
+
+### Emergency fallback active
+
+`THEME_EMERGENCY_FALLBACK` indicates no bundled or external themes loaded.
+Check `THEMES_ENABLED`, `THEMES_CUSTOM_DIR`, and `THEMES_ALLOW_CUSTOM`.
+Run `python scripts/validate_themes.py --bundled` to identify bundled
+parse failures.

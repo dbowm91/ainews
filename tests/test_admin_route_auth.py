@@ -47,6 +47,8 @@ PUBLIC_ROUTES = {
     "public.unsubscribe_confirm",
     "public.verify",
     "public.offline",
+    "themes.serve_theme_css",
+    "themes.theme_metadata",
 }
 
 # Routes that are intentionally public auth pages
@@ -156,6 +158,7 @@ ADMIN_API_ROUTES = {
     "admin_api.trend_memory_semantic_search",
     "admin_api.topic_gap_reports",
     "admin_api.list_audit_logs",
+    "admin_api.themes_diagnostics",
 }
 
 # API token routes (separate blueprint, no url_prefix)

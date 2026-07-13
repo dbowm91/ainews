@@ -24,6 +24,28 @@ from services.themes.models import (
 )
 
 
+def _check_contrast(
+    findings: list[ThemeDiagnostic],
+    fg: Color,
+    bg: Color,
+    threshold: float,
+    field: str,
+    code: str,
+    message: str,
+    severity: Severity = Severity.WARNING,
+) -> None:
+    ratio = contrast_ratio(fg, bg)
+    if ratio < threshold:
+        findings.append(
+            ThemeDiagnostic(
+                severity=severity,
+                field=field,
+                message=f"{message} contrast {ratio:.2f} < {threshold}",
+                code=code,
+            )
+        )
+
+
 def detect_appearance(theme: HalloyTheme) -> tuple[Literal["light", "dark"], TokenSource]:
     if theme.general.background is not None:
         bg = parse_hex_color(theme.general.background)
@@ -43,101 +65,134 @@ def detect_appearance(theme: HalloyTheme) -> tuple[Literal["light", "dark"], Tok
 
 
 def classify_contrast_findings(theme: AinewsTheme) -> list[ThemeDiagnostic]:
+    """WCAG contrast checks for all text/surface pairings in the theme.
+
+    Thresholds:
+    - Normal text (< 18pt / < 14pt bold): 4.5:1 (AA), 7.0:1 (AAA)
+    - Large text (>= 18pt / >= 14pt bold): 3.0:1 (AA)
+    - Non-text controls (icons, badges, focus rings): 3.0:1
+
+    Diagnostic codes use the ``contrast.<pair>`` pattern for stable identification.
+    """
     findings: list[ThemeDiagnostic] = []
 
     tp = parse_hex_color(theme.text_primary)
     bg = parse_hex_color(theme.bg_primary)
-    ratio = contrast_ratio(tp, bg)
-    if ratio < 4.5:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.ERROR,
-                field="text_primary",
-                message=f"Primary text vs bg_primary contrast {ratio:.2f} < 4.5",
-                code="contrast.primary_text",
-            )
-        )
-    elif ratio < 7.0:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="text_primary",
-                message=f"Primary text vs bg_primary contrast {ratio:.2f} < 7.0 (AAA)",
-                code="contrast.primary_text",
-            )
-        )
-
-    ts = parse_hex_color(theme.text_secondary)
     bg2 = parse_hex_color(theme.bg_secondary)
-    ratio2 = contrast_ratio(ts, bg2)
-    if ratio2 < 4.5:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="text_secondary",
-                message=f"Secondary text vs bg_secondary contrast {ratio2:.2f} < 4.5",
-                code="contrast.secondary_text",
-            )
-        )
-
+    bg_input = parse_hex_color(theme.bg_input)
+    bg_selected = parse_hex_color(theme.bg_selected)
+    ts = parse_hex_color(theme.text_secondary)
+    tm = parse_hex_color(theme.text_muted)
     accent = parse_hex_color(theme.accent)
-    ratio3 = contrast_ratio(accent, bg)
-    if ratio3 < 4.5:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="accent",
-                message=f"Accent vs bg_primary contrast {ratio3:.2f} < 4.5",
-                code="contrast.accent_link",
-            )
-        )
-
-    ratio4 = contrast_ratio(tp, accent)
-    if ratio4 < 4.5:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="accent",
-                message=f"Primary text on accent (button) contrast {ratio4:.2f} < 4.5",
-                code="contrast.button_text",
-            )
-        )
-
     fr = parse_hex_color(theme.focus_ring)
-    ratio5 = contrast_ratio(fr, bg)
-    if ratio5 < 3.0:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="focus_ring",
-                message=f"Focus ring vs bg_primary contrast {ratio5:.2f} < 3.0",
-                code="contrast.focus_ring",
-            )
-        )
-
     err = parse_hex_color(theme.error)
-    ratio6 = contrast_ratio(err, bg)
-    if ratio6 < 4.5:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="error",
-                message=f"Error vs bg_primary contrast {ratio6:.2f} < 4.5",
-                code="contrast.error",
-            )
-        )
-
     succ = parse_hex_color(theme.success)
-    ratio7 = contrast_ratio(succ, bg)
-    if ratio7 < 4.5:
-        findings.append(
-            ThemeDiagnostic(
-                severity=Severity.WARNING,
-                field="success",
-                message=f"Success vs bg_primary contrast {ratio7:.2f} < 4.5",
-                code="contrast.success",
-            )
-        )
+    link = parse_hex_color(theme.link)
+
+    # 1. Primary text vs page background (normal text — 4.5 AA, 7.0 AAA)
+    _check_contrast(findings, tp, bg, 4.5, "text_primary", "contrast.primary_text",
+                    "Primary text vs bg_primary", Severity.ERROR)
+    _check_contrast(findings, tp, bg, 7.0, "text_primary", "contrast.primary_text",
+                    "Primary text vs bg_primary")
+
+    # 2. Secondary text vs content background (normal text — 4.5 AA)
+    _check_contrast(findings, ts, bg2, 4.5, "text_secondary", "contrast.secondary_text",
+                    "Secondary text vs bg_secondary")
+
+    # 3. Muted text vs content background (normal text — 4.5 AA)
+    _check_contrast(findings, tm, bg2, 4.5, "text_muted", "contrast.muted_text",
+                    "Muted text vs bg_secondary")
+
+    # 4. Accent/link color vs page background (normal text — 4.5 AA)
+    _check_contrast(findings, accent, bg, 4.5, "accent", "contrast.accent_link",
+                    "Accent vs bg_primary")
+
+    # 5. Link vs page background (normal text — 4.5 AA)
+    _check_contrast(findings, link, bg, 4.5, "link", "contrast.link",
+                    "Link vs bg_primary")
+
+    # 6. Link vs content background (normal text — 4.5 AA)
+    _check_contrast(findings, link, bg2, 4.5, "link", "contrast.link",
+                    "Link vs bg_secondary")
+
+    # 7. Button text (primary text on accent) — normal text — 4.5 AA
+    _check_contrast(findings, tp, accent, 4.5, "accent", "contrast.button_text",
+                    "Primary text on accent (button)")
+
+    # 8. Focus ring vs page background (non-text control — 3.0 AA)
+    _check_contrast(findings, fr, bg, 3.0, "focus_ring", "contrast.focus_ring",
+                    "Focus ring vs bg_primary")
+
+    # 9. Focus ring vs content background (non-text control — 3.0 AA)
+    _check_contrast(findings, fr, bg2, 3.0, "focus_ring", "contrast.focus_ring",
+                    "Focus ring vs bg_secondary")
+
+    # 10. Focus ring vs input background (non-text control — 3.0 AA)
+    _check_contrast(findings, fr, bg_input, 3.0, "focus_ring", "contrast.focus_ring",
+                    "Focus ring vs bg_input")
+
+    # 11. Error vs page background (normal text — 4.5 AA)
+    _check_contrast(findings, err, bg, 4.5, "error", "contrast.error",
+                    "Error vs bg_primary")
+
+    # 12. Success vs page background (normal text — 4.5 AA)
+    _check_contrast(findings, succ, bg, 4.5, "success", "contrast.success",
+                    "Success vs bg_primary")
+
+    # 13. Input text vs input background (normal text — 4.5 AA)
+    _check_contrast(findings, tp, bg_input, 4.5, "bg_input", "contrast.input_text",
+                    "Input text vs bg_input")
+
+    # 14. Selected text vs selected surface (normal text — 4.5 AA)
+    _check_contrast(findings, tp, bg_selected, 4.5, "bg_selected", "contrast.selection",
+                    "Selected text vs bg_selected")
+
+    return findings
+
+
+def classify_accessibility_findings(theme: AinewsTheme) -> list[ThemeDiagnostic]:
+    """Accessibility checks for non-text controls and status colors.
+
+    Validates:
+    - Category badge colors have >= 3:1 contrast against page background (non-text control)
+    - Status colors (success/error/warning/info) have >= 4.5:1 against page background
+    - Focus ring has >= 3:1 against all surfaces it could appear on
+
+    Diagnostic codes use the ``contrast.<pair>`` pattern for stable identification.
+    """
+    findings: list[ThemeDiagnostic] = []
+
+    bg = parse_hex_color(theme.bg_primary)
+    bg2 = parse_hex_color(theme.bg_secondary)
+    bg_input = parse_hex_color(theme.bg_input)
+    fr = parse_hex_color(theme.focus_ring)
+
+    # Category badge colors — non-text controls, 3:1 threshold
+    category_fields = [
+        ("category_ai", "AI"),
+        ("category_privacy", "Privacy"),
+        ("category_security", "Security"),
+        ("category_programming", "Programming"),
+        ("category_hardware", "Hardware"),
+        ("category_other", "Other"),
+    ]
+    for field_name, label in category_fields:
+        cat_color = parse_hex_color(getattr(theme, field_name))
+        _check_contrast(findings, cat_color, bg, 3.0, field_name, "contrast.category_badge",
+                        f"Category badge '{label}' vs bg_primary")
+
+    # Status colors vs page background — normal text, 4.5 threshold
+    status_fields = ["success", "error", "warning", "info"]
+    for field_name in status_fields:
+        status_color = parse_hex_color(getattr(theme, field_name))
+        _check_contrast(findings, status_color, bg, 4.5, field_name, f"contrast.{field_name}",
+                        f"Status '{field_name}' vs bg_primary")
+
+    # Focus ring vs all surfaces — non-text control, 3:1 threshold
+    surfaces = [("bg_primary", bg), ("bg_secondary", bg2), ("bg_input", bg_input)]
+    for surface_name, surface_color in surfaces:
+        _check_contrast(findings, fr, surface_color, 3.0, "focus_ring", "contrast.focus_ring",
+                        f"Focus ring vs {surface_name}")
 
     return findings
 

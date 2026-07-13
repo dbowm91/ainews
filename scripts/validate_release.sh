@@ -165,6 +165,8 @@ if [ "$MODE" = "fast" ]; then
 
     run_step "Ruff lint" uv run ruff check . --exclude .venv || true
 
+    run_step "Bundled theme validation" uv run python scripts/validate_themes.py --bundled || true
+
     run_step "Production config smoke" uv run pytest tests/test_smoke_production_config.py -q || true
 
     run_step "Docs/env consistency" uv run pytest tests/test_docs_env_consistency.py -q || true
@@ -240,6 +242,9 @@ echo -e "${YELLOW}--- Full Mode: lint + tests + smoke + Docker + Compose ---${NC
 
 # Step 1: Ruff lint
 run_step "Ruff lint" uv run ruff check . --exclude .venv || true
+
+# Step 1.5: Bundled theme validation
+run_step "Bundled theme validation" uv run python scripts/validate_themes.py --bundled --strict || true
 
 # Step 2: Full test suite
 run_step "Full test suite" uv run pytest tests/ -q || true

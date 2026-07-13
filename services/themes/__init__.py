@@ -83,6 +83,7 @@ from services.themes.registry import (
     build_registry,
 )
 from services.themes.translate import (
+    classify_accessibility_findings,
     classify_contrast_findings,
     detect_appearance,
     to_css_variables,
@@ -124,6 +125,7 @@ __all__ = [
     "translate_theme",
     "detect_appearance",
     "classify_contrast_findings",
+    "classify_accessibility_findings",
     "to_css_variables",
     # Manifest
     "BundledThemeEntry",

@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 
 from flask import Blueprint, Response, abort, jsonify, request
-from markupsafe import escape
 
 from services.themes.loader import get_app_registry
 
@@ -40,24 +39,17 @@ def serve_theme_css(theme_id: str) -> Response:
     if not css:
         abort(404, description=f"Theme '{theme_id}' has no CSS output")
 
-    etag = f'"{registered.content_digest}"'
-
-    if_none_match = request.headers.get("If-None-Match")
-    if if_none_match and if_none_match.strip() == etag:
-        return Response(status=304)
-
     response = Response(
         css,
         mimetype="text/css",
         headers={
             "Content-Type": "text/css; charset=utf-8",
             "Cache-Control": "public, max-age=300",
-            "ETag": etag,
             "X-Content-Type-Options": "nosniff",
         },
     )
-
-    return response
+    response.set_etag(registered.content_digest)
+    return response.make_conditional(request)
 
 
 def _build_safe_metadata() -> dict | None:
@@ -65,6 +57,8 @@ def _build_safe_metadata() -> dict | None:
 
     Returns None if the theme registry is not available.
     Excludes emergency themes — they are internal fallbacks.
+    Display names are plain validated strings; Jinja tojson and Flask
+    jsonify handle serialization safely without pre-escaping.
     """
     registry = get_app_registry()
     if registry is None:
@@ -76,7 +70,7 @@ def _build_safe_metadata() -> dict | None:
         },
         "themes": {
             theme_id: {
-                "name": str(escape(theme.display_name)),
+                "name": theme.display_name,
                 "appearance": theme.appearance,
                 "css_url": f"/assets/themes/{theme_id}.css",
                 "origin": theme.origin.kind,

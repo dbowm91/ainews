@@ -126,6 +126,22 @@ class TestThemeMetadataEndpoint:
                 f"Unescaped script tag in display name for {theme_id}"
             )
 
+    def test_metadata_display_names_not_double_escaped(self, _client):
+        """Display names in JSON are not HTML-escaped (no &amp; entities)."""
+        resp = _client.get("/api/v1/themes/metadata")
+        data = json.loads(resp.data)
+        for theme_id, info in data["themes"].items():
+            name = info["name"]
+            assert "&amp;" not in name, (
+                f"Double-escaped & in display name for {theme_id}"
+            )
+            assert "&lt;" not in name, (
+                f"Double-escaped < in display name for {theme_id}"
+            )
+            assert "&gt;" not in name, (
+                f"Double-escaped > in display name for {theme_id}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Context processor injection
@@ -204,6 +220,70 @@ class TestTemplateMetadataRendering:
         html = resp.data.decode("utf-8")
         assert "theme-selector" in html
         assert "theme-selector-panel" in html
+
+
+# ---------------------------------------------------------------------------
+# Stylesheet ownership (Workstream A regression)
+# ---------------------------------------------------------------------------
+
+class TestStylesheetOwnership:
+    """Application CSS and palette CSS are separate, independent links."""
+
+    def test_base_has_both_stylesheet_links(self, _client):
+        """base.html includes both app-stylesheet and theme-stylesheet."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-app-stylesheet"' in html
+        assert 'id="ainews-theme-stylesheet"' in html
+
+    def test_app_stylesheet_is_permanent(self, _client):
+        """App stylesheet links to the full CSS, not palette-only."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        # App stylesheet should reference style.css
+        assert 'id="ainews-app-stylesheet"' in html
+        assert "style.css" in html
+
+    def test_theme_stylesheet_starts_empty(self, _client):
+        """Theme palette stylesheet starts with empty href (filled by JS)."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        # Find the theme-stylesheet link and check its href is empty
+        import re
+        match = re.search(
+            r'id="ainews-theme-stylesheet"[^>]*href="([^"]*)"',
+            html,
+        )
+        assert match is not None, "Theme stylesheet link not found"
+        assert match.group(1) == "", f"Theme href should be empty, got: {match.group(1)}"
+
+    def test_admin_has_both_stylesheet_links(self, _client):
+        """base_admin.html includes both app and theme stylesheet links."""
+        resp = _client.get("/admin/login")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-app-stylesheet"' in html
+        assert 'id="ainews-theme-stylesheet"' in html
+
+    def test_theme_stylesheet_never_points_to_style_css(self, _client):
+        """Theme stylesheet never references the full app CSS."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        import re
+        match = re.search(
+            r'id="ainews-theme-stylesheet"[^>]*href="([^"]*)"',
+            html,
+        )
+        assert match is not None
+        href = match.group(1)
+        assert "style.css" not in href, "Theme stylesheet must not point to style.css"
+        assert "style.bundled.css" not in href, "Theme stylesheet must not point to style.bundled.css"
+
+    def test_login_has_both_links(self, _client):
+        """Admin login page has both app and theme stylesheet links."""
+        resp = _client.get("/admin/login")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-app-stylesheet"' in html
+        assert 'id="ainews-theme-stylesheet"' in html
 
 
 # ---------------------------------------------------------------------------

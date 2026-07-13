@@ -219,6 +219,8 @@ The emergency theme (`__emergency__`) cannot be overridden by external themes.
 - **Restart required**: Theme files are parsed once at application startup. Adding, removing, or modifying files requires a process restart.
 - **Browser cache**: The CSS route serves with `ETag` and `Cache-Control: public, max-age=300`. When the CSS content changes, the ETag changes automatically. Hard-refresh (`Ctrl+Shift+R`) or wait up to 5 minutes for the browser to re-fetch.
 - **Cross-tab sync**: The browser preference system syncs across tabs via `storage` events. Switching themes in one tab immediately updates all other open tabs.
+- **Two-stylesheet architecture:** The app stylesheet (`#ainews-app-stylesheet`) is permanent and contains all structural/layout CSS. The theme palette link (`#ainews-theme-stylesheet`) is replaceable and contains only CSS custom properties. Theme switching swaps only the palette link, never the app link.
+- **Palette-only output:** Generated theme CSS contains only CSS custom property definitions within a `:root` block. No element selectors, media queries, or other CSS rules are present.
 
 ## Minimal Valid Example
 

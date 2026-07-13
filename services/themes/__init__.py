@@ -156,6 +156,7 @@ __all__ += [
     "build_app_registry",
     "build_settings_from_config",
     "get_app_registry",
+    "get_diagnostics",
     "load_bundle_from_resources",
     "load_bundled_manifest",
 ]

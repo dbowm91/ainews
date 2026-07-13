@@ -257,6 +257,8 @@ Implemented in `classify_contrast_findings()` at `services/themes/translate.py:4
 
 All hex colors are lowercase `#rrggbb`. Alpha variants use `rgba(r,g,b,a)` format where the alpha value matches the existing `static/css/variables.css` contract: `-alpha-08` = `0.08`, `-alpha-10` = `0.10`, `-alpha-25` = `0.25`. The variable names match those in `static/css/variables.css`.
 
+Generated theme CSS consists exclusively of CSS custom property definitions within a `:root` block. No element selectors, class selectors, media queries, or other CSS rules are permitted. Structural tokens (fonts, spacing, radius, z-index) are defined in `static/css/variables.css` and must not appear in generated theme CSS. Theme CSS overrides palette tokens only.
+
 ## Properties of the translation
 
 - **Pure**: no I/O, no network, no database
@@ -441,13 +443,16 @@ browser-consumable tokens.
 |--------|-------|
 | ``Content-Type`` | ``text/css; charset=utf-8`` |
 | ``Cache-Control`` | ``public, max-age=300`` |
-| ``ETag`` | ``"`` + content digest (SHA-256 of CSS body) + ``"`` |
+| ``ETag`` | ``"`` + content digest (SHA-256 of CSS body) + ``"`` (set via ``response.set_etag()``) |
 | ``X-Content-Type-Options`` | ``nosniff`` |
 
 ### 13.3 Conditional requests
 
 If the client sends ``If-None-Match`` with a matching ETag, the route returns
 ``304 Not Modified`` with no body. This avoids re-transmitting unchanged CSS.
+Conditional request handling uses ``response.set_etag()`` and
+``response.make_conditional(request)`` from Werkzeug for standards-compliant
+ETag matching, weak comparison, and multiple validator support.
 
 ### 13.4 CSS output structure
 
@@ -466,6 +471,8 @@ If the client sends ``If-None-Match`` with a matching ETag, the route returns
 
 Both legacy and semantic names are emitted. Components should prefer semantic
 names; legacy names remain available for backward compatibility.
+
+The entire output is a single `:root` block containing only custom property definitions. No other CSS constructs (selectors, at-rules, comments) are present in generated theme CSS.
 
 ### 13.5 Fallback palette
 

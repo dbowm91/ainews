@@ -1,16 +1,9 @@
 /**
  * AinewsTheme — browser theme preference controller
  *
- * Implements Phase 4 workstreams 1-6, 10-12:
- *   1. Preference schema (ainews-theme-preference-v2)
- *   2. Legacy migration from ainews-theme
- *   3. Registry metadata from #ainews-theme-metadata script tag
- *   4. No-flash bootstrap
- *   5. Stylesheet controller with failure recovery
- *   6. System mode (matchMedia-driven)
- *  10. Cross-tab sync via storage event
- *  11. Accessibility (prefers-reduced-motion)
- *  12. Storage/privacy (localStorage only, no server persistence)
+ * Manages two independent stylesheet roles:
+ *   1. Application stylesheet (id="ainews-app-stylesheet") — permanent, never touched
+ *   2. Theme palette stylesheet (id="ainews-theme-stylesheet") — replaceable palette vars only
  *
  * localStorage key: ainews-theme-preference-v2
  * Values: "system" | "theme:<normalized-id>"
@@ -28,10 +21,10 @@
   var PREFERENCE_KEY = 'ainews-theme-preference-v2';
   var LEGACY_KEY = 'ainews-theme';
   var METADATA_SELECTOR = '#ainews-theme-metadata';
-  var STYLESHEET_ID = 'ainews-theme-stylesheet';
+  var APP_STYLESHEET_ID = 'ainews-app-stylesheet';
+  var PALETTE_STYLESHEET_ID = 'ainews-theme-stylesheet';
   var PREFERENCE_PREFIX = 'theme:';
   var TRANSITION_DURATION_MS = 300;
-  var INITIAL_TRANSITION_DELAY_MS = 50;
 
   /* ------------------------------------------------------------------ */
   /* State                                                              */
@@ -40,16 +33,15 @@
   var _initialized = false;
   var _preferencesFromStorage = false;
   var _activatedThemeId = null;
-  var _initialActivationDone = false;
   var _stylesheetErrorCount = 0;
   var _maxStylesheetErrors = 3;
+  var _activationGeneration = 0;
 
-  var _registry = null;    // { defaults: { dark, light }, themes: { id: { name, appearance, css_url, origin } } }
+  var _registry = null;
   var _currentPreference = 'system';
   var _resolvedThemeId = null;
 
-  var _mediaQuery = null;   // matchMedia('(prefers-color-scheme: dark)')
-  var _mediaListener = null;
+  var _mediaQuery = null;
 
   /* ------------------------------------------------------------------ */
   /* Storage helpers                                                    */
@@ -83,11 +75,6 @@
   /* Preference parsing                                                 */
   /* ------------------------------------------------------------------ */
 
-  /**
-   * Parse stored preference string into a normalized value.
-   * Returns "system" or "theme:<id>".
-   * Unknown/malformed values fall back to "system".
-   */
   function parsePreference(raw) {
     if (typeof raw !== 'string' || raw.length === 0) {
       return 'system';
@@ -117,7 +104,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Registry metadata (Workstream 3)                                   */
+  /* Registry metadata                                                  */
   /* ------------------------------------------------------------------ */
 
   function readRegistryMetadata() {
@@ -136,7 +123,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Legacy migration (Workstream 2)                                    */
+  /* Legacy migration                                                   */
   /* ------------------------------------------------------------------ */
 
   function migrateLegacyPreference(registry) {
@@ -166,13 +153,16 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Theme resolution (Workstream 6)                                    */
+  /* Theme resolution                                                   */
   /* ------------------------------------------------------------------ */
 
+  function isRegisteredThemeId(id, registry) {
+    return !!(registry && registry.themes && registry.themes[id]);
+  }
+
   function resolveExplicitThemeId(id, registry) {
-    if (!registry || !registry.themes) return null;
-    if (registry.themes[id]) return id;
-    return null;
+    if (!isRegisteredThemeId(id, registry)) return null;
+    return id;
   }
 
   function resolveSystemTheme(registry) {
@@ -188,7 +178,9 @@
     if (isExplicitPreference(preference)) {
       var id = preferenceThemeId(preference);
       var resolved = resolveExplicitThemeId(id, registry);
-      return resolved || id;
+      if (resolved) return resolved;
+      _currentPreference = 'system';
+      return resolveSystemTheme(registry);
     }
     return resolveSystemTheme(registry);
   }
@@ -210,16 +202,32 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Stylesheet controller (Workstream 5)                               */
+  /* Palette stylesheet controller                                       */
   /* ------------------------------------------------------------------ */
 
-  function getExistingStylesheet() {
-    return document.getElementById(STYLESHEET_ID);
+  function getPaletteStylesheet() {
+    return document.getElementById(PALETTE_STYLESHEET_ID);
   }
 
-  function activateStylesheet(cssUrl, callback) {
-    var existing = getExistingStylesheet();
-    var currentHref = existing ? existing.getAttribute('href') : null;
+  function ensurePaletteLink() {
+    var link = getPaletteStylesheet();
+    if (link) return link;
+    link = document.createElement('link');
+    link.id = PALETTE_STYLESHEET_ID;
+    link.rel = 'stylesheet';
+    link.href = '';
+    var appLink = document.getElementById(APP_STYLESHEET_ID);
+    if (appLink && appLink.parentNode) {
+      appLink.parentNode.insertBefore(link, appLink.nextSibling);
+    } else {
+      (document.head || document.getElementsByTagName('head')[0]).appendChild(link);
+    }
+    return link;
+  }
+
+  function activateStylesheet(cssUrl, generation, callback) {
+    var currentLink = getPaletteStylesheet();
+    var currentHref = currentLink ? currentLink.getAttribute('href') : null;
 
     if (currentHref === cssUrl) {
       if (callback) callback(null);
@@ -227,19 +235,24 @@
     }
 
     var link = document.createElement('link');
-    link.id = STYLESHEET_ID + '-pending';
+    link.id = PALETTE_STYLESHEET_ID + '-pending';
     link.rel = 'stylesheet';
     link.href = cssUrl;
 
     var loadHandler = function () {
       cleanup();
-      var finalLink = getExistingStylesheet() || existing;
-      if (finalLink && finalLink.parentNode) {
-        finalLink.parentNode.removeChild(finalLink);
+      if (generation !== _activationGeneration) {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        return;
       }
-      link.id = STYLESHEET_ID;
+      var oldLink = getPaletteStylesheet();
+      if (oldLink && oldLink !== link && oldLink.parentNode) {
+        oldLink.parentNode.removeChild(oldLink);
+      }
+      link.id = PALETTE_STYLESHEET_ID;
       link.removeEventListener('load', loadHandler);
       link.removeEventListener('error', errorHandler);
+      _stylesheetErrorCount = 0;
       if (callback) callback(null);
     };
 
@@ -248,7 +261,9 @@
       link.removeEventListener('load', loadHandler);
       link.removeEventListener('error', errorHandler);
       if (link.parentNode) link.parentNode.removeChild(link);
-      _stylesheetErrorCount++;
+      if (generation === _activationGeneration) {
+        _stylesheetErrorCount++;
+      }
       if (callback) callback(new Error('Stylesheet load failed'));
     };
 
@@ -257,39 +272,34 @@
     link.addEventListener('load', loadHandler);
     link.addEventListener('error', errorHandler);
 
-    if (existing && existing.parentNode) {
-      existing.parentNode.insertBefore(link, existing.nextSibling);
+    if (currentLink && currentLink.parentNode) {
+      currentLink.parentNode.insertBefore(link, currentLink.nextSibling);
     } else {
-      (document.head || document.getElementsByTagName('head')[0]).appendChild(link);
-    }
-  }
-
-  function deactivateStylesheet() {
-    var link = getExistingStylesheet();
-    if (link && link.parentNode) {
-      link.parentNode.removeChild(link);
+      ensurePaletteLink();
+      var palette = getPaletteStylesheet();
+      if (palette && palette !== link && palette.parentNode) {
+        palette.parentNode.insertBefore(link, palette.nextSibling);
+      } else {
+        (document.head || document.getElementsByTagName('head')[0]).appendChild(link);
+      }
     }
   }
 
   /* ------------------------------------------------------------------ */
-  /* Transition helper (Workstream 11)                                  */
+  /* Transition helper                                                  */
   /* ------------------------------------------------------------------ */
 
-  function addThemeTransition() {
-    if (_initialActivationDone) return;
+  function addThemeTransition(skipTransition) {
+    if (skipTransition) return;
     var prefersReduced = false;
     try {
       prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     } catch (e) { /* ignore */ }
-    if (prefersReduced) {
-      _initialActivationDone = true;
-      return;
-    }
+    if (prefersReduced) return;
     var html = document.documentElement;
     html.classList.add('theme-transitioning');
     setTimeout(function () {
       html.classList.remove('theme-transitioning');
-      _initialActivationDone = true;
     }, TRANSITION_DURATION_MS);
   }
 
@@ -300,6 +310,7 @@
   function activateTheme(themeId, registry, options) {
     options = options || {};
     var skipPersist = !!options.skipPersist;
+    var skipTransition = !!options.skipTransition;
 
     if (!themeId) {
       themeId = (registry && registry.defaults) ? registry.defaults.dark : null;
@@ -325,25 +336,17 @@
 
     if (_stylesheetErrorCount >= _maxStylesheetErrors) return;
 
+    var generation = ++_activationGeneration;
+
     setDocumentTheme(themeId, appearance);
 
-    activateStylesheet(cssUrl, function (err) {
+    activateStylesheet(cssUrl, generation, function (err) {
+      if (generation !== _activationGeneration) return;
+
       if (err) {
         if (_stylesheetErrorCount >= _maxStylesheetErrors) {
-          var fallbackAppearance = (registry && registry.defaults) ? 'dark' : null;
-          var fallbackId = (registry && registry.defaults) ? registry.defaults.dark : null;
-          if (fallbackId) {
-            deactivateStylesheet();
-            setDocumentTheme(fallbackId, fallbackAppearance || 'dark');
-            var fallbackUrl = '/assets/themes/' + fallbackId + '.css';
-            activateStylesheet(fallbackUrl, null);
-          }
           storageRemove(PREFERENCE_KEY);
           return;
-        }
-        var fallbackTheme = (registry && registry.defaults) ? registry.defaults.dark : null;
-        if (fallbackTheme && fallbackTheme !== themeId) {
-          activateTheme(fallbackTheme, registry, { skipPersist: true });
         }
         return;
       }
@@ -355,19 +358,19 @@
       _activatedThemeId = themeId;
       _resolvedThemeId = themeId;
 
-      addThemeTransition();
+      addThemeTransition(skipTransition);
     });
   }
 
   /* ------------------------------------------------------------------ */
-  /* System mode media listener (Workstream 6)                          */
+  /* System mode media listener                                         */
   /* ------------------------------------------------------------------ */
 
   function onSystemPreferenceChange() {
     if (!isExplicitPreference(_currentPreference) && _registry) {
       var newThemeId = resolveSystemTheme(_registry);
       if (newThemeId && newThemeId !== _activatedThemeId) {
-        activateTheme(newThemeId, _registry);
+        activateTheme(newThemeId, _registry, { skipTransition: false });
       }
     }
   }
@@ -393,7 +396,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Cross-tab sync (Workstream 10)                                     */
+  /* Cross-tab sync                                                     */
   /* ------------------------------------------------------------------ */
 
   function onStorageEvent(e) {
@@ -426,14 +429,10 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Public API (Workstream 5)                                          */
+  /* Public API                                                         */
   /* ------------------------------------------------------------------ */
 
   var controller = {
-    /**
-     * Activate a theme by registry ID.
-     * Only known registry IDs are accepted.
-     */
     activate: function (themeId) {
       if (!themeId || !_registry) return;
       var resolved = resolveExplicitThemeId(themeId, _registry);
@@ -443,39 +442,24 @@
       activateTheme(resolved, _registry);
     },
 
-    /**
-     * Set preference to system mode (follow OS light/dark).
-     */
     setSystem: function () {
       _currentPreference = 'system';
       var themeId = resolveSystemTheme(_registry);
       if (themeId) activateTheme(themeId, _registry);
     },
 
-    /**
-     * Get the current resolved theme ID.
-     */
     getActiveThemeId: function () {
       return _activatedThemeId;
     },
 
-    /**
-     * Get the current preference string.
-     */
     getPreference: function () {
       return _currentPreference;
     },
 
-    /**
-     * Get the registry metadata.
-     */
     getRegistry: function () {
       return _registry;
     },
 
-    /**
-     * Check if preference is in system mode.
-     */
     isSystemMode: function () {
       return !isExplicitPreference(_currentPreference);
     }
@@ -513,7 +497,7 @@
   };
 
   /* ------------------------------------------------------------------ */
-  /* Selector panel (Workstream 7)                                      */
+  /* Selector panel                                                     */
   /* ------------------------------------------------------------------ */
 
   function initSelectorPanel() {
@@ -717,11 +701,11 @@
     var themeId = resolveTheme(_currentPreference, _registry);
 
     if (themeId) {
-      activateTheme(themeId, _registry);
+      activateTheme(themeId, _registry, { skipTransition: true });
     } else {
       var defaultId = (_registry && _registry.defaults) ? _registry.defaults.dark : null;
       if (defaultId) {
-        activateTheme(defaultId, _registry);
+        activateTheme(defaultId, _registry, { skipTransition: true });
       } else {
         setDocumentTheme('dark', 'dark');
       }

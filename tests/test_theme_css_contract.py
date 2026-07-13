@@ -256,3 +256,76 @@ class TestNoObsoleteFixedAlphas:
         # Check that accent-alpha-10 uses these RGB values
         expected = f"rgba({r},{g},{b},"
         assert f"--accent-alpha-10: {expected}" in emergency_css
+
+
+# ---------------------------------------------------------------------------
+# CSS allowlist (palette-only contract)
+# ---------------------------------------------------------------------------
+
+class TestCSSAllowlist:
+    """Theme CSS must be palette-only: no selectors, no @rules, no imports."""
+
+    def test_no_data_theme_selectors(self, emergency_css):
+        """Theme CSS contains no [data-theme=...] selectors."""
+        assert "[data-theme=" not in emergency_css
+
+    def test_no_media_queries(self, emergency_css):
+        """Theme CSS contains no @media rules."""
+        assert "@media" not in emergency_css
+
+    def test_no_import_rules(self, emergency_css):
+        """Theme CSS contains no @import rules."""
+        assert "@import" not in emergency_css
+
+    def test_no_font_face(self, emergency_css):
+        """Theme CSS contains no @font-face rules."""
+        assert "@font-face" not in emergency_css
+
+    def test_no_keyframes(self, emergency_css):
+        """Theme CSS contains no @keyframes rules."""
+        assert "@keyframes" not in emergency_css
+
+    def test_no_html_selectors(self, emergency_css):
+        """Theme CSS contains no element selectors (only :root)."""
+        lines = emergency_css.strip().split("\n")
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped == ":root {" or stripped == "}":
+                continue
+            if stripped.startswith(":root"):
+                continue
+            # Should be a --var declaration, not a selector
+            assert not stripped.endswith("{"), f"Unexpected selector: {stripped}"
+
+    def test_no_duplicate_variables(self, emergency_css):
+        """No CSS variable is declared more than once."""
+        seen: dict[str, int] = {}
+        for i, line in enumerate(emergency_css.strip().split("\n"), 1):
+            stripped = line.strip()
+            match = re.match(r"^(--[a-z0-9-]+):", stripped)
+            if match:
+                var_name = match.group(1)
+                if var_name in seen:
+                    pytest.fail(
+                        f"Duplicate variable {var_name} at lines {seen[var_name]} and {i}"
+                    )
+                seen[var_name] = i
+
+    def test_only_uses_var_references(self, emergency_css):
+        """Values only use static colors, rgba(), or var() references."""
+        lines = emergency_css.strip().split("\n")
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped == ":root {" or stripped == "}":
+                continue
+            # Extract value after the colon
+            match = re.match(r"^--[a-z0-9-]+:\s*(.+);?$", stripped)
+            if match:
+                value = match.group(1).strip().rstrip(";").strip()
+                # Allow hex colors, rgba(), var(), and simple values
+                assert (
+                    value.startswith("#")
+                    or value.startswith("rgba(")
+                    or value.startswith("var(")
+                    or re.match(r"^[a-z0-9]+$", value)
+                ), f"Unexpected value type: {stripped}"

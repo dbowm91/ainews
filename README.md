@@ -95,7 +95,7 @@ Nginx → Granian (ASGI) → Flask
 
 ### Themes
 
-ainews ships with 48 built-in dark/light themes derived from Halloy IRC themes (Catppuccin, Dracula, Gruvbox, Nord, Rose Pine, Solarized, etc.). Operators can add custom themes via `THEMES_CUSTOM_DIR`. See [Theme Authoring Guide](docs/theme-authoring.md) for creating compatible themes.
+ainews ships with 48 built-in dark/light themes derived from Halloy IRC themes (Catppuccin, Dracula, Gruvbox, Nord, Rose Pine, Solarized, etc.). Application layout CSS is permanent; theme CSS provides palette variables only. Operators can add custom themes via `THEMES_CUSTOM_DIR`. See [Theme Authoring Guide](docs/theme-authoring.md) for creating compatible themes.
 
 ## Features
 
@@ -110,7 +110,7 @@ ainews ships with 48 built-in dark/light themes derived from Halloy IRC themes (
 - **Safe Fetch Client** — First-party SSRF-protected HTTP client with manual redirect validation, streaming byte limits, and content-type allowlist
 - **Newsletter Generation** — Daily newsletters with per-subscriber topic filtering and delivery tracking
 - **RSS Output** — Published feed at `/feed` for downstream consumption
-- **Themeable Frontend** — 48 packaged Halloy-compatible themes under `resources/themes/` with manifest, code-defined emergency fallback, and operator-configurable external custom directory. Themes are parsed once at startup; immutable `ThemeRegistry` exposes deterministic lookup for later CSS delivery phases. See [Halloy Theme Contract](docs/halloy-theme-contract.md) §12.
+- **Themeable Frontend** — 48 packaged Halloy-compatible themes under `resources/themes/` with manifest, code-defined emergency fallback, and operator-configurable external custom directory. Themes are parsed once at startup; immutable `ThemeRegistry` exposes deterministic lookup for later CSS delivery phases. Application CSS is permanent; generated theme CSS contains only palette variables. See [Halloy Theme Contract](docs/halloy-theme-contract.md) §12.
 
 ## Configuration
 

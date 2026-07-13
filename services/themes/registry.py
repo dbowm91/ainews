@@ -106,6 +106,8 @@ class RegistryDiagnostics:
     """Build-time diagnostics recorded by :func:`build_registry`."""
 
     diagnostics: tuple[ThemeDiagnostic, ...] = ()
+    overrides: tuple[str, ...] = ()
+    built_at: str = ""
 
     def errors(self) -> list[ThemeDiagnostic]:
         return [d for d in self.diagnostics if d.severity == Severity.ERROR]
@@ -125,6 +127,7 @@ class ThemeRegistry:
     default_id: str
     default_dark_id: str
     default_light_id: str
+    built_at: str = ""
 
     # ------------------------------------------------------------------ access
 
@@ -751,6 +754,9 @@ def build_registry(
         get_emergency_css,
     )
 
+    from datetime import datetime, timezone
+
+    build_time = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     diagnostics: list[ThemeDiagnostic] = []
 
     if not settings.enabled:
@@ -771,6 +777,7 @@ def build_registry(
             default_id=EMERGENCY_THEME_ID,
             default_dark_id=EMERGENCY_THEME_ID,
             default_light_id=EMERGENCY_THEME_ID,
+            built_at=build_time,
         )
         diagnostics.append(
             ThemeDiagnostic(
@@ -780,7 +787,11 @@ def build_registry(
                 code="themes.disabled",
             )
         )
-        return registry, RegistryDiagnostics(tuple(diagnostics))
+        return registry, RegistryDiagnostics(
+            tuple(diagnostics),
+            overrides=(),
+            built_at=build_time,
+        )
 
     # Always build the emergency theme first so we can fall back to it.
     emergency_theme = get_emergency_ainews_theme()
@@ -903,6 +914,7 @@ def build_registry(
         default_id=default_id,
         default_dark_id=default_dark_id,
         default_light_id=default_light_id,
+        built_at=build_time,
     )
 
     # Decide whether to emit a structured error diagnostic when the registry
@@ -919,7 +931,11 @@ def build_registry(
             )
         )
 
-    return registry, RegistryDiagnostics(tuple(diagnostics))
+    return registry, RegistryDiagnostics(
+        tuple(diagnostics),
+        overrides=tuple(overrides),
+        built_at=build_time,
+    )
 
 
 __all__ = [

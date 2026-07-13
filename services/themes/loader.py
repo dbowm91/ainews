@@ -369,6 +369,7 @@ def build_app_registry(
     if not app.extensions:
         app.extensions = {}
     app.extensions["theme_registry"] = registry
+    app.extensions["theme_diagnostics"] = build_diags
     return registry
 
 
@@ -387,10 +388,26 @@ def get_app_registry(app: "Flask | None" = None) -> ThemeRegistry | None:
     return app.extensions.get("theme_registry")
 
 
+def get_diagnostics(app: "Flask | None" = None) -> "RegistryDiagnostics | None":
+    """Return the registry diagnostics attached to ``app`` (or None).
+
+    Use ``current_app`` when ``app`` is omitted.
+    """
+    if app is None:
+        from flask import current_app
+
+        try:
+            app = current_app._get_current_object()  # type: ignore[attr-defined]
+        except RuntimeError:
+            return None
+    return app.extensions.get("theme_diagnostics")
+
+
 __all__ = [
     "build_app_registry",
     "build_settings_from_config",
     "get_app_registry",
+    "get_diagnostics",
     "load_bundle_from_resources",
     "load_bundled_manifest",
 ]

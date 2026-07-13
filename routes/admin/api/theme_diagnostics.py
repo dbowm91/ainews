@@ -1,7 +1,6 @@
 """Admin API endpoint for theme registry diagnostics."""
 
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from flask import Response
@@ -21,7 +20,7 @@ def themes_diagnostics() -> tuple[Response, int]:
     metadata, per-theme summaries (no paths, CSS, or TOML content),
     and aggregate diagnostic counts.
     """
-    from services.themes.loader import get_app_registry
+    from services.themes.loader import get_app_registry, get_diagnostics
     from services.themes.registry import EMERGENCY_RESERVED_ID
 
     registry = get_app_registry()
@@ -31,14 +30,13 @@ def themes_diagnostics() -> tuple[Response, int]:
             status=503,
         )
 
-    # Collect bundled IDs so we can flag external overrides.
-    bundled_ids: set[str] = {
-        tid
-        for tid, t in registry.themes.items()
-        if t.origin.kind == "bundled"
-    }
+    diagnostics_obj = get_diagnostics()
 
-    built_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    built_at = registry.built_at or (
+        diagnostics_obj.built_at if diagnostics_obj else ""
+    )
+
+    override_set = set(diagnostics_obj.overrides) if diagnostics_obj else set()
 
     themes_list: list[dict[str, Any]] = []
     total_errors = 0
@@ -59,8 +57,7 @@ def themes_diagnostics() -> tuple[Response, int]:
                 total_warnings += 1
 
         is_emergency = theme.origin.kind == "emergency"
-        is_external = theme.origin.kind == "external"
-        overrides_bundled = is_external and theme.id in bundled_ids
+        overrides_bundled = theme.id in override_set
 
         entry: dict[str, Any] = {
             "id": theme.id,

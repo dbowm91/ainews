@@ -97,6 +97,7 @@ Diagnostic codes reference `THEME_DIAGNOSTIC_CODES` from `services/themes/errors
 **Resolution:**
 
 - The browser will fall back to the configured default theme automatically (the selector shows the default when the stored ID is not in the registry).
+- **Note:** The application CSS (layout, typography, structural tokens) remains fully loaded even when a stale or unknown theme triggers the fallback. The `#ainews-app-stylesheet` link is permanent and is never removed by `theme.js`, so the page layout and structure are unaffected by a missing theme stylesheet.
 - To force a reset, open browser DevTools → Application → Local Storage → delete the `ainews-theme-preference-v2` key.
 - Cross-tab sync via `storage` events updates other tabs automatically.
 
@@ -112,7 +113,7 @@ Diagnostic codes reference `THEME_DIAGNOSTIC_CODES` from `services/themes/errors
 
 - **Hard refresh:** `Ctrl+Shift+R` (or `Cmd+Shift+R` on macOS) bypasses the cache.
 - **Wait:** Cache expires after 300 seconds.
-- **Verify ETag changed:** Use DevTools Network tab to confirm the server returns `200 OK` with a new `ETag` header. If it returns `304 Not Modified`, the browser cache is still valid.
+- **Verify ETag changed:** Use DevTools Network tab to confirm the server returns `200 OK` with a new `ETag` header. If it returns `304 Not Modified`, the browser cache is still valid. The ETag handling uses Werkzeug's `response.set_etag()` and `response.make_conditional(request)` for standards-compliant conditional requests.
 
 ---
 
@@ -231,7 +232,7 @@ python scripts/validate_themes.py --file theme.toml --format json
 |------|-------------|
 | `themes.external.duplicate` | Duplicate normalized id in external directory |
 | `themes.external.parse` | Could not parse external theme file |
-| `themes.external.override` | External theme overriding bundled entry |
+| `themes.external.override` | External theme overriding bundled entry (`RegistryDiagnostics.overrides` records which bundled IDs were overridden; admin diagnostics API exposes an `overrides_bundled` boolean per theme) |
 | `themes.external.reserved` | External theme shadows reserved emergency identifier |
 
 ### Registry Codes

@@ -106,6 +106,7 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 - **Public API:** `load_halloy_theme()`, `parse_halloy_toml()`, `translate_theme()`, `detect_appearance()`, `to_css_variables()`, `classify_contrast_findings()`. Re-exported from `services/themes/__init__.py`.
 - **DO NOT import Flask into `services/themes/`.** The package is independently testable with zero framework dependencies.
 - **Invalid source values cannot reach CSS output.** `parse_hex_color()` rejects shorthand hex, named colors, `var()`, `url()`, gradients — only `#RRGGBB` and `#RRGGBBAA` are accepted. All rejections raise `ThemeParseError`.
+- **Generated CSS is palette-only.** `to_css_variables()` emits only a `:root` block with custom property definitions. No selectors, media queries, or other CSS rules. Structural tokens live in `static/css/variables.css`.
 - **Translation is pure and deterministic.** `translate_theme()` and `to_css_variables()` have no I/O, no network, no database. Same input always produces same output.
 - **256 KB file size cap** (`MAX_HALLOY_FILE_BYTES`). Enforced at both raw bytes and file stat.
 - **Strict `AinewsTheme`** (`extra="forbid"`) catches unexpected tokens. Halloy models are tolerant (`extra="ignore"`).
@@ -129,9 +130,10 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 - **Route:** `GET /assets/themes/<theme_id>.css` — serves pre-generated CSS from the startup-built registry.
 - **Blueprint:** `routes/themes.py`, registered as `themes_bp` (no auth, public GET-only).
 - **Response:** `text/css; charset=utf-8`, `Cache-Control: public, max-age=300`, `ETag` from content digest, `X-Content-Type-Options: nosniff`.
-- **304 handling:** If-None-Match with matching ETag returns 304.
+- **304 handling:** Uses Werkzeug's response.make_conditional(request) for standards-compliant conditional requests (weak ETags, multiple validators, quoted values).
 - **404 for unknown IDs:** Uses `registry.get_exact()` — unknown IDs return 404, not fallback CSS.
 - **CSS output structure:** `to_css_variables()` emits: palette variables → alpha variants → accent-dim alias → legacy status aliases → semantic aliases.
+- **Palette-only output:** Generated theme CSS contains only CSS custom property definitions within a :root block. No element/class selectors, media queries, or other CSS rules are present.
 - **Fallback palette:** `static/css/variables.css` defines complete fallback defaults. Theme CSS overrides palette tokens only; structural tokens (fonts, spacing, radius, z-index) remain fixed.
 - **Token naming:** Components use `--green`, `--orange`, `--red`, `--purple`, `--pink` (legacy). Theme system adds `--success`, `--warning`, `--error`, `--info` (semantic). Both sets are emitted.
 - **Alpha variants:** `--accent-alpha-*`, `--green-alpha-*`, `--orange-alpha-*`, `--red-alpha-*`, `--purple-alpha-*`, `--category-*-alpha-{15,40}`.
@@ -142,8 +144,8 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 ### Theme Browser Selection (Phase 4)
 - **Preference schema:** `ainews-theme-preference-v2` localStorage key with values `"system"` or `"theme:<normalized-id>"`. Legacy `ainews-theme` values (`dark`/`light`) are migrated to configured default theme IDs on first access.
 - **Registry metadata:** Templates receive `theme_metadata` via context processor from `routes/themes.py`. Embedded as `#ainews-theme-metadata` JSON script tag (no nonce needed — `type="application/json"` is not executable). Includes `defaults.dark`, `defaults.light`, and per-theme `name`, `appearance`, `css_url`, `origin`. Emergency themes excluded.
-- **No-flash bootstrap:** `theme.js` runs synchronously in IIFE. Reads/migrates preference, parses registry, resolves active theme, sets `data-theme-id`, `data-theme-appearance`, and `data-theme` on `<html>`, updates `#ainews-theme-stylesheet` link. Falls back to static styling on failure.
-- **Stylesheet controller:** `window.AinewsTheme` public API with `activate(themeId)`, `setSystem()`, `getActiveThemeId()`, `getPreference()`, `getRegistry()`, `isSystemMode()`. Atomic switching via preload → activate → remove old. Max 3 stylesheet error retries before clearing preference.
+- **No-flash bootstrap:** `theme.js` manages two independent stylesheet roles: a permanent application stylesheet (`#ainews-app-stylesheet`) and a replaceable palette stylesheet (`#ainews-theme-stylesheet`). Only the palette link is updated; the app link is never removed or modified. Reads/migrates preference, parses registry, resolves active theme, sets `data-theme-id`, `data-theme-appearance`, and `data-theme` on `<html>`. Falls back to static styling on failure.
+- **Stylesheet controller:** `window.AinewsTheme` public API with `activate(themeId)`, `setSystem()`, `getActiveThemeId()`, `getPreference()`, `getRegistry()`, `isSystemMode()`. Atomic switching of the palette link via preload → activate → remove old. Only the palette link is swapped; the app link is permanent. Max 3 stylesheet error retries before clearing preference.
 - **System mode:** Uses `matchMedia('(prefers-color-scheme: dark)')` to map OS preference to configured `default_dark`/`default_light` theme IDs. Listens for OS changes while in system mode; ignores changes for explicit selections.
 - **Selector UI:** `templates/partials/theme_selector.html` — accessible popover with search, grouped options (system/built-in/custom), keyboard navigation, mobile bottom-sheet. Replaces `theme_toggle.html` in base templates.
 - **Cross-tab sync:** `storage` event listener on the v2 key. Validates incoming preferences, avoids write-back loops, falls back on unknown IDs.
@@ -153,7 +155,7 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 `scripts/validate_themes.py` validates themes using production helpers. Modes: `--bundled` (all packaged), `--directory DIR` (scan custom), `--file FILE` (single). Flags: `--strict` (warnings fail), `--format json` (machine-readable), `--print-css` (emit CSS). Integrated into `scripts/validate_release.sh`.
 
 ### Theme Admin Diagnostics
-`GET /api/v1/themes/diagnostics` (admin-authenticated) returns registry health, per-theme validity, and aggregate diagnostic counts. Does not expose absolute paths, TOML content, or generated CSS. Uses `Cache-Control: no-store`.
+`GET /api/v1/themes/diagnostics` (admin-authenticated) returns registry health, per-theme validity, aggregate diagnostic counts, `built_at` (real ISO timestamp of registry construction), and `overrides_bundled` per theme. Does not expose absolute paths, TOML content, or generated CSS. Uses `Cache-Control: no-store`.
 
 ### Theme Contrast Policy
 `classify_contrast_findings()` checks 14 WCAG contrast pairings. `classify_accessibility_findings()` checks category badges (3:1) and status colors (4.5:1). Critical primary text < 4.5 raises `ThemeContrastError`. All other failures are warnings.

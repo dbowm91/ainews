@@ -627,6 +627,19 @@ class TestAdminDiagnosticsStructure:
                 assert "warning_codes" in theme
                 assert "content_digest" in theme
 
+    def test_built_at_is_real_timestamp(self, auth_client):
+        """built_at should be a real ISO timestamp, not response time."""
+        resp = auth_client.get("/api/v1/themes/diagnostics")
+        if resp.status_code == 200:
+            data = resp.get_json()
+            built_at = data["data"]["registry"].get("built_at", "")
+            assert built_at, "built_at should be present"
+            assert built_at.endswith("Z"), f"built_at should end with Z: {built_at}"
+            # Should be parseable as ISO format
+            from datetime import datetime
+            dt = datetime.fromisoformat(built_at.replace("Z", "+00:00"))
+            assert dt.tzinfo is not None, "built_at should be timezone-aware"
+
 
 class TestAdminDiagnosticsRedaction:
     """Test that diagnostics redact absolute paths and TOML content."""

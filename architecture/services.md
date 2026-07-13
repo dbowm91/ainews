@@ -75,7 +75,14 @@ services/
 ├── config_cache.py          # Redis config cache (mtime-based)
 ├── config_unified.py        # Unified config access
 ├── config_utils.py          # Celery-safe config helper
-└── url.py                   # URL validation (SSRF prevention)
+├── url.py                   # URL validation (SSRF prevention)
+└── themes/                  # Halloy TOML theme parser & CSS variable translator
+    ├── __init__.py          # Re-exports public API
+    ├── errors.py            # ThemeParseError, ThemeValidationError, ThemeTranslationError, ThemeContrastError
+    ├── colors.py            # Color dataclass, parse/serialize, luminance, contrast, HSL ops
+    ├── models.py            # HalloyTheme (tolerant), AinewsTheme (strict), TokenSource/Provenance
+    ├── halloy.py            # load_halloy_theme(), parse_halloy_toml(), normalize_identifier()
+    └── translate.py         # translate_theme(), detect_appearance(), to_css_variables()
 ```
 
 ## LLM Provider System
@@ -346,6 +353,30 @@ services/search/
 | Session | `session.py` | Shared connection pool with SSRF-safe redirects |
 
 **Note:** DeepSeek is not a search provider. DeepSeek is only referenced as a regex pattern (`r"\bdeepseek\b"`) in `services/trend_detector.py` for detecting AI topic trends.
+
+## Theme Subsystem (`themes/`)
+
+Parses Halloy IRC client `.toml` theme files and translates them into ainews CSS custom properties. This is foundation work (Phase 1) — no visible frontend behavior changes yet. A separate Phase 3 will wire CSS delivery.
+
+```
+services/themes/
+├── __init__.py          # Re-exports public API
+├── errors.py            # ThemeParseError, ThemeValidationError, ThemeTranslationError, ThemeContrastError, Severity, ThemeDiagnostic
+├── colors.py            # Color dataclass, parse_hex_color, serialize_color, relative_luminance, contrast_ratio, HSL operations, mix, composite_over
+├── models.py            # HalloyGeneral/Text/Buffer/Button (tolerant, extra="ignore"), AinewsTheme (strict, extra="forbid"), TokenSource, TokenProvenance, ThemeTranslationResult
+├── halloy.py            # load_halloy_theme(), parse_halloy_toml(), normalize_identifier(), MAX_HALLOY_FILE_BYTES = 256 KB
+└── translate.py         # translate_theme(), detect_appearance(), classify_contrast_findings(), to_css_variables()
+```
+
+Key invariants:
+- Zero Flask imports — independently testable.
+- `parse_hex_color()` only accepts `#RRGGBB` and `#RRGGBBAA` (no shorthand, named colors, `var()`, gradients).
+- `AinewsTheme` is strict (`extra="forbid"`); Halloy models are tolerant (`extra="ignore"`).
+- Translation is pure and deterministic — same input always produces same output.
+- Critical contrast failure (primary text vs primary bg < 4.5) raises `ThemeContrastError`.
+- 117 tests in `tests/test_theme_*.py`.
+
+See [Theme Inventory](../docs/themes-inventory.md) and [Halloy Theme Contract](../docs/halloy-theme-contract.md) for details.
 
 ## Known Layering Exceptions
 

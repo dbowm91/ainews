@@ -506,6 +506,20 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 
 ## Implementation History
 
+### Themes subsystem
+
+`services/themes/` provides Halloy TOML theme parsing and CSS variable translation. Key invariants:
+- Zero Flask imports — independently testable with `pytest tests/test_theme_*.py`
+- `parse_hex_color()` only accepts `#RRGGBB` and `#RRGGBBAA` (no shorthand, named colors, `var()`, gradients)
+- `AinewsTheme` is strict (`extra="forbid"`); Halloy models are tolerant (`extra="ignore"`)
+- Translation is pure and deterministic — same input always produces same output
+- 256 KB file size cap (`MAX_HALLOY_FILE_BYTES`)
+- Critical contrast failure (primary text vs primary bg < 4.5) raises `ThemeContrastError`
+
+See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract. See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
+
+## Implementation History
+
 Key features implemented (2026-05):
 - LLM batching, semantic search optimization, prompt caching
 - Database indexes, inline Lua login lockout, request_id in error responses

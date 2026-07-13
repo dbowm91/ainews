@@ -39,6 +39,8 @@ packaging or deploying standalone pages.
 - Use safe_href for links derived from crawled or model-generated URLs.
 - Prefer the semantic CSS variables in static/css/variables.css over new raw
   colors or spacing values.
+- Custom themes produced by `services/themes.translate.to_css_variables()` MUST
+  emit variables matching the names in `static/css/variables.css`.
 
 ## Checking frontend changes
 

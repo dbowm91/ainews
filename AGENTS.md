@@ -92,6 +92,18 @@ Tasks layer IS allowed to import from services layer. This is not a layer violat
 ### Production Config Validation
 `ProductionConfig.validate()` (config.py:320-336) uses `ConfigValidationResult` to accumulate all validation errors and raise a single `RuntimeError`. Helpers: `_validate_debug()`, `_validate_session_security()`, `_validate_secrets()`, `_validate_llm_providers()`. LLM provider validation is fail-closed — catches `FileNotFoundError` and generic `Exception` as validation issues (not silent warnings). `_validate_llm_providers()` tracks `valid_provider_ids` and `_validate_default_provider()` verifies the default provider's config is valid (not just enabled). Tests in `tests/test_production_config.py` (56 tests). To add new validation: add a helper function that calls `result.add(field, message, fix_hint)` and call it from `ProductionConfig.validate()`.
 
+### Theme Subsystem (services/themes/)
+- **Location:** `services/themes/` — parser foundation for Halloy TOML themes.
+- **Public API:** `load_halloy_theme()`, `parse_halloy_toml()`, `translate_theme()`, `detect_appearance()`, `to_css_variables()`, `classify_contrast_findings()`. Re-exported from `services/themes/__init__.py`.
+- **DO NOT import Flask into `services/themes/`.** The package is independently testable with zero framework dependencies.
+- **Invalid source values cannot reach CSS output.** `parse_hex_color()` rejects shorthand hex, named colors, `var()`, `url()`, gradients — only `#RRGGBB` and `#RRGGBBAA` are accepted. All rejections raise `ThemeParseError`.
+- **Translation is pure and deterministic.** `translate_theme()` and `to_css_variables()` have no I/O, no network, no database. Same input always produces same output.
+- **256 KB file size cap** (`MAX_HALLOY_FILE_BYTES`). Enforced at both raw bytes and file stat.
+- **Strict `AinewsTheme`** (`extra="forbid"`) catches unexpected tokens. Halloy models are tolerant (`extra="ignore"`).
+- **Contrast policy:** Primary text vs primary bg < 4.5 is a fatal `ThemeContrastError`. Other contrast issues are non-fatal `ThemeDiagnostic(WARNING)`.
+- See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract.
+- See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
+
 ## Architecture Conventions
 
 ### Type Checking Pattern

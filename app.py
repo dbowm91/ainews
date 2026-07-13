@@ -357,4 +357,11 @@ def create_app(config_name=None):
 
     initialize_tool_registry()
 
+    # Build the theme registry (Phase 2). The registry is independent of the
+    # database / Celery / LLM providers, so it lives here rather than next to
+    # the other subsystems. Failures degrade gracefully to the emergency theme.
+    from services.themes import build_app_registry
+
+    build_app_registry(app)
+
     return app

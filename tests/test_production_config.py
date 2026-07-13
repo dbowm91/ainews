@@ -744,3 +744,64 @@ class TestSafeFetchEnvValidation:
         r = ConfigValidationResult()
         _validate_safe_fetch(r)
         assert len(r.errors) == 0
+
+
+# ---------------------------------------------------------------------------
+# Theme env validation (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestThemeEnvValidation:
+    """Tests for production theme config validation."""
+
+    def _validate(self, monkeypatch=None):
+        from config import _validate_themes
+        r = ConfigValidationResult()
+        _validate_themes(r)
+        return r
+
+    def test_default_values_pass(self, monkeypatch):
+        monkeypatch.delenv("THEMES_MAX_FILE_BYTES", raising=False)
+        r = self._validate(monkeypatch)
+        assert len(r.errors) == 0
+
+    def test_themes_disabled_skips_validation(self, monkeypatch):
+        monkeypatch.setenv("THEMES_ENABLED", "false")
+        # Even with bogus THEMES_MAX_FILE_BYTES, disabled themes skip checks
+        monkeypatch.setenv("THEMES_MAX_FILE_BYTES", "not-a-number")
+        r = self._validate(monkeypatch)
+        assert len(r.errors) == 0
+
+    def test_max_file_bytes_too_small_raises(self, monkeypatch):
+        monkeypatch.setenv("THEMES_MAX_FILE_BYTES", "100")
+        with pytest.raises(RuntimeError, match="THEMES_MAX_FILE_BYTES"):
+            from config import _validate_themes
+            r = ConfigValidationResult()
+            _validate_themes(r)
+            r.raise_on_errors()
+
+    def test_max_file_bytes_too_large_raises(self, monkeypatch):
+        monkeypatch.setenv("THEMES_MAX_FILE_BYTES", "99999999")
+        with pytest.raises(RuntimeError, match="THEMES_MAX_FILE_BYTES"):
+            from config import _validate_themes
+            r = ConfigValidationResult()
+            _validate_themes(r)
+            r.raise_on_errors()
+
+    def test_max_file_bytes_malformed_raises(self, monkeypatch):
+        monkeypatch.setenv("THEMES_MAX_FILE_BYTES", "not-a-number")
+        with pytest.raises(RuntimeError, match="THEMES_MAX_FILE_BYTES"):
+            from config import _validate_themes
+            r = ConfigValidationResult()
+            _validate_themes(r)
+            r.raise_on_errors()
+
+    def test_custom_dir_with_allow_custom_false_warns(self, monkeypatch):
+        monkeypatch.setenv("THEMES_CUSTOM_DIR", "/var/themes")
+        monkeypatch.setenv("THEMES_ALLOW_CUSTOM", "false")
+        from config import _validate_themes
+        r = ConfigValidationResult()
+        _validate_themes(r)
+        # Warning, not error
+        fields = [w.field for w in r.warnings]
+        assert "THEMES_ALLOW_CUSTOM" in fields

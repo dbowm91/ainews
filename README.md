@@ -106,7 +106,7 @@ Nginx → Granian (ASGI) → Flask
 - **Safe Fetch Client** — First-party SSRF-protected HTTP client with manual redirect validation, streaming byte limits, and content-type allowlist
 - **Newsletter Generation** — Daily newsletters with per-subscriber topic filtering and delivery tracking
 - **RSS Output** — Published feed at `/feed` for downstream consumption
-- **Themeable Frontend** — Parser foundation for Halloy TOML themes (50 bundled; 48 translate successfully); strict `AinewsTheme` model produces deterministic CSS variables for the existing `variables.css` contract (phase 1 complete; browser selector in phase 4)
+- **Themeable Frontend** — 48 packaged Halloy-compatible themes under `resources/themes/` with manifest, code-defined emergency fallback, and operator-configurable external custom directory. Themes are parsed once at startup; immutable `ThemeRegistry` exposes deterministic lookup for later CSS delivery phases. See [Halloy Theme Contract](docs/halloy-theme-contract.md) §12.
 
 ## Configuration
 

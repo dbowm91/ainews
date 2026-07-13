@@ -154,6 +154,28 @@ class Config:
     MIN_CONTENT_LENGTH = safe_int("MIN_CONTENT_LENGTH", 200)
     VERIFICATION_EXPIRY_SECONDS = safe_int("VERIFICATION_EXPIRY_SECONDS", 3600)
 
+    # Theme subsystem (Phase 2)
+    THEMES_ENABLED = os.environ.get("THEMES_ENABLED", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    THEMES_CUSTOM_DIR = os.environ.get("THEMES_CUSTOM_DIR", "")
+    THEMES_ALLOW_CUSTOM = os.environ.get("THEMES_ALLOW_CUSTOM", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    THEMES_DEFAULT = os.environ.get("THEMES_DEFAULT", "")
+    THEMES_DEFAULT_DARK = os.environ.get("THEMES_DEFAULT_DARK", "catppuccin-mocha")
+    THEMES_DEFAULT_LIGHT = os.environ.get("THEMES_DEFAULT_LIGHT", "catppuccin-latte")
+    THEMES_MAX_FILE_BYTES = safe_int("THEMES_MAX_FILE_BYTES", 256 * 1024)
+    THEMES_STRICT_CONTRAST = os.environ.get(
+        "THEMES_STRICT_CONTRAST", "false"
+    ).lower() in ("1", "true", "yes", "on")
+
     # Database query logging
     DB_QUERY_LOG_LEVEL = os.environ.get("DB_QUERY_LOG_LEVEL", "WARNING").upper()
 
@@ -347,6 +369,7 @@ class ProductionConfig(Config):
         _validate_llm_providers(result)
         _validate_docker_ollama_host(result)
         _validate_safe_fetch(result)
+        _validate_themes(result)
         result.raise_on_errors()
         return result
 
@@ -818,6 +841,66 @@ def _validate_llm_providers(result: ConfigValidationResult) -> None:
         _validate_default_provider(
             result, config, all_provider_ids, provider_by_id, enabled_providers,
             valid_provider_ids=valid_provider_ids,
+        )
+
+
+def _validate_themes(result: ConfigValidationResult) -> None:
+    """Validate theme subsystem configuration values.
+
+    Reads env vars at call time so tests can patch them with ``monkeypatch``.
+    The theme registry will fall back through configured defaults to the
+    emergency theme at runtime, so missing/wrong default IDs are non-fatal
+    warnings rather than production-startup-blockers. The byte limit must be
+    parseable so malformed input surfaces immediately.
+    """
+    enabled_raw = os.environ.get("THEMES_ENABLED", "true").lower()
+    if enabled_raw not in ("1", "true", "yes", "on"):
+        return
+
+    raw = os.environ.get("THEMES_MAX_FILE_BYTES")
+    if raw is not None:
+        try:
+            value = int(raw)
+            if value < 1024:
+                result.add(
+                    field="THEMES_MAX_FILE_BYTES",
+                    message=(
+                        f"THEMES_MAX_FILE_BYTES must be >= 1024, got {value}"
+                    ),
+                    fix_hint="Set THEMES_MAX_FILE_BYTES to 1024 or higher",
+                )
+            elif value > 1024 * 1024:
+                result.add(
+                    field="THEMES_MAX_FILE_BYTES",
+                    message=(
+                        f"THEMES_MAX_FILE_BYTES must be <= 1048576, got {value}"
+                    ),
+                    fix_hint="Set THEMES_MAX_FILE_BYTES to 1048576 or lower",
+                )
+        except ValueError:
+            result.add(
+                field="THEMES_MAX_FILE_BYTES",
+                message=(
+                    f"THEMES_MAX_FILE_BYTES must be an integer, got {raw!r}"
+                ),
+                fix_hint="Set THEMES_MAX_FILE_BYTES to a valid integer (default: 262144)",
+            )
+
+    custom_dir = os.environ.get("THEMES_CUSTOM_DIR", "").strip()
+    allow_custom_raw = os.environ.get("THEMES_ALLOW_CUSTOM", "true").lower()
+    allow_custom = allow_custom_raw in ("1", "true", "yes", "on")
+    if custom_dir and not allow_custom:
+        result.add(
+            field="THEMES_ALLOW_CUSTOM",
+            message=(
+                "THEMES_CUSTOM_DIR is set but THEMES_ALLOW_CUSTOM is false; "
+                "the custom directory will be ignored"
+            ),
+            fix_hint=(
+                "Set THEMES_ALLOW_CUSTOM=true to load themes from the "
+                "configured directory"
+            ),
+            severity="warning",
         )
 
 

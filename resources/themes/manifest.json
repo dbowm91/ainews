@@ -1,0 +1,389 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "booberry",
+      "display_name": "booberry",
+      "source_filename": "Booberry.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "catppuccin-latte",
+      "display_name": "catppuccin latte",
+      "source_filename": "Catppuccin Latte.toml",
+      "appearance": "light",
+      "provenance": "Catppuccin",
+      "bundled": true
+    },
+    {
+      "id": "catppuccin-macchiato",
+      "display_name": "catppuccin macchiato",
+      "source_filename": "Catppuccin Macchiato.toml",
+      "appearance": "dark",
+      "provenance": "Catppuccin",
+      "bundled": true
+    },
+    {
+      "id": "catppuccin-mocha",
+      "display_name": "catppuccin mocha",
+      "source_filename": "Catppuccin Mocha.toml",
+      "appearance": "dark",
+      "provenance": "Catppuccin",
+      "bundled": true
+    },
+    {
+      "id": "cyberpunk",
+      "display_name": "cyberpunk",
+      "source_filename": "Cyberpunk.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "dark-green",
+      "display_name": "dark green",
+      "source_filename": "Dark Green.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "discord-80-saturation",
+      "display_name": "discord 80 saturation",
+      "source_filename": "Discord (80_ Saturation).toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "discord",
+      "display_name": "discord",
+      "source_filename": "Discord.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "dracula",
+      "display_name": "dracula",
+      "source_filename": "Dracula.toml",
+      "appearance": "dark",
+      "provenance": "Dracula",
+      "bundled": true
+    },
+    {
+      "id": "ferra-light",
+      "display_name": "ferra light",
+      "source_filename": "Ferra Light.toml",
+      "appearance": "light",
+      "provenance": "Community (Ferra variant)",
+      "bundled": true
+    },
+    {
+      "id": "flexor-dark",
+      "display_name": "flexor dark",
+      "source_filename": "Flexor Dark.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "gruvbox",
+      "display_name": "gruvbox",
+      "source_filename": "Gruvbox.toml",
+      "appearance": "dark",
+      "provenance": "Gruvbox",
+      "bundled": true
+    },
+    {
+      "id": "halcyon-dark",
+      "display_name": "halcyon dark",
+      "source_filename": "Halcyon Dark.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "intellij-light",
+      "display_name": "intellij light",
+      "source_filename": "IntelliJ Light.toml",
+      "appearance": "light",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "kanagawa",
+      "display_name": "kanagawa",
+      "source_filename": "Kanagawa.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "macaw-dark",
+      "display_name": "macaw dark",
+      "source_filename": "Macaw Dark.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "macaw-light",
+      "display_name": "macaw light",
+      "source_filename": "Macaw Light.toml",
+      "appearance": "light",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "matrix",
+      "display_name": "matrix",
+      "source_filename": "Matrix.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "noctis-lilac",
+      "display_name": "noctis lilac",
+      "source_filename": "Noctis Lilac.toml",
+      "appearance": "light",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "nord",
+      "display_name": "nord",
+      "source_filename": "Nord.toml",
+      "appearance": "dark",
+      "provenance": "Nord",
+      "bundled": true
+    },
+    {
+      "id": "nostromo-terminal",
+      "display_name": "nostromo terminal",
+      "source_filename": "Nostromo Terminal.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "one-dark",
+      "display_name": "one dark",
+      "source_filename": "One Dark.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "oxocarbon",
+      "display_name": "oxocarbon",
+      "source_filename": "Oxocarbon.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "rose-pine-moon",
+      "display_name": "rose pine moon",
+      "source_filename": "Rose Pine Moon.toml",
+      "appearance": "dark",
+      "provenance": "Rose Pine",
+      "bundled": true
+    },
+    {
+      "id": "rose-pine",
+      "display_name": "rose pine",
+      "source_filename": "Rose Pine.toml",
+      "appearance": "dark",
+      "provenance": "Rose Pine",
+      "bundled": true
+    },
+    {
+      "id": "solarized-dark",
+      "display_name": "solarized dark",
+      "source_filename": "Solarized Dark.toml",
+      "appearance": "dark",
+      "provenance": "Solarized",
+      "bundled": true
+    },
+    {
+      "id": "sonokai",
+      "display_name": "sonokai",
+      "source_filename": "Sonokai.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "tokyo-night-storm",
+      "display_name": "tokyo night storm",
+      "source_filename": "Tokyo Night Storm.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "vesper",
+      "display_name": "vesper",
+      "source_filename": "VESPER.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "zenburn",
+      "display_name": "zenburn",
+      "source_filename": "Zenburn.toml",
+      "appearance": "dark",
+      "provenance": "Zenburn",
+      "bundled": true
+    },
+    {
+      "id": "acton",
+      "display_name": "acton",
+      "source_filename": "acton.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "bam",
+      "display_name": "bam",
+      "source_filename": "bam.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "base16-atelier-forest-light",
+      "display_name": "base16 atelier forest light",
+      "source_filename": "base16-atelier-forest-light.toml",
+      "appearance": "light",
+      "provenance": "Community (Base16)",
+      "bundled": true
+    },
+    {
+      "id": "berlin",
+      "display_name": "berlin",
+      "source_filename": "berlin.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "black-but-with-important-highlights",
+      "display_name": "black but with important highlights",
+      "source_filename": "black but with important highlights.toml",
+      "appearance": "dark",
+      "provenance": "Community",
+      "bundled": true
+    },
+    {
+      "id": "broc",
+      "display_name": "broc",
+      "source_filename": "broc.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "cork",
+      "display_name": "cork",
+      "source_filename": "cork.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "ferra",
+      "display_name": "ferra",
+      "source_filename": "ferra.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "forest",
+      "display_name": "forest",
+      "source_filename": "forest.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "lisbon",
+      "display_name": "lisbon",
+      "source_filename": "lisbon.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "midnight",
+      "display_name": "midnight",
+      "source_filename": "midnight.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "oslo",
+      "display_name": "oslo",
+      "source_filename": "oslo.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "plum",
+      "display_name": "plum",
+      "source_filename": "plum.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "portland",
+      "display_name": "portland",
+      "source_filename": "portland.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "sunset",
+      "display_name": "sunset",
+      "source_filename": "sunset.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "tofino",
+      "display_name": "tofino",
+      "source_filename": "tofino.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "vanimo",
+      "display_name": "vanimo",
+      "source_filename": "vanimo.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    },
+    {
+      "id": "vik",
+      "display_name": "vik",
+      "source_filename": "vik.toml",
+      "appearance": "dark",
+      "provenance": "Halloy built-in",
+      "bundled": true
+    }
+  ]
+}

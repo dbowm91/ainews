@@ -67,6 +67,30 @@ All outbound HTTP requests go through the safe fetch client (`services/safe_fetc
 - The byte limit prevents memory exhaustion when fetching untrusted content. Increase only if you have verified the source returns large but legitimate responses (e.g., full article HTML).
 - The total timeout is a hard ceiling enforced before each redirect follow and each chunk read in the streaming loop. If `SAFE_FETCH_TOTAL_TIMEOUT` is less than `SAFE_FETCH_CONNECT_TIMEOUT + SAFE_FETCH_READ_TIMEOUT`, the connect timeout takes precedence.
 
+## Theme Subsystem Configuration
+
+The theme registry is built once at startup. The following environment variables
+control its behavior:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `THEMES_ENABLED` | `true` | Set `false` to disable the theme system; only the code-defined emergency theme remains. |
+| `THEMES_CUSTOM_DIR` | empty | Directory of operator-provided Halloy-compatible `.toml` files. Empty disables external discovery. |
+| `THEMES_ALLOW_CUSTOM` | `true` | When `false`, the custom directory is ignored even if configured. |
+| `THEMES_DEFAULT` | empty | Fallback ID used before per-appearance defaults resolve. |
+| `THEMES_DEFAULT_DARK` | `catppuccin-mocha` | Default theme for dark-mode requests. |
+| `THEMES_DEFAULT_LIGHT` | `catppuccin-latte` | Default theme for light-mode requests. |
+| `THEMES_MAX_FILE_BYTES` | `262144` | Per-file byte limit for external themes. Validated `1024..1048576`. |
+| `THEMES_STRICT_CONTRAST` | `false` | Reserved for a future strict-contrast policy. |
+
+**Production notes:**
+
+- All values are read at process start; changes require a service restart.
+- `THEMES_MAX_FILE_BYTES` outside the validated range blocks production startup (`_validate_themes()` in `config.py`).
+- An invalid theme ID does not block startup; the registry falls back through `THEMES_DEFAULT` → `THEMES_DEFAULT_DARK` → `THEMES_DEFAULT_LIGHT` → the emergency theme (`__emergency__`).
+- Setting `THEMES_CUSTOM_DIR` with `THEMES_ALLOW_CUSTOM=false` emits a warning at startup; the directory is otherwise ignored.
+- See [`docs/halloy-theme-contract.md` §12](halloy-theme-contract.md) for the full contract (manifest format, external directory discovery rules, registry model, and restart semantics).
+
 ## Configuration Files
 
 ### `pipeline.yaml` — Processing Pipeline

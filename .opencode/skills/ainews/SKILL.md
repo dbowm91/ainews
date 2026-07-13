@@ -518,6 +518,19 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 
 See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract. See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
 
+### Themes Phase 2 — Registry, packaging, custom themes
+
+The pure parser/translator was extended into a startup-built registry:
+- **Packaged location:** `resources/themes/` is a Python package containing the manifest and bundled `.toml` files. Read via `importlib.resources.files()` with a filesystem fallback.
+- **Manifest:** `resources/themes/manifest.json` is the source of truth for bundled theme metadata. Validate duplicate IDs and filenames via `manifest.build_manifest()`.
+- **Registry:** `services/themes/registry.py` exposes `ThemeRegistry`, `RegisteredTheme`, `ThemeOrigin`, `RegistryDiagnostics`, and `build_registry(bundled, settings)`. Immutable frozen dataclasses with `MappingProxyType` read-only views. Always includes the `__emergency__` (reserved) identifier as final fallback.
+- **Loader:** `services/themes/loader.py` is the only Flask-aware module in the package. Reads the manifest + bundled resources, builds the registry, and attaches it to `app.extensions['theme_registry']`. Called from `create_app()` via `build_app_registry(app)`.
+- **Emergency theme:** `services/themes/emergency.py` defines a complete `AinewsTheme` in Python literals with reserved id `__emergency__`. Used when TOML resources fail to load, configured defaults resolve to nothing, or every bundled theme fails to translate.
+- **External precedence:** External themes with the same normalized ID replace bundled themes entirely (no field merging). Duplicate external IDs are skipped and recorded as a diagnostic.
+- **Safety:** External root must not be a symlink. Per-file symlinks are rejected. Child paths are validated to resolve inside the root. Identifiers are rejected if they contain separators, nulls, control characters, or exceed 64 chars.
+- **Config:** `THEMES_ENABLED`, `THEMES_CUSTOM_DIR`, `THEMES_ALLOW_CUSTOM`, `THEMES_DEFAULT[_DARK|_LIGHT]`, `THEMES_MAX_FILE_BYTES`, `THEMES_STRICT_CONTRAST` in `config.py:_validate_themes()`. Restart required to pick up changes (no live watcher).
+- **Tests:** `tests/test_theme_registry.py` and `tests/test_theme_packaging.py`.
+
 ## Implementation History
 
 Key features implemented (2026-05):

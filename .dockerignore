@@ -30,3 +30,10 @@ dump.rdb
 .DS_Store
 *.log
 LICENSE
+# Uncommitted root themes directory (no longer used at runtime — packaged
+# themes live under resources/themes/).
+themes/
+# macOS resource fork artifacts (`._*.toml` etc.) leak into the repo via
+# the original themes/ extraction; resources/themes/ should never include
+# them. Belt and braces for any other directories in the future.
+._*

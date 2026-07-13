@@ -264,3 +264,154 @@ All hex colors are lowercase `#rrggbb`. Alpha variants use `rgba(r,g,b,a)` forma
 - **Flask-free**: `services/themes/` has zero Flask imports
 - **Strict output model**: `AinewsTheme` uses `extra="forbid"` — unexpected fields raise validation errors
 - **Provenance tracking**: every output token records whether it was DIRECT, DEFAULTED, or DERIVED
+
+
+## 12. Registry, packaging, and configuration (Phase 2)
+
+The Phase 1 parser/translator is one piece of the runtime architecture. Phase 2
+adds a startup-built, immutable ``ThemeRegistry`` that powers request-time
+theme lookup. The contract below extends the previous sections without
+changing them.
+
+### 12.1 Package layout
+
+```text
+resources/
+└── themes/
+    ├── __init__.py            # marks the package for importlib.resources
+    ├── manifest.json          # source of truth for bundled themes
+    └── *.toml                 # approved Halloy theme files (48 themes)
+```
+
+The root uncommitted ``themes/`` directory is no longer used at runtime; it is
+excluded from the Docker build context via ``.dockerignore``. Bundled themes
+are read from ``resources/themes/`` via ``importlib.resources.files()`` with a
+filesystem fallback for editable installs.
+
+### 12.2 Manifest format
+
+``resources/themes/manifest.json`` is the single source of truth for bundled
+themes. Each entry is:
+
+```json
+{
+  "id": "catppuccin-mocha",
+  "display_name": "catppuccin mocha",
+  "source_filename": "Catppuccin Mocha.toml",
+  "appearance": "dark",
+  "provenance": "Catppuccin",
+  "bundled": true
+}
+```
+
+The Pydantic-style schema is in ``services/themes/manifest.py``. CI fails on
+duplicate IDs, duplicate filenames, missing files, or stale entries.
+
+### 12.3 Configuration contract
+
+Theme behavior is configured via env vars (see ``ProductionConfig`` in
+``config.py``):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| ``THEMES_ENABLED`` | ``true`` | Set ``false`` to disable the theme system; only the emergency theme remains. |
+| ``THEMES_CUSTOM_DIR`` | empty | Directory of operator-provided ``.toml`` files. Empty disables external discovery. |
+| ``THEMES_ALLOW_CUSTOM`` | ``true`` | When ``false``, the custom directory is ignored even when configured. |
+| ``THEMES_DEFAULT`` | empty | Registry fallback ID before per-appearance defaults. |
+| ``THEMES_DEFAULT_DARK`` | ``catppuccin-mocha`` | Default for dark-mode requests. |
+| ``THEMES_DEFAULT_LIGHT`` | ``catppuccin-latte`` | Default for light-mode requests. |
+| ``THEMES_MAX_FILE_BYTES`` | ``262144`` | Per-file byte limit for external themes. Validated 1024..1048576. |
+| ``THEMES_STRICT_CONTRAST`` | ``false`` | Reserved for a future strict-contrast policy. |
+
+Changes require a restart. Production startup validates only the byte limit
+and the ``THEMES_CUSTOM_DIR``/``THEMES_ALLOW_CUSTOM`` interaction; invalid
+default theme IDs degrade gracefully through registry fallback to the
+emergency theme.
+
+### 12.4 Registry model
+
+Defined in ``services/themes/registry.py``:
+
+```python
+@dataclass(frozen=True)
+class ThemeOrigin:
+    kind: Literal["bundled", "external", "emergency"]
+    source_ref: str
+
+@dataclass(frozen=True)
+class RegisteredTheme:
+    id: str
+    display_name: str
+    appearance: Literal["light", "dark"]
+    origin: ThemeOrigin
+    theme: AinewsTheme
+    css: str
+    warnings: tuple[ThemeDiagnostic, ...]
+    content_digest: str
+
+@dataclass(frozen=True)
+class ThemeRegistry:
+    themes: Mapping[str, RegisteredTheme]   # MappingProxyType (read-only)
+    default_id: str
+    default_dark_id: str
+    default_light_id: str
+```
+
+All structures are frozen; the ``themes`` mapping is wrapped in
+``MappingProxyType``. The registry is built once during application startup
+via ``build_app_registry(app)`` and attached to ``app.extensions['theme_registry']``.
+Request-time access uses the prebuilt registry — no per-request parsing, no
+arbitrary filesystem lookups.
+
+### 12.5 Discovery precedence
+
+Precedence is fixed; see ``build_registry`` for the authoritative implementation:
+
+1. External exact normalized ID overrides bundled exact normalized ID.
+2. External overrides replace the entire translated theme, not fields.
+3. The emergency theme has identifier ``__emergency__`` and cannot be shadowed.
+4. Invalid configured defaults fall back through:
+
+   ``THEMES_DEFAULT`` → ``THEMES_DEFAULT_DARK`` → ``THEMES_DEFAULT_LIGHT`` → emergency
+   
+   missing IDs are non-fatal because the registry always has the emergency
+   entry.
+
+### 12.6 External directory discovery
+
+External ``.toml`` files are read directly from ``THEMES_CUSTOM_DIR`` with
+these guarantees:
+
+- Only direct child ``.toml`` files are read (nested directories are ignored).
+- Subdirectories are ignored (flat discovery only in this phase).
+- Hidden/temp files (``.*``, ``~*``) are skipped.
+- File count capped at ``MAX_EXTERNAL_FILES`` (200) to prevent resource abuse.
+- Per-file size capped at ``MAX_EXTERNAL_FILE_BYTES`` (matches the parser).
+- Duplicate normalized IDs in the directory are skipped with a diagnostic.
+- Symlinks (file and directory) are rejected before parsing.
+- Path traversal (``../``, absolute paths, percent-encoded escapes) is rejected.
+- One bad file does not abort the registry — diagnostic is emitted instead.
+
+The display name is derived from the normalized identifier (``rose-pine-dawn``
+→ ``"rose pine dawn"``). Halloy has no trustworthy metadata field for this.
+
+### 12.7 Emergency fallback
+
+``services/themes/emergency.py`` defines a complete ``AinewsTheme`` in Python
+literals (no I/O). It has the reserved identifier ``__emergency__`` and
+includes every required token for the dark palette used historically by
+``static/css/variables.css``.
+
+The emergency theme is inserted last into the merged map so it cannot be
+shadowed by bundled or external entries. It is the always-present final
+fallback for ``ThemeRegistry.get()``.
+
+### 12.8 Restart semantics
+
+Themes are parsed once per application process. Operators who change the
+custom directory or the bundled resource set must restart the web and worker
+processes for the changes to take effect. There is no live file watcher in
+this phase.
+
+Tests in ``tests/test_theme_registry.py`` and ``tests/test_theme_packaging.py``
+cover every acceptance criterion in this section.

@@ -104,6 +104,18 @@ Tasks layer IS allowed to import from services layer. This is not a layer violat
 - See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract.
 - See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
 
+### Theme Subsystem Phase 2 — Registry, Packaging, Custom Themes
+- **Bundled location:** `resources/themes/` is a Python package containing the manifest and bundled `.toml` files (no longer the root uncommitted `themes/`).
+- **Manifest:** `resources/themes/manifest.json` is the source of truth for bundled theme metadata; `services/themes/manifest.py` defines the Pydantic-style schema.
+- **Build path:** `services/themes/registry.py` exposes `ThemeRegistry`, `RegisteredTheme`, `ThemeOrigin`, `RegistryDiagnostics`, and the `build_registry(bundled, settings)` factory. Strictly pure Python — never imports Flask.
+- **Flask bridge:** `services/themes/loader.py` (the only Flask-aware module in the package) reads bundled themes via `importlib.resources.files()` with a filesystem fallback, then attaches the registry to `app.extensions['theme_registry']`. Use `build_app_registry(app)` from `create_app()`.
+- **Configuration:** `THEMES_ENABLED`, `THEMES_CUSTOM_DIR`, `THEMES_ALLOW_CUSTOM`, `THEMES_DEFAULT[_DARK|_LIGHT]`, `THEMES_MAX_FILE_BYTES`, `THEMES_STRICT_CONTRAST` in `config.py:_validate_themes()`. Defaults work without any external configuration.
+- **Emergency fallback:** `services/themes/emergency.py` defines a code-defined `AinewsTheme` with reserved id `__emergency__`. Always present in the registry; cannot be overridden by external themes. Used whenever TOML resources are unavailable, configured defaults fail to resolve, or every bundled theme fails to parse.
+- **External precedence:** External themes with the same normalized ID replace bundled themes wholesale (no field merging). Duplicate external IDs are skipped with a diagnostic; filesystem enumeration order is irrelevant.
+- **Safety:** External root must not be a symlink, individual files must not be symlinks, child paths must resolve inside the root, and identifiers are rejected if they contain separators, nulls, control characters, or exceed 64 chars. The `.dockerignore` excludes the uncommitted `themes/` directory at the repo root.
+- **Restart semantics:** Themes are parsed once per application process. Operators changing the custom directory must restart. No live file watcher.
+- **Tests:** `tests/test_theme_registry.py` (registry discovery + precedence) and `tests/test_theme_packaging.py` (manifest + bundled inclusion + loader integration).
+
 ## Architecture Conventions
 
 ### Type Checking Pattern

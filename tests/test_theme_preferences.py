@@ -287,6 +287,277 @@ class TestStylesheetOwnership:
 
 
 # ---------------------------------------------------------------------------
+# Dual-stylesheet architecture — browser-level template assertions
+# ---------------------------------------------------------------------------
+
+# All templates that must carry both app and theme stylesheet links.
+_THEMED_TEMPLATES = [
+    ("base.html", "/"),
+    ("base_admin.html", "/admin/login"),
+    ("login.html", "/admin/login"),
+    ("verify.html", "/"),
+    ("admin/setup_2fa.html", None),
+    ("admin/verify_2fa.html", None),
+    ("share_redirect.html", None),
+]
+
+_THEMED_TEMPLATE_IDS = [t[0].replace("/", "-") for t in _THEMED_TEMPLATES]
+
+
+def _extract_metadata_json(html: str) -> dict | None:
+    """Return parsed JSON from the #ainews-theme-metadata script tag, or None."""
+    import re
+    match = re.search(
+        r'<script\s+id="ainews-theme-metadata"\s+type="application/json">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    if not match:
+        return None
+    return json.loads(match.group(1))
+
+
+def _find_theme_href(html: str) -> str | None:
+    """Return the href of the #ainews-theme-stylesheet link, or None."""
+    import re
+    match = re.search(
+        r'id="ainews-theme-stylesheet"[^>]*href="([^"]*)"',
+        html,
+    )
+    return match.group(1) if match else None
+
+
+class TestDualStylesheetArchitecture:
+    """Browser-level assertions proving the dual-stylesheet architecture works.
+
+    These are static template checks using the Flask test client — no browser
+    or JS runtime required.  Each test verifies that the rendered HTML output
+    contains the correct elements for the dual-stylesheet system to function.
+    """
+
+    # -- 1. Initial system theme: metadata JSON present ---------------------
+
+    def test_initial_system_theme_metadata_present(self, _client):
+        """Metadata JSON script tag is present in rendered home page."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        data = _extract_metadata_json(html)
+        assert data is not None, "Metadata JSON script tag missing from home page"
+
+    def test_initial_system_theme_metadata_has_defaults(self, _client):
+        """Metadata JSON includes defaults.dark and defaults.light."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        assert "defaults" in data
+        assert "dark" in data["defaults"]
+        assert "light" in data["defaults"]
+
+    def test_initial_system_theme_metadata_has_themes(self, _client):
+        """Metadata JSON includes themes dict with at least one entry."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        assert "themes" in data
+        assert isinstance(data["themes"], dict)
+        assert len(data["themes"]) > 0
+
+    # -- 2. Stored explicit theme: theme stylesheet link exists -------------
+
+    def test_theme_stylesheet_link_exists_on_home(self, _client):
+        """Theme stylesheet link element is present on the home page."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-theme-stylesheet"' in html
+
+    def test_theme_stylesheet_link_exists_on_admin(self, _client):
+        """Theme stylesheet link element is present on admin pages."""
+        resp = _client.get("/admin/login")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-theme-stylesheet"' in html
+
+    # -- 3. App stylesheet persistence: #ainews-app-stylesheet everywhere --
+
+    def test_app_stylesheet_persistence_home(self, _client):
+        """App stylesheet persists on home page."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-app-stylesheet"' in html
+
+    def test_app_stylesheet_persistence_admin(self, _client):
+        """App stylesheet persists on admin login page."""
+        resp = _client.get("/admin/login")
+        html = resp.data.decode("utf-8")
+        assert 'id="ainews-app-stylesheet"' in html
+
+    def test_app_stylesheet_never_removed(self, _client):
+        """App stylesheet is not replaced by theme stylesheet on any page."""
+        resp = _client.get("/")
+        html = resp.data.decode("utf-8")
+        import re
+        app_links = re.findall(r'id="ainews-app-stylesheet"', html)
+        assert len(app_links) == 1, (
+            f"Expected exactly 1 app-stylesheet link, found {len(app_links)}"
+        )
+
+    # -- 4. Palette stylesheet existence: #ainews-theme-stylesheet ----------
+
+    def test_palette_stylesheet_always_empty_href(self, _client):
+        """Palette stylesheet starts with empty href on home page."""
+        resp = _client.get("/")
+        href = _find_theme_href(resp.data.decode("utf-8"))
+        assert href is not None, "Theme stylesheet link not found"
+        assert href == "", f"Palette href should be empty, got: {href}"
+
+    def test_palette_stylesheet_always_empty_href_admin(self, _client):
+        """Palette stylesheet starts with empty href on admin page."""
+        resp = _client.get("/admin/login")
+        href = _find_theme_href(resp.data.decode("utf-8"))
+        assert href is not None, "Theme stylesheet link not found"
+        assert href == "", f"Palette href should be empty, got: {href}"
+
+    # -- 5. No ID collision: style.css / style.bundled.css -----------------
+
+    def test_no_collision_on_home(self, _client):
+        """Theme stylesheet never points to app CSS on home page."""
+        resp = _client.get("/")
+        href = _find_theme_href(resp.data.decode("utf-8"))
+        assert href is not None
+        assert "style.css" not in href
+        assert "style.bundled.css" not in href
+
+    def test_no_collision_on_admin(self, _client):
+        """Theme stylesheet never points to app CSS on admin page."""
+        resp = _client.get("/admin/login")
+        href = _find_theme_href(resp.data.decode("utf-8"))
+        assert href is not None
+        assert "style.css" not in href
+        assert "style.bundled.css" not in href
+
+    # -- 6. Theme metadata JSON well-formed ---------------------------------
+
+    def test_metadata_json_parseable(self, _client):
+        """Embedded metadata JSON is valid, parseable JSON."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        assert isinstance(data, dict)
+
+    def test_metadata_json_has_required_keys(self, _client):
+        """Metadata JSON contains 'defaults' and 'themes' top-level keys."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        assert "defaults" in data
+        assert "themes" in data
+
+    def test_metadata_defaults_are_strings(self, _client):
+        """Default theme IDs are strings."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        assert isinstance(data["defaults"]["dark"], str)
+        assert isinstance(data["defaults"]["light"], str)
+
+    def test_metadata_theme_entries_have_required_fields(self, _client):
+        """Each theme entry has name, appearance, css_url, origin."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        for theme_id, info in data["themes"].items():
+            assert "name" in info, f"Missing 'name' for {theme_id}"
+            assert "appearance" in info, f"Missing 'appearance' for {theme_id}"
+            assert "css_url" in info, f"Missing 'css_url' for {theme_id}"
+            assert "origin" in info, f"Missing 'origin' for {theme_id}"
+
+    def test_metadata_css_urls_are_valid_paths(self, _client):
+        """All css_url values start with /assets/themes/."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        for theme_id, info in data["themes"].items():
+            assert info["css_url"].startswith("/assets/themes/"), (
+                f"css_url for {theme_id} doesn't start with /assets/themes/: {info['css_url']}"
+            )
+
+    def test_metadata_no_emergency_theme(self, _client):
+        """Emergency theme is excluded from metadata."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode("utf-8"))
+        assert data is not None
+        assert "__emergency__" not in data["themes"]
+
+    def test_metadata_no_file_paths_leaked(self, _client):
+        """Metadata JSON does not contain filesystem paths."""
+        resp = _client.get("/")
+        raw = resp.data.decode("utf-8")
+        # Extract just the JSON content from the script tag
+        import re
+        match = re.search(
+            r'<script\s+id="ainews-theme-metadata"\s+type="application/json">(.*?)</script>',
+            raw,
+            re.DOTALL,
+        )
+        assert match is not None
+        json_str = match.group(1)
+        assert "resources/themes" not in json_str
+        assert "/home/" not in json_str
+        assert ".toml" not in json_str
+
+    # -- 7. All themed templates have both links ---------------------------
+
+    def _render_template(self, _app, template, **kwargs):
+        """Render a template inside a request context (needed for url_for)."""
+        with _app.test_request_context("/"):
+            from flask import render_template
+            return render_template(template, **kwargs)
+
+    @pytest.mark.parametrize("template,route", _THEMED_TEMPLATES, ids=_THEMED_TEMPLATE_IDS)
+    def test_themed_template_has_app_stylesheet(self, _client, _app, template, route):
+        """Every themed template includes #ainews-app-stylesheet."""
+        if route:
+            html = _client.get(route).data.decode("utf-8")
+        else:
+            html = self._render_template(
+                _app, template, article=None, qr_svg_b64=""
+            )
+        assert 'id="ainews-app-stylesheet"' in html, (
+            f"{template} missing #ainews-app-stylesheet"
+        )
+
+    @pytest.mark.parametrize("template,route", _THEMED_TEMPLATES, ids=_THEMED_TEMPLATE_IDS)
+    def test_themed_template_has_theme_stylesheet(self, _client, _app, template, route):
+        """Every themed template includes #ainews-theme-stylesheet."""
+        if route:
+            html = _client.get(route).data.decode("utf-8")
+        else:
+            html = self._render_template(
+                _app, template, article=None, qr_svg_b64=""
+            )
+        assert 'id="ainews-theme-stylesheet"' in html, (
+            f"{template} missing #ainews-theme-stylesheet"
+        )
+
+    @pytest.mark.parametrize("template,route", _THEMED_TEMPLATES, ids=_THEMED_TEMPLATE_IDS)
+    def test_themed_template_no_style_collision(self, _client, _app, template, route):
+        """Theme stylesheet in every template never references app CSS files."""
+        if route:
+            html = _client.get(route).data.decode("utf-8")
+        else:
+            html = self._render_template(
+                _app, template, article=None, qr_svg_b64=""
+            )
+        href = _find_theme_href(html)
+        assert href is not None, f"{template} missing theme stylesheet link"
+        assert "style.css" not in href, (
+            f"{template} theme stylesheet points to style.css"
+        )
+        assert "style.bundled.css" not in href, (
+            f"{template} theme stylesheet points to style.bundled.css"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Theme CSS route (regression)
 # ---------------------------------------------------------------------------
 

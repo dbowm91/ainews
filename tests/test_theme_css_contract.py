@@ -329,3 +329,124 @@ class TestCSSAllowlist:
                     or value.startswith("var(")
                     or re.match(r"^[a-z0-9]+$", value)
                 ), f"Unexpected value type: {stripped}"
+
+
+# ---------------------------------------------------------------------------
+# CSS route failure mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestThemeCSSRouteUnknownID:
+    """Requesting an unknown theme ID returns 404."""
+
+    def test_unknown_theme_returns_404(self, client):
+        resp = client.get("/assets/themes/nonexistent.css")
+        assert resp.status_code == 404
+
+
+class TestThemeCSSRoutePathTraversal:
+    """Path traversal attempts return 404."""
+
+    def test_double_dot_slash_returns_404(self, client):
+        resp = client.get("/assets/themes/../etc/passwd.css")
+        assert resp.status_code in (404, 400)
+
+    def test_encoded_traversal_returns_404(self, client):
+        resp = client.get("/assets/themes/..%2F..%2Fetc%2Fpasswd.css")
+        assert resp.status_code in (404, 400)
+
+    def test_backslash_traversal_returns_404(self, client):
+        resp = client.get("/assets/themes/..\\..\\etc\\passwd.css")
+        assert resp.status_code in (404, 400)
+
+
+class TestThemeCSSRouteValidHeaders:
+    """Valid theme CSS responses include correct headers."""
+
+    def _get_emergency_css(self, client):
+        """Fetch the emergency theme CSS (always present in registry)."""
+        return client.get("/assets/themes/__emergency__.css")
+
+    def test_content_type_is_text_css(self, client):
+        resp = self._get_emergency_css(client)
+        if resp.status_code == 200:
+            assert resp.content_type == "text/css; charset=utf-8"
+
+    def test_nosniff_header(self, client):
+        resp = self._get_emergency_css(client)
+        if resp.status_code == 200:
+            assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+
+    def test_cache_control_header(self, client):
+        resp = self._get_emergency_css(client)
+        if resp.status_code == 200:
+            assert resp.headers.get("Cache-Control") == "public, max-age=300"
+
+    def test_etag_header_present(self, client):
+        resp = self._get_emergency_css(client)
+        if resp.status_code == 200:
+            assert "ETag" in resp.headers
+            assert len(resp.headers["ETag"]) > 0
+
+    def test_etag_is_quoted_string(self, client):
+        resp = self._get_emergency_css(client)
+        if resp.status_code == 200:
+            etag = resp.headers["ETag"]
+            assert etag.startswith('"') and etag.endswith('"'), (
+                f"ETag should be quoted: {etag}"
+            )
+
+
+class TestThemeCSSRouteRegistryUnavailable:
+    """When registry is None, CSS route returns 503."""
+
+    def test_returns_503_when_registry_unavailable(self, client):
+        from unittest.mock import patch
+
+        with patch("routes.themes.get_app_registry", return_value=None):
+            resp = client.get("/assets/themes/any-theme.css")
+            assert resp.status_code == 503
+
+
+class TestThemeCSSRouteEmptyCSS:
+    """When a theme has empty CSS output, route returns 404."""
+
+    def test_empty_css_returns_404(self, client):
+        from unittest.mock import patch
+        from services.themes.registry import (
+            ThemeRegistry,
+            ThemeOrigin,
+            RegisteredTheme,
+            EMERGENCY_RESERVED_ID,
+        )
+
+        empty_theme = RegisteredTheme(
+            id="empty-theme",
+            display_name="Empty",
+            appearance="dark",
+            origin=ThemeOrigin(kind="bundled", source_ref="empty.toml"),
+            theme=object(),
+            css="",
+            warnings=(),
+            content_digest="empty",
+        )
+        emergency = RegisteredTheme(
+            id=EMERGENCY_RESERVED_ID,
+            display_name="Emergency",
+            appearance="dark",
+            origin=ThemeOrigin(kind="emergency", source_ref="code"),
+            theme=object(),
+            css=":root {}",
+            warnings=(),
+            content_digest="abc",
+        )
+        fake_registry = ThemeRegistry(
+            themes={EMERGENCY_RESERVED_ID: emergency, "empty-theme": empty_theme},
+            default_id=EMERGENCY_RESERVED_ID,
+            default_dark_id=EMERGENCY_RESERVED_ID,
+            default_light_id=EMERGENCY_RESERVED_ID,
+        )
+
+        with patch("routes.themes.get_app_registry", return_value=fake_registry):
+            resp = client.get("/assets/themes/empty-theme.css")
+            assert resp.status_code == 404

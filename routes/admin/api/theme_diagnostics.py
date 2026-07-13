@@ -44,11 +44,11 @@ def themes_diagnostics() -> tuple[Response, int]:
     code_counts: dict[str, int] = {}
 
     for theme in registry.list_themes():
-        warning_count = 0
+        issue_count = 0
         warning_codes: list[str] = []
         for diag in theme.warnings:
             if diag.severity.value in ("warning", "error"):
-                warning_count += 1
+                issue_count += 1
                 warning_codes.append(diag.code)
                 code_counts[diag.code] = code_counts.get(diag.code, 0) + 1
             if diag.severity.value == "error":
@@ -67,7 +67,7 @@ def themes_diagnostics() -> tuple[Response, int]:
             "valid": len(theme.warnings) == 0 or all(
                 w.severity.value not in ("error",) for w in theme.warnings
             ),
-            "warning_count": warning_count,
+            "issue_count": issue_count,
             "warning_codes": warning_codes,
             "content_digest": theme.content_digest,
         }

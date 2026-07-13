@@ -243,8 +243,8 @@ def load_bundle_from_resources(
 
     Returns a :class:`BundleLocation` suitable for :func:`build_registry`, or
     ``None`` when the manifest is unusable. Diagnostics capture per-file
-    problems; missing files are silently logged because Phase 1 lists the
-    canonical set in CI.
+    problems; missing files are silently logged because the manifest lists
+    the canonical set and CI validates it.
     """
     manifest, manifest_diags = load_bundled_manifest(theme_dir)
     if not manifest.entries:

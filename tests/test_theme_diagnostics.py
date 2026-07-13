@@ -623,7 +623,7 @@ class TestAdminDiagnosticsStructure:
                 assert "appearance" in theme
                 assert "origin" in theme
                 assert "valid" in theme
-                assert "warning_count" in theme
+                assert "issue_count" in theme
                 assert "warning_codes" in theme
                 assert "content_digest" in theme
 
@@ -740,6 +740,61 @@ class TestAdminDiagnosticsOverrideDetection:
                     continue
                 assert "overrides_bundled" not in theme or not theme.get("overrides_bundled")
 
+    def test_overrides_bundled_flagged_when_present(self, auth_client):
+        """Themes in the overrides set should have overrides_bundled=True."""
+        from unittest.mock import patch
+        from services.themes.registry import (
+            ThemeRegistry,
+            ThemeOrigin,
+            RegisteredTheme,
+            RegistryDiagnostics,
+            EMERGENCY_RESERVED_ID,
+        )
+
+        emergency = RegisteredTheme(
+            id=EMERGENCY_RESERVED_ID,
+            display_name="Emergency",
+            appearance="dark",
+            origin=ThemeOrigin(kind="emergency", source_ref="code"),
+            theme=object(),
+            css=":root {}",
+            warnings=(),
+            content_digest="abc",
+        )
+        theme_a = RegisteredTheme(
+            id="custom-theme",
+            display_name="Custom",
+            appearance="dark",
+            origin=ThemeOrigin(kind="external", source_ref="custom.toml"),
+            theme=object(),
+            css=":root {}",
+            warnings=(),
+            content_digest="def",
+        )
+        fake_registry = ThemeRegistry(
+            themes={EMERGENCY_RESERVED_ID: emergency, "custom-theme": theme_a},
+            default_id="custom-theme",
+            default_dark_id="custom-theme",
+            default_light_id="custom-theme",
+            built_at="2025-01-01T00:00:00Z",
+        )
+        fake_diagnostics = RegistryDiagnostics(
+            diagnostics=(),
+            overrides=("custom-theme",),
+            built_at="2025-01-01T00:00:00Z",
+        )
+
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=fake_registry),
+            patch("services.themes.loader.get_diagnostics", return_value=fake_diagnostics),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            custom = [t for t in data["data"]["themes"] if t["id"] == "custom-theme"]
+            assert len(custom) == 1
+            assert custom[0]["overrides_bundled"] is True
+
 
 # ---------------------------------------------------------------------------
 # CSS output for contrast-tested themes
@@ -760,3 +815,192 @@ class TestCssOutputForContrastThemes:
         css1 = to_css_variables(theme)
         css2 = to_css_variables(theme)
         assert css1 == css2
+
+
+# ---------------------------------------------------------------------------
+# Server failure mode tests
+# ---------------------------------------------------------------------------
+
+
+def _build_fake_registry(themes=None, *, built_at="2025-01-01T00:00:00Z"):
+    """Build a minimal fake ThemeRegistry for failure mode tests."""
+    from services.themes.registry import (
+        ThemeRegistry,
+        ThemeOrigin,
+        RegisteredTheme,
+        EMERGENCY_RESERVED_ID,
+    )
+
+    if themes is None:
+        emergency = RegisteredTheme(
+            id=EMERGENCY_RESERVED_ID,
+            display_name="Emergency",
+            appearance="dark",
+            origin=ThemeOrigin(kind="emergency", source_ref="code"),
+            theme=object(),
+            css=":root {}",
+            warnings=(),
+            content_digest="abc",
+        )
+        themes = {EMERGENCY_RESERVED_ID: emergency}
+
+    return ThemeRegistry(
+        themes=themes,
+        default_id=EMERGENCY_RESERVED_ID,
+        default_dark_id=EMERGENCY_RESERVED_ID,
+        default_light_id=EMERGENCY_RESERVED_ID,
+        built_at=built_at,
+    )
+
+
+def _build_fake_diagnostics(*, overrides=(), built_at="2025-01-01T00:00:00Z"):
+    """Build a minimal fake RegistryDiagnostics."""
+    from services.themes.registry import RegistryDiagnostics
+
+    return RegistryDiagnostics(diagnostics=(), overrides=overrides, built_at=built_at)
+
+
+class TestDiagnosticsRegistryUnavailable:
+    """When get_app_registry() returns None, diagnostics returns 503."""
+
+    def test_returns_503(self, auth_client):
+        from unittest.mock import patch
+
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=None),
+            patch("services.themes.loader.get_diagnostics", return_value=_build_fake_diagnostics()),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            assert resp.status_code == 503
+
+    def test_error_message_indicates_registry_unavailable(self, auth_client):
+        from unittest.mock import patch
+
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=None),
+            patch("services.themes.loader.get_diagnostics", return_value=_build_fake_diagnostics()),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            data = resp.get_json()
+            assert "error" in data
+            assert "registry" in data["error"].lower() or "not available" in data["error"].lower()
+
+
+class TestDiagnosticsGracefulDegradation:
+    """When get_diagnostics() returns None, endpoint still works."""
+
+    def test_returns_200_with_none_diagnostics(self, auth_client):
+        from unittest.mock import patch
+
+        fake_registry = _build_fake_registry()
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=fake_registry),
+            patch("services.themes.loader.get_diagnostics", return_value=None),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            assert resp.status_code == 200
+
+    def test_built_at_falls_back_to_registry(self, auth_client):
+        from unittest.mock import patch
+
+        fake_registry = _build_fake_registry(built_at="2025-06-15T12:00:00Z")
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=fake_registry),
+            patch("services.themes.loader.get_diagnostics", return_value=None),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["data"]["registry"]["built_at"] == "2025-06-15T12:00:00Z"
+
+    def test_themes_list_still_populated(self, auth_client):
+        from unittest.mock import patch
+        from services.themes.registry import ThemeOrigin, RegisteredTheme, EMERGENCY_RESERVED_ID
+
+        emergency = RegisteredTheme(
+            id=EMERGENCY_RESERVED_ID,
+            display_name="Emergency",
+            appearance="dark",
+            origin=ThemeOrigin(kind="emergency", source_ref="code"),
+            theme=object(),
+            css=":root {}",
+            warnings=(),
+            content_digest="abc",
+        )
+        fake_registry = _build_fake_registry(themes={EMERGENCY_RESERVED_ID: emergency})
+
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=fake_registry),
+            patch("services.themes.loader.get_diagnostics", return_value=None),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert isinstance(data["data"]["themes"], list)
+            assert len(data["data"]["themes"]) == 1
+
+
+class TestDiagnosticsEmptyRegistry:
+    """When the registry has no themes (edge case), endpoint returns valid structure."""
+
+    def test_empty_registry_returns_valid_structure(self, auth_client):
+        from unittest.mock import patch
+        from services.themes.registry import ThemeRegistry
+
+        empty_registry = ThemeRegistry(
+            themes={},
+            default_id="",
+            default_dark_id="",
+            default_light_id="",
+            built_at="2025-01-01T00:00:00Z",
+        )
+        fake_diag = _build_fake_diagnostics()
+
+        with (
+            patch("services.themes.loader.get_app_registry", return_value=empty_registry),
+            patch("services.themes.loader.get_diagnostics", return_value=fake_diag),
+        ):
+            resp = auth_client.get("/api/v1/themes/diagnostics")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            registry = data["data"]["registry"]
+            assert registry["theme_count_total"] == 0
+            assert registry["theme_count_bundled"] == 0
+            assert registry["theme_count_custom"] == 0
+            assert registry["emergency_fallback_active"] is False
+            assert data["data"]["themes"] == []
+            assert data["data"]["diagnostics"]["errors"] == 0
+            assert data["data"]["diagnostics"]["warnings"] == 0
+
+
+class TestDiagnosticsRegistryFieldPresence:
+    """Verify all expected registry fields are present and correct types."""
+
+    def test_emergency_fallback_active_is_bool(self, auth_client):
+        resp = auth_client.get("/api/v1/themes/diagnostics")
+        if resp.status_code == 200:
+            data = resp.get_json()
+            assert isinstance(data["data"]["registry"]["emergency_fallback_active"], bool)
+
+    def test_theme_count_fields_are_integers(self, auth_client):
+        resp = auth_client.get("/api/v1/themes/diagnostics")
+        if resp.status_code == 200:
+            data = resp.get_json()
+            registry = data["data"]["registry"]
+            for field in ("theme_count_total", "theme_count_bundled", "theme_count_custom"):
+                assert isinstance(registry[field], int), f"{field} should be int"
+                assert registry[field] >= 0, f"{field} should be non-negative"
+
+    def test_built_at_is_string(self, auth_client):
+        resp = auth_client.get("/api/v1/themes/diagnostics")
+        if resp.status_code == 200:
+            data = resp.get_json()
+            assert isinstance(data["data"]["registry"]["built_at"], str)
+
+    def test_default_ids_are_strings(self, auth_client):
+        resp = auth_client.get("/api/v1/themes/diagnostics")
+        if resp.status_code == 200:
+            data = resp.get_json()
+            registry = data["data"]["registry"]
+            for field in ("default_id", "default_dark_id", "default_light_id"):
+                assert isinstance(registry[field], str), f"{field} should be str"

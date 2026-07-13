@@ -1,7 +1,8 @@
 """Theme registry — the runtime source of truth for available themes.
 
-The registry is constructed once during application startup and exposed to
-later phases (CSS delivery, browser selection). It holds immutable records of:
+The registry is constructed once during application startup and consumed by
+the CSS delivery route and the browser preference system. It holds immutable
+records of:
 
 - bundled themes shipped inside ``resources/themes/``;
 - operator-provided external themes from an optional configured directory;

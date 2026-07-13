@@ -518,6 +518,9 @@ Pagination template (`templates/partials/pagination.html`) includes ARIA attribu
 
 See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract. See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
 
+### Theme CSS Delivery (Phase 3)
+Theme CSS is served via `GET /assets/themes/<theme_id>.css` from the startup-built registry. Blueprint at `routes/themes.py` (`themes_bp`), registered before `public_bp`. Registry accessed via `get_app_registry()` (or `app.extensions['theme_registry']`). Response: `text/css; charset=utf-8`, `Cache-Control: public, max-age=300`, ETag-based 304. Unknown IDs return 404. CSS output includes both legacy (`--green`, `--accent-dim`) and semantic (`--success`, `--accent-active`) variable names. Category badges use `--category-{name}-alpha-{15,40}` variables.
+
 ### Themes Phase 2 — Registry, packaging, custom themes
 
 The pure parser/translator was extended into a startup-built registry:

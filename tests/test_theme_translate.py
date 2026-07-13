@@ -401,10 +401,15 @@ class TestCssVariables:
         css = to_css_variables(result.theme)
         alpha_vars = [
             "--accent-alpha-08", "--accent-alpha-10", "--accent-alpha-25",
-            "--green-alpha-10", "--green-alpha-25",
-            "--orange-alpha-10", "--orange-alpha-25",
-            "--red-alpha-10", "--red-alpha-25",
+            "--green-alpha-10", "--green-alpha-15", "--green-alpha-25",
+            "--orange-alpha-10", "--orange-alpha-15", "--orange-alpha-25",
+            "--red-alpha-08", "--red-alpha-10", "--red-alpha-15", "--red-alpha-25",
             "--purple-alpha-10", "--purple-alpha-25",
+            "--category-ai-alpha-15", "--category-ai-alpha-40",
+            "--category-privacy-alpha-15", "--category-privacy-alpha-40",
+            "--category-security-alpha-15", "--category-security-alpha-40",
+            "--category-programming-alpha-15", "--category-programming-alpha-40",
+            "--category-hardware-alpha-15", "--category-hardware-alpha-40",
         ]
         for var in alpha_vars:
             assert var in css, f"Missing alpha variable: {var}"
@@ -414,7 +419,7 @@ class TestCssVariables:
         css = to_css_variables(result.theme)
         rgba_pattern = re.compile(r"rgba\(\d+,\d+,\d+,\d+\.\d+\)")
         matches = rgba_pattern.findall(css)
-        assert len(matches) == 11
+        assert len(matches) == 25
 
     def test_alpha_values_match_variables_css_contract(self) -> None:
         result = translate_theme(_parse_fixture(CATPPUCCIN_MOCHA))
@@ -424,13 +429,27 @@ class TestCssVariables:
             "--accent-alpha-10": "0.1000",
             "--accent-alpha-25": "0.2500",
             "--green-alpha-10": "0.1000",
+            "--green-alpha-15": "0.1500",
             "--green-alpha-25": "0.2500",
             "--orange-alpha-10": "0.1000",
+            "--orange-alpha-15": "0.1500",
             "--orange-alpha-25": "0.2500",
+            "--red-alpha-08": "0.0800",
             "--red-alpha-10": "0.1000",
+            "--red-alpha-15": "0.1500",
             "--red-alpha-25": "0.2500",
             "--purple-alpha-10": "0.1000",
             "--purple-alpha-25": "0.2500",
+            "--category-ai-alpha-15": "0.1500",
+            "--category-ai-alpha-40": "0.4000",
+            "--category-privacy-alpha-15": "0.1500",
+            "--category-privacy-alpha-40": "0.4000",
+            "--category-security-alpha-15": "0.1500",
+            "--category-security-alpha-40": "0.4000",
+            "--category-programming-alpha-15": "0.1500",
+            "--category-programming-alpha-40": "0.4000",
+            "--category-hardware-alpha-15": "0.1500",
+            "--category-hardware-alpha-40": "0.4000",
         }
         for var, alpha in expected_alphas.items():
             pattern = rf"{re.escape(var)}: rgba\(\d+,\d+,\d+,{re.escape(alpha)}\);"

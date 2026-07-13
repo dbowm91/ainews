@@ -460,7 +460,8 @@ def translate_theme(halloy: HalloyTheme) -> ThemeTranslationResult:
     )
 
 
-_CSS_ORDER: list[str] = [
+_PALETTE_ORDER: list[str] = [
+    # Backgrounds
     "bg-primary",
     "bg-secondary",
     "bg-tertiary",
@@ -468,30 +469,42 @@ _CSS_ORDER: list[str] = [
     "bg-input",
     "bg-hover",
     "bg-selected",
+    # Borders
     "border",
     "border-light",
     "border-focus",
+    # Text
     "text-primary",
     "text-secondary",
     "text-muted",
     "text-dim",
     "text-inverse",
+    # Accent
     "accent",
     "accent-hover",
     "accent-active",
     "link",
     "link-hover",
     "focus-ring",
+    # Status (canonical names used by components)
+    "green",
+    "orange",
+    "red",
+    "purple",
+    "pink",
+    # Status semantic (new names)
     "success",
     "warning",
     "error",
     "info",
+    # Categories
     "category-ai",
     "category-privacy",
     "category-security",
     "category-programming",
     "category-hardware",
     "category-other",
+    # Utility
     "skeleton-base",
     "skeleton-shine",
     "selection",
@@ -503,13 +516,27 @@ _ALPHA_VARS: list[tuple[str, str, float]] = [
     ("accent-alpha-10", "accent", 0.10),
     ("accent-alpha-25", "accent", 0.25),
     ("green-alpha-10", "success", 0.10),
+    ("green-alpha-15", "success", 0.15),
     ("green-alpha-25", "success", 0.25),
     ("orange-alpha-10", "warning", 0.10),
+    ("orange-alpha-15", "warning", 0.15),
     ("orange-alpha-25", "warning", 0.25),
+    ("red-alpha-08", "error", 0.08),
     ("red-alpha-10", "error", 0.10),
+    ("red-alpha-15", "error", 0.15),
     ("red-alpha-25", "error", 0.25),
     ("purple-alpha-10", "category_ai", 0.10),
     ("purple-alpha-25", "category_ai", 0.25),
+    ("category-ai-alpha-15", "category_ai", 0.15),
+    ("category-ai-alpha-40", "category_ai", 0.40),
+    ("category-privacy-alpha-15", "category_privacy", 0.15),
+    ("category-privacy-alpha-40", "category_privacy", 0.40),
+    ("category-security-alpha-15", "category_security", 0.15),
+    ("category-security-alpha-40", "category_security", 0.40),
+    ("category-programming-alpha-15", "category_programming", 0.15),
+    ("category-programming-alpha-40", "category_programming", 0.40),
+    ("category-hardware-alpha-15", "category_hardware", 0.15),
+    ("category-hardware-alpha-40", "category_hardware", 0.40),
 ]
 
 
@@ -538,6 +565,12 @@ def to_css_variables(theme: AinewsTheme) -> str:
         "link": "link",
         "link_hover": "link-hover",
         "focus_ring": "focus-ring",
+        # Status: emit both old and new names
+        "green": "green",       # alias for success
+        "orange": "orange",     # alias for warning
+        "red": "red",           # alias for error
+        "purple": "purple",     # alias for category_ai
+        "pink": "pink",         # keep for backward compat
         "success": "success",
         "warning": "warning",
         "error": "error",
@@ -554,13 +587,15 @@ def to_css_variables(theme: AinewsTheme) -> str:
         "overlay": "overlay",
     }
 
-    for css_name in _CSS_ORDER:
+    # 1. Emit direct palette variables from theme fields
+    for css_name in _PALETTE_ORDER:
         field_name = css_name.replace("-", "_")
         hex_val = getattr(theme, field_name, None)
         if hex_val is None:
             continue
         lines.append(f"  --{css_name}: {hex_val};")
 
+    # 2. Emit alpha (rgba) variants
     for alpha_name, source_field, alpha in _ALPHA_VARS:
         source_hex = getattr(theme, source_field, None)
         if source_hex is None:
@@ -568,5 +603,59 @@ def to_css_variables(theme: AinewsTheme) -> str:
         c = parse_hex_color(source_hex)
         r, g, b = c.r, c.g, c.b
         lines.append(f"  --{alpha_name}: rgba({r},{g},{b},{alpha:.4f});")
+
+    # 3. Accent-dim alias (alias for accent-active)
+    accent_active_val = getattr(theme, "accent_active", None)
+    if accent_active_val is not None:
+        lines.append(f"  --accent-dim: {accent_active_val};")
+
+    # 4. Legacy status aliases: new semantic → old component names
+    success_val = getattr(theme, "success", None)
+    if success_val is not None:
+        lines.append(f"  --green: {success_val};")
+
+    warning_val = getattr(theme, "warning", None)
+    if warning_val is not None:
+        lines.append(f"  --orange: {warning_val};")
+
+    error_val = getattr(theme, "error", None)
+    if error_val is not None:
+        lines.append(f"  --red: {error_val};")
+
+    category_ai_val = getattr(theme, "category_ai", None)
+    if category_ai_val is not None:
+        lines.append(f"  --purple: {category_ai_val};")
+
+    # Pink is not directly in AinewsTheme; derive from error as a reasonable default
+    if error_val is not None:
+        lines.append(f"  --pink: {error_val};")
+
+    # 5. Semantic aliases (component-facing names)
+    semantic_map = {
+        "color-bg-page": "bg-primary",
+        "color-bg-surface": "bg-secondary",
+        "color-bg-elevated": "bg-tertiary",
+        "color-bg-overlay": "bg-subtle",
+        "color-text-heading": "text-primary",
+        "color-text-body": "text-secondary",
+        "color-text-muted": "text-muted",
+        "color-text-subtle": "text-dim",
+        "color-interactive": "accent",
+        "color-interactive-hover": "accent-dim",
+        "color-border-default": "border",
+        "color-border-emphasis": "border-light",
+        "color-success": "success",
+        "color-warning": "warning",
+        "color-error": "error",
+        "color-info": "info",
+        "color-category-ai": "category-ai",
+        "color-category-privacy": "category-privacy",
+        "color-category-security": "category-security",
+        "color-category-programming": "category-programming",
+        "color-category-hardware": "category-hardware",
+        "color-category-other": "category-other",
+    }
+    for alias_name, source_name in semantic_map.items():
+        lines.append(f"  --{alias_name}: var(--{source_name});")
 
     return ":root {\n" + "\n".join(lines) + "\n}"

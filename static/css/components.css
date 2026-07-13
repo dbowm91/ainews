@@ -14,32 +14,32 @@
 
 .cat-ai {
   color: var(--purple);
-  background: rgba(188, 140, 255, 0.15);
-  border: 1px solid rgba(188, 140, 255, 0.4);
+  background: var(--category-ai-alpha-15);
+  border: 1px solid var(--category-ai-alpha-40);
 }
 
 .cat-privacy {
   color: var(--orange);
-  background: rgba(210, 153, 34, 0.15);
-  border: 1px solid rgba(210, 153, 34, 0.4);
+  background: var(--category-privacy-alpha-15);
+  border: 1px solid var(--category-privacy-alpha-40);
 }
 
 .cat-security {
   color: var(--red);
-  background: rgba(248, 81, 73, 0.15);
-  border: 1px solid rgba(248, 81, 73, 0.4);
+  background: var(--category-security-alpha-15);
+  border: 1px solid var(--category-security-alpha-40);
 }
 
 .cat-programming {
   color: var(--green);
-  background: rgba(63, 185, 80, 0.15);
-  border: 1px solid rgba(63, 185, 80, 0.4);
+  background: var(--category-programming-alpha-15);
+  border: 1px solid var(--category-programming-alpha-40);
 }
 
 .cat-hardware {
   color: var(--accent);
-  background: rgba(88, 166, 255, 0.15);
-  border: 1px solid rgba(88, 166, 255, 0.4);
+  background: var(--category-hardware-alpha-15);
+  border: 1px solid var(--category-hardware-alpha-40);
 }
 
 .cat-other {
@@ -252,7 +252,7 @@
 }
 
 .btn-danger:hover {
-  background: rgba(248, 81, 73, 0.08);
+  background: var(--red-alpha-08);
   border-color: var(--red);
 }
 
@@ -269,7 +269,7 @@
 
 .btn-delete:hover {
   border-color: var(--red);
-  background: rgba(248, 81, 73, 0.08);
+  background: var(--red-alpha-08);
 }
 
 .btn-logout {
@@ -614,7 +614,7 @@
 .form-error {
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
-  background: rgba(248, 81, 73, 0.1);
+  background: var(--red-alpha-10);
   border: 1px solid rgba(248, 81, 73, 0.4);
   border-radius: var(--radius-lg);
   font-family: var(--font-mono);

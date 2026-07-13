@@ -4,58 +4,26 @@
    CSS Custom Properties for the ainews theme system.
 
    STRUCTURE:
-   1. Colors - Semantic color tokens
-   2. Typography - Font families and sizes
-   3. Layout - Spacing, radius, max-width
-   4. Alpha variants - Transparent versions of colors
-   5. Semantic aliases - Intent-based variable names
+   1. Structural tokens - Typography, layout, spacing, radius, z-index
+   2. Fallback palette tokens - Themeable color defaults (dark mode)
+   3. Alpha variants - Transparent versions of colors
+   4. Semantic aliases - Intent-based variable names
+   5. Light theme overrides
+   6. High contrast overrides
 
    USAGE:
-   Always prefer semantic variables (e.g., --color-bg-primary) over raw values.
+   Always prefer semantic variables (e.g., --color-bg-page) over raw palette tokens.
    Use alpha variants for overlays, highlights, and subtle backgrounds.
+   Theme CSS output from to_css_variables() overrides the fallback palette.
 
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
   /* ─────────────────────────────────────────────────────────────────
-     1. COLOR TOKENS
+     1. STRUCTURAL TOKENS (non-themeable, stay fixed)
      ───────────────────────────────────────────────────────────────── */
 
-  /* Background colors */
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --bg-subtle: #1c2128;
-
-  /* Border colors */
-  --border: #30363d;
-  --border-light: #3d444d;
-
-  /* Text colors */
-  --text-primary: #e6edf3;
-  --text-secondary: #c9d1d9;
-  --text-muted: #8b949e;
-  --text-dim: #adbac7;
-
-  /* Accent colors */
-  --accent: #58a6ff;
-  --accent-dim: #1f6feb;
-
-  /* Semantic status colors */
-  --green: #3fb950;
-  --orange: #d29922;
-  --red: #f85149;
-  --purple: #bc8cff;
-  --pink: #f778ba;
-
-  /* Skeleton loader colors */
-  --skeleton-base: #161b22;
-  --skeleton-shine: #21262d;
-
-  /* ─────────────────────────────────────────────────────────────────
-     2. TYPOGRAPHY
-     ───────────────────────────────────────────────────────────────── */
-
+  /* Typography */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
 
@@ -73,10 +41,7 @@
   --text-6xl: clamp(1.5rem, 1.3rem + 2.5vw, 1.75rem);    /* 24-28px */
   --text-7xl: clamp(1.75rem, 1.5rem + 3vw, 2rem);          /* 28-32px */
 
-  /* ─────────────────────────────────────────────────────────────────
-     3. LAYOUT
-     ───────────────────────────────────────────────────────────────── */
-
+  /* Layout */
   --max-width: 900px;
 
   /* Border radius */
@@ -103,33 +68,118 @@
   --space-15: 4.5rem;
   --space-16: 5rem;
 
+  /* Z-index layers */
+  --z-index-sticky: 100;
+  --z-index-share-dropdown: 200;
+  --z-index-skip-link: 1000;
+  --z-index-toast: 9999;
+
   /* ─────────────────────────────────────────────────────────────────
-     4. ALPHA VARIANTS
+     2. FALLBACK PALETTE TOKENS (themeable, dark mode defaults)
+     ───────────────────────────────────────────────────────────────── */
+
+  /* Background colors */
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-subtle: #1c2128;
+  --bg-input: #0d1117;
+  --bg-hover: #21262d;
+  --bg-selected: #2d333b;
+
+  /* Border colors */
+  --border: #30363d;
+  --border-light: #3d444d;
+  --border-focus: #58a6ff;
+
+  /* Text colors */
+  --text-primary: #e6edf3;
+  --text-secondary: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-dim: #adbac7;
+  --text-inverse: #0d1117;
+
+  /* Accent colors */
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-active: #1f6feb;
+  --accent-dim: #1f6feb;
+  --link: #58a6ff;
+  --link-hover: #79b8ff;
+  --focus-ring: #58a6ff;
+
+  /* Status colors (component-facing names) */
+  --green: #3fb950;
+  --orange: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+  --pink: #f778ba;
+
+  /* Status semantic colors (new names) */
+  --success: #3fb950;
+  --warning: #d29922;
+  --error: #f85149;
+  --info: #58a6ff;
+
+  /* Category colors */
+  --category-ai: #bc8cff;
+  --category-privacy: #d29922;
+  --category-security: #f85149;
+  --category-programming: #3fb950;
+  --category-hardware: #58a6ff;
+  --category-other: #8b949e;
+
+  /* Skeleton loader colors */
+  --skeleton-base: #161b22;
+  --skeleton-shine: #21262d;
+
+  /* Utility */
+  --selection: #2d333b;
+  --overlay: rgba(0,0,0,0.5);
+
+  /* ─────────────────────────────────────────────────────────────────
+     3. ALPHA VARIANTS
      ───────────────────────────────────────────────────────────────── */
 
   /* Accent alpha */
   --accent-alpha-08: rgba(88, 166, 255, 0.08);
-  --accent-alpha-10: rgba(88, 166, 255, 0.1);
+  --accent-alpha-10: rgba(88, 166, 255, 0.10);
   --accent-alpha-25: rgba(88, 166, 255, 0.25);
 
-  /* Green alpha */
-  --green-alpha-10: rgba(63, 185, 80, 0.1);
+  /* Green / success alpha */
+  --green-alpha-10: rgba(63, 185, 80, 0.10);
+  --green-alpha-15: rgba(63, 185, 80, 0.15);
   --green-alpha-25: rgba(63, 185, 80, 0.25);
 
-  /* Orange alpha */
-  --orange-alpha-10: rgba(210, 153, 34, 0.1);
+  /* Orange / warning alpha */
+  --orange-alpha-10: rgba(210, 153, 34, 0.10);
+  --orange-alpha-15: rgba(210, 153, 34, 0.15);
   --orange-alpha-25: rgba(210, 153, 34, 0.25);
 
-  /* Red alpha */
-  --red-alpha-10: rgba(248, 81, 73, 0.1);
+  /* Red / error alpha */
+  --red-alpha-08: rgba(248, 81, 73, 0.08);
+  --red-alpha-10: rgba(248, 81, 73, 0.10);
+  --red-alpha-15: rgba(248, 81, 73, 0.15);
   --red-alpha-25: rgba(248, 81, 73, 0.25);
 
-  /* Purple alpha */
-  --purple-alpha-10: rgba(188, 140, 255, 0.1);
+  /* Purple / category-ai alpha */
+  --purple-alpha-10: rgba(188, 140, 255, 0.10);
   --purple-alpha-25: rgba(188, 140, 255, 0.25);
+  --category-ai-alpha-15: rgba(188, 140, 255, 0.15);
+  --category-ai-alpha-40: rgba(188, 140, 255, 0.40);
+
+  /* Category alpha variants */
+  --category-privacy-alpha-15: rgba(210, 153, 34, 0.15);
+  --category-privacy-alpha-40: rgba(210, 153, 34, 0.40);
+  --category-security-alpha-15: rgba(248, 81, 73, 0.15);
+  --category-security-alpha-40: rgba(248, 81, 73, 0.40);
+  --category-programming-alpha-15: rgba(63, 185, 80, 0.15);
+  --category-programming-alpha-40: rgba(63, 185, 80, 0.40);
+  --category-hardware-alpha-15: rgba(88, 166, 255, 0.15);
+  --category-hardware-alpha-40: rgba(88, 166, 255, 0.40);
 
   /* ─────────────────────────────────────────────────────────────────
-     5. SEMANTIC ALIASES
+     4. SEMANTIC ALIASES
      ───────────────────────────────────────────────────────────────── */
 
   /* Semantic: Surfaces */
@@ -151,50 +201,120 @@
   --color-border-emphasis: var(--border-light);
 
   /* Semantic: Status */
-  --color-success: var(--green);
-  --color-warning: var(--orange);
-  --color-error: var(--red);
-  --color-info: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
 
   /* Semantic: Category colors */
-  --color-category-ai: var(--purple);
-  --color-category-privacy: var(--orange);
-  --color-category-security: var(--red);
-  --color-category-programming: var(--green);
-  --color-category-hardware: var(--accent);
-  --color-category-other: var(--text-muted);
-
-  /* Semantic: Z-index layers */
-  --z-index-sticky: 100;
-  --z-index-share-dropdown: 200;
-  --z-index-skip-link: 1000;
-  --z-index-toast: 9999;
+  --color-category-ai: var(--category-ai);
+  --color-category-privacy: var(--category-privacy);
+  --color-category-security: var(--category-security);
+  --color-category-programming: var(--category-programming);
+  --color-category-hardware: var(--category-hardware);
+  --color-category-other: var(--category-other);
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   LIGHT THEME OVERRIDES
+   5. LIGHT THEME OVERRIDES
    ───────────────────────────────────────────────────────────────── */
 
 [data-theme="light"] {
+  /* Background colors */
   --bg-primary: #ffffff;
   --bg-secondary: #f6f8fa;
   --bg-tertiary: #eaeef2;
+  --bg-subtle: #eaeef2;
+  --bg-input: #ffffff;
+  --bg-hover: #eaeef2;
+  --bg-selected: #ddf4ff;
+
+  /* Border colors */
   --border: #d0d7de;
   --border-light: #afb8c1;
+  --border-focus: #0969da;
+
+  /* Text colors */
   --text-primary: #1f2328;
   --text-secondary: #57606a;
   --text-muted: #6e7781;
   --text-dim: #57606a;
+  --text-inverse: #ffffff;
+
+  /* Accent colors */
   --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-active: #0550ae;
   --accent-dim: #0550ae;
+  --link: #0969da;
+  --link-hover: #0550ae;
+  --focus-ring: #0969da;
+
+  /* Status colors */
   --green: #1a7f37;
   --orange: #9a6700;
   --red: #cf222e;
   --purple: #8250df;
+  --pink: #bf3989;
+
+  /* Status semantic colors */
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --error: #cf222e;
+  --info: #0969da;
+
+  /* Category colors */
+  --category-ai: #8250df;
+  --category-privacy: #9a6700;
+  --category-security: #cf222e;
+  --category-programming: #1a7f37;
+  --category-hardware: #0969da;
+  --category-other: #6e7781;
+
+  /* Skeleton loader colors */
   --skeleton-base: #eaeef2;
   --skeleton-shine: #d0d7de;
-  --bg-subtle: #eaeef2;
+
+  /* Utility */
+  --selection: #ddf4ff;
+  --overlay: rgba(0,0,0,0.3);
+
+  /* Alpha variants */
+  --accent-alpha-08: rgba(9, 105, 218, 0.08);
+  --accent-alpha-10: rgba(9, 105, 218, 0.10);
+  --accent-alpha-25: rgba(9, 105, 218, 0.25);
+
+  --green-alpha-10: rgba(26, 127, 55, 0.10);
+  --green-alpha-15: rgba(26, 127, 55, 0.15);
+  --green-alpha-25: rgba(26, 127, 55, 0.25);
+
+  --orange-alpha-10: rgba(154, 103, 0, 0.10);
+  --orange-alpha-15: rgba(154, 103, 0, 0.15);
+  --orange-alpha-25: rgba(154, 103, 0, 0.25);
+
+  --red-alpha-08: rgba(207, 34, 46, 0.08);
+  --red-alpha-10: rgba(207, 34, 46, 0.10);
+  --red-alpha-15: rgba(207, 34, 46, 0.15);
+  --red-alpha-25: rgba(207, 34, 46, 0.25);
+
+  --purple-alpha-10: rgba(130, 80, 223, 0.10);
+  --purple-alpha-25: rgba(130, 80, 223, 0.25);
+  --category-ai-alpha-15: rgba(130, 80, 223, 0.15);
+  --category-ai-alpha-40: rgba(130, 80, 223, 0.40);
+
+  --category-privacy-alpha-15: rgba(154, 103, 0, 0.15);
+  --category-privacy-alpha-40: rgba(154, 103, 0, 0.40);
+  --category-security-alpha-15: rgba(207, 34, 46, 0.15);
+  --category-security-alpha-40: rgba(207, 34, 46, 0.40);
+  --category-programming-alpha-15: rgba(26, 127, 55, 0.15);
+  --category-programming-alpha-40: rgba(26, 127, 55, 0.40);
+  --category-hardware-alpha-15: rgba(9, 105, 218, 0.15);
+  --category-hardware-alpha-40: rgba(9, 105, 218, 0.40);
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   6. HIGH CONTRAST OVERRIDES
+   ───────────────────────────────────────────────────────────────── */
 
 @media (prefers-contrast: high) {
   :root {

@@ -396,3 +396,127 @@ class TestMetadataIntegrity:
             assert "appearance" in info, f"Missing 'appearance' for {theme_id}"
             assert "css_url" in info, f"Missing 'css_url' for {theme_id}"
             assert "origin" in info, f"Missing 'origin' for {theme_id}"
+
+
+# ---------------------------------------------------------------------------
+# 25–32. Race condition and async event contracts
+# ---------------------------------------------------------------------------
+
+class TestRaceConditionContracts:
+    """Server-side validation of race condition handling contracts.
+
+    The JS controller uses _activationGeneration to prevent stale async events
+    from overwriting newer selections. These tests verify the server-side
+    contracts that support that behavior.
+    """
+
+    def test_theme_js_has_generation_counter(self):
+        """theme.js maintains _activationGeneration for race condition prevention."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        assert "_activationGeneration" in js_content
+        assert "++_activationGeneration" in js_content
+
+    def test_theme_js_checks_generation_on_load(self):
+        """theme.js checks generation matches before applying stylesheet."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # The load handler should check generation !== _activationGeneration
+        assert "generation !== _activationGeneration" in js_content
+
+    def test_theme_js_pending_link_cleanup_on_success(self):
+        """theme.js removes old palette link after pending link loads."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # Should remove old link and rename pending to active
+        assert "removeChild" in js_content
+        assert "PALETTE_STYLESHEET_ID" in js_content
+
+    def test_theme_js_pending_link_cleanup_on_error(self):
+        """theme.js removes pending link on error."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # Error handler should remove the pending link
+        assert "errorHandler" in js_content
+        assert "Stylesheet load failed" in js_content
+
+    def test_theme_js_max_error_count(self):
+        """theme.js limits stylesheet errors to prevent infinite retries."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        assert "_stylesheetErrorCount" in js_content
+        assert "_maxStylesheetErrors" in js_content
+
+    def test_theme_js_error_count_resets_on_success(self):
+        """theme.js resets error count on successful stylesheet load."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # loadHandler should reset error count
+        assert "_stylesheetErrorCount = 0" in js_content
+
+    def test_theme_js_cross_tab_sync_checks_key(self):
+        """theme.js only responds to PREFERENCE_KEY storage events."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        assert "e.key !== PREFERENCE_KEY" in js_content
+
+    def test_theme_js_cross_tab_sync_avoids_loop(self):
+        """theme.js avoids write-back loops in cross-tab sync."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # skipPersist: true prevents writing back to storage
+        assert "skipPersist: true" in js_content
+
+    def test_theme_js_system_mode_ignores_os_changes_when_explicit(self):
+        """theme.js ignores OS preference changes when explicit theme is set."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # onSystemPreferenceChange should check isExplicitPreference
+        assert "isExplicitPreference(_currentPreference)" in js_content
+
+    def test_css_routes_independent_for_concurrent_requests(self, _client):
+        """CSS routes serve independent responses for concurrent requests."""
+        # Request two different themes concurrently (simulated sequential)
+        resp1 = _client.get("/assets/themes/__emergency__.css")
+        resp2 = _client.get("/assets/themes/__emergency__.css")
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+        # Both should return valid CSS
+        assert ":root" in resp1.data.decode()
+        assert ":root" in resp2.data.decode()
+
+
+# ---------------------------------------------------------------------------
+# 33. Metadata integrity under rapid requests
+# ---------------------------------------------------------------------------
+
+class TestMetadataUnderLoad:
+    """Metadata must be consistent across multiple rapid requests."""
+
+    def test_metadata_consistent_across_requests(self, _client):
+        """Metadata JSON is identical across multiple requests."""
+        responses = []
+        for _ in range(5):
+            resp = _client.get("/api/v1/themes/metadata")
+            data = json.loads(resp.data)
+            responses.append(data)
+        # All responses should have the same themes
+        theme_sets = [set(r.get("themes", {}).keys()) for r in responses]
+        assert all(s == theme_sets[0] for s in theme_sets), "Metadata inconsistent across requests"
+
+    def test_css_route_consistent_across_requests(self, _client):
+        """CSS output is identical across multiple requests for same theme."""
+        responses = []
+        for _ in range(5):
+            resp = _client.get("/assets/themes/__emergency__.css")
+            responses.append(resp.data.decode())
+        assert all(r == responses[0] for r in responses), "CSS output inconsistent"

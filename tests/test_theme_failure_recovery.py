@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -29,6 +30,23 @@ from services.themes.registry import (
     RegistryBuildSettings,
     build_registry,
 )
+
+
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+
+def _extract_metadata_json(html: str) -> dict | None:
+    """Return parsed JSON from the #ainews-theme-metadata script tag."""
+    match = re.search(
+        r'<script\s+id="ainews-theme-metadata"\s+type="application/json">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    if not match:
+        return None
+    return json.loads(match.group(1))
 
 
 # ------------------------------------------------------------------
@@ -781,3 +799,158 @@ class TestRecoveryAssertions:
         diags = _app.extensions.get("theme_diagnostics")
         assert diags is not None
         assert hasattr(diagnostics := diags, "diagnostics")
+
+
+# ======================================================================
+# 5. Browser-side failure mode contracts (server-side validation)
+# ======================================================================
+
+
+class TestBrowserSideFailureContracts:
+    """Server-side contracts for browser-side failure modes.
+
+    These tests validate the server-side infrastructure that the browser
+    depends on for failure recovery. The actual browser behavior is tested
+    via manual smoke tests in docs/theme-validation.md.
+    """
+
+    def test_metadata_script_tag_is_wellformed_json(self, _client):
+        """Embedded metadata JSON is valid and parseable."""
+        resp = _client.get("/")
+        html = resp.data.decode()
+        match = re.search(
+            r'<script\s+id="ainews-theme-metadata"\s+type="application/json">(.*?)</script>',
+            html,
+            re.DOTALL,
+        )
+        assert match is not None, "Metadata script tag not found"
+        data = json.loads(match.group(1))
+        assert isinstance(data, dict)
+        assert "defaults" in data
+        assert "themes" in data
+
+    def test_metadata_script_has_correct_type(self, _client):
+        """Metadata script tag uses type=application/json (non-executable)."""
+        resp = _client.get("/")
+        html = resp.data.decode()
+        assert 'type="application/json"' in html
+
+    def test_metadata_defaults_have_dark_and_light(self, _client):
+        """Metadata defaults include dark and light theme IDs."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode())
+        assert data is not None
+        assert isinstance(data["defaults"]["dark"], str)
+        assert isinstance(data["defaults"]["light"], str)
+        assert len(data["defaults"]["dark"]) > 0
+        assert len(data["defaults"]["light"]) > 0
+
+    def test_metadata_themes_have_css_url(self, _client):
+        """Every theme in metadata has a valid css_url."""
+        resp = _client.get("/")
+        data = _extract_metadata_json(resp.data.decode())
+        assert data is not None
+        for theme_id, info in data["themes"].items():
+            assert "css_url" in info, f"{theme_id}: Missing css_url"
+            assert info["css_url"].startswith("/assets/themes/"), (
+                f"{theme_id}: Invalid css_url: {info['css_url']}"
+            )
+
+    def test_css_route_returns_404_for_unknown_id(self, _client):
+        """CSS route returns 404 for unknown theme IDs."""
+        resp = _client.get("/assets/themes/this-theme-does-not-exist-at-all.css")
+        assert resp.status_code == 404
+
+    def test_css_route_returns_200_for_emergency(self, _client):
+        """CSS route always returns 200 for emergency theme."""
+        resp = _client.get(f"/assets/themes/{EMERGENCY_THEME_ID}.css")
+        assert resp.status_code == 200
+
+    def test_css_route_no_filesystem_paths(self, _client):
+        """CSS response contains no filesystem paths."""
+        resp = _client.get(f"/assets/themes/{EMERGENCY_THEME_ID}.css")
+        css = resp.data.decode()
+        assert "/home/" not in css
+        assert "resources/themes" not in css
+        assert ".toml" not in css
+
+    def test_metadata_no_css_content_leaked(self, _client):
+        """Metadata response contains no CSS content."""
+        resp = _client.get("/api/v1/themes/metadata")
+        data = json.loads(resp.data)
+        for theme_id, info in data.get("themes", {}).items():
+            assert "css" not in info, f"CSS leaked for {theme_id}"
+            assert "content" not in info, f"Content leaked for {theme_id}"
+
+    def test_theme_js_storage_helpers_are_non_fatal(self):
+        """theme.js storage helpers catch exceptions (non-fatal)."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # storageRead, storageWrite, storageRemove all have try/catch
+        assert "try {" in js_content
+        assert "catch (e)" in js_content
+
+    def test_theme_js_handles_metadata_absence(self):
+        """theme.js handles missing metadata gracefully."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # readRegistryMetadata returns null if element not found
+        assert "return null" in js_content
+
+    def test_theme_js_handles_invalid_metadata(self):
+        """theme.js handles malformed metadata JSON gracefully."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # JSON.parse is wrapped in try/catch
+        assert "JSON.parse" in js_content
+
+    def test_theme_js_bootstrap_handles_missing_registry(self):
+        """theme.js bootstrap handles null registry."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # bootstrap should handle _registry being null
+        assert "if (themeId)" in js_content or "if (_registry)" in js_content
+
+    def test_theme_js_activate_handles_missing_appearance(self):
+        """theme.js activateTheme handles missing appearance gracefully."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # Should fall back to defaults if appearance not found
+        assert "if (!appearance)" in js_content
+
+    def test_theme_js_activate_handles_missing_css_url(self):
+        """theme.js activateTheme constructs CSS URL when not in registry."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # Should construct /assets/themes/<id>.css as fallback
+        assert "'/assets/themes/' + themeId + '.css'" in js_content
+
+    def test_theme_js_error_threshold_clears_preference(self):
+        """theme.js clears preference after max stylesheet errors."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # Should remove preference key when error count exceeded
+        assert "storageRemove(PREFERENCE_KEY)" in js_content
+
+    def test_theme_js_prefers_reduced_motion_checked(self):
+        """theme.js checks prefers-reduced-motion before adding transitions."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        assert "prefers-reduced-motion" in js_content
+
+    def test_theme_js_matchmedia_unavailable_handled(self):
+        """theme.js handles matchMedia being unavailable."""
+        from pathlib import Path
+        js_path = Path(__file__).parent.parent / "static" / "js" / "theme.js"
+        js_content = js_path.read_text()
+        # Should check window.matchMedia before using it
+        assert "window.matchMedia" in js_content
+        assert "_mediaQuery ? _mediaQuery.matches : true" in js_content

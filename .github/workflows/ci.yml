@@ -207,6 +207,15 @@ jobs:
       - name: Run theme failure recovery tests
         run: .venv/bin/python -m pytest tests/test_theme_failure_recovery.py -v
 
+      - name: Run theme accessibility validation tests
+        run: .venv/bin/python -m pytest tests/test_theme_accessibility_validation.py -v
+
+      - name: Run theme visual validation tests
+        run: .venv/bin/python -m pytest tests/test_theme_visual_validation.py -v
+
+      - name: Run theme package validation tests
+        run: .venv/bin/python -m pytest tests/test_theme_package_validation.py -v
+
   compose-smoke:
     runs-on: ubuntu-latest
 

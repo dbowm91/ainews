@@ -154,7 +154,6 @@ class Config:
     MIN_CONTENT_LENGTH = safe_int("MIN_CONTENT_LENGTH", 200)
     VERIFICATION_EXPIRY_SECONDS = safe_int("VERIFICATION_EXPIRY_SECONDS", 3600)
 
-    # Theme subsystem (Phase 2)
     THEMES_ENABLED = os.environ.get("THEMES_ENABLED", "true").lower() in (
         "1",
         "true",

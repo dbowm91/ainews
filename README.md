@@ -95,7 +95,7 @@ Nginx → Granian (ASGI) → Flask
 
 ### Themes
 
-ainews ships with 48 built-in dark/light themes derived from Halloy IRC themes (Catppuccin, Dracula, Gruvbox, Nord, Rose Pine, Solarized, etc.). Application layout CSS is permanent; theme CSS provides palette variables only. Operators can add custom themes via `THEMES_CUSTOM_DIR`. See [Theme Authoring Guide](docs/theme-authoring.md) for creating compatible themes.
+ainews ships with 48 built-in themes (6 light, 42 dark) derived from Halloy IRC themes (Catppuccin, Dracula, Gruvbox, Nord, Rose Pine, Solarized, etc.). Application layout CSS is permanent; theme CSS provides palette variables only. Operators can add custom themes via `THEMES_CUSTOM_DIR`. See [Theme Authoring Guide](docs/theme-authoring.md) for creating compatible themes.
 
 ## Features
 

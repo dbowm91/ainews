@@ -22,10 +22,10 @@ Added `required` parameter. When `required=True`, raises `ValueError` on missing
 ### 1.4-1.6 CSS Consolidation ✅
 - Removed duplicate `:root` and `[data-theme="light"]` blocks from critical.css
 - Added `@import "./variables.css"` to critical.css
-- Created build/generate-critical-css.js for auto-generating critical_css.html
+- Created scripts/build_critical_css.py for auto-generating critical_css.html
 - Deduplicated layout.css rules
 
-**Files modified:** static/css/critical.css, static/css/layout.css, build/generate-critical-css.js
+**Files modified:** static/css/critical.css, static/css/layout.css, scripts/build_critical_css.py
 
 ## Wave 2: High Priority (COMPLETED)
 

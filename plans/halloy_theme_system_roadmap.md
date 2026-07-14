@@ -1,5 +1,7 @@
 # Halloy-Compatible Theme System Roadmap
 
+> **Note:** This is a historical planning document. Phases 1–6 are complete and Phase 7 (release hardening) is underway. The roadmap below is preserved for reference.
+
 ## Purpose
 
 Introduce a Halloy-compatible theming subsystem for the `ainews` frontend. The system must package the approved Halloy themes currently present in the uncommitted repository-root `themes/` directory, translate Halloy TOML into `ainews` semantic CSS variables, preserve client-side reader preferences, and allow operators to add or override themes through a configurable external directory.

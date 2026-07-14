@@ -74,8 +74,7 @@ def get_emergency_ainews_theme(appearance: str = "dark") -> AinewsTheme:
     Args:
         appearance: ``"dark"`` or ``"light"``. Defaults to ``"dark"`` because
             the emergency palette was designed as a dark fallback. Non-dark
-            appearances currently return the same palette — light overrides are
-            planned for a later phase.
+            appearances currently return the same palette.
 
     Returns:
         A fully-populated :class:`AinewsTheme` whose default ``appearance``

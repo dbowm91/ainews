@@ -323,7 +323,7 @@ Theme behavior is configured via env vars (see ``ProductionConfig`` in
 | ``THEMES_DEFAULT_DARK`` | ``catppuccin-mocha`` | Default for dark-mode requests. |
 | ``THEMES_DEFAULT_LIGHT`` | ``catppuccin-latte`` | Default for light-mode requests. |
 | ``THEMES_MAX_FILE_BYTES`` | ``262144`` | Per-file byte limit for external themes. Validated 1024..1048576. |
-| ``THEMES_STRICT_CONTRAST`` | ``false`` | Reserved for a future strict-contrast policy. |
+| ``THEMES_STRICT_CONTRAST`` | ``false`` | When ``true``, treats non-fatal contrast warnings as errors during theme validation. |
 
 Changes require a restart. Production startup validates only the byte limit
 and the ``THEMES_CUSTOM_DIR``/``THEMES_ALLOW_CUSTOM`` interaction; invalid
@@ -462,10 +462,11 @@ balancing freshness against performance:
   cached CSS will send ``If-None-Match`` with the previous ``ETag``. The
   route returns ``304 Not Modified`` when the content digest has not changed,
   avoiding unnecessary re-transmission.
-- **Fingerprinted URLs are deferred as future work.** A URL scheme like
+- **Fingerprinted URLs are deferred (not planned).** A URL scheme like
   ``/assets/themes/<id>.<digest>.css`` would allow immutable caching, but
   adds complexity to the client-side preference system and the metadata
-  endpoint. The current approach is correct for the current feature set.
+  endpoint. The current ETag-based approach is sufficient for the current
+  feature set.
 
 ### 13.4 Conditional requests
 
@@ -586,8 +587,7 @@ When preference is ``"system"``:
 
 ### 14.5 Selector UI
 
-``templates/partials/theme_selector.html`` replaces the legacy
-``theme_toggle.html`` partial. Requirements:
+``templates/partials/theme_selector.html`` provides an accessible popover for theme selection. Requirements:
 
 - Accessible popover with ``role="listbox"`` and ``aria-label``.
 - Search input filters themes by display name.

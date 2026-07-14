@@ -1,10 +1,6 @@
 # Theme Selector
 
-The theme selector switches between color schemes managed by the Halloy theme system. It replaces the legacy `theme_toggle.html` partial and provides an accessible, searchable popover for theme selection.
-
-## Legacy Fallback
-
-`templates/partials/theme_toggle.html` is a legacy fallback. Base templates (`base.html`, `base_admin.html`) now use `templates/partials/theme_selector.html` instead. The legacy toggle only supports binary dark/light switching via `localStorage.theme`. The selector supports arbitrary themes, system mode, and cross-tab sync.
+The theme selector switches between color schemes managed by the Halloy theme system. It provides an accessible, searchable popover for theme selection.
 
 ## Preference Schema
 
@@ -100,6 +96,5 @@ A `storage` event listener on the v2 key synchronizes preference changes across 
 
 - `static/js/theme.js` — Bootstrap, controller, cross-tab sync
 - `templates/partials/theme_selector.html` — Selector popover partial
-- `templates/partials/theme_toggle.html` — Legacy fallback (binary dark/light only)
 - `routes/themes.py` — Context processor, metadata endpoint, CSS delivery
-- `tests/test_theme_preferences.py` — 22 tests for preference system
+- `tests/test_theme_preferences.py` — 51 tests for preference system

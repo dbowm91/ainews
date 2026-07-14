@@ -17,7 +17,7 @@ switching, sharing, bookmarks, and offline feedback.
 After changing CSS, rebuild generated assets from the repository root:
 
     python scripts/build_assets.py css
-    node build/generate-critical-css.js
+    python scripts/build_critical_css.py
 
 After changing JavaScript, rebuild the minified bundle as well:
 

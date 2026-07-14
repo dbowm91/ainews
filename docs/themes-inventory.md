@@ -1,6 +1,6 @@
 # Theme Inventory & Provenance
 
-This document catalogs every `.toml` file under `themes/`. It is the review record for Phase 1 of the theme subsystem — no source theme collection is committed blindly.
+This document catalogs every `.toml` file under `resources/themes/`. It is the review record for Phase 1 of the theme subsystem — no source theme collection is committed blindly.
 
 ## How appearance is determined
 
@@ -73,14 +73,14 @@ Exact light/dark classification is done at parse time via `detect_appearance()` 
 
 ## Contrast exclusions (translation failures)
 
-These themes parse successfully but `translate_theme()` raises `ThemeContrastError` because `text.primary` vs `general.background` falls below the WCAG AA threshold of 4.5. They are excluded from the bundle until remapped; future phases may accept them with explicit contrast remapping or a per-theme override.
+These themes parse successfully but `translate_theme()` raises `ThemeContrastError` because `text.primary` vs `general.background` falls below the WCAG AA threshold of 4.5. They are excluded from the bundle; re-inclusion would require explicit contrast remapping or a per-theme override, which is not currently planned.
 
 | Theme | text.primary | general.background | Measured contrast | Notes |
 |-------|--------------|---------------------|-------------------|-------|
 | `Cyber Red.toml` | `#e41951` (red) | `#0a0000` (near-black red) | 4.50 | Both reds are too close in luminance; the original Halloy theme intentionally uses red text on near-black background. |
 | `Rose Pine Dawn.toml` | `#d7827e` (rose) | `#f4ede8` (warm off-white) | 2.45 | Rose Pine Dawn is a deliberately low-contrast pastel palette; the rose accent is not intended to be primary text. |
 
-These themes remain valid Halloy themes and parse without errors — only the translation step fails. They are kept out of the default bundle until a contrast remapping option is implemented in a later phase.
+These themes remain valid Halloy themes and parse without errors — only the translation step fails. They are excluded from the bundle; re-inclusion would require explicit contrast remapping or a per-theme override, which is not currently planned.
 
 ## Normalized identifier examples
 

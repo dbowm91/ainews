@@ -13,7 +13,7 @@ Rules are organized into focused modules in `static/css/`.
 - Avoid inline styles; use utility classes from `utilities.css`.
 
 ### CSS Consolidation Note
-When editing CSS variables, always edit `variables.css`. If `critical.css` or `critical_css.html` need updating, ensure all three files stay in sync using the build script at `build/generate-critical-css.js`.
+When editing CSS variables, always edit `variables.css`. If `critical.css` or `critical_css.html` need updating, ensure all three files stay in sync using the build script at `scripts/build_critical_css.py`.
 
 ### CSS @layer Organization
 `static/css/style.css` uses `@layer reset, variables, layout, components, pages, utilities;` with layered `@import` statements.

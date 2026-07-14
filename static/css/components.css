@@ -339,14 +339,7 @@
   height: 16px;
 }
 
-.theme-icon-light,
-[data-theme="light"] .theme-icon-dark {
-  display: none;
-}
 
-[data-theme="light"] .theme-icon-light {
-  display: block;
-}
 
 .share-trigger {
   position: relative;

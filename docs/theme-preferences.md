@@ -1,6 +1,6 @@
 # Theme Preferences
 
-ainews supports light and dark themes that you can switch between.
+ainews supports 48 built-in themes (and optional custom themes) that you can switch between, including system mode that follows your OS dark/light preference.
 
 ## Finding the theme selector
 

@@ -468,35 +468,6 @@
   window.AinewsTheme = controller;
 
   /* ------------------------------------------------------------------ */
-  /* Backward compatibility                                             */
-  /* ------------------------------------------------------------------ */
-
-  window.toggleTheme = function () {
-    if (!_registry) return;
-
-    if (isExplicitPreference(_currentPreference)) {
-      var currentId = preferenceThemeId(_currentPreference);
-      var currentAppearance = getThemeAppearance(currentId, _registry);
-      if (currentAppearance === 'light') {
-        var darkId = (_registry.defaults) ? _registry.defaults.dark : null;
-        if (darkId) controller.activate(darkId);
-      } else {
-        var lightId = (_registry.defaults) ? _registry.defaults.light : null;
-        if (lightId) controller.activate(lightId);
-      }
-    } else {
-      var isDark = _mediaQuery ? _mediaQuery.matches : true;
-      if (isDark) {
-        var lightDefault = (_registry.defaults) ? _registry.defaults.light : null;
-        if (lightDefault) controller.activate(lightDefault);
-      } else {
-        var darkDefault = (_registry.defaults) ? _registry.defaults.dark : null;
-        if (darkDefault) controller.activate(darkDefault);
-      }
-    }
-  };
-
-  /* ------------------------------------------------------------------ */
   /* Selector panel                                                     */
   /* ------------------------------------------------------------------ */
 
@@ -675,16 +646,6 @@
 
     updateSelectorState();
   }
-
-  /* ------------------------------------------------------------------ */
-  /* Click delegation (legacy .theme-toggle)                            */
-  /* ------------------------------------------------------------------ */
-
-  document.addEventListener('click', function (e) {
-    if (e.target.closest('.theme-toggle') && !e.target.closest('.theme-selector')) {
-      window.toggleTheme();
-    }
-  });
 
   /* ------------------------------------------------------------------ */
   /* Bootstrap                                                          */

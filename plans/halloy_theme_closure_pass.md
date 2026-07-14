@@ -393,7 +393,6 @@ Search for and classify remaining uses of:
 ainews-theme
 LIGHT
 DARK
-toggleTheme
 ```
 
 Retain only:

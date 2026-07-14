@@ -140,4 +140,4 @@ Themes may be excluded from the bundle for the following reasons:
 - **License incompatibility** — non-MIT license or additional restrictions
 - **Duplicate** — substantially identical to an existing theme (e.g., a variant that only changes one color)
 
-Excluded themes are documented in `docs/themes-inventory.md` under "Excluded Themes" with the specific reason. They remain in the evaluation set and may be re-included if their issues are resolved (e.g., via contrast remapping in a future phase).
+Excluded themes are documented in `docs/themes-inventory.md` under "Excluded Themes" with the specific reason. They are excluded from the bundle; re-inclusion would require explicit contrast remapping or a per-theme override, which is not currently planned.

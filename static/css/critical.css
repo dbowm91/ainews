@@ -228,14 +228,7 @@ a:hover {
   height: 16px;
 }
 
-.theme-icon-light,
-[data-theme="light"] .theme-icon-dark {
-  display: none;
-}
 
-[data-theme="light"] .theme-icon-light {
-  display: block;
-}
 
 .nav-toggle-label {
   display: none;

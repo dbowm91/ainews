@@ -343,10 +343,19 @@ class TestCheckDatabaseDirectory:
 
 
 class TestCheckPlaceholderValues:
-    def test_always_passes(self):
+    def test_no_placeholders(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
         checks: list[CheckResult] = []
-        _check_placeholder_values(checks)
+        _check_placeholder_values(paths, checks)
         assert checks[0].passed is True
+
+    def test_detects_placeholder_in_env(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        paths.env_file.path.write_text("SECRET_KEY=changeme\n")
+        checks: list[CheckResult] = []
+        _check_placeholder_values(paths, checks)
+        assert checks[0].passed is False
+        assert "SECRET_KEY" in checks[0].details
 
 
 class TestDoctorReportJsonSerialization:

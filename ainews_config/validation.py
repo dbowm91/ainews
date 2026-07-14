@@ -632,9 +632,28 @@ def _validate_themes(config: dict[str, Any], result: ValidationResult) -> None:
 
 def _validate_redis(config: dict[str, Any], result: ValidationResult) -> None:
     env = _get_environment(config)
+    flask_config = env.get("FLASK_CONFIG", "")
 
     broker = env.get("CELERY_BROKER_URL", "")
     backend = env.get("CELERY_RESULT_BACKEND", "")
+
+    if flask_config == "production":
+        if not broker:
+            result.add_error(
+                code="REDIS_URL_MISSING",
+                file=".env",
+                key="CELERY_BROKER_URL",
+                message="CELERY_BROKER_URL is required in production mode.",
+                remediation="Set CELERY_BROKER_URL to a Redis URL, e.g. redis://localhost:6379/0.",
+            )
+        if not backend:
+            result.add_error(
+                code="REDIS_URL_MISSING",
+                file=".env",
+                key="CELERY_RESULT_BACKEND",
+                message="CELERY_RESULT_BACKEND is required in production mode.",
+                remediation="Set CELERY_RESULT_BACKEND to a Redis URL, e.g. redis://localhost:6379/1.",
+            )
 
     if not broker or not backend:
         return

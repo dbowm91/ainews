@@ -98,45 +98,46 @@ class TestLoadDotenv:
     def test_simple_key_value(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("FOO=bar\nBAZ=qux\n")
-        env, diags = load_dotenv(env_file)
+        env, diags, lines = load_dotenv(env_file)
         assert env == {"FOO": "bar", "BAZ": "qux"}
         assert diags == []
+        assert lines == {"FOO": 1, "BAZ": 2}
 
     def test_double_quoted_value(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text('FOO="hello world"\n')
-        env, _ = load_dotenv(env_file)
+        env, _, _ = load_dotenv(env_file)
         assert env["FOO"] == "hello world"
 
     def test_single_quoted_value(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("FOO='single quoted'\n")
-        env, _ = load_dotenv(env_file)
+        env, _, _ = load_dotenv(env_file)
         assert env["FOO"] == "single quoted"
 
     def test_export_prefix(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("export KEY=value\n")
-        env, _ = load_dotenv(env_file)
+        env, _, _ = load_dotenv(env_file)
         assert env["KEY"] == "value"
 
     def test_comments_ignored(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("# comment\nFOO=bar\n")
-        env, diags = load_dotenv(env_file)
+        env, diags, _ = load_dotenv(env_file)
         assert env == {"FOO": "bar"}
         assert diags == []
 
     def test_blank_lines_ignored(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("\n\nFOO=bar\n\n")
-        env, _ = load_dotenv(env_file)
+        env, _, _ = load_dotenv(env_file)
         assert env == {"FOO": "bar"}
 
     def test_malformed_no_equals(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("BAD_LINE_NO_EQUALS\n")
-        env, diags = load_dotenv(env_file)
+        env, diags, _ = load_dotenv(env_file)
         assert env == {}
         assert len(diags) == 1
         assert diags[0].severity == "error"
@@ -145,7 +146,7 @@ class TestLoadDotenv:
     def test_empty_key(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("=value\n")
-        env, diags = load_dotenv(env_file)
+        env, diags, _ = load_dotenv(env_file)
         assert env == {}
         assert len(diags) == 1
         assert diags[0].code == "DOTENV_EMPTY_KEY"
@@ -153,22 +154,23 @@ class TestLoadDotenv:
     def test_unmatched_quote(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text('FOO="unmatched\n')
-        env, diags = load_dotenv(env_file)
+        env, diags, _ = load_dotenv(env_file)
         assert "FOO" not in env
         assert len(diags) == 1
         assert diags[0].code == "DOTENV_UNMATCHED_QUOTE"
 
     def test_missing_file_returns_empty(self, tmp_path):
-        env, diags = load_dotenv(tmp_path / "nonexistent.env")
+        env, diags, lines = load_dotenv(tmp_path / "nonexistent.env")
         assert env == {}
         assert diags == []
+        assert lines == {}
 
     def test_unreadable_file(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("X=1")
         env_file.chmod(0o000)
         try:
-            env, diags = load_dotenv(env_file)
+            env, diags, _ = load_dotenv(env_file)
             assert env == {}
             assert len(diags) == 1
             assert diags[0].code == "DOTENV_READ_ERROR"
@@ -178,15 +180,21 @@ class TestLoadDotenv:
     def test_value_with_equals_sign(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("CONN=redis://localhost:6379\n")
-        env, _ = load_dotenv(env_file)
+        env, _, _ = load_dotenv(env_file)
         assert env["CONN"] == "redis://localhost:6379"
 
     def test_multiple_malformed_lines(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text("GOOD=ok\nBAD1\nBAD2\nALSO_GOOD=yes\n")
-        env, diags = load_dotenv(env_file)
+        env, diags, _ = load_dotenv(env_file)
         assert env == {"GOOD": "ok", "ALSO_GOOD": "yes"}
         assert len(diags) == 2
+
+    def test_line_numbers_populated(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("# comment\nSECRET_KEY=abc123\n# another\nADMIN_PASS=x\n")
+        env, _, lines = load_dotenv(env_file)
+        assert lines == {"SECRET_KEY": 2, "ADMIN_PASS": 4}
 
 
 class TestResolveEnvVars:
@@ -1025,3 +1033,48 @@ class TestEffectiveConfiguration:
             "dotenv",
         }
         assert fields == expected
+
+
+class TestDeprecatedFieldWarnings:
+    def test_deprecated_field_triggers_warning(self, tmp_path):
+        from unittest.mock import patch
+        from ainews_config.fields import FIELD_REGISTRY, ConfigField, ConfigFile, FieldType
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("SECRET_KEY=abc123\n")
+
+        for name in ["providers.yaml", "pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        # Temporarily mark secret_key as deprecated
+        original_field = FIELD_REGISTRY.lookup("secret_key")
+        deprecated_field = ConfigField(
+            key=original_field.key,
+            destination=original_field.destination,
+            path=original_field.path,
+            field_type=original_field.field_type,
+            secret=original_field.secret,
+            deprecated=True,
+            env_var=original_field.env_var,
+        )
+        with patch.dict(FIELD_REGISTRY._fields, {"secret_key": deprecated_field}):
+            paths = _make_resolved_paths(tmp_path)
+            config = load_all_configs(paths)
+            dep_diags = [d for d in config.diagnostics if d.code == "FIELD_DEPRECATED"]
+            assert len(dep_diags) >= 1
+            assert any("secret_key" in d.key for d in dep_diags)
+
+
+class TestProvenanceLineNumbers:
+    def test_env_provenance_has_line_numbers(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("# comment\nSECRET_KEY=abc123\n")
+
+        for name in ["providers.yaml", "pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        prov = config.provenance.get("SECRET_KEY")
+        assert prov is not None
+        assert prov.line == 2

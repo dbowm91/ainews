@@ -619,3 +619,31 @@ class TestEdgeCases:
         cfg["sources"].append({"id": "bad-topics", "topics": {"include": "not-a-list"}})
         result = validate_cross_file(cfg)
         assert result.is_valid
+
+
+class TestRedisPresenceProduction:
+    def test_missing_broker_in_production(self):
+        cfg = _base_config()
+        cfg["environment"]["FLASK_CONFIG"] = "production"
+        cfg["environment"].pop("CELERY_BROKER_URL", None)
+        cfg["environment"].pop("CELERY_RESULT_BACKEND", None)
+        result = validate_cross_file(cfg)
+        codes = [e.code for e in result.errors]
+        assert "REDIS_URL_MISSING" in codes
+
+    def test_missing_backend_in_production(self):
+        cfg = _base_config()
+        cfg["environment"]["FLASK_CONFIG"] = "production"
+        cfg["environment"]["CELERY_BROKER_URL"] = "redis://localhost:6379/0"
+        cfg["environment"].pop("CELERY_RESULT_BACKEND", None)
+        result = validate_cross_file(cfg)
+        codes = [e.code for e in result.errors]
+        assert "REDIS_URL_MISSING" in codes
+
+    def test_missing_broker_not_checked_in_development(self):
+        cfg = _base_config()
+        cfg["environment"].pop("CELERY_BROKER_URL", None)
+        cfg["environment"].pop("CELERY_RESULT_BACKEND", None)
+        result = validate_cross_file(cfg)
+        codes = [e.code for e in result.errors]
+        assert "REDIS_URL_MISSING" not in codes

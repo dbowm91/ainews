@@ -5,13 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-
-class ConfigFile(enum.Enum):
-    ENV = ".env"
-    PROVIDERS = "providers.yaml"
-    PIPELINE = "pipeline.yaml"
-    SOURCES = "sources.yaml"
-    TOPICS = "topics.yaml"
+from ainews_config.paths import ConfigFile
 
 
 class FieldType(enum.Enum):
@@ -146,9 +140,9 @@ _ENV_FIELDS = [
     _env("database_url", field_type=FieldType.STRING, default="sqlite:///instance/prod.db", restart_impact=frozenset({RuntimeComponent.WEB, RuntimeComponent.WORKER}), description="SQLite database URL", aliases=("db_url",)),
     _env("safe_fetch_max_redirects", field_type=FieldType.INT, default=5, description="Maximum redirects for safe fetch client"),
     _env("safe_fetch_max_bytes", field_type=FieldType.INT, default=2000000, description="Maximum response body size in bytes"),
-    _env("safe_fetch_connect_timeout", field_type=FieldType.INT, default=5, description="Connection timeout in seconds"),
-    _env("safe_fetch_read_timeout", field_type=FieldType.INT, default=10, description="Read timeout in seconds"),
-    _env("safe_fetch_total_timeout", field_type=FieldType.INT, default=20, description="Total timeout in seconds"),
+    _env("safe_fetch_connect_timeout", field_type=FieldType.FLOAT, default=5.0, description="Connection timeout in seconds"),
+    _env("safe_fetch_read_timeout", field_type=FieldType.FLOAT, default=10.0, description="Read timeout in seconds"),
+    _env("safe_fetch_total_timeout", field_type=FieldType.FLOAT, default=20.0, description="Total timeout in seconds"),
     _env("dns_cache_ttl", field_type=FieldType.INT, default=300, description="DNS cache TTL in seconds"),
     _env("dns_cache_max", field_type=FieldType.INT, default=1024, description="DNS cache max entries"),
     _env("l1_cache_maxsize", field_type=FieldType.INT, default=1000, description="L1 in-memory cache max entries"),
@@ -237,6 +231,8 @@ _ROLE_FIELDS.extend([
     _yaml("pipeline.researcher.max_article_text_length", dest=ConfigFile.PIPELINE, path=("pipeline", "researcher", "max_article_text_length"), field_type=FieldType.INT, nullable=True, description="Max article text length for research"),
     _yaml("pipeline.writer.max_key_points", dest=ConfigFile.PIPELINE, path=("pipeline", "writer", "max_key_points"), field_type=FieldType.INT, nullable=True, description="Max key points for writer"),
     _yaml("pipeline.editor.max_tags", dest=ConfigFile.PIPELINE, path=("pipeline", "editor", "max_tags"), field_type=FieldType.INT, nullable=True, description="Max tags for editor"),
+    _yaml("pipeline.review.enabled", dest=ConfigFile.PIPELINE, path=("pipeline", "review", "enabled"), field_type=FieldType.BOOL, default=False, description="Enable manual review stage"),
+    _yaml("pipeline.review.auto_publish_threshold", dest=ConfigFile.PIPELINE, path=("pipeline", "review", "auto_publish_threshold"), field_type=FieldType.FLOAT, default=0.8, description="Auto-publish quality threshold"),
 ])
 
 _NEWSLETTER_FIELDS = [
@@ -257,6 +253,13 @@ _MEMORY_FIELDS = [
     _yaml("memory.ttl_days_low", dest=ConfigFile.PIPELINE, path=("memory", "ttl_days_low"), field_type=FieldType.INT, default=7, description="TTL for low-priority memory entries"),
     _yaml("memory.ttl_days_medium", dest=ConfigFile.PIPELINE, path=("memory", "ttl_days_medium"), field_type=FieldType.INT, default=30, description="TTL for medium-priority memory entries"),
     _yaml("memory.ttl_days_high", dest=ConfigFile.PIPELINE, path=("memory", "ttl_days_high"), field_type=FieldType.INT, default=0, description="TTL for high-priority memory entries (0=infinite)"),
+    _yaml("memory.consolidation_cooldown_hours", dest=ConfigFile.PIPELINE, path=("memory", "consolidation_cooldown_hours"), field_type=FieldType.INT, default=24, description="Hours between memory consolidation runs"),
+    _yaml("memory.max_entries_per_propose", dest=ConfigFile.PIPELINE, path=("memory", "max_entries_per_propose"), field_type=FieldType.INT, default=10, description="Max memory entries per proposal"),
+    _yaml("memory.consolidation_merge_window_hours", dest=ConfigFile.PIPELINE, path=("memory", "consolidation_merge_window_hours"), field_type=FieldType.INT, default=48, description="Hours for consolidation merge window"),
+    _yaml("memory.truncation_llm_provider", dest=ConfigFile.PIPELINE, path=("memory", "truncation_llm_provider"), field_type=FieldType.STRING, nullable=True, description="LLM provider for memory truncation"),
+    _yaml("memory.truncation_llm_model", dest=ConfigFile.PIPELINE, path=("memory", "truncation_llm_model"), field_type=FieldType.STRING, nullable=True, description="LLM model for memory truncation"),
+    _yaml("memory.truncation_llm_max_tokens", dest=ConfigFile.PIPELINE, path=("memory", "truncation_llm_max_tokens"), field_type=FieldType.INT, default=1024, description="Max tokens for memory truncation LLM"),
+    _yaml("memory.truncation_llm_temperature", dest=ConfigFile.PIPELINE, path=("memory", "truncation_llm_temperature"), field_type=FieldType.FLOAT, default=0.0, description="Temperature for memory truncation LLM"),
 ]
 
 _SCHEDULE_FIELDS = [
@@ -265,6 +268,17 @@ _SCHEDULE_FIELDS = [
     _yaml("schedule.cleanup_old_logs_hour", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_old_logs_hour"), field_type=FieldType.INT, default=3, description="Hour to clean up old logs (UTC)"),
     _yaml("schedule.consolidate_trend_memory_hour", dest=ConfigFile.PIPELINE, path=("schedule", "consolidate_trend_memory_hour"), field_type=FieldType.INT, default=3, description="Hour to consolidate trend memory (UTC)"),
     _yaml("schedule.cleanup_inactive_subscribers_hour", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_inactive_subscribers_hour"), field_type=FieldType.INT, default=1, description="Hour to clean up inactive subscribers (UTC)"),
+    _yaml("schedule.retry_stuck_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "retry_stuck_interval_minutes"), field_type=FieldType.INT, default=60, description="Minutes between stuck article retries"),
+    _yaml("schedule.cleanup_old_versions_hour", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_old_versions_hour"), field_type=FieldType.INT, default=3, description="Hour to clean up old article versions (UTC)"),
+    _yaml("schedule.cleanup_old_versions_days_to_keep", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_old_versions_days_to_keep"), field_type=FieldType.INT, default=30, description="Days to keep old article versions"),
+    _yaml("schedule.cleanup_expired_verifications_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_expired_verifications_interval_minutes"), field_type=FieldType.INT, default=15, description="Minutes between expired verification cleanups"),
+    _yaml("schedule.publish_scheduled_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "publish_scheduled_interval_minutes"), field_type=FieldType.INT, default=5, description="Minutes between scheduled publish checks"),
+    _yaml("schedule.cleanup_stale_limiter_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_stale_limiter_interval_minutes"), field_type=FieldType.INT, default=5, description="Minutes between stale limiter slot cleanups"),
+    _yaml("schedule.cleanup_inactive_subscribers_minute", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_inactive_subscribers_minute"), field_type=FieldType.INT, default=0, description="Minute of hour for inactive subscriber cleanup"),
+]
+
+_EXPERIMENTS_FIELDS = [
+    _yaml("experiments", dest=ConfigFile.PIPELINE, path=("experiments",), field_type=FieldType.DICT, nullable=True, description="A/B experiment configurations"),
 ]
 
 _PIPELINE_FIELDS = (
@@ -273,6 +287,7 @@ _PIPELINE_FIELDS = (
     + _SUBAGENT_FIELDS
     + _MEMORY_FIELDS
     + _SCHEDULE_FIELDS
+    + _EXPERIMENTS_FIELDS
 )
 
 for _f in _PIPELINE_FIELDS:

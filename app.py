@@ -321,6 +321,14 @@ def create_app(config_name=None):
     )
     app.config.from_object(config[config_name])
 
+    # Overlay shared config loader values (ainews_config). This bridges
+    # the shared config system with Flask's app.config dict. The loader
+    # returns empty dict on failure so existing behavior is never broken.
+    from config import load_from_shared_loader
+    shared_overrides = load_from_shared_loader()
+    if shared_overrides:
+        app.config.update(shared_overrides)
+
     # Setup structured logging
     setup_logging(
         app,

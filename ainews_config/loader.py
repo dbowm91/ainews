@@ -45,14 +45,15 @@ class EffectiveConfiguration:
     dotenv: dict[str, str]
 
 
-def load_dotenv(path: Path) -> tuple[dict[str, str], list[Diagnostic]]:
+def load_dotenv(path: Path) -> tuple[dict[str, str], list[Diagnostic], dict[str, int]]:
     env: dict[str, str] = {}
     diagnostics: list[Diagnostic] = []
+    line_numbers: dict[str, int] = {}
 
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return env, diagnostics
+        return env, diagnostics, line_numbers
     except OSError as exc:
         diagnostics.append(
             Diagnostic(
@@ -64,7 +65,7 @@ def load_dotenv(path: Path) -> tuple[dict[str, str], list[Diagnostic]]:
                 remediation="Check file permissions.",
             )
         )
-        return env, diagnostics
+        return env, diagnostics, line_numbers
 
     for lineno, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
@@ -119,8 +120,9 @@ def load_dotenv(path: Path) -> tuple[dict[str, str], list[Diagnostic]]:
             continue
 
         env[key] = value
+        line_numbers[key] = lineno
 
-    return env, diagnostics
+    return env, diagnostics, line_numbers
 
 
 def resolve_env_vars(value: Any, env: dict[str, str]) -> tuple[Any, list[Diagnostic]]:
@@ -207,11 +209,15 @@ def load_yaml(path: Path) -> tuple[Any, list[Diagnostic]]:
 
 def _build_provenance_from_env(
     env: dict[str, str],
+    line_numbers: dict[str, int] | None = None,
 ) -> dict[str, ValueProvenance]:
     provenance: dict[str, ValueProvenance] = {}
     for key, value in env.items():
         provenance[key] = ValueProvenance(
-            key=key, source="env", raw_value=value
+            key=key,
+            source="env",
+            line=(line_numbers or {}).get(key),
+            raw_value=value,
         )
     return provenance
 
@@ -405,14 +411,14 @@ def load_all_configs(
     all_provenance: dict[str, ValueProvenance] = {}
 
     env_file_path = paths.env_file.path
-    dotenv, dotenv_diags = load_dotenv(env_file_path)
+    dotenv, dotenv_diags, dotenv_lines = load_dotenv(env_file_path)
     all_diags.extend(dotenv_diags)
 
     merged_env = dict(dotenv)
     if env_overrides:
         merged_env.update(env_overrides)
 
-    all_provenance.update(_build_provenance_from_env(dotenv))
+    all_provenance.update(_build_provenance_from_env(dotenv, dotenv_lines))
 
     providers_data: dict[str, Any] = {}
     pipeline_data: dict[str, Any] = {}
@@ -478,6 +484,15 @@ def load_all_configs(
                 all_provenance[fld] = ValueProvenance(
                     key=fld, source="default", raw_value=field_obj.default
                 )
+        if field_obj.deprecated:
+            all_diags.append(Diagnostic(
+                severity="warning",
+                code="FIELD_DEPRECATED",
+                file=None,
+                key=fld,
+                message=f"Field '{fld}' is deprecated.",
+                remediation=f"Remove '{fld}' from your configuration.",
+            ))
 
     return EffectiveConfiguration(
         paths=paths,

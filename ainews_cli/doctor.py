@@ -73,14 +73,16 @@ def run_doctor(
     _check_directory_writable(paths.config_dir.path, "config", checks)
     _check_directory_writable(paths.data_dir.path, "data", checks)
     _check_config_files(paths, checks)
-    _check_config_validation(paths, checks)
+    _check_config_validation(paths, checks, production=production)
     _check_secret_permissions(paths, checks)
+    if production:
+        _check_secret_file_permissions_strict(paths, checks)
     _check_port_available(checks)
     _check_docker_available(checks)
     _check_compose_available(checks)
     _check_python_available(checks)
     _check_database_directory(paths, checks)
-    _check_placeholder_values(checks)
+    _check_placeholder_values(paths, checks)
 
     return DoctorReport(checks=checks)
 
@@ -168,7 +170,12 @@ def _check_config_files(paths: ResolvedPaths, checks: list[CheckResult]) -> None
             ))
 
 
-def _check_config_validation(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+def _check_config_validation(
+    paths: ResolvedPaths,
+    checks: list[CheckResult],
+    *,
+    production: bool = False,
+) -> None:
     try:
         config = load_all_configs(paths)
         validation_input = {
@@ -179,14 +186,24 @@ def _check_config_validation(paths: ResolvedPaths, checks: list[CheckResult]) ->
             "environment": config.environment,
         }
         result = validate_cross_file(validation_input)
-        if result.is_valid:
+        error_msgs = [e.message for e in result.errors if e.severity == "error"]
+        warning_msgs = [e.message for e in result.errors if e.severity == "warning"]
+
+        if production and not result.is_valid:
+            checks.append(CheckResult(
+                name="config_validation",
+                passed=False,
+                message=f"Configuration has {result.error_count} error(s) in production mode",
+                details="; ".join(error_msgs[:5]),
+                remediation="Fix all errors before running in production.",
+            ))
+        elif result.is_valid:
             checks.append(CheckResult(
                 name="config_validation",
                 passed=True,
                 message=f"Configuration is valid ({result.warning_count} warnings)",
             ))
         else:
-            error_msgs = [e.message for e in result.errors if e.severity == "error"]
             checks.append(CheckResult(
                 name="config_validation",
                 passed=False,
@@ -224,6 +241,34 @@ def _check_secret_permissions(paths: ResolvedPaths, checks: list[CheckResult]) -
         checks.append(CheckResult(name="secret_permissions", passed=True, message=".env file permissions are restrictive"))
 
 
+def _check_secret_file_permissions_strict(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    """Production-only check: .env must not be world-readable or world-writable."""
+    env_path = paths.env_file.path
+    if not env_path.exists():
+        return
+    mode = env_path.stat().st_mode
+    issues: list[str] = []
+    if mode & 0o004:
+        issues.append("world-readable")
+    if mode & 0o002:
+        issues.append("world-writable")
+    if mode & 0o020:
+        issues.append("group-writable")
+    if issues:
+        checks.append(CheckResult(
+            name="secret_permissions_strict",
+            passed=False,
+            message=f".env file has insecure permissions: {', '.join(issues)}",
+            remediation=f"Fix permissions: chmod 600 {env_path}",
+        ))
+    else:
+        checks.append(CheckResult(
+            name="secret_permissions_strict",
+            passed=True,
+            message=".env file has secure permissions (0600)",
+        ))
+
+
 def _check_docker_available(checks: list[CheckResult]) -> None:
     docker = shutil.which("docker")
     if docker:
@@ -258,8 +303,92 @@ def _check_database_directory(paths: ResolvedPaths, checks: list[CheckResult]) -
     _check_directory_writable(db_dir, "database", checks)
 
 
-def _check_placeholder_values(checks: list[CheckResult]) -> None:
-    checks.append(CheckResult(name="placeholder_check", passed=True, message="Placeholder check passed"))
+_PLACEHOLDER_PATTERNS = (
+    "changeme",
+    "change_me",
+    "your-password-here",
+    "your_password_here",
+    "replace_me",
+    "REPLACE_ME",
+    "todo",
+    "TODO",
+    "FIXME",
+    "placeholder",
+    "example",
+    "test_secret",
+    "not_a_real_key",
+    "supersecret",
+    "password123",
+    "admin123",
+    "secret123",
+)
+
+
+def _check_placeholder_values(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    placeholders_found: list[str] = []
+
+    env_path = paths.env_file.path
+    if env_path.exists():
+        try:
+            text = env_path.read_text(encoding="utf-8")
+            for lineno, raw_line in enumerate(text.splitlines(), start=1):
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip().lstrip("export ").strip()
+                value = value.strip()
+                if len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
+                    value = value[1:-1]
+                lower_val = value.lower()
+                for pattern in _PLACEHOLDER_PATTERNS:
+                    if pattern.lower() in lower_val:
+                        placeholders_found.append(f"{env_path.name}:{lineno} ({key})")
+                        break
+        except OSError:
+            pass
+
+    for yaml_path in (paths.providers_file.path, paths.pipeline_file.path):
+        if yaml_path.exists():
+            try:
+                import yaml
+                data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    _scan_dict_for_placeholders(data, str(yaml_path.name), placeholders_found)
+            except (yaml.YAMLError, OSError):
+                pass
+
+    if placeholders_found:
+        checks.append(CheckResult(
+            name="placeholder_check",
+            passed=False,
+            message=f"Found {len(placeholders_found)} config value(s) with placeholder patterns",
+            details="\n".join(placeholders_found),
+            remediation="Replace placeholder values with real credentials before running in production.",
+        ))
+    else:
+        checks.append(CheckResult(
+            name="placeholder_check",
+            passed=True,
+            message="No placeholder values detected in configuration",
+        ))
+
+
+def _scan_dict_for_placeholders(
+    data: dict, file_name: str, found: list[str], prefix: str = ""
+) -> None:
+    for key, value in data.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, str):
+            lower_val = value.lower()
+            for pattern in _PLACEHOLDER_PATTERNS:
+                if pattern.lower() in lower_val:
+                    found.append(f"{file_name} ({full_key})")
+                    break
+        elif isinstance(value, dict):
+            _scan_dict_for_placeholders(value, file_name, found, full_key)
 
 
 def _check_port_available(checks: list[CheckResult]) -> None:

@@ -491,3 +491,61 @@ class TestInterruptedRollback:
                     txn.modify_file(target, b"new: true\n")
 
         assert target.read_text() == "new: true\n"
+
+
+class TestStaleLockRecovery:
+    def test_stale_lock_removed_before_acquire(self, tmp_path):
+        paths = _make_paths(tmp_path)
+        lock_path = paths.transaction_lock.path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create a stale lock file (old mtime)
+        lock_path.write_text("stale")
+        old_time = time.time() - 700  # 12 minutes ago
+        os.utime(lock_path, (old_time, old_time))
+
+        # Should be able to acquire despite stale lock
+        target = tmp_path / "test.txt"
+        with transaction(paths) as txn:
+            txn.modify_file(target, b"content\n")
+
+        assert target.read_text() == "content\n"
+
+
+class TestRollbackRetention:
+    def test_prunes_old_rollbacks(self, tmp_path):
+        from ainews_config.transaction import _prune_old_rollbacks, MAX_ROLLBACKS
+
+        paths = _make_paths(tmp_path)
+        backup_dir = paths.backup_dir.path
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create more rollback dirs than MAX_ROLLBACKS
+        for i in range(MAX_ROLLBACKS + 5):
+            rollback_dir = backup_dir / f"txn-{i}_20240101T000000Z"
+            rollback_dir.mkdir()
+            manifest = {
+                "transaction_id": f"txn-{i}",
+                "files_changed": [],
+                "rollback_path": str(rollback_dir),
+                "created_at": f"2024-01-01T00:{i:02d}:00+00:00",
+            }
+            (rollback_dir / "manifest.json").write_text(json.dumps(manifest))
+
+        _prune_old_rollbacks(backup_dir)
+
+        remaining = list(backup_dir.iterdir())
+        assert len(remaining) == MAX_ROLLBACKS
+
+
+class TestRedactedDiffExposed:
+    def test_redacted_diff_available_after_commit(self, tmp_path):
+        paths = _make_paths(tmp_path)
+        target = tmp_path / ".env"
+        target.write_text("SECRET_KEY=old_secret_value\n")
+
+        with transaction(paths) as txn:
+            txn.modify_file(target, b"SECRET_KEY=new_secret_value\n")
+
+        # Redacted diff should be available
+        assert isinstance(txn.redacted_diff, list)

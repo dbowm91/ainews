@@ -52,6 +52,7 @@ class ConfigTransaction:
         self._staging_dir: Path = paths.transaction_staging.path
         self._backup_dir: Path = paths.backup_dir.path
         self._transaction_id: str = ""
+        self._last_redacted_diff: list[dict[str, str]] = []
 
     def __enter__(self) -> ConfigTransaction:
         self._acquire_lock()
@@ -81,8 +82,21 @@ class ConfigTransaction:
         self._deletions.add(path)
         self._changes.pop(path, None)
 
+    @property
+    def redacted_diff(self) -> list[dict[str, str]]:
+        """Return the redacted diff from the last committed transaction."""
+        return list(self._last_redacted_diff)
+
     def _acquire_lock(self) -> None:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # If lock is stale, remove it before trying to acquire
+        if self._lock_path.exists() and _is_lock_stale(self._lock_path):
+            try:
+                self._lock_path.unlink()
+            except OSError:
+                pass
+
         self._lock_fd = os.open(str(self._lock_path), os.O_CREAT | os.O_RDWR, 0o600)
         try:
             fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -258,6 +272,7 @@ class ConfigTransaction:
             )
 
         self._create_rollback()
+        _prune_old_rollbacks(self._backup_dir)
         self._cleanup_staging()
 
     def _build_redacted_diff(self) -> list[dict[str, str]]:
@@ -318,6 +333,7 @@ class ConfigTransaction:
                     target.write_bytes(rollback_content)
 
         diff_entries = self._build_redacted_diff()
+        self._last_redacted_diff = diff_entries
 
         manifest = TransactionManifest(
             transaction_id=self._transaction_id,
@@ -460,3 +476,42 @@ def _find_original_path(manifest: TransactionManifest, file_hash: str) -> Path |
         if candidate_hash == file_hash:
             return candidate
     return None
+
+
+MAX_ROLLBACKS = 20
+
+
+def _prune_old_rollbacks(backup_dir: Path, max_rollbacks: int = MAX_ROLLBACKS) -> None:
+    """Remove oldest rollback directories when count exceeds max_rollbacks."""
+    manifests = list_rollbacks(backup_dir)
+    if len(manifests) <= max_rollbacks:
+        return
+    to_remove = manifests[: len(manifests) - max_rollbacks]
+    for manifest in to_remove:
+        rollback_dir = Path(manifest.rollback_path)
+        if rollback_dir.exists():
+            import shutil
+            shutil.rmtree(rollback_dir, ignore_errors=True)
+
+
+def _is_lock_stale(lock_path: Path) -> bool:
+    """Check if a lock file is held by a process that no longer exists."""
+    try:
+        fd = os.open(str(lock_path), os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        # Try non-blocking lock; if it succeeds, lock is not held
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return False  # Lock acquired = not stale
+        except OSError:
+            # Lock is held. Check if the holding PID is alive.
+            # fcntl.flock doesn't expose the PID, so we use a heuristic:
+            # If the lock file is older than 10 minutes, consider it stale.
+            import time
+            lock_age = time.time() - os.path.getmtime(lock_path)
+            return lock_age > 600  # 10 minutes
+    finally:
+        os.close(fd)

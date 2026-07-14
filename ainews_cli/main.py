@@ -98,9 +98,16 @@ def _get_yaml_target(config: Any, fld: Any) -> tuple[Any, dict[str, Any]]:
 
 
 def _serialize_yaml(data: dict[str, Any]) -> bytes:
-    import yaml
+    from ruamel.yaml import YAML
 
-    return yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True).encode("utf-8")
+    yaml = YAML()
+    yaml.default_flow_style = False
+    yaml.allow_unicode = True
+    yaml.sort_keys = False
+    import io
+    buf = io.BytesIO()
+    yaml.dump(data, buf)
+    return buf.getvalue()
 
 
 def _load_baseline_from_rollback(config: Any, transaction_id: str) -> dict[str, Any]:

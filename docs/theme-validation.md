@@ -262,7 +262,22 @@ Every combination in the risk-weighted matrix must be tested across these state 
 | All themes | `tests/test_theme_halloy.py` | TOML parsing, field mapping, error handling for malformed input |
 | All themes | `tests/test_theme_translate.py` | Halloy → AinewsTheme translation, field coverage |
 | C8 | `tests/test_theme_css_contract.py` | CSS output structure, variable naming, alpha variants |
-| CLI modes | `tests/test_theme_validation_cli.py` | `--bundled`, `--directory`, `--file`, `--strict`, `--format json` |
+| CLI modes | `tests/test_theme_validation_cli.py` | `--bundled`, `--directory`, `--file`, `--strict`, `--format json`, strict-promotable promotion |
+| All (browser) | `tests/test_theme_browser_smoke.py` | Playwright/Chromium: dual-stylesheet ownership, palette switching, preference persistence, legacy migration, system mode, CSS failure recovery, ETag 304, HTMX navigation, selector keyboard interaction |
+
+### Browser Smoke Tests
+
+`tests/test_theme_browser_smoke.py` provides 14 Playwright/Chromium tests covering end-to-end browser behavior:
+
+- **Dual-stylesheet ownership:** Verifies exactly 2 `<link>` elements (#ainews-app-stylesheet + #ainews-theme-stylesheet)
+- **Palette switching:** Theme activation swaps only the palette stylesheet, not the app stylesheet
+- **Preference persistence:** Selection survives page reload via localStorage v2 key
+- **Legacy migration:** Legacy `ainews-theme` (`dark`/`light`) migrates to v2 preference
+- **System mode:** OS preference changes update theme when preference is `"system"`
+- **CSS failure recovery:** Stylesheet load failure falls back to static variables.css
+- **ETag 304:** Cached CSS returns 304 with strong ETag on re-request
+- **HTMX navigation:** Theme persists across fragment swaps
+- **Selector keyboard interaction:** Popover opens, ArrowDown/Up navigates, Enter selects, Escape closes
 
 ---
 
@@ -270,7 +285,7 @@ Every combination in the risk-weighted matrix must be tested across these state 
 
 ### Phase 6a: Automated (Week 1)
 1. Run full `test_theme_*.py` suite — all must pass.
-2. Run `scripts/validate_themes.py --bundled --strict` — zero warnings.
+2. Run `scripts/validate_themes.py --bundled --strict` — zero errors. `--strict` promotes only strict-promotable warnings (`THEME_CONTRAST_CRITICAL`, `THEME_REGISTRY_EMPTY`, `THEME_BUNDLED_EMPTY`, `THEME_MANIFEST_DRIFT`, `THEME_DEFAULT_MISSING`); advisory contrast warnings (644 AAA-threshold pairings) remain non-blocking.
 3. Run `scripts/validate_release.sh --fast` — lint + smoke pass.
 
 ### Phase 6b: Manual Critical (Week 1)

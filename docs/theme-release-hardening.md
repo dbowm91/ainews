@@ -76,7 +76,7 @@ The registry is frozen (`MappingProxyType`) and immutable during the process lif
 | Content-Type | `text/css; charset=utf-8` |
 | X-Content-Type-Options | `nosniff` |
 | Cache-Control | `public, max-age=300` |
-| ETag | SHA-256 content digest (weak) |
+| ETag | SHA-256 content digest (strong — `set_etag()` without `weak=True`) |
 | 304 handling | Werkzeug `response.make_conditional(request)` |
 | 404 for unknown IDs | Controlled 404 (not fallback) |
 | 503 when unavailable | Controlled 503 JSON error |
@@ -301,6 +301,8 @@ Verification of every item from the original roadmap definition of done.
 | 16 | Docker/release resource inclusion | `Dockerfile` (`COPY . .`), `.dockerignore` (includes `resources/themes/`) | `test_theme_package_validation.py` | `docs/theme-release-hardening.md` §4 | **Closed** |
 | 17 | Emergency fallback independence | `services/themes/emergency.py` (code-defined, always present) | `test_theme_failure_recovery.py` (75 tests) | `docs/theme-troubleshooting.md` §9 | **Closed** |
 | 18 | Full repository validation | `scripts/validate_release.sh --full`, 685+ theme tests, ruff, mypy | All 16 theme test files | `docs/release_checklist.md` | **Closed** |
+| 19 | Strict validation policy | `STRICT_PROMOTABLE_CODES` in `services/themes/errors.py`, `is_fatal_diagnostic()`, `is_strict_promotable()`, `is_advisory_diagnostic()` helpers | `tests/test_theme_validation_cli.py` (strict-promotable tests) | `AGENTS.md`, `docs/theme-release-hardening.md` | **Closed** |
+| 20 | Browser smoke tests | `tests/test_theme_browser_smoke.py` (14 Playwright/Chromium tests) | Dual-stylesheet ownership, palette switching, preference persistence, legacy migration, system mode, CSS failure recovery, ETag 304, HTMX navigation, selector keyboard interaction | `AGENTS.md` | **Closed** |
 
 ### Accepted Limitations
 

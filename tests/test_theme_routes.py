@@ -109,6 +109,43 @@ class TestETagBehavior:
         )
         assert resp.status_code == 200
 
+    def test_etag_is_strong(self, _client):
+        """ETag is a strong validator (no W/ prefix)."""
+        resp = _client.get(f"/assets/themes/{EMERGENCY_THEME_ID}.css")
+        etag = resp.headers["ETag"]
+        assert not etag.startswith("W/"), f"ETag should be strong, got weak: {etag}"
+        assert etag.startswith('"'), f"ETag should be quoted: {etag}"
+
+    def test_conditional_304_with_comma_separated_etags(self, _client):
+        """If-None-Match with comma-separated ETags including the current one returns 304."""
+        resp = _client.get(f"/assets/themes/{EMERGENCY_THEME_ID}.css")
+        etag = resp.headers["ETag"]
+        multi = f'"other-tag", {etag}, "another-tag"'
+        resp2 = _client.get(
+            f"/assets/themes/{EMERGENCY_THEME_ID}.css",
+            headers={"If-None-Match": multi},
+        )
+        assert resp2.status_code == 304
+
+    def test_conditional_304_has_no_body(self, _client):
+        """304 response must contain no body."""
+        resp = _client.get(f"/assets/themes/{EMERGENCY_THEME_ID}.css")
+        etag = resp.headers["ETag"]
+        resp2 = _client.get(
+            f"/assets/themes/{EMERGENCY_THEME_ID}.css",
+            headers={"If-None-Match": etag},
+        )
+        assert resp2.status_code == 304
+        assert resp2.data == b""
+
+    def test_etag_changes_when_content_changes(self, _client):
+        """Different themes produce different ETags."""
+        resp1 = _client.get(f"/assets/themes/{EMERGENCY_THEME_ID}.css")
+        # Request a different (non-emergency) theme if available
+        resp2 = _client.get("/assets/themes/catppuccin-mocha.css")
+        if resp2.status_code == 200:
+            assert resp1.headers["ETag"] != resp2.headers["ETag"]
+
 
 # ---------------------------------------------------------------------------
 # Cache-Control

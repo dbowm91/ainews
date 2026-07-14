@@ -443,7 +443,7 @@ browser-consumable tokens.
 |--------|-------|
 | ``Content-Type`` | ``text/css; charset=utf-8`` |
 | ``Cache-Control`` | ``public, max-age=300`` |
-| ``ETag`` | ``"`` + content digest (SHA-256 of CSS body) + ``"`` (set via ``response.set_etag()``) |
+| ``ETag`` | ``"`` + content digest (SHA-256 of CSS body) + ``"`` (strong, set via ``response.set_etag()`` without ``weak=True``) |
 | ``X-Content-Type-Options`` | ``nosniff`` |
 
 ### 13.3 Cache lifetime rationale
@@ -474,7 +474,7 @@ If the client sends ``If-None-Match`` with a matching ETag, the route returns
 ``304 Not Modified`` with no body. This avoids re-transmitting unchanged CSS.
 Conditional request handling uses ``response.set_etag()`` and
 ``response.make_conditional(request)`` from Werkzeug for standards-compliant
-ETag matching, weak comparison, and multiple validator support.
+strong ETag generation and conditional request handling.
 
 ### 13.5 CSS output structure
 

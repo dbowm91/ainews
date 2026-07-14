@@ -41,12 +41,17 @@ from services.themes.loader import (
     load_bundled_manifest,
 )
 from services.themes.errors import (
+    STRICT_PROMOTABLE_CODES,
     Severity,
     ThemeContrastError,
     ThemeDiagnostic,
     ThemeParseError,
     ThemeTranslationError,
     ThemeValidationError,
+    get_diagnostic_description,
+    is_advisory_diagnostic,
+    is_fatal_diagnostic,
+    is_strict_promotable,
 )
 from services.themes.halloy import (
     MAX_HALLOY_FILE_BYTES,
@@ -106,6 +111,11 @@ __all__ = [
     "ThemeContrastError",
     "ThemeDiagnostic",
     "Severity",
+    "STRICT_PROMOTABLE_CODES",
+    "is_fatal_diagnostic",
+    "is_strict_promotable",
+    "is_advisory_diagnostic",
+    "get_diagnostic_description",
     # Models
     "HalloyGeneral",
     "HalloyText",

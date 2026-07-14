@@ -46,6 +46,7 @@ dev = [
     "pytest-cov>=4.0,<5",
     "pytest-xdist>=3.0,<4",
     "pytest-timeout>=2.0,<3",
+    "pytest-playwright>=0.8,<1",
     "ruff>=0.9.0,<1",
     "mypy>=1.0,<2",
     "types-requests>=2.31,<3",
@@ -58,6 +59,7 @@ testpaths = ["tests"]
 addopts = "--durations=10"
 markers = [
     "timeout: marks tests as slow-running (deselect with '-m not timeout')",
+    "browser: end-to-end Playwright tests (deselect with '-m not browser')",
 ]
 
 [tool.coverage.run]

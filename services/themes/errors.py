@@ -123,3 +123,47 @@ THEME_DIAGNOSTIC_CODES: dict[str, str] = {
 def get_diagnostic_description(code: str) -> str:
     """Return the human-readable description for a diagnostic code."""
     return THEME_DIAGNOSTIC_CODES.get(code, f"Unknown diagnostic code: {code}")
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic classification helpers
+# ---------------------------------------------------------------------------
+# These functions provide a single, stable classification policy used by the
+# CLI ``--strict`` flag, ``THEMES_STRICT_CONTRAST`` runtime config, startup
+# validation, tests, and documentation.  Classification derives entirely
+# from severity and diagnostic code — never from human-readable text.
+
+# Diagnostic codes whose WARNING severity should be promoted to failure
+# under ``--strict`` mode.  Codes NOT listed here remain advisory warnings
+# even in strict mode.
+STRICT_PROMOTABLE_CODES: frozenset[str] = frozenset({
+    "THEME_CONTRAST_CRITICAL",
+    "THEME_REGISTRY_EMPTY",
+    "THEME_BUNDLED_EMPTY",
+    "THEME_MANIFEST_DRIFT",
+    "THEME_DEFAULT_MISSING",
+})
+
+
+def is_fatal_diagnostic(diag: ThemeDiagnostic) -> bool:
+    """Return True if *diag* is an error that always causes nonzero exit."""
+    return diag.severity == Severity.ERROR
+
+
+def is_strict_promotable(diag: ThemeDiagnostic) -> bool:
+    """Return True if *diag* should become a failure under ``--strict``.
+
+    A diagnostic is strict-promotable when its severity is WARNING **and**
+    its code is in the ``STRICT_PROMOTABLE_CODES`` set.  This allows the
+    CLI and ``THEMES_STRICT_CONTRAST`` to share a single promotion policy.
+    """
+    return diag.severity == Severity.WARNING and diag.code in STRICT_PROMOTABLE_CODES
+
+
+def is_advisory_diagnostic(diag: ThemeDiagnostic) -> bool:
+    """Return True if *diag* is a non-blocking advisory finding.
+
+    Advisory diagnostics are neither fatal errors nor strict-promotable.
+    They remain warnings in all modes and do not affect exit codes.
+    """
+    return not is_fatal_diagnostic(diag) and not is_strict_promotable(diag)

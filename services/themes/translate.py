@@ -247,12 +247,31 @@ def _derive_from_nearest(
 def _check_critical_contrast(theme: AinewsTheme, warnings: list[ThemeDiagnostic]) -> None:
     contrast_findings = classify_contrast_findings(theme)
     warnings.extend(contrast_findings)
+
+    # Check for fatal contrast errors (always raise).
     has_critical = any(f.severity == Severity.ERROR for f in contrast_findings)
     if has_critical:
         critical_fields = [f.field for f in contrast_findings if f.severity == Severity.ERROR]
         raise ThemeContrastError(
             f"Critical contrast failure for fields: {', '.join(critical_fields)}"
         )
+
+    # When THEMES_STRICT_CONTRAST is enabled, also raise on strict-promotable
+    # contrast warnings.  This mirrors CLI --strict semantics at runtime.
+    try:
+        from flask import current_app
+        strict_contrast = current_app.config.get("THEMES_STRICT_CONTRAST", False)
+    except RuntimeError:
+        strict_contrast = False
+
+    if strict_contrast:
+        from services.themes.errors import is_strict_promotable
+        promotable = [f for f in contrast_findings if is_strict_promotable(f)]
+        if promotable:
+            promotable_fields = [f.field for f in promotable]
+            raise ThemeContrastError(
+                f"Strict contrast failure for fields: {', '.join(promotable_fields)}"
+            )
 
 
 def _resolve_surface(

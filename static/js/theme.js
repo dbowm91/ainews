@@ -41,7 +41,7 @@
   var _currentPreference = 'system';
   var _resolvedThemeId = null;
 
-  var _mediaQuery = null;
+  var _mediaQuery = (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
   /* ------------------------------------------------------------------ */
   /* Storage helpers                                                    */
@@ -674,7 +674,12 @@
 
     startMediaListener();
     startStorageSync();
-    initSelectorPanel();
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSelectorPanel);
+    } else {
+      initSelectorPanel();
+    }
   }
 
   bootstrap();

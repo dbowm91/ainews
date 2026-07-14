@@ -43,6 +43,7 @@ from services.themes.errors import (  # noqa: E402
     ThemeParseError,
     ThemeTranslationError,
     ThemeValidationError,
+    is_strict_promotable,
 )
 from services.themes.halloy import normalize_identifier, parse_halloy_toml  # noqa: E402
 from services.themes.loader import (  # noqa: E402
@@ -123,6 +124,7 @@ class _ValidationResult:
         self.strict = strict
         self.errors: list[_DiagnosticEntry] = []
         self.warnings: list[_DiagnosticEntry] = []
+        self.promoted: list[_DiagnosticEntry] = []
         self.themes_validated: int = 0
         self.total_source_bytes: int = 0
         self.total_css_bytes: int = 0
@@ -156,10 +158,14 @@ class _ValidationResult:
         *,
         override_code: str | None = None,
     ) -> None:
-        """Map a ThemeDiagnostic to an error or warning entry."""
+        """Map a ThemeDiagnostic to an error, warning, or promoted entry."""
         code = override_code or diag.code
         if diag.severity in _ERROR_SEVERITIES:
             self.add_error(theme_id, code, diag.field, diag.message)
+        elif self.strict and is_strict_promotable(diag):
+            # Strict-promotable warnings are promoted to errors under --strict.
+            entry = _DiagnosticEntry(theme_id, code, "promoted", diag.field, diag.message)
+            self.promoted.append(entry)
         else:
             self.add_warning(theme_id, code, diag.field, diag.message)
 
@@ -180,10 +186,15 @@ class _ValidationResult:
         return len(self.errors) > 0
 
     def should_fail(self) -> bool:
-        """Determine whether the script should exit nonzero."""
+        """Determine whether the script should exit nonzero.
+
+        Exit nonzero when:
+        - any errors are present, OR
+        - strict mode is active and any strict-promotable warnings were promoted.
+        """
         if self.errors:
             return True
-        if self.strict and self.warnings:
+        if self.strict and self.promoted:
             return True
         return False
 
@@ -193,6 +204,7 @@ class _ValidationResult:
             "themes_validated": self.themes_validated,
             "errors": [e.to_dict() for e in self.errors],
             "warnings": [w.to_dict() for w in self.warnings],
+            "promoted": [p.to_dict() for p in self.promoted],
             "duration_ms": self.duration_ms,
             "total_source_bytes": self.total_source_bytes,
             "total_css_bytes": self.total_css_bytes,
@@ -520,13 +532,15 @@ def _validate_file(
 
 def _print_human(result: _ValidationResult) -> None:
     """Pretty-print diagnostics to stderr."""
-    all_entries = result.errors + result.warnings
+    all_entries = result.errors + result.warnings + result.promoted
     if not all_entries:
         sys.stderr.write("All themes valid.\n")
         return
 
     for entry in result.errors:
         sys.stderr.write(f"  ERROR   [{entry.code}] {entry.theme_id}: {entry.field}: {entry.message}\n")
+    for entry in result.promoted:
+        sys.stderr.write(f"  PROMOTED[{entry.code}] {entry.theme_id}: {entry.field}: {entry.message}\n")
     for entry in result.warnings:
         sys.stderr.write(f"  WARNING [{entry.code}] {entry.theme_id}: {entry.field}: {entry.message}\n")
 
@@ -539,6 +553,7 @@ def _print_summary(result: _ValidationResult) -> None:
         f"themes validated: {result.themes_validated} | "
         f"errors: {len(result.errors)} | "
         f"warnings: {len(result.warnings)} | "
+        f"promoted: {len(result.promoted)} | "
         f"duration: {result.duration_ms}ms | "
         f"source bytes: {result.total_source_bytes} | "
         f"css bytes: {result.total_css_bytes} ---\n"
@@ -596,7 +611,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         default=False,
-        help="Treat warnings as policy failures (nonzero exit)",
+        help="Promote strict-promotable warnings to failures (nonzero exit). Advisory warnings remain non-blocking.",
     )
     return parser
 

@@ -111,6 +111,7 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 - **256 KB file size cap** (`MAX_HALLOY_FILE_BYTES`). Enforced at both raw bytes and file stat.
 - **Strict `AinewsTheme`** (`extra="forbid"`) catches unexpected tokens. Halloy models are tolerant (`extra="ignore"`).
 - **Contrast policy:** Primary text vs primary bg < 4.5 is a fatal `ThemeContrastError`. Other contrast issues are non-fatal `ThemeDiagnostic(WARNING)`.
+- **Strict validation policy:** `--strict` only promotes warnings in `STRICT_PROMOTABLE_CODES` frozenset: `THEME_CONTRAST_CRITICAL`, `THEME_REGISTRY_EMPTY`, `THEME_BUNDLED_EMPTY`, `THEME_MANIFEST_DRIFT`, `THEME_DEFAULT_MISSING`. Advisory contrast warnings (644 AAA-threshold pairings) remain non-blocking under `--strict`. Helpers: `is_fatal_diagnostic()`, `is_strict_promotable()`, `is_advisory_diagnostic()` in `services/themes/errors.py`.
 - See `docs/halloy-theme-contract.md` for the full source schema, translation rules, and CSS output contract.
 - See `docs/themes-inventory.md` for the theme collection inventory and provenance review.
 
@@ -131,6 +132,7 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 - **Blueprint:** `routes/themes.py`, registered as `themes_bp` (no auth, public GET-only).
 - **Response:** `text/css; charset=utf-8`, `Cache-Control: public, max-age=300`, `ETag` from content digest, `X-Content-Type-Options: nosniff`.
 - **304 handling:** Uses Werkzeug's response.make_conditional(request) for standards-compliant conditional requests (weak ETags, multiple validators, quoted values).
+- **ETag is strong:** Generated via `set_etag()` without `weak=True` (strong ETag semantics).
 - **404 for unknown IDs:** Uses `registry.get_exact()` — unknown IDs return 404, not fallback CSS.
 - **CSS output structure:** `to_css_variables()` emits: palette variables → alpha variants → accent-dim alias → legacy status aliases → semantic aliases.
 - **Palette-only output:** Generated theme CSS contains only CSS custom property definitions within a :root block. No element/class selectors, media queries, or other CSS rules are present.
@@ -152,7 +154,7 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 - **Metadata endpoint:** `GET /api/v1/themes/metadata` returns same JSON as context processor, `Cache-Control: public, max-age=60`. No auth required.
 
 ### Theme Validation CLI
-`scripts/validate_themes.py` validates themes using production helpers. Modes: `--bundled` (all packaged), `--directory DIR` (scan custom), `--file FILE` (single). Flags: `--strict` (warnings fail), `--format json` (machine-readable), `--print-css` (emit CSS). Integrated into `scripts/validate_release.sh`.
+`scripts/validate_themes.py` validates themes using production helpers. Modes: `--bundled` (all packaged), `--directory DIR` (scan custom), `--file FILE` (single). Flags: `--strict` (only strict-promotable warnings fail, see `STRICT_PROMOTABLE_CODES`), `--format json` (machine-readable), `--print-css` (emit CSS). Integrated into `scripts/validate_release.sh`.
 
 ### Theme Admin Diagnostics
 `GET /api/v1/themes/diagnostics` (admin-authenticated) returns registry health, per-theme validity, aggregate diagnostic counts, `built_at` (real ISO timestamp of registry construction), and `overrides_bundled` per theme. Does not expose absolute paths, TOML content, or generated CSS. Uses `Cache-Control: no-store`.
@@ -161,7 +163,7 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 `classify_contrast_findings()` checks 14 WCAG contrast pairings. `classify_accessibility_findings()` checks category badges (3:1) and status colors (4.5:1). Critical primary text < 4.5 raises `ThemeContrastError`. All other failures are warnings.
 
 ### Theme Diagnostic Codes
-Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Use these in CLI output, logs, tests, and admin diagnostics. `get_diagnostic_description(code)` returns human-readable description.
+Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Use these in CLI output, logs, tests, and admin diagnostics. `get_diagnostic_description(code)` returns human-readable description. `STRICT_PROMOTABLE_CODES` frozenset defines which warnings become errors under `--strict` mode. `is_fatal_diagnostic()`, `is_strict_promotable()`, `is_advisory_diagnostic()` classify diagnostics by severity tier.
 
 ### Theme Comprehensive Validation (Phase 6)
 - **Validation matrix**: `docs/theme-validation.md` defines the complete validation matrix with 11 theme representatives, 34 page families, 5 viewports, 16 state dimensions, and 57 risk-weighted matrix cells.
@@ -171,8 +173,8 @@ Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Us
 - **Accessibility validation**: `tests/test_theme_accessibility_validation.py` (32 tests) validates WCAG contrast for bundled themes, category badge/status color/focus ring contrast, template ARIA attributes, keyboard navigation, reduced-motion support, and screen reader structure.
 - **Visual validation**: `tests/test_theme_visual_validation.py` (23 tests) validates CSS variable completeness, palette lightness distribution, layout structure (no hardcoded colors), theme selector visual structure, and CSS output consistency.
 - **Package validation**: `tests/test_theme_package_validation.py` (31 tests) validates manifest loadability, bundled theme parseability, emergency theme availability, registry build from package resources, CSS route for all bundled themes, and metadata endpoint completeness.
-- **CI integration**: `theme-validation` job in `.github/workflows/ci.yml` runs validation CLI and all theme-specific tests.
-- **Total theme test count**: 685+ tests across 16 test files.
+- **CI integration**: `theme-validation` job in `.github/workflows/ci.yml` runs validation CLI and all theme-specific tests. `theme-browser-smoke` job runs Playwright/Chromium browser tests.
+- **Total theme test count**: 685+ tests across 16 test files (plus 14 Playwright browser smoke tests).
 
 ## Architecture Conventions
 
@@ -495,6 +497,7 @@ The following CI jobs must pass before merge. These are configured as required s
 | `smoke-tests` | Production config, Celery import, migration, docs/env consistency |
 | `compose-smoke` | Full Docker Compose boot + `/health` endpoint |
 | `gitleaks` | Secret scanning |
+| `theme-browser-smoke` | Playwright/Chromium browser tests for theme subsystem |
 
 ### Concurrency
 

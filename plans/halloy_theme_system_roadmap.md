@@ -1,6 +1,6 @@
 # Halloy-Compatible Theme System Roadmap
 
-> **Note:** This is a historical planning document. Phases 1–6 are complete and Phase 7 (release hardening) is underway. The roadmap below is preserved for reference.
+> **Note:** This is a historical planning document. All phases (1–7) are complete. See `docs/theme-release-hardening.md` for the Phase 7 closure record. The roadmap below is preserved for reference.
 
 ## Purpose
 
@@ -133,9 +133,9 @@ Detailed handoff: `plans/halloy_theme_phase_5_operator_validation.md`.
 
 Add parser, translation, registry, route, JavaScript, failure-mode, accessibility, and visual-regression matrices. Cover materially different light and dark themes and all core public/admin pages at mobile and desktop widths.
 
-### Phase 7: release hardening and closure
+### Phase 7: release hardening and closure ✅
 
-Measure startup and first-paint cost; review CSS injection, traversal, symlink, identifier collision, CSP, and cache behavior; verify Docker/release artifacts; remove obsolete binary-theme assumptions while retaining legacy preference migration for a compatibility period.
+Measure startup and first-paint cost; review CSS injection, traversal, symlink, identifier collision, CSP, and cache behavior; verify Docker/release artifacts; remove obsolete binary-theme assumptions while retaining legacy preference migration for a compatibility period. **Complete** — see `docs/theme-release-hardening.md`.
 
 ## Recommended configuration contract
 

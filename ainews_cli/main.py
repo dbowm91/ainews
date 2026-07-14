@@ -39,6 +39,129 @@ def _parse_value(value: str, fld: Any) -> Any:
     return value
 
 
+def _write_env_key(env_path: Any, env_key: str, value: str) -> bytes:
+    env_lines: list[str] = []
+    if env_path.exists():
+        env_lines = env_path.read_text(encoding="utf-8").splitlines()
+
+    found = False
+    for i, line in enumerate(env_lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith(f"{env_key}=") or stripped.startswith(f"export {env_key}="):
+            env_lines[i] = f"{env_key}={value}"
+            found = True
+            break
+    if not found:
+        env_lines.append(f"{env_key}={value}")
+
+    content = "\n".join(env_lines) + "\n"
+    return content.encode("utf-8")
+
+
+def _remove_env_key(env_path: Any, env_key: str) -> bytes:
+    env_lines: list[str] = []
+    if env_path.exists():
+        env_lines = env_path.read_text(encoding="utf-8").splitlines()
+
+    new_lines: list[str] = []
+    for line in env_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            new_lines.append(line)
+            continue
+        if stripped.startswith(f"{env_key}=") or stripped.startswith(f"export {env_key}="):
+            continue
+        new_lines.append(line)
+
+    content = "\n".join(new_lines) + "\n" if new_lines else ""
+    return content.encode("utf-8")
+
+
+def _get_yaml_target(config: Any, fld: Any) -> tuple[Any, dict[str, Any]]:
+    from ainews_config.fields import ConfigFile
+
+    if fld is None:
+        return config.paths.providers_file.path, config.providers
+
+    if fld.destination == ConfigFile.PROVIDERS:
+        return config.paths.providers_file.path, config.providers
+    elif fld.destination == ConfigFile.PIPELINE:
+        return config.paths.pipeline_file.path, config.pipeline
+    elif fld.destination == ConfigFile.SOURCES:
+        return config.paths.sources_file.path, {"sources": config.sources}
+    elif fld.destination == ConfigFile.TOPICS:
+        return config.paths.topics_file.path, config.topics
+
+    return config.paths.providers_file.path, config.providers
+
+
+def _serialize_yaml(data: dict[str, Any]) -> bytes:
+    import yaml
+
+    return yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True).encode("utf-8")
+
+
+def _load_baseline_from_rollback(config: Any, transaction_id: str) -> dict[str, Any]:
+    from pathlib import Path as _Path
+
+    from ainews_config import list_rollbacks, load_all_configs, restore_rollback
+    from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+
+    backups = list_rollbacks(config.paths.backup_dir.path)
+    target_manifest = None
+    for m in backups:
+        if m.transaction_id == transaction_id:
+            target_manifest = m
+            break
+    if target_manifest is None:
+        _out.error(f"Rollback snapshot not found: {transaction_id}", exit_codes.NOT_FOUND)
+
+    import tempfile
+    import shutil
+
+    tmp_dir = _Path(tempfile.mkdtemp())
+    try:
+
+        def _rp(p: _Path) -> ResolvedPath:
+            return ResolvedPath(
+                path=p,
+                provenance=PathProvenance.EXPLICIT,
+                exists=p.exists(),
+                is_writable=True,
+            )
+
+        baseline_paths = ResolvedPaths(
+            app_dir=_rp(tmp_dir),
+            config_dir=_rp(tmp_dir),
+            data_dir=_rp(tmp_dir),
+            state_dir=_rp(tmp_dir),
+            backup_dir=_rp(tmp_dir),
+            env_file=_rp(config.paths.env_file.path),
+            providers_file=_rp(config.paths.providers_file.path),
+            pipeline_file=_rp(config.paths.pipeline_file.path),
+            sources_file=_rp(config.paths.sources_file.path),
+            topics_file=_rp(config.paths.topics_file.path),
+            database_file=_rp(tmp_dir / "dummy.db"),
+            install_metadata_file=_rp(tmp_dir / "dummy.json"),
+            transaction_lock=_rp(tmp_dir / "lock"),
+            transaction_staging=_rp(tmp_dir / "staging"),
+        )
+
+        restore_rollback(config.paths.backup_dir.path, transaction_id, baseline_paths)
+        baseline_config = load_all_configs(baseline_paths)
+
+        from ainews_config import FIELD_REGISTRY, get_effective_value
+
+        values: dict[str, Any] = {}
+        for key in FIELD_REGISTRY.all_keys():
+            values[key] = get_effective_value(baseline_config, key)
+        return values
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 @app.callback()
 def main(
     verbose: bool = _VERBOSE,
@@ -59,6 +182,8 @@ def version() -> None:
     """Show ainews version and build information."""
     from importlib.metadata import PackageNotFoundError, version as get_version
 
+    from ainews_config import FIELD_REGISTRY, load_install_metadata, resolve_paths
+
     try:
         pkg_version = get_version("ainews")
     except PackageNotFoundError:
@@ -78,12 +203,25 @@ def version() -> None:
         )
         if result.returncode == 0:
             git_commit = result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
+    config_schema_version = f"1.0.{len(FIELD_REGISTRY.all_keys())}"
+
+    install_channel = "development"
+    try:
+        paths = resolve_paths()
+        metadata = load_install_metadata(paths.install_metadata_file.path)
+        if metadata is not None:
+            install_channel = metadata.install_type
+    except (OSError, ValueError):
         pass
 
     data: dict[str, object] = {
         "version": pkg_version,
         "python": py_version,
+        "config_schema": config_schema_version,
+        "install_channel": install_channel,
     }
     if git_commit:
         data["git"] = git_commit
@@ -305,23 +443,12 @@ def config_set(
         with transaction(config.paths) as txn:
             set_effective_value(config, key, parsed)
 
-            target_file = config.paths.providers_file.path
-            if fld is not None:
-                from ainews_config.fields import ConfigFile
-
-                if fld.destination == ConfigFile.PROVIDERS:
-                    target_file = config.paths.providers_file.path
-                elif fld.destination == ConfigFile.PIPELINE:
-                    target_file = config.paths.pipeline_file.path
-                elif fld.destination == ConfigFile.SOURCES:
-                    target_file = config.paths.sources_file.path
-                elif fld.destination == ConfigFile.TOPICS:
-                    target_file = config.paths.topics_file.path
-
-            import yaml
-
-            content = yaml.dump(config.providers, default_flow_style=False, allow_unicode=True)
-            txn.modify_file(target_file, content.encode("utf-8"))
+            if fld is not None and fld.destination.value == ".env":
+                env_key = fld.env_var or key.upper()
+                txn.modify_file(config.paths.env_file.path, _write_env_key(config.paths.env_file.path, env_key, str(parsed)))
+            else:
+                target_file, target_data = _get_yaml_target(config, fld)
+                txn.modify_file(target_file, _serialize_yaml(target_data))
     except (OSError, TransactionError) as e:
         _out.error(f"Transaction failed: {e}", exit_codes.LOCK_ERROR)
 
@@ -335,6 +462,7 @@ def config_set_secret(
 ) -> None:
     """Set a secret configuration value (reads from stdin)."""
     from ainews_config import FIELD_REGISTRY, set_effective_value, transaction
+    from ainews_config.transaction import TransactionError
 
     fld = FIELD_REGISTRY.lookup(key)
     if fld is None:
@@ -356,11 +484,12 @@ def config_set_secret(
         with transaction(config.paths) as txn:
             set_effective_value(config, key, value)
 
-            import yaml
-
-            target_file = config.paths.providers_file.path
-            content = yaml.dump(config.providers, default_flow_style=False, allow_unicode=True)
-            txn.modify_file(target_file, content.encode("utf-8"))
+            if fld is not None and fld.destination.value == ".env":
+                env_key = fld.env_var or key.upper()
+                txn.modify_file(config.paths.env_file.path, _write_env_key(config.paths.env_file.path, env_key, value))
+            else:
+                target_file, target_data = _get_yaml_target(config, fld)
+                txn.modify_file(target_file, _serialize_yaml(target_data))
     except (OSError, TransactionError) as e:
         _out.error(f"Transaction failed: {e}", exit_codes.LOCK_ERROR)
 
@@ -388,11 +517,12 @@ def config_unset(
         with transaction(config.paths) as txn:
             unset_effective_value(config, key)
 
-            import yaml
-
-            target_file = config.paths.providers_file.path
-            content = yaml.dump(config.providers, default_flow_style=False, allow_unicode=True)
-            txn.modify_file(target_file, content.encode("utf-8"))
+            if fld is not None and fld.destination.value == ".env":
+                env_key = fld.env_var or key.upper()
+                txn.modify_file(config.paths.env_file.path, _remove_env_key(config.paths.env_file.path, env_key))
+            else:
+                target_file, target_data = _get_yaml_target(config, fld)
+                txn.modify_file(target_file, _serialize_yaml(target_data))
     except (OSError, TransactionError) as e:
         _out.error(f"Transaction failed: {e}", exit_codes.LOCK_ERROR)
 
@@ -401,12 +531,30 @@ def config_unset(
 
 @config_app.command("diff")
 def config_diff(
-    baseline: Optional[str] = typer.Option(None, "--baseline", help="Baseline snapshot name (default: packaged defaults)"),
+    baseline: Optional[str] = typer.Option(None, "--baseline", help="Baseline: 'defaults' or a rollback transaction ID"),
 ) -> None:
-    """Compare current configuration with defaults."""
-    from ainews_config import FIELD_REGISTRY, get_effective_value
+    """Compare current configuration with defaults or a rollback snapshot."""
+    from ainews_config import FIELD_REGISTRY, get_effective_value, redact_value
 
     config = _ctx.ensure_loaded()
+
+    if baseline is not None:
+        if baseline == "defaults":
+            baseline_values: dict[str, Any] = {}
+            for key in FIELD_REGISTRY.all_keys():
+                fld = FIELD_REGISTRY.lookup(key)
+                if fld is None:
+                    continue
+                baseline_values[key] = fld.default
+        else:
+            baseline_values = _load_baseline_from_rollback(config, baseline)
+    else:
+        baseline_values = {}
+        for key in FIELD_REGISTRY.all_keys():
+            fld = FIELD_REGISTRY.lookup(key)
+            if fld is None:
+                continue
+            baseline_values[key] = fld.default
 
     diffs: list[dict[str, Any]] = []
     for key in FIELD_REGISTRY.all_keys():
@@ -414,22 +562,23 @@ def config_diff(
         if fld is None:
             continue
         current = get_effective_value(config, key)
-        default = fld.default
-        if current != default:
+        default_val = baseline_values.get(key)
+        if current != default_val:
             diffs.append({
                 "key": key,
-                "current": current,
-                "default": default,
+                "current": redact_value(key, current, fld),
+                "baseline": redact_value(key, default_val, fld),
             })
 
     if _ctx.json_output:
-        _out.json_data({"diffs": diffs, "count": len(diffs)})
+        _out.json_data({"diffs": diffs, "count": len(diffs), "baseline": baseline or "defaults"})
     else:
         if not diffs:
-            _out.info("No differences from defaults")
+            _out.info("No differences from baseline")
         else:
-            headers = ["Key", "Current", "Default"]
-            rows = [[d["key"], str(d["current"]), str(d["default"])] for d in diffs]
+            bl_label = baseline or "defaults"
+            headers = ["Key", "Current", f"Baseline ({bl_label})"]
+            rows = [[d["key"], str(d["current"]), str(d["baseline"])] for d in diffs]
             _out.table(headers, rows)
 
 

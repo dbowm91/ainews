@@ -93,6 +93,116 @@ control its behavior:
 
 ## Configuration Files
 
+Configuration files are located via a 5-level precedence chain defined in `ainews_config/paths.py`. The CLI resolves paths at startup and reports provenance for each resolved path.
+
+### Canonical Path Resolution
+
+Each configuration file and directory is resolved through this precedence chain (highest priority first):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1. Explicit | CLI option (`--config-dir`, etc.) | `ainews config path --config-dir /custom` |
+| 2. Environment | `AINEWS_CONFIG_DIR`, `AINEWS_DATA_DIR`, etc. | `export AINEWS_CONFIG_DIR=/opt/ainews/config` |
+| 3. Install metadata | `install-metadata.json` in config dir | Written by installer at setup time |
+| 4. Platform default | OS canonical location | `~/.config/ainews/` on Linux |
+| 5. Development | Repository-local fallback | `./config/` when `.git` is detected |
+
+**Platform defaults:**
+
+| Directory | Linux/macOS | Windows |
+|-----------|-------------|---------|
+| Config | `$XDG_CONFIG_HOME/ainews` (`~/.config/ainews`) | `%APPDATA%/ainews` |
+| Data | `$XDG_DATA_HOME/ainews` (`~/.local/share/ainews`) | `%LOCALAPPDATA%/ainews` |
+| State | `$XDG_STATE_HOME/ainews` (`~/.local/state/ainews`) | `%LOCALAPPDATA%/ainews` |
+
+**Environment variables for path overrides:**
+
+| Variable | Overrides |
+|----------|-----------|
+| `AINEWS_APP_DIR` | Application root directory |
+| `AINEWS_CONFIG_DIR` | Configuration files directory |
+| `AINEWS_DATA_DIR` | Data directory (database, backups) |
+| `AINEWS_STATE_DIR` | State directory (transaction locks, staging) |
+| `AINEWS_BACKUP_DIR` | Backup snapshots directory |
+| `AINEWS_ENV_FILE` | `.env` file path |
+| `AINEWS_PROVIDERS_FILE` | `providers.yaml` path |
+| `AINEWS_PIPELINE_FILE` | `pipeline.yaml` path |
+| `AINEWS_SOURCES_FILE` | `sources.yaml` path |
+| `AINEWS_TOPICS_FILE` | `topics.yaml` path |
+| `AINEWS_DATABASE_FILE` | SQLite database path |
+
+Development mode is active when the CLI is run from a directory containing `.git` or `pyproject.toml`. In development mode, the repository root's `config/` and `instance/` directories are used as fallbacks before platform defaults.
+
+Use `ainews config path` to see all resolved paths, their provenance, existence, and writability.
+
+### Configuration Precedence
+
+Values from different sources are merged with this precedence:
+
+1. **Environment variables** (highest priority) — override YAML values for any key
+2. **YAML file values** — `providers.yaml`, `pipeline.yaml`, `sources.yaml`, `topics.yaml`
+3. **Code defaults** — built-in defaults defined in the field registry
+
+**Effective value resolution:**
+
+- The `.env` file is loaded first and merged with the process environment. Process environment variables take precedence over `.env` values.
+- YAML files support `${VAR}` interpolation — unresolved variables produce a diagnostic warning.
+- CLI `config set` writes to the appropriate YAML file via atomic transaction with rollback.
+- CLI `config unset` removes a YAML override, falling back to defaults.
+- `config show` displays the effective value with provenance (where each value came from).
+
+### Structured Diagnostics
+
+The configuration system emits structured diagnostics during loading and validation. Each diagnostic has:
+
+| Field | Description |
+|-------|-------------|
+| `severity` | `error` (blocks startup) or `warning` (informational) |
+| `code` | Stable diagnostic code (e.g., `ROLE_PROVIDER_MISSING`) |
+| `file` | Source file (`providers.yaml`, `pipeline.yaml`, `.env`, etc.) |
+| `key` | Dotted configuration key (e.g., `pipeline.writer.provider`) |
+| `message` | Human-readable description of the issue |
+| `remediation` | Suggested fix (when available) |
+
+**Common diagnostic codes:**
+
+| Code | Severity | Meaning | Remediation |
+|------|----------|---------|-------------|
+| `PROVIDER_MISSING` | error | `default_provider` references a non-existent provider | Add the provider or change `default_provider` |
+| `PROVIDER_DISABLED` | error | Default provider is disabled | Enable the provider or choose another |
+| `ROLE_PROVIDER_MISSING` | error | Pipeline role references missing provider | Add the provider or reassign the role |
+| `ROLE_PROVIDER_DISABLED` | error | Pipeline role references disabled provider | Enable the provider or reassign |
+| `PROVIDER_DUPLICATE` | error | Duplicate provider ID in `providers.yaml` | Use unique provider IDs |
+| `SOURCE_DUPLICATE` | error | Duplicate source ID in `sources.yaml` | Use unique source IDs |
+| `SOURCE_TOPIC_MISSING` | error | Source references non-existent topic | Add the topic to `topics.yaml` or remove the reference |
+| `TOPIC_DUPLICATE` | error | Duplicate topic ID in `topics.yaml` | Use unique topic IDs |
+| `SCHEDULE_OUT_OF_RANGE` | error | Schedule or numeric value outside valid bounds | Set to a value within the documented range |
+| `TIMEZONE_INVALID` | error | Newsletter timezone not in allowed list | Use a valid IANA timezone (e.g., `America/New_York`, `UTC`) |
+| `SECRET_KEY_SHORT` | error | `SECRET_KEY` too short for production | Generate a 64-char hex key |
+| `ADMIN_PASSWORD_PLAINTEXT` | error | `ADMIN_PASSWORD` is plaintext in production | Hash the password with `werkzeug` |
+| `CELERY_SECRET_SHORT` | error | `CELERY_TASK_SECRET` too short for production | Generate a strong secret |
+| `SAFE_FETCH_OUT_OF_RANGE` | error | Safe fetch env var outside valid range | Set to an integer within the documented bounds |
+| `THEME_CONFIG_INVALID` | error | Theme env var is invalid or out of range | Set to a valid value per the theme configuration docs |
+| `DOTENV_MALFORMED_LINE` | error | `.env` line missing `=` separator | Use `KEY=value` format |
+| `YAML_PARSE_ERROR` | error | YAML syntax error | Fix YAML syntax |
+| `ENV_VAR_UNRESOLVED` | warning | `${VAR}` in YAML not found in environment | Set the variable in `.env` or environment |
+| `REDIS_URL_MISMATCH` | warning | Broker and backend Redis URLs mismatched | Use consistent Redis URLs |
+
+**Interpreting `config check` output:**
+
+```bash
+# Check configuration offline
+ainews config check
+
+# Include production-specific checks
+ainews config check --production
+
+# Machine-readable JSON output
+ainews config check --json
+```
+
+The command reports errors and warnings. Exit code `0` means valid; exit code `3` means validation errors were found. Each diagnostic includes the source file, key, and remediation when available.
+
 ### `pipeline.yaml` — Processing Pipeline
 
 Controls the AI processing stages: selector, researcher, writer, editor.

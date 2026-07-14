@@ -777,3 +777,55 @@ class TestEdgeCases:
         )
         assert result.config_dir.provenance == PathProvenance.EXPLICIT
         assert result.data_dir.provenance == PathProvenance.PLATFORM_DEFAULT
+
+
+class TestDevFallbackMigrationWarning:
+    def test_warning_logged_without_install_metadata(self, tmp_path, caplog):
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        (repo_root / ".git").mkdir()
+        (repo_root / "config").mkdir()
+        (repo_root / "instance").mkdir()
+
+        with patch("ainews_config.paths.Path.cwd", return_value=repo_root):
+            with caplog.at_level("WARNING", logger="ainews_config.paths"):
+                result = resolve_paths(development_mode=True)
+
+        assert result.config_dir.provenance == PathProvenance.DEVELOPMENT
+        warning_messages = [r.message for r in caplog.records if r.levelno >= 30]
+        assert any("config_dir" in msg for msg in warning_messages)
+        assert any("ainews config install" in msg for msg in warning_messages)
+
+    def test_no_warning_with_install_metadata(self, tmp_path, caplog):
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        (repo_root / ".git").mkdir()
+        (repo_root / "config").mkdir()
+        (repo_root / "instance").mkdir()
+
+        meta = InstallMetadata(
+            version="1.0.0",
+            installed_at="2025-01-01",
+            install_type="user",
+            config_dir=str(tmp_path / "meta_config"),
+            data_dir=str(tmp_path / "meta_data"),
+        )
+        (tmp_path / "meta_config").mkdir()
+        (tmp_path / "meta_data").mkdir()
+
+        with patch("ainews_config.paths.Path.cwd", return_value=repo_root):
+            with caplog.at_level("WARNING", logger="ainews_config.paths"):
+                result = resolve_paths(install_metadata=meta, development_mode=True)
+
+        assert result.config_dir.provenance == PathProvenance.INSTALL_METADATA
+        warning_messages = [r.message for r in caplog.records if r.levelno >= 30]
+        assert not any("ainews config install" in msg for msg in warning_messages)
+
+    def test_no_warning_without_dev_fallback(self, tmp_path, caplog):
+        with patch("ainews_config.paths._find_repo_root", return_value=None):
+            with caplog.at_level("WARNING", logger="ainews_config.paths"):
+                result = resolve_paths(development_mode=False)
+
+        assert result.config_dir.provenance == PathProvenance.PLATFORM_DEFAULT
+        warning_messages = [r.message for r in caplog.records if r.levelno >= 30]
+        assert not any("ainews config install" in msg for msg in warning_messages)

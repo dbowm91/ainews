@@ -355,6 +355,197 @@ The safe fetch client sets `trust_env=False` and passes `proxies={}` on every re
 curl -sf --max-time 10 <url>
 ```
 
+### Configuration Errors
+
+The configuration system emits structured diagnostics with severity, code, and remediation. Run `ainews config check` to see all errors and warnings, or `ainews config check --production` for production-specific checks.
+
+#### `ROLE_PROVIDER_MISSING` — pipeline role references missing provider
+
+A pipeline role (selector, researcher, writer, editor) references a provider ID that doesn't exist in `providers.yaml`.
+
+```bash
+# Check which provider is missing
+ainews config check
+
+# Fix: add the provider to providers.yaml, or reassign the role
+ainews config set pipeline.writer.provider ollama-local
+```
+
+#### `ROLE_PROVIDER_DISABLED` — pipeline role references disabled provider
+
+A pipeline role references a provider that exists but has `enabled: false`.
+
+```bash
+# Enable the provider in providers.yaml
+ainews config set providers.providers.<id>.enabled true
+
+# Or reassign the role to an enabled provider
+ainews config set pipeline.writer.provider ollama-local
+```
+
+#### `PROVIDER_MISSING` — default provider does not exist
+
+The `default_provider` in `providers.yaml` references a non-existent provider ID.
+
+```bash
+# Add the provider, or change the default
+ainews config set providers.default_provider ollama-local
+```
+
+#### `PROVIDER_DISABLED` — default provider is disabled
+
+The `default_provider` points to a provider with `enabled: false`.
+
+```bash
+ainews config set providers.providers.<id>.enabled true
+```
+
+#### `SOURCE_TOPIC_MISSING` — source references non-existent topic
+
+A source's `topics.include` list references a topic ID not defined in `topics.yaml`.
+
+```bash
+# Add the missing topic to topics.yaml, or remove the reference
+# Check which source and topic
+ainews config check
+```
+
+#### `SCHEDULE_OUT_OF_RANGE` — numeric value outside valid bounds
+
+A schedule or pipeline numeric value is outside its allowed range.
+
+```bash
+# Valid ranges:
+# crawl_interval_minutes: 1-1440
+# generate_newsletters_hour: 0-23
+# max_tokens: 1-1000000
+# concurrency: 1-64
+# timeout_seconds: 1-86400
+
+ainews config set schedule.crawl_interval_minutes 30
+```
+
+#### `TIMEZONE_INVALID` — newsletter timezone not recognized
+
+The `newsletter.timezone` value is not in the allowed list of IANA timezones.
+
+```bash
+# Use a valid timezone
+ainews config set newsletter.timezone "America/New_York"
+```
+
+#### `SECRET_KEY_SHORT` / `CELERY_SECRET_SHORT` — secrets too short for production
+
+Production requires secrets of sufficient length. `SECRET_KEY` must be >= 16 characters. `CELERY_TASK_SECRET` must be >= 16 characters.
+
+```bash
+# Generate a strong secret
+python -c "import secrets; print(secrets.token_hex(32))"
+
+# Set it in .env
+# SECRET_KEY=<generated value>
+# CELERY_TASK_SECRET=<generated value>
+```
+
+#### `ADMIN_PASSWORD_PLAINTEXT` — password not hashed in production
+
+The `ADMIN_PASSWORD` in `.env` is plaintext. Production requires a hashed password.
+
+```bash
+# Hash the password
+python scripts/hash_password.py
+
+# Or inline:
+python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your-password'))"
+
+# Paste the scrypt/pbkdf2 hash into ADMIN_PASSWORD in .env
+```
+
+#### `SAFE_FETCH_OUT_OF_RANGE` — safe fetch env var invalid
+
+A `SAFE_FETCH_*` environment variable is not an integer or is outside its valid range.
+
+```bash
+# Valid ranges:
+# SAFE_FETCH_MAX_REDIRECTS: 0-20
+# SAFE_FETCH_MAX_BYTES: 1024-100000000
+# SAFE_FETCH_CONNECT_TIMEOUT: 1-60
+# SAFE_FETCH_READ_TIMEOUT: 1-300
+# SAFE_FETCH_TOTAL_TIMEOUT: 1-600
+
+# Set valid values in .env
+```
+
+#### `YAML_PARSE_ERROR` — YAML syntax error in config file
+
+A configuration YAML file has invalid syntax.
+
+```bash
+# Check which file
+ainews config check
+
+# Fix the YAML syntax (indentation, colons, etc.)
+# Common issues:
+# - Missing colons after keys
+# - Incorrect indentation (use spaces, not tabs)
+# - Unclosed quotes
+```
+
+#### `DOTENV_MALFORMED_LINE` / `DOTENV_EMPTY_KEY` — `.env` file issues
+
+The `.env` file has lines that don't follow `KEY=value` format.
+
+```bash
+# Check for malformed lines
+ainews config check
+
+# Fix: ensure each line is KEY=value
+# Remove empty lines or lines without '='
+```
+
+#### `ENV_VAR_UNRESOLVED` — environment variable not found
+
+A `${VAR}` reference in a YAML file couldn't be resolved from the environment or `.env`.
+
+```bash
+# Set the missing variable
+echo "MISSING_VAR=value" >> .env
+
+# Or remove the ${VAR} reference and use a literal value
+```
+
+#### `REDIS_URL_MISMATCH` — broker and backend Redis URLs mismatched
+
+The Celery broker and result backend use different Redis configurations when both are Redis, or one is Redis and the other isn't.
+
+```bash
+# Ensure consistent Redis URLs in .env
+# CELERY_BROKER_URL=redis://localhost:6379/0
+# CELERY_RESULT_BACKEND=redis://localhost:6379/1
+```
+
+#### General: checking and fixing configuration
+
+```bash
+# Full validation
+ainews config check --production
+
+# Show effective configuration with provenance
+ainews config show
+
+# Show resolved paths
+ainews config path
+
+# Show specific value
+ainews config get pipeline.writer.model
+
+# Set a value
+ainews config set pipeline.writer.model qwen3:8b
+
+# Compare with defaults
+ainews config diff
+```
+
 ---
 
 ## Diagnostic Commands

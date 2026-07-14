@@ -137,6 +137,68 @@ class ConfigTransaction:
                         partial_files=[path],
                     )
 
+        self._validate_cross_file_staged()
+
+    def _validate_cross_file_staged(self) -> None:
+        from ainews_config.loader import load_all_configs
+
+        temp_dir = self._staging_dir / "_validate"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            file_map: dict[Path, Path] = {}
+            for path in self._changes:
+                staging_name = hashlib.sha256(str(path).encode()).hexdigest() + ".tmp"
+                staging_path = self._staging_dir / staging_name
+                if staging_path.exists():
+                    file_map[path] = staging_path
+
+            from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+
+            def _rp(p: Path) -> ResolvedPath:
+                return ResolvedPath(
+                    path=p,
+                    provenance=PathProvenance.EXPLICIT,
+                    exists=True,
+                    is_writable=True,
+                )
+
+            env_path = file_map.get(self._paths.env_file.path, self._paths.env_file.path)
+            providers_path = file_map.get(self._paths.providers_file.path, self._paths.providers_file.path)
+            pipeline_path = file_map.get(self._paths.pipeline_file.path, self._paths.pipeline_file.path)
+            sources_path = file_map.get(self._paths.sources_file.path, self._paths.sources_file.path)
+            topics_path = file_map.get(self._paths.topics_file.path, self._paths.topics_file.path)
+
+            staging_paths = ResolvedPaths(
+                app_dir=_rp(temp_dir),
+                config_dir=_rp(temp_dir),
+                data_dir=_rp(temp_dir),
+                state_dir=_rp(temp_dir),
+                backup_dir=_rp(temp_dir),
+                env_file=_rp(env_path),
+                providers_file=_rp(providers_path),
+                pipeline_file=_rp(pipeline_path),
+                sources_file=_rp(sources_path),
+                topics_file=_rp(topics_path),
+                database_file=_rp(temp_dir / "dummy.db"),
+                install_metadata_file=_rp(temp_dir / "dummy.json"),
+                transaction_lock=_rp(temp_dir / "lock"),
+                transaction_staging=_rp(temp_dir / "staging"),
+            )
+
+            load_all_configs(staging_paths)
+        except TransactionError:
+            raise
+        except (OSError, yaml.YAMLError, ValueError) as e:
+            raise TransactionError(
+                message=f"Cross-file validation failed: {e}",
+                code="VALIDATION_FAILED",
+            )
+        finally:
+            import shutil
+
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def _verify_no_external_modification(self) -> None:
         for snap in self._snapshots:
             if not snap.exists:
@@ -182,7 +244,9 @@ class ConfigTransaction:
                 for snap in self._snapshots:
                     if snap.path == path:
                         if snap.exists:
-                            self._atomic_replace(path, snap.content_hash.encode())
+                            original_content = self._original_contents.get(snap.path)
+                            if original_content is not None:
+                                self._atomic_replace(path, original_content)
                         elif path.exists():
                             path.unlink()
                         break
@@ -195,6 +259,45 @@ class ConfigTransaction:
 
         self._create_rollback()
         self._cleanup_staging()
+
+    def _build_redacted_diff(self) -> list[dict[str, str]]:
+        from ainews_config.fields import FIELD_REGISTRY, SecretClassification
+
+        diffs: list[dict[str, str]] = []
+        for path, new_content in self._changes.items():
+            original = self._original_contents.get(path)
+            if original is None:
+                diffs.append({
+                    "file": str(path),
+                    "change": "created",
+                })
+                continue
+            if original == new_content:
+                continue
+
+            new_text = new_content.decode("utf-8", errors="replace")
+            old_text = original.decode("utf-8", errors="replace")
+
+            for fld in FIELD_REGISTRY.all_keys():
+                field_obj = FIELD_REGISTRY.lookup(fld)
+                if field_obj is None:
+                    continue
+                if field_obj.secret in (SecretClassification.SECRET, SecretClassification.SENSITIVE):
+                    if fld.upper() in old_text or fld.upper() in new_text:
+                        diffs.append({
+                            "file": str(path),
+                            "change": "modified",
+                            "key": fld,
+                            "old": "***REDACTED***",
+                            "new": "***REDACTED***",
+                        })
+                        return diffs
+
+            diffs.append({
+                "file": str(path),
+                "change": "modified",
+            })
+        return diffs
 
     def _create_rollback(self) -> Path | None:
         if not self._snapshots:
@@ -214,6 +317,8 @@ class ConfigTransaction:
                     target = rollback_dir / hashlib.sha256(str(snap.path).encode()).hexdigest()
                     target.write_bytes(rollback_content)
 
+        diff_entries = self._build_redacted_diff()
+
         manifest = TransactionManifest(
             transaction_id=self._transaction_id,
             files_changed=files_changed,
@@ -226,6 +331,7 @@ class ConfigTransaction:
             "files_changed": manifest.files_changed,
             "rollback_path": manifest.rollback_path,
             "created_at": manifest.created_at,
+            "diff": diff_entries,
         }, indent=2))
 
         return rollback_dir

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import enum
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class PathProvenance(enum.Enum):
@@ -87,6 +90,18 @@ def _check_writable(path: Path) -> bool:
             return os.access(parent, os.W_OK)
         parent = parent.parent
     return False
+
+
+def _warn_if_dev_fallback(
+    resolved: ResolvedPath,
+    name: str,
+    has_install_metadata: bool,
+) -> None:
+    if not has_install_metadata and resolved.provenance == PathProvenance.DEVELOPMENT:
+        logger.warning(
+            "Using development fallback path for %s. Run 'ainews config install' to set up proper installation paths.",
+            name,
+        )
 
 
 def _resolve_directory(
@@ -289,6 +304,7 @@ def resolve_paths(
         platform_default=user_home,
         dev_fallback=repo_root if use_dev else None,
     )
+    _warn_if_dev_fallback(app_dir, "app_dir", install_metadata is not None)
 
     config_dir = _resolve_directory(
         "config_dir",
@@ -298,6 +314,7 @@ def resolve_paths(
         platform_default=platform_config,
         dev_fallback=dev_config if use_dev else None,
     )
+    _warn_if_dev_fallback(config_dir, "config_dir", install_metadata is not None)
 
     data_dir = _resolve_directory(
         "data_dir",
@@ -307,6 +324,7 @@ def resolve_paths(
         platform_default=platform_data,
         dev_fallback=dev_data if use_dev else None,
     )
+    _warn_if_dev_fallback(data_dir, "data_dir", install_metadata is not None)
 
     state_dir = _resolve_directory(
         "state_dir",
@@ -316,6 +334,7 @@ def resolve_paths(
         platform_default=platform_state,
         dev_fallback=dev_state if use_dev else None,
     )
+    _warn_if_dev_fallback(state_dir, "state_dir", install_metadata is not None)
 
     backup_dir = _resolve_directory(
         "backup_dir",
@@ -325,6 +344,7 @@ def resolve_paths(
         platform_default=platform_data / "backups",
         dev_fallback=(repo_root / "backups") if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(backup_dir, "backup_dir", install_metadata is not None)
 
     env_file = _resolve_file(
         "env_file",
@@ -334,6 +354,7 @@ def resolve_paths(
         platform_default=config_dir.path / ConfigFile.ENV.value,
         dev_fallback=(repo_root / ConfigFile.ENV.value) if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(env_file, "env_file", install_metadata is not None)
 
     providers_file = _resolve_file(
         "providers_file",
@@ -343,6 +364,7 @@ def resolve_paths(
         platform_default=config_dir.path / ConfigFile.PROVIDERS.value,
         dev_fallback=(repo_root / ConfigFile.PROVIDERS.value) if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(providers_file, "providers_file", install_metadata is not None)
 
     pipeline_file = _resolve_file(
         "pipeline_file",
@@ -352,6 +374,7 @@ def resolve_paths(
         platform_default=config_dir.path / ConfigFile.PIPELINE.value,
         dev_fallback=(repo_root / ConfigFile.PIPELINE.value) if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(pipeline_file, "pipeline_file", install_metadata is not None)
 
     sources_file = _resolve_file(
         "sources_file",
@@ -361,6 +384,7 @@ def resolve_paths(
         platform_default=config_dir.path / ConfigFile.SOURCES.value,
         dev_fallback=(repo_root / ConfigFile.SOURCES.value) if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(sources_file, "sources_file", install_metadata is not None)
 
     topics_file = _resolve_file(
         "topics_file",
@@ -370,6 +394,7 @@ def resolve_paths(
         platform_default=config_dir.path / ConfigFile.TOPICS.value,
         dev_fallback=(repo_root / ConfigFile.TOPICS.value) if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(topics_file, "topics_file", install_metadata is not None)
 
     database_file = _resolve_file(
         "database_file",
@@ -379,6 +404,7 @@ def resolve_paths(
         platform_default=data_dir.path / ConfigFile.DATABASE.value,
         dev_fallback=None,
     )
+    _warn_if_dev_fallback(database_file, "database_file", install_metadata is not None)
 
     install_metadata_file = _resolve_file(
         "install_metadata_file",
@@ -388,6 +414,7 @@ def resolve_paths(
         platform_default=config_dir.path / "install-metadata.json",
         dev_fallback=(repo_root / "install-metadata.json") if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(install_metadata_file, "install_metadata_file", install_metadata is not None)
 
     transaction_lock = _resolve_file(
         "transaction_lock",
@@ -397,6 +424,7 @@ def resolve_paths(
         platform_default=state_dir.path / "transaction.lock",
         dev_fallback=(repo_root / "transaction.lock") if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(transaction_lock, "transaction_lock", install_metadata is not None)
 
     transaction_staging = _resolve_directory(
         "transaction_staging",
@@ -406,6 +434,7 @@ def resolve_paths(
         platform_default=state_dir.path / "staging",
         dev_fallback=(repo_root / "staging") if use_dev and repo_root else None,
     )
+    _warn_if_dev_fallback(transaction_staging, "transaction_staging", install_metadata is not None)
 
     return ResolvedPaths(
         app_dir=app_dir,

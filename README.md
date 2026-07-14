@@ -95,6 +95,8 @@ ainews config rollback --list          # List rollback snapshots
 ainews doctor                          # System diagnostics
 ```
 
+> **Note:** The CLI is available now for configuration management and diagnostics. The complete installer path (automated setup, systemd service creation, initial provisioning) is not yet implemented. For production deployments, follow the [Deployment Guide](docs/deployment.md) or use Docker.
+
 Install the CLI entry point:
 ```bash
 pip install -e .

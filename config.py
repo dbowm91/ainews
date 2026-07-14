@@ -903,6 +903,85 @@ def _validate_themes(result: ConfigValidationResult) -> None:
         )
 
 
+def _flatten_pipeline_config(effective: Any) -> dict[str, Any]:
+    """Extract pipeline config keys into flat dict for Flask app.config."""
+    flat: dict[str, Any] = {}
+    pipeline_section = effective.pipeline.get("pipeline", {})
+    if not isinstance(pipeline_section, dict):
+        return flat
+    for role in ("selector", "researcher", "writer", "editor"):
+        role_cfg = pipeline_section.get(role, {})
+        if not isinstance(role_cfg, dict):
+            continue
+        prefix = role.upper()
+        for rk, rv in role_cfg.items():
+            flat[f"{prefix}_{rk.upper()}"] = rv
+    schedule = effective.pipeline.get("schedule", {})
+    if isinstance(schedule, dict):
+        for sk, sv in schedule.items():
+            flat[f"SCHEDULE_{sk.upper()}"] = sv
+    newsletter = effective.pipeline.get("newsletter", {})
+    if isinstance(newsletter, dict):
+        for nk, nv in newsletter.items():
+            flat[f"NEWSLETTER_{nk.upper()}"] = nv
+    return flat
+
+
+def _log_loader_diagnostics(diagnostics: list, logger: Any) -> None:
+    """Log shared loader diagnostics at appropriate levels."""
+    relevant = [d for d in diagnostics if d.severity in ("error", "warning")]
+    if not relevant:
+        return
+    error_count = sum(1 for d in relevant if d.severity == "error")
+    warning_count = sum(1 for d in relevant if d.severity == "warning")
+    logger.info(
+        "Shared loader diagnostics: %d issues (%d errors, %d warnings)",
+        len(relevant),
+        error_count,
+        warning_count,
+    )
+    for d in relevant:
+        if d.severity == "error":
+            logger.warning("[%s] %s", d.code, d.message)
+        else:
+            logger.info("[%s] %s", d.code, d.message)
+
+
+def load_from_shared_loader() -> dict[str, Any]:
+    """Load configuration via the shared ainews_config loader.
+
+    Compatibility wrapper that bridges the shared config system with Flask's
+    app.config dict. Existing code paths continue to work unchanged; this
+    function provides an additional configuration source that can be used
+    alongside or instead of the legacy config classes.
+
+    Returns:
+        Dict suitable for ``app.config.update()``. Returns empty dict on
+        failure so that existing behavior is never broken.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        from ainews_config.loader import load_config_for_app
+    except ImportError:
+        logger.debug("ainews_config not available, skipping shared loader")
+        return {}
+
+    try:
+        effective = load_config_for_app()
+    except Exception:
+        logger.exception("Shared config loader failed")
+        return {}
+
+    flat: dict[str, Any] = dict(effective.environment)
+    flat.update(_flatten_pipeline_config(effective))
+    _log_loader_diagnostics(effective.diagnostics, logger)
+
+    return flat
+
+
 config = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,

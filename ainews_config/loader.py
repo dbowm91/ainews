@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from ainews_config.fields import FIELD_REGISTRY, ConfigField, SecretClassification
-from ainews_config.paths import ResolvedPaths
+from ainews_config.paths import ResolvedPaths, resolve_paths
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 
@@ -238,6 +238,164 @@ def _build_provenance_from_yaml(
     return provenance
 
 
+def _validate_providers_schema(
+    data: dict[str, Any], file_name: str
+) -> list[Diagnostic]:
+    diags: list[Diagnostic] = []
+    providers_val = data.get("providers")
+    if providers_val is not None and not isinstance(providers_val, dict):
+        diags.append(
+            Diagnostic(
+                severity="error",
+                code="SCHEMA_VIOLATION",
+                file=file_name,
+                key="providers",
+                message="Field 'providers' must be a dict.",
+                remediation="Ensure providers.yaml has a 'providers' key mapping provider IDs to configs.",
+            )
+        )
+    default_provider = data.get("default_provider")
+    if default_provider is not None and not isinstance(default_provider, str):
+        diags.append(
+            Diagnostic(
+                severity="error",
+                code="SCHEMA_VIOLATION",
+                file=file_name,
+                key="default_provider",
+                message="Field 'default_provider' must be a string.",
+                remediation="Set default_provider to a provider ID string.",
+            )
+        )
+    search_providers = data.get("search_providers")
+    if search_providers is not None and not isinstance(search_providers, list):
+        diags.append(
+            Diagnostic(
+                severity="error",
+                code="SCHEMA_VIOLATION",
+                file=file_name,
+                key="search_providers",
+                message="Field 'search_providers' must be a list.",
+                remediation="Set search_providers to a list of search provider definitions.",
+            )
+        )
+    return diags
+
+
+def _validate_pipeline_schema(
+    data: dict[str, Any], file_name: str
+) -> list[Diagnostic]:
+    diags: list[Diagnostic] = []
+    pipeline_section = data.get("pipeline")
+    if pipeline_section is None:
+        return diags
+    if not isinstance(pipeline_section, dict):
+        diags.append(
+            Diagnostic(
+                severity="error",
+                code="SCHEMA_VIOLATION",
+                file=file_name,
+                key="pipeline",
+                message="Field 'pipeline' must be a dict.",
+                remediation="Ensure pipeline.yaml has a 'pipeline' key with role configurations.",
+            )
+        )
+        return diags
+
+    expected_roles = ("selector", "researcher", "writer", "editor")
+    for role in expected_roles:
+        role_val = pipeline_section.get(role)
+        if role_val is not None and not isinstance(role_val, dict):
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    code="SCHEMA_VIOLATION",
+                    file=file_name,
+                    key=f"pipeline.{role}",
+                    message=f"Role '{role}' must be a dict.",
+                    remediation=f"Set pipeline.{role} to a dict with role configuration.",
+                )
+            )
+
+    for optional_key in ("schedule", "memory", "subagent"):
+        optional_val = data.get(optional_key)
+        if optional_val is not None and not isinstance(optional_val, dict):
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    code="SCHEMA_VIOLATION",
+                    file=file_name,
+                    key=optional_key,
+                    message=f"Field '{optional_key}' must be a dict.",
+                    remediation=f"Set {optional_key} to a dict with configuration.",
+                )
+            )
+
+    return diags
+
+
+def _validate_sources_schema(
+    data: list[dict[str, Any]], file_name: str
+) -> list[Diagnostic]:
+    diags: list[Diagnostic] = []
+    for idx, item in enumerate(data):
+        if not isinstance(item, dict):
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    code="SCHEMA_VIOLATION",
+                    file=file_name,
+                    key=f"sources[{idx}]",
+                    message=f"Source at index {idx} must be a dict.",
+                    remediation="Each source entry must be a dict with 'id', 'url', and 'type' keys.",
+                )
+            )
+            continue
+        for required_key in ("id", "url", "type"):
+            if required_key not in item:
+                diags.append(
+                    Diagnostic(
+                        severity="error",
+                        code="SCHEMA_VIOLATION",
+                        file=file_name,
+                        key=f"sources[{idx}].{required_key}",
+                        message=f"Source at index {idx} is missing required key '{required_key}'.",
+                        remediation=f"Add '{required_key}' to source entry at index {idx}.",
+                    )
+                )
+    return diags
+
+
+def _validate_topics_schema(
+    data: dict[str, Any], file_name: str
+) -> list[Diagnostic]:
+    diags: list[Diagnostic] = []
+    for tid, tval in data.items():
+        if not isinstance(tval, dict):
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    code="SCHEMA_VIOLATION",
+                    file=file_name,
+                    key=f"topics.{tid}",
+                    message=f"Topic '{tid}' must be a dict.",
+                    remediation=f"Set topics.{tid} to a dict with at least a 'query' key.",
+                )
+            )
+            continue
+        if "query" not in tval:
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    code="SCHEMA_VIOLATION",
+                    file=file_name,
+                    key=f"topics.{tid}.query",
+                    message=f"Topic '{tid}' is missing required key 'query'.",
+                    remediation=f"Add 'query' to topic '{tid}'.",
+                )
+            )
+    return diags
+
+
 def load_all_configs(
     paths: ResolvedPaths,
     *,
@@ -282,12 +440,24 @@ def load_all_configs(
 
         if provenance_prefix == "providers" and isinstance(resolved_data, dict):
             providers_data = resolved_data
+            all_diags.extend(
+                _validate_providers_schema(resolved_data, file_path.name)
+            )
         elif provenance_prefix == "pipeline" and isinstance(resolved_data, dict):
             pipeline_data = resolved_data
+            all_diags.extend(
+                _validate_pipeline_schema(resolved_data, file_path.name)
+            )
         elif provenance_prefix == "sources" and isinstance(resolved_data, list):
             sources_data = resolved_data
+            all_diags.extend(
+                _validate_sources_schema(resolved_data, file_path.name)
+            )
         elif provenance_prefix == "topics" and isinstance(resolved_data, dict):
             topics_data = resolved_data
+            all_diags.extend(
+                _validate_topics_schema(resolved_data, file_path.name)
+            )
 
         if resolved_data is not None:
             yaml_prov = _build_provenance_from_yaml(
@@ -320,6 +490,81 @@ def load_all_configs(
         diagnostics=all_diags,
         dotenv=dotenv,
     )
+
+
+def _providers_dict_to_list(providers_cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert dict-format providers to list-format for validate_cross_file.
+
+    The loader stores providers as a dict keyed by provider ID, but
+    validate_cross_file expects a list of provider dicts with 'id' fields.
+    """
+    raw = providers_cfg.get("providers", {})
+    if not isinstance(raw, dict):
+        return []
+    result: list[dict[str, Any]] = []
+    for pid, pval in raw.items():
+        if not isinstance(pval, dict):
+            continue
+        entry: dict[str, Any] = {"id": pid, **pval}
+        result.append(entry)
+    return result
+
+
+def load_config_for_app(
+    *,
+    env_overrides: dict[str, str] | None = None,
+    explicit_paths: dict[str, Path | None] | None = None,
+) -> EffectiveConfiguration:
+    """Load all configuration files and validate cross-file consistency.
+
+    This is the bridge function between the shared ainews_config system and the
+    Flask/Celery runtime. It resolves paths, loads all config files, and runs
+    cross-file validation.
+
+    Args:
+        env_overrides: Optional environment variable overrides.
+        explicit_paths: Optional explicit path overrides passed to
+            ``resolve_paths()``. When ``None``, paths are resolved using
+            the standard precedence chain (env vars, install metadata,
+            dev fallback).
+
+    Returns:
+        EffectiveConfiguration with diagnostics. On failure, returns a config
+        object with error diagnostics rather than raising.
+    """
+    from ainews_config.validation import validate_cross_file
+
+    paths = resolve_paths(explicit_paths=explicit_paths)
+    config = load_all_configs(paths, env_overrides=env_overrides)
+
+    providers_for_validation = _providers_dict_to_list(config.providers)
+
+    validation = validate_cross_file(
+        {
+            "providers": {
+                "providers": providers_for_validation,
+                "default_provider": config.providers.get("default_provider"),
+            },
+            "pipeline": config.pipeline,
+            "sources": config.sources,
+            "topics": config.topics,
+            "environment": config.environment,
+        }
+    )
+
+    for err in validation.errors:
+        config.diagnostics.append(
+            Diagnostic(
+                severity=err.severity,
+                code=err.code,
+                file=err.file,
+                key=err.key,
+                message=err.message,
+                remediation=err.remediation,
+            )
+        )
+
+    return config
 
 
 def redact_value(

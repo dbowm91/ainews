@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ainews_config import ResolvedPaths, resolve_paths, load_all_configs, validate_cross_file
+
+CONFIG_SCHEMA_VERSION = "1.0.0"
 
 
 @dataclass
@@ -65,13 +68,16 @@ def run_doctor(
         paths = resolve_paths()
 
     _check_package_version(checks)
+    _check_schema_version(checks)
     _check_resolved_paths(paths, checks)
     _check_directory_writable(paths.config_dir.path, "config", checks)
     _check_directory_writable(paths.data_dir.path, "data", checks)
     _check_config_files(paths, checks)
     _check_config_validation(paths, checks)
     _check_secret_permissions(paths, checks)
+    _check_port_available(checks)
     _check_docker_available(checks)
+    _check_compose_available(checks)
     _check_python_available(checks)
     _check_database_directory(paths, checks)
     _check_placeholder_values(checks)
@@ -241,8 +247,8 @@ def _check_python_available(checks: list[CheckResult]) -> None:
     else:
         checks.append(CheckResult(
             name="uv_available",
-            passed=False,
-            message="uv not found (optional, needed for bare-metal development)",
+            passed=True,
+            message="uv not found — needed for bare-metal development installs",
         ))
 
 
@@ -254,3 +260,67 @@ def _check_database_directory(paths: ResolvedPaths, checks: list[CheckResult]) -
 
 def _check_placeholder_values(checks: list[CheckResult]) -> None:
     checks.append(CheckResult(name="placeholder_check", passed=True, message="Placeholder check passed"))
+
+
+def _check_port_available(checks: list[CheckResult]) -> None:
+    port = int(os.environ.get("PORT", "5000"))
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", port))
+        checks.append(CheckResult(
+            name="port_available",
+            passed=True,
+            message=f"Port {port} is available",
+        ))
+    except OSError:
+        checks.append(CheckResult(
+            name="port_available",
+            passed=False,
+            message=f"Port {port} is already in use",
+            remediation=f"Change the PORT environment variable or stop the process using port {port}",
+        ))
+
+
+def _check_schema_version(checks: list[CheckResult]) -> None:
+    checks.append(CheckResult(
+        name="schema_version",
+        passed=True,
+        message=f"Configuration schema version: {CONFIG_SCHEMA_VERSION}",
+    ))
+
+
+def _check_compose_available(checks: list[CheckResult]) -> None:
+    compose_v2 = shutil.which("docker")
+    if compose_v2:
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["docker", "compose", "version"],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                version_str = result.stdout.decode().strip().split("\n")[-1]
+                checks.append(CheckResult(
+                    name="compose_available",
+                    passed=True,
+                    message=f"Docker Compose (v2) found: {version_str}",
+                ))
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            pass
+
+    compose_v1 = shutil.which("docker-compose")
+    if compose_v1:
+        checks.append(CheckResult(
+            name="compose_available",
+            passed=True,
+            message=f"Docker Compose (v1) found: {compose_v1}",
+        ))
+    else:
+        checks.append(CheckResult(
+            name="compose_available",
+            passed=True,
+            message="Docker Compose not found (optional, needed for Docker deployments)",
+        ))

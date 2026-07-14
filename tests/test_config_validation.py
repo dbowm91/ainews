@@ -465,6 +465,93 @@ class TestThemeValidation:
         assert result.is_valid
 
 
+class TestDatabaseUrlValidation:
+    def test_missing_database_url_in_production(self):
+        cfg = _base_config()
+        cfg["environment"] = {"FLASK_CONFIG": "production"}
+        result = validate_cross_file(cfg)
+        assert not result.is_valid
+        assert any(e.code == "DATABASE_URL_MISSING" for e in result.errors)
+
+    def test_empty_database_url_in_production(self):
+        cfg = _base_config()
+        cfg["environment"] = {"FLASK_CONFIG": "production", "DATABASE_URL": ""}
+        result = validate_cross_file(cfg)
+        assert not result.is_valid
+        assert any(e.code == "DATABASE_URL_MISSING" for e in result.errors)
+
+    def test_database_url_present_in_production(self):
+        cfg = _base_config()
+        cfg["environment"] = {
+            "FLASK_CONFIG": "production",
+            "DATABASE_URL": "sqlite:///instance/prod.db",
+        }
+        result = validate_cross_file(cfg)
+        assert not any(e.code == "DATABASE_URL_MISSING" for e in result.errors)
+
+    def test_non_production_skips_database_url_check(self):
+        cfg = _base_config()
+        cfg["environment"] = {"FLASK_CONFIG": "development"}
+        result = validate_cross_file(cfg)
+        assert not any(e.code == "DATABASE_URL_MISSING" for e in result.errors)
+
+
+class TestRoleModelValidation:
+    def test_valid_model_with_colon(self):
+        cfg = _base_config()
+        cfg["pipeline"]["pipeline"]["selector"]["model"] = "qwen3:8b"
+        result = validate_cross_file(cfg)
+        assert not any(
+            e.code == "ROLE_MODEL_INVALID" and "selector" in (e.key or "")
+            for e in result.errors
+        )
+
+    def test_valid_model_with_slash(self):
+        cfg = _base_config()
+        cfg["pipeline"]["pipeline"]["selector"]["model"] = "openai/gpt-4"
+        result = validate_cross_file(cfg)
+        assert not any(
+            e.code == "ROLE_MODEL_INVALID" and "selector" in (e.key or "")
+            for e in result.errors
+        )
+
+    def test_model_without_colon_or_slash_warns(self):
+        cfg = _base_config()
+        cfg["pipeline"]["pipeline"]["selector"]["model"] = "gpt4"
+        result = validate_cross_file(cfg)
+        assert any(
+            e.code == "ROLE_MODEL_INVALID" and "selector" in (e.key or "")
+            for e in result.errors
+        )
+
+    def test_disabled_role_skipped(self):
+        cfg = _base_config()
+        cfg["pipeline"]["pipeline"]["selector"]["enabled"] = False
+        cfg["pipeline"]["pipeline"]["selector"]["model"] = "bad"
+        result = validate_cross_file(cfg)
+        assert not any(
+            e.code == "ROLE_MODEL_INVALID" and "selector" in (e.key or "")
+            for e in result.errors
+        )
+
+    def test_null_model_skipped(self):
+        cfg = _base_config()
+        cfg["pipeline"]["pipeline"]["selector"]["model"] = None
+        result = validate_cross_file(cfg)
+        assert not any(
+            e.code == "ROLE_MODEL_INVALID" and "selector" in (e.key or "")
+            for e in result.errors
+        )
+
+    def test_multiple_invalid_models(self):
+        cfg = _base_config()
+        cfg["pipeline"]["pipeline"]["selector"]["model"] = "badmodel"
+        cfg["pipeline"]["pipeline"]["writer"]["model"] = "alsobad"
+        result = validate_cross_file(cfg)
+        model_errors = [e for e in result.errors if e.code == "ROLE_MODEL_INVALID"]
+        assert len(model_errors) >= 2
+
+
 class TestMultipleErrors:
     def test_multiple_errors_reported_simultaneously(self):
         cfg = _base_config()

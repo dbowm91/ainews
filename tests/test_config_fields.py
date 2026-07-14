@@ -7,6 +7,7 @@ import pytest
 from ainews_config.fields import (
     FIELD_REGISTRY,
     ConfigFile,
+    FieldType,
     RuntimeComponent,
     SecretClassification,
     lookup_field,
@@ -166,3 +167,45 @@ class TestRuntimeComponentImpact:
             assert isinstance(fld.restart_impact, frozenset)
             for comp in fld.restart_impact:
                 assert isinstance(comp, RuntimeComponent)
+
+
+class TestFieldAliases:
+    def test_secret_key_alias_secret(self):
+        fld = lookup_field("secret")
+        assert fld is not None
+        assert fld.key == "secret_key"
+
+    def test_admin_password_alias_admin_pass(self):
+        fld = lookup_field("admin_pass")
+        assert fld is not None
+        assert fld.key == "admin_password"
+
+    def test_database_url_alias_db_url(self):
+        fld = lookup_field("db_url")
+        assert fld is not None
+        assert fld.key == "database_url"
+
+    def test_celery_broker_url_alias_broker_url(self):
+        fld = lookup_field("broker_url")
+        assert fld is not None
+        assert fld.key == "celery_broker_url"
+
+    def test_smtp_host_alias_mail_host(self):
+        fld = lookup_field("mail_host")
+        assert fld is not None
+        assert fld.key == "smtp_host"
+
+    def test_smtp_port_alias_mail_port(self):
+        fld = lookup_field("mail_port")
+        assert fld is not None
+        assert fld.key == "smtp_port"
+
+    def test_aliases_resolve_via_validate_key(self):
+        fld = FIELD_REGISTRY.validate_key("secret")
+        assert fld.key == "secret_key"
+
+    def test_aliases_in_registry_lookup(self):
+        fld = FIELD_REGISTRY.lookup("broker_url")
+        assert fld is not None
+        assert fld.key == "celery_broker_url"
+        assert fld.field_type == FieldType.STRING

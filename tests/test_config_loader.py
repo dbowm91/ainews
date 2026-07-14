@@ -693,6 +693,320 @@ class TestMultipleErrors:
         assert "YAML_PARSE_ERROR" in codes
 
 
+class TestProvidersSchemaValidation:
+    def test_providers_not_dict_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("providers: not-a-dict\n")
+
+        for name in ["pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        codes = [d.code for d in config.diagnostics]
+        assert "SCHEMA_VIOLATION" in codes
+        assert any(d.key == "providers" for d in config.diagnostics)
+
+    def test_default_provider_not_string_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("default_provider: 12345\n")
+
+        for name in ["pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and d.key == "default_provider"
+            for d in config.diagnostics
+        )
+
+    def test_search_providers_not_list_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("search_providers: not-a-list\n")
+
+        for name in ["pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and d.key == "search_providers"
+            for d in config.diagnostics
+        )
+
+    def test_valid_providers_no_violations(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text(
+            "default_provider: ollama\n"
+            "providers:\n"
+            "  ollama:\n"
+            "    model: llama3\n"
+            "search_providers:\n"
+            "  - duckduckgo\n"
+        )
+
+        for name in ["pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert not any(
+            d.code == "SCHEMA_VIOLATION" for d in config.diagnostics
+        )
+
+
+class TestPipelineSchemaValidation:
+    def test_pipeline_not_dict_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("pipeline: not-a-dict\n")
+
+        for name in ["sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and d.key == "pipeline"
+            for d in config.diagnostics
+        )
+
+    def test_role_not_dict_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("pipeline:\n  selector: not-a-dict\n")
+
+        for name in ["sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and d.key == "pipeline.selector"
+            for d in config.diagnostics
+        )
+
+    def test_valid_pipeline_no_violations(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text(
+            "pipeline:\n"
+            "  selector:\n"
+            "    enabled: true\n"
+            "  researcher:\n"
+            "    enabled: true\n"
+            "  writer:\n"
+            "    enabled: true\n"
+            "  editor:\n"
+            "    enabled: true\n"
+        )
+
+        for name in ["sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert not any(
+            d.code == "SCHEMA_VIOLATION" and d.key and d.key.startswith("pipeline.")
+            for d in config.diagnostics
+        )
+
+    def test_optional_sections_not_dict_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text(
+            "pipeline:\n  selector:\n    enabled: true\n"
+            "schedule: not-a-dict\nmemory: also-not\nsubagent: nope\n"
+        )
+
+        for name in ["sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        violation_keys = [d.key for d in config.diagnostics if d.code == "SCHEMA_VIOLATION"]
+        assert "schedule" in violation_keys
+        assert "memory" in violation_keys
+        assert "subagent" in violation_keys
+
+
+class TestSourcesSchemaValidation:
+    def test_source_not_dict_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("{}\n")
+
+        sources_file = tmp_path / "sources.yaml"
+        sources_file.write_text("- not-a-dict\n- also-not\n")
+
+        topics_file = tmp_path / "topics.yaml"
+        topics_file.write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and "sources[0]" in (d.key or "")
+            for d in config.diagnostics
+        )
+
+    def test_source_missing_required_keys(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("{}\n")
+
+        sources_file = tmp_path / "sources.yaml"
+        sources_file.write_text("- name: test\n")
+
+        topics_file = tmp_path / "topics.yaml"
+        topics_file.write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        violation_keys = [d.key for d in config.diagnostics if d.code == "SCHEMA_VIOLATION"]
+        assert "sources[0].id" in violation_keys
+        assert "sources[0].url" in violation_keys
+        assert "sources[0].type" in violation_keys
+
+    def test_valid_sources_no_violations(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("{}\n")
+
+        sources_file = tmp_path / "sources.yaml"
+        sources_file.write_text(
+            "- id: hackernews\n  url: https://news.ycombinator.com\n  type: web\n"
+        )
+
+        topics_file = tmp_path / "topics.yaml"
+        topics_file.write_text("{}\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert not any(
+            d.code == "SCHEMA_VIOLATION" and d.key and d.key.startswith("sources[")
+            for d in config.diagnostics
+        )
+
+
+class TestTopicsSchemaValidation:
+    def test_topic_not_dict_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("{}\n")
+
+        sources_file = tmp_path / "sources.yaml"
+        sources_file.write_text("[]\n")
+
+        topics_file = tmp_path / "topics.yaml"
+        topics_file.write_text("ai: not-a-dict\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and d.key == "topics.ai"
+            for d in config.diagnostics
+        )
+
+    def test_topic_missing_query_error(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("{}\n")
+
+        sources_file = tmp_path / "sources.yaml"
+        sources_file.write_text("[]\n")
+
+        topics_file = tmp_path / "topics.yaml"
+        topics_file.write_text("ai:\n  display_name: AI\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert any(
+            d.code == "SCHEMA_VIOLATION" and d.key == "topics.ai.query"
+            for d in config.diagnostics
+        )
+
+    def test_valid_topics_no_violations(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text("{}\n")
+
+        pipeline_file = tmp_path / "pipeline.yaml"
+        pipeline_file.write_text("{}\n")
+
+        sources_file = tmp_path / "sources.yaml"
+        sources_file.write_text("[]\n")
+
+        topics_file = tmp_path / "topics.yaml"
+        topics_file.write_text("ai:\n  query: artificial intelligence\n  display_name: AI\n")
+
+        paths = _make_resolved_paths(tmp_path)
+        config = load_all_configs(paths)
+        assert not any(
+            d.code == "SCHEMA_VIOLATION" and d.key and d.key.startswith("topics.")
+            for d in config.diagnostics
+        )
+
+
 class TestEffectiveConfiguration:
     def test_is_dataclass(self):
         assert hasattr(EffectiveConfiguration, "__dataclass_fields__")

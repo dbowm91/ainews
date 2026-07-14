@@ -2,6 +2,15 @@
 
 Provides a single point of access to all application configuration,
 abstracting Flask config, environment variables, and YAML configs.
+
+.. deprecated::
+    This module's independent config loading logic should eventually be
+    migrated to use ``ainews_config.loader`` as the single source of truth.
+    The new ``load_from_shared_loader()`` in ``config.py`` provides the
+    bridge between the shared system and Flask/Celery startup. Once the
+    migration is complete, this module will serve as a thin accessor over
+    the shared ``EffectiveConfiguration`` rather than duplicating load
+    and parse logic.
 """
 
 import logging

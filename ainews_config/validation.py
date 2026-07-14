@@ -131,6 +131,8 @@ def validate_cross_file(config: dict[str, Any]) -> ValidationResult:
     _validate_schedule(config, result)
     _validate_newsletter(config, result)
     _validate_production_secrets(config, result)
+    _validate_database_url(config, result)
+    _validate_role_models(config, result)
     _validate_safe_fetch(config, result)
     _validate_themes(config, result)
     _validate_redis(config, result)
@@ -513,6 +515,53 @@ def _validate_production_secrets(
             message=f"CELERY_TASK_SECRET must be at least {_MIN_CELERY_SECRET_LENGTH} characters in production.",
             remediation="Generate a strong secret with: python -c 'import secrets; print(secrets.token_hex(32))'",
         )
+
+
+def _validate_database_url(config: dict[str, Any], result: ValidationResult) -> None:
+    env = _get_environment(config)
+    flask_config = env.get("FLASK_CONFIG", "development")
+    if flask_config != "production":
+        return
+
+    database_url = env.get("DATABASE_URL", "")
+    if not isinstance(database_url, str) or not database_url:
+        result.add_error(
+            code="DATABASE_URL_MISSING",
+            file=".env",
+            key="DATABASE_URL",
+            message="DATABASE_URL is required in production.",
+            remediation="Set DATABASE_URL in your .env file (e.g. sqlite:///instance/prod.db).",
+        )
+
+
+def _validate_role_models(config: dict[str, Any], result: ValidationResult) -> None:
+    pipeline = _get_pipeline(config)
+    pipeline_section = pipeline.get("pipeline", {})
+    if not isinstance(pipeline_section, dict):
+        return
+
+    for role in _ROLES:
+        role_config = pipeline_section.get(role, {})
+        if not isinstance(role_config, dict):
+            continue
+        if role_config.get("enabled") is False:
+            continue
+
+        model = role_config.get("model")
+        if model is None or model == "null":
+            continue
+
+        if not isinstance(model, str) or not model:
+            continue
+
+        if "/" not in model and ":" not in model:
+            result.add_warning(
+                code="ROLE_MODEL_INVALID",
+                file="pipeline.yaml",
+                key=f"pipeline.{role}.model",
+                message=f"Role {role!r} model {model!r} does not follow expected format (provider/model or model:variant).",
+                remediation=f"Use a model string like 'ollama/qwen3:8b' or 'gpt-4' for {role!r}.",
+            )
 
 
 def _validate_safe_fetch(config: dict[str, Any], result: ValidationResult) -> None:

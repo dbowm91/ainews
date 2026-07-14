@@ -402,3 +402,92 @@ class TestEdgeCases:
         missing = tmp_path / "missing.txt"
         txn._snapshot_file(missing)
         assert txn._snapshots[-1].exists is False
+
+
+class TestSerializationFailure:
+    def test_invalid_yaml_output_raises_validation_error(self, tmp_path):
+        paths = _make_paths(tmp_path)
+        target = tmp_path / "providers.yaml"
+        target.write_text("valid: true\n")
+
+        with pytest.raises(TransactionError, match="YAML validation"):
+            with transaction(paths) as txn:
+                txn.modify_file(target, b"{{invalid yaml::\n")
+
+    def test_non_yaml_file_skips_yaml_validation(self, tmp_path):
+        paths = _make_paths(tmp_path)
+        target = tmp_path / "data.txt"
+        target.write_text("original\n")
+
+        with transaction(paths) as txn:
+            txn.modify_file(target, b"modified\n")
+
+        assert target.read_text() == "modified\n"
+
+
+class TestDiskFullSimulation:
+    def test_os_replace_failure_triggers_rollback(self, tmp_path):
+        from unittest.mock import patch
+
+        paths = _make_paths(tmp_path)
+        target = tmp_path / "providers.yaml"
+        target.write_text("original: true\n")
+
+        call_count = 0
+        original_replace = os.replace
+
+        def failing_replace(src: str, dst: str) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise OSError("No space left on device")
+            original_replace(src, dst)
+
+        with patch("os.replace", side_effect=failing_replace):
+            with pytest.raises(TransactionError, match="Failed to apply changes"):
+                with transaction(paths) as txn:
+                    txn.modify_file(target, b"new: content\n")
+
+        assert target.read_text() == "original: true\n"
+
+
+class TestFailureAfterStaging:
+    def test_atomic_replace_failure_restores_original(self, tmp_path):
+        from unittest.mock import patch
+
+        paths = _make_paths(tmp_path)
+        target = tmp_path / "providers.yaml"
+        target.write_text("original: data\n")
+
+        original_atomic = ConfigTransaction._atomic_replace
+        call_count = 0
+
+        def failing_atomic(target_path: Path, content: bytes) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise OSError("Simulated disk failure")
+            original_atomic(target_path, content)
+
+        with patch.object(ConfigTransaction, "_atomic_replace", side_effect=failing_atomic):
+            with pytest.raises(TransactionError, match="Failed to apply changes"):
+                with transaction(paths) as txn:
+                    txn.modify_file(target, b"new: data\n")
+
+        assert target.read_text() == "original: data\n"
+
+
+class TestInterruptedRollback:
+    def test_rollback_creation_failure_still_applies(self, tmp_path):
+        from unittest.mock import patch
+
+        paths = _make_paths(tmp_path)
+        target = tmp_path / "providers.yaml"
+        target.write_text("original: true\n")
+
+        with patch.object(ConfigTransaction, "_create_rollback", side_effect=OSError("Cannot create rollback")):
+            with pytest.raises(OSError, match="Cannot create rollback"):
+                with transaction(paths) as txn:
+                    txn.modify_file(target, b"new: true\n")
+
+        assert target.read_text() == "new: true\n"

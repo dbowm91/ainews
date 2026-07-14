@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
 from ainews_cli.doctor import (
+    CONFIG_SCHEMA_VERSION,
     CheckResult,
     DoctorReport,
+    _check_compose_available,
     _check_config_files,
     _check_config_validation,
     _check_database_directory,
@@ -14,8 +17,10 @@ from ainews_cli.doctor import (
     _check_directory_writable,
     _check_package_version,
     _check_placeholder_values,
+    _check_port_available,
     _check_python_available,
     _check_resolved_paths,
+    _check_schema_version,
     _check_secret_permissions,
     run_doctor,
 )
@@ -143,13 +148,16 @@ class TestRunDoctor:
         report = run_doctor(paths=paths)
         check_names = {c.name for c in report.checks}
         assert "package_version" in check_names
+        assert "schema_version" in check_names
         assert "path_config_dir" in check_names
         assert "path_data_dir" in check_names
         assert "writable_config" in check_names
         assert "writable_data" in check_names
         assert "config_validation" in check_names
         assert "secret_permissions" in check_names
+        assert "port_available" in check_names
         assert "docker_available" in check_names
+        assert "compose_available" in check_names
         assert "python_version" in check_names
         assert "placeholder_check" in check_names
 
@@ -316,7 +324,8 @@ class TestCheckPythonAvailable:
         with patch("shutil.which", return_value=None):
             _check_python_available(checks)
         uv_check = [c for c in checks if c.name == "uv_available"][0]
-        assert uv_check.passed is False
+        assert uv_check.passed is True
+        assert "needed for bare-metal" in uv_check.message
 
 
 class TestCheckDatabaseDirectory:
@@ -366,3 +375,96 @@ class TestCheckConfigValidation:
             _check_config_validation(paths, checks)
         assert checks[0].passed is False
         assert "Could not validate" in checks[0].message
+
+
+class TestCheckPortAvailable:
+    def test_port_available(self):
+        checks: list[CheckResult] = []
+        with patch.dict(os.environ, {"PORT": "19999"}):
+            with patch("socket.socket") as mock_socket_cls:
+                mock_socket = mock_socket_cls.return_value.__enter__.return_value
+                _check_port_available(checks)
+        assert len(checks) == 1
+        assert checks[0].name == "port_available"
+        assert checks[0].passed is True
+        assert "19999" in checks[0].message
+
+    def test_port_unavailable(self):
+        checks: list[CheckResult] = []
+        with patch.dict(os.environ, {"PORT": "19999"}):
+            with patch("socket.socket") as mock_socket_cls:
+                mock_socket = mock_socket_cls.return_value.__enter__.return_value
+                mock_socket.bind.side_effect = OSError("Address already in use")
+                _check_port_available(checks)
+        assert len(checks) == 1
+        assert checks[0].name == "port_available"
+        assert checks[0].passed is False
+        assert "in use" in checks[0].message
+
+    def test_default_port(self):
+        checks: list[CheckResult] = []
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("socket.socket") as mock_socket_cls:
+                mock_socket = mock_socket_cls.return_value.__enter__.return_value
+                _check_port_available(checks)
+        assert checks[0].passed is True
+        assert "5000" in checks[0].message
+
+
+class TestCheckSchemaVersion:
+    def test_always_passes(self):
+        checks: list[CheckResult] = []
+        _check_schema_version(checks)
+        assert len(checks) == 1
+        assert checks[0].name == "schema_version"
+        assert checks[0].passed is True
+        assert CONFIG_SCHEMA_VERSION in checks[0].message
+
+
+class TestCheckComposeAvailable:
+    def test_compose_v2_found(self):
+        checks: list[CheckResult] = []
+        with patch("shutil.which", return_value="/usr/bin/docker"):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value.returncode = 0
+                mock_run.return_value.stdout = b"Docker Compose version v2.20.0\n"
+                _check_compose_available(checks)
+        assert checks[0].passed is True
+        assert "v2" in checks[0].message
+
+    def test_compose_v1_found(self):
+        checks: list[CheckResult] = []
+        with patch("shutil.which") as mock_which:
+            def which_side_effect(name):
+                if name == "docker":
+                    return None
+                if name == "docker-compose":
+                    return "/usr/bin/docker-compose"
+                return None
+            mock_which.side_effect = which_side_effect
+            _check_compose_available(checks)
+        assert checks[0].passed is True
+        assert "v1" in checks[0].message
+
+    def test_compose_not_found(self):
+        checks: list[CheckResult] = []
+        with patch("shutil.which", return_value=None):
+            _check_compose_available(checks)
+        assert checks[0].passed is True
+        assert "not found" in checks[0].message
+
+    def test_compose_v2_fallback_to_v1(self):
+        checks: list[CheckResult] = []
+        with patch("shutil.which") as mock_which:
+            def which_side_effect(name):
+                if name == "docker":
+                    return "/usr/bin/docker"
+                if name == "docker-compose":
+                    return "/usr/bin/docker-compose"
+                return None
+            mock_which.side_effect = which_side_effect
+            with patch("subprocess.run") as mock_run:
+                mock_run.side_effect = FileNotFoundError("not found")
+                _check_compose_available(checks)
+        assert checks[0].passed is True
+        assert "v1" in checks[0].message

@@ -21,6 +21,7 @@ concurrency:
 #   trivy                — filesystem vulnerability scan
 #   docker-build         — image build + testing/prod smoke
 #   smoke-tests          — production config, Celery, migration, docs consistency
+#   theme-validation     — theme CLI validation + lifecycle/preference/recovery tests
 #   compose-smoke        — full Docker Compose boot + health check
 #   gitleaks             — secret scanning
 # ---------------------------------------------------------------------------
@@ -176,6 +177,35 @@ jobs:
 
       - name: Run docs consistency smoke tests
         run: .venv/bin/python -m pytest tests/test_docs_env_consistency.py -v
+
+  theme-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Run theme validation CLI
+        run: .venv/bin/python scripts/validate_themes.py --bundled --strict
+
+      - name: Run theme lifecycle tests
+        run: .venv/bin/python -m pytest tests/test_theme_lifecycle.py -v
+
+      - name: Run theme preference validation tests
+        run: .venv/bin/python -m pytest tests/test_theme_preference_validation.py -v
+
+      - name: Run theme failure recovery tests
+        run: .venv/bin/python -m pytest tests/test_theme_failure_recovery.py -v
 
   compose-smoke:
     runs-on: ubuntu-latest

@@ -526,6 +526,14 @@ See `docs/halloy-theme-contract.md` for the full source schema, translation rule
 - **Diagnostic codes:** Stable codes in `THEME_DIAGNOSTIC_CODES` dict (`services/themes/errors.py`). Use in CLI output, logs, tests, and admin diagnostics.
 - **Documentation:** `docs/theme-authoring.md` (operators/contributors), `docs/theme-troubleshooting.md` (diagnostic codes), `docs/theme-preferences.md` (reader-facing), `docs/theme-provenance.md` (source licenses).
 
+### Theme Comprehensive Validation (Phase 6)
+- **Validation matrix**: `docs/theme-validation.md` defines the complete validation matrix with 11 theme representatives, 34 page families, 5 viewports, 16 state dimensions, and 57 risk-weighted matrix cells.
+- **Lifecycle regression**: `tests/test_theme_lifecycle.py` (33 tests) validates dual-stylesheet ownership, standalone page support, CSS route integration, and metadata integrity.
+- **Preference validation**: `tests/test_theme_preference_validation.py` (38 tests) validates preference parsing, legacy migration, HTMX/navigation, selector state, and cross-tab sync contracts.
+- **Failure recovery**: `tests/test_theme_failure_recovery.py` (58 tests) validates registry build failures, external directory pathologies, route-level failures, and recovery assertions.
+- **CI integration**: `theme-validation` job in `.github/workflows/ci.yml` runs validation CLI and theme-specific tests.
+- **Total theme test count**: 568+ tests across 13 test files.
+
 ### Theme CSS Delivery (Phase 3)
 Theme CSS is served via `GET /assets/themes/<theme_id>.css` from the startup-built registry. Blueprint at `routes/themes.py` (`themes_bp`), registered before `public_bp`. Registry accessed via `get_app_registry()` (or `app.extensions['theme_registry']`). Response: `text/css; charset=utf-8`, `Cache-Control: public, max-age=300`, ETag-based 304. Unknown IDs return 404. CSS output includes both legacy (`--green`, `--accent-dim`) and semantic (`--success`, `--accent-active`) variable names. Category badges use `--category-{name}-alpha-{15,40}` variables.
 

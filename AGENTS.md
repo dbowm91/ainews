@@ -163,6 +163,14 @@ The `themes_bp` blueprint is registered in `app.py:_register_blueprints()` BEFOR
 ### Theme Diagnostic Codes
 Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Use these in CLI output, logs, tests, and admin diagnostics. `get_diagnostic_description(code)` returns human-readable description.
 
+### Theme Comprehensive Validation (Phase 6)
+- **Validation matrix**: `docs/theme-validation.md` defines the complete validation matrix with 11 theme representatives, 34 page families, 5 viewports, 16 state dimensions, and 57 risk-weighted matrix cells.
+- **Lifecycle regression**: `tests/test_theme_lifecycle.py` (33 tests) validates dual-stylesheet ownership, standalone page support, CSS route integration, and metadata integrity.
+- **Preference validation**: `tests/test_theme_preference_validation.py` (38 tests) validates preference parsing, legacy migration, HTMX/navigation, selector state, and cross-tab sync contracts.
+- **Failure recovery**: `tests/test_theme_failure_recovery.py` (58 tests) validates registry build failures, external directory pathologies, route-level failures, and recovery assertions.
+- **CI integration**: `theme-validation` job in `.github/workflows/ci.yml` runs validation CLI and theme-specific tests.
+- **Total theme test count**: 568+ tests across 13 test files.
+
 ## Architecture Conventions
 
 ### Type Checking Pattern

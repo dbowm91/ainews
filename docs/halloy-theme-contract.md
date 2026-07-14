@@ -822,3 +822,28 @@ on the directory.
 Check `THEMES_ENABLED`, `THEMES_CUSTOM_DIR`, and `THEMES_ALLOW_CUSTOM`.
 Run `python scripts/validate_themes.py --bundled` to identify bundled
 parse failures.
+
+## Phase 6 — Comprehensive Validation
+
+Phase 6 closes the remaining validation gap by exercising the subsystem as an integrated product.
+
+### Validation Matrix
+`docs/theme-validation.md` defines:
+- 11 theme representatives (dark, light, high-contrast, low-saturation, warm, high-chroma, custom, emergency, diagnostic)
+- 34 page families (public, admin, standalone, API)
+- 5 viewports (320px–1920px)
+- 16 state dimensions (system mode, explicit, legacy, failure modes)
+- 57 risk-weighted matrix cells
+
+### Automated Coverage
+- `tests/test_theme_lifecycle.py` — 33 tests for stylesheet ownership regression
+- `tests/test_theme_preference_validation.py` — 38 tests for preference/migration/HTMX
+- `tests/test_theme_failure_recovery.py` — 58 tests for failure modes and recovery
+
+### CI Integration
+The `theme-validation` CI job runs:
+1. `validate_themes.py --bundled --strict`
+2. Theme-specific pytest files
+
+### Evidence Record
+`docs/theme-validation.md` contains the validation matrix, manual step descriptions, and automated test coverage map.

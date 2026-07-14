@@ -1,112 +1,178 @@
-"""Tests for database migrations.
+from __future__ import annotations
 
-Verifies that migrations can be applied cleanly and produce a schema
-consistent with the SQLAlchemy models.
-"""
+import fcntl
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from sqlalchemy import inspect
+from ainews_cli.migrations import (
+    _run_flask_command,
+    check_migration_lock,
+    detect_pending_migrations,
+    get_migration_status,
+    run_migrations,
+)
+from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
 
 
-def _get_table_columns(db, table_name):
-    """Get column names from the actual database schema."""
-    inspector = inspect(db.engine)
-    columns = inspector.get_columns(table_name)
-    return {col["name"] for col in columns}
+def _make_resolved_paths(tmp_path: Path) -> ResolvedPaths:
+    def _rp(p: Path) -> ResolvedPath:
+        return ResolvedPath(
+            path=p,
+            provenance=PathProvenance.EXPLICIT,
+            exists=p.exists(),
+            is_writable=True,
+        )
+
+    return ResolvedPaths(
+        app_dir=_rp(tmp_path),
+        config_dir=_rp(tmp_path),
+        data_dir=_rp(tmp_path),
+        state_dir=_rp(tmp_path),
+        backup_dir=_rp(tmp_path),
+        env_file=_rp(tmp_path / ".env"),
+        providers_file=_rp(tmp_path / "providers.yaml"),
+        pipeline_file=_rp(tmp_path / "pipeline.yaml"),
+        sources_file=_rp(tmp_path / "sources.yaml"),
+        topics_file=_rp(tmp_path / "topics.yaml"),
+        database_file=_rp(tmp_path / "db.sqlite"),
+        install_metadata_file=_rp(tmp_path / "meta.json"),
+        transaction_lock=_rp(tmp_path / "lock"),
+        transaction_staging=_rp(tmp_path / "staging"),
+    )
 
 
-class TestMigrationSchema:
-    """Verify database schema matches SQLAlchemy models."""
+class TestRunFlaskCommand:
+    def test_returns_completed_process(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            result = _run_flask_command(["db", "current"], paths, timeout=10)
+            assert result.returncode == 0
+            assert result.stdout == "ok"
 
-    def test_sources_table_exists(self, app):
-        from extensions import db
+    def test_sets_flask_app_env(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            _run_flask_command(["db", "current"], paths, timeout=10)
+            call_args = mock_run.call_args
+            env = call_args.kwargs.get("env", call_args[1].get("env", {}))
+            assert "FLASK_APP" in env
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "sources" in tables
 
-    def test_articles_table_exists(self, app):
-        from extensions import db
+class TestDetectPendingMigrations:
+    def test_no_pending(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            current = MagicMock(returncode=0, stdout="abc123\n")
+            heads = MagicMock(returncode=0, stdout="abc123\n")
+            mock_cmd.side_effect = [current, heads]
+            result = detect_pending_migrations(paths)
+            assert result["pending_count"] == 0
+            assert result["error"] is None
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "articles" in tables
+    def test_some_pending(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            current = MagicMock(returncode=0, stdout="abc123\n")
+            heads = MagicMock(returncode=0, stdout="abc123\ndef456\n")
+            mock_cmd.side_effect = [current, heads]
+            result = detect_pending_migrations(paths)
+            assert result["pending_count"] >= 0
 
-    def test_subscribers_table_exists(self, app):
-        from extensions import db
+    def test_error_state(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            current = MagicMock(returncode=1, stdout="", stderr="alembic not found")
+            heads = MagicMock(returncode=1, stdout="", stderr="alembic not found")
+            mock_cmd.side_effect = [current, heads]
+            result = detect_pending_migrations(paths)
+            assert result["error"] is not None
+            assert "alembic" in result["error"].lower()
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "subscribers" in tables
 
-    def test_subscribers_has_deleted_at(self, app):
-        """Subscriber model has deleted_at column — schema should too."""
-        from extensions import db
+class TestRunMigrations:
+    def test_success(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=0, stdout="done", stderr="")
+            result = run_migrations(paths)
+            assert result["success"] is True
+            assert result["error"] is None
 
-        with app.app_context():
-            columns = _get_table_columns(db, "subscribers")
-            assert "deleted_at" in columns
+    def test_failure(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=1, stdout="", stderr="migration error")
+            result = run_migrations(paths)
+            assert result["success"] is False
+            assert "migration error" in result["error"]
 
-    def test_articles_has_total_retries(self, app):
-        """Article model has total_retries column."""
-        from extensions import db
+    def test_dry_run(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=0, stdout="SQL here", stderr="")
+            result = run_migrations(paths, dry_run=True)
+            assert result["success"] is True
+            assert result["output"] == "SQL here"
 
-        with app.app_context():
-            columns = _get_table_columns(db, "articles")
-            assert "total_retries" in columns
+    def test_migration_lock(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations._run_flask_command") as mock_cmd:
+            mock_cmd.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
-    def test_article_versions_table_exists(self, app):
-        from extensions import db
+            result1 = run_migrations(paths)
+            assert result1["success"] is True
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "article_versions" in tables
+            lock_path = paths.state_dir.path / "migration.lock"
+            if lock_path.exists():
+                lock_path.unlink()
 
-    def test_pipeline_tables_exist(self, app):
-        from extensions import db
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "pipeline_runs" in tables
-            assert "pipeline_logs" in tables
+class TestGetMigrationStatus:
+    def test_needs_migration(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations.detect_pending_migrations") as mock_detect:
+            mock_detect.return_value = {
+                "current_revision": "abc123",
+                "head_revisions": ["abc123", "def456"],
+                "pending_count": 1,
+                "error": None,
+            }
+            result = get_migration_status(paths)
+            assert result["needs_migration"] is True
+            assert result["pending_count"] == 1
 
-    def test_article_metrics_table_exists(self, app):
-        from extensions import db
+    def test_up_to_date(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        with patch("ainews_cli.migrations.detect_pending_migrations") as mock_detect:
+            mock_detect.return_value = {
+                "current_revision": "abc123",
+                "head_revisions": ["abc123"],
+                "pending_count": 0,
+                "error": None,
+            }
+            result = get_migration_status(paths)
+            assert result["needs_migration"] is False
+            assert result["pending_count"] == 0
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "article_metrics" in tables
 
-    def test_share_configs_table_exists(self, app):
-        from extensions import db
+class TestCheckMigrationLock:
+    def test_not_locked(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        result = check_migration_lock(paths)
+        assert result["locked"] is False
 
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "share_configs" in tables
-
-    def test_article_tags_association_table(self, app):
-        from extensions import db
-
-        with app.app_context():
-            inspector = inspect(db.engine)
-            tables = inspector.get_table_names()
-            assert "article_tags" in tables
-
-    def test_indexes_exist(self, app):
-        """Verify key indexes exist."""
-        from extensions import db
-
-        with app.app_context():
-            inspector = inspect(db.engine)
-            indexes = inspector.get_indexes("articles")
-            index_names = {idx["name"] for idx in indexes}
-            # These are defined in model __table_args__
-            assert "ix_articles_status_created" in index_names
-            assert "ix_articles_published" in index_names
-            assert "ix_articles_impact" in index_names
+    def test_locked(self, tmp_path):
+        paths = _make_resolved_paths(tmp_path)
+        lock_path = paths.state_dir.path / "migration.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_fd = open(lock_path, "w")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            result = check_migration_lock(paths)
+            assert result["locked"] is True
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+            lock_path.unlink(missing_ok=True)

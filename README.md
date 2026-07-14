@@ -77,29 +77,97 @@ ollama pull qwen3:8b
 
 See [docs/quickstart.md](docs/quickstart.md) for full setup instructions.
 
-## Operator CLI
+## Quick Start (Release 2)
 
-ainews includes a command-line interface for configuration management and diagnostics:
+### Docker (fastest)
+
+1. Clone and enter the repo:
+   ```bash
+   git clone https://github.com/dbowm91/ainews.git && cd ainews
+   ```
+
+2. Install the CLI:
+   ```bash
+   pip install -e .
+   ```
+
+3. Run interactive onboarding:
+   ```bash
+   ainews onboard
+   ```
+
+   The onboarding wizard will:
+   - Select a deployment profile (docker-local, docker-lan, reverse-proxy, bare-metal)
+   - Generate secure secrets (SECRET_KEY, CELERY_TASK_SECRET, admin password)
+   - Configure your LLM provider (Ollama, OpenAI, Anthropic, Gemini, EggPool, or generic OpenAI-compatible)
+   - Discover available models
+   - Apply pipeline and source profiles
+   - Validate and start services
+
+4. Or use a bootstrap file for unattended setup:
+   ```bash
+   ainews onboard --non-interactive --config-file bootstrap.yaml --start
+   ```
+
+5. Verify the app is running:
+   ```bash
+   curl http://localhost:5000/health
+   ```
+
+### Bare Metal
+
+Requires Python 3.12+, Redis, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```bash
-ainews version                        # Show version info
-ainews config path                    # Show resolved config paths
-ainews config show                    # Show effective configuration (secrets redacted)
-ainews config check                   # Validate configuration offline
-ainews config get pipeline.writer.model  # Get a config value
-ainews config set pipeline.writer.model qwen3:8b  # Set a config value
-ainews config set-secret smtp.password   # Set a secret (reads from stdin)
-ainews config unset smtp.password        # Remove an override
-ainews config diff                     # Compare with defaults
-ainews config rollback --list          # List rollback snapshots
-ainews doctor                          # System diagnostics
+git clone https://github.com/dbowm91/ainews.git && cd ainews
+uv sync
+ainews onboard  # Interactive setup
 ```
 
-> **Note:** The CLI is available now for configuration management and diagnostics. The complete installer path (automated setup, systemd service creation, initial provisioning) is not yet implemented. For production deployments, follow the [Deployment Guide](docs/deployment.md) or use Docker.
+## Operator CLI
 
-Install the CLI entry point:
+ainews includes a command-line interface for onboarding, provider management, service lifecycle, and diagnostics:
+
 ```bash
-pip install -e .
+# Onboarding
+ainews onboard                           # Interactive first-run setup
+ainews onboard --config-file boot.yaml   # Declarative bootstrap
+ainews onboard --dry-run                 # Preview without changes
+
+# Provider management
+ainews providers-list                    # Show configured providers
+ainews providers-add                     # Add a provider interactively
+ainews providers-test [ID]              # Test provider connectivity
+ainews providers-models ID              # List available models
+ainews providers-set-default ID         # Set default provider
+ainews providers-assign ID MODEL [ROLES]  # Assign to pipeline roles
+ainews providers-remove ID              # Remove a provider
+
+# Service lifecycle
+ainews start                             # Start all services
+ainews stop                              # Stop services
+ainews restart                           # Restart services
+ainews status                            # Show service status
+ainews logs [SERVICE]                    # View logs
+ainews health                            # Check health endpoints
+ainews smoke                             # Post-deploy smoke checks
+
+# Configuration
+ainews config path                       # Show resolved config paths
+ainews config show                       # Show effective config (secrets redacted)
+ainews config check                      # Validate configuration
+ainews config get KEY                    # Get a config value
+ainews config set KEY VALUE             # Set a config value
+ainews config set-secret KEY            # Set a secret (reads from stdin)
+ainews config unset KEY                  # Remove an override
+ainews config diff                       # Compare with defaults
+ainews config rollback --list           # List rollback snapshots
+
+# Diagnostics
+ainews doctor                            # Full system diagnostics
+ainews doctor --quick                    # Basic checks only
+ainews doctor --network                  # Include connectivity checks
+ainews version                           # Show version info
 ```
 
 See [CLI Reference](docs/cli-reference.md) for full documentation.
@@ -178,7 +246,9 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [Theme Inventory](docs/themes-inventory.md) | Halloy theme collection inventory & provenance |
 | [Halloy Theme Contract](docs/halloy-theme-contract.md) | Supported source schema and translation rules |
 | [Security Triage](docs/security_triage.md) | Vulnerability triage, suppression policy, license review, container scanning |
-| [CLI Reference](docs/cli-reference.md) | Operator CLI for config management |
+| [CLI Reference](docs/cli-reference.md) | Operator CLI reference |
+| [Onboarding](docs/onboarding.md) | First-run setup, profiles, bootstrap schema |
+| [Provider CLI](docs/providers-cli.md) | Provider management, testing, model discovery |
 
 ## Release Validation
 

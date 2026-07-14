@@ -24,7 +24,7 @@ This document provides instructions and context for agents working on the AI New
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
 *   `ainews_config/`: Configuration engine package (CLI-independent). Contains path resolver, field registry, loader, validator, and transactional writer.
-*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, config (path/show/check/get/set/unset/diff/rollback), doctor.
+*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, onboard, providers (list/add/test/models/set-default/assign/remove), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/set-secret/unset/diff/rollback), doctor.
 
 ## Known Issues & Gotchas
 
@@ -348,6 +348,15 @@ The codebase uses SQLite with WAL mode only. There is no PostgreSQL configuratio
 ### Operator CLI Architecture
 The `ainews_cli` package is Flask-free and imports only from `ainews_config`. All commands work outside the repository directory. The CLI uses Typer with `typer.Typer(no_args_is_help=True)`. Configuration loading uses `resolve_paths()` → `load_all_configs()` → `validate_cross_file()`. Secret values are redacted in output by default; `--show-secrets` is not available in Release 1. The `config set` and `config unset` commands use `ConfigTransaction` for atomic file replacement with rollback. Exit codes are defined in `ainews_cli/exit_codes.py`. See `docs/cli-reference.md` for the full command reference.
 
+### Onboarding Architecture
+The `ainews onboard` command implements a 16-stage state machine (`OnboardingService`) with resume-from-failure support. State is persisted to `onboarding-state.json` in the config directory. Stages are executed sequentially with `run_stage()` returning `StageResult` objects. The `resume()` method picks up from the last incomplete stage. Deployment, pipeline, and source profiles (`ainews_cli/profiles.py`) provide preset configurations. Bootstrap YAML files (`ainews_cli/schema.py`) enable unattended setup with cross-field validation and secret detection.
+
+### Provider Adapter Architecture
+Provider management uses a pluggable adapter pattern (`ainews_cli/providers/`). Each adapter implements the `ProviderSetupAdapter` protocol with `fields()`, `probe()`, `discover_models()`, and `remediation()`. The registry (`ainews_cli/providers/registry.py`) maps type IDs to adapter classes. Built-in adapters: `ollama`, `openai`, `anthropic`, `gemini`, `eggpool`, `generic`. Adapters are independent of the Flask runtime and can be tested in isolation.
+
+### Lifecycle Driver Architecture
+Service lifecycle uses a `LifecycleDriver` protocol (`ainews_cli/lifecycle/driver.py`) with `DockerComposeDriver` and `BareMetalDriver` implementations. Commands (`ainews_cli/lifecycle/commands.py`) register as top-level CLI commands (start, stop, restart, status, logs, health, smoke). The start command integrates with `doctor` checks and `migrations` for prerequisites.
+
 ### Configuration Engine Architecture
 The `ainews_config` package provides the shared configuration model used by both the CLI and (eventually) the Flask/Celery runtime. Key modules: `paths.py` (5-level path precedence chain), `fields.py` (typed field registry with 80+ operator-facing keys), `loader.py` (dotenv/YAML parsing with provenance tracking), `validation.py` (cross-file semantic checks), `transaction.py` (flock-based atomic writes with rollback). The package has zero Flask dependencies.
 
@@ -490,7 +499,14 @@ The following are documented as intentional and should NOT be "fixed":
 | `services/pipeline_degradation.py` | `post_finalize_article()`, `degrade_stage()`, `_finalize()` |
 | `adapters/api.py` | API source adapter with error logging in `_fetch_item` |
 | `ainews_config/` | Configuration engine: path resolver, field registry, loader, validator, transactional writer |
-| `ainews_cli/` | Operator CLI: version, config (path/show/check/get/set/unset/diff/rollback), doctor |
+| `ainews_cli/` | Operator CLI: version, onboard, providers (list/add/test/models/set-default/assign/remove), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/unset/diff/rollback), doctor |
+| `ainews_cli/onboard.py` | Onboarding state machine, stage definitions, orchestration service |
+| `ainews_cli/profiles.py` | Deployment, pipeline, and source profile definitions |
+| `ainews_cli/schema.py` | Declarative bootstrap YAML schema and validation |
+| `ainews_cli/secrets.py` | Secret generation, password hashing, admin setup |
+| `ainews_cli/migrations.py` | Database migration detection and execution |
+| `ainews_cli/providers/` | Provider adapter protocol, built-in adapters (Ollama, OpenAI, Anthropic, Gemini, EggPool, generic), CLI commands |
+| `ainews_cli/lifecycle/` | Lifecycle driver abstraction, Docker Compose and bare metal drivers, CLI commands |
 | `docs/cli-reference.md` | CLI command reference documentation |
 | `docs/configuration-contract.md` | Machine-oriented configuration inventory |
 

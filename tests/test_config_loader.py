@@ -1038,7 +1038,7 @@ class TestEffectiveConfiguration:
 class TestDeprecatedFieldWarnings:
     def test_deprecated_field_triggers_warning(self, tmp_path):
         from unittest.mock import patch
-        from ainews_config.fields import FIELD_REGISTRY, ConfigField, ConfigFile, FieldType
+        from ainews_config.fields import FIELD_REGISTRY, ConfigField
 
         env_file = tmp_path / ".env"
         env_file.write_text("SECRET_KEY=abc123\n")

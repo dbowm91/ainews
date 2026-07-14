@@ -630,14 +630,20 @@ def config_rollback(
         _out.table(headers, rows)
 
 
+from ainews_cli.providers.commands import register_commands as _register_provider_commands  # noqa: E402
+_register_provider_commands(app, _ctx, _out)
+
+
 @app.command()
 def doctor(
     production: bool = typer.Option(False, "--production", help="Run production-specific checks"),
+    quick: bool = typer.Option(False, "--quick", help="Only basic checks (version, paths, config)"),
+    network: bool = typer.Option(False, "--network", help="Add connectivity checks (may contact external providers)"),
 ) -> None:
     """Run system and configuration diagnostics."""
     from ainews_cli.doctor import run_doctor
 
-    report = run_doctor(production=production)
+    report = run_doctor(production=production, quick=quick, network=network)
 
     if _ctx.json_output:
         _out.json_data(report.to_dict())
@@ -654,6 +660,202 @@ def doctor(
     if not report.all_passed:
         sys.exit(exit_codes.GENERAL_ERROR)
 
+
+@app.command()
+def onboard(
+    config_file: Optional[str] = typer.Option(None, "--config-file", "-c", help="Bootstrap YAML file for non-interactive setup"),
+    non_interactive: bool = typer.Option(False, "--non-interactive", "-n", help="Non-interactive mode (requires --config-file)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing"),
+    start: bool = typer.Option(False, "--start", help="Start services after onboarding"),
+    reset: bool = typer.Option(False, "--reset", help="Reset onboarding state and start over"),
+    rotate_secrets: bool = typer.Option(False, "--rotate-secrets", help="Regenerate all application secrets"),
+    verbose: bool = _VERBOSE,
+    json_output: bool = _JSON,
+) -> None:
+    """Interactive first-run onboarding or reconfiguration."""
+    from ainews_cli.onboard import OnboardingService
+
+    service = OnboardingService()
+
+    if reset:
+        service.reset(force=False)
+        _out.success("Onboarding state reset.")
+        return
+
+    if config_file:
+        from ainews_cli.schema import (
+            BootstrapValidationError,
+            build_bootstrap_config,
+            parse_bootstrap_file,
+        )
+
+        try:
+            data = parse_bootstrap_file(config_file)
+        except FileNotFoundError as e:
+            _out.error(str(e), exit_codes.NOT_FOUND)
+        except BootstrapValidationError as e:
+            _out.error(f"Bootstrap validation failed: {'; '.join(e.errors)}", exit_codes.VALIDATION_ERROR)
+
+        bootstrap = build_bootstrap_config(data)
+
+        if dry_run:
+            if _ctx.json_output:
+                _out.json_data({
+                    "dry_run": True,
+                    "bootstrap": {
+                        "version": bootstrap.version,
+                        "deployment": {"profile": bootstrap.deployment.profile},
+                        "admin": {"username": bootstrap.admin.username},
+                        "provider": {"id": bootstrap.provider.id},
+                        "pipeline": {"profile": bootstrap.pipeline.profile},
+                        "sources": {"profile": bootstrap.sources.profile},
+                        "start": bootstrap.start,
+                    },
+                })
+            else:
+                _out.info("Dry run — no changes will be written.")
+                _out.info(f"  Deployment: {bootstrap.deployment.profile}")
+                _out.info(f"  Admin: {bootstrap.admin.username}")
+                _out.info(f"  Provider: {bootstrap.provider.id} ({bootstrap.provider.type})")
+                _out.info(f"  Pipeline: {bootstrap.pipeline.profile}")
+                _out.info(f"  Sources: {bootstrap.sources.profile}")
+                _out.info(f"  Start after: {bootstrap.start}")
+            return
+
+        results = service.resume(
+            dry_run=dry_run,
+            non_interactive=True,
+            inputs_callback=lambda _stage: _build_inputs_for_stage(_stage, bootstrap),
+        )
+
+        _print_stage_results(results, _ctx.json_output)
+
+        if all(r.success for r in results):
+            summary = service.get_summary()
+            if _ctx.json_output:
+                _out.json_data({"status": "success", "summary": summary})
+            else:
+                _print_onboarding_summary(summary)
+        else:
+            failed = next(r for r in results if not r.success)
+            if _ctx.json_output:
+                _out.json_data({
+                    "status": "error",
+                    "failed_stage": failed.stage,
+                    "error": failed.message,
+                    "error_code": failed.error_code,
+                })
+            else:
+                _out.error(
+                    f"Onboarding failed at stage '{failed.stage}': {failed.message}",
+                    exit_codes.CONFIG_ERROR,
+                )
+    elif non_interactive:
+        _out.error("--non-interactive requires --config-file.", exit_codes.VALIDATION_ERROR)
+    else:
+        results = service.resume(
+            dry_run=dry_run,
+            non_interactive=False,
+            inputs_callback=lambda _stage: _interactive_inputs_for_stage(_stage),
+        )
+
+        _print_stage_results(results, _ctx.json_output)
+
+        if all(r.success for r in results):
+            summary = service.get_summary()
+            if _ctx.json_output:
+                _out.json_data({"status": "success", "summary": summary})
+            else:
+                _print_onboarding_summary(summary)
+        else:
+            failed = next(r for r in results if not r.success)
+            if _ctx.json_output:
+                _out.json_data({
+                    "status": "error",
+                    "failed_stage": failed.stage,
+                    "error": failed.message,
+                })
+            else:
+                _out.error(
+                    f"Onboarding failed at stage '{failed.stage}': {failed.message}",
+                    exit_codes.CONFIG_ERROR,
+                )
+
+
+def _build_inputs_for_stage(stage: Any, bootstrap: Any) -> dict[str, Any]:
+    """Build inputs dict for a stage from a BootstrapConfig."""
+    stage_name = stage.value if hasattr(stage, "value") else str(stage)
+    inputs: dict[str, Any] = {}
+
+    if stage_name == "select_deployment_profile":
+        inputs["deployment_profile"] = bootstrap.deployment.profile
+    elif stage_name == "configure_admin":
+        inputs["admin_username"] = bootstrap.admin.username
+        if bootstrap.admin.password_env:
+            inputs["password_env"] = bootstrap.admin.password_env
+        if bootstrap.admin.password_file:
+            inputs["password_file"] = bootstrap.admin.password_file
+    elif stage_name == "configure_provider":
+        inputs["provider_type"] = bootstrap.provider.type
+        inputs["provider_id"] = bootstrap.provider.id
+        inputs["base_url"] = bootstrap.provider.base_url
+        inputs["api_key_env"] = bootstrap.provider.api_key_env
+        inputs["default_model"] = bootstrap.provider.default_model
+    elif stage_name == "select_pipeline_profile":
+        inputs["pipeline_profile"] = bootstrap.pipeline.profile
+    elif stage_name == "select_source_profile":
+        inputs["source_profile"] = bootstrap.sources.profile
+    elif stage_name == "configure_optional_newsletter":
+        inputs["newsletter_enabled"] = bootstrap.newsletter.enabled
+    elif stage_name == "optionally_start":
+        inputs["start"] = bootstrap.start
+
+    return inputs
+
+
+def _interactive_inputs_for_stage(stage: Any) -> dict[str, Any]:
+    """Collect interactive inputs for a stage."""
+    return {}
+
+
+def _print_stage_results(results: list[Any], json_mode: bool) -> None:
+    """Print results from stage execution."""
+    if json_mode:
+        return
+
+    for result in results:
+        if result.success:
+            _out.success(f"  {result.stage}: {result.message}")
+        else:
+            _out.error(f"  {result.stage}: {result.message}", exit_codes.CONFIG_ERROR)
+
+
+def _print_onboarding_summary(summary: dict[str, Any]) -> None:
+    """Print the final onboarding summary."""
+    print("\n" + "=" * 60)
+    print("  Onboarding Complete")
+    print("=" * 60)
+    print(f"  Config dir:     {summary.get('config_dir', '')}")
+    print(f"  Install dir:    {summary.get('install_dir', '')}")
+    print(f"  Admin user:     {summary.get('admin_username', '')}")
+    print(f"  Deployment:     {summary.get('deployment_profile', '')}")
+    print(f"  Pipeline:       {summary.get('pipeline_profile', '')}")
+    print(f"  Sources:        {summary.get('source_profile', '')}")
+    print(f"  Provider:       {summary.get('provider_id', '')} ({summary.get('provider_type', '')})")
+    completed = summary.get("completed_stages", [])
+    total = summary.get("total_stages", 0)
+    print(f"  Stages:         {len(completed)}/{total}")
+    print("=" * 60)
+    print("\n  Next steps:")
+    print("    ainews config check")
+    print("    ainews doctor")
+    print("    ainews start")
+    print()
+
+
+from ainews_cli.lifecycle.commands import register_lifecycle_commands  # noqa: E402
+
+register_lifecycle_commands(app)
 
 if __name__ == "__main__":
     app()

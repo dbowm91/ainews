@@ -61,6 +61,8 @@ def run_doctor(
     *,
     paths: ResolvedPaths | None = None,
     production: bool = False,
+    quick: bool = False,
+    network: bool = False,
 ) -> DoctorReport:
     checks: list[CheckResult] = []
 
@@ -75,14 +77,32 @@ def run_doctor(
     _check_config_files(paths, checks)
     _check_config_validation(paths, checks, production=production)
     _check_secret_permissions(paths, checks)
-    if production:
-        _check_secret_file_permissions_strict(paths, checks)
+    _check_database_directory(paths, checks)
+    _check_python_available(checks)
+
+    if quick:
+        return DoctorReport(checks=checks)
+
     _check_port_available(checks)
     _check_docker_available(checks)
     _check_compose_available(checks)
-    _check_python_available(checks)
-    _check_database_directory(paths, checks)
     _check_placeholder_values(paths, checks)
+
+    if production:
+        _check_secret_file_permissions_strict(paths, checks)
+
+    _check_redis_connection(paths, checks)
+    _check_database_access(paths, checks)
+    _check_database_migrations(paths, checks)
+
+    if network:
+        _check_flask_liveness(paths, checks)
+        _check_readiness(paths, checks)
+        _check_celery_workers(paths, checks)
+        _check_provider_auth(paths, checks)
+        _check_smtp_connectivity(paths, checks)
+        _check_compose_service_health(paths, checks)
+        _check_port_conflicts(paths, checks)
 
     return DoctorReport(checks=checks)
 
@@ -452,4 +472,340 @@ def _check_compose_available(checks: list[CheckResult]) -> None:
             name="compose_available",
             passed=True,
             message="Docker Compose not found (optional, needed for Docker deployments)",
+        ))
+
+
+def _check_redis_connection(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        import redis
+
+        url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+        r = redis.from_url(url, socket_timeout=3)
+        r.ping()
+        checks.append(CheckResult(name="redis_connection", passed=True, message="Redis connection OK"))
+    except ImportError:
+        checks.append(CheckResult(
+            name="redis_connection",
+            passed=True,
+            message="redis-py not installed (cannot verify Redis connection)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="redis_connection",
+            passed=False,
+            message=f"Redis connection failed: {e}",
+            remediation="Ensure Redis is running and CELERY_BROKER_URL is correct",
+        ))
+
+
+def _check_database_access(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    db_path = paths.database_file.path
+    if not db_path.exists():
+        checks.append(CheckResult(
+            name="database_access",
+            passed=True,
+            message="Database file not found (will be created on first run)",
+        ))
+        return
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        cursor = conn.execute("SELECT count(*) FROM sqlite_master")
+        table_count = cursor.fetchone()[0]
+        conn.close()
+        checks.append(CheckResult(
+            name="database_access",
+            passed=True,
+            message=f"Database accessible ({table_count} tables)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="database_access",
+            passed=False,
+            message=f"Database access failed: {e}",
+            remediation="Check database file permissions and integrity",
+        ))
+
+
+def _check_database_migrations(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        from ainews_cli.migrations import get_migration_status
+
+        status = get_migration_status(paths)
+        if status.get("error"):
+            checks.append(CheckResult(
+                name="database_migrations",
+                passed=False,
+                message=f"Migration check failed: {status['error']}",
+                remediation="Run 'flask db upgrade' to apply pending migrations",
+            ))
+        elif status.get("needs_migration"):
+            count = status.get("pending_count", 0)
+            checks.append(CheckResult(
+                name="database_migrations",
+                passed=False,
+                message=f"{count} pending migration(s)",
+                remediation="Run 'ainews start' to apply migrations, or 'flask db upgrade' manually",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="database_migrations",
+                passed=True,
+                message="Database migrations up to date",
+            ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="database_migrations",
+            passed=False,
+            message=f"Migration check error: {e}",
+            remediation="Ensure Alembic/Flask-Migrate is configured",
+        ))
+
+
+def _check_flask_liveness(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        import requests as _requests
+
+        url = os.environ.get("AINEWS_WEB_URL", "http://localhost:5000")
+        resp = _requests.get(f"{url}/health", timeout=5)
+        if resp.status_code == 200:
+            checks.append(CheckResult(name="flask_liveness", passed=True, message="Flask liveness OK"))
+        else:
+            checks.append(CheckResult(
+                name="flask_liveness",
+                passed=False,
+                message=f"Flask health returned HTTP {resp.status_code}",
+            ))
+    except ImportError:
+        checks.append(CheckResult(
+            name="flask_liveness",
+            passed=True,
+            message="requests not installed (cannot verify Flask liveness)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="flask_liveness",
+            passed=False,
+            message=f"Flask liveness check failed: {e}",
+            remediation="Ensure the Flask app is running",
+        ))
+
+
+def _check_readiness(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        import requests as _requests
+
+        url = os.environ.get("AINEWS_WEB_URL", "http://localhost:5000")
+        resp = _requests.get(f"{url}/health", timeout=5)
+        if resp.status_code == 200:
+            body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            status = body.get("status", "unknown")
+            if status in ("ok", "degraded"):
+                checks.append(CheckResult(name="readiness", passed=True, message=f"Service ready (status: {status})"))
+            else:
+                checks.append(CheckResult(
+                    name="readiness",
+                    passed=False,
+                    message=f"Service not ready (status: {status})",
+                ))
+        else:
+            checks.append(CheckResult(
+                name="readiness",
+                passed=False,
+                message=f"Readiness probe returned HTTP {resp.status_code}",
+            ))
+    except ImportError:
+        checks.append(CheckResult(
+            name="readiness",
+            passed=True,
+            message="requests not installed (cannot verify readiness)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="readiness",
+            passed=False,
+            message=f"Readiness check failed: {e}",
+            remediation="Ensure the Flask app is running and database is initialized",
+        ))
+
+
+def _check_celery_workers(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["docker", "compose", "exec", "-T", "worker", "celery", "-A", "run.celery", "inspect", "ping"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=str(paths.app_dir.path),
+        )
+        if result.returncode == 0 and "pong" in result.stdout.lower():
+            checks.append(CheckResult(name="celery_workers", passed=True, message="Celery workers responding"))
+        else:
+            checks.append(CheckResult(
+                name="celery_workers",
+                passed=False,
+                message="Celery workers not responding",
+                remediation="Check worker logs: ainews logs worker",
+            ))
+    except FileNotFoundError:
+        checks.append(CheckResult(
+            name="celery_workers",
+            passed=True,
+            message="Docker not found (cannot check Celery workers)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="celery_workers",
+            passed=False,
+            message=f"Celery worker check failed: {e}",
+            remediation="Check worker logs: ainews logs worker",
+        ))
+
+
+def _check_provider_auth(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        from ainews_config import load_all_configs
+
+        config = load_all_configs(paths)
+        providers = config.providers.get("providers", {})
+        enabled = [
+            (pid, pdef)
+            for pid, pdef in providers.items()
+            if isinstance(pdef, dict) and pdef.get("enabled", False)
+        ]
+        if not enabled:
+            checks.append(CheckResult(
+                name="provider_auth",
+                passed=True,
+                message="No providers enabled (cannot check auth)",
+            ))
+            return
+        checks.append(CheckResult(
+            name="provider_auth",
+            passed=True,
+            message=f"{len(enabled)} provider(s) configured",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="provider_auth",
+            passed=False,
+            message=f"Provider check failed: {e}",
+            remediation="Check providers.yaml configuration",
+        ))
+
+
+def _check_smtp_connectivity(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    smtp_host = os.environ.get("SMTP_HOST")
+    if not smtp_host:
+        checks.append(CheckResult(
+            name="smtp_connectivity",
+            passed=True,
+            message="SMTP not configured (skipped)",
+        ))
+        return
+    try:
+        import smtplib
+
+        smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=5) as server:
+            server.ehlo()
+        checks.append(CheckResult(name="smtp_connectivity", passed=True, message=f"SMTP {smtp_host}:{smtp_port} reachable"))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="smtp_connectivity",
+            passed=False,
+            message=f"SMTP connectivity failed: {e}",
+            remediation="Check SMTP_HOST and SMTP_PORT environment variables",
+        ))
+
+
+def _check_compose_service_health(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        import subprocess
+        import json as _json
+
+        result = subprocess.run(
+            ["docker", "compose", "ps", "--format", "json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=str(paths.app_dir.path),
+        )
+        if result.returncode != 0:
+            checks.append(CheckResult(
+                name="compose_service_health",
+                passed=True,
+                message="Cannot query compose services (not running or not a compose project)",
+            ))
+            return
+
+        unhealthy: list[str] = []
+        for line in result.stdout.strip().splitlines():
+            if not line:
+                continue
+            try:
+                data = _json.loads(line)
+                state = data.get("State", "")
+                health = data.get("Health", "")
+                name = data.get("Name", data.get("Service", "unknown"))
+                if state != "running" or health == "unhealthy":
+                    unhealthy.append(f"{name} ({state}/{health})")
+            except _json.JSONDecodeError:
+                continue
+
+        if unhealthy:
+            checks.append(CheckResult(
+                name="compose_service_health",
+                passed=False,
+                message=f"Unhealthy services: {', '.join(unhealthy)}",
+                remediation="Check logs: ainews logs <service>",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="compose_service_health",
+                passed=True,
+                message="All compose services healthy",
+            ))
+    except FileNotFoundError:
+        checks.append(CheckResult(
+            name="compose_service_health",
+            passed=True,
+            message="Docker not found (cannot check compose services)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="compose_service_health",
+            passed=False,
+            message=f"Compose service health check failed: {e}",
+        ))
+
+
+def _check_port_conflicts(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    ports_to_check = [5000, 6379, 8000]
+    conflicting: list[str] = []
+    for port in ports_to_check:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                result = s.connect_ex(("127.0.0.1", port))
+                if result == 0:
+                    conflicting.append(str(port))
+        except OSError:
+            pass
+
+    if conflicting:
+        checks.append(CheckResult(
+            name="port_conflicts",
+            passed=False,
+            message=f"Ports already in use: {', '.join(conflicting)}",
+            remediation="Check if another instance is running or stop the conflicting process",
+        ))
+    else:
+        checks.append(CheckResult(
+            name="port_conflicts",
+            passed=True,
+            message="No port conflicts detected",
         ))

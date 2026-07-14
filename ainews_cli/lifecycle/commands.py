@@ -56,7 +56,7 @@ def start(
         if not migration_result["success"]:
             _out.error(f"Migration failed: {migration_result['error']}", exit_codes.GENERAL_ERROR)
 
-    result = driver.start(timeout=timeout)
+    result = driver.start(timeout=timeout, no_wait=no_wait)
 
     if _ctx.json_output:
         _out.json_data({
@@ -75,6 +75,8 @@ def start(
         if result.degraded_warnings:
             for warning in result.degraded_warnings:
                 _out.warning(warning)
+
+        _out.info(f"\nDashboard: {result.details.get('web_url', 'http://localhost:5000') if result.details else 'http://localhost:5000'}")
 
     if not result.success:
         sys.exit(exit_codes.GENERAL_ERROR)
@@ -198,6 +200,7 @@ def logs(
         tail=tail,
         follow=follow,
         timestamps=timestamps,
+        raw=raw,
     )
 
     if _ctx.json_output:

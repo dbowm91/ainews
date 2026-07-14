@@ -870,6 +870,75 @@ LLM provider slot limiting is handled separately via `services/limiter.py`:
 
 ---
 
+## Lifecycle CLI Commands
+
+The `ainews` CLI provides lifecycle management commands for controlling services:
+
+### Starting Services
+
+```bash
+ainews start
+ainews start --skip-doctor      # Skip doctor prerequisite checks
+ainews start --skip-migrations   # Skip database migrations
+ainews start --no-wait          # Start without waiting for health check
+ainews start --timeout 180      # Custom timeout (seconds)
+ainews start --json             # JSON output
+```
+
+### Stopping Services
+
+```bash
+ainews stop
+```
+
+### Restarting Services
+
+```bash
+ainews restart
+ainews restart --skip-doctor    # Skip doctor checks before restart
+ainews restart --timeout 180    # Custom timeout
+```
+
+### Service Status
+
+```bash
+ainews status
+ainews status --json
+```
+
+Displays: Compose service state, health endpoint, Redis, database, Celery workers, pending migrations, and configured providers.
+
+### Viewing Logs
+
+```bash
+ainews logs                     # All services
+ainews logs web                 # Specific service
+ainews logs --tail 200          # More lines
+ainews logs --follow            # Follow output
+ainews logs --timestamps        # Show timestamps
+ainews logs --raw               # Raw passthrough
+```
+
+### Health Check
+
+```bash
+ainews health
+ainews health --timeout 15
+ainews health --json
+```
+
+### Smoke Tests
+
+```bash
+ainews smoke
+ainews smoke --timeout 60
+ainews smoke --json
+```
+
+Runs post-deploy validation: health endpoint, Redis connectivity, Celery workers.
+
+---
+
 ## Security
 
 1. **Secrets:** Never commit `.env` to version control. Use `chmod 600 .env`. All production secrets (`SECRET_KEY`, `ADMIN_PASSWORD`, `CELERY_TASK_SECRET`) are validated at startup.

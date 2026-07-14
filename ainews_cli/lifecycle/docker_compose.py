@@ -118,7 +118,7 @@ class DockerComposeDriver:
         self._web_url = web_url or "http://localhost:5000"
         self._workdir = str(resolved_paths.app_dir.path)
 
-    def start(self, timeout: int = 120) -> LifecycleResult:
+    def start(self, timeout: int = 120, no_wait: bool = False) -> LifecycleResult:
         warnings: list[str] = []
 
         cfg = _run_compose(
@@ -159,26 +159,30 @@ class DockerComposeDriver:
                 details={"stderr": up.stderr, "stdout": up.stdout},
             )
 
-        health_ok, _ = _wait_for_health(
-            f"{self._web_url}/health",
-            timeout=min(timeout, 60),
-        )
-        if not health_ok:
-            warnings.append("Health check did not succeed within timeout")
+        web_url = self._web_url
 
-        worker_ping = _run_compose(
-            ["exec", "-T", "worker", "celery", "-A", "run.celery", "inspect", "ping"],
-            project_name=self._project_name,
-            compose_file=self._compose_file,
-            workdir=self._workdir,
-            timeout=15,
-        )
-        if worker_ping.returncode != 0:
-            warnings.append("Celery worker ping failed")
+        if not no_wait:
+            health_ok, _ = _wait_for_health(
+                f"{web_url}/health",
+                timeout=min(timeout, 60),
+            )
+            if not health_ok:
+                warnings.append("Health check did not succeed within timeout")
+
+            worker_ping = _run_compose(
+                ["exec", "-T", "worker", "celery", "-A", "run.celery", "inspect", "ping"],
+                project_name=self._project_name,
+                compose_file=self._compose_file,
+                workdir=self._workdir,
+                timeout=15,
+            )
+            if worker_ping.returncode != 0:
+                warnings.append("Celery worker ping failed")
 
         return LifecycleResult(
             success=True,
             message="Services started",
+            details={"web_url": web_url},
             degraded=bool(warnings),
             degraded_warnings=warnings or None,
         )
@@ -291,6 +295,34 @@ class DockerComposeDriver:
         )
         celery_ok = worker_ping.returncode == 0
 
+        pending_migrations = 0
+        try:
+            from ainews_cli.migrations import get_migration_status
+
+            migration_status = get_migration_status(self._paths)
+            if migration_status.get("needs_migration"):
+                pending_migrations = migration_status.get("pending_count", 0)
+        except Exception:  # noqa: BLE001
+            pass
+
+        providers_summary: list[dict] | None = None
+        try:
+            from ainews_config import load_all_configs
+
+            config = load_all_configs(self._paths)
+            providers = config.providers.get("providers", {})
+            if isinstance(providers, dict):
+                providers_summary = []
+                for pid, pdef in providers.items():
+                    if isinstance(pdef, dict):
+                        providers_summary.append({
+                            "id": pid,
+                            "type": pdef.get("type", "unknown"),
+                            "enabled": pdef.get("enabled", True),
+                        })
+        except Exception:  # noqa: BLE001
+            pass
+
         return StatusResult(
             success=web_ok,
             services=services,
@@ -298,6 +330,8 @@ class DockerComposeDriver:
             redis_ok=redis_ok,
             database_ok=database_ok,
             celery_ok=celery_ok,
+            pending_migrations=pending_migrations,
+            providers_summary=providers_summary,
         )
 
     def logs(
@@ -306,6 +340,7 @@ class DockerComposeDriver:
         tail: int = 100,
         follow: bool = False,
         timestamps: bool = False,
+        raw: bool = False,
     ) -> LogsResult:
         cmd = ["logs", f"--tail={tail}"]
         if follow:

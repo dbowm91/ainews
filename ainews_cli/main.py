@@ -661,6 +661,68 @@ def doctor(
         sys.exit(exit_codes.GENERAL_ERROR)
 
 
+def _update_env_key(env_lines: list[str], env_key: str, env_val: str) -> list[str]:
+    """Update or append a key in env lines."""
+    found = False
+    for i, line in enumerate(env_lines):
+        stripped = line.strip()
+        if stripped.startswith(f"{env_key}=") or stripped.startswith(f"export {env_key}="):
+            env_lines[i] = f"{env_key}={env_val}"
+            found = True
+            break
+    if not found:
+        env_lines.append(f"{env_key}={env_val}")
+    return env_lines
+
+
+def _write_rotation_to_env(updates: dict[str, str], out: OutputFormatter) -> None:
+    """Write rotation updates to .env file."""
+    from ainews_config import resolve_paths, load_all_configs, transaction
+    config_paths = resolve_paths()
+    config = load_all_configs(config_paths)
+    env_path = config_paths.env_file.path
+    env_lines: list[str] = []
+    if env_path.exists():
+        env_lines = env_path.read_text(encoding="utf-8").splitlines()
+    for env_key, env_val in updates.items():
+        env_lines = _update_env_key(env_lines, env_key, env_val)
+    content = "\n".join(env_lines) + "\n"
+    with transaction(config_paths) as txn:
+        txn.modify_file(env_path, content.encode("utf-8"))
+
+
+def _handle_rotation(
+    rotate_admin: bool,
+    rotate_secrets: bool,
+    rotate_all: bool,
+    out: OutputFormatter,
+) -> bool:
+    """Handle secret rotation flags. Returns True if rotation was performed."""
+    if rotate_all:
+        rotate_admin = True
+        rotate_secrets = True
+
+    if not rotate_admin and not rotate_secrets:
+        return False
+
+    from ainews_cli.secrets import rotate_admin_password as _rotate_admin, rotate_application_secrets as _rotate_secrets
+
+    updates: dict[str, str] = {}
+    if rotate_admin:
+        out.info("Rotating admin password...")
+        updates["ADMIN_PASSWORD"] = _rotate_admin(interactive=True)
+    if rotate_secrets:
+        out.info("Rotating application secrets...")
+        updates.update(_rotate_secrets())
+    try:
+        _write_rotation_to_env(updates, out)
+        out.success("Secrets rotated.")
+    except (OSError, ValueError) as e:
+        out.error(f"Failed to rotate secrets: {e}", exit_codes.LOCK_ERROR)
+    out.warning("Services must be restarted for changes to take effect.")
+    return True
+
+
 @app.command()
 def onboard(
     config_file: Optional[str] = typer.Option(None, "--config-file", "-c", help="Bootstrap YAML file for non-interactive setup"),
@@ -668,7 +730,9 @@ def onboard(
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing"),
     start: bool = typer.Option(False, "--start", help="Start services after onboarding"),
     reset: bool = typer.Option(False, "--reset", help="Reset onboarding state and start over"),
-    rotate_secrets: bool = typer.Option(False, "--rotate-secrets", help="Regenerate all application secrets"),
+    rotate_admin_password: bool = typer.Option(False, "--rotate-admin-password", help="Rotate admin password"),
+    rotate_application_secrets: bool = typer.Option(False, "--rotate-application-secrets", help="Rotate SECRET_KEY and CELERY_TASK_SECRET"),
+    rotate_all_secrets: bool = typer.Option(False, "--rotate-all-secrets", help="Rotate admin password and all application secrets"),
     verbose: bool = _VERBOSE,
     json_output: bool = _JSON,
 ) -> None:
@@ -680,6 +744,9 @@ def onboard(
     if reset:
         service.reset(force=False)
         _out.success("Onboarding state reset.")
+        return
+
+    if _handle_rotation(rotate_admin_password, rotate_application_secrets, rotate_all_secrets, _out):
         return
 
     if config_file:
@@ -750,6 +817,8 @@ def onboard(
                     f"Onboarding failed at stage '{failed.stage}': {failed.message}",
                     exit_codes.CONFIG_ERROR,
                 )
+                _out.info("\nTo resume from this point, run:")
+                _out.info("  ainews onboard")
     elif non_interactive:
         _out.error("--non-interactive requires --config-file.", exit_codes.VALIDATION_ERROR)
     else:
@@ -780,6 +849,8 @@ def onboard(
                     f"Onboarding failed at stage '{failed.stage}': {failed.message}",
                     exit_codes.CONFIG_ERROR,
                 )
+                _out.info("\nTo resume from this point, run:")
+                _out.info("  ainews onboard")
 
 
 def _build_inputs_for_stage(stage: Any, bootstrap: Any) -> dict[str, Any]:
@@ -832,9 +903,14 @@ def _print_stage_results(results: list[Any], json_mode: bool) -> None:
 
 def _print_onboarding_summary(summary: dict[str, Any]) -> None:
     """Print the final onboarding summary."""
+    import os
+    port = os.environ.get("PORT", "5000")
+    dashboard_url = f"http://localhost:{port}"
+
     print("\n" + "=" * 60)
     print("  Onboarding Complete")
     print("=" * 60)
+    print(f"  Dashboard URL: {dashboard_url}")
     print(f"  Config dir:     {summary.get('config_dir', '')}")
     print(f"  Install dir:    {summary.get('install_dir', '')}")
     print(f"  Admin user:     {summary.get('admin_username', '')}")
@@ -850,6 +926,9 @@ def _print_onboarding_summary(summary: dict[str, Any]) -> None:
     print("    ainews config check")
     print("    ainews doctor")
     print("    ainews start")
+    print("    ainews status")
+    print("    ainews logs")
+    print("    ainews providers-test")
     print()
 
 

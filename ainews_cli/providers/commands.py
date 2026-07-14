@@ -278,13 +278,30 @@ def register_commands(  # noqa: C901
             for pid, pval in providers_data.items():
                 if not isinstance(pval, dict):
                     continue
+                has_credential = bool(pval.get("config", {}).get("api_key_env") or pval.get("config", {}).get("base_url"))
+                probe_summary = None
+                try:
+                    ptype = pval.get("type", "unknown")
+                    adapter = get_adapter(ptype)
+                    definition = adapter.build_definition({"id": pid, **pval})
+                    probe_result = adapter.probe(definition, pval.get("config", {}))
+                    probe_summary = {
+                        "success": probe_result.success,
+                        "latency_ms": probe_result.latency_ms,
+                        "endpoint_resolved": probe_result.endpoint_resolved,
+                        "auth_success": probe_result.auth_success,
+                    }
+                except Exception:  # noqa: BLE001
+                    probe_summary = None
                 items.append({
                     "id": pid,
                     "type": pval.get("type", "unknown"),
                     "endpoint": pval.get("config", {}).get("base_url", ""),
                     "enabled": pval.get("enabled", True),
+                    "credential_configured": has_credential,
                     "is_default": pid == default_id,
                     "roles": role_assignments.get(pid, []),
+                    "probe": probe_summary,
                 })
             out.json_data({"providers": items, "default_provider": default_id})
         else:
@@ -293,7 +310,7 @@ def register_commands(  # noqa: C901
                 out.info("Add a provider: ainews providers-add")
                 return
 
-            headers = ["ID", "Type", "Endpoint", "Enabled", "Default", "Roles"]
+            headers = ["ID", "Type", "Endpoint", "Enabled", "Credential", "Default", "Roles", "Probe"]
             rows: list[list[str]] = []
             for pid, pval in providers_data.items():
                 if not isinstance(pval, dict):
@@ -301,9 +318,18 @@ def register_commands(  # noqa: C901
                 ptype = pval.get("type", "unknown")
                 endpoint = pval.get("config", {}).get("base_url", "")
                 enabled = "yes" if pval.get("enabled", True) else "no"
+                has_credential = "yes" if (pval.get("config", {}).get("api_key_env") or pval.get("config", {}).get("base_url")) else "no"
                 default_mark = "yes" if pid == default_id else ""
                 roles = ", ".join(role_assignments.get(pid, []))
-                rows.append([pid, ptype, endpoint, enabled, default_mark, roles])
+                probe_str = ""
+                try:
+                    adapter = get_adapter(ptype)
+                    definition = adapter.build_definition({"id": pid, **pval})
+                    probe_result = adapter.probe(definition, pval.get("config", {}))
+                    probe_str = f"ok ({probe_result.latency_ms:.0f}ms)" if probe_result.success else f"fail: {probe_result.error}"
+                except Exception:  # noqa: BLE001
+                    probe_str = "n/a"
+                rows.append([pid, ptype, endpoint, enabled, has_credential, default_mark, roles, probe_str])
 
             out.table(headers, rows)
 
@@ -325,17 +351,39 @@ def register_commands(  # noqa: C901
         endpoint = adapter.normalize_endpoint(values)
         definition = adapter.build_definition(values)
 
-        if not skip_probe:
+        if skip_probe:
+            out.warning(
+                "Skipping probe. Provider connectivity has NOT been verified. "
+                "Run 'ainews providers-test' after setup to validate."
+            )
+        else:
             _handle_probe(adapter, definition, values, out)
 
         _stage_provider(ctx, provider_type, definition, out)
+
+        out.info("Discovering models...")
+        try:
+            result = adapter.discover_models(definition, values)
+            _format_models_output(result, out)
+        except Exception as e:  # noqa: BLE001
+            out.warning(f"Model discovery failed: {e}")
+
+        old_providers = dict(ctx.ensure_loaded().providers.get("providers", {}))
+        new_providers = _get_providers_dict(ctx.ensure_loaded())
+        added = {k: v for k, v in new_providers.items() if k not in old_providers}
+        if added:
+            out.info("\nChanges to be committed:")
+            for pid in added:
+                out.info(f"  + provider '{pid}' ({added[pid].get('type', 'unknown')})")
+
+        out.info("\nRun 'ainews providers-assign <id> <model> <roles>' to assign pipeline roles.")
 
     @main_app.command("providers-test")
     def providers_test(
         provider_id: Optional[str] = typer.Argument(None, help="Provider ID to test"),
         json_output: bool = typer.Option(False, "--json", "-j", help="Output in JSON format"),
     ) -> None:
-        """Test provider connectivity and authentication."""
+        """Test provider connectivity, authentication, and model discovery."""
         config = ctx.ensure_loaded()
         providers_data = _get_providers_dict(config)
 
@@ -344,12 +392,35 @@ def register_commands(  # noqa: C901
             out.info("No providers to test.")
             return
 
-        results = [_probe_single(pid, pval) for pid, pval in targets]
+        results = []
+        for pid, pval in targets:
+            probe = _probe_single(pid, pval)
+            ptype = pval.get("type", "unknown")
+            model_result = None
+            try:
+                adapter = get_adapter(ptype)
+                definition = adapter.build_definition({"id": pid, **pval})
+                disc = adapter.discover_models(definition, pval.get("config", {}))
+                model_result = {
+                    "success": disc.success,
+                    "count": len(disc.models),
+                    "provenance": disc.provenance,
+                    "error": disc.error,
+                }
+            except Exception as e:  # noqa: BLE001
+                model_result = {"success": False, "count": 0, "error": str(e)}
+            probe["model_discovery"] = model_result
+            results.append(probe)
 
         if ctx.json_output:
             out.json_data({"results": results})
         else:
             _format_probe_result_table(results, out)
+            for r in results:
+                md = r.get("model_discovery")
+                if md:
+                    status = "ok" if md["success"] else "fail"
+                    out.info(f"  {r['id']} models: {md['count']} ({status}, {md.get('provenance', 'n/a')})")
 
     @main_app.command("providers-models")
     def providers_models(
@@ -395,7 +466,7 @@ def register_commands(  # noqa: C901
     def providers_set_default(
         provider_id: str = typer.Argument(help="Provider ID to set as default"),
     ) -> None:
-        """Set a provider as the default."""
+        """Set a provider as the default and validate pipeline settings."""
         config = ctx.ensure_loaded()
         providers_data = _get_providers_dict(config)
 
@@ -404,8 +475,24 @@ def register_commands(  # noqa: C901
 
         old_default = config.providers.get("default_provider", "")
         config.providers["default_provider"] = provider_id
+
+        pipeline = config.pipeline.get("pipeline", {})
+        if isinstance(pipeline, dict):
+            affected_roles = []
+            for role in _ROLES:
+                role_config = pipeline.get(role, {})
+                if isinstance(role_config, dict):
+                    old_provider = role_config.get("provider", "")
+                    if old_provider == old_default:
+                        role_config["provider"] = provider_id
+                        affected_roles.append(role)
+            if affected_roles:
+                out.info(f"Updated provider for role(s): {', '.join(affected_roles)}")
+                _commit_pipeline(config)
+
         _commit_providers(config)
         out.success(f"Default provider changed: {old_default or '(none)'} -> {provider_id}")
+        out.info("Run 'ainews start' to apply changes.")
 
     @main_app.command("providers-assign")
     def providers_assign(
@@ -426,17 +513,26 @@ def register_commands(  # noqa: C901
             pipeline = {}
             config.pipeline["pipeline"] = pipeline
 
+        changed_roles: list[str] = []
         for role in target_roles:
             role_config = pipeline.setdefault(role, {})
             if not isinstance(role_config, dict):
                 role_config = {}
                 pipeline[role] = role_config
+            old_provider = role_config.get("provider", "")
             role_config["provider"] = provider_id
             role_config["model"] = model
+            if old_provider != provider_id:
+                changed_roles.append(role)
 
         _commit_pipeline(config)
         roles_str = ", ".join(target_roles)
         out.success(f"Assigned {provider_id}/{model} to: {roles_str}")
+        if changed_roles:
+            out.warning(
+                f"Pipeline role(s) changed: {', '.join(changed_roles)}. "
+                "Run 'ainews restart' to apply changes."
+            )
 
     @main_app.command("providers-remove")
     def providers_remove(

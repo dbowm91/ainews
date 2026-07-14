@@ -73,6 +73,8 @@ class StageInfo:
     changes_secrets: bool = False
     requires_docker: bool = False
     requires_network: bool = False
+    rollback_behavior: str = "none"
+    resume_marker: str = ""
 
 
 _STAGE_ORDER: list[OnboardingStage] = list(OnboardingStage)
@@ -196,7 +198,6 @@ class OnboardingState:
     source_profile: str = ""
     provider_id: str = ""
     provider_type: str = ""
-    generated_secrets: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d = {
@@ -632,7 +633,6 @@ class OnboardingService:
         self, inputs: dict[str, Any], *, dry_run: bool, non_interactive: bool
     ) -> StageResult:
         secrets_dict = generate_application_secrets()
-        self._state.generated_secrets = {}
         self._staged_env.update(secrets_dict)
 
         return StageResult(

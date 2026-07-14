@@ -102,10 +102,20 @@ def run_migrations(paths: Any, dry_run: bool = False) -> dict[str, Any]:
 
     try:
         result = _run_flask_command(["db", "upgrade"], paths, timeout=120)
+        if result.returncode != 0:
+            return {
+                "success": False,
+                "output": result.stdout,
+                "error": result.stderr.strip() if result.returncode != 0 else None,
+            }
         return {
-            "success": result.returncode == 0,
+            "success": True,
             "output": result.stdout,
-            "error": result.stderr.strip() if result.returncode != 0 else None,
+            "error": None,
+            "warning": (
+                "Note: Full data backup/restore protection will be available in a future release. "
+                "Ensure you have your own backup strategy for production data."
+            ),
         }
     finally:
         try:

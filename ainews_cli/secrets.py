@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import getpass
+import logging
 import os
 import secrets
+
+logger = logging.getLogger(__name__)
 
 _PLACEHOLDER_PASSWORDS = frozenset({
     "password",
@@ -178,3 +181,26 @@ def secure_password_from_file(file_path: str) -> str:
         )
 
     return password
+
+
+def rotate_admin_password(interactive: bool = True) -> str:
+    """Generate a new admin password hash, optionally collecting interactively.
+
+    Returns:
+        The new password hash.
+    """
+    if interactive:
+        password = interactive_password_entry("New admin password: ")
+    else:
+        password = secrets.token_urlsafe(24)
+        logger.info("Generated random admin password (non-interactive rotation).")
+    return hash_admin_password(password)
+
+
+def rotate_application_secrets() -> dict[str, str]:
+    """Generate new application secrets (SECRET_KEY, CELERY_TASK_SECRET).
+
+    Returns:
+        Dict mapping env var names to new secret values.
+    """
+    return generate_application_secrets()

@@ -100,9 +100,12 @@ def run_doctor(
         _check_readiness(paths, checks)
         _check_celery_workers(paths, checks)
         _check_provider_auth(paths, checks)
+        _check_provider_model_availability(paths, checks)
         _check_smtp_connectivity(paths, checks)
+        _check_source_connectivity(paths, checks)
         _check_compose_service_health(paths, checks)
         _check_port_conflicts(paths, checks)
+        _check_docker_dns_resolution(paths, checks)
 
     return DoctorReport(checks=checks)
 
@@ -808,4 +811,170 @@ def _check_port_conflicts(paths: ResolvedPaths, checks: list[CheckResult]) -> No
             name="port_conflicts",
             passed=True,
             message="No port conflicts detected",
+        ))
+
+
+def _check_provider_model_availability(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        from ainews_config import load_all_configs
+
+        config = load_all_configs(paths)
+        providers = config.providers.get("providers", {})
+        enabled = [
+            (pid, pdef)
+            for pid, pdef in providers.items()
+            if isinstance(pdef, dict) and pdef.get("enabled", False)
+        ]
+        if not enabled:
+            checks.append(CheckResult(
+                name="provider_model_availability",
+                passed=True,
+                message="No providers enabled (cannot check models)",
+            ))
+            return
+
+        for pid, pdef in enabled:
+            ptype = pdef.get("type", "unknown")
+            try:
+                from ainews_cli.providers.registry import get_adapter
+                adapter = get_adapter(ptype)
+                definition = adapter.build_definition({"id": pid, **pdef})
+                result = adapter.discover_models(definition, pdef.get("config", {}))
+                if result.success and result.models:
+                    checks.append(CheckResult(
+                        name=f"provider_models_{pid}",
+                        passed=True,
+                        message=f"{pid}: {len(result.models)} model(s) available ({result.provenance})",
+                    ))
+                elif result.success and not result.models:
+                    checks.append(CheckResult(
+                        name=f"provider_models_{pid}",
+                        passed=False,
+                        message=f"{pid}: No models available",
+                        remediation=f"Pull models or check provider configuration for {pid}",
+                    ))
+                else:
+                    checks.append(CheckResult(
+                        name=f"provider_models_{pid}",
+                        passed=False,
+                        message=f"{pid}: Model discovery failed: {result.error}",
+                        remediation=f"Run 'ainews providers-test {pid}' for details",
+                    ))
+            except Exception as e:  # noqa: BLE001
+                checks.append(CheckResult(
+                    name=f"provider_models_{pid}",
+                    passed=False,
+                    message=f"{pid}: Model check error: {e}",
+                ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="provider_model_availability",
+            passed=False,
+            message=f"Model availability check failed: {e}",
+        ))
+
+
+def _check_source_connectivity(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    try:
+        from ainews_config import load_all_configs
+
+        config = load_all_configs(paths)
+        sources = config.sources
+        if not sources:
+            checks.append(CheckResult(
+                name="source_connectivity",
+                passed=True,
+                message="No sources configured (skipped)",
+            ))
+            return
+
+        source_list = sources if isinstance(sources, list) else []
+        if not source_list:
+            checks.append(CheckResult(
+                name="source_connectivity",
+                passed=True,
+                message="No sources configured (skipped)",
+            ))
+            return
+
+        reachable = 0
+        unreachable = 0
+        for src in source_list[:3]:
+            url = src.get("url", "")
+            if not url:
+                continue
+            try:
+                import requests as _requests
+                resp = _requests.head(url, timeout=5, allow_redirects=True)
+                if resp.status_code < 400:
+                    reachable += 1
+                else:
+                    unreachable += 1
+            except Exception:  # noqa: BLE001
+                unreachable += 1
+
+        total = reachable + unreachable
+        if unreachable > 0:
+            checks.append(CheckResult(
+                name="source_connectivity",
+                passed=False,
+                message=f"{unreachable}/{total} source(s) unreachable",
+                remediation="Check source URLs and network connectivity",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="source_connectivity",
+                passed=True,
+                message=f"{reachable}/{total} source(s) reachable",
+            ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="source_connectivity",
+            passed=True,
+            message=f"Source connectivity check skipped: {e}",
+        ))
+
+
+def _check_docker_dns_resolution(paths: ResolvedPaths, checks: list[CheckResult]) -> None:
+    docker = shutil.which("docker")
+    if not docker:
+        checks.append(CheckResult(
+            name="docker_dns_resolution",
+            passed=True,
+            message="Docker not found (skipped)",
+        ))
+        return
+
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["docker", "run", "--rm", "alpine:3.19", "nslookup", "host.docker.internal"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and "Address" in result.stdout:
+            checks.append(CheckResult(
+                name="docker_dns_resolution",
+                passed=True,
+                message="Docker DNS resolution working (host.docker.internal resolves)",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="docker_dns_resolution",
+                passed=True,
+                message="host.docker.internal not available (may need extra_hosts in compose)",
+            ))
+    except FileNotFoundError:
+        checks.append(CheckResult(
+            name="docker_dns_resolution",
+            passed=True,
+            message="Docker not found (skipped)",
+        ))
+    except Exception as e:  # noqa: BLE001
+        checks.append(CheckResult(
+            name="docker_dns_resolution",
+            passed=True,
+            message=f"Docker DNS check skipped: {e}",
         ))

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import requests
 
 from ainews_cli.providers.protocol import (
+    ModelDiscoveryResult,
     ProviderDefinition,
     ProviderEndpoint,
     ProviderInputField,

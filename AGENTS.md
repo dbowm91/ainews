@@ -23,6 +23,8 @@ This document provides instructions and context for agents working on the AI New
 *   `routes/`: Flask blueprints for public and admin interfaces.
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
+*   `ainews_config/`: Configuration engine package (CLI-independent). Contains path resolver, field registry, loader, validator, and transactional writer.
+*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, config (path/show/check/get/set/unset/diff/rollback), doctor.
 
 ## Known Issues & Gotchas
 
@@ -343,6 +345,12 @@ Celery uses UTC (`CELERY_TIMEZONE = "UTC"` in `config.py:102`). The `NewsletterC
 ### SQLite Only (No PostgreSQL)
 The codebase uses SQLite with WAL mode only. There is no PostgreSQL configuration, driver, or connection string anywhere. Do not reference PostgreSQL in documentation.
 
+### Operator CLI Architecture
+The `ainews_cli` package is Flask-free and imports only from `ainews_config`. All commands work outside the repository directory. The CLI uses Typer with `typer.Typer(no_args_is_help=True)`. Configuration loading uses `resolve_paths()` → `load_all_configs()` → `validate_cross_file()`. Secret values are redacted in output by default; `--show-secrets` is not available in Release 1. The `config set` and `config unset` commands use `ConfigTransaction` for atomic file replacement with rollback. Exit codes are defined in `ainews_cli/exit_codes.py`. See `docs/cli-reference.md` for the full command reference.
+
+### Configuration Engine Architecture
+The `ainews_config` package provides the shared configuration model used by both the CLI and (eventually) the Flask/Celery runtime. Key modules: `paths.py` (5-level path precedence chain), `fields.py` (typed field registry with 80+ operator-facing keys), `loader.py` (dotenv/YAML parsing with provenance tracking), `validation.py` (cross-file semantic checks), `transaction.py` (flock-based atomic writes with rollback). The package has zero Flask dependencies.
+
 ### MetricsCollector Method Names
 The `MetricsCollector` in `services/metrics.py` uses these method names:
 - `counter_inc(name, value=1, labels=None)` — NOT `increment()`
@@ -481,6 +489,10 @@ The following are documented as intentional and should NOT be "fixed":
 | `tasks/cleanup.py` | Log cleanup, trend memory consolidation |
 | `services/pipeline_degradation.py` | `post_finalize_article()`, `degrade_stage()`, `_finalize()` |
 | `adapters/api.py` | API source adapter with error logging in `_fetch_item` |
+| `ainews_config/` | Configuration engine: path resolver, field registry, loader, validator, transactional writer |
+| `ainews_cli/` | Operator CLI: version, config (path/show/check/get/set/unset/diff/rollback), doctor |
+| `docs/cli-reference.md` | CLI command reference documentation |
+| `docs/configuration-contract.md` | Machine-oriented configuration inventory |
 
 ## CI Gates
 

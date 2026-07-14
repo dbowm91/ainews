@@ -77,6 +77,31 @@ ollama pull qwen3:8b
 
 See [docs/quickstart.md](docs/quickstart.md) for full setup instructions.
 
+## Operator CLI
+
+ainews includes a command-line interface for configuration management and diagnostics:
+
+```bash
+ainews version                        # Show version info
+ainews config path                    # Show resolved config paths
+ainews config show                    # Show effective configuration (secrets redacted)
+ainews config check                   # Validate configuration offline
+ainews config get pipeline.writer.model  # Get a config value
+ainews config set pipeline.writer.model qwen3:8b  # Set a config value
+ainews config set-secret smtp.password   # Set a secret (reads from stdin)
+ainews config unset smtp.password        # Remove an override
+ainews config diff                     # Compare with defaults
+ainews config rollback --list          # List rollback snapshots
+ainews doctor                          # System diagnostics
+```
+
+Install the CLI entry point:
+```bash
+pip install -e .
+```
+
+See [CLI Reference](docs/cli-reference.md) for full documentation.
+
 ## Architecture
 
 ```
@@ -121,6 +146,7 @@ ainews ships with 48 built-in themes (6 light, 42 dark) derived from Halloy IRC 
 | `sources.yaml` | RSS/API feed sources |
 | `topics.yaml` | Topic classification categories |
 | `providers.yaml` | LLM provider configuration |
+| [CLI Reference](docs/cli-reference.md) | Operator CLI commands |
 
 See [docs/configuration.md](docs/configuration.md) for the full reference.
 
@@ -150,6 +176,7 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [Theme Inventory](docs/themes-inventory.md) | Halloy theme collection inventory & provenance |
 | [Halloy Theme Contract](docs/halloy-theme-contract.md) | Supported source schema and translation rules |
 | [Security Triage](docs/security_triage.md) | Vulnerability triage, suppression policy, license review, container scanning |
+| [CLI Reference](docs/cli-reference.md) | Operator CLI for config management |
 
 ## Release Validation
 

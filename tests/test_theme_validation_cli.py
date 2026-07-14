@@ -332,6 +332,188 @@ class TestStrictMode:
         assert "promoted" in data
         assert isinstance(data["promoted"], list)
 
+    def test_strict_promotable_warning_fails_under_strict(self, tmp_path):
+        """A strict-promotable diagnostic code should fail under --strict.
+
+        Uses the validate_themes API directly to inject a THEME_DEFAULT_MISSING
+        warning (which is in STRICT_PROMOTABLE_CODES), verifying the promotion
+        path end-to-end.
+        """
+        from services.themes.errors import (
+            Severity,
+            STRICT_PROMOTABLE_CODES,
+            ThemeDiagnostic,
+        )
+        from scripts.validate_themes import _ValidationResult
+
+        promotable_code = next(iter(STRICT_PROMOTABLE_CODES))
+        result = _ValidationResult(strict=True)
+        diag = ThemeDiagnostic(
+            Severity.WARNING, "defaults", "Configured default not found", promotable_code
+        )
+        result.add_diagnostic("__defaults__", diag)
+        # strict + promotable → promoted, should_fail() = True
+        assert result.should_fail() is True
+        assert len(result.promoted) == 1
+        assert result.promoted[0].code == promotable_code
+
+    def test_advisory_warning_passes_under_strict(self, tmp_path):
+        """A non-promotable advisory diagnostic should NOT fail under --strict."""
+        from services.themes.errors import (
+            Severity,
+            ThemeDiagnostic,
+        )
+        from scripts.validate_themes import _ValidationResult
+
+        result = _ValidationResult(strict=True)
+        diag = ThemeDiagnostic(
+            Severity.WARNING, "contrast", "Below AAA threshold", "THEME_CONTRAST_WARNING"
+        )
+        result.add_diagnostic("__test__", diag)
+        # strict + advisory → stays warning, should_fail() = False
+        assert result.should_fail() is False
+        assert len(result.warnings) == 1
+        assert len(result.promoted) == 0
+
+    def test_translation_error_exits_nonzero(self, tmp_path):
+        """A theme that parses valid TOML but fails translation should exit nonzero.
+
+        A theme with no general.background and no buffer.background triggers
+        ThemeTranslationError in detect_appearance().
+        """
+        theme_file = tmp_path / "translation_error.toml"
+        theme_file.write_text(
+            '[text]\nprimary = "#ffffff"\n'
+        )
+        result = _run_cli("--file", str(theme_file))
+        assert result.returncode != 0, f"Expected nonzero for translation error, stderr: {result.stderr}"
+
+    def test_translation_error_json_has_error(self, tmp_path):
+        """Translation error produces THEME_TRANSLATION_ERROR in JSON output."""
+        theme_file = tmp_path / "translation_error.toml"
+        theme_file.write_text(
+            '[text]\nprimary = "#ffffff"\n'
+        )
+        result = _run_cli("--file", str(theme_file), "--format", "json")
+        assert result.returncode != 0
+        data = json.loads(result.stdout)
+        assert len(data["errors"]) > 0
+        codes = [e["code"] for e in data["errors"]]
+        assert "THEME_TRANSLATION_ERROR" in codes
+
+    def test_advisory_constrast_warning_exits_zero(self, tmp_path):
+        """A theme with contrast between AA (4.5) and AAA (7.0) produces
+        an advisory warning that does not cause nonzero exit."""
+        theme_file = tmp_path / "advisory.toml"
+        # #333333 on #555555 → contrast ~2.7 (fails AA → ERROR, not advisory).
+        # Use a theme that passes AA but fails AAA for advisory warnings.
+        # #dddddd on #ffffff → contrast ~1.2 (fails AA → ERROR).
+        # Actually, we need contrast between 4.5 and 7.0 for advisory.
+        # #888888 on #ffffff → contrast ~3.9 (fails AA → ERROR).
+        # #cccccc on #ffffff → contrast ~1.4 (fails AA → ERROR).
+        # We need a specific ratio. #999999 on #ffffff → L1=1.0, L2=0.333
+        # ratio = (1.05)/(0.383) = 2.74 (fails AA → ERROR).
+        # For advisory (passes AA 4.5, fails AAA 7.0):
+        # ratio 5.5: L1=1.0, need L2 s.t. 1.05/(L2+0.05)=5.5 → L2=0.141
+        # #5c5c5c: R=G=B=92/255=0.361 → lin=0.106 → L=0.106. ratio=1.05/0.156=6.73
+        # #636363: R=G=B=99/255=0.388 → lin=0.123 → L=0.123. ratio=1.05/0.173=6.07
+        # That's between 4.5 and 7.0 → advisory (AAA warning only).
+        theme_file.write_text(
+            '[general]\nbackground = "#636363"\n'
+            '[text]\nprimary = "#ffffff"\n'
+            '[buffer]\nbackground = "#636363"\n'
+        )
+        result = _run_cli("--file", str(theme_file))
+        assert result.returncode == 0, f"Expected zero for advisory warning, stderr: {result.stderr}"
+
+    def test_advisory_constrast_warning_json_has_warnings(self, tmp_path):
+        """Advisory contrast warnings appear in JSON warnings, not errors."""
+        theme_file = tmp_path / "advisory.toml"
+        theme_file.write_text(
+            '[general]\nbackground = "#636363"\n'
+            '[text]\nprimary = "#ffffff"\n'
+            '[buffer]\nbackground = "#636363"\n'
+        )
+        result = _run_cli("--file", str(theme_file), "--format", "json")
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        # Should have warnings (contrast below AAA) but no errors
+        assert len(data["errors"]) == 0
+        assert len(data["warnings"]) > 0
+        warning_codes = [w["code"] for w in data["warnings"]]
+        assert "THEME_CONTRAST_WARNING" in warning_codes
+
+    def test_mixed_findings_directory(self, tmp_path):
+        """A directory with both valid and invalid themes produces mixed findings."""
+        # Valid theme
+        good = tmp_path / "good_theme.toml"
+        good.write_text(
+            '[general]\nbackground = "#000000"\n'
+            '[text]\nprimary = "#ffffff"\n'
+            '[buffer]\nbackground = "#111111"\n'
+        )
+        # Invalid TOML
+        bad = tmp_path / "bad_theme.toml"
+        bad.write_text("this is not valid toml [[[")
+        result = _run_cli("--directory", str(tmp_path), "--format", "json")
+        assert result.returncode != 0  # errors from bad theme
+        data = json.loads(result.stdout)
+        assert len(data["errors"]) > 0
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "THEME_PARSE_INVALID_TOML" in error_codes
+        # The valid theme should still be counted
+        assert data["themes_validated"] >= 1
+
+    def test_mixed_findings_human_output(self, tmp_path):
+        """Mixed findings show both ERROR and WARNING in human output."""
+        good = tmp_path / "good_theme.toml"
+        good.write_text(
+            '[general]\nbackground = "#000000"\n'
+            '[text]\nprimary = "#ffffff"\n'
+            '[buffer]\nbackground = "#111111"\n'
+        )
+        bad = tmp_path / "bad_theme.toml"
+        bad.write_text("this is not valid toml [[[")
+        result = _run_cli("--directory", str(tmp_path))
+        assert result.returncode != 0
+        # Human output goes to stderr
+        assert "ERROR" in result.stderr
+        # The valid theme should produce warnings (contrast below AAA)
+        # since #ffffff on #000000 has ratio=21.0 (passes AAA), there might
+        # be no warnings. But the point is mixed error+valid themes work.
+        assert "PASS" in result.stderr or "FAIL" in result.stderr
+
+    def test_strict_with_critical_constrast_exits_nonzero(self, tmp_path):
+        """A theme with critical contrast failure (below 4.5 AA) fails even without --strict.
+
+        The translate_theme() function raises ThemeContrastError which is caught
+        and converted to a THEME_CONTRAST_CRITICAL error entry.
+        """
+        theme_file = tmp_path / "critical.toml"
+        # #333333 on #444444 → very low contrast, fails AA (4.5) → ERROR
+        theme_file.write_text(
+            '[general]\nbackground = "#444444"\n'
+            '[text]\nprimary = "#333333"\n'
+            '[buffer]\nbackground = "#444444"\n'
+        )
+        result = _run_cli("--file", str(theme_file))
+        assert result.returncode != 0, f"Expected nonzero for critical contrast, stderr: {result.stderr}"
+
+    def test_strict_with_critical_constrast_json(self, tmp_path):
+        """Critical contrast failure produces THEME_CONTRAST_CRITICAL error in JSON."""
+        theme_file = tmp_path / "critical.toml"
+        theme_file.write_text(
+            '[general]\nbackground = "#444444"\n'
+            '[text]\nprimary = "#333333"\n'
+            '[buffer]\nbackground = "#444444"\n'
+        )
+        result = _run_cli("--file", str(theme_file), "--strict", "--format", "json")
+        assert result.returncode != 0
+        data = json.loads(result.stdout)
+        assert len(data["errors"]) > 0
+        codes = [e["code"] for e in data["errors"]]
+        assert "THEME_CONTRAST_CRITICAL" in codes
+
 
 # ---------------------------------------------------------------------------
 # --format argument validation

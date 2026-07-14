@@ -200,13 +200,13 @@ python scripts/validate_themes.py --directory /path/to/themes/
 python scripts/validate_themes.py --bundled --format json
 ```
 
-### Strict mode (warnings become errors)
+### Strict mode (strict-promotable warnings become errors)
 
 ```bash
 python scripts/validate_themes.py --file my-theme.toml --strict
 ```
 
-The script exits nonzero on failure, making it suitable for CI.
+`--strict` promotes only **strict-promotable** warnings to failures (nonzero exit). Advisory contrast warnings (AAA threshold) remain non-blocking. Strict-promotable codes are defined in `STRICT_PROMOTABLE_CODES` in `services/themes/errors.py` and include `THEME_CONTRAST_CRITICAL`, `THEME_REGISTRY_EMPTY`, `THEME_BUNDLED_EMPTY`, `THEME_MANIFEST_DRIFT`, and `THEME_DEFAULT_MISSING`. The script exits nonzero on failure, making it suitable for CI.
 
 ## External Override Semantics
 

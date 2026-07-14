@@ -81,7 +81,7 @@ control its behavior:
 | `THEMES_DEFAULT_DARK` | `catppuccin-mocha` | Default theme for dark-mode requests. |
 | `THEMES_DEFAULT_LIGHT` | `catppuccin-latte` | Default theme for light-mode requests. |
 | `THEMES_MAX_FILE_BYTES` | `262144` | Per-file byte limit for external themes. Validated `1024..1048576`. |
-| `THEMES_STRICT_CONTRAST` | `false` | When `true`, treats non-fatal contrast warnings as errors during theme validation. |
+| `THEMES_STRICT_CONTRAST` | `false` | When `true`, treats strict-promotable contrast warnings as errors during theme validation. Uses the same `STRICT_PROMOTABLE_CODES` classification as CLI `--strict`. |
 
 **Production notes:**
 

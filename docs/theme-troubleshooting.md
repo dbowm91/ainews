@@ -107,13 +107,13 @@ Diagnostic codes reference `THEME_DIAGNOSTIC_CODES` from `services/themes/errors
 
 **Symptom:** Replaced a theme file with a new version but the browser still shows the old colors.
 
-**Cause:** The CSS route uses `ETag` and `Cache-Control: public, max-age=300`. The ETag is derived from the CSS content hash, so it changes when the content changes. However, the browser may serve from its local cache within the 5-minute window.
+**Cause:** The CSS route uses a **strong** `ETag` (via `set_etag()` without `weak=True`) and `Cache-Control: public, max-age=300`. The ETag is derived from the CSS content hash, so it changes when the content changes. However, the browser may serve from its local cache within the 5-minute window.
 
 **Resolution:**
 
 - **Hard refresh:** `Ctrl+Shift+R` (or `Cmd+Shift+R` on macOS) bypasses the cache.
 - **Wait:** Cache expires after 300 seconds.
-- **Verify ETag changed:** Use DevTools Network tab to confirm the server returns `200 OK` with a new `ETag` header. If it returns `304 Not Modified`, the browser cache is still valid. The ETag handling uses Werkzeug's `response.set_etag()` and `response.make_conditional(request)` for standards-compliant conditional requests.
+- **Verify ETag changed:** Use DevTools Network tab to confirm the server returns `200 OK` with a new `ETag` header (format: `"<digest>"`, not `W/"<digest>"`). If it returns `304 Not Modified`, the browser cache is still valid. The ETag handling uses Werkzeug's `response.set_etag()` and `response.make_conditional(request)` for standards-compliant conditional requests.
 
 ---
 

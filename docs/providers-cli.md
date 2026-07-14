@@ -108,6 +108,13 @@ providers:
     config:
       base_url: https://api.openai.com/v1
       default_model: gpt-4o
+
+  anthropic-prod:
+    type: anthropic
+    enabled: true
+    config:
+      base_url: https://api.anthropic.com
+      default_model: claude-sonnet-4-20250514
 ```
 
 Then validate with `ainews config check`.
@@ -313,6 +320,26 @@ config:
 ```yaml
 config:
   base_url: http://host.docker.internal:11434/v1
+```
+
+### EggPool in Docker
+
+**Correct** (Docker Compose service):
+```yaml
+config:
+  base_url: http://eggpool:11300/v1
+```
+
+**Correct** (host machine):
+```yaml
+config:
+  base_url: http://host.docker.internal:11300/v1
+```
+
+**Correct** (LAN host):
+```yaml
+config:
+  base_url: http://192.168.1.100:11300/v1
 ```
 
 ### Cloud Providers

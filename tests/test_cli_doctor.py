@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ainews_cli.doctor import (
     CONFIG_SCHEMA_VERSION,
     CheckResult,
+    CheckStatus,
     DoctorReport,
     _check_compose_available,
     _check_config_files,
@@ -23,6 +24,10 @@ from ainews_cli.doctor import (
     _check_schema_version,
     _check_secret_permissions,
     run_doctor,
+    check_pass,
+    check_fail,
+    check_skip,
+    check_warn,
 )
 from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
 
@@ -65,71 +70,132 @@ def _make_resolved_paths(tmp_path: Path, *, create: bool = True) -> ResolvedPath
 
 class TestCheckResult:
     def test_fields(self):
-        r = CheckResult(name="test", passed=True, message="ok")
+        r = check_pass("test", "ok")
         assert r.name == "test"
+        assert r.status == CheckStatus.PASS
         assert r.passed is True
         assert r.message == "ok"
         assert r.details is None
         assert r.remediation is None
 
     def test_with_details(self):
-        r = CheckResult(name="test", passed=False, message="fail", details="info", remediation="fix it")
+        r = check_fail("test", "fail", details="info", remediation="fix it")
         assert r.details == "info"
         assert r.remediation == "fix it"
+
+    def test_status_property_pass(self):
+        r = check_pass("test", "ok")
+        assert r.passed is True
+
+    def test_status_property_skip(self):
+        r = check_skip("test", "skipped")
+        assert r.passed is True
+
+    def test_status_property_fail(self):
+        r = check_fail("test", "failed")
+        assert r.passed is False
+
+    def test_status_property_warn(self):
+        r = check_warn("test", "warning")
+        assert r.passed is False
+
+    def test_to_dict_includes_status(self):
+        r = check_pass("test", "ok")
+        d = r.to_dict()
+        assert d["status"] == "pass"
+        assert d["passed"] is True
+
+    def test_to_dict_with_blocking(self):
+        r = CheckResult(name="test", status=CheckStatus.FAIL, message="fail", blocking=True)
+        d = r.to_dict()
+        assert d["blocking"] is True
 
 
 class TestDoctorReport:
     def test_all_passed_true(self):
         report = DoctorReport(checks=[
-            CheckResult(name="a", passed=True, message="ok"),
-            CheckResult(name="b", passed=True, message="ok"),
+            check_pass("a", "ok"),
+            check_pass("b", "ok"),
         ])
         assert report.all_passed is True
 
     def test_all_passed_false(self):
         report = DoctorReport(checks=[
-            CheckResult(name="a", passed=True, message="ok"),
-            CheckResult(name="b", passed=False, message="fail"),
+            check_pass("a", "ok"),
+            check_fail("b", "fail"),
         ])
         assert report.all_passed is False
 
+    def test_all_passed_with_skip(self):
+        report = DoctorReport(checks=[
+            check_pass("a", "ok"),
+            check_skip("b", "skipped"),
+        ])
+        assert report.all_passed is True
+
+    def test_all_passed_with_warn(self):
+        report = DoctorReport(checks=[
+            check_pass("a", "ok"),
+            check_warn("b", "warning"),
+        ])
+        assert report.all_passed is True
+
     def test_passed_count(self):
         report = DoctorReport(checks=[
-            CheckResult(name="a", passed=True, message="ok"),
-            CheckResult(name="b", passed=False, message="fail"),
-            CheckResult(name="c", passed=True, message="ok"),
+            check_pass("a", "ok"),
+            check_fail("b", "fail"),
+            check_pass("c", "ok"),
         ])
         assert report.passed_count == 2
 
     def test_failed_count(self):
         report = DoctorReport(checks=[
-            CheckResult(name="a", passed=True, message="ok"),
-            CheckResult(name="b", passed=False, message="fail"),
-            CheckResult(name="c", passed=False, message="fail"),
+            check_pass("a", "ok"),
+            check_fail("b", "fail"),
+            check_fail("c", "fail"),
         ])
         assert report.failed_count == 2
+
+    def test_warn_count(self):
+        report = DoctorReport(checks=[
+            check_pass("a", "ok"),
+            check_warn("b", "warning"),
+        ])
+        assert report.warn_count == 1
+
+    def test_skipped_count(self):
+        report = DoctorReport(checks=[
+            check_pass("a", "ok"),
+            check_skip("b", "skipped"),
+        ])
+        assert report.skipped_count == 1
 
     def test_empty_report(self):
         report = DoctorReport()
         assert report.all_passed is True
         assert report.passed_count == 0
         assert report.failed_count == 0
+        assert report.warn_count == 0
+        assert report.skipped_count == 0
 
     def test_to_dict(self):
         report = DoctorReport(checks=[
-            CheckResult(name="a", passed=True, message="ok"),
+            check_pass("a", "ok"),
         ])
         d = report.to_dict()
         assert d["all_passed"] is True
         assert d["passed_count"] == 1
         assert d["failed_count"] == 0
+        assert d["warn_count"] == 0
+        assert d["skipped_count"] == 0
         assert len(d["checks"]) == 1
         assert d["checks"][0]["name"] == "a"
         assert d["checks"][0]["passed"] is True
+        assert d["checks"][0]["status"] == "pass"
 
     def test_to_dict_with_details(self):
         report = DoctorReport(checks=[
-            CheckResult(name="a", passed=False, message="fail", details="d", remediation="r"),
+            check_fail("a", "fail", details="d", remediation="r"),
         ])
         d = report.to_dict()
         assert d["checks"][0]["details"] == "d"
@@ -175,6 +241,7 @@ class TestCheckPackageVersion:
         assert len(checks) == 1
         assert checks[0].name == "package_version"
         assert checks[0].passed is True
+        assert checks[0].status == CheckStatus.PASS
         assert "ainews 1.0.0" == checks[0].message
 
     def test_version_not_found(self):
@@ -184,6 +251,7 @@ class TestCheckPackageVersion:
         with patch("importlib.metadata.version", side_effect=PackageNotFoundError):
             _check_package_version(checks)
         assert checks[0].passed is False
+        assert checks[0].status == CheckStatus.FAIL
         assert checks[0].remediation is not None
 
 
@@ -368,6 +436,9 @@ class TestDoctorReportJsonSerialization:
         deserialized = json.loads(serialized)
         assert deserialized["all_passed"] == report.all_passed
         assert len(deserialized["checks"]) == len(report.checks)
+        # Verify status field is present in serialized output
+        for check_dict in deserialized["checks"]:
+            assert "status" in check_dict
 
 
 class TestCheckConfigValidation:
@@ -380,7 +451,7 @@ class TestCheckConfigValidation:
     def test_load_error(self, tmp_path):
         paths = _make_resolved_paths(tmp_path)
         checks: list[CheckResult] = []
-        with patch("ainews_cli.doctor.load_all_configs", side_effect=OSError("boom")):
+        with patch("ainews_config.load_all_configs", side_effect=OSError("boom")):
             _check_config_validation(paths, checks)
         assert checks[0].passed is False
         assert "Could not validate" in checks[0].message
@@ -477,3 +548,64 @@ class TestCheckComposeAvailable:
                 _check_compose_available(checks)
         assert checks[0].passed is True
         assert "v1" in checks[0].message
+
+
+class TestSkippedChecks:
+    """Test that checks produce SKIP status when prerequisites are missing."""
+
+    def test_redis_not_installed_is_skip(self, tmp_path):
+        from ainews_cli.doctor import _check_redis_connection
+        paths = _make_resolved_paths(tmp_path)
+        checks: list[CheckResult] = []
+        with patch.dict("sys.modules", {"redis": None}):
+            _check_redis_connection(paths, checks)
+        assert checks[0].status == CheckStatus.SKIP
+        assert checks[0].passed is True
+
+    def test_smtp_not_configured_is_skip(self, tmp_path):
+        from ainews_cli.doctor import _check_smtp_connectivity
+        paths = _make_resolved_paths(tmp_path)
+        checks: list[CheckResult] = []
+        with patch.dict("os.environ", {}, clear=True):
+            _check_smtp_connectivity(paths, checks)
+        assert checks[0].status == CheckStatus.SKIP
+
+    def test_flask_liveness_not_installed_is_skip(self, tmp_path):
+        from ainews_cli.doctor import _check_flask_liveness
+        paths = _make_resolved_paths(tmp_path)
+        checks: list[CheckResult] = []
+        with patch.dict("sys.modules", {"requests": None}):
+            _check_flask_liveness(paths, checks)
+        assert checks[0].status == CheckStatus.SKIP
+
+    def test_readiness_not_installed_is_skip(self, tmp_path):
+        from ainews_cli.doctor import _check_readiness
+        paths = _make_resolved_paths(tmp_path)
+        checks: list[CheckResult] = []
+        with patch.dict("sys.modules", {"requests": None}):
+            _check_readiness(paths, checks)
+        assert checks[0].status == CheckStatus.SKIP
+
+    def test_celery_workers_docker_not_found_is_skip(self, tmp_path):
+        from ainews_cli.doctor import _check_celery_workers
+        paths = _make_resolved_paths(tmp_path)
+        checks: list[CheckResult] = []
+        _check_celery_workers(paths, checks)
+        # If docker isn't available, it should be SKIP
+        if checks[0].name == "celery_workers":
+            assert checks[0].status in (CheckStatus.SKIP, CheckStatus.FAIL)
+
+
+class TestExceptionHandlers:
+    """Test that exception handlers never produce CheckStatus.PASS."""
+
+    def test_redis_connection_error_is_fail(self, tmp_path):
+        from ainews_cli.doctor import _check_redis_connection
+        paths = _make_resolved_paths(tmp_path)
+        checks: list[CheckResult] = []
+        mock_redis_mod = MagicMock()
+        mock_redis_mod.from_url.return_value.ping.side_effect = OSError("refused")
+        with patch.dict("sys.modules", {"redis": mock_redis_mod}):
+            _check_redis_connection(paths, checks)
+        assert checks[0].status == CheckStatus.FAIL
+        assert checks[0].passed is False

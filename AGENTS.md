@@ -348,6 +348,19 @@ The codebase uses SQLite with WAL mode only. There is no PostgreSQL configuratio
 ### Operator CLI Architecture
 The `ainews_cli` package is Flask-free and imports only from `ainews_config`. All commands work outside the repository directory. The CLI uses Typer with `typer.Typer(no_args_is_help=True)`. Configuration loading uses `resolve_paths()` → `load_all_configs()` → `validate_cross_file()`. Secret values are redacted in output by default; `--show-secrets` is not available in Release 1. The `config set` and `config unset` commands use `ConfigTransaction` for atomic file replacement with rollback. Exit codes are defined in `ainews_cli/exit_codes.py`. See `docs/cli-reference.md` for the full command reference.
 
+### Doctor Package Architecture
+The `ainews_cli/doctor/` package provides system diagnostics. It is structured as:
+- `model.py`: `CheckStatus` enum (PASS/WARN/FAIL/SKIP), `CheckResult`, `DoctorReport` with aggregate counts (`passed_count`, `warn_count`, `failed_count`, `skipped_count`). `CheckResult.passed` property is backwards-compatible (PASS or SKIP → True).
+- `runner.py`: `run_doctor()` orchestrator with `--quick`, `--production`, `--network` flags controlling check tiers.
+- `rendering.py`: Human-readable output with symbols (✅ WARN ⚠️ FAIL ❌ SKIP ⏭️).
+- `checks/`: Individual check modules — `installation`, `configuration`, `runtime`, `providers`, `sources`, `docker`, `network`.
+
+**Source connectivity:** The `_extract_primary_url()` helper in `checks/sources.py` correctly extracts URLs from adapter-specific config fields (`feed_url` for RSS, `list_url` for API, `listing_url` for Web) instead of a non-existent top-level `url`. Safe source probing uses `requests.head()` with a 5-second timeout, limited to the first 3 sources.
+
+**Docker diagnostics (non-invasive):** Default doctor does not run `docker run --rm alpine:3.19 nslookup`. Instead it checks Docker daemon status via `docker info` and inspects existing running containers via `docker compose ps`. DNS resolution (`nslookup`) only runs inside existing containers when `--network` is passed.
+
+**Exit behavior:** `ainews doctor` exits 0 when no FAIL results exist, exits 1 when any check has FAIL status. JSON output includes `passed_count`, `warn_count`, `failed_count`, `skipped_count` fields.
+
 ### Onboarding Architecture
 The `ainews onboard` command implements a 16-stage state machine (`OnboardingService`) with resume-from-failure support. State is persisted to `onboarding-state.json` in the config directory. Stages are executed sequentially with `run_stage()` returning `StageResult` objects. The `resume()` method picks up from the last incomplete stage. Deployment, pipeline, and source profiles (`ainews_cli/profiles.py`) provide preset configurations. Bootstrap YAML files (`ainews_cli/schema.py`) enable unattended setup with cross-field validation and secret detection.
 

@@ -145,25 +145,50 @@ List available rollback snapshots or restore a specific one.
 
 ### `ainews doctor`
 
-Run offline system and configuration diagnostics.
+Run system and configuration diagnostics. Three tiers of checks based on flags.
 
 **Options:**
-- `--production` — Include production-specific checks
+- `--production` — Include production-specific checks (strict `.env` permissions)
+- `--quick` — Only basic checks (version, paths, config parsing)
+- `--network` — Add connectivity checks (may contact external providers)
 
-**Checks performed:**
-- Package version availability
-- Resolved path existence
-- Directory writability
-- YAML config file parsing
-- Cross-file configuration validation
-- Secret file permissions
-- Docker/Compose availability
+**Status model:** Each check returns one of four statuses:
+- `PASS` — Check succeeded
+- `WARN` — Non-blocking issue detected
+- `FAIL` — Blocking failure requiring attention
+- `SKIP` — Check was not applicable (e.g., Docker not installed)
+
+**Checks performed (default):**
+- Package version, schema version
+- Resolved path existence, directory writability
+- YAML config file parsing, cross-file validation
+- Secret file permissions, database directory writability
 - Python/uv availability
-- Database directory writability
+
+**Additional checks (standard):**
+- Port availability
+- Docker/Compose availability
+- Placeholder value detection in configs
+- Redis connection, database access, migration status
+
+**Production checks:**
+- Strict `.env` permissions (no world/group writability)
+
+**Network checks:**
+- Flask liveness (`/health`)
+- Readiness probe
+- Celery worker ping
+- Provider auth validation
+- SMTP connectivity
+- Docker Compose service health
+- Port conflict detection
+- Source connectivity (adapter-specific URL extraction)
+
+**JSON output:** Includes `all_passed` (bool), `passed_count`, `warn_count`, `failed_count`, `skipped_count`, and per-check `status` field.
 
 **Exit codes:**
-- `0` — All checks passed
-- `1` — One or more checks failed
+- `0` — No blocking failures (all checks PASS, WARN, or SKIP)
+- `1` — One or more checks have FAIL status
 
 ## Exit Codes
 
@@ -509,46 +534,4 @@ Run post-deploy smoke checks. Tests critical endpoints and service connectivity.
 
 **Exit codes:**
 - `0` — All smoke checks passed
-- `1` — One or more checks failed
-
----
-
-## Diagnostics (Expanded)
-
-### `ainews doctor`
-
-Run system and configuration diagnostics. Three tiers of checks based on flags.
-
-**Options:**
-- `--production` — Include production-specific checks (strict secret permissions)
-- `--quick` — Only basic checks (version, paths, config parsing)
-- `--network` — Add connectivity checks (may contact external providers)
-
-**Checks performed (default):**
-- Package version, schema version
-- Resolved path existence, directory writability
-- YAML config file parsing, cross-file validation
-- Secret file permissions, database directory writability
-- Python/uv availability
-
-**Additional checks (standard):**
-- Port availability
-- Docker/Compose availability
-- Placeholder value detection in configs
-- Redis connection, database access, migration status
-
-**Production checks:**
-- Strict `.env` permissions (no world/group writability)
-
-**Network checks:**
-- Flask liveness (`/health`)
-- Readiness probe
-- Celery worker ping
-- Provider auth validation
-- SMTP connectivity
-- Docker Compose service health
-- Port conflict detection
-
-**Exit codes:**
-- `0` — All checks passed
 - `1` — One or more checks failed

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from ainews_cli.doctor import (
     CheckResult,
+    CheckStatus,
     _check_redis_connection,
     _check_database_access,
     _check_database_migrations,
@@ -87,6 +88,7 @@ class TestCheckRedisConnection:
         assert len(checks) == 1
         assert checks[0].name == "redis_connection"
         assert checks[0].passed is True
+        assert checks[0].status == CheckStatus.PASS
 
     def test_redis_not_installed(self, tmp_path):
         paths = _make_resolved_paths(tmp_path)
@@ -94,6 +96,7 @@ class TestCheckRedisConnection:
         with patch.dict("sys.modules", {"redis": None}):
             _check_redis_connection(paths, checks)
         assert checks[0].passed is True
+        assert checks[0].status == CheckStatus.SKIP
         assert "not installed" in checks[0].message
 
     def test_redis_connection_error(self, tmp_path):
@@ -104,6 +107,7 @@ class TestCheckRedisConnection:
         with patch.dict("sys.modules", {"redis": mock_redis_mod}):
             _check_redis_connection(paths, checks)
         assert checks[0].passed is False
+        assert checks[0].status == CheckStatus.FAIL
         assert "failed" in checks[0].message.lower()
 
 
@@ -164,6 +168,7 @@ class TestCheckFlaskLiveness:
         with patch.dict("sys.modules", {"requests": None}):
             _check_flask_liveness(paths, checks)
         assert checks[0].passed is True
+        assert checks[0].status == CheckStatus.SKIP
         assert "not installed" in checks[0].message
 
 
@@ -247,6 +252,7 @@ class TestCheckSmtpConnectivity:
         with patch.dict("os.environ", {}, clear=True):
             _check_smtp_connectivity(paths, checks)
         assert checks[0].passed is True
+        assert checks[0].status == CheckStatus.SKIP
         assert "not configured" in checks[0].message
 
     def test_smtp_reachable(self, tmp_path):
@@ -264,9 +270,8 @@ class TestCheckComposeServiceHealth:
         paths = _make_resolved_paths(tmp_path)
         checks: list[CheckResult] = []
         ps_data = json.dumps({"Name": "web", "State": "running", "Health": "healthy"})
-        mock_sub = MagicMock()
-        mock_sub.run.return_value = MagicMock(returncode=0, stdout=ps_data)
-        with patch.dict("sys.modules", {"subprocess": mock_sub}):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=ps_data)
             _check_compose_service_health(paths, checks)
         assert checks[0].passed is True
 
@@ -274,9 +279,8 @@ class TestCheckComposeServiceHealth:
         paths = _make_resolved_paths(tmp_path)
         checks: list[CheckResult] = []
         ps_data = json.dumps({"Name": "web", "State": "running", "Health": "unhealthy"})
-        mock_sub = MagicMock()
-        mock_sub.run.return_value = MagicMock(returncode=0, stdout=ps_data)
-        with patch.dict("sys.modules", {"subprocess": mock_sub}):
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout=ps_data)
             _check_compose_service_health(paths, checks)
         assert checks[0].passed is False
         assert "unhealthy" in checks[0].message.lower()
@@ -317,13 +321,13 @@ class TestDoctorQuickFlag:
 class TestDoctorNetworkFlag:
     def test_network_adds_connectivity_checks(self, tmp_path):
         paths = _make_resolved_paths(tmp_path)
-        with patch("ainews_cli.doctor._check_flask_liveness") as mock_liveness, \
-             patch("ainews_cli.doctor._check_readiness") as mock_ready, \
-             patch("ainews_cli.doctor._check_celery_workers") as mock_celery, \
-             patch("ainews_cli.doctor._check_provider_auth") as mock_provider, \
-             patch("ainews_cli.doctor._check_smtp_connectivity") as mock_smtp, \
-             patch("ainews_cli.doctor._check_compose_service_health") as mock_compose, \
-             patch("ainews_cli.doctor._check_port_conflicts") as mock_ports:
+        with patch("ainews_cli.doctor.runner._check_flask_liveness") as mock_liveness, \
+             patch("ainews_cli.doctor.runner._check_readiness") as mock_ready, \
+             patch("ainews_cli.doctor.runner._check_celery_workers") as mock_celery, \
+             patch("ainews_cli.doctor.runner._check_provider_auth") as mock_provider, \
+             patch("ainews_cli.doctor.runner._check_smtp_connectivity") as mock_smtp, \
+             patch("ainews_cli.doctor.runner._check_compose_service_health") as mock_compose, \
+             patch("ainews_cli.doctor.runner._check_port_conflicts") as mock_ports:
             report = run_doctor(paths=paths, network=True)
             mock_liveness.assert_called_once()
             mock_ready.assert_called_once()
@@ -358,3 +362,139 @@ class TestDoctorJsonOutput:
         assert isinstance(serialized, str)
         deserialized = json.loads(serialized)
         assert deserialized["all_passed"] == report.all_passed
+        # Verify status field is present
+        assert "warn_count" in deserialized
+        assert "skipped_count" in deserialized
+
+
+class TestSourceConnectivitySchema:
+    """Test source connectivity with different adapter type schemas."""
+
+    def test_extract_primary_url_rss(self):
+        from ainews_cli.doctor import _extract_primary_url
+        source = {"type": "rss", "config": {"feed_url": "https://example.com/feed.xml"}}
+        assert _extract_primary_url(source) == "https://example.com/feed.xml"
+
+    def test_extract_primary_url_api(self):
+        from ainews_cli.doctor import _extract_primary_url
+        source = {"type": "api", "config": {"list_url": "https://example.com/api/items"}}
+        assert _extract_primary_url(source) == "https://example.com/api/items"
+
+    def test_extract_primary_url_web(self):
+        from ainews_cli.doctor import _extract_primary_url
+        source = {"type": "web", "config": {"listing_url": "https://example.com/news"}}
+        assert _extract_primary_url(source) == "https://example.com/news"
+
+    def test_extract_primary_url_unknown_type(self):
+        from ainews_cli.doctor import _extract_primary_url
+        source = {"type": "unknown", "config": {"some_key": "https://example.com"}}
+        assert _extract_primary_url(source) is None
+
+    def test_extract_primary_url_missing_config(self):
+        from ainews_cli.doctor import _extract_primary_url
+        source = {"type": "rss"}
+        assert _extract_primary_url(source) is None
+
+
+class TestDockerDnsNonInvasive:
+    """Test that Docker DNS check doesn't create containers."""
+
+    def test_docker_not_found_returns_skip(self):
+        from ainews_cli.doctor import _check_docker_dns_resolution
+        from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+        from pathlib import Path as _Path
+
+        tmp = _Path("/tmp/test_doctor_docker")
+        paths = ResolvedPaths(
+            app_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            config_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            data_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            state_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            backup_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            env_file=ResolvedPath(path=tmp / ".env", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            providers_file=ResolvedPath(path=tmp / "providers.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            pipeline_file=ResolvedPath(path=tmp / "pipeline.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            sources_file=ResolvedPath(path=tmp / "sources.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            topics_file=ResolvedPath(path=tmp / "topics.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            database_file=ResolvedPath(path=tmp / "db.sqlite", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            install_metadata_file=ResolvedPath(path=tmp / "meta.json", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            transaction_lock=ResolvedPath(path=tmp / "lock", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            transaction_staging=ResolvedPath(path=tmp / "staging", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+        )
+        checks: list[CheckResult] = []
+        with patch("shutil.which", return_value=None):
+            _check_docker_dns_resolution(paths, checks)
+        assert len(checks) == 1
+        assert checks[0].status == CheckStatus.SKIP
+        assert "Docker not found" in checks[0].message
+
+    def test_no_running_containers_returns_skip(self):
+        from ainews_cli.doctor import _check_docker_dns_resolution
+        from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+        from pathlib import Path as _Path
+
+        tmp = _Path("/tmp/test_doctor_docker2")
+        paths = ResolvedPaths(
+            app_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            config_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            data_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            state_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            backup_dir=ResolvedPath(path=tmp, provenance=PathProvenance.EXPLICIT, exists=True, is_writable=True),
+            env_file=ResolvedPath(path=tmp / ".env", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            providers_file=ResolvedPath(path=tmp / "providers.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            pipeline_file=ResolvedPath(path=tmp / "pipeline.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            sources_file=ResolvedPath(path=tmp / "sources.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            topics_file=ResolvedPath(path=tmp / "topics.yaml", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            database_file=ResolvedPath(path=tmp / "db.sqlite", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            install_metadata_file=ResolvedPath(path=tmp / "meta.json", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            transaction_lock=ResolvedPath(path=tmp / "lock", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+            transaction_staging=ResolvedPath(path=tmp / "staging", provenance=PathProvenance.EXPLICIT, exists=False, is_writable=False),
+        )
+        checks: list[CheckResult] = []
+        with patch("shutil.which", return_value="/usr/bin/docker"), \
+             patch("ainews_cli.doctor.checks.docker._docker_daemon_running", return_value=True), \
+             patch("ainews_cli.doctor.checks.docker._get_running_containers", return_value=[]):
+            _check_docker_dns_resolution(paths, checks)
+        assert len(checks) == 1
+        assert checks[0].status == CheckStatus.SKIP
+        assert "No running containers" in checks[0].message
+
+
+class TestDoctorReportStatusCounts:
+    """Test DoctorReport status counting with all four statuses."""
+
+    def test_mixed_statuses(self):
+        from ainews_cli.doctor import DoctorReport, check_pass, check_warn, check_fail, check_skip
+
+        report = DoctorReport(checks=[
+            check_pass("a", "ok"),
+            check_warn("b", "warned"),
+            check_fail("c", "failed"),
+            check_skip("d", "skipped"),
+        ])
+        assert report.all_passed is False  # FAIL present
+        assert report.passed_count == 1
+        assert report.warn_count == 1
+        assert report.failed_count == 1
+        assert report.skipped_count == 1
+
+    def test_mixed_no_fail(self):
+        from ainews_cli.doctor import DoctorReport, check_pass, check_warn, check_skip
+
+        report = DoctorReport(checks=[
+            check_pass("a", "ok"),
+            check_warn("b", "warned"),
+            check_skip("d", "skipped"),
+        ])
+        assert report.all_passed is True  # no FAIL
+
+    def test_all_skip(self):
+        from ainews_cli.doctor import DoctorReport, check_skip
+
+        report = DoctorReport(checks=[
+            check_skip("a", "skipped"),
+            check_skip("b", "skipped"),
+        ])
+        assert report.all_passed is True
+        assert report.skipped_count == 2
+        assert report.passed_count == 0

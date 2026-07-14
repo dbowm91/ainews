@@ -641,21 +641,14 @@ def doctor(
     network: bool = typer.Option(False, "--network", help="Add connectivity checks (may contact external providers)"),
 ) -> None:
     """Run system and configuration diagnostics."""
-    from ainews_cli.doctor import run_doctor
+    from ainews_cli.doctor import run_doctor, render_human
 
     report = run_doctor(production=production, quick=quick, network=network)
 
     if _ctx.json_output:
         _out.json_data(report.to_dict())
     else:
-        for check in report.checks:
-            if check.passed:
-                _out.success(f"  {check.name}: {check.message}")
-            else:
-                _out.error(f"  {check.name}: {check.message}")
-                if check.remediation:
-                    _out.info(f"    Fix: {check.remediation}")
-        _out.info(f"\n{report.passed_count}/{report.passed_count + report.failed_count} checks passed")
+        print(render_human(report))
 
     if not report.all_passed:
         sys.exit(exit_codes.GENERAL_ERROR)

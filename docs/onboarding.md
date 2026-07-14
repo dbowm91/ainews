@@ -195,6 +195,7 @@ Models are assigned to pipeline roles (selector, researcher, writer, editor) bas
 - **Password policy**: Minimum 8 characters, no known placeholder values
 - **Non-interactive**: Passwords read from env vars (`password_env`) or files (`password_file`)
 - **No embedded secrets**: Bootstrap validation rejects inline secret values
+- **Not persisted in state**: Secrets (passwords, keys) are never written to `onboarding-state.json`. State tracks stage completion and failure metadata only — secret values are written directly to config files and never stored in the resume state.
 
 ## Reconfiguration
 

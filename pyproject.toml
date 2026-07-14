@@ -65,6 +65,10 @@ addopts = "--durations=10"
 markers = [
     "timeout: marks tests as slow-running (deselect with '-m not timeout')",
     "browser: end-to-end Playwright tests (deselect with '-m not browser')",
+    "integration: Integration tests requiring filesystem or local HTTP servers",
+    "network: Tests requiring external network access",
+    "docker: Tests requiring Docker",
+    "slow: Slow-running tests",
 ]
 
 [tool.coverage.run]

@@ -320,11 +320,12 @@ jobs:
       - name: Validate artifact with validate_artifact.sh
         run: |
           ARTIFACT_NAME="${{ steps.artifact.outputs.name }}"
+          REPORT="validate-report-${{ matrix.platform }}.txt"
           # Only pass --tag for actual version tags (not main-channel)
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            bash scripts/validate_artifact.sh "$ARTIFACT_NAME" --tag "${GITHUB_REF_NAME}"
+            bash scripts/validate_artifact.sh "$ARTIFACT_NAME" --tag "${GITHUB_REF_NAME}" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee "$REPORT"
           else
-            bash scripts/validate_artifact.sh "$ARTIFACT_NAME"
+            bash scripts/validate_artifact.sh "$ARTIFACT_NAME" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee "$REPORT"
           fi
 
       - name: Upload artifact
@@ -334,6 +335,7 @@ jobs:
           path: |
             ${{ steps.artifact.outputs.name }}
             SHA256SUMS
+            validate-report-${{ matrix.platform }}.txt
           retention-days: 5
 
   # ── Collect all checksums into a single file ────────────────────────

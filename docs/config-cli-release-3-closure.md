@@ -52,12 +52,12 @@
   - macOS arm64: cross-platform validation
   - Deferred prerequisite: no-Docker scenario
   - Docker unavailable: graceful degradation
-- `tests/installer_e2e.sh` — End-to-end installer tests with fault injection (28 tests):
+- `tests/installer_e2e.sh` — End-to-end installer tests with fault injection (34 tests):
   - Post-install behavior: canonical dirs, metadata, permissions, secrets
   - Fault injection: traversal, absolute paths, empty/corrupted/truncated archives, symlink escape, unwritable dirs, checksum mismatch, onboarding failure, startup timeout, metadata write failure, config preservation on rerun
   - Lifecycle: version exit code
   - Schema: metadata version, required fields, file permissions
-- `tests/test_cli_json_contracts.py` — JSON schema tests for version, config path, config check, doctor, status (24 tests)
+- `tests/test_cli_json_contracts.py` — JSON schema tests for version, config path, config check, doctor, status (33 tests)
 - `scripts/validate_artifact.sh` — Pre-publish artifact validation (contents, safety, version, checksum)
 - Updated README with installer-first Quick Start, deferred setup, integrity verification, troubleshooting table
 - Updated AGENTS.md with installer CI architecture
@@ -72,7 +72,7 @@
 - [x] Test suite passes — 228 CLI/doctor/config tests pass, 473+ total pass
 - [x] Installer tests pass — 137 tests (`bash tests/test_install.sh`)
 - [x] E2E installer tests pass — 34 tests with fault injection (`bash tests/installer_e2e.sh`)
-- [x] JSON contract tests pass — 32 tests (`pytest tests/test_cli_json_contracts.py -v`)
+- [x] JSON contract tests pass — 33 tests (`pytest tests/test_cli_json_contracts.py -v`)
 - [x] Smoke tests pass — pre-existing env dependency issues not related to Release 3 changes
 
 ## Rollback / Recovery

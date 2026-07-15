@@ -189,6 +189,58 @@ ainews onboard  # Interactive setup
 
 The installer writes versioned metadata (channel, version, checksums, paths) to the canonical state directory for later update, rollback, and uninstall support. See [Release 3 Closure](docs/config-cli-release-3-closure.md) for details.
 
+### Deferred Setup (Docker Absent)
+
+If Docker is not available during installation, the installer completes the file extraction and metadata write but defers service startup. You can complete setup later when Docker is installed:
+
+```bash
+# Install without starting services
+./scripts/install.sh --channel stable
+
+# Later, after Docker is available:
+ainews onboard
+ainews start
+```
+
+The installer output clearly distinguishes three states: **installed** (files on disk), **configured** (onboarding complete), and **running** (services active). Re-running the installer after Docker becomes available does not replace existing configuration or secrets.
+
+### Integrity Verification
+
+The installer automatically verifies artifact integrity before extraction:
+
+1. Downloads the `SHA256SUMS` file from the same release URL as the tarball
+2. Computes SHA-256 of the downloaded artifact
+3. Compares against the expected checksum
+4. Aborts with a clear error on mismatch
+
+The checksum is also recorded in `install-metadata.json` for auditability. To manually verify:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+### Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Checksum mismatch` | Corrupted download | Delete cached artifact, re-run installer |
+| `Platform not supported` | OS/arch not in release matrix | Use WSL on Windows; check [supported platforms](#supported-platforms) |
+| `Docker not found` | Docker daemon not running | Install Docker, or use `--no-start` to defer |
+| `Permission denied` | System install without root | Use `--user` (default) or run with `sudo` |
+| `Config already exists` | Re-running onboard | Use `ainews config set` to modify, or delete `~/.config/ainews/` |
+| `Provider connection failed` | LLM provider unreachable | Check provider config with `ainews providers-test` |
+| `Redis connection refused` | Redis not running | Start Redis: `redis-server &` or check `CELERY_BROKER_URL` |
+
+### Uninstall / Update
+
+Uninstall and update commands are planned for **Release 4**. For now:
+
+- **Update:** Re-run the installer — it backs up the current installation before replacing files. Configuration in `~/.config/ainews/` is preserved.
+- **Uninstall:** Remove the canonical directories:
+  ```bash
+  rm -rf ~/.local/share/ainews ~/.config/ainews ~/.local/state/ainews ~/.local/bin/ainews
+  ```
+
 ### Windows (WSL)
 
 Windows native installation is not supported. Use Windows Subsystem for Linux (WSL) with a supported Linux distribution. See [Deployment Guide](docs/deployment.md) for details.
@@ -336,9 +388,9 @@ bash scripts/validate_artifact.sh ainews-X.Y.Z-linux-x86_64.tar.gz  # Artifact v
 Installer tests:
 
 ```bash
-bash tests/test_install.sh               # 92 tests, 170+ assertions
-bash tests/installer_e2e.sh              # 24 end-to-end tests with fault injection
-pytest tests/test_cli_json_contracts.py  # JSON contract tests for CLI output
+bash tests/test_install.sh               # 137 tests
+bash tests/installer_e2e.sh              # 28 end-to-end tests with fault injection
+pytest tests/test_cli_json_contracts.py  # 24 JSON contract tests for CLI output
 ```
 
 Clean-host CI (`.github/workflows/installer-smoke.yml`) validates:

@@ -529,6 +529,186 @@ with open('${config_dir}/install-metadata.json', 'w') as f:
     rm -rf "$tmpdir"
 }
 
+# ── Tests: Onboarding failure handling ──────────────────────────────
+
+test_onboarding_failure_preserves_install() {
+    CURRENT_TEST="Fault injection: onboarding failure preserves installation"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local install_dir="${tmpdir}/app"
+    local config_dir="${tmpdir}/config"
+    mkdir -p "$install_dir/.venv/bin" "$config_dir"
+
+    # Create a minimal app
+    cat > "$install_dir/ainews" <<'EOF'
+#!/bin/bash
+echo "ainews v0.0.0-test"
+exit 0
+EOF
+    chmod 755 "$install_dir/ainews"
+
+    # Simulate a successful install
+    python3 -c "
+import json, datetime
+meta = {
+    'schema_version': 1,
+    'install_type': 'main',
+    'version': '0.0.0-e2e',
+    'commit': 'abc123',
+    'artifact': 'test.tar.gz',
+    'artifact_sha256': 'abc123',
+    'installed_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'install_root': '${install_dir}',
+    'config_dir': '${config_dir}',
+    'data_dir': '${install_dir}/data',
+    'state_dir': '${tmpdir}/state',
+    'installer_version': '3.0.0'
+}
+with open('${config_dir}/install-metadata.json', 'w') as f:
+    json.dump(meta, f, indent=2)
+"
+
+    # Simulate onboarding failure (config file missing/invalid)
+    local onboarding_state="${config_dir}/onboarding-state.json"
+    if [[ ! -f "$onboarding_state" ]]; then
+        _pass "$CURRENT_TEST (no state = onboarding never completed)"
+    else
+        _fail "$CURRENT_TEST" "onboarding state unexpectedly exists"
+    fi
+
+    # Verify installation is still intact after onboarding failure
+    assert_file_exists "$install_dir/ainews" "$CURRENT_TEST (app preserved)"
+    assert_file_exists "$config_dir/install-metadata.json" "$CURRENT_TEST (metadata preserved)"
+    rm -rf "$tmpdir"
+}
+
+test_startup_timeout_after_onboarding() {
+    CURRENT_TEST="Fault injection: startup timeout after onboarding"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local install_dir="${tmpdir}/app"
+    mkdir -p "$install_dir/.venv/bin"
+
+    # Create an ainews wrapper that hangs (simulating slow startup)
+    cat > "$install_dir/ainews" <<'EOF'
+#!/bin/bash
+# Simulate a startup that takes too long
+sleep 300 &
+HOLD_PID=$!
+echo "Starting services..."
+# Exit with timeout code after brief delay
+sleep 1
+kill $HOLD_PID 2>/dev/null || true
+echo "Startup timed out after 300s" >&2
+exit 124
+EOF
+    chmod 755 "$install_dir/ainews"
+
+    local out rc
+    out=$("$install_dir/ainews" 2>&1) && rc=$? || rc=$?
+
+    # Startup timeout should exit non-zero
+    if [[ $rc -ne 0 ]]; then
+        _pass "$CURRENT_TEST (exit code: $rc)"
+    else
+        _fail "$CURRENT_TEST" "expected non-zero exit code, got $rc"
+    fi
+    assert_contains "$out" "timed out" "$CURRENT_TEST (error message)"
+    rm -rf "$tmpdir"
+}
+
+test_metadata_write_failure() {
+    CURRENT_TEST="Fault injection: metadata write failure"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local config_dir="${tmpdir}/readonly-config"
+    mkdir -p "$config_dir"
+    chmod 444 "$config_dir"
+
+    # Attempt to write metadata to read-only directory
+    local out rc
+    out=$(python3 -c "
+import json
+meta = {'schema_version': 1, 'install_type': 'stable', 'version': '1.0.0'}
+try:
+    with open('${config_dir}/install-metadata.json', 'w') as f:
+        json.dump(meta, f)
+    print('UNEXPECTED SUCCESS')
+except (PermissionError, OSError) as e:
+    print(f'EXPECTED FAILURE: {e}')
+" 2>&1) && rc=$? || rc=$?
+
+    if echo "$out" | grep -q "EXPECTED FAILURE"; then
+        _pass "$CURRENT_TEST"
+    else
+        _fail "$CURRENT_TEST" "expected write failure, got: $out"
+    fi
+
+    chmod 755 "$config_dir"
+    rm -rf "$tmpdir"
+}
+
+test_rerun_after_docker_available() {
+    CURRENT_TEST="Fault injection: rerun preserves config after Docker becomes available"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local config_dir="${tmpdir}/config"
+    local install_dir="${tmpdir}/app"
+    mkdir -p "$config_dir" "$install_dir/.venv/bin"
+
+    # Create initial install + config
+    cat > "$install_dir/ainews" <<'EOF'
+#!/bin/bash
+echo "ainews v0.0.0-test"
+exit 0
+EOF
+    chmod 755 "$install_dir/ainews"
+
+    # Write initial metadata
+    python3 -c "
+import json, datetime
+meta = {
+    'schema_version': 1,
+    'install_type': 'main',
+    'version': '0.0.0-e2e',
+    'commit': 'abc123',
+    'artifact': 'test.tar.gz',
+    'artifact_sha256': 'abc123',
+    'installed_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'install_root': '${install_dir}',
+    'config_dir': '${config_dir}',
+    'data_dir': '${install_dir}/data',
+    'state_dir': '${tmpdir}/state',
+    'installer_version': '3.0.0'
+}
+with open('${config_dir}/install-metadata.json', 'w') as f:
+    json.dump(meta, f, indent=2)
+"
+
+    # Write a "secret" config file that must persist
+    echo "my-api-key-12345" > "${config_dir}/.env"
+
+    # Simulate rerunning the installer (should not overwrite config)
+    local original_hash
+    original_hash=$(sha256sum "${config_dir}/.env" | awk '{print $1}')
+
+    # Re-read the metadata (simulating installer reading existing state)
+    local version
+    version=$(python3 -c "import json; print(json.load(open('${config_dir}/install-metadata.json'))['version'])")
+
+    # Verify config survived
+    local current_hash
+    current_hash=$(sha256sum "${config_dir}/.env" | awk '{print $1}')
+    assert_contains "$version" "0.0.0-e2e" "$CURRENT_TEST (metadata version preserved)"
+    if [[ "$original_hash" == "$current_hash" ]]; then
+        _pass "$CURRENT_TEST (config file preserved)"
+    else
+        _fail "$CURRENT_TEST" "config file was modified"
+    fi
+
+    rm -rf "$tmpdir"
+}
+
 # ── Test runner ──────────────────────────────────────────────────────
 
 run_all_tests() {

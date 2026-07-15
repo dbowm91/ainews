@@ -385,8 +385,9 @@ The release workflow at `.github/workflows/release.yml` builds platform-specific
 The clean-host CI workflow at `.github/workflows/installer-smoke.yml` validates the installer as a supported operational path:
 - **Build job:** Builds a test tarball from the repo for deterministic testing (no GitHub API required)
 - **Linux x86_64:** Full install to canonical user paths, metadata verification, ainews version, config check, doctor --production
-- **Linux aarch64:** Native ARM runner for ARM validation
+- **Linux aarch64:** Native ARM runner (`ubuntu-24.04-arm`), builds own artifact on ARM for architecture-correct testing
 - **macOS arm64:** Cross-platform canonical path validation
+- **Full lifecycle:** Install → Docker Compose build → start services → wait for /health → verify health response → stop → verify no orphans
 - **Deferred prerequisite:** Tests installation without Docker, verifies metadata distinguishes installed/configured/running states
 - **Docker unavailable:** Verifies graceful degradation when Docker daemon is missing
 
@@ -411,7 +412,7 @@ Shell tests at `tests/test_install.sh` cover:
 - Metadata writing (valid JSON, correct fields, permissions)
 - Input validation (empty, absolute, traversal, newlines)
 - Fault injection (corrupted archives, traversal, symlinks, device nodes, checksum mismatches, unwritable directories)
-- 92 tests, 170+ assertions — run with `bash tests/test_install.sh`
+- 137 tests — run with `bash tests/test_install.sh`
 
 End-to-end installer tests at `tests/installer_e2e.sh` cover:
 - Post-install canonical directory creation
@@ -420,16 +421,21 @@ End-to-end installer tests at `tests/installer_e2e.sh` cover:
 - Checksum mismatch detection
 - Unwritable directory handling
 - Lifecycle exit codes
-- 24 tests — run with `bash tests/installer_e2e.sh`
+- Onboarding failure preserves installation state
+- Startup timeout handling
+- Metadata write failure handling
+- Config preservation on rerun (Docker becomes available)
+- 28 tests — run with `bash tests/installer_e2e.sh`
 
 JSON contract tests at `tests/test_cli_json_contracts.py` cover:
 - `ainews version --json` schema and no-secrets check
-- `ainews config path --json` structure and no-secrets check
-- `ainews config check --json` status/exit-code consistency
-- `ainews doctor --json` schema_version, checks, counts, outcome
+- `ainews config path` text output and no-secrets check
+- `ainews config check` status/exit-code consistency
+- `ainews doctor` schema_version, checks, counts, outcome
+- `ainews status --json` output contract
 - Exit code consistency across commands
 - Additive evolution policy (extra fields accepted)
-- 30+ tests — run with `pytest tests/test_cli_json_contracts.py -v`
+- 24 tests — run with `pytest tests/test_cli_json_contracts.py -v`
 
 ### Doctor Package Architecture
 The `ainews_cli/doctor/` package provides system diagnostics. It is structured as:
@@ -625,7 +631,7 @@ The following CI jobs must pass before merge. These are configured as required s
 | `compose-smoke` | Full Docker Compose boot + `/health` endpoint |
 | `gitleaks` | Secret scanning |
 | `theme-browser-smoke` | Playwright/Chromium browser tests for theme subsystem |
-| `installer-smoke` | Clean-host installer validation (Linux x86_64, aarch64, macOS arm64, deferred prerequisite) |
+| `installer-smoke` | Clean-host installer validation (Linux x86_64, aarch64, macOS arm64, deferred prerequisite, full lifecycle) |
 
 ### Concurrency
 

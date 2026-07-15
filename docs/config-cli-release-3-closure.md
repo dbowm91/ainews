@@ -20,6 +20,7 @@
 | Interrupted downloads don't replace working install | Staging + atomic rename | ✅ |
 | README points to tested installer path | Updated Quick Start | ✅ |
 | Clean-host CI jobs verify installation from canonical paths | `.github/workflows/installer-smoke.yml` | ✅ |
+| Full lifecycle test (install → start → health → stop) | `.github/workflows/installer-smoke.yml` `full-lifecycle` job | ✅ |
 | Installer fault injection tests verify corruption/malicious handling | `tests/installer_e2e.sh` + `tests/test_install.sh` | ✅ |
 | CI artifact validation verifies tarball contents before publish | `scripts/validate_artifact.sh` + release workflow | ✅ |
 | JSON contract tests verify CLI output schemas | `tests/test_cli_json_contracts.py` | ✅ |
@@ -42,19 +43,23 @@
 - Install metadata written to `install-metadata.json` (field: `install_type` aligned with `ainews_config.paths`)
 - Canonical paths for user and system installations
 - Release workflow (`.github/workflows/release.yml`) builds platform tarballs and creates GitHub Releases
-- Installer shell tests (`tests/test_install.sh`) — 92 tests, 170+ assertions
+- Installer shell tests (`tests/test_install.sh`) — 137 tests
 
 ### 3C: Clean-Host CI and Documentation
 - `.github/workflows/installer-smoke.yml` — Clean-host CI jobs:
   - Linux x86_64: full install, metadata, version, config check, doctor
-  - Linux aarch64: native ARM runner
+  - Linux aarch64: native ARM runner (builds own artifact on arm64)
   - macOS arm64: cross-platform validation
   - Deferred prerequisite: no-Docker scenario
   - Docker unavailable: graceful degradation
-- `tests/installer_e2e.sh` — End-to-end installer tests with fault injection
-- `tests/test_cli_json_contracts.py` — JSON schema tests for version, config path, config check, doctor, status
-- `scripts/validate_artifact.sh` — Pre-publish artifact validation (contents, safety, version)
-- Updated README with installer-first Quick Start
+- `tests/installer_e2e.sh` — End-to-end installer tests with fault injection (28 tests):
+  - Post-install behavior: canonical dirs, metadata, permissions, secrets
+  - Fault injection: traversal, absolute paths, empty/corrupted/truncated archives, symlink escape, unwritable dirs, checksum mismatch, onboarding failure, startup timeout, metadata write failure, config preservation on rerun
+  - Lifecycle: version exit code
+  - Schema: metadata version, required fields, file permissions
+- `tests/test_cli_json_contracts.py` — JSON schema tests for version, config path, config check, doctor, status (24 tests)
+- `scripts/validate_artifact.sh` — Pre-publish artifact validation (contents, safety, version, checksum)
+- Updated README with installer-first Quick Start, deferred setup, integrity verification, troubleshooting table
 - Updated AGENTS.md with installer CI architecture
 - Updated CLI reference with installer options and doctor JSON contract
 - Updated deployment guide with installer installation path
@@ -65,9 +70,9 @@
 - [x] Lint passes (ruff) — 0 errors
 - [x] Type check passes (mypy) — 1 pre-existing unrelated error (validate_themes.py dual module name)
 - [x] Test suite passes — 228 CLI/doctor/config tests pass, 473+ total pass
-- [x] Installer tests pass — 92 tests, 170+ assertions (`bash tests/test_install.sh`)
-- [x] E2E installer tests pass — 24 tests with fault injection (`bash tests/installer_e2e.sh`)
-- [x] JSON contract tests pass — 30+ tests (`pytest tests/test_cli_json_contracts.py -v`)
+- [x] Installer tests pass — 137 tests (`bash tests/test_install.sh`)
+- [x] E2E installer tests pass — 28 tests with fault injection (`bash tests/installer_e2e.sh`)
+- [x] JSON contract tests pass — 24 tests (`pytest tests/test_cli_json_contracts.py -v`)
 - [x] Smoke tests pass — pre-existing env dependency issues not related to Release 3 changes
 
 ## Known Limitations

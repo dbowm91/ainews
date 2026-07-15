@@ -317,6 +317,16 @@ jobs:
           }
           echo "Wrapper script references .venv/bin/ainews — OK"
 
+      - name: Validate artifact with validate_artifact.sh
+        run: |
+          ARTIFACT_NAME="${{ steps.artifact.outputs.name }}"
+          # Only pass --tag for actual version tags (not main-channel)
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            bash scripts/validate_artifact.sh "$ARTIFACT_NAME" --tag "${GITHUB_REF_NAME}"
+          else
+            bash scripts/validate_artifact.sh "$ARTIFACT_NAME"
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

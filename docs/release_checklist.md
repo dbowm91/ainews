@@ -87,7 +87,24 @@ If existing deployments matter, add upgrade-from-prior-head validation:
 - [ ] Run current `flask db upgrade`
 - [ ] Inspect tables/columns match expected schema
 
-## 6. Safe-Fetch Validation
+## 6. Backup/Restore Validation
+
+```bash
+ainews backup create
+ainews backup list
+ainews backup verify BACKUP_ID
+ainews backup prune --dry-run
+ainews restore BACKUP_ID --dry-run
+ainews migrations status
+```
+
+- [ ] Backup creation succeeds with valid manifest
+- [ ] Backup verification passes all checks
+- [ ] Restore dry-run shows correct plan
+- [ ] Migration status reports correctly
+- [ ] Prune dry-run shows correct candidates
+
+## 7. Safe-Fetch Validation
 
 ```bash
 uv run pytest tests/test_safe_fetch.py tests/test_url_security.py tests/test_content_extractor_safe_fetch.py -q
@@ -100,7 +117,7 @@ rg "trafilatura\.fetch_url|requests\.get|httpx\.get|urlopen|urllib\.request" ser
 
 > **Note**: The direct-network-call grep must be run locally with `rg` — GitHub code search does not support the exact regex semantics needed. See `AGENTS.md` for the exact pattern.
 
-## 7. Documentation Validation
+## 8. Documentation Validation
 
 - [ ] README quickstart works for Docker path
 - [ ] `.env.example` aligns with `ProductionConfig.validate()` requirements
@@ -114,7 +131,7 @@ Commands if docs tests exist:
 uv run pytest tests/test_docs_alignment.py tests/test_docs_env_consistency.py -q
 ```
 
-## 8. Release Artifact/Version Validation
+## 9. Release Artifact/Version Validation
 
 - [ ] `pyproject.toml` version matches intended release (currently `1.0.0`)
 - [ ] Package metadata classifiers and maturity status are correct
@@ -126,7 +143,7 @@ uv run pytest tests/test_docs_alignment.py tests/test_docs_env_consistency.py -q
 - [ ] Artifact safety validation passes (no absolute paths, no traversal entries)
 - [ ] Installer tests pass: `bash tests/test_install.sh`
 
-## 9. Rollback/Restore Readiness
+## 10. Rollback/Restore Readiness
 
 For self-hosted releases, docs should describe:
 
@@ -136,7 +153,7 @@ For self-hosted releases, docs should describe:
 - [ ] How to inspect logs (`docker compose logs`, application logs)
 - [ ] How to run migrations manually (`flask db upgrade`)
 
-## 10. Final Human Signoff
+## 11. Final Human Signoff
 
 Require a final note with:
 

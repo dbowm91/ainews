@@ -941,5 +941,8 @@ from ainews_cli.lifecycle.commands import register_lifecycle_commands  # noqa: E
 
 register_lifecycle_commands(app)
 
+from ainews_cli.backup_commands import register_commands as _register_backup_commands  # noqa: E402
+_register_backup_commands(app, _ctx, _out)
+
 if __name__ == "__main__":
     app()

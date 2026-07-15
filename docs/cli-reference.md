@@ -282,6 +282,7 @@ Each check may include a `reason_code` field for machine-readable failure classi
 | `6` | `PERMISSION_ERROR` | Insufficient permissions |
 | `7` | `LOCK_ERROR` | Could not acquire configuration lock |
 | `8` | `ROLLBACK_ERROR` | Rollback operation failed |
+| `9` | `BACKUP_ERROR` | Backup/restore operation failed |
 
 ## Configuration Precedence
 
@@ -932,3 +933,137 @@ Run post-deploy smoke checks. Tests critical endpoints and service connectivity.
 **Exit codes:**
 - `0` — All smoke checks passed
 - `1` — One or more checks failed
+
+---
+
+## Backup and Restore
+
+### `ainews backup create`
+
+Create a point-in-time backup of configuration files and database.
+
+**Options:**
+- `--include-logs` — Include application log files in the backup
+- `--tag TAG` — Add a human-readable tag to the backup
+
+**Output:** Backup ID, manifest path, total size.
+
+**Exit codes:**
+- `0` — Backup created successfully
+- `9` — Backup error
+
+---
+
+### `ainews backup list`
+
+List available backups with creation time, version, tag, and size.
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+**Output fields (text):** ID, Created, Version, Tag, Size, Verified.
+**JSON fields:** `id`, `created_at`, `app_version`, `tag`, `total_bytes`, `verified`.
+
+---
+
+### `ainews backup show BACKUP_ID`
+
+Show detailed information about a specific backup including section checksums and sizes.
+
+**Arguments:**
+- `BACKUP_ID` — Backup ID (required)
+
+**Exit codes:**
+- `0` — Backup found
+- `5` — Backup not found
+
+---
+
+### `ainews backup verify BACKUP_ID`
+
+Verify backup integrity without modifying it. Checks manifest schema, section checksums, SQLite integrity, config tarball parseability, and version compatibility.
+
+**Arguments:**
+- `BACKUP_ID` — Backup ID (required)
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+**Output fields:** Status (pass/fail), sections checked, reason codes for failures.
+
+**Reason codes:** `backup_not_found`, `manifest_missing`, `manifest_corrupt`, `manifest_invalid`, `schema_too_new`, `version_incompatible`, `section_missing`, `unsafe_path`, `file_missing`, `size_mismatch`, `checksum_mismatch`, `db_corrupt`, `config_tar_corrupt`, `config_parse_error`.
+
+**Exit codes:**
+- `0` — Backup verified successfully
+- `1` — Verification failed
+- `5` — Backup not found
+
+---
+
+### `ainews backup prune`
+
+Remove old backups respecting retention policy (default: 10 backups, 90 days). Pinned backups are never pruned. The last verified backup is never deleted.
+
+**Options:**
+- `--max-count N` — Maximum number of backups to keep (default: 10)
+- `--max-age-days N` — Maximum age in days (default: 90)
+- `--dry-run` — Show which backups would be pruned without deleting
+
+**Output:** Number of backups pruned, list of pruned backup IDs.
+
+**Exit codes:**
+- `0` — Prune completed
+- `9` — Backup error
+
+---
+
+### `ainews restore BACKUP_ID`
+
+Restore configuration and/or database from a verified backup. Creates an automatic pre-restore safety backup before applying changes.
+
+**Arguments:**
+- `BACKUP_ID` — Backup ID to restore from (required)
+
+**Options:**
+- `--config-only` — Restore configuration files only (skip database)
+- `--data-only` — Restore database only (skip configuration files)
+- `--dry-run` — Show restore plan without applying changes
+- `-y`, `--yes` — Skip confirmation prompt
+
+**Exit codes:**
+- `0` — Restore completed successfully
+- `1` — Restore failed
+- `5` — Backup not found
+- `9` — Backup error
+
+---
+
+### `ainews migrations status`
+
+Show current database migration status: applied migrations, pending migrations, and current schema version.
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+---
+
+### `ainews migrations plan`
+
+Plan pending migrations without applying them. Shows migration IDs and dependency order.
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+---
+
+### `ainews migrations apply`
+
+Apply pending database migrations. Runs preflight checks before applying.
+
+**Options:**
+- `--dry-run` — Show migrations that would be applied without executing
+- `-y`, `--yes` — Skip confirmation prompt
+
+**Exit codes:**
+- `0` — Migrations applied successfully
+- `1` — Migration failed

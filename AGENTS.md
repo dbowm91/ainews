@@ -455,6 +455,58 @@ The `ainews_cli/doctor/` package provides system diagnostics. It is structured a
 ### Onboarding Architecture
 The `ainews onboard` command implements a 16-stage state machine (`OnboardingService`) with resume-from-failure support. State is persisted to `onboarding-state.json` in the config directory. Stages are executed sequentially with `run_stage()` returning `StageResult` objects. The `resume()` method picks up from the last incomplete stage. Deployment, pipeline, and source profiles (`ainews_cli/profiles.py`) provide preset configurations. Bootstrap YAML files (`ainews_cli/schema.py`) enable unattended setup with cross-field validation and secret detection.
 
+### Backup, Restore, and Migration Architecture
+
+**Location:** `ainews_config/backup.py` (core library, Flask-free), `ainews_cli/backup_commands.py` (CLI commands)
+
+**Backup format:** Versioned directory containing:
+- `manifest.json` — schema version, backup ID, application version, config schema version, database schema version, sections with SHA-256 checksums
+- `config.tar` — tarball of all config files (.env, providers.yaml, pipeline.yaml, sources.yaml, topics.yaml)
+- `database.sqlite` — consistent SQLite snapshot via backup API
+- `install_metadata.json` — installation metadata
+
+**Backup directory layout:**
+```
+backup_dir/
+  2026-07-15T041500Z-1.4.0/
+    manifest.json
+    config.tar
+    database.sqlite
+    install_metadata.json
+  pins.json  # {"pinned": ["backup_id1", ...]}
+  restore-records/
+    restore-*.json
+```
+
+**Backup creation:** Acquires flock on `state_dir/backup.lock`, validates config files, uses SQLite backup API for consistent snapshot, stages in temp dir, computes checksums, atomically publishes. Permissions: 0o700 for dirs, 0o600 for files.
+
+**Backup verification:** Non-mutating. Validates manifest schema, section presence/checksums/paths, SQLite integrity (`PRAGMA integrity_check`), config tarball parseability, version compatibility (same major version). Returns stable reason codes: `backup_not_found`, `manifest_missing`, `manifest_corrupt`, `manifest_invalid`, `schema_too_new`, `version_incompatible`, `section_missing`, `unsafe_path`, `file_missing`, `size_mismatch`, `checksum_mismatch`, `db_corrupt`, `config_tar_corrupt`, `config_parse_error`.
+
+**Retention/pruning:** Default 10 backups, 90 days max age. Respects pinned backups. Never deletes the only verified backup. Oldest-first selection. Supports `--dry-run`.
+
+**Restore:** Creates automatic pre-restore safety backup. Supports `--config-only`, `--data-only`, `--dry-run`. Acquires restore lock. Stages files, validates, atomically replaces. Writes restore record.
+
+**Migration framework:** `Migration` protocol with `id`, `from_version`, `to_version`, `reversible`, `preflight()`, `apply()`, `rollback()`. `BaseMigration` abstract class. Deterministic ordering, idempotency, downgrade refusal. `plan_migrations()` and `execute_migration_plan()` functions.
+
+**CLI commands:**
+```bash
+ainews backup create [--include-logs] [--tag TAG]
+ainews backup list
+ainews backup show BACKUP_ID
+ainews backup verify BACKUP_ID
+ainews backup prune [--max-count N] [--max-age-days N] [--dry-run]
+ainews restore BACKUP_ID [--config-only] [--data-only] [--dry-run] [-y]
+ainews migrations status
+ainews migrations plan
+ainews migrations apply [--dry-run] [-y]
+```
+
+**Exit codes:** `BACKUP_ERROR = 9` added to `ainews_cli/exit_codes.py`.
+
+**Key types:** `BackupManifest`, `BackupSection`, `VerifyResult`, `RestorePlan`, `PruneResult`, `MigrationReport`, `MigrationStatusDetail`, `MigrationPlanDetail`, `MigrationApplyResult`.
+
+**Tests:** `tests/test_backup_restore.py` — 73 tests covering creation, verification, listing, pinning, pruning, restore (full/config-only/data-only), version compatibility, migration framework, manifest serialization, locking, and edge cases.
+
 ### Provider Adapter Architecture
 Provider management uses a pluggable adapter pattern (`ainews_cli/providers/`). Each adapter implements the `ProviderSetupAdapter` protocol with `fields()`, `probe()`, `discover_models()`, and `remediation()`. The registry (`ainews_cli/providers/registry.py`) maps type IDs to adapter classes. Built-in adapters: `ollama`, `openai`, `anthropic`, `gemini`, `eggpool`, `generic`. Adapters are independent of the Flask runtime and can be tested in isolation.
 
@@ -606,6 +658,9 @@ The following are documented as intentional and should NOT be "fixed":
 | `ainews_config/` | Configuration engine: path resolver, field registry, loader, validator, transactional writer |
 | `ainews_cli/` | Operator CLI: version, onboard, providers (list/add/test/models/set-default/assign/remove), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/unset/diff/rollback), doctor |
 | `ainews_cli/onboard.py` | Onboarding state machine, stage definitions, orchestration service |
+| `ainews_config/backup.py` | Backup, restore, and migration framework (Flask-free) |
+| `ainews_cli/backup_commands.py` | CLI commands for backup, restore, migrations |
+| `tests/test_backup_restore.py` | 73 tests for backup/restore/migration system |
 | `ainews_cli/profiles.py` | Deployment, pipeline, and source profile definitions |
 | `ainews_cli/schema.py` | Declarative bootstrap YAML schema and validation |
 | `ainews_cli/secrets.py` | Secret generation, password hashing, admin setup |

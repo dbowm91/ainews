@@ -1,0 +1,350 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — build and validate artifacts but do not create a release"
+        required: false
+        default: "false"
+        type: boolean
+      tag_override:
+        description: "Override release tag (e.g. v1.0.0). Defaults to the pushed tag."
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.6"
+
+jobs:
+  # ── Gate: run the full test suite before building anything ──────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Lint
+        run: .venv/bin/ruff check . --exclude .venv
+
+      - name: Type check
+        run: .venv/bin/mypy . --exclude .venv
+
+      - name: Tests
+        run: .venv/bin/python -m pytest tests/ -x -q --timeout=120
+
+  # ── Build platform-specific release tarballs ────────────────────────
+  build:
+    name: "Build ${{ matrix.platform }}"
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+            os: linux
+            arch: x86_64
+          - platform: linux-aarch64
+            runner: ubuntu-22.04
+            os: linux
+            arch: aarch64
+          - platform: macos-x86_64
+            runner: macos-latest
+            os: macos
+            arch: x86_64
+          - platform: macos-aarch64
+            runner: macos-latest
+            os: macos
+            arch: aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Determine artifact name
+        id: artifact
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA::8}"
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            ARTIFACT_NAME="ainews-${VERSION}-${{ matrix.platform }}.tar.gz"
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            ARTIFACT_NAME="ainews-main-${COMMIT}-${{ matrix.platform }}.tar.gz"
+            RELEASE_TAG="main-${COMMIT}"
+          fi
+
+          echo "name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
+
+      - name: Write wrapper script
+        run: |
+          cat > ainews <<'WRAPPER'
+          #!/bin/bash
+          set -euo pipefail
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
+          WRAPPER
+          chmod +x ainews
+
+      - name: Assemble staging directory
+        run: |
+          STAGING="staging/ainews"
+          mkdir -p "${STAGING}"
+
+          # Application source
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.venv' \
+            --exclude='staging' \
+            --exclude='htmlcov' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            --exclude='.mypy_cache' \
+            --exclude='.ruff_cache' \
+            --exclude='instance' \
+            --exclude='*.egg-info' \
+            --exclude='dist' \
+            --exclude='build' \
+            . "${STAGING}/"
+
+          # Virtualenv (move into staging to keep paths relative)
+          mv .venv "${STAGING}/.venv"
+
+          # Wrapper entry point
+          mv ainews "${STAGING}/ainews"
+
+          # Ensure docker-compose manifests are present
+          for f in docker-compose.yml docker-compose.ollama.yml; do
+            if [[ ! -f "${STAGING}/${f}" ]]; then
+              echo "ERROR: missing ${f}" >&2
+              exit 1
+            fi
+          done
+
+          # Verify expected directories exist
+          for d in migrations resources/themes static templates services models adapters tasks routes schemas utils ainews_cli ainews_config; do
+            if [[ ! -d "${STAGING}/${d}" ]]; then
+              echo "ERROR: missing directory ${d}" >&2
+              exit 1
+            fi
+          done
+
+          # Verify key files exist
+          for f in pyproject.toml .env.example providers.yaml; do
+            if [[ ! -f "${STAGING}/${f}" ]]; then
+              echo "ERROR: missing file ${f}" >&2
+              exit 1
+            fi
+          done
+
+          echo "Staging contents:"
+          ls -la "${STAGING}/"
+          echo ""
+          echo "Staging disk usage:"
+          du -sh "${STAGING}/"
+
+      - name: Create tarball
+        run: |
+          ARTIFACT_NAME="${{ steps.artifact.outputs.name }}"
+          tar -czf "${ARTIFACT_NAME}" -C staging ainews
+          echo "Tarball created: ${ARTIFACT_NAME}"
+          ls -lh "${ARTIFACT_NAME}"
+
+      - name: Generate checksum
+        run: |
+          ARTIFACT_NAME="${{ steps.artifact.outputs.name }}"
+          sha256sum "${ARTIFACT_NAME}" > SHA256SUMS
+          echo "Checksum:"
+          cat SHA256SUMS
+
+      - name: Validate artifact contents
+        run: |
+          ARTIFACT_NAME="${{ steps.artifact.outputs.name }}"
+          echo "=== Archive entry listing ==="
+          tar -tzf "${ARTIFACT_NAME}" | head -50
+          echo "..."
+
+          echo ""
+          echo "=== Safety checks ==="
+
+          # Reject absolute paths
+          ABSOLUTE=$(tar -tzf "${ARTIFACT_NAME}" | grep '^/' || true)
+          if [[ -n "${ABSOLUTE}" ]]; then
+            echo "FAIL: absolute paths found in archive:"
+            echo "${ABSOLUTE}"
+            exit 1
+          fi
+
+          # Reject traversal entries
+          TRAVERSAL=$(tar -tzf "${ARTIFACT_NAME}" | grep '\.\.' || true)
+          if [[ -n "${TRAVERSAL}" ]]; then
+            echo "FAIL: traversal entries found in archive:"
+            echo "${TRAVERSAL}"
+            exit 1
+          fi
+
+          echo "No absolute paths or traversal entries — OK"
+
+          echo ""
+          echo "=== Required files check ==="
+
+          REQUIRED=(
+            "ainews/ainews"
+            "ainews/pyproject.toml"
+            "ainews/docker-compose.yml"
+            "ainews/docker-compose.ollama.yml"
+            "ainews/.env.example"
+            "ainews/providers.yaml"
+            "ainews/.venv/bin/activate"
+            "ainews/migrations/env.py"
+            "ainews/resources/themes"
+            "ainews/static"
+            "ainews/templates"
+            "ainews/services"
+            "ainews/models"
+            "ainews/adapters"
+            "ainews/tasks"
+            "ainews/routes"
+            "ainews/schemas"
+            "ainews/utils"
+            "ainews/ainews_cli"
+            "ainews/ainews_config"
+          )
+
+          MISSING=0
+          for entry in "${REQUIRED[@]}"; do
+            if ! tar -tzf "${ARTIFACT_NAME}" | grep -q "^${entry}"; then
+              echo "  MISSING: ${entry}"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+
+          if [[ ${MISSING} -gt 0 ]]; then
+            echo "FAIL: ${MISSING} required entries missing"
+            exit 1
+          fi
+
+          echo "All required entries present — OK"
+
+          echo ""
+          echo "=== Wrapper script check ==="
+          tar -xzf "${ARTIFACT_NAME}" -O ainews/ainews | head -5
+          tar -xzf "${ARTIFACT_NAME}" -O ainews/ainews | grep -q "\.venv/bin/ainews" || {
+            echo "FAIL: wrapper script does not reference .venv/bin/ainews"
+            exit 1
+          }
+          echo "Wrapper script references .venv/bin/ainews — OK"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            ${{ steps.artifact.outputs.name }}
+            SHA256SUMS
+          retention-days: 5
+
+  # ── Collect all checksums into a single file ────────────────────────
+  checksums:
+    name: Collect checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all checksum files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Merge SHA256SUMS
+        run: |
+          cat SHA256SUMS.* SHA256SUMS 2>/dev/null | sort -u > SHA256SUMS.combined
+          mv SHA256SUMS.combined SHA256SUMS
+          echo "Combined checksums:"
+          cat SHA256SUMS
+
+      - name: Upload combined checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: SHA256SUMS
+          retention-days: 5
+
+  # ── Create the GitHub Release ───────────────────────────────────────
+  release:
+    name: Create release
+    needs: [build, checksums]
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Download checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: release-checksums
+
+      - name: List release assets
+        run: |
+          echo "=== Assets to publish ==="
+          ls -lh *.tar.gz SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "ainews ${{ github.ref_name }}"
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          generate_release_notes: true
+          files: |
+            *.tar.gz
+            SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -541,7 +541,7 @@ write_metadata() {
     cat > "$meta_tmp" <<METAEOF
 {
   "schema_version": ${METADATA_SCHEMA_VERSION},
-  "channel": "${channel}",
+  "install_type": "${channel}",
   "version": "${version}",
   "commit": "${commit}",
   "artifact": "${artifact}",

@@ -370,6 +370,27 @@ Canonical paths:
 - User: `~/.local/share/ainews/app/`, `~/.config/ainews/`, `~/.local/state/ainews/`
 - System: `/opt/ainews/`, `/etc/ainews/`, `/var/lib/ainews/`, `/var/log/ainews/`
 
+### Release Workflow Architecture
+The release workflow at `.github/workflows/release.yml` builds platform-specific release artifacts and creates GitHub Releases:
+- **Trigger:** Tag pushes matching `v*` (also supports `workflow_dispatch` for dry runs)
+- **Gate:** Full test suite (lint, typecheck, pytest) must pass before builds start
+- **Build matrix:** `linux-x86_64` (ubuntu-22.04 for glibc 2.35), `linux-aarch64`, `macos-x86_64`, `macos-aarch64`
+- **Artifact contents:** Application source + `.venv/` + Docker Compose manifests + migrations + themes + wrapper `ainews` script
+- **Safety validation:** Rejects absolute paths and `..` traversal entries in tarballs
+- **Checksums:** Per-platform `SHA256SUMS` merged into a single file
+- **Release:** `softprops/action-gh-release@v2` with auto-generated notes; `-rc`/`-beta`/`-alpha` tags marked as prerelease
+- **Artifact naming:** `ainews-{version}-{platform}.tar.gz` (matches installer's `resolve_artifact_url()`)
+
+### Installer Tests
+Shell tests at `tests/test_install.sh` cover:
+- Argument parsing (all flags, missing values, unknown flags)
+- Platform detection and architecture normalization
+- Path computation (user, system, prefix modes)
+- Checksum verification helpers
+- Metadata writing (valid JSON, correct fields, permissions)
+- Input validation (empty, absolute, traversal, newlines)
+- 74 tests, 119 assertions — run with `bash tests/test_install.sh`
+
 ### Doctor Package Architecture
 The `ainews_cli/doctor/` package provides system diagnostics. It is structured as:
 - `model.py`: `CheckStatus` enum (PASS/WARN/FAIL/SKIP), `CheckResult`, `DoctorReport` with aggregate counts (`passed_count`, `warn_count`, `failed_count`, `skipped_count`). `CheckResult.passed` property is backwards-compatible (PASS or SKIP → True).

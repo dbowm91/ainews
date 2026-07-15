@@ -120,6 +120,11 @@ uv run pytest tests/test_docs_alignment.py tests/test_docs_env_consistency.py -q
 - [ ] Package metadata classifiers and maturity status are correct
 - [ ] Changelog/release notes exist for this version
 - [ ] Docker tag naming follows convention (if images are published)
+- [ ] Release workflow (`.github/workflows/release.yml`) produces platform tarballs for `v*` tags
+- [ ] Tarballs contain expected files (source, venv, compose manifests, migrations, themes, wrapper script)
+- [ ] SHA256SUMS checksums are generated and attached to the release
+- [ ] Artifact safety validation passes (no absolute paths, no traversal entries)
+- [ ] Installer tests pass: `bash tests/test_install.sh`
 
 ## 9. Rollback/Restore Readiness
 

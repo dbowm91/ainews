@@ -34,8 +34,10 @@
 - SHA-256 checksum verification before extraction
 - Safe extraction with path traversal rejection
 - Atomic staging and install
-- Install metadata written to `install-metadata.json`
+- Install metadata written to `install-metadata.json` (field: `install_type` aligned with `ainews_config.paths`)
 - Canonical paths for user and system installations
+- Release workflow (`.github/workflows/release.yml`) builds platform tarballs and creates GitHub Releases
+- Installer shell tests (`tests/test_install.sh`) — 74 tests, 119 assertions
 
 ### 3C: Documentation and CI
 - Updated README with installer-first Quick Start

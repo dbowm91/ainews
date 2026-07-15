@@ -332,6 +332,14 @@ bash scripts/validate_release.sh --fast   # Quick: ruff + targeted smoke tests
 bash scripts/validate_release.sh --security  # pip-audit + secret scanning
 ```
 
+Installer tests:
+
+```bash
+bash tests/test_install.sh               # 74 tests, 119 assertions
+```
+
+Release artifacts are built by `.github/workflows/release.yml` on `v*` tag pushes. The workflow produces platform-specific tarballs (`linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-aarch64`) with SHA256SUMS checksums and creates a GitHub Release.
+
 Or via Make:
 
 ```bash

@@ -361,10 +361,11 @@ class TestDoctorJsonOutput:
         serialized = json.dumps(d)
         assert isinstance(serialized, str)
         deserialized = json.loads(serialized)
-        assert deserialized["all_passed"] == report.all_passed
-        # Verify status field is present
-        assert "warn_count" in deserialized
-        assert "skipped_count" in deserialized
+        assert deserialized["outcome"] == ("passed" if report.all_passed else "failed")
+        # Verify counts field is present
+        assert "counts" in deserialized
+        assert "pass" in deserialized["counts"]
+        assert "skip" in deserialized["counts"]
 
 
 class TestSourceConnectivitySchema:

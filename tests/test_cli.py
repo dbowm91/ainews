@@ -204,9 +204,8 @@ class TestDoctor:
         result = runner.invoke(app, ["--json", "doctor"])
         assert result.exit_code in (exit_codes.SUCCESS, exit_codes.GENERAL_ERROR)
         data = json.loads(result.output)
-        assert "all_passed" in data
-        assert "passed_count" in data
-        assert "failed_count" in data
+        assert "outcome" in data
+        assert "counts" in data
         assert "checks" in data
 
 

@@ -64,7 +64,10 @@ def run_doctor(
     _check_python_available(checks)
 
     if quick:
-        return DoctorReport(checks=checks)
+        return DoctorReport(
+            checks=checks,
+            mode={"quick": quick, "production": production, "network": network},
+        )
 
     _check_port_available(checks)
     _check_docker_available(checks)
@@ -90,4 +93,7 @@ def run_doctor(
         _check_port_conflicts(paths, checks)
         _check_docker_dns_resolution(paths, checks)
 
-    return DoctorReport(checks=checks)
+    return DoctorReport(
+        checks=checks,
+        mode={"quick": quick, "production": production, "network": network},
+    )

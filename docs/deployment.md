@@ -1,6 +1,58 @@
 # Production Deployment Guide
 
-Deploy ainews to a production server using Docker (recommended) or bare metal with systemd.
+Deploy ainews to a production server using the installer (recommended), Docker, or bare metal with systemd.
+
+## Option C: Installer (Recommended for Production)
+
+The recommended installation path uses the channel-aware installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dbowm91/ainews/main/scripts/install.sh | bash
+ainews onboard
+ainews start
+```
+
+### Supported Platforms
+
+| Platform | Architecture | Status |
+|----------|-------------|--------|
+| Linux | x86_64 | Supported |
+| Linux | aarch64/arm64 | Supported |
+| macOS | arm64 | Supported |
+| Windows | — | Use WSL |
+
+### Installation Modes
+
+**User installation** (default, no root required):
+- App: `~/.local/share/ainews/app/`
+- Config: `~/.config/ainews/`
+- State: `~/.local/state/ainews/`
+- CLI: `~/.local/bin/ainews`
+
+**System installation** (requires root):
+- App: `/opt/ainews/`
+- Config: `/etc/ainews/`
+- State: `/var/lib/ainews/`
+- CLI: `/usr/local/bin/ainews`
+
+### Channel Selection
+
+| Channel | Description | Default |
+|---------|-------------|---------|
+| `stable` | Latest non-prerelease GitHub release | Yes |
+| `prerelease` | Latest prerelease | No |
+| `main` | Exact commit SHA (dev/eval only) | No |
+
+### Non-Interactive Installation
+
+```bash
+AINEWS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/run/secrets/ainews-admin \
+  ./scripts/install.sh --non-interactive --bootstrap ./bootstrap.yaml --start
+```
+
+### Docker-Absent Installation
+
+The installer succeeds without Docker when `--start` is not requested. Install metadata is written, and onboarding can be deferred. After Docker is available, run `ainews start` to complete setup.
 
 ## Option A: Docker (Recommended)
 

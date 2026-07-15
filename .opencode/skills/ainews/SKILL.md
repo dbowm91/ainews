@@ -7,6 +7,8 @@ description: "ainews AI news pipeline — Flask backend, Celery workers, LLM pip
 
 ainews is an AI-curated news pipeline with a Flask backend, Celery workers, and a 4-stage LLM pipeline: select → research → write → edit. Articles are crawled from RSS/API sources, processed through pipeline stages with circuit breakers and rate limiting, then served via public feeds and email newsletters.
 
+**Installer:** The primary installation path is the channel-aware installer at `scripts/install.sh` (not `git clone`). Doctor source probing uses `safe_fetch_url()` from `services/safe_fetch.py`, not raw requests. Install metadata (`install-metadata.json`) is consumed by `ainews_config.paths` for canonical path resolution.
+
 **Tech stack:**
 - Flask (WSGI behind Granian ASGI adapter)
 - Celery + Redis broker

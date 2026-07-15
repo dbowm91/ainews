@@ -21,6 +21,7 @@ class CheckResult:
     blocking: bool = False
     details: dict[str, object] | str | None = None
     duration_ms: float | None = None
+    reason_code: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -41,12 +42,16 @@ class CheckResult:
             d["duration_ms"] = self.duration_ms
         if self.blocking:
             d["blocking"] = True
+        if self.reason_code is not None:
+            d["reason_code"] = self.reason_code
         return d
 
 
 @dataclass
 class DoctorReport:
     checks: list[CheckResult] = field(default_factory=list)
+    mode: dict[str, bool] = field(default_factory=lambda: {"quick": False, "production": False, "network": False})
+    schema_version: int = 1
 
     @property
     def all_passed(self) -> bool:
@@ -70,11 +75,16 @@ class DoctorReport:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "all_passed": self.all_passed,
-            "passed_count": self.passed_count,
-            "warn_count": self.warn_count,
-            "failed_count": self.failed_count,
-            "skipped_count": self.skipped_count,
+            "schema_version": self.schema_version,
+            "command": "doctor",
+            "mode": dict(self.mode),
+            "outcome": "passed" if self.all_passed else "failed",
+            "counts": {
+                "pass": self.passed_count,
+                "warn": self.warn_count,
+                "fail": self.failed_count,
+                "skip": self.skipped_count,
+            },
             "checks": [c.to_dict() for c in self.checks],
         }
 

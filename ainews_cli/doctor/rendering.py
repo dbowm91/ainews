@@ -12,7 +12,12 @@ _STATUS_SYMBOLS = {
 
 def render_check(check: CheckResult) -> str:
     symbol = _STATUS_SYMBOLS.get(check.status, "?")
-    return f"  {symbol} {check.name}: {check.message}"
+    suffix = ""
+    if check.duration_ms is not None:
+        suffix = f" ({check.duration_ms:.0f}ms)"
+    if check.reason_code is not None:
+        suffix += f" [{check.reason_code}]"
+    return f"  {symbol} {check.name}: {check.message}{suffix}"
 
 
 def render_summary(report: DoctorReport) -> str:

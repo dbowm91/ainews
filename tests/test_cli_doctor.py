@@ -183,11 +183,13 @@ class TestDoctorReport:
             check_pass("a", "ok"),
         ])
         d = report.to_dict()
-        assert d["all_passed"] is True
-        assert d["passed_count"] == 1
-        assert d["failed_count"] == 0
-        assert d["warn_count"] == 0
-        assert d["skipped_count"] == 0
+        assert d["schema_version"] == 1
+        assert d["command"] == "doctor"
+        assert d["outcome"] == "passed"
+        assert d["counts"]["pass"] == 1
+        assert d["counts"]["fail"] == 0
+        assert d["counts"]["warn"] == 0
+        assert d["counts"]["skip"] == 0
         assert len(d["checks"]) == 1
         assert d["checks"][0]["name"] == "a"
         assert d["checks"][0]["passed"] is True
@@ -434,7 +436,7 @@ class TestDoctorReportJsonSerialization:
         serialized = json.dumps(d)
         assert isinstance(serialized, str)
         deserialized = json.loads(serialized)
-        assert deserialized["all_passed"] == report.all_passed
+        assert deserialized["outcome"] == ("passed" if report.all_passed else "failed")
         assert len(deserialized["checks"]) == len(report.checks)
         # Verify status field is present in serialized output
         for check_dict in deserialized["checks"]:

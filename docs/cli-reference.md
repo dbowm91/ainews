@@ -10,6 +10,47 @@ pip install -e .
 
 This registers the `ainews` console command via `pyproject.toml` `[project.scripts]`.
 
+## Installer
+
+The one-liner installer downloads and installs pre-built release artifacts. It does **not** configure the application — delegate to `ainews onboard` afterward.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dbowm91/ainews/main/scripts/install.sh | bash
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--channel CHANNEL` | Release channel: `stable` (default), `prerelease`, `main` |
+| `--version VERSION` | Pin to a specific version tag (e.g. `1.4.0`) |
+| `--commit SHA` | Pin to an exact commit (used with `--channel main`) |
+| `--user` | User-owned paths under `~/.local/share/ainews` (default) |
+| `--system` | System-wide paths under `/opt/ainews` (requires root) |
+| `--prefix PATH` | Override base directory for all paths |
+| `--non-interactive` | Never prompt; use defaults |
+| `--yes` | Accept defaults at prompts |
+| `--dry-run` | Show what would happen without executing |
+| `--download-only` | Download and verify only; do not install |
+| `--bootstrap PATH` | Run `ainews onboard --non-interactive --config-file PATH` after install |
+| `--start` | Run `ainews start` after onboarding |
+| `--no-onboard` | Skip the onboarding prompt entirely |
+| `--help` | Show help and exit |
+
+**Channel resolution:** `stable` fetches the latest GitHub release. `prerelease` includes pre-release tags. `main` builds from the branch HEAD. A `--version` or `--commit` pin overrides channel resolution.
+
+**Environment variable mirrors:** `AINEWS_CHANNEL` (mirrors `--channel`, CLI takes precedence), `AINEWS_GITHUB_TOKEN` (GitHub API auth to avoid rate limits), `HTTPS_PROXY` / `HTTP_PROXY` (download proxy).
+
+**Install paths:**
+
+| Mode | Base directory |
+|------|----------------|
+| `user` (default) | `~/.local/share/ainews/` |
+| `system` | `/opt/ainews/` |
+| `--prefix` | Custom path |
+
+**Metadata:** An `install-metadata.json` file is written to the config directory with schema version, install type, channel, and installed version. This file is read by `ainews config path` and `ainews version` to determine provenance.
+
 ## Global Options
 
 | Option | Description |
@@ -25,7 +66,15 @@ This registers the `ainews` console command via `pyproject.toml` `[project.scrip
 
 Show package version, Python version, and git commit (when available).
 
-**Output:** Human-readable version info, or JSON with `version`, `python`, `git_commit` fields.
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+**JSON fields:**
+- `version` — Package version (from `importlib.metadata`)
+- `python` — Python interpreter version
+- `git` — Short git commit hash (omitted when not in a repo)
+- `config_schema` — Field registry schema version (e.g. `1.0.80`)
+- `install_channel` — `stable`, `prerelease`, `main`, or `development` (when no install metadata exists)
 
 ---
 
@@ -184,7 +233,37 @@ Run system and configuration diagnostics. Three tiers of checks based on flags.
 - Port conflict detection
 - Source connectivity (adapter-specific URL extraction)
 
-**JSON output:** Includes `all_passed` (bool), `passed_count`, `warn_count`, `failed_count`, `skipped_count`, and per-check `status` field.
+**JSON output:** Uses the structured `DoctorReport` schema:
+
+```json
+{
+  "schema_version": 1,
+  "command": "doctor",
+  "mode": {"quick": false, "production": false, "network": false},
+  "outcome": "passed",
+  "counts": {"pass": 12, "warn": 1, "fail": 0, "skip": 2},
+  "checks": [
+    {
+      "name": "config_paths",
+      "status": "pass",
+      "passed": true,
+      "message": "All paths resolved",
+      "duration_ms": 4.2
+    },
+    {
+      "name": "source_connectivity",
+      "status": "fail",
+      "passed": false,
+      "message": "Source 'ai-news' unreachable",
+      "blocking": true,
+      "reason_code": "http_error",
+      "details": {"url": "https://example.com/feed"}
+    }
+  ]
+}
+```
+
+Each check may include a `reason_code` field for machine-readable failure classification (e.g. `http_error`, `dns_failure`, `timeout`, `ssrf_blocked`, `connection_failed`, `content_type_rejected`). The `--json` flag controls whether output uses this structured format or the human-readable table.
 
 **Exit codes:**
 - `0` — No blocking failures (all checks PASS, WARN, or SKIP)

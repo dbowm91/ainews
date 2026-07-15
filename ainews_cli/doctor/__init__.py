@@ -1,3 +1,4 @@
+from ainews_cli.doctor.checks.sources import probe_source
 from ainews_cli.doctor.model import (
     CheckResult,
     CheckStatus,
@@ -90,4 +91,5 @@ __all__ = [
     "_check_source_connectivity",
     "_check_port_conflicts",
     "_extract_primary_url",
+    "probe_source",
 ]

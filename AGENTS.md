@@ -178,6 +178,9 @@ Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Us
 - **CI integration**: `theme-validation` job in `.github/workflows/ci.yml` runs validation CLI and all theme-specific tests. `theme-browser-smoke` job runs Playwright/Chromium browser tests.
 - **Total theme test count**: 685+ tests across 16 test files (plus 14 Playwright browser smoke tests).
 
+### Installer Source Acquisition
+The installer downloads release artifacts from GitHub. It requires `curl` (preferred) or `wget`. The installer does NOT clone the repository — it downloads immutable versioned tarballs. The `main` channel is for development/evaluation only; `stable` is the default production path.
+
 ## Architecture Conventions
 
 ### Type Checking Pattern
@@ -348,6 +351,25 @@ The codebase uses SQLite with WAL mode only. There is no PostgreSQL configuratio
 ### Operator CLI Architecture
 The `ainews_cli` package is Flask-free and imports only from `ainews_config`. All commands work outside the repository directory. The CLI uses Typer with `typer.Typer(no_args_is_help=True)`. Configuration loading uses `resolve_paths()` → `load_all_configs()` → `validate_cross_file()`. Secret values are redacted in output by default; `--show-secrets` is not available in Release 1. The `config set` and `config unset` commands use `ConfigTransaction` for atomic file replacement with rollback. Exit codes are defined in `ainews_cli/exit_codes.py`. See `docs/cli-reference.md` for the full command reference.
 
+### Installer Architecture
+The installer at `scripts/install.sh` is a thin, channel-aware shell script that downloads immutable release artifacts from GitHub. It:
+- Detects platform (OS + CPU architecture)
+- Resolves the target version via GitHub API (stable/prerelease/main channels)
+- Downloads artifact tarball + SHA256SUMS
+- Verifies SHA-256 checksum before extraction
+- Extracts to a staging directory with path traversal rejection
+- Atomically installs to canonical paths
+- Writes `install-metadata.json` consumed by `ainews_config.paths`
+- Delegates setup to `ainews onboard` and lifecycle to `ainews start`
+
+The installer contains NO application configuration policy. It acquires and installs; all setup is delegated to the CLI.
+
+Installer options: `--channel`, `--version`, `--commit`, `--user`/`--system`, `--prefix`, `--non-interactive`, `--bootstrap`, `--start`, `--download-only`, `--dry-run`, `--yes`.
+
+Canonical paths:
+- User: `~/.local/share/ainews/app/`, `~/.config/ainews/`, `~/.local/state/ainews/`
+- System: `/opt/ainews/`, `/etc/ainews/`, `/var/lib/ainews/`, `/var/log/ainews/`
+
 ### Doctor Package Architecture
 The `ainews_cli/doctor/` package provides system diagnostics. It is structured as:
 - `model.py`: `CheckStatus` enum (PASS/WARN/FAIL/SKIP), `CheckResult`, `DoctorReport` with aggregate counts (`passed_count`, `warn_count`, `failed_count`, `skipped_count`). `CheckResult.passed` property is backwards-compatible (PASS or SKIP → True).
@@ -355,11 +377,13 @@ The `ainews_cli/doctor/` package provides system diagnostics. It is structured a
 - `rendering.py`: Human-readable output with symbols (✅ WARN ⚠️ FAIL ❌ SKIP ⏭️).
 - `checks/`: Individual check modules — `installation`, `configuration`, `runtime`, `providers`, `sources`, `docker`, `network`.
 
-**Source connectivity:** The `_extract_primary_url()` helper in `checks/sources.py` correctly extracts URLs from adapter-specific config fields (`feed_url` for RSS, `list_url` for API, `listing_url` for Web) instead of a non-existent top-level `url`. Safe source probing uses `requests.head()` with a 5-second timeout, limited to the first 3 sources.
+**Source connectivity:** The `_extract_primary_url()` helper in `checks/sources.py` correctly extracts URLs from adapter-specific config fields (`feed_url` for RSS, `list_url` for API, `listing_url` for Web) instead of a non-existent top-level `url`. Safe source probing uses `safe_fetch_url()` from `services/safe_fetch.py` — the same SSRF-protected client used in production. The `probe_source()` function applies tight limits (3s connect, 5s read, 10s total, 4KB max bytes) and maps exceptions to stable reason codes (`ssrf_blocked`, `timeout`, `connection_failed`, `dns_failure`, `content_type_rejected`, `http_error`). HEAD failures (405) fall back to a bounded GET. Probe results include latency and per-source details in JSON output.
 
 **Docker diagnostics (non-invasive):** Default doctor does not run `docker run --rm alpine:3.19 nslookup`. Instead it checks Docker daemon status via `docker info` and inspects existing running containers via `docker compose ps`. DNS resolution (`nslookup`) only runs inside existing containers when `--network` is passed.
 
 **Exit behavior:** `ainews doctor` exits 0 when no FAIL results exist, exits 1 when any check has FAIL status. JSON output includes `passed_count`, `warn_count`, `failed_count`, `skipped_count` fields.
+
+**Doctor JSON contract:** `ainews doctor --json` outputs a versioned schema (`schema_version: 1`) with `command`, `mode` (quick/production/network flags), `outcome` (passed/failed), `counts` (pass/warn/fail/skip), and `checks` array. Each check includes `name`, `status`, `message`, optional `reason_code`, optional `remediation`, and optional `duration_ms`.
 
 ### Onboarding Architecture
 The `ainews onboard` command implements a 16-stage state machine (`OnboardingService`) with resume-from-failure support. State is persisted to `onboarding-state.json` in the config directory. Stages are executed sequentially with `run_stage()` returning `StageResult` objects. The `resume()` method picks up from the last incomplete stage. Deployment, pipeline, and source profiles (`ainews_cli/profiles.py`) provide preset configurations. Bootstrap YAML files (`ainews_cli/schema.py`) enable unattended setup with cross-field validation and secret detection.
@@ -472,6 +496,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `tests/test_smoke_celery.py` | Celery app import/config smoke tests (Layer 3) |
 | `tests/test_docs_env_consistency.py` | Docs/env variable consistency smoke tests (Layer 7) |
 | `scripts/ci_compose_smoke.sh` | Docker Compose boot smoke test script (Layer 6) — wired into CI as `compose-smoke` job |
+| `scripts/install.sh` | Channel-aware release installer with checksum verification |
 | `tests/fixtures/providers.ci.yaml` | Minimal valid Ollama provider config for CI image smoke and production app-factory tests |
 | `scripts/wait_for_health.sh` | Reusable health check poller for CI scripts |
 | `schemas/tasks.py` | Pydantic schemas for Celery task input validation |

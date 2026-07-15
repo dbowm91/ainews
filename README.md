@@ -2,11 +2,32 @@
 
 AI-powered news aggregation and newsletter platform. Discovers, summarizes, and curates articles from configurable RSS/API sources using a multi-stage LLM pipeline with quality gates, subagent tool calling, and trend memory.
 
-> **Status:** Release candidate. Designed for single-node self-hosted use. See [Release Checklist](docs/release_checklist.md) for validation requirements.
+> **Status:** Release candidate. Release 3 installer is available. Designed for single-node self-hosted use. See [Release Checklist](docs/release_checklist.md) for validation requirements.
 
 ## Quick Start
 
-### Docker (fastest)
+### Installer (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dbowm91/ainews/main/scripts/install.sh | bash
+ainews onboard
+ainews start
+```
+
+Channel selection:
+```bash
+AINEWS_CHANNEL=stable ./scripts/install.sh
+AINEWS_CHANNEL=prerelease ./scripts/install.sh
+AINEWS_CHANNEL=main ./scripts/install.sh
+```
+
+Non-interactive flow:
+```bash
+AINEWS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/run/secrets/ainews-admin \
+  ./scripts/install.sh --non-interactive --bootstrap ./bootstrap.yaml --start
+```
+
+### Docker (alternative)
 
 1. Clone and enter the repo:
    ```bash
@@ -58,7 +79,7 @@ AI-powered news aggregation and newsletter platform. Discovers, summarizes, and 
 
 > **Ollama in Docker:** The default Ollama provider at `localhost:11434` does not work from inside Docker containers. See [Deployment Guide](docs/deployment.md#docker-with-ollama) for Docker-compatible Ollama setup.
 
-### Bare Metal
+### Bare Metal / Development
 
 Requires Python 3.12+, Redis, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
@@ -77,9 +98,11 @@ ollama pull qwen3:8b
 
 See [docs/quickstart.md](docs/quickstart.md) for full setup instructions.
 
-## Quick Start (Release 2)
+## Development Setup
 
-### Docker (fastest)
+For developers who want to work from a repository checkout:
+
+### Docker
 
 1. Clone and enter the repo:
    ```bash
@@ -123,6 +146,52 @@ git clone https://github.com/dbowm91/ainews.git && cd ainews
 uv sync
 ainews onboard  # Interactive setup
 ```
+
+## Installation
+
+### Supported Platforms
+
+| Platform | Architecture | Status |
+|----------|-------------|--------|
+| Linux | x86_64 | Supported |
+| Linux | arm64 | Supported |
+| macOS | arm64 | Supported |
+| Windows | x86_64 | WSL only |
+
+### Installation Modes
+
+**User installation** (default) — no root required:
+```
+~/.local/share/ainews/app/
+~/.config/ainews/
+~/.local/state/ainews/
+~/.local/bin/ainews
+```
+
+**System installation** — requires explicit `--system` flag and root privileges:
+```
+/opt/ainews/
+/etc/ainews/
+/var/lib/ainews/
+/var/log/ainews/
+/usr/local/bin/ainews
+```
+
+### Channel Selection
+
+| Channel | Description |
+|---------|-------------|
+| `stable` (default) | Latest non-prerelease GitHub release with checksum verification |
+| `prerelease` | Latest GitHub prerelease |
+| `main` | Exact commit SHA for development/evaluation |
+
+### Install Metadata
+
+The installer writes versioned metadata (channel, version, checksums, paths) to the canonical state directory for later update, rollback, and uninstall support. See [Release 3 Closure](docs/config-cli-release-3-closure.md) for details.
+
+### Windows (WSL)
+
+Windows native installation is not supported. Use Windows Subsystem for Linux (WSL) with a supported Linux distribution. See [Deployment Guide](docs/deployment.md) for details.
 
 ## Operator CLI
 
@@ -216,6 +285,8 @@ ainews ships with 48 built-in themes (6 light, 42 dark) derived from Halloy IRC 
 | `sources.yaml` | RSS/API feed sources |
 | `topics.yaml` | Topic classification categories |
 | `providers.yaml` | LLM provider configuration |
+| `~/.config/ainews/` | User config directory (installer-managed) |
+| `~/.local/state/ainews/` | State directory including install metadata |
 | [CLI Reference](docs/cli-reference.md) | Operator CLI commands |
 
 See [docs/configuration.md](docs/configuration.md) for the full reference.
@@ -246,9 +317,10 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [Theme Inventory](docs/themes-inventory.md) | Halloy theme collection inventory & provenance |
 | [Halloy Theme Contract](docs/halloy-theme-contract.md) | Supported source schema and translation rules |
 | [Security Triage](docs/security_triage.md) | Vulnerability triage, suppression policy, license review, container scanning |
-| [CLI Reference](docs/cli-reference.md) | Operator CLI reference |
+| [CLI Reference](docs/cli-reference.md) | Operator CLI commands |
 | [Onboarding](docs/onboarding.md) | First-run setup, profiles, bootstrap schema |
 | [Provider CLI](docs/providers-cli.md) | Provider management, testing, model discovery |
+| [Release 3 Closure](docs/config-cli-release-3-closure.md) | Release 3 evidence and gate audit |
 
 ## Release Validation
 

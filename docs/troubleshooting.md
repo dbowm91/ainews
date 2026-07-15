@@ -355,6 +355,60 @@ The safe fetch client sets `trust_env=False` and passes `proxies={}` on every re
 curl -sf --max-time 10 <url>
 ```
 
+### Source Connectivity (Doctor)
+
+When `ainews doctor --network` reports source connectivity failures, the probe uses the same SSRF-protected `safe_fetch_url()` client as production. Each reason code maps to a specific root cause:
+
+#### `ssrf_blocked` — source endpoint resolves to a private/reserved address
+
+```bash
+# The source URL resolves to a private, loopback, or reserved IP.
+# Common cause: URL points to an internal service or misconfigured DNS.
+# Fix: Verify the URL points to a publicly reachable endpoint.
+ainews doctor --network --json | jq '.checks[] | select(.reason_code == "ssrf_blocked")'
+```
+
+#### `dns_failure` — DNS resolution failed
+
+```bash
+# The source hostname could not be resolved.
+# Fix: Check DNS configuration and verify the hostname is correct.
+dig <hostname>
+```
+
+#### `connection_failed` — TCP connection refused or timed out at transport level
+
+```bash
+# The server is not accepting connections on the expected port.
+# Fix: Verify the URL and port, check firewall rules.
+curl -sf --max-time 5 <url>
+```
+
+#### `timeout` — request exceeded diagnostic time limits
+
+```bash
+# The server responded too slowly for the diagnostic probe (3s connect, 5s read, 10s total).
+# This may indicate a slow server or network issue, not necessarily a misconfiguration.
+# Fix: Check server load or increase SAFE_FETCH_TOTAL_TIMEOUT in .env.
+```
+
+#### `content_type_rejected` — response Content-Type not in allowlist
+
+```bash
+# The source returned a content type (e.g., application/json, binary) not expected for feeds.
+# For API sources, this may be normal — the probe only accepts RSS/Atom/HTML/XML types.
+# Fix: Verify the source returns the expected content type for its adapter type.
+curl -sI <url> | grep -i content-type
+```
+
+#### `http_error` — non-2xx HTTP status
+
+```bash
+# The server returned an error status code (4xx/5xx).
+# Fix: Check if the source URL is correct and the server is operational.
+curl -sf -o /dev/null -w "%{http_code}" <url>
+```
+
 ### Configuration Errors
 
 The configuration system emits structured diagnostics with severity, code, and remediation. Run `ainews config check` to see all errors and warnings, or `ainews config check --production` for production-specific checks.

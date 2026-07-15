@@ -643,6 +643,57 @@ jobs:
               json.dump(meta, f, indent=2)
           "
 
+      - name: Run onboarding via bootstrap fixture
+        run: |
+          INSTALL_DIR="${HOME}/.local/share/ainews/app"
+          export PATH="${HOME}/.local/bin:$PATH"
+
+          # Create bootstrap YAML for non-interactive onboarding
+          cat > /tmp/bootstrap.yaml <<'BOOTSTRAP'
+          version: 1
+          deployment:
+            profile: docker-local
+          admin:
+            username: admin
+            password_env: AINEWS_ADMIN_PASSWORD
+          provider:
+            type: ollama
+            id: ollama-local
+            base_url: http://ollama:11434/v1
+            default_model: auto
+          pipeline:
+            profile: lightweight-local
+          sources:
+            profile: minimal
+          newsletter:
+            enabled: false
+          start: false
+          BOOTSTRAP
+
+          # Set admin password for bootstrap
+          export AINEWS_ADMIN_PASSWORD="ci-lifecycle-password-123"
+
+          # Run onboarding (validates bootstrap, executes stages, writes metadata)
+          echo "=== Running ainews onboard --bootstrap ==="
+          ainews onboard --non-interactive --bootstrap /tmp/bootstrap.yaml
+          ONBOARD_EXIT=$?
+          echo "Onboarding exit code: $ONBOARD_EXIT"
+
+          # Verify onboarding state was written
+          STATE_DIR="${HOME}/.config/ainews"
+          if [[ -f "${STATE_DIR}/onboarding-state.json" ]]; then
+            echo "Onboarding state file: OK"
+            python3 -c "
+          import json
+          with open('${STATE_DIR}/onboarding-state.json') as f:
+              state = json.load(f)
+          completed = state.get('completed_stages', [])
+          print(f'Completed stages: {len(completed)}')
+          for s in completed:
+              print(f'  - {s}')
+          "
+          fi
+
       - name: Generate secrets and write .env
         run: |
           INSTALL_DIR="${HOME}/.local/share/ainews/app"

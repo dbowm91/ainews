@@ -219,6 +219,23 @@ The checksum is also recorded in `install-metadata.json` for auditability. To ma
 sha256sum -c SHA256SUMS
 ```
 
+### Proxy / Firewall Considerations
+
+The installer downloads release artifacts from `github.com`. If your environment requires a proxy:
+
+```bash
+# Set proxy for curl
+export https_proxy=http://proxy.example.com:8080
+export http_proxy=http://proxy.example.com:8080
+
+# Or configure git proxy (for source installation)
+git config --global http.proxy http://proxy.example.com:8080
+```
+
+Firewall rules must allow outbound HTTPS (port 443) to `github.com` and `api.github.com`. The installer also contacts Docker Hub for container images during `ainews start`.
+
+If the installer cannot reach GitHub, it will fail with a clear error message. Use `--download-only` to test connectivity without installing.
+
 ### Troubleshooting
 
 | Error | Cause | Fix |

@@ -224,6 +224,51 @@ class TestDoctorJSON:
             if f'"{pattern}":' in output:
                 pass  # Acceptable — doctor may mention config keys
 
+    def test_json_mode_via_global_flag(self) -> None:
+        """Doctor --json outputs valid JSON via global --json flag."""
+        result = run_cli("--json", "doctor")
+        if result.returncode == 0 and result.stdout.strip():
+            data = parse_json_output(result)
+            if data:
+                assert isinstance(data, dict), "Expected JSON object"
+                # Should have schema_version and checks
+                assert "schema_version" in data or "checks" in data, (
+                    f"Expected schema_version or checks in JSON output, got: {list(data.keys())}"
+                )
+
+    def test_json_mode_deterministic_fields(self) -> None:
+        """Doctor --json has deterministic field names."""
+        result = run_cli("--json", "doctor")
+        if result.returncode == 0 and result.stdout.strip():
+            data = parse_json_output(result)
+            if data and "checks" in data:
+                for check in data["checks"]:
+                    assert "name" in check, f"Check missing 'name' field: {check}"
+                    assert "status" in check, f"Check missing 'status' field: {check}"
+
+    def test_json_mode_no_secrets(self) -> None:
+        """Doctor --json output contains no secrets."""
+        result = run_cli("--json", "doctor")
+        output = result.stdout.lower()
+        for pattern in SECRET_PATTERNS:
+            assert f'"{pattern}":' not in output or pattern == "token", (
+                f"Potential secret in doctor JSON output: {pattern}"
+            )
+
+    def test_network_flag(self) -> None:
+        """Doctor --network runs connectivity checks."""
+        result = run_cli("doctor", "--network")
+        # May exit 0 or 1 depending on network availability
+        assert result.returncode in (0, 1)
+
+    def test_network_flag_with_json(self) -> None:
+        """Doctor --network --json outputs valid JSON."""
+        result = run_cli("--json", "doctor", "--network")
+        if result.returncode == 0 and result.stdout.strip():
+            data = parse_json_output(result)
+            if data:
+                assert isinstance(data, dict), "Expected JSON object"
+
 
 # ---------------------------------------------------------------------------
 # Tests: ainews status --json
@@ -269,6 +314,78 @@ class TestExitCodeConsistency:
     def test_unknown_command_exits_nonzero(self) -> None:
         result = run_cli("nonexistent-command-xyz")
         assert result.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews onboard --json
+# ---------------------------------------------------------------------------
+
+
+class TestOnboardingJSON:
+    """Tests for `ainews onboard` JSON output contract."""
+
+    def test_dry_run_json_output(self) -> None:
+        """Onboard --dry-run --json outputs valid JSON."""
+        result = run_cli("--json", "onboard", "--dry-run")
+        # dry-run should succeed
+        if result.stdout.strip():
+            data = parse_json_output(result)
+            if data:
+                assert isinstance(data, dict), "Expected JSON object"
+                assert data.get("dry_run") is True, "Expected dry_run=True"
+
+    def test_dry_run_shows_bootstrap_config(self) -> None:
+        """Onboard --dry-run --json with bootstrap shows parsed config."""
+        # Create a minimal bootstrap YAML
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write("""
+version: 1
+deployment:
+  profile: docker-local
+admin:
+  username: admin
+  password_env: AINEWS_TEST_PASSWORD
+provider:
+  type: ollama
+  id: ollama-local
+  base_url: http://localhost:11434/v1
+  default_model: auto
+pipeline:
+  profile: lightweight-local
+sources:
+  profile: minimal
+newsletter:
+  enabled: false
+start: false
+""")
+            bootstrap_path = f.name
+
+        try:
+            os.environ["AINEWS_TEST_PASSWORD"] = "test-password-123"
+            result = run_cli("--json", "onboard", "--dry-run", "--config-file", bootstrap_path)
+            if result.stdout.strip():
+                data = parse_json_output(result)
+                if data and "bootstrap" in data:
+                    bootstrap = data["bootstrap"]
+                    assert bootstrap.get("version") == 1
+                    assert bootstrap.get("deployment", {}).get("profile") == "docker-local"
+        finally:
+            os.unlink(bootstrap_path)
+            os.environ.pop("AINEWS_TEST_PASSWORD", None)
+
+    def test_onboard_non_interactive_requires_config_file(self) -> None:
+        """Onboard --non-interactive without --config-file fails."""
+        result = run_cli("onboard", "--non-interactive")
+        # Should fail with validation error
+        assert result.returncode != 0
+
+    def test_onboard_json_no_secrets(self) -> None:
+        """Onboard --json output contains no embedded secrets."""
+        result = run_cli("--json", "onboard", "--dry-run")
+        output = result.stdout.lower()
+        # Should not contain raw password values
+        assert "test-password" not in output, "Raw secret found in onboarding output"
 
 
 # ---------------------------------------------------------------------------

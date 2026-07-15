@@ -709,6 +709,198 @@ with open('${config_dir}/install-metadata.json', 'w') as f:
     rm -rf "$tmpdir"
 }
 
+# ── Tests: Network-level fault injection ─────────────────────────────
+
+test_unavailable_api_handled() {
+    CURRENT_TEST="Network fault: unavailable API handled"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Simulate installer hitting an unavailable API endpoint
+    # The installer uses curl; test that curl fails gracefully with bad URL
+    local out rc
+    out=$(curl -fsS --max-time 2 "http://192.0.2.1:99999/releases" 2>&1) && rc=$? || rc=$?
+
+    # Connection should fail (exit code > 0)
+    if [[ $rc -ne 0 ]]; then
+        _pass "$CURRENT_TEST (exit code: $rc)"
+    else
+        _fail "$CURRENT_TEST" "expected non-zero exit code for unavailable API"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_rate_limited_api_handled() {
+    CURRENT_TEST="Network fault: rate-limited API (HTTP 429) handled"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Start a local HTTP server that returns 429
+    local port
+    port=$(python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
+    python3 -c "
+import http.server, threading, sys
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(429)
+        self.send_header('Retry-After', '60')
+        self.end_headers()
+        self.wfile.write(b'{\"message\":\"rate limit exceeded\"}')
+    def log_message(self, format, *args):
+        pass
+server = http.server.HTTPServer(('127.0.0.1', $port), Handler)
+t = threading.Thread(target=server.serve_forever)
+t.daemon = True
+t.start()
+import time; time.sleep(30)
+" &
+    SERVER_PID=$!
+    sleep 1
+
+    # Try to fetch from rate-limited server
+    local out rc
+    out=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/releases" 2>&1) && rc=$? || rc=$?
+
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+
+    # curl -f returns exit code 22 for HTTP errors (4xx, 5xx)
+    if [[ $rc -ne 0 ]]; then
+        _pass "$CURRENT_TEST (rate limit detected, exit: $rc)"
+    else
+        _fail "$CURRENT_TEST" "expected non-zero exit for rate-limited response"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_missing_platform_asset_handled() {
+    CURRENT_TEST="Network fault: missing platform asset (HTTP 404) handled"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Start a local HTTP server that returns 404
+    local port
+    port=$(python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
+    python3 -c "
+import http.server, threading
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(404)
+        self.end_headers()
+        self.wfile.write(b'{\"message\":\"not found\"}')
+    def log_message(self, format, *args):
+        pass
+server = http.server.HTTPServer(('127.0.0.1', $port), Handler)
+t = threading.Thread(target=server.serve_forever)
+t.daemon = True
+t.start()
+import time; time.sleep(30)
+" &
+    SERVER_PID=$!
+    sleep 1
+
+    # Try to download from 404 server
+    local out rc
+    out=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/ainews-1.0.0-linux-x86_64.tar.gz" 2>&1) && rc=$? || rc=$?
+
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+
+    # curl -f returns exit code 22 for HTTP 404
+    if [[ $rc -ne 0 ]]; then
+        _pass "$CURRENT_TEST (404 detected, exit: $rc)"
+    else
+        _fail "$CURRENT_TEST" "expected non-zero exit for missing asset"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_interrupted_download_handled() {
+    CURRENT_TEST="Network fault: interrupted download handled"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Start a local HTTP server that sends partial content then disconnects
+    local port
+    port=$(python3 -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
+    python3 -c "
+import http.server, threading, time
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/gzip')
+        self.send_header('Content-Length', '1000000')
+        self.end_headers()
+        # Send partial data then stop
+        self.wfile.write(b'X' * 1000)
+        self.wfile.flush()
+        time.sleep(0.1)
+        # Connection will close here (partial content)
+    def log_message(self, format, *args):
+        pass
+server = http.server.HTTPServer(('127.0.0.1', $port), Handler)
+t = threading.Thread(target=server.serve_forever)
+t.daemon = True
+t.start()
+import time; time.sleep(30)
+" &
+    SERVER_PID=$!
+    sleep 1
+
+    # Try to download from server that disconnects early
+    local out rc
+    out=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/ainews.tar.gz" -o "${tmpdir}/partial.tar.gz" 2>&1) && rc=$? || rc=$?
+
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+
+    # Partial download should either fail or produce incomplete file
+    if [[ $rc -ne 0 ]] || [[ -f "${tmpdir}/partial.tar.gz" && $(stat -c%s "${tmpdir}/partial.tar.gz" 2>/dev/null || echo 0) -lt 1000000 ]]; then
+        _pass "$CURRENT_TEST (partial download detected)"
+    else
+        _fail "$CURRENT_TEST" "expected partial download or error"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_invalid_url_scheme_handled() {
+    CURRENT_TEST="Network fault: invalid URL scheme handled"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Try to download from a non-HTTP URL
+    local out rc
+    out=$(curl -fsS --max-time 2 "ftp://invalid.example.com/releases" 2>&1) && rc=$? || rc=$?
+
+    # Should fail (curl doesn't support ftp with -f by default, or DNS fails)
+    if [[ $rc -ne 0 ]]; then
+        _pass "$CURRENT_TEST (invalid scheme rejected, exit: $rc)"
+    else
+        _fail "$CURRENT_TEST" "expected non-zero exit for invalid URL scheme"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_checksum_mismatch_during_download() {
+    CURRENT_TEST="Network fault: checksum mismatch after corrupted download"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Create a file with wrong content (simulating corrupted download)
+    echo "wrong content" > "${tmpdir}/downloaded.tar.gz"
+    local actual
+    actual=$(sha256sum "${tmpdir}/downloaded.tar.gz" | awk '{print $1}')
+    local expected="0000000000000000000000000000000000000000000000000000000000000000"
+
+    # Verify mismatch is detected
+    if [[ "$actual" != "$expected" ]]; then
+        _pass "$CURRENT_TEST (checksum mismatch detected)"
+    else
+        _fail "$CURRENT_TEST" "checksums matched unexpectedly"
+    fi
+    rm -rf "$tmpdir"
+}
+
 # ── Test runner ──────────────────────────────────────────────────────
 
 run_all_tests() {

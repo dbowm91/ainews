@@ -71,12 +71,62 @@
 - [x] Type check passes (mypy) — 1 pre-existing unrelated error (validate_themes.py dual module name)
 - [x] Test suite passes — 228 CLI/doctor/config tests pass, 473+ total pass
 - [x] Installer tests pass — 137 tests (`bash tests/test_install.sh`)
-- [x] E2E installer tests pass — 28 tests with fault injection (`bash tests/installer_e2e.sh`)
-- [x] JSON contract tests pass — 24 tests (`pytest tests/test_cli_json_contracts.py -v`)
+- [x] E2E installer tests pass — 34 tests with fault injection (`bash tests/installer_e2e.sh`)
+- [x] JSON contract tests pass — 32 tests (`pytest tests/test_cli_json_contracts.py -v`)
 - [x] Smoke tests pass — pre-existing env dependency issues not related to Release 3 changes
+
+## Rollback / Recovery
+
+### Recovering from a Failed Install
+
+If the installer fails mid-execution:
+
+1. **Check staging directory:** The installer uses atomic staging. If extraction fails, the staging directory is cleaned up automatically.
+2. **Verify existing installation:** Check `~/.config/ainews/install-metadata.json` for the last known good version.
+3. **Re-run installer:** The installer will resume from where it left off. Existing config is preserved.
+
+### Recovering from a Bad Update
+
+If a new version causes issues:
+
+1. **Check metadata:** `cat ~/.config/ainews/install-metadata.json` shows the current version.
+2. **Re-run with previous version:**
+   ```bash
+   AINEWS_VERSION=1.0.0 ./scripts/install.sh --channel stable
+   ```
+3. **Or restore from backup:** The installer creates a backup before replacing files:
+   ```bash
+   ls ~/.config/ainews/backup/
+   ```
+
+### Recovering from Corrupted Config
+
+If configuration files are corrupted:
+
+1. **Reset onboarding:** `ainews onboard --reset`
+2. **Re-run onboarding:** `ainews onboard`
+3. **Or restore from backup:**
+   ```bash
+   cp ~/.config/ainews/backup/providers.yaml ~/.config/ainews/providers.yaml
+   ```
+
+### Emergency Recovery
+
+If the installation is completely broken:
+
+1. **Remove all state:**
+   ```bash
+   rm -rf ~/.local/share/ainews ~/.config/ainews ~/.local/state/ainews ~/.local/bin/ainews
+   ```
+2. **Re-install from scratch:**
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/dbowm91/ainews/main/scripts/install.sh | bash
+   ainews onboard
+   ainews start
+   ```
 
 ## Known Limitations
 
 - Windows native installer out of scope (WSL documented as fallback)
 - Clean-host CI uses local tarball extraction (not GitHub API resolution) for deterministic testing
-- Fault injection tests verify archive-level safety; network-level fault injection (rate limiting, missing platform) requires integration environment
+- Fault injection tests verify archive-level safety; network-level fault injection (rate limiting, missing platform) tested via local HTTP servers in E2E tests

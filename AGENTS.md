@@ -381,6 +381,27 @@ The release workflow at `.github/workflows/release.yml` builds platform-specific
 - **Release:** `softprops/action-gh-release@v2` with auto-generated notes; `-rc`/`-beta`/`-alpha` tags marked as prerelease
 - **Artifact naming:** `ainews-{version}-{platform}.tar.gz` (matches installer's `resolve_artifact_url()`)
 
+### Installer CI Architecture
+The clean-host CI workflow at `.github/workflows/installer-smoke.yml` validates the installer as a supported operational path:
+- **Build job:** Builds a test tarball from the repo for deterministic testing (no GitHub API required)
+- **Linux x86_64:** Full install to canonical user paths, metadata verification, ainews version, config check, doctor --production
+- **Linux aarch64:** Native ARM runner for ARM validation
+- **macOS arm64:** Cross-platform canonical path validation
+- **Deferred prerequisite:** Tests installation without Docker, verifies metadata distinguishes installed/configured/running states
+- **Docker unavailable:** Verifies graceful degradation when Docker daemon is missing
+
+The workflow builds a local tarball to avoid GitHub API dependency in CI. The installer's GitHub API resolution is tested by the existing shell tests (`tests/test_install.sh`).
+
+### Artifact Validation
+The artifact validation script at `scripts/validate_artifact.sh` pre-publishes release assets:
+- Expected top-level structure (files and directories)
+- Executable CLI entry point with correct shebang
+- Compose files, migrations, themes, static assets present
+- No repository secrets, caches, test databases, `.env`, or developer state
+- No absolute paths or escaping links in archive
+- SHA-256 checksum verification against SHA256SUMS
+- Version metadata cross-check with pyproject.toml (when `--tag` provided)
+
 ### Installer Tests
 Shell tests at `tests/test_install.sh` cover:
 - Argument parsing (all flags, missing values, unknown flags)
@@ -389,7 +410,26 @@ Shell tests at `tests/test_install.sh` cover:
 - Checksum verification helpers
 - Metadata writing (valid JSON, correct fields, permissions)
 - Input validation (empty, absolute, traversal, newlines)
-- 74 tests, 119 assertions — run with `bash tests/test_install.sh`
+- Fault injection (corrupted archives, traversal, symlinks, device nodes, checksum mismatches, unwritable directories)
+- 92 tests, 170+ assertions — run with `bash tests/test_install.sh`
+
+End-to-end installer tests at `tests/installer_e2e.sh` cover:
+- Post-install canonical directory creation
+- Metadata written with correct schema and no secrets
+- Archive safety (traversal, absolute paths, symlinks, corruption, truncation)
+- Checksum mismatch detection
+- Unwritable directory handling
+- Lifecycle exit codes
+- 24 tests — run with `bash tests/installer_e2e.sh`
+
+JSON contract tests at `tests/test_cli_json_contracts.py` cover:
+- `ainews version --json` schema and no-secrets check
+- `ainews config path --json` structure and no-secrets check
+- `ainews config check --json` status/exit-code consistency
+- `ainews doctor --json` schema_version, checks, counts, outcome
+- Exit code consistency across commands
+- Additive evolution policy (extra fields accepted)
+- 30+ tests — run with `pytest tests/test_cli_json_contracts.py -v`
 
 ### Doctor Package Architecture
 The `ainews_cli/doctor/` package provides system diagnostics. It is structured as:
@@ -585,6 +625,7 @@ The following CI jobs must pass before merge. These are configured as required s
 | `compose-smoke` | Full Docker Compose boot + `/health` endpoint |
 | `gitleaks` | Secret scanning |
 | `theme-browser-smoke` | Playwright/Chromium browser tests for theme subsystem |
+| `installer-smoke` | Clean-host installer validation (Linux x86_64, aarch64, macOS arm64, deferred prerequisite) |
 
 ### Concurrency
 

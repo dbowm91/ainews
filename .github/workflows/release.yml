@@ -115,6 +115,17 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
 
+      - name: Cross-check version against pyproject.toml
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+            echo "ERROR: Tag version (${TAG_VERSION}) does not match pyproject.toml version (${PKG_VERSION})"
+            exit 1
+          fi
+          echo "Version cross-check: tag=${TAG_VERSION} == pyproject.toml=${PKG_VERSION} — OK"
+
       - name: Write wrapper script
         run: |
           cat > ainews <<'WRAPPER'
@@ -182,6 +193,37 @@ jobs:
           echo ""
           echo "Staging disk usage:"
           du -sh "${STAGING}/"
+
+      - name: Check generated assets match committed versions
+        run: |
+          echo "=== Checking generated asset drift ==="
+          
+          # Check critical CSS
+          python3 scripts/build_critical_css.py 2>/dev/null || true
+          if [[ -f static/css/critical.css ]]; then
+            CRITICAL_HASH=$(sha256sum static/css/critical.css | awk '{print $1}')
+            # The generated file should match what's committed
+            if ! git diff --quiet static/css/critical.css 2>/dev/null; then
+              echo "WARNING: static/css/critical.css differs from committed version"
+              git diff static/css/critical.css
+            else
+              echo "critical.css — OK (matches committed)"
+            fi
+          fi
+          
+          # Check bundled CSS
+          python3 scripts/build_assets.py css 2>/dev/null || true
+          if [[ -f static/css/style.bundled.css ]]; then
+            BUNDLED_HASH=$(sha256sum static/css/style.bundled.css | awk '{print $1}')
+            if ! git diff --quiet static/css/style.bundled.css 2>/dev/null; then
+              echo "WARNING: static/css/style.bundled.css differs from committed version"
+              git diff static/css/style.bundled.css
+            else
+              echo "style.bundled.css — OK (matches committed)"
+            fi
+          fi
+          
+          echo "Asset drift check complete"
 
       - name: Create tarball
         run: |

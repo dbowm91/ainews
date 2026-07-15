@@ -111,6 +111,7 @@ DOWNLOAD_ONLY=false
 DRY_RUN=false
 YES=false
 INSECURE=false
+INSTALL_MODE_COUNT=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -124,9 +125,9 @@ while [[ $# -gt 0 ]]; do
             [[ $# -lt 2 ]] && die "Missing value for --commit"
             COMMIT="$2"; shift 2 ;;
         --user)
-            INSTALL_MODE="user"; shift ;;
+            INSTALL_MODE="user"; INSTALL_MODE_COUNT=$((INSTALL_MODE_COUNT + 1)); shift ;;
         --system)
-            INSTALL_MODE="system"; shift ;;
+            INSTALL_MODE="system"; INSTALL_MODE_COUNT=$((INSTALL_MODE_COUNT + 1)); shift ;;
         --prefix)
             [[ $# -lt 2 ]] && die "Missing value for --prefix"
             PREFIX="$2"; shift 2 ;;
@@ -171,6 +172,10 @@ if [[ -n "$COMMIT" ]]; then
         || die "Invalid commit SHA: '${COMMIT}'. Expected 7-40 hex characters"
 fi
 
+if [[ "$INSTALL_MODE_COUNT" -gt 1 ]]; then
+    die "Cannot use both --user and --system. Choose one install mode."
+fi
+
 if [[ "$INSTALL_MODE" == "system" && $EUID -ne 0 ]]; then
     die "System install requires root. Run with sudo or use --user."
 fi
@@ -185,6 +190,7 @@ if [[ -n "$BOOTSTRAP" ]]; then
 fi
 
 [[ "$NON_INTERACTIVE" == true && "$YES" == false ]] && YES=true
+
 
 # ── Platform detection ──────────────────────────────────────────────
 
@@ -204,6 +210,20 @@ detect_platform() {
     esac
 
     echo "${os}-${arch}"
+}
+
+detect_libc() {
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        echo "n/a"
+        return
+    fi
+    if command -v ldd &>/dev/null; then
+        local version
+        version=$(ldd --version 2>&1 | head -1 | grep -oP '\d+\.\d+' | head -1)
+        echo "${version:-unknown}"
+    else
+        echo "unknown"
+    fi
 }
 
 # ── Dependency checks ───────────────────────────────────────────────
@@ -481,6 +501,24 @@ extract_to_staging() {
         echo "$escaping" >&2
         die "Refusing to continue. The artifact may be tampered with."
     fi
+
+    # Post-extraction safety: reject device nodes, FIFOs, sockets
+    local bad_types
+    bad_types=$(find "$staging" \( -type c -o -type b -o -p -o -s \) 2>/dev/null | head -20)
+    if [[ -n "$bad_types" ]]; then
+        log_error "Archive contains device nodes, FIFOs, or sockets:"
+        echo "$bad_types" >&2
+        die "Refusing to continue. Release artifacts must not contain special files."
+    fi
+
+    # Post-extraction safety: reject hardlinks
+    local hardlinks
+    hardlinks=$(find "$staging" -type f -links +1 2>/dev/null | head -20)
+    if [[ -n "$hardlinks" ]]; then
+        log_error "Archive contains hardlinks:"
+        echo "$hardlinks" >&2
+        die "Hardlinks are not allowed in release artifacts."
+    fi
 }
 
 # ── Path computation ────────────────────────────────────────────────
@@ -570,6 +608,12 @@ do_install() {
 
     platform=$(detect_platform)
     log_info "Platform: ${platform}"
+
+    if [[ "$(uname -s)" == Linux* ]]; then
+        local libc_ver
+        libc_ver=$(detect_libc)
+        log_info "libc: ${libc_ver}"
+    fi
 
     check_deps
 
@@ -828,6 +872,13 @@ do_install() {
     fi
 
     if [[ "$DO_START" == true ]]; then
+        if ! command -v docker &>/dev/null; then
+            log_warn "Docker not found. ainews start may require Docker for some services."
+            log_warn "Install Docker: https://docs.docker.com/get-docker/"
+        elif ! docker info &>/dev/null 2>&1; then
+            log_warn "Docker daemon is not running. ainews start may fail."
+        fi
+
         log_step "Starting ainews..."
         if command -v ainews &>/dev/null; then
             ainews start || log_error "Failed to start ainews. Check 'ainews doctor' for diagnostics."

@@ -2,7 +2,7 @@
 
 AI-powered news aggregation and newsletter platform. Discovers, summarizes, and curates articles from configurable RSS/API sources using a multi-stage LLM pipeline with quality gates, subagent tool calling, and trend memory.
 
-> **Status:** Release candidate. Release 3 installer is available. Designed for single-node self-hosted use. See [Release Checklist](docs/release_checklist.md) for validation requirements.
+> **Status:** Release 3 complete. Installer-based installation is the primary supported path. See [Release 3 Closure](docs/config-cli-release-3-closure.md) for evidence and gate audit.
 
 ## Quick Start
 
@@ -330,13 +330,23 @@ Run one command to validate your changes match CI gates:
 bash scripts/validate_release.sh          # Full: lint + tests + smoke + Docker + Compose
 bash scripts/validate_release.sh --fast   # Quick: ruff + targeted smoke tests
 bash scripts/validate_release.sh --security  # pip-audit + secret scanning
+bash scripts/validate_artifact.sh ainews-X.Y.Z-linux-x86_64.tar.gz  # Artifact validation
 ```
 
 Installer tests:
 
 ```bash
-bash tests/test_install.sh               # 74 tests, 119 assertions
+bash tests/test_install.sh               # 92 tests, 170+ assertions
+bash tests/installer_e2e.sh              # 24 end-to-end tests with fault injection
+pytest tests/test_cli_json_contracts.py  # JSON contract tests for CLI output
 ```
+
+Clean-host CI (`.github/workflows/installer-smoke.yml`) validates:
+- Linux x86_64 full install + lifecycle
+- Linux aarch64 native ARM
+- macOS arm64
+- Deferred prerequisite (no Docker)
+- Docker unavailable graceful degradation
 
 Release artifacts are built by `.github/workflows/release.yml` on `v*` tag pushes. The workflow produces platform-specific tarballs (`linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-aarch64`) with SHA256SUMS checksums and creates a GitHub Release.
 

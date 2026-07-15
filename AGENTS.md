@@ -24,7 +24,7 @@ This document provides instructions and context for agents working on the AI New
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
 *   `ainews_config/`: Configuration engine package (CLI-independent). Contains path resolver, field registry, loader, validator, and transactional writer.
-*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, onboard, providers (list/add/test/models/set-default/assign/remove), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/set-secret/unset/diff/rollback), doctor.
+*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, onboard, providers (list/add/test/models/set-default/assign/remove), sources (list/show/add/update/enable/disable/remove/test/import-opml/export-opml), topics (list/show/add/update/remove), pipeline (show/validate/set-profile/assign/unassign/diff), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/set-secret/unset/diff/rollback), doctor. Subpackages: `providers/` (adapter protocol, registry, built-in adapters), `sources/` (adapter protocol, registry, OPML, built-in adapters), `topics/` (models, commands), `pipeline/` (models, commands), `lifecycle/` (Docker Compose/bare metal drivers), `doctor/` (diagnostic checks).
 
 ## Known Issues & Gotchas
 

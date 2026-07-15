@@ -281,6 +281,22 @@ ainews providers-set-default ID         # Set default provider
 ainews providers-assign ID MODEL [ROLES]  # Assign to pipeline roles
 ainews providers-remove ID              # Remove a provider
 
+# Source management
+ainews sources-list                      # Show configured sources
+ainews sources-add --type rss            # Add a source interactively
+ainews sources-test [ID]                # Test source connectivity
+ainews sources-import-opml FILE          # Import from OPML
+ainews sources-export-opml -o feeds.opml # Export to OPML
+
+# Topic management
+ainews topics-list                       # Show configured topics
+ainews topics-add --name "AI"            # Add a topic
+
+# Pipeline administration
+ainews pipeline-show                     # Show role assignments
+ainews pipeline-validate                 # Validate configuration
+ainews pipeline-set-profile balanced     # Apply a named profile
+
 # Service lifecycle
 ainews start                             # Start all services
 ainews stop                              # Stop services

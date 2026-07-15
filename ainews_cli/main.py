@@ -633,6 +633,18 @@ def config_rollback(
 from ainews_cli.providers.commands import register_commands as _register_provider_commands  # noqa: E402
 _register_provider_commands(app, _ctx, _out)
 
+from ainews_cli.sources.commands import register_commands as _register_source_commands  # noqa: E402
+_register_source_commands(app, _ctx, _out)
+
+from ainews_cli.topics.commands import register_commands as _register_topic_commands  # noqa: E402
+_register_topic_commands(app, _ctx, _out)
+
+from ainews_cli.pipeline.commands import register_commands as _register_pipeline_commands  # noqa: E402
+_register_pipeline_commands(app, _ctx, _out)
+
+from ainews_cli.sources.commands import register_commands as _register_source_commands  # noqa: E402
+_register_source_commands(app, _ctx, _out)
+
 
 @app.command()
 def doctor(

@@ -528,6 +528,324 @@ Remove a provider from configuration. If the provider is assigned to pipeline ro
 
 ---
 
+## Source Management
+
+### `ainews sources-list`
+
+Show all configured sources with type, enabled status, endpoint, and schedule.
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+---
+
+### `ainews sources-show SOURCE_ID`
+
+Show details for a specific source including configuration and topic matching.
+
+**Arguments:**
+- `SOURCE_ID` — Source ID to show (required)
+
+**Exit codes:**
+- `0` — Source found
+- `5` — Source not found
+
+---
+
+### `ainews sources-add`
+
+Add a new source interactively or from flags. Without `--type`, lists available adapter types. With `--type`, enters interactive field collection.
+
+**Options:**
+- `--type`, `-t` — Source type (`rss`, `api`, `web`)
+- `--dry-run` — Show what would change without writing
+
+**Adapter types:**
+| Type | Display Name | OPML Support | Key Fields |
+|------|-------------|--------------|------------|
+| `rss` | RSS Feed | Yes | `feed_url` |
+| `api` | REST API | No | `list_url`, `api_key` |
+| `web` | Web Scraper | No | `listing_url`, `card_selector`, `link_selector` |
+
+Each adapter implements the `SourceSetupAdapter` protocol: `fields()`, `build_definition()`, `test_source()`, `opml_repr()`, `from_opml()`.
+
+---
+
+### `ainews sources-update SOURCE_ID`
+
+Update basic fields of an existing source.
+
+**Arguments:**
+- `SOURCE_ID` — Source ID to update (required)
+
+**Options:**
+- `--name` — New display name
+- `--schedule` — New schedule interval in minutes (5-1440)
+- `--url` — New endpoint URL
+
+**Exit codes:**
+- `0` — Source updated
+- `5` — Source not found
+
+---
+
+### `ainews sources-enable SOURCE_ID`
+
+Enable a disabled source.
+
+**Arguments:**
+- `SOURCE_ID` — Source ID to enable (required)
+
+**Exit codes:**
+- `0` — Source enabled or already enabled
+- `5` — Source not found
+
+---
+
+### `ainews sources-disable SOURCE_ID`
+
+Disable a source without removing it.
+
+**Arguments:**
+- `SOURCE_ID` — Source ID to disable (required)
+
+**Exit codes:**
+- `0` — Source disabled or already disabled
+- `5` — Source not found
+
+---
+
+### `ainews sources-remove SOURCE_ID`
+
+Remove a source from configuration. Associated articles and historical data are preserved.
+
+**Arguments:**
+- `SOURCE_ID` — Source ID to remove (required)
+
+**Options:**
+- `--force`, `-f` — Skip confirmation prompt
+
+**Exit codes:**
+- `0` — Source removed
+- `5` — Source not found
+
+---
+
+### `ainews sources-test [SOURCE_ID]`
+
+Test source connectivity and configuration using the shared safe-probe layer. Without an argument, tests all configured sources.
+
+**Arguments:**
+- `SOURCE_ID` — Source ID to test (optional, tests all if omitted)
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+**Test layers:**
+1. Schema validity
+2. URL and SSRF safety
+3. Connectivity and authentication
+4. Bounded response retrieval
+
+**Outcomes:** `reachable`, `degraded`, `blocked`, `unreachable`
+
+---
+
+### `ainews sources-import-opml FILE`
+
+Import sources from an OPML file. Defaults to dry-run preview.
+
+**Arguments:**
+- `FILE` — Path to OPML file (required)
+
+**Options:**
+- `--conflict` — Conflict strategy: `skip` (default), `merge`, `replace`, `rename`
+- `--no-dry-run` — Actually apply changes (default is dry-run)
+
+**Safety features:**
+- Maximum file size: 1 MB
+- Maximum outline depth: 10
+- Maximum outline count: 500
+- XML entity declarations (XXE) rejected
+- Only `http://` and `https://` URLs accepted
+
+**Exit codes:**
+- `0` — Import completed
+- `4` — File I/O error
+
+---
+
+### `ainews sources-export-opml`
+
+Export sources to an OPML file. Only exports enabled RSS sources with valid `feed_url`. Credentials are never included.
+
+**Options:**
+- `--output`, `-o` — Output file path (stdout if omitted)
+- `--all` — Export all sources (not just enabled)
+
+**Exit codes:**
+- `0` — Export completed
+- `4` — File I/O error
+
+---
+
+## Topic Management
+
+### `ainews topics-list`
+
+Show all configured topics with display name, color, and description.
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+---
+
+### `ainews topics-show TOPIC_ID`
+
+Show details for a specific topic.
+
+**Arguments:**
+- `TOPIC_ID` — Topic ID to show (required)
+
+**Exit codes:**
+- `0` — Topic found
+- `5` — Topic not found
+
+---
+
+### `ainews topics-add`
+
+Add a new topic interactively or from flags.
+
+**Options:**
+- `--name` — Topic display name
+- `--description` — Topic description
+- `--color` — Topic color (default: `blue`)
+- `--query` — Search query for matching
+
+**Behavior:**
+- Topic ID is auto-generated from the display name (lowercase, underscores)
+- Duplicate IDs are rejected
+
+---
+
+### `ainews topics-update TOPIC_ID`
+
+Update an existing topic's fields.
+
+**Arguments:**
+- `TOPIC_ID` — Topic ID to update (required)
+
+**Options:**
+- `--name` — New display name
+- `--description` — New description
+- `--color` — New color
+- `--query` — New search query
+
+**Exit codes:**
+- `0` — Topic updated
+- `5` — Topic not found
+
+---
+
+### `ainews topics-remove TOPIC_ID`
+
+Remove a topic from configuration.
+
+**Arguments:**
+- `TOPIC_ID` — Topic ID to remove (required)
+
+**Options:**
+- `--force`, `-f` — Skip confirmation prompt
+
+**Exit codes:**
+- `0` — Topic removed
+- `5` — Topic not found
+
+---
+
+## Pipeline Administration
+
+### `ainews pipeline-show`
+
+Show current pipeline role assignments (selector, researcher, writer, editor).
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+---
+
+### `ainews pipeline-validate`
+
+Validate pipeline configuration: provider existence, model specification, enabled state.
+
+**Options:**
+- `--json`, `-j` — Output in JSON format
+
+**Exit codes:**
+- `0` — Configuration valid
+- `3` — Validation errors found
+
+---
+
+### `ainews pipeline-set-profile`
+
+Apply a named pipeline profile overlaying provider/model assignments.
+
+**Options:**
+- `--profile`, `-p` — Profile name: `balanced`, `fast`, `cheap` (required)
+
+**Profiles:**
+| Profile | Description |
+|---------|-------------|
+| `balanced` | qwen3:8b for all roles |
+| `fast` | qwen3:4b for all roles |
+| `cheap` | Mixed smaller models |
+
+**Exit codes:**
+- `0` — Profile applied
+- `3` — Unknown profile
+
+---
+
+### `ainews pipeline-assign ROLE PROVIDER/MODEL`
+
+Assign a provider/model to a pipeline role.
+
+**Arguments:**
+- `ROLE` — Pipeline role: `selector`, `researcher`, `writer`, `editor` (required)
+- `PROVIDER/MODEL` — Provider and model in format `provider_id/model_name` (required)
+
+**Exit codes:**
+- `0` — Assignment committed
+- `3` — Invalid role or format
+- `5` — Provider not found
+
+---
+
+### `ainews pipeline-unassign ROLE`
+
+Remove provider/model assignment from a pipeline role.
+
+**Arguments:**
+- `ROLE` — Pipeline role to unassign (required)
+
+**Exit codes:**
+- `0` — Unassigned
+- `3` — Invalid role
+- `5` — No assignment found
+
+---
+
+### `ainews pipeline-diff`
+
+Show differences from a baseline pipeline configuration.
+
+**Options:**
+- `--baseline` — Baseline profile or `defaults`
+
+---
+
 ## Service Lifecycle
 
 ### `ainews start`

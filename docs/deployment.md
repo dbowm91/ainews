@@ -599,6 +599,53 @@ ainews service render --systemd --profile docker_compose
 ainews service install --systemd --profile docker_compose --enable
 ```
 
+### Systemd Hardening
+
+Generated units include comprehensive security hardening:
+
+| Directive | Purpose |
+|-----------|---------|
+| `NoNewPrivileges=true` | Prevent privilege escalation |
+| `PrivateTmp=true` | Isolated `/tmp` directory |
+| `ProtectSystem=strict` | Read-only `/usr`, `/boot`, `/efi` |
+| `ProtectHome=true` | Hide `/home`, `/root`, `/run/user` |
+| `UMask=0027` | Restrict file permissions |
+| `CapabilityBoundingSet=` | Drop all Linux capabilities |
+| `RestrictNamespaces=true` | Prevent namespace creation |
+| `RestrictRealtime=true` | Prevent real-time scheduling |
+| `RestrictSUIDSGID=true` | Prevent SUID/SGID files |
+| `MemoryDenyWriteExecute=true` | Prevent W^X violations |
+| `LockPersonality=true` | Lock execution domain |
+| `SystemCallArchitectures=native` | Prevent ABI emulation |
+| `PrivateDevices=true` | Hide physical devices |
+| `ProtectKernelTunables=true` | Protect `/proc`, `/sys` |
+| `ProtectKernelModules=true` | Prevent module loading |
+| `ProtectControlGroups=true` | Protect cgroup hierarchy |
+| `ProtectClock=true` | Prevent clock changes |
+| `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX` | Limit socket types |
+
+**Docker Compose compatibility:** For containerized deployments, some hardening directives may need adjustment. Use `--profile docker_compose` to generate compatible units.
+
+### Installation Safety
+
+The installation process includes multiple safety mechanisms:
+
+1. **Validation:** Comprehensive checks before installation
+2. **Diff preview:** Shows exactly what will change
+3. **Atomic writes:** Files are written atomically with rollback on failure
+4. **Content tracking:** SHA-256 hashes detect operator modifications
+5. **Modified unit protection:** Requires confirmation to overwrite or remove modified units
+6. **Lock-based concurrency:** Prevents concurrent installations
+7. **Health checks:** Verifies services start correctly after installation
+
+### Recovery
+
+If service installation fails:
+
+- **Automatic rollback:** All installed files are removed and state is restored
+- **Manual recovery:** Check logs with `journalctl -u ainews-web -u ainews-celery-worker -u ainews-celery-beat`
+- **State cleanup:** If state becomes inconsistent, remove `~/.config/ainews/service-state.json` and reinstall
+
 ### Log Rotation
 
 Configure automatic log rotation for file-backed logs:

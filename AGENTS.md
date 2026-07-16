@@ -416,6 +416,7 @@ The service management subsystem at `ainews_cli/service/` provides systemd unit 
 - `systemd.py` — systemd unit file rendering engine with `render_unit()` and builder functions for web, celery-worker, celery-beat, and docker-compose profiles
 - `logrotate.py` — logrotate rule rendering engine with `render_logrotate_rule()` and `build_logrotate_rule()`
 - `state.py` — Installation state tracking (persisted to `service-state.json` in config dir)
+- `validation.py` — Path validation, conflict detection, and comprehensive unit spec validation
 - `commands.py` — CLI commands: `ainews service {render,install,validate,status,restart,remove}`
 - `logrotate_commands.py` — CLI commands: `ainews logs {configure-rotation,validate-rotation,remove-rotation}`
 
@@ -432,19 +433,34 @@ The service management subsystem at `ainews_cli/service/` provides systemd unit 
 - `ProtectSystem=strict`
 - `ProtectHome=true`
 - `UMask=0027`
+- `CapabilityBoundingSet=` (empty = drop all capabilities)
+- `RestrictNamespaces=true`
+- `RestrictRealtime=true`
+- `RestrictSUIDSGID=true`
+- `MemoryDenyWriteExecute=true`
+- `LockPersonality=true`
+- `SystemCallArchitectures=native`
+- `PrivateDevices=true`
+- `ProtectKernelTunables=true`
+- `ProtectKernelModules=true`
+- `ProtectControlGroups=true`
+- `ProtectClock=true`
+- `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`
 - Bounded restart policy (on-failure, 5s delay, 5 burst in 60s)
 
 **Installation lifecycle:**
 1. Render to staging directory
-2. Validate (model checks, path checks, systemd-analyze verify)
-3. Show diff and impact
+2. Validate (model checks, path checks, executable checks, conflict detection, systemd-analyze verify)
+3. Show diff and impact analysis
 4. Require confirmation
 5. Write atomically with correct permissions (0644)
 6. Record installed unit paths and content hashes in state
 7. Run daemon-reload
 8. Optionally enable/start only when requested
+9. Run post-install health checks
+10. Automatic rollback on failure
 
-**State tracking:** Installed units are tracked in `service-state.json` with SHA-256 content hashes. Modified units are detected on removal and require explicit confirmation.
+**State tracking:** Installed units are tracked in `service-state.json` with SHA-256 content hashes. Modified units are detected on removal and require explicit confirmation. Installation uses flock-based locking to prevent concurrent modifications.
 
 **Logrotate:** Rules are generated only for file-backed logs (not journald or Docker logs). Default: daily rotation, 10 rotations, compression with delay, 0640 permissions.
 

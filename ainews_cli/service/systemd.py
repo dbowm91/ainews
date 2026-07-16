@@ -66,6 +66,46 @@ def render_unit(spec: ServiceUnitSpec) -> RenderedUnit:
         svc_lines.append(f"ProtectSystem={spec.protect_system}")
     svc_lines.append(f"ProtectHome={_systemd_bool(spec.protect_home)}")
     svc_lines.append(f"UMask={spec.umask}")
+    # Capability management
+    if spec.capability_bounding_set is not None:
+        svc_lines.append(f"CapabilityBoundingSet={spec.capability_bounding_set}")
+    if spec.ambient_capabilities:
+        svc_lines.append(f"AmbientCapabilities={spec.ambient_capabilities}")
+    # Namespace restrictions
+    if spec.restrict_namespaces:
+        svc_lines.append("RestrictNamespaces=true")
+    if spec.restrict_realtime:
+        svc_lines.append("RestrictRealtime=true")
+    if spec.restrict_suidsgid:
+        svc_lines.append("RestrictSUIDSGID=true")
+    # Memory and personality
+    if spec.memory_deny_write_execute:
+        svc_lines.append("MemoryDenyWriteExecute=true")
+    if spec.lock_personality:
+        svc_lines.append("LockPersonality=true")
+    if spec.system_call_architectures:
+        svc_lines.append(f"SystemCallArchitectures={spec.system_call_architectures}")
+    # Network restrictions
+    if spec.private_network:
+        svc_lines.append("PrivateNetwork=true")
+    # Device restrictions
+    if spec.private_devices:
+        svc_lines.append("PrivateDevices=true")
+    # Kernel protection
+    if spec.protect_kernel_tunables:
+        svc_lines.append("ProtectKernelTunables=true")
+    if spec.protect_kernel_modules:
+        svc_lines.append("ProtectKernelModules=true")
+    if spec.protect_control_groups:
+        svc_lines.append("ProtectControlGroups=true")
+    if spec.protect_clock:
+        svc_lines.append("ProtectClock=true")
+    # Address families
+    if spec.restrict_address_families:
+        svc_lines.append(f"RestrictAddressFamilies={spec.restrict_address_families}")
+    # System call filter
+    if spec.system_call_filter:
+        svc_lines.append(f"SystemCallFilter={spec.system_call_filter}")
     sections.append("[Service]\n" + "\n".join(svc_lines))
 
     # [Install] section

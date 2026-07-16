@@ -303,6 +303,18 @@ Install service unit files to systemd.
 
 **System scope requires root.** User scope installs to `~/.config/systemd/user/`.
 
+**Installation process:**
+1. Validates unit specifications
+2. Shows diff and impact analysis
+3. Requires confirmation (unless `--force`)
+4. Writes files atomically with rollback on failure
+5. Records installed units with SHA-256 content hashes
+6. Runs `daemon-reload`
+7. Optionally enables and starts services
+8. Runs post-install health checks
+
+**Rollback:** If installation fails, all installed files are automatically removed and the previous state is restored.
+
 ---
 
 ### `ainews service validate`
@@ -315,9 +327,24 @@ Validate service unit specifications.
 | `--systemd` | Validate systemd units (required) |
 | `--scope TEXT` | Service scope |
 | `--profile TEXT` | Deployment profile |
+| `--skip-executable-checks` | Skip executable existence checks |
 | `--json, -j` | Output in JSON format |
 
-Runs internal model validation, path checks, secret detection, hardening verification, and `systemd-analyze verify` when available.
+Runs comprehensive validation including:
+- Internal model validation
+- Path safety checks (rejects unresolved, relative, or unsafe paths)
+- Secret detection in command lines
+- Executable existence checks (skip with `--skip-executable-checks`)
+- Environment file permission checks
+- Conflict detection with existing installed units
+- Hardening directive verification
+- `systemd-analyze verify` when available
+
+**Exit codes:**
+| Code | Meaning |
+|------|---------|
+| `0` | All checks passed |
+| `1` | One or more checks have FAIL status |
 
 ---
 

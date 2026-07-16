@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import difflib
+import fcntl
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -28,8 +32,6 @@ def _is_root() -> bool:
 
 def _check_systemctl() -> bool:
     """Check if systemctl is available."""
-    import shutil
-
     return shutil.which("systemctl") is not None
 
 
@@ -98,108 +100,339 @@ def _is_docker_deployed() -> bool:
     return False
 
 
-def _validate_unit_spec(spec: object) -> list[dict[str, str]]:
-    """Run validation checks against a unit spec."""
+def _get_compose_validation_checks() -> list[dict[str, str]]:
+    """Validate Docker Compose configuration if present."""
     checks: list[dict[str, str]] = []
 
-    exec_start = getattr(spec, "exec_start", None)
-    if not exec_start:
-        checks.append({"name": "exec_start", "status": "FAIL", "message": "ExecStart is empty"})
-    else:
-        checks.append(
-            {
-                "name": "exec_start",
-                "status": "PASS",
-                "message": f"ExecStart: {exec_start}",
-            }
-        )
+    if not _is_docker_deployed():
+        return checks
 
-    secret_patterns = ["password=", "secret=", "token=", "key=", "credential="]
-    lower_cmd = (exec_start or "").lower()
-    for pattern in secret_patterns:
-        if pattern in lower_cmd:
-            checks.append(
-                {
-                    "name": "secrets_in_cmd",
-                    "status": "FAIL",
-                    "message": f"Potential secret in ExecStart: {pattern}",
-                }
-            )
-            break
-    else:
-        checks.append(
-            {
-                "name": "secrets_in_cmd",
-                "status": "PASS",
-                "message": "No secrets detected in command line",
-            }
-        )
+    # Check if docker compose is available
+    if not shutil.which("docker"):
+        checks.append({
+            "name": "docker_compose_available",
+            "status": "SKIP",
+            "message": "docker command not found, cannot validate Compose config",
+        })
+        return checks
 
-    env_file = getattr(spec, "environment_file", None)
-    if env_file and Path(env_file).exists():
-        mode = oct(os.stat(env_file).st_mode)[-3:]
-        if mode in ("644", "666", "777", "755"):
-            checks.append(
-                {
-                    "name": "env_file_perms",
-                    "status": "WARN",
-                    "message": f"Environment file {env_file} has permissive mode {mode} (recommend 0600)",
-                }
-            )
-        else:
-            checks.append(
-                {
-                    "name": "env_file_perms",
-                    "status": "PASS",
-                    "message": f"Environment file permissions: {mode}",
-                }
-            )
+    # Try to validate compose config
+    config = _ctx.ensure_loaded()
+    compose_files = ["compose.yml", "docker-compose.yml", "compose.yaml", "docker-compose.yaml"]
 
-    if getattr(spec, "no_new_privileges", False):
-        checks.append(
-            {
-                "name": "hardening_nonewprivileges",
-                "status": "PASS",
-                "message": "NoNewPrivileges=true",
-            }
-        )
-    else:
-        checks.append(
-            {
-                "name": "hardening_nonewprivileges",
-                "status": "WARN",
-                "message": "NoNewPrivileges=false",
-            }
-        )
-
-    if getattr(spec, "private_tmp", False):
-        checks.append(
-            {
-                "name": "hardening_privatetmp",
-                "status": "PASS",
-                "message": "PrivateTmp=true",
-            }
-        )
-
-    user = getattr(spec, "user", None)
-    if user in ("root", ""):
-        checks.append(
-            {
-                "name": "running_as_root",
-                "status": "WARN",
-                "message": "Service runs as root — consider using a dedicated user",
-            }
-        )
-    else:
-        checks.append(
-            {
-                "name": "running_as_root",
-                "status": "PASS",
-                "message": f"Service user: {user or '(current user)'}",
-            }
-        )
+    for cf in compose_files:
+        for search_dir in [config.paths.config_dir.path, config.paths.app_dir.path]:
+            compose_path = search_dir / cf
+            if compose_path.exists():
+                result = subprocess.run(
+                    ["docker", "compose", "-f", str(compose_path), "config", "--quiet"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    cwd=str(search_dir),
+                )
+                if result.returncode != 0:
+                    checks.append({
+                        "name": f"compose_config:{cf}",
+                        "status": "FAIL",
+                        "message": f"Compose config validation failed: {result.stderr.strip()}",
+                    })
+                else:
+                    checks.append({
+                        "name": f"compose_config:{cf}",
+                        "status": "PASS",
+                        "message": f"Compose config valid: {cf}",
+                    })
+                break
 
     return checks
+
+
+def _validate_unit_spec(spec: object, installed_units: list | None = None, *, check_executables: bool = True) -> list[dict[str, str]]:
+    """Run validation checks against a unit spec using the comprehensive validator."""
+    from ainews_cli.service.validation import validate_unit_spec_comprehensive
+
+    if installed_units is None:
+        from ainews_cli.service.state import load_installed_units
+        config = _ctx.ensure_loaded()
+        installed_units = load_installed_units(config.paths.config_dir.path)
+
+    return validate_unit_spec_comprehensive(
+        spec,  # type: ignore[arg-type]
+        installed_units,  # type: ignore[arg-type]
+        check_executables=check_executables,
+        check_env_perms=True,
+        check_conflicts=True,
+    )
+
+
+def _show_diff_and_impact(specs: list, scope: str) -> None:
+    """Show diff and impact analysis before installation."""
+    from ainews_cli.service.state import load_installed_units
+    from ainews_cli.service.systemd import render_unit
+
+    config = _ctx.ensure_loaded()
+    existing_units = load_installed_units(config.paths.config_dir.path)
+
+    _out.info("\n=== Impact Analysis ===")
+    _out.info(f"Scope: {scope}")
+    _out.info(f"Units to install: {len(specs)}")
+
+    for spec in specs:
+        unit = render_unit(spec)
+        _out.info(f"\n--- {unit.filename} ---")
+
+        # Check if unit already exists
+        if unit.install_path.exists():
+            existing_content = unit.install_path.read_text(encoding="utf-8")
+            if existing_content == unit.content:
+                _out.info("  No changes (unit already up to date)")
+            else:
+                _out.info("  Unit will be UPDATED:")
+                diff = list(difflib.unified_diff(
+                    existing_content.splitlines(keepends=True),
+                    unit.content.splitlines(keepends=True),
+                    fromfile=f"existing/{unit.filename}",
+                    tofile=f"new/{unit.filename}",
+                    lineterm="",
+                ))
+                for line in diff[:50]:  # Limit diff output
+                    _out.info(f"    {line.rstrip()}")
+                if len(diff) > 50:
+                    _out.info(f"    ... ({len(diff) - 50} more lines)")
+        else:
+            _out.info("  Unit will be CREATED")
+
+        # Check for conflicts with system units
+        systemd_paths = ["/etc/systemd/system", "/usr/lib/systemd/system"]
+        for systemd_path in systemd_paths:
+            system_unit = Path(systemd_path) / unit.filename
+            if system_unit.exists():
+                _out.warning(f"  WARNING: Unit exists at {system_unit}")
+
+        # Show key hardening directives
+        _out.info(f"  Hardening: NoNewPrivileges={spec.no_new_privileges}, "
+                  f"ProtectSystem={spec.protect_system}, "
+                  f"ProtectHome={spec.protect_home}")
+
+
+def _rollback_install(installed_paths: list[Path], state_path: Path) -> None:
+    """Rollback a failed installation by removing installed files and restoring state."""
+    _out.warning("Rolling back installation...")
+
+    # Remove any files we installed
+    for path in installed_paths:
+        if path.exists():
+            try:
+                path.unlink()
+                _out.info(f"  Removed {path}")
+            except OSError as e:
+                _out.warning(f"  Could not remove {path}: {e}")
+
+    # Reload systemd to reflect changes
+    _run_systemctl("daemon-reload", check=False)
+
+
+def _check_health_after_install(scope: str) -> bool:
+    """Run health checks after installation to verify services are working."""
+    from ainews_cli.service.state import load_installed_units
+
+    config = _ctx.ensure_loaded()
+    units = load_installed_units(config.paths.config_dir.path)
+
+    if not units:
+        return True
+
+    _out.info("\n=== Post-Install Health Check ===")
+    all_healthy = True
+
+    for unit in units:
+        result = _run_systemctl(
+            "is-active",
+            f"{unit.unit_name}.service",
+            scope=scope,
+            check=False,
+        )
+        active_state = result.stdout.strip()
+
+        if active_state == "active":
+            _out.success(f"  {unit.unit_name}: active")
+        elif active_state == "activating":
+            _out.info(f"  {unit.unit_name}: activating (waiting...)")
+            # Wait a bit for activation
+            import time
+            for _ in range(5):
+                time.sleep(1)
+                result = _run_systemctl(
+                    "is-active",
+                    f"{unit.unit_name}.service",
+                    scope=scope,
+                    check=False,
+                )
+                if result.stdout.strip() == "active":
+                    _out.success(f"  {unit.unit_name}: active")
+                    break
+            else:
+                _out.warning(f"  {unit.unit_name}: still activating after wait")
+                all_healthy = False
+        else:
+            _out.warning(f"  {unit.unit_name}: {active_state}")
+            all_healthy = False
+
+            # Get more details
+            result = _run_systemctl(
+                "status",
+                f"{unit.unit_name}.service",
+                scope=scope,
+                check=False,
+            )
+            if result.returncode != 0:
+                # Show last few lines of journal
+                journal_result = _run_systemctl(
+                    "journal",
+                    "-u", f"{unit.unit_name}.service",
+                    "-n", "5",
+                    "--no-pager",
+                    scope=scope,
+                    check=False,
+                )
+                if journal_result.stdout:
+                    _out.info(f"  Recent logs:\n{journal_result.stdout}")
+
+    return all_healthy
+
+
+def _try_lifecycle_fallback(operation: str, service: str | None = None) -> bool:
+    """Try to use the existing lifecycle driver as a fallback.
+
+    Returns True if lifecycle driver was used, False otherwise.
+    """
+    try:
+        from ainews_cli.lifecycle.commands import (
+            lifecycle_start,
+            lifecycle_stop,
+            lifecycle_restart,
+            lifecycle_status,
+        )
+
+        _out.info(f"Falling back to lifecycle driver for {operation}...")
+
+        if operation == "status":
+            lifecycle_status()
+            return True
+        elif operation == "restart":
+            lifecycle_restart()
+            return True
+        elif operation == "start":
+            lifecycle_start()
+            return True
+        elif operation == "stop":
+            lifecycle_stop()
+            return True
+    except (ImportError, RuntimeError, OSError, ValueError) as e:
+        _out.warning(f"Lifecycle driver not available: {e}")
+
+    return False
+
+
+def _acquire_install_lock(lock_path: Path) -> int:
+    """Acquire an exclusive lock on the state file for transactional writes.
+
+    Returns the file descriptor for the lock.
+    """
+    lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(lock_fd)
+        raise RuntimeError("Could not acquire install lock - another installation may be in progress")
+    return lock_fd
+
+
+def _release_install_lock(lock_fd: int) -> None:
+    """Release the install lock."""
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+    finally:
+        os.close(lock_fd)
+
+
+def _install_units_transactional(specs: list, scope: str, enable: bool, start: bool) -> list[dict]:
+    """Write unit files to disk with transactional safety and rollback support."""
+    from ainews_cli.service.models import InstalledUnitRecord, ServiceScope
+    from ainews_cli.service.state import add_installed_unit, content_hash
+    from ainews_cli.service.systemd import render_unit
+
+    config = _ctx.ensure_loaded()
+    installed: list[dict] = []
+    installed_paths: list[Path] = []
+    state_lock_path = config.paths.config_dir.path / ".service-install.lock"
+    state_path = config.paths.config_dir.path / "service-state.json"
+
+    lock_fd = None
+    try:
+        lock_fd = _acquire_install_lock(state_lock_path)
+
+        # Create backup of current state
+        state_backup = None
+        if state_path.exists():
+            state_backup = state_path.read_bytes()
+
+        try:
+            for spec in specs:
+                unit = render_unit(spec)
+                unit.install_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Backup existing file if it exists
+                existing_backup = None
+                if unit.install_path.exists():
+                    existing_backup = unit.install_path.read_bytes()
+
+                try:
+                    unit.install_path.write_text(unit.content, encoding="utf-8")
+                    os.chmod(unit.install_path, 0o644)
+                    installed_paths.append(unit.install_path)
+
+                    record = InstalledUnitRecord(
+                        unit_name=spec.name,
+                        unit_type="service",
+                        install_path=unit.install_path,
+                        content_hash=content_hash(unit.content),
+                        installed_at=datetime.now(timezone.utc).isoformat(),
+                        scope=ServiceScope(scope),
+                    )
+                    add_installed_unit(config.paths.config_dir.path, record)
+                    installed.append({"name": unit.filename, "path": str(unit.install_path)})
+
+                except OSError as e:
+                    # Restore from backup if write failed
+                    if existing_backup and unit.install_path.exists():
+                        unit.install_path.write_bytes(existing_backup)
+                    raise RuntimeError(f"Failed to install {unit.filename}: {e}") from e
+
+            # Reload systemd
+            _run_systemctl("daemon-reload", scope=scope, check=False)
+
+            if enable:
+                for spec in specs:
+                    _run_systemctl("enable", f"{spec.name}.service", scope=scope, check=False)
+
+            if start:
+                for spec in specs:
+                    _run_systemctl("start", f"{spec.name}.service", scope=scope, check=False)
+
+        except (RuntimeError, OSError):
+            # Rollback on failure
+            _rollback_install(installed_paths, state_path)
+            if state_backup:
+                state_path.write_bytes(state_backup)
+            raise
+
+    finally:
+        if lock_fd is not None:
+            _release_install_lock(lock_fd)
+
+    return installed
 
 
 @app.command()
@@ -248,54 +481,6 @@ def render(
             _out.info(f"  {item['name']} → {item['install_path']}")
 
 
-def _install_units(specs: list, scope: str, enable: bool, start: bool) -> list[dict]:
-    """Write unit files to disk, record state, and reload systemd."""
-    from ainews_cli.service.models import InstalledUnitRecord, ServiceScope
-    from ainews_cli.service.state import add_installed_unit, content_hash
-    from ainews_cli.service.systemd import render_unit
-
-    config = _ctx.ensure_loaded()
-    installed: list[dict] = []
-    for spec in specs:
-        unit = render_unit(spec)
-        unit.install_path.parent.mkdir(parents=True, exist_ok=True)
-        unit.install_path.write_text(unit.content, encoding="utf-8")
-        os.chmod(unit.install_path, 0o644)
-
-        record = InstalledUnitRecord(
-            unit_name=spec.name,
-            unit_type="service",
-            install_path=unit.install_path,
-            content_hash=content_hash(unit.content),
-            installed_at=datetime.now(timezone.utc).isoformat(),
-            scope=ServiceScope(scope),
-        )
-        add_installed_unit(config.paths.config_dir.path, record)
-        installed.append({"name": unit.filename, "path": str(unit.install_path)})
-
-    _run_systemctl("daemon-reload", scope=scope, check=False)
-
-    if enable:
-        for spec in specs:
-            _run_systemctl("enable", f"{spec.name}.service", scope=scope, check=False)
-
-    if start:
-        for spec in specs:
-            _run_systemctl("start", f"{spec.name}.service", scope=scope, check=False)
-
-    return installed
-
-
-def _show_install_preview(specs: list) -> None:
-    """Display which units will be installed."""
-    from ainews_cli.service.systemd import render_unit
-
-    _out.info("Units to install:")
-    for spec in specs:
-        unit = render_unit(spec)
-        _out.info(f"  {unit.filename} → {unit.install_path}")
-
-
 @app.command()
 def install(
     systemd: bool = typer.Option(False, "--systemd", help="Install systemd unit files"),
@@ -325,23 +510,40 @@ def install(
 
     specs = _build_unit_specs(scope, profile)
 
+    # Run comprehensive validation
     all_checks: list[dict[str, str]] = []
     for spec in specs:
         all_checks.extend(_validate_unit_spec(spec))
 
+    # Add Compose validation if applicable
+    all_checks.extend(_get_compose_validation_checks())
+
     failures = [c for c in all_checks if c["status"] == "FAIL"]
+    warnings = [c for c in all_checks if c["status"] == "WARN"]
+
     if failures:
         for f in failures:
             _out.error(f"Validation failed: {f['message']}", exit_codes.VALIDATION_ERROR)
         return
 
     if not force and not json_output:
-        _show_install_preview(specs)
+        _show_diff_and_impact(specs, scope)
+        _out.info(f"\n{len(warnings)} warning(s) found")
         if not typer.confirm("Proceed with installation?"):
             _out.info("Installation cancelled.")
             return
 
-    installed = _install_units(specs, scope, enable, start)
+    try:
+        installed = _install_units_transactional(specs, scope, enable, start)
+    except (RuntimeError, OSError) as e:
+        _out.error(f"Installation failed: {e}", exit_codes.SERVICE_ERROR)
+        return
+
+    # Run health check after install
+    if start:
+        healthy = _check_health_after_install(scope)
+        if not healthy:
+            _out.warning("Some services did not start correctly. Check logs with: ainews logs")
 
     if json_output:
         _out.json_data(
@@ -351,6 +553,7 @@ def install(
                 "scope": scope,
                 "enabled": enable,
                 "started": start,
+                "warnings": [c["message"] for c in warnings],
             }
         )
     else:
@@ -368,6 +571,7 @@ def validate(
     systemd: bool = typer.Option(False, "--systemd", help="Validate systemd unit files"),
     scope: str = typer.Option("user", "--scope", help="Service scope"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Deployment profile"),
+    skip_executable_checks: bool = typer.Option(False, "--skip-executable-checks", help="Skip executable existence checks"),
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ) -> None:
     """Validate service unit specifications."""
@@ -384,8 +588,11 @@ def validate(
     specs = _build_unit_specs(scope, profile)
     all_checks: list[dict[str, str]] = []
     for spec in specs:
-        checks = _validate_unit_spec(spec)
+        checks = _validate_unit_spec(spec, check_executables=not skip_executable_checks)
         all_checks.extend(checks)
+
+    # Add Compose validation if applicable
+    all_checks.extend(_get_compose_validation_checks())
 
     from ainews_cli.service.systemd import render_unit
 
@@ -394,8 +601,6 @@ def validate(
     for spec in specs:
         unit = render_unit(spec)
         if analyze_available:
-            import tempfile
-
             with tempfile.NamedTemporaryFile(suffix=".service", mode="w", delete=False) as f:
                 f.write(unit.content)
                 f.flush()
@@ -433,6 +638,7 @@ def validate(
 
     failures = [c for c in all_checks if c["status"] == "FAIL"]
     warnings = [c for c in all_checks if c["status"] == "WARN"]
+    skipped = [c for c in all_checks if c["status"] == "SKIP"]
 
     if json_output:
         _out.json_data(
@@ -441,6 +647,7 @@ def validate(
                 "checks": all_checks,
                 "failure_count": len(failures),
                 "warning_count": len(warnings),
+                "skipped_count": len(skipped),
             }
         )
     else:
@@ -461,7 +668,7 @@ def validate(
                 exit_codes.VALIDATION_ERROR,
             )
         else:
-            _out.success(f"\nAll {len(all_checks)} checks passed ({len(warnings)} warning(s))")
+            _out.success(f"\nAll {len(all_checks)} checks passed ({len(warnings)} warning(s), {len(skipped)} skipped)")
 
     if failures:
         sys.exit(exit_codes.VALIDATION_ERROR)
@@ -477,23 +684,31 @@ def status(
     global _out
     _out = OutputFormatter(json_mode=json_output)
 
-    if not _check_systemctl():
-        _out.error(
-            "systemctl not found. Service management requires systemd.",
-            exit_codes.NOT_FOUND,
-        )
-
     from ainews_cli.service.state import load_installed_units
 
     config = _ctx.ensure_loaded()
     units = load_installed_units(config.paths.config_dir.path)
 
     if not units:
+        # Try lifecycle driver fallback
+        if _try_lifecycle_fallback("status"):
+            return
+
         if json_output:
             _out.json_data({"success": True, "units": [], "message": "No installed units found"})
         else:
             _out.info("No installed service units found. Use 'ainews service install --systemd' to install.")
         return
+
+    if not _check_systemctl():
+        # Try lifecycle driver fallback
+        if _try_lifecycle_fallback("status"):
+            return
+
+        _out.error(
+            "systemctl not found. Service management requires systemd.",
+            exit_codes.NOT_FOUND,
+        )
 
     service_statuses: list[dict] = []
     for unit in units:
@@ -535,19 +750,27 @@ def restart(
     global _out
     _out = OutputFormatter(json_mode=json_output)
 
-    if not _check_systemctl():
-        _out.error("systemctl not found.", exit_codes.NOT_FOUND)
-
     from ainews_cli.service.state import load_installed_units
 
     config = _ctx.ensure_loaded()
     units = load_installed_units(config.paths.config_dir.path)
 
     if not units:
+        # Try lifecycle driver fallback
+        if _try_lifecycle_fallback("restart"):
+            return
+
         _out.error(
             "No installed units. Use 'ainews service install' first.",
             exit_codes.NOT_FOUND,
         )
+
+    if not _check_systemctl():
+        # Try lifecycle driver fallback
+        if _try_lifecycle_fallback("restart"):
+            return
+
+        _out.error("systemctl not found.", exit_codes.NOT_FOUND)
 
     target_units = [u for u in units if service is None or u.unit_name == service]
     if not target_units:

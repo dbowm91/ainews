@@ -54,6 +54,22 @@ class ServiceUnitSpec:
     protect_system: str | None = "strict"
     protect_home: bool = True
     umask: str = "0027"
+    capability_bounding_set: str = ""  # Empty = drop all capabilities
+    ambient_capabilities: str = ""
+    restrict_namespaces: bool = True
+    restrict_realtime: bool = True
+    restrict_suidsgid: bool = True
+    memory_deny_write_execute: bool = True
+    lock_personality: bool = True
+    system_call_architectures: str = "native"
+    private_network: bool = False  # Only for truly offline services
+    private_devices: bool = True
+    protect_kernel_tunables: bool = True
+    protect_kernel_modules: bool = True
+    protect_control_groups: bool = True
+    protect_clock: bool = True
+    restrict_address_families: str | None = "AF_INET AF_INET6 AF_UNIX"
+    system_call_filter: str | None = None  # e.g., "@system-service"
     # Logging
     standard_output: str = "journal"
     standard_error: str = "journal"

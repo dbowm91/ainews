@@ -64,6 +64,7 @@ def register_commands(  # noqa: C901
                 "is_downgrade": result.is_downgrade,
                 "is_reinstall": result.is_reinstall,
                 "artifact_name": result.artifact_name,
+                "artifact_size": result.artifact_size,
                 "min_supported_version": result.min_supported_version,
             })
         else:
@@ -77,8 +78,14 @@ def register_commands(  # noqa: C901
                 out.info(f"  Current commit:  {result.current_commit}")
             if result.latest_commit:
                 out.info(f"  Latest commit:   {result.latest_commit}")
+            if result.artifact_size:
+                size_mb = result.artifact_size / (1024 * 1024)
+                out.info(f"  Artifact size:   {size_mb:.1f} MB")
             if result.is_downgrade:
                 out.warning("This would be a downgrade.")
+                out.warning(
+                    "Downgrades are not recommended and may require manual intervention."
+                )
             if result.is_reinstall:
                 out.info("Reinstall available (same version, different commit).")
             if not result.update_available:
@@ -93,6 +100,11 @@ def register_commands(  # noqa: C901
             "--channel",
             "-c",
             help="Override release channel",
+        ),
+        dry_run: bool = typer.Option(
+            False,
+            "--dry-run",
+            help="Show what would happen without applying",
         ),
         json_output: bool = typer.Option(
             False,
@@ -121,6 +133,7 @@ def register_commands(  # noqa: C901
                 "channel": check_result.channel,
                 "update_available": check_result.update_available,
                 "artifact_name": check_result.artifact_name,
+                "artifact_size": update_plan_result.artifact_size,
                 "artifact_sha256": update_plan_result.artifact_sha256,
                 "config_migrations": update_plan_result.config_migrations,
                 "db_migrations": update_plan_result.db_migrations,
@@ -130,11 +143,16 @@ def register_commands(  # noqa: C901
                 "rollback_capable": update_plan_result.rollback_capable,
                 "paths_changed": update_plan_result.paths_changed,
                 "blockers": update_plan_result.blockers,
+                "dry_run": dry_run,
             })
         else:
             out.info(f"Update plan: {check_result.current_version} -> {check_result.latest_version}")
             out.info(f"  Channel:                {check_result.channel}")
             out.info(f"  Artifact:               {check_result.artifact_name or 'N/A'}")
+
+            if update_plan_result.artifact_size:
+                size_mb = update_plan_result.artifact_size / (1024 * 1024)
+                out.info(f"  Artifact size:          {size_mb:.1f} MB")
 
             if update_plan_result.artifact_sha256:
                 out.info(f"  SHA-256:                {update_plan_result.artifact_sha256[:16]}...")
@@ -148,6 +166,8 @@ def register_commands(  # noqa: C901
 
             if update_plan_result.db_migrations:
                 out.info(f"  DB migrations:          {len(update_plan_result.db_migrations)}")
+                for m in update_plan_result.db_migrations:
+                    out.info(f"    - {m}")
             else:
                 out.info("  DB migrations:          none")
 
@@ -156,6 +176,10 @@ def register_commands(  # noqa: C901
             out.info(f"  Backup required:        {'yes' if update_plan_result.backup_required else 'no'}")
             out.info(f"  Rollback capable:       {'yes' if update_plan_result.rollback_capable else 'no'}")
             out.info(f"  Paths changed:          {', '.join(update_plan_result.paths_changed)}")
+
+            if dry_run:
+                out.info("")
+                out.info("Dry run — no changes would be made.")
 
             if update_plan_result.blockers:
                 out.warning("Blockers:")

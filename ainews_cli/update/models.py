@@ -108,6 +108,7 @@ class UpdatePlan:
 
     check: UpdateCheckResult
     artifact_sha256: str | None
+    artifact_size: int | None
     config_migrations: list[str]
     db_migrations: list[str]
     service_restart_required: bool

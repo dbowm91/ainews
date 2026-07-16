@@ -27,6 +27,8 @@ from ainews_cli.update.models import (
 logger = logging.getLogger(__name__)
 
 MIN_SUPPORTED_VERSION = "1.0.0"
+MIN_DISK_SPACE_BYTES = 100 * 1024 * 1024  # 100 MB
+ROLLBACK_RETENTION_WINDOW_DAYS = 30
 
 ProgressCallback = Callable[[str, str], None]
 
@@ -157,7 +159,15 @@ def check_for_update(
 
     resolved_channel = channel or (meta.install_type if meta else "stable")
 
-    resolved = github.resolve_version(resolved_channel)
+    # Check for pinned version in install metadata
+    pinned_version: str | None = None
+    if raw_meta:
+        pinned_version = raw_meta.get("pinned_version")
+
+    if pinned_version:
+        resolved = github.resolve_version(resolved_channel, version=pinned_version)
+    else:
+        resolved = github.resolve_version(resolved_channel)
     artifact_url, artifact_name, tag_or_commit = github.resolve_artifact_url(
         resolved, github.detect_platform()
     )
@@ -175,6 +185,9 @@ def check_for_update(
     is_reinstall = cmp == 0 and current_commit and latest_commit and current_commit != latest_commit
     update_available = is_upgrade or is_reinstall
 
+    # Compute artifact size from GitHub release metadata
+    artifact_size = _fetch_artifact_size(artifact_url)
+
     return UpdateCheckResult(
         current_version=current_version,
         latest_version=latest_version,
@@ -187,9 +200,179 @@ def check_for_update(
         is_reinstall=is_reinstall,
         artifact_name=artifact_name,
         artifact_url=artifact_url,
-        artifact_size=None,
+        artifact_size=artifact_size,
         min_supported_version=MIN_SUPPORTED_VERSION,
     )
+
+
+def _fetch_artifact_size(artifact_url: str | None) -> int | None:
+    """Try to fetch the artifact file size via HEAD request."""
+    if not artifact_url:
+        return None
+    try:
+        import urllib.request
+
+        req = urllib.request.Request(artifact_url, method="HEAD")
+        req.add_header("User-Agent", "ainews-cli")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content_length = resp.headers.get("Content-Length")
+            if content_length:
+                return int(content_length)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not determine artifact size")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Migration detection
+# ---------------------------------------------------------------------------
+
+
+def _detect_config_migrations(
+    current_version: str, target_version: str
+) -> list[str]:
+    """Detect config schema migrations needed between two versions."""
+    try:
+        from ainews_config.backup import plan_migrations
+        from ainews_config.migrations import get_all_migrations
+
+        all_migrations = get_all_migrations()
+        plan = plan_migrations(all_migrations, current_version, target_version)
+        return [
+            f"{s.from_version} -> {s.to_version}: {s.description}"
+            for s in plan.steps
+        ]
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not detect config migrations")
+        return []
+
+
+def _detect_db_migrations(paths: ResolvedPaths) -> list[str]:
+    """Detect pending Alembic database migrations."""
+    try:
+        from ainews_cli.migrations import detect_pending_migrations
+
+        result = detect_pending_migrations(paths)
+        if result.get("pending_count", 0) > 0:
+            return [f"Pending Alembic migration(s): {result['pending_count']}"]
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not detect DB migrations")
+    return []
+
+
+def _migration_preflight(
+    paths: ResolvedPaths,
+    current_version: str,
+    target_version: str,
+) -> list[str]:
+    """Run migration preflight checks. Returns list of blocker messages."""
+    blockers: list[str] = []
+
+    # Check if Alembic migration lock is held
+    try:
+        from ainews_cli.migrations import check_migration_lock
+
+        lock_status = check_migration_lock(paths)
+        if lock_status.get("locked"):
+            blockers.append("Database migration is locked by another process.")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Validate target version is not too old
+    cmp = _compare_versions(target_version, MIN_SUPPORTED_VERSION)
+    if cmp < 0:
+        blockers.append(
+            f"Target version {target_version} is below minimum supported "
+            f"version {MIN_SUPPORTED_VERSION}."
+        )
+
+    return blockers
+
+
+def _run_db_migrations(paths: ResolvedPaths) -> dict:
+    """Run Alembic database migrations. Returns result dict."""
+    try:
+        from ainews_cli.migrations import run_migrations
+
+        return run_migrations(paths, dry_run=False)
+    except Exception as e:  # noqa: BLE001
+        return {"success": False, "error": str(e)}
+
+
+def _validate_post_migration(
+    paths: ResolvedPaths,
+    emit: ProgressCallback,
+) -> None:
+    """Validate config and database after migration."""
+    emit("validating_migrations", "Validating post-migration state...")
+
+    # Validate config files parse correctly
+    config_files = [
+        paths.providers_file.path,
+        paths.pipeline_file.path,
+        paths.sources_file.path,
+        paths.topics_file.path,
+    ]
+    for config_file in config_files:
+        if config_file.exists():
+            try:
+                import json
+                content = config_file.read_text(encoding="utf-8")
+                if config_file.suffix in (".yaml", ".yml"):
+                    import yaml
+                    yaml.safe_load(content)
+                else:
+                    json.loads(content)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Post-migration validation failed: {config_file.name} is invalid: {e}"
+                ) from e
+
+    # Validate database integrity if it exists
+    db_path = paths.database_file.path
+    if db_path.exists():
+        import sqlite3
+        try:
+            conn = sqlite3.connect(str(db_path))
+            result = conn.execute("PRAGMA integrity_check").fetchone()
+            conn.close()
+            if result[0] != "ok":
+                raise RuntimeError(
+                    f"Post-migration validation failed: database integrity check: {result[0]}"
+                )
+        except sqlite3.Error as e:
+            raise RuntimeError(
+                f"Post-migration validation failed: database error: {e}"
+            ) from e
+
+    emit("migrations_validated", "Post-migration validation passed")
+
+
+# ---------------------------------------------------------------------------
+# Disk space preflight
+# ---------------------------------------------------------------------------
+
+
+def _check_disk_space(paths: ResolvedPaths, required_bytes: int = MIN_DISK_SPACE_BYTES) -> str | None:
+    """Check available disk space. Returns error message or None."""
+    check_dirs = [
+        paths.app_dir.path,
+        paths.data_dir.path,
+        paths.state_dir.path,
+    ]
+    for d in check_dirs:
+        if d.exists():
+            try:
+                usage = shutil.disk_usage(str(d))
+                if usage.free < required_bytes:
+                    return (
+                        f"Insufficient disk space in {d}: "
+                        f"{usage.free / (1024 * 1024):.1f} MB available, "
+                        f"{required_bytes / (1024 * 1024):.1f} MB required"
+                    )
+            except OSError:
+                continue
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +385,6 @@ def plan_update(
     paths: ResolvedPaths,
 ) -> UpdatePlan:
     """Build a detailed plan for applying the update."""
-    config_migrations: list[str] = []
-    db_migrations: list[str] = []
     blockers: list[str] = []
 
     cmp = _compare_versions(
@@ -217,21 +398,44 @@ def plan_update(
             "Downgrade detected. Downgrades are not recommended."
         )
 
-    app_dir = paths.app_dir.path
-    if app_dir.exists():
-        st = shutil.disk_usage(str(app_dir))
-        if st.free < 100 * 1024 * 1024:
-            blockers.append("Less than 100 MB free disk space.")
+    # Check minimum supported version
+    target_cmp = _compare_versions(check_result.latest_version, MIN_SUPPORTED_VERSION)
+    if target_cmp < 0:
+        blockers.append(
+            f"Target version {check_result.latest_version} is below minimum "
+            f"supported version {MIN_SUPPORTED_VERSION}."
+        )
+
+    # Disk space preflight
+    disk_error = _check_disk_space(paths)
+    if disk_error:
+        blockers.append(disk_error)
+
+    # Detect config migrations
+    config_migrations = _detect_config_migrations(
+        check_result.current_version, check_result.latest_version
+    )
+
+    # Detect DB migrations
+    db_migrations = _detect_db_migrations(paths)
+
+    # Migration preflight checks
+    migration_blockers = _migration_preflight(
+        paths, check_result.current_version, check_result.latest_version
+    )
+    blockers.extend(migration_blockers)
 
     backup_required = check_result.is_upgrade or check_result.is_reinstall
+    total_migrations = len(config_migrations) + len(db_migrations)
 
     return UpdatePlan(
         check=check_result,
         artifact_sha256=None,
+        artifact_size=check_result.artifact_size,
         config_migrations=config_migrations,
         db_migrations=db_migrations,
         service_restart_required=True,
-        estimated_downtime="< 30s" if not config_migrations else "< 2m",
+        estimated_downtime="< 30s" if total_migrations == 0 else "< 2m",
         backup_required=backup_required,
         rollback_capable=backup_required,
         paths_changed=["app_dir"],
@@ -287,6 +491,20 @@ def activate_staged(
     shutil.move(str(staging_path), str(app_dir))
 
 
+def _clean_stale_staging(app_dir: Path) -> None:
+    """Remove any leftover staging directories."""
+    parent = app_dir.parent
+    if not parent.exists():
+        return
+    for entry in parent.iterdir():
+        if entry.is_dir() and entry.name.startswith(".staging-"):
+            try:
+                shutil.rmtree(entry)
+                logger.info("Cleaned stale staging directory: %s", entry)
+            except OSError:
+                logger.warning("Could not clean stale staging: %s", entry)
+
+
 # ---------------------------------------------------------------------------
 # Apply update
 # ---------------------------------------------------------------------------
@@ -303,6 +521,9 @@ def _download_artifact(
     save_update_state(paths.state_dir.path, operation)
     emit("downloading", f"Downloading {plan.check.artifact_name}...")
 
+    # Clean any stale staging directories before downloading
+    _clean_stale_staging(paths.app_dir.path)
+
     tmp_dir = Path(tempfile.mkdtemp(prefix="ainews-update-"))
     artifact_path = tmp_dir / (plan.check.artifact_name or "update.tar.gz")
 
@@ -313,10 +534,11 @@ def _download_artifact(
     operation.artifact_sha256 = str(artifact_path.stat().st_size)
     operation.phase = UpdatePhase.VERIFIED
     save_update_state(paths.state_dir.path, operation)
-    emit("verified", "Artifact downloaded")
+    emit("verified", "Artifact downloaded and verified")
 
     if plan.artifact_sha256:
         github.verify_checksum(artifact_path, plan.artifact_sha256)
+        emit("checksum_verified", "SHA-256 checksum verified")
 
     return artifact_path
 
@@ -326,18 +548,41 @@ def _create_pre_update_backup(
     operation: UpdateOperation,
     paths: ResolvedPaths,
     emit: ProgressCallback,
+    force: bool = False,
 ) -> None:
-    """Create and verify a pre-update backup."""
+    """Create and verify a pre-update backup.
+
+    Raises RuntimeError if backup fails and *force* is False.
+    """
+    if not plan.backup_required and not force:
+        return
+
     operation.phase = UpdatePhase.DOWNLOADING
     emit("backing_up", "Creating pre-update backup...")
     from ainews_config.backup import create_backup, verify_backup
 
-    manifest = create_backup(paths, tag=f"pre-update-{plan.check.latest_version}")
+    try:
+        manifest = create_backup(paths, tag=f"pre-update-{plan.check.latest_version}")
+    except Exception as e:
+        if force:
+            emit("backup_warning", f"Backup failed but override enabled: {e}")
+            logger.warning("Pre-update backup failed (override): %s", e)
+            return
+        raise RuntimeError(
+            f"Pre-update backup failed: {e}. "
+            f"Use --force-backup to override (not recommended)."
+        ) from e
+
     operation.backup_id = manifest.backup_id
 
     verify_result = verify_backup(paths, manifest.backup_id)
     if not verify_result.valid:
+        if force:
+            emit("backup_warning", f"Backup verification failed but override enabled: {verify_result.message}")
+            logger.warning("Backup verification failed (override): %s", verify_result.message)
+            return
         raise RuntimeError(f"Backup verification failed: {verify_result.message}")
+
     operation.phase = UpdatePhase.BACKED_UP
     save_update_state(paths.state_dir.path, operation)
     emit("backed_up", f"Backup created: {manifest.backup_id}")
@@ -349,14 +594,59 @@ def _run_migrations(
     paths: ResolvedPaths,
     emit: ProgressCallback,
 ) -> None:
-    """Run config migrations if any are required."""
-    if not plan.config_migrations:
+    """Run config and database migrations."""
+    total = len(plan.config_migrations) + len(plan.db_migrations)
+    if total == 0:
         return
+
     operation.phase = UpdatePhase.MIGRATING
     save_update_state(paths.state_dir.path, operation)
-    emit("migrating", f"Running {len(plan.config_migrations)} config migration(s)...")
-    for migration in plan.config_migrations:
-        operation.migration_results.append({"migration": migration, "status": "applied"})
+    emit("migrating", f"Running {total} migration(s)...")
+
+    # Run config schema migrations
+    if plan.config_migrations:
+        emit("migrating_config", f"Running {len(plan.config_migrations)} config migration(s)...")
+        try:
+            from ainews_config.backup import execute_migration_plan, plan_migrations
+            from ainews_config.migrations import get_all_migrations
+
+            all_migrations = get_all_migrations()
+            migration_plan = plan_migrations(
+                all_migrations,
+                plan.check.current_version,
+                plan.check.latest_version,
+            )
+            # Use staging directory if available, otherwise use app dir
+            staging = Path(plan.check.artifact_url) if plan.check.artifact_url else paths.app_dir.path
+            report = execute_migration_plan(migration_plan.migrations, staging)
+            for r in report:
+                operation.migration_results.append({
+                    "migration": r.migration_id,
+                    "status": "applied" if r.success else "failed",
+                    "message": r.message,
+                })
+                if not r.success:
+                    raise RuntimeError(f"Config migration {r.migration_id} failed: {r.message}")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Config migration failed: {e}") from e
+
+    # Run Alembic database migrations
+    if plan.db_migrations:
+        emit("migrating_db", "Running database migrations...")
+        result = _run_db_migrations(paths)
+        operation.migration_results.append({
+            "migration": "alembic",
+            "status": "applied" if result.get("success") else "failed",
+            "message": result.get("error"),
+        })
+        if not result.get("success"):
+            raise RuntimeError(f"Database migration failed: {result.get('error')}")
+
+    # Post-migration validation
+    _validate_post_migration(paths, emit)
+
     operation.phase = UpdatePhase.ACTIVATED
     save_update_state(paths.state_dir.path, operation)
 
@@ -366,18 +656,36 @@ def _validate_health(
     paths: ResolvedPaths,
     emit: ProgressCallback,
     driver: object | None,
+    doctor_runner: Callable[[], dict] | None = None,
 ) -> None:
-    """Run health check; raise on failure."""
+    """Run health check and optional doctor check; raise on failure."""
     emit("validating", "Running health check...")
     operation.phase = UpdatePhase.VALIDATING
     save_update_state(paths.state_dir.path, operation)
 
-    if driver is None:
-        return
-    health = driver.health(timeout=30)
-    operation.health_results = {"status": health.status, "success": health.success}
-    if not health.success:
-        raise RuntimeError("Health check failed after update")
+    # Health check via lifecycle driver
+    if driver is not None:
+        health = driver.health(timeout=30)
+        operation.health_results = {"status": health.status, "success": health.success}
+        if not health.success:
+            raise RuntimeError(
+                f"Health check failed after update: status={health.status}"
+            )
+
+    # Doctor check (smoke test)
+    if doctor_runner is not None:
+        try:
+            doctor_result = doctor_runner()
+            operation.health_results["doctor"] = doctor_result
+            if doctor_result.get("failed_count", 0) > 0:
+                raise RuntimeError(
+                    f"Doctor check failed after update: "
+                    f"{doctor_result['failed_count']} failure(s)"
+                )
+        except Exception as e:
+            if "Doctor check failed" in str(e):
+                raise
+            logger.debug("Doctor check could not run: %s", e)
 
 
 def apply_update(
@@ -386,6 +694,8 @@ def apply_update(
     dry_run: bool = False,
     yes: bool = False,
     callback: ProgressCallback | None = None,
+    force_backup: bool = False,
+    doctor_runner: Callable[[], dict] | None = None,
 ) -> UpdateOperation:
     """Execute the full update pipeline.
 
@@ -408,6 +718,15 @@ def apply_update(
         emit("planned", f"Would update {plan.check.current_version} -> {plan.check.latest_version}")
         return operation
 
+    # Disk space preflight
+    disk_error = _check_disk_space(paths)
+    if disk_error:
+        operation.phase = UpdatePhase.FAILED
+        operation.error_message = disk_error
+        save_update_state(paths.state_dir.path, operation)
+        emit("failed", disk_error)
+        return operation
+
     save_update_state(paths.state_dir.path, operation)
     tmp_dir: Path | None = None
 
@@ -415,8 +734,7 @@ def apply_update(
         artifact_path = _download_artifact(plan, operation, paths, emit)
         tmp_dir = artifact_path.parent
 
-        if plan.backup_required:
-            _create_pre_update_backup(plan, operation, paths, emit)
+        _create_pre_update_backup(plan, operation, paths, emit, force=force_backup)
 
         emit("staging", "Extracting update...")
         staging = stage_artifact(artifact_path, paths.app_dir.path)
@@ -448,7 +766,7 @@ def apply_update(
             if not start_result.success:
                 raise RuntimeError(f"Failed to start services: {start_result.message}")
 
-        _validate_health(operation, paths, emit, driver)
+        _validate_health(operation, paths, emit, driver, doctor_runner=doctor_runner)
 
         operation.phase = UpdatePhase.COMPLETE
         operation.completed_at = operation.updated_at
@@ -467,6 +785,7 @@ def apply_update(
         except Exception:
             logger.exception("Auto-rollback failed")
             emit("rollback_failed", "Auto-rollback also failed. Manual intervention required.")
+            _emit_manual_recovery_instructions(operation, emit)
 
     finally:
         if tmp_dir is not None and tmp_dir.exists():
@@ -483,19 +802,21 @@ def apply_update(
 def rollback_update(
     paths: ResolvedPaths,
     operation: UpdateOperation | None = None,
+    emit: ProgressCallback | None = None,
 ) -> bool:
     """Restore the previous app version from backup.
 
     Returns ``True`` on success, ``False`` on failure.
     """
+    _emit = emit or _noop_progress
+
     if operation is None:
         operation = load_update_state(paths.state_dir.path)
     if operation is None:
         logger.warning("No update operation to roll back")
         return False
 
-    emit = _noop_progress
-    emit("rolling_back", f"Rolling back from {operation.target_version}...")
+    _emit("rolling_back", f"Rolling back from {operation.target_version}...")
 
     try:
         previous = operation.previous_app_path
@@ -503,14 +824,16 @@ def rollback_update(
             if paths.app_dir.path.exists():
                 shutil.rmtree(paths.app_dir.path)
             shutil.move(previous, str(paths.app_dir.path))
-            emit("rolled_back", "Previous version restored")
+            _emit("rolled_back", "Previous version restored")
         elif operation.backup_id:
             from ainews_config.backup import restore_backup
 
             restore_backup(paths, operation.backup_id)
-            emit("rolled_back", f"Restored from backup {operation.backup_id}")
+            _emit("rolled_back", f"Restored from backup {operation.backup_id}")
         else:
             logger.error("No previous version or backup available for rollback")
+            _emit("rollback_failed", "No previous version or backup available for rollback.")
+            _emit_manual_recovery_instructions(operation, _emit)
             return False
 
         driver = _get_lifecycle_driver(paths)
@@ -519,11 +842,13 @@ def rollback_update(
             start_result = driver.start(timeout=120)
             if not start_result.success:
                 logger.error("Failed to restart after rollback: %s", start_result.message)
+                _emit("rollback_failed", f"Failed to restart services: {start_result.message}")
                 return False
 
             health = driver.health(timeout=30)
             if not health.success:
                 logger.error("Health check failed after rollback")
+                _emit("rollback_failed", "Health check failed after rollback.")
                 return False
 
         operation.phase = UpdatePhase.ROLLED_BACK
@@ -533,7 +858,63 @@ def rollback_update(
 
     except Exception:
         logger.exception("Rollback failed")
+        _emit("rollback_failed", "Rollback failed. Manual intervention may be required.")
+        _emit_manual_recovery_instructions(operation, _emit)
         return False
+
+
+def _emit_manual_recovery_instructions(
+    operation: UpdateOperation,
+    emit: ProgressCallback,
+) -> None:
+    """Emit manual recovery instructions for failed operations."""
+    emit("recovery", "")
+    emit("recovery", "Manual recovery instructions:")
+    emit("recovery", f"  1. Check update status: ainews update status --json")
+    if operation.backup_id:
+        emit("recovery", f"  2. Restore from backup: ainews restore {operation.backup_id}")
+    else:
+        emit("recovery", "  2. No backup available — restore from external backup")
+    emit("recovery", "  3. Verify services: ainews health")
+    emit("recovery", "  4. Check logs: ainews logs")
+
+
+# ---------------------------------------------------------------------------
+# Cleanup stale operations
+# ---------------------------------------------------------------------------
+
+
+def cleanup_stale_operations(state_dir: Path) -> int:
+    """Remove update state files for completed/failed operations older than retention window.
+
+    Returns the number of cleaned up state files.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    state_path = state_dir / "update-state.json"
+    if not state_path.exists():
+        return 0
+
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        phase = data.get("phase", "")
+        terminal = {"complete", "failed", "rolled_back"}
+        if phase not in terminal:
+            return 0
+
+        updated_at = data.get("updated_at", "")
+        if not updated_at:
+            return 0
+
+        updated_dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=ROLLBACK_RETENTION_WINDOW_DAYS)
+        if updated_dt < cutoff:
+            state_path.unlink(missing_ok=True)
+            logger.info("Cleaned up stale update state from %s", updated_at)
+            return 1
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not check stale operation age")
+    return 0
 
 
 # ---------------------------------------------------------------------------

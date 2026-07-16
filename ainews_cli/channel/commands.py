@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -33,7 +34,7 @@ def _write_metadata(path: Path, data: dict) -> None:
     tmp.replace(path)
 
 
-def register_commands(
+def register_commands(  # noqa: C901
     main_app: typer.Typer,
     ctx: CLIContext,
     out: OutputFormatter,
@@ -77,13 +78,24 @@ def register_commands(
             ])
 
     @channel_app.command("set")
-    def channel_set(
+    def channel_set(  # noqa: C901
         channel: str = typer.Argument(help="New channel: stable, prerelease, or main"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing"),
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+        apply: bool = typer.Option(False, "--apply", help="Immediately check for and apply updates after channel change"),
+        pinned_version: Optional[str] = typer.Option(
+            None,
+            "--version",
+            help="Pin to a specific version (prevents channel resolution)",
+        ),
         json_output: bool = typer.Option(False, "--json", "-j", help="Output in JSON format"),
     ) -> None:
-        """Set the release channel."""
+        """Set the release channel.
+
+        By default only changes the channel metadata without triggering an
+        update. Use --apply to immediately check for and apply updates on
+        the new channel. Use --version to pin to a specific version.
+        """
         channel = channel.lower().strip()
 
         if channel not in VALID_CHANNELS:
@@ -102,14 +114,15 @@ def register_commands(
         current_channel = meta.get("install_type", "unknown")
         current_version = meta.get("version", "unknown")
 
-        if channel == current_channel:
+        if channel == current_channel and not pinned_version:
             out.info(f"Already on channel '{channel}'.")
             return
 
         if channel in RISKY_CHANNELS and not yes:
             out.warning(
                 f"Switching from '{current_channel}' to '{channel}' may install "
-                f"unstable versions. This does NOT trigger an immediate update."
+                f"unstable versions. This does NOT trigger an immediate update "
+                f"(unless --apply is specified)."
             )
             if not json_output:
                 confirm = input(f"Switch to '{channel}'? [y/N]: ").strip().lower()
@@ -123,24 +136,70 @@ def register_commands(
                     "dry_run": True,
                     "current_channel": current_channel,
                     "proposed_channel": channel,
+                    "pinned_version": pinned_version,
                     "version": current_version,
+                    "apply": apply,
                 })
             else:
                 out.info(f"Would change channel: {current_channel} -> {channel}")
                 out.info(f"Current version: {current_version}")
+                if pinned_version:
+                    out.info(f"Pinned version: {pinned_version}")
+                if apply:
+                    out.info("Would immediately check for updates.")
                 out.info("No files modified (--dry-run).")
             return
 
-        meta["install_type"] = channel
-        _write_metadata(meta_path, meta)
-
-        if json_output:
-            out.json_data({
-                "success": True,
-                "previous_channel": current_channel,
-                "channel": channel,
-                "version": current_version,
-            })
+        # Apply version pin if provided
+        if pinned_version:
+            clean_version = pinned_version.lstrip("v")
+            meta["pinned_version"] = clean_version
+            meta["install_type"] = channel
+            _write_metadata(meta_path, meta)
+            if json_output:
+                out.json_data({
+                    "success": True,
+                    "previous_channel": current_channel,
+                    "channel": channel,
+                    "pinned_version": clean_version,
+                    "version": current_version,
+                })
+            else:
+                out.success(f"Channel changed: {current_channel} -> {channel} (pinned to {clean_version})")
         else:
-            out.success(f"Channel changed: {current_channel} -> {channel}")
-            out.info("Run 'ainews update check' to see available updates.")
+            meta["install_type"] = channel
+            # Remove any existing pin when switching channels
+            meta.pop("pinned_version", None)
+            _write_metadata(meta_path, meta)
+            if json_output:
+                out.json_data({
+                    "success": True,
+                    "previous_channel": current_channel,
+                    "channel": channel,
+                    "version": current_version,
+                })
+            else:
+                out.success(f"Channel changed: {current_channel} -> {channel}")
+
+        if not dry_run:
+            if apply:
+                out.info("Checking for updates on new channel...")
+                from ainews_cli.update.engine import check_for_update, plan_update
+
+                try:
+                    check_result = check_for_update(config.paths, channel=channel)
+                    if check_result.update_available:
+                        out.info(f"Update available: {check_result.current_version} -> {check_result.latest_version}")
+                        update_plan_result = plan_update(check_result, config.paths)
+                        if update_plan_result.blockers:
+                            out.warning("Update blocked:")
+                            for b in update_plan_result.blockers:
+                                out.warning(f"  - {b}")
+                        else:
+                            out.info("Run 'ainews update apply' to apply the update.")
+                    else:
+                        out.success("Already running the latest version on this channel.")
+                except Exception as e:  # noqa: BLE001
+                    out.warning(f"Could not check for updates: {e}")
+            else:
+                out.info("Run 'ainews update check' to see available updates.")

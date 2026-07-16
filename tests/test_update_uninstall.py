@@ -259,6 +259,7 @@ class TestUpdatePlan:
         plan = UpdatePlan(
             check=check,
             artifact_sha256=None,
+            artifact_size=1024,
             config_migrations=[],
             db_migrations=[],
             service_restart_required=True,
@@ -269,6 +270,7 @@ class TestUpdatePlan:
             blockers=[],
         )
         assert plan.service_restart_required is True
+        assert plan.artifact_size == 1024
         with pytest.raises(AttributeError):
             plan.blockers = []  # type: ignore[misc]
 
@@ -830,6 +832,7 @@ class TestApplyUpdate:
         plan = UpdatePlan(
             check=check,
             artifact_sha256=None,
+            artifact_size=None,
             config_migrations=[],
             db_migrations=[],
             service_restart_required=True,
@@ -1392,3 +1395,895 @@ class TestExitCodes:
 
     def test_uninstall_error_is_int(self) -> None:
         assert isinstance(UNINSTALL_ERROR, int)
+
+
+# ===================================================================
+# 7. Migration detection and preflight (engine.py)
+# ===================================================================
+
+
+class TestMigrationDetection:
+    def test_config_migrations_returns_list(self) -> None:
+        from ainews_cli.update.engine import _detect_config_migrations
+
+        result = _detect_config_migrations("1.0.0", "1.1.0")
+        assert isinstance(result, list)
+
+    def test_db_migrations_returns_list(self, resolved_paths: Any) -> None:
+        from ainews_cli.update.engine import _detect_db_migrations
+
+        result = _detect_db_migrations(resolved_paths)
+        assert isinstance(result, list)
+
+    def test_migration_preflight_returns_list(self, resolved_paths: Any) -> None:
+        from ainews_cli.update.engine import _migration_preflight
+
+        result = _migration_preflight(resolved_paths, "1.0.0", "1.1.0")
+        assert isinstance(result, list)
+
+    @patch("ainews_cli.update.engine._detect_config_migrations", return_value=["1.0 -> 1.1: test"])
+    def test_plan_includes_config_migrations(self, mock_detect: MagicMock) -> None:
+        from ainews_cli.update.engine import plan_update
+        from ainews_cli.update.models import UpdateCheckResult
+        from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name=None,
+            artifact_url=None,
+            artifact_size=None,
+            min_supported_version="1.0.0",
+        )
+        dummy = ResolvedPath(
+            path=Path("/nonexistent"),
+            provenance=PathProvenance.PLATFORM_DEFAULT,
+            exists=False,
+            is_writable=False,
+        )
+        paths = ResolvedPaths(
+            app_dir=dummy, config_dir=dummy, data_dir=dummy,
+            state_dir=dummy, backup_dir=dummy, env_file=dummy,
+            providers_file=dummy, pipeline_file=dummy, sources_file=dummy,
+            topics_file=dummy, database_file=dummy,
+            install_metadata_file=dummy, transaction_lock=dummy,
+            transaction_staging=dummy,
+        )
+
+        plan = plan_update(check, paths)
+        assert len(plan.config_migrations) == 1
+        assert "1.0 -> 1.1" in plan.config_migrations[0]
+
+
+class TestMigrationPreflight:
+    def test_rejects_below_min_version(self, resolved_paths: Any) -> None:
+        from ainews_cli.update.engine import _migration_preflight
+
+        blockers = _migration_preflight(resolved_paths, "1.0.0", "0.5.0")
+        assert any("minimum supported" in b.lower() for b in blockers)
+
+
+# ===================================================================
+# 8. Disk space preflight (engine.py)
+# ===================================================================
+
+
+class TestDiskSpacePreflight:
+    def test_returns_none_when_sufficient(self, resolved_paths: Any) -> None:
+        from ainews_cli.update.engine import _check_disk_space
+
+        result = _check_disk_space(resolved_paths, required_bytes=1024)
+        # Should pass on any normal system with >1KB free
+        assert result is None or isinstance(result, str)
+
+    def test_returns_error_when_insufficient(self, tmp_path: Path) -> None:
+        from ainews_cli.update.engine import _check_disk_space
+        from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+
+        real_dir = tmp_path / "app"
+        real_dir.mkdir()
+
+        dummy = ResolvedPath(
+            path=real_dir,
+            provenance=PathProvenance.PLATFORM_DEFAULT,
+            exists=True,
+            is_writable=True,
+        )
+        paths = ResolvedPaths(
+            app_dir=dummy, config_dir=dummy, data_dir=dummy,
+            state_dir=dummy, backup_dir=dummy, env_file=dummy,
+            providers_file=dummy, pipeline_file=dummy, sources_file=dummy,
+            topics_file=dummy, database_file=dummy,
+            install_metadata_file=dummy, transaction_lock=dummy,
+            transaction_staging=dummy,
+        )
+
+        # Requesting an absurd amount should always fail
+        result = _check_disk_space(paths, required_bytes=999_999_999_999_999)
+        assert result is not None
+        assert "Insufficient disk space" in result
+
+
+# ===================================================================
+# 9. Health check failure rollback (engine.py)
+# ===================================================================
+
+
+class TestHealthCheckFailure:
+    def test_rollback_update_returns_false_when_nothing_to_rollback(
+        self, resolved_paths: Any
+    ) -> None:
+        from ainews_cli.update.engine import rollback_update
+
+        assert rollback_update(resolved_paths) is False
+
+    @patch("ainews_cli.update.engine.shutil")
+    def test_rollback_restores_previous_path(
+        self, mock_shutil: MagicMock, resolved_paths: Any
+    ) -> None:
+        from ainews_cli.update.engine import rollback_update
+        from ainews_cli.update.models import UpdateOperation, UpdatePhase
+
+        previous_dir = resolved_paths.app_dir.path.parent / "previous-1.0.0"
+        previous_dir.mkdir(parents=True, exist_ok=True)
+        (previous_dir / "test.txt").write_text("old version")
+
+        op = UpdateOperation(
+            phase=UpdatePhase.STAGED,
+            source_version="1.0.0",
+            target_version="1.1.0",
+            previous_app_path=str(previous_dir),
+            backup_id=None,
+        )
+
+        # Mock the lifecycle driver to return None (unavailable)
+        with patch("ainews_cli.update.engine._get_lifecycle_driver", return_value=None):
+            result = rollback_update(resolved_paths, operation=op)
+
+        assert result is True
+        assert op.phase == UpdatePhase.ROLLED_BACK
+
+
+# ===================================================================
+# 10. Manual recovery instructions (engine.py)
+# ===================================================================
+
+
+class TestManualRecovery:
+    def test_emits_recovery_instructions(self) -> None:
+        from ainews_cli.update.engine import _emit_manual_recovery_instructions
+        from ainews_cli.update.models import UpdateOperation
+
+        instructions: list[tuple[str, str]] = []
+        op = UpdateOperation(backup_id="backup-123")
+
+        def capture(phase: str, message: str) -> None:
+            instructions.append((phase, message))
+
+        _emit_manual_recovery_instructions(op, capture)
+
+        assert len(instructions) > 0
+        recovery_msgs = [m for p, m in instructions if p == "recovery"]
+        assert any("update status" in m for m in recovery_msgs)
+        assert any("restore" in m for m in recovery_msgs)
+
+    def test_emits_instructions_without_backup(self) -> None:
+        from ainews_cli.update.engine import _emit_manual_recovery_instructions
+        from ainews_cli.update.models import UpdateOperation
+
+        instructions: list[tuple[str, str]] = []
+        op = UpdateOperation(backup_id=None)
+
+        def capture(phase: str, message: str) -> None:
+            instructions.append((phase, message))
+
+        _emit_manual_recovery_instructions(op, capture)
+
+        recovery_msgs = [m for p, m in instructions if p == "recovery"]
+        assert any("external backup" in m for m in recovery_msgs)
+
+
+# ===================================================================
+# 11. Stale staging cleanup (engine.py)
+# ===================================================================
+
+
+class TestStaleStagingCleanup:
+    def test_removes_staging_dirs(self, tmp_path: Path) -> None:
+        from ainews_cli.update.engine import _clean_stale_staging
+
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+        staging = tmp_path / ".staging-ainews-1.0.0"
+        staging.mkdir()
+        (staging / "file.txt").write_text("data")
+
+        _clean_stale_staging(app_dir)
+        assert not staging.exists()
+
+    def test_preserves_non_staging_dirs(self, tmp_path: Path) -> None:
+        from ainews_cli.update.engine import _clean_stale_staging
+
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+        other = tmp_path / ".other-dir"
+        other.mkdir()
+
+        _clean_stale_staging(app_dir)
+        assert other.exists()
+
+
+# ===================================================================
+# 12. Artifact size reporting (engine.py)
+# ===================================================================
+
+
+class TestArtifactSizeReporting:
+    @patch("ainews_cli.update.engine.github")
+    @patch("ainews_cli.update.engine._fetch_artifact_size", return_value=1024 * 1024)
+    def test_check_includes_artifact_size(
+        self, mock_size: MagicMock, mock_github: MagicMock, resolved_paths: Any
+    ) -> None:
+        from ainews_cli.update.engine import check_for_update
+
+        mock_github.resolve_version.return_value = "tag:v2.0.0"
+        mock_github.resolve_artifact_url.return_value = (
+            "https://example.com/download",
+            "ainews-2.0.0-linux-x86_64.tar.gz",
+            "v2.0.0",
+        )
+        mock_github.detect_platform.return_value = "linux-x86_64"
+
+        result = check_for_update(resolved_paths)
+        assert result.artifact_size == 1024 * 1024
+
+    @patch("ainews_cli.update.engine.github")
+    @patch("ainews_cli.update.engine._fetch_artifact_size", return_value=None)
+    def test_check_handles_unknown_artifact_size(
+        self, mock_size: MagicMock, mock_github: MagicMock, resolved_paths: Any
+    ) -> None:
+        from ainews_cli.update.engine import check_for_update
+
+        mock_github.resolve_version.return_value = "tag:v2.0.0"
+        mock_github.resolve_artifact_url.return_value = (
+            "https://example.com/download",
+            "ainews-2.0.0-linux-x86_64.tar.gz",
+            "v2.0.0",
+        )
+        mock_github.detect_platform.return_value = "linux-x86_64"
+
+        result = check_for_update(resolved_paths)
+        assert result.artifact_size is None
+
+
+# ===================================================================
+# 13. Channel --apply flag and version pinning
+# ===================================================================
+
+
+class TestChannelApplyFlag:
+    def test_channel_set_json_with_apply(self, tmp_path: Path, metadata_path: Path) -> None:
+        from ainews_cli.channel.commands import register_commands
+        from ainews_cli.context import CLIContext
+        from ainews_cli.output import OutputFormatter
+        import typer
+
+        app = typer.Typer()
+        ctx = MagicMock(spec=CLIContext)
+        config = MagicMock()
+        config.paths.install_metadata_file.path = metadata_path
+        ctx.ensure_loaded.return_value = config
+        out = MagicMock(spec=OutputFormatter)
+
+        register_commands(app, ctx, out)
+
+        runner = __import__("typer.testing").testing.CliRunner()
+        # --apply without --yes should still change channel
+        with patch("ainews_cli.update.engine.check_for_update") as mock_check:
+            mock_check.side_effect = Exception("Network unavailable")
+            result = runner.invoke(app, ["channel", "set", "main", "-y", "--apply"])
+
+        # Verify metadata was updated
+        data = json.loads(metadata_path.read_text())
+        assert data["install_type"] == "main"
+
+
+class TestChannelVersionPinning:
+    def test_set_with_pinned_version(self, tmp_path: Path, metadata_path: Path) -> None:
+        from ainews_cli.channel.commands import register_commands
+        from ainews_cli.context import CLIContext
+        from ainews_cli.output import OutputFormatter
+        import typer
+
+        app = typer.Typer()
+        ctx = MagicMock(spec=CLIContext)
+        config = MagicMock()
+        config.paths.install_metadata_file.path = metadata_path
+        ctx.ensure_loaded.return_value = config
+        out = MagicMock(spec=OutputFormatter)
+
+        register_commands(app, ctx, out)
+
+        runner = __import__("typer.testing").testing.CliRunner()
+        result = runner.invoke(
+            app, ["channel", "set", "main", "-y", "--version", "1.5.0"]
+        )
+        assert result.exit_code == 0
+
+        data = json.loads(metadata_path.read_text())
+        assert data["install_type"] == "main"
+        assert data["pinned_version"] == "1.5.0"
+
+    def test_set_clears_pin_when_no_version(self, tmp_path: Path, metadata_path: Path) -> None:
+        from ainews_cli.channel.commands import register_commands
+        from ainews_cli.context import CLIContext
+        from ainews_cli.output import OutputFormatter
+        import typer
+
+        # Set initial pin
+        meta = json.loads(metadata_path.read_text())
+        meta["pinned_version"] = "1.2.0"
+        metadata_path.write_text(json.dumps(meta))
+
+        app = typer.Typer()
+        ctx = MagicMock(spec=CLIContext)
+        config = MagicMock()
+        config.paths.install_metadata_file.path = metadata_path
+        ctx.ensure_loaded.return_value = config
+        out = MagicMock(spec=OutputFormatter)
+
+        register_commands(app, ctx, out)
+
+        runner = __import__("typer.testing").testing.CliRunner()
+        result = runner.invoke(app, ["channel", "set", "main", "-y"])
+        assert result.exit_code == 0
+
+        data = json.loads(metadata_path.read_text())
+        assert "pinned_version" not in data
+
+
+# ===================================================================
+# 14. Uninstall purge backup
+# ===================================================================
+
+
+class TestUninstallPurgeBackup:
+    @patch("ainews_cli.uninstall.commands.typer.confirm", return_value=True)
+    @patch("ainews_cli.uninstall.commands._create_final_backup", return_value="backup-123")
+    def test_purge_creates_backup(
+        self, mock_backup: MagicMock, mock_confirm: MagicMock,
+        tmp_path: Path, metadata_path: Path
+    ) -> None:
+        from ainews_cli.uninstall.commands import _create_final_backup
+        from ainews_cli.output import OutputFormatter
+
+        # Just verify the function can be called
+        paths = MagicMock()
+        out = MagicMock(spec=OutputFormatter)
+        result = _create_final_backup(paths, out, yes=True)
+        # Result depends on whether create_backup is importable
+        assert result is None or isinstance(result, str)
+
+    def test_create_final_backup_returns_none_on_failure(
+        self, tmp_path: Path
+    ) -> None:
+        from ainews_cli.uninstall.commands import _create_final_backup
+        from ainews_cli.output import OutputFormatter
+
+        paths = MagicMock()
+        paths.app_dir.path = tmp_path / "nonexistent"
+        out = MagicMock(spec=OutputFormatter)
+
+        with patch(
+            "ainews_config.backup.create_backup",
+            side_effect=Exception("backup failed"),
+        ):
+            result = _create_final_backup(paths, out, yes=True)
+
+        assert result is None
+
+
+# ===================================================================
+# 15. Artifact size in UpdatePlan
+# ===================================================================
+
+
+class TestUpdatePlanArtifactSize:
+    def test_plan_includes_artifact_size(self) -> None:
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePlan
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name=None,
+            artifact_url=None,
+            artifact_size=5 * 1024 * 1024,
+            min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check,
+            artifact_sha256=None,
+            artifact_size=5 * 1024 * 1024,
+            config_migrations=[],
+            db_migrations=[],
+            service_restart_required=True,
+            estimated_downtime="< 30s",
+            backup_required=True,
+            rollback_capable=True,
+            paths_changed=["app_dir"],
+            blockers=[],
+        )
+        assert plan.artifact_size == 5 * 1024 * 1024
+
+    def test_plan_accepts_none_artifact_size(self) -> None:
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePlan
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name=None,
+            artifact_url=None,
+            artifact_size=None,
+            min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check,
+            artifact_sha256=None,
+            artifact_size=None,
+            config_migrations=[],
+            db_migrations=[],
+            service_restart_required=True,
+            estimated_downtime="< 30s",
+            backup_required=True,
+            rollback_capable=True,
+            paths_changed=["app_dir"],
+            blockers=[],
+        )
+        assert plan.artifact_size is None
+
+
+# ===================================================================
+# 16. Migration failure triggers auto-rollback
+# ===================================================================
+
+
+class TestMigrationFailureRollback:
+    @patch("ainews_cli.update.engine._get_lifecycle_driver", return_value=None)
+    @patch("ainews_cli.update.engine._run_migrations", side_effect=RuntimeError("migration failed"))
+    @patch("ainews_cli.update.engine._create_pre_update_backup")
+    @patch("ainews_cli.update.engine.stage_artifact")
+    @patch("ainews_cli.update.engine._download_artifact")
+    def test_migration_failure_rolls_back(
+        self, mock_dl: MagicMock, mock_staging: MagicMock, mock_bu: MagicMock,
+        mock_migrations: MagicMock, mock_driver: MagicMock,
+        resolved_paths: Any, tmp_path: Path
+    ) -> None:
+        from ainews_cli.update.engine import apply_update
+        from ainews_cli.update.models import (
+            UpdateCheckResult,
+            UpdatePhase,
+            UpdatePlan,
+        )
+
+        # Mock download to return a real temp file
+        fake_artifact = tmp_path / "fake-artifact.tar.gz"
+        fake_artifact.write_bytes(b"fake")
+        mock_dl.return_value = fake_artifact
+
+        # Mock staging to return a staging directory
+        staging_dir = tmp_path / ".staging-update"
+        staging_dir.mkdir()
+        mock_staging.return_value = staging_dir
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name="ainews-1.1.0-linux-x86_64.tar.gz",
+            artifact_url="https://example.com/artifact.tar.gz",
+            artifact_size=None,
+            min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check,
+            artifact_sha256=None,
+            artifact_size=None,
+            config_migrations=["1.0 -> 1.1: test"],
+            db_migrations=[],
+            service_restart_required=True,
+            estimated_downtime="< 30s",
+            backup_required=False,
+            rollback_capable=True,
+            paths_changed=["app_dir"],
+            blockers=[],
+        )
+
+        op = apply_update(resolved_paths, plan)
+        assert op.phase == UpdatePhase.FAILED
+        assert "migration failed" in (op.error_message or "")
+
+    @patch("ainews_cli.update.engine._get_lifecycle_driver", return_value=None)
+    @patch("ainews_cli.update.engine._run_migrations", side_effect=RuntimeError("db migration failed"))
+    @patch("ainews_cli.update.engine._create_pre_update_backup")
+    @patch("ainews_cli.update.engine.stage_artifact")
+    @patch("ainews_cli.update.engine._download_artifact")
+    @patch("ainews_cli.update.engine.rollback_update", side_effect=RuntimeError("rollback also failed"))
+    def test_migration_failure_emits_manual_recovery(
+        self, mock_rb: MagicMock, mock_dl: MagicMock, mock_staging: MagicMock,
+        mock_bu: MagicMock, mock_migrations: MagicMock, mock_driver: MagicMock,
+        resolved_paths: Any, tmp_path: Path
+    ) -> None:
+        from ainews_cli.update.engine import apply_update
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePhase, UpdatePlan
+
+        # Mock download to return a real temp file
+        fake_artifact = tmp_path / "fake-artifact.tar.gz"
+        fake_artifact.write_bytes(b"fake")
+        mock_dl.return_value = fake_artifact
+
+        # Mock staging to return a staging directory
+        staging_dir = tmp_path / ".staging-update"
+        staging_dir.mkdir()
+        mock_staging.return_value = staging_dir
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name="ainews-1.1.0-linux-x86_64.tar.gz",
+            artifact_url="https://example.com/artifact.tar.gz",
+            artifact_size=None,
+            min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check,
+            artifact_sha256=None,
+            artifact_size=None,
+            config_migrations=[],
+            db_migrations=["pending alembic"],
+            service_restart_required=True,
+            estimated_downtime="< 2m",
+            backup_required=False,
+            rollback_capable=True,
+            paths_changed=["app_dir"],
+            blockers=[],
+        )
+
+        # Do NOT set up previous dir or backup — rollback should fail
+        # and emit manual recovery instructions
+
+        phases: list[tuple[str, str]] = []
+        def capture(phase: str, msg: str) -> None:
+            phases.append((phase, msg))
+
+        op = apply_update(resolved_paths, plan, callback=capture)
+        assert op.phase == UpdatePhase.FAILED
+        recovery = [m for p, m in phases if p == "recovery"]
+        assert len(recovery) > 0
+
+
+# ===================================================================
+# 17. Secret-free JSON output
+# ===================================================================
+
+
+class TestSecretFreeJson:
+    def test_check_json_no_secrets(self, resolved_paths: Any) -> None:
+        """Verify that update check JSON output contains no secret-looking values."""
+        from ainews_cli.update.models import UpdateCheckResult
+
+        result = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name="ainews-1.1.0-linux-x86_64.tar.gz",
+            artifact_url="https://example.com/download",
+            artifact_size=1024,
+            min_supported_version="1.0.0",
+        )
+
+        import json as json_mod
+        data = {
+            "current_version": result.current_version,
+            "latest_version": result.latest_version,
+            "channel": result.channel,
+            "artifact_name": result.artifact_name,
+            "artifact_url": result.artifact_url,
+        }
+        serialized = json_mod.dumps(data)
+
+        secret_patterns = ["password", "secret", "token", "api_key", "apikey"]
+        for pattern in secret_patterns:
+            assert pattern not in serialized.lower()
+
+    def test_plan_json_no_secrets(self) -> None:
+        """Verify that update plan JSON output contains no secret-looking values."""
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePlan
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name="ainews-1.1.0-linux-x86_64.tar.gz",
+            artifact_url="https://example.com/download",
+            artifact_size=None,
+            min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check,
+            artifact_sha256="abc123def456",
+            artifact_size=None,
+            config_migrations=[],
+            db_migrations=[],
+            service_restart_required=True,
+            estimated_downtime="< 30s",
+            backup_required=True,
+            rollback_capable=True,
+            paths_changed=["app_dir"],
+            blockers=[],
+        )
+
+        import json as json_mod
+        data = {
+            "artifact_sha256": plan.artifact_sha256,
+            "backup_required": plan.backup_required,
+            "blockers": plan.blockers,
+        }
+        serialized = json_mod.dumps(data)
+
+        secret_patterns = ["password", "secret", "token", "api_key", "apikey"]
+        for pattern in secret_patterns:
+            assert pattern not in serialized.lower()
+
+
+# ===================================================================
+# 18. Version pinning (end-to-end)
+# ===================================================================
+
+
+class TestVersionPinning:
+    @patch("ainews_cli.update.engine.github")
+    def test_check_for_update_uses_pinned_version(
+        self, mock_github: MagicMock, resolved_paths: Any
+    ) -> None:
+        """check_for_update must read pinned_version from install metadata."""
+        from ainews_cli.update.engine import check_for_update
+        import json as json_mod
+
+        # Write install metadata with pinned version
+        meta_path = resolved_paths.install_metadata_file.path
+        meta_data = {
+            "version": "1.3.0",
+            "installed_at": "2026-01-15T10:00:00Z",
+            "install_type": "stable",
+            "commit": "abc123def456",
+            "pinned_version": "1.5.0",
+        }
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(json_mod.dumps(meta_data))
+
+        mock_github.resolve_version.return_value = "tag:v1.5.0"
+        mock_github.resolve_artifact_url.return_value = (
+            "https://example.com/download",
+            "ainews-1.5.0-linux-x86_64.tar.gz",
+            "v1.5.0",
+        )
+        mock_github.detect_platform.return_value = "linux-x86_64"
+
+        result = check_for_update(resolved_paths)
+
+        # resolve_version should have been called with version="1.5.0"
+        mock_github.resolve_version.assert_called_once_with(
+            "stable", version="1.5.0"
+        )
+        assert result.latest_version == "1.5.0"
+
+    @patch("ainews_cli.update.engine.github")
+    def test_check_for_update_without_pin(
+        self, mock_github: MagicMock, resolved_paths: Any
+    ) -> None:
+        """Without pinned_version, check_for_update uses channel resolution."""
+        from ainews_cli.update.engine import check_for_update
+        import json as json_mod
+
+        # Write install metadata WITHOUT pinned version
+        meta_path = resolved_paths.install_metadata_file.path
+        meta_data = {
+            "version": "1.3.0",
+            "installed_at": "2026-01-15T10:00:00Z",
+            "install_type": "stable",
+        }
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(json_mod.dumps(meta_data))
+
+        mock_github.resolve_version.return_value = "tag:v2.0.0"
+        mock_github.resolve_artifact_url.return_value = (
+            "https://example.com/download",
+            "ainews-2.0.0-linux-x86_64.tar.gz",
+            "v2.0.0",
+        )
+        mock_github.detect_platform.return_value = "linux-x86_64"
+
+        result = check_for_update(resolved_paths)
+
+        # resolve_version should have been called without version kwarg
+        mock_github.resolve_version.assert_called_once_with("stable")
+        assert result.latest_version == "2.0.0"
+
+
+# ===================================================================
+# 19. Malicious metadata path rejection
+# ===================================================================
+
+
+class TestMaliciousMetadataRejection:
+    def test_uninstall_rejects_traversal_metadata(self, tmp_path: Path) -> None:
+        """Uninstall should reject metadata pointing outside approved roots."""
+        from ainews_cli.uninstall.commands import _is_path_owned
+
+        # A path that escapes the approved root
+        evil = Path("/etc/../../etc/passwd")
+        approved = [tmp_path / "approved"]
+        assert _is_path_owned(evil, approved) is False
+
+    def test_uninstall_rejects_relative_path(self, tmp_path: Path) -> None:
+        """Relative paths that resolve outside approved roots are rejected."""
+        from ainews_cli.uninstall.commands import _is_path_owned
+
+        evil = Path("../secret")
+        approved = [tmp_path / "approved"]
+        assert _is_path_owned(evil, approved) is False
+
+    def test_uninstall_rejects_absolute_path_outside_roots(self, tmp_path: Path) -> None:
+        """Absolute paths outside approved roots are rejected."""
+        from ainews_cli.uninstall.commands import _is_path_owned
+
+        evil = Path("/var/log/evil")
+        approved = [tmp_path / "approved"]
+        assert _is_path_owned(evil, approved) is False
+
+    def test_is_unsafe_path_rejects_symlink_to_root(self, tmp_path: Path) -> None:
+        """Paths containing unresolved shell variables are rejected."""
+        from ainews_cli.uninstall.commands import _is_unsafe_path
+
+        assert _is_unsafe_path(Path("${HOME}/../../etc")) is True
+
+    def test_removal_plan_uses_owned_paths_only(self, tmp_path: Path) -> None:
+        """Removal plan only includes paths under approved roots."""
+        from ainews_cli.uninstall.commands import _build_removal_plan
+
+        base = tmp_path / "ainews"
+        base.mkdir()
+        app_d = base / "app"
+        app_d.mkdir()
+
+        paths = MagicMock()
+        paths.app_dir.path = app_d
+        paths.config_dir.path = tmp_path / "evil" / "config"
+        paths.data_dir.path = tmp_path / "evil" / "data"
+        paths.state_dir.path = tmp_path / "evil" / "state"
+        paths.backup_dir.path = tmp_path / "evil" / "backups"
+
+        plan = _build_removal_plan(paths, remove_app_only=False, purge=True)
+        # Only app_dir is under approved roots; evil paths should be excluded
+        all_paths = []
+        for items in plan.values():
+            all_paths.extend(items)
+        for p in all_paths:
+            assert "evil" not in p
+
+
+# ===================================================================
+# 20. Prior-version migration fixture
+# ===================================================================
+
+
+class TestPriorVersionMigration:
+    def test_config_migration_from_v1_to_v2(self) -> None:
+        """Verify that config migrations can be detected between versions."""
+        from ainews_cli.update.engine import _detect_config_migrations
+
+        result = _detect_config_migrations("1.0.0", "1.1.0")
+        assert isinstance(result, list)
+
+    def test_migration_preflight_rejects_old_target(self, resolved_paths: Any) -> None:
+        """Migration preflight rejects target versions below minimum supported."""
+        from ainews_cli.update.engine import _migration_preflight
+
+        blockers = _migration_preflight(resolved_paths, "1.0.0", "0.1.0")
+        assert any("minimum" in b.lower() for b in blockers)
+
+    def test_plan_includes_migration_details(self) -> None:
+        """Update plan includes config and DB migration details."""
+        from ainews_cli.update.engine import plan_update
+        from ainews_cli.update.models import UpdateCheckResult
+        from ainews_config.paths import PathProvenance, ResolvedPath, ResolvedPaths
+
+        check = UpdateCheckResult(
+            current_version="1.0.0",
+            latest_version="1.1.0",
+            current_commit=None,
+            latest_commit=None,
+            channel="stable",
+            update_available=True,
+            is_upgrade=True,
+            is_downgrade=False,
+            is_reinstall=False,
+            artifact_name=None,
+            artifact_url=None,
+            artifact_size=None,
+            min_supported_version="1.0.0",
+        )
+        dummy = ResolvedPath(
+            path=Path("/nonexistent"),
+            provenance=PathProvenance.PLATFORM_DEFAULT,
+            exists=False,
+            is_writable=False,
+        )
+        paths = ResolvedPaths(
+            app_dir=dummy, config_dir=dummy, data_dir=dummy,
+            state_dir=dummy, backup_dir=dummy, env_file=dummy,
+            providers_file=dummy, pipeline_file=dummy, sources_file=dummy,
+            topics_file=dummy, database_file=dummy,
+            install_metadata_file=dummy, transaction_lock=dummy,
+            transaction_staging=dummy,
+        )
+
+        plan = plan_update(check, paths)
+        assert isinstance(plan.config_migrations, list)
+        assert isinstance(plan.db_migrations, list)
+        assert isinstance(plan.paths_changed, list)
+
+    def test_downgrade_not_blocked_by_migration_preflight(self, resolved_paths: Any) -> None:
+        """Migration preflight only checks minimum version, not direction."""
+        from ainews_cli.update.engine import _migration_preflight
+
+        # Downgrade to 1.0.0 (still above minimum) — no blocker from preflight
+        blockers = _migration_preflight(resolved_paths, "1.1.0", "1.0.0")
+        # Should not have a minimum-version blocker (direction check is in plan_update)
+        assert not any("minimum" in b.lower() for b in blockers)

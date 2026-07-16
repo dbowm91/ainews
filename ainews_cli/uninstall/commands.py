@@ -229,6 +229,44 @@ def _prompt_confirmation(plan: dict[str, list[str]], out: OutputFormatter) -> bo
     return typer.confirm("\nContinue with removal?")
 
 
+# ---------------------------------------------------------------------------
+# Final backup for purge
+# ---------------------------------------------------------------------------
+
+
+def _create_final_backup(paths: Any, out: OutputFormatter, yes: bool) -> str | None:
+    """Create a final backup before purge. Returns backup ID or None.
+
+    Returns the backup_id string on success, None if backup was skipped
+    or failed.
+    """
+    if not yes:
+        out.warning(
+            "Purge will permanently delete all config, data, and backups."
+        )
+        if not typer.confirm("Create a final backup before purge?"):
+            out.info("Skipping backup. Proceeding with purge.")
+            return None
+
+    try:
+        from ainews_config.backup import create_backup, verify_backup
+
+        out.info("Creating final backup...")
+        manifest = create_backup(paths, tag="pre-purge")
+        verify_result = verify_backup(paths, manifest.backup_id)
+
+        if not verify_result.valid:
+            out.warning(f"Backup verification failed: {verify_result.message}")
+            out.warning("Proceeding without verified backup.")
+            return None
+
+        return manifest.backup_id
+    except Exception as e:  # noqa: BLE001
+        out.warning(f"Could not create backup: {e}")
+        out.warning("Proceeding without backup.")
+        return None
+
+
 def _format_size(path: Path) -> str:
     """Best-effort directory/file size."""
     try:
@@ -309,6 +347,15 @@ def register_commands(  # noqa: C901
                 "--purge in non-interactive mode requires --yes to confirm.",
                 exit_codes.VALIDATION_ERROR,
             )
+
+        # ── Final backup requirement for --purge ─────────────────
+        if purge and not dry_run:
+            backup_id = _create_final_backup(config.paths, out, yes)
+            if backup_id:
+                out.info(f"Final backup created: {backup_id}")
+            elif backup_id is None and not yes:
+                # User declined backup
+                return
 
         # ── Build plan ───────────────────────────────────────────
         plan = _build_removal_plan(config.paths, remove_app_only, purge)

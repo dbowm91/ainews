@@ -1092,7 +1092,10 @@ Show detailed update plan (non-mutating). Includes artifact size, checksum, migr
 
 **Options:**
 - `-c`, `--channel CHANNEL` — Override release channel
+- `--dry-run` — Show what would happen without applying
 - `-j`, `--json` — Output in JSON format
+
+**Output includes:** Artifact size, config/DB migration steps, service restart requirement, estimated downtime, backup requirement, rollback capability, paths that will change, and any blockers.
 
 ---
 
@@ -1117,7 +1120,7 @@ Apply an available update. Detects incomplete operations and offers resume/rollb
 
 ### `ainews update rollback`
 
-Rollback a failed or incomplete update. Restores previous app version from backup or staging.
+Rollback a failed or incomplete update. Restores previous app version from backup or staging. If both the previous version and backup are unavailable, manual recovery instructions are displayed.
 
 **Options:**
 - `-y`, `--yes` — Skip confirmation prompts
@@ -1127,6 +1130,12 @@ Rollback a failed or incomplete update. Restores previous app version from backu
 - `0` — Rollback completed successfully
 - `1` — Rollback failed
 - `8` — Rollback error
+
+**Manual recovery:** If automatic rollback fails, the following steps can restore the system:
+1. Check update status: `ainews update status --json`
+2. Restore from backup: `ainews restore <backup-id>` (if backup was created)
+3. Verify services: `ainews health`
+4. Check logs: `ainews logs`
 
 ---
 
@@ -1152,7 +1161,7 @@ Show the current release channel, version, commit, and installation metadata.
 
 ### `ainews channel set CHANNEL`
 
-Set the release channel. Validates channel, requires confirmation for risky channels (prerelease, main). Does NOT trigger an implicit update.
+Set the release channel. Validates channel, requires confirmation for risky channels (prerelease, main). Does NOT trigger an implicit update unless `--apply` is specified.
 
 **Arguments:**
 - `CHANNEL` — New channel: stable, prerelease, or main
@@ -1160,7 +1169,16 @@ Set the release channel. Validates channel, requires confirmation for risky chan
 **Options:**
 - `--dry-run` — Show what would change without writing
 - `-y`, `--yes` — Skip confirmation prompt
+- `--apply` — Immediately check for and apply updates after channel change
+- `--version VERSION` — Pin to a specific version (prevents channel resolution)
 - `-j`, `--json` — Output in JSON format
+
+**Channel semantics:**
+- `stable` — Latest GitHub release tag (default, recommended for production)
+- `prerelease` — Latest pre-release tag (may be unstable)
+- `main` — Branch HEAD commit (development only)
+
+**Downgrade limitations:** Switching from a higher version channel to a lower one (e.g., `stable` to `main`) does not automatically downgrade. Run `ainews update check` to see available versions, then `ainews update apply` if a downgrade is desired. Downgrades may require manual intervention for config/database migrations.
 
 ---
 
@@ -1182,9 +1200,14 @@ Remove ainews application files while preserving operator-owned state. By defaul
 - Validates path ownership against approved roots
 - Rejects unsafe paths (root, home, empty, unresolved variables)
 - Stops services before removal
+- `--purge` prompts for a final backup before deleting mutable state
+
+**Purge implications:** `--purge` permanently removes all configuration, databases, application data, and backups. A final backup is created before purge unless declined. This action is irreversible — ensure you have external backups before proceeding.
 
 **Exit codes:**
 - `0` — Uninstall completed successfully
 - `1` — Uninstall failed
 - `5` — Not found (no install metadata)
 - `11` — Uninstall error
+
+**Manual recovery:** If uninstall partially fails, check the output for which items failed to remove. You can manually remove remaining files after verifying they are safe to delete.

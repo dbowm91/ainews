@@ -373,12 +373,16 @@ Canonical paths:
 ### Update Architecture
 The update system at `ainews_cli/update/` provides safe, channel-aware in-place updates:
 - **State machine:** `UpdatePhase` enum tracks operation lifecycle: idle → checking → planned → downloading → verified → backed_up → staged → migrating → activated → validating → complete (or failed/rolled_back)
-- **GitHub client:** `ainews_cli/update/github.py` replicates installer's version resolution and artifact download logic in Python using `urllib.request`. Supports `AINEWS_GITHUB_TOKEN` and proxy env vars.
+- **GitHub client:** `ainews_cli/update/github.py` replicates installer's version resolution and artifact download logic in Python using `urllib.request`. Supports `AINEWS_GITHUB_TOKEN` and proxy env vars. Reports artifact size via HEAD request.
 - **Update engine:** `ainews_cli/update/engine.py` orchestrates the full pipeline: check → plan → download → verify checksum → create pre-update backup → extract to staging → stop services → activate → run migrations → start services → health check → auto-rollback on failure
+- **Migration integration:** Detects both config schema migrations (`ainews_config.migrations`) and Alembic database migrations (`ainews_cli.migrations`). Runs migration preflight checks (lock detection, version validation), executes migrations, and validates post-migration state (config parseability, DB integrity).
+- **Disk space preflight:** Checks available disk space before download and before applying. Fails early if insufficient space is detected.
+- **Staging cleanup:** Removes stale `.staging-*` directories before downloading new artifacts.
 - **Locking:** Exclusive `fcntl.flock` on `state_dir/update.lock` prevents concurrent update/uninstall/restore operations
 - **State persistence:** `UpdateOperation` saved to `state_dir/update-state.json` for interrupted operation recovery
-- **Pre-update backup:** Full backup via `ainews_config.backup.create_backup()` before any migration, verified before proceeding
-- **Rollback:** Automatic on failure; explicit via `ainews update rollback` within retention window. Restores previous app version from staging backup or pre-update backup.
+- **Pre-update backup:** Full backup via `ainews_config.backup.create_backup()` before any migration, verified before proceeding. Optional `force_backup` override allows proceeding when backup fails.
+- **Rollback:** Automatic on failure; explicit via `ainews update rollback` within 30-day retention window. Restores previous app version from staging backup or pre-update backup. Emits manual recovery instructions when automatic rollback fails.
+- **Health validation:** Runs lifecycle health check and optional doctor/smoke test after update. Health or doctor failures trigger automatic rollback.
 - **Version comparison:** Uses `packaging.version.Version` when available, falls back to string comparison
 
 Commands: `ainews update check`, `ainews update plan`, `ainews update apply`, `ainews update rollback`, `ainews update status`
@@ -386,13 +390,16 @@ Commands: `ainews update check`, `ainews update plan`, `ainews update apply`, `a
 ### Channel Management
 Channel commands at `ainews_cli/channel/` manage the release channel:
 - `ainews channel show` — displays current channel, version, commit, installed-at from `install-metadata.json`
-- `ainews channel set <channel>` — validates channel (stable/prerelease/main), requires confirmation for risky channels (prerelease/main), writes metadata atomically, does NOT trigger implicit update
+- `ainews channel set <channel>` — validates channel (stable/prerelease/main), requires confirmation for risky channels (prerelease/main), writes metadata atomically
+- `--apply` flag triggers immediate update check after channel change
+- `--version` flag pins to a specific version, preventing channel resolution
+- Switching channels clears any existing version pin unless `--version` is also specified
 
 ### Uninstall Architecture
 The uninstall command at `ainews_cli/uninstall/` removes application files while preserving operator-owned state:
 - **Default behavior:** Removes only app files (binaries, code), preserves config, data, backups, and state
 - **`--remove-app-only`:** Removes only application files
-- **`--purge`:** Removes everything including config, data, and backups (requires `--yes` in non-interactive mode)
+- **`--purge`:** Removes everything including config, data, and backups (requires `--yes` in non-interactive mode). Prompts for a final backup before deleting mutable state.
 - **Path ownership validation:** Each target path must be under an approved root (`~/.local/share/ainews`, `~/.config/ainews`, `/opt/ainews`, etc.)
 - **Safety checks:** Refuses without install metadata, rejects unsafe paths (root, home, empty, unresolved variables)
 - **Service lifecycle:** Stops services via lifecycle driver before removal

@@ -209,6 +209,11 @@ def register_commands(  # noqa: C901
             "-y",
             help="Skip confirmation prompts",
         ),
+        force_backup: bool = typer.Option(
+            False,
+            "--force-backup",
+            help="Continue even if pre-update backup fails (not recommended)",
+        ),
         json_output: bool = typer.Option(
             False,
             "--json",
@@ -305,6 +310,11 @@ def register_commands(  # noqa: C901
                 out.info(f"  [{phase}] {message}")
 
         # ── Apply ────────────────────────────────────────────────
+        def _doctor_runner() -> dict:
+            from ainews_cli.doctor import run_doctor
+            report = run_doctor(paths=config.paths, quick=True)
+            return report.to_dict()
+
         try:
             operation = apply_update(
                 config.paths,
@@ -312,6 +322,8 @@ def register_commands(  # noqa: C901
                 dry_run=dry_run,
                 yes=yes,
                 callback=_emit_progress,
+                force_backup=force_backup,
+                doctor_runner=_doctor_runner,
             )
         except Exception as e:  # noqa: BLE001
             out.error(f"Update failed: {e}", exit_codes.IO_ERROR)

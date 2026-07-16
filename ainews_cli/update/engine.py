@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
+import os
 import shutil
 import tarfile
 import tempfile
@@ -302,16 +303,22 @@ def _run_db_migrations(paths: ResolvedPaths) -> dict:
 def _validate_post_migration(
     paths: ResolvedPaths,
     emit: ProgressCallback,
+    config_root: Path | None = None,
 ) -> None:
     """Validate config and database after migration."""
     emit("validating_migrations", "Validating post-migration state...")
 
-    # Validate config files parse correctly
+    # Validate config files parse correctly — use config_root if provided (staged),
+    # otherwise fall back to the live config directory
+    if config_root is not None:
+        config_dir = config_root
+    else:
+        config_dir = paths.config_dir.path
     config_files = [
-        paths.providers_file.path,
-        paths.pipeline_file.path,
-        paths.sources_file.path,
-        paths.topics_file.path,
+        config_dir / "providers.yaml",
+        config_dir / "pipeline.yaml",
+        config_dir / "sources.yaml",
+        config_dir / "topics.yaml",
     ]
     for config_file in config_files:
         if config_file.exists():
@@ -428,9 +435,18 @@ def plan_update(
     backup_required = check_result.is_upgrade or check_result.is_reinstall
     total_migrations = len(config_migrations) + len(db_migrations)
 
+    # Fetch expected SHA-256 from release metadata
+    sha256: str | None = None
+    if check_result.artifact_name:
+        try:
+            resolved = github.resolve_version(check_result.channel)
+            sha256 = _fetch_sha256_from_release(resolved, check_result.artifact_name)
+        except Exception:  # noqa: BLE001
+            logger.debug("Could not fetch expected SHA-256 for artifact")
+
     return UpdatePlan(
         check=check_result,
-        artifact_sha256=None,
+        artifact_sha256=sha256,
         artifact_size=check_result.artifact_size,
         config_migrations=config_migrations,
         db_migrations=db_migrations,
@@ -459,6 +475,14 @@ def stage_artifact(artifact_path: Path, app_dir: Path) -> Path:
     staging_dir.mkdir(parents=True, exist_ok=True)
 
     with tarfile.open(artifact_path, "r:gz") as tar:
+        # Defense-in-depth: reject paths with traversal components
+        for member in tar.getmembers():
+            member_path = (staging_dir / member.name).resolve()
+            if not str(member_path).startswith(str(staging_dir.resolve())):
+                raise RuntimeError(
+                    f"Unsafe path in tarball: {member.name} "
+                    f"(resolves outside staging directory)"
+                )
         tar.extractall(path=staging_dir)
 
     extracted_items = list(staging_dir.iterdir())
@@ -510,6 +534,47 @@ def _clean_stale_staging(app_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _fetch_sha256_from_release(resolved: str, artifact_name: str) -> str | None:
+    """Try to fetch the expected SHA-256 hash from the release's SHA256SUMS file."""
+    try:
+        tag = ""
+        commit = ""
+        if resolved.startswith("tag:"):
+            tag = resolved[len("tag:"):]
+        elif resolved.startswith("commit:"):
+            commit = resolved[len("commit:"):]
+
+        if tag:
+            release_url = f"{github.GITHUB_API}/releases/tags/{tag}"
+        elif commit:
+            short = commit[:8]
+            release_url = f"{github.GITHUB_API}/releases/tags/main-{short}"
+        else:
+            return None
+
+        release_data = github._github_request(release_url)
+        for asset in release_data.get("assets", []):
+            if asset.get("name") == "SHA256SUMS":
+                download_url = asset.get("browser_download_url", "")
+                if not download_url:
+                    continue
+                import urllib.request
+                req = urllib.request.Request(download_url)
+                req.add_header("User-Agent", "ainews-cli")
+                token = os.environ.get("AINEWS_GITHUB_TOKEN")
+                if token:
+                    req.add_header("Authorization", f"token {token}")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    content = resp.read().decode("utf-8")
+                for line in content.strip().splitlines():
+                    parts = line.split()
+                    if len(parts) == 2 and parts[1] == artifact_name:
+                        return parts[0]
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not fetch SHA256SUMS from release")
+    return None
+
+
 def _download_artifact(
     plan: UpdatePlan,
     operation: UpdateOperation,
@@ -531,14 +596,31 @@ def _download_artifact(
         raise RuntimeError("No artifact URL available")
 
     github.download_file(plan.check.artifact_url, artifact_path, "update artifact")
-    operation.artifact_sha256 = str(artifact_path.stat().st_size)
+
+    # Compute actual SHA-256 hash
+    import hashlib
+    sha256 = hashlib.sha256()
+    with open(artifact_path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            sha256.update(chunk)
+    actual_sha256 = sha256.hexdigest()
+    operation.artifact_sha256 = actual_sha256
+
+    # Verify checksum if expected hash is available
+    expected_sha256 = plan.artifact_sha256
+    if expected_sha256:
+        if actual_sha256.lower() != expected_sha256.lower():
+            raise RuntimeError(
+                f"Checksum mismatch: expected {expected_sha256}, got {actual_sha256}"
+            )
+        emit("checksum_verified", "SHA-256 checksum verified")
+
     operation.phase = UpdatePhase.VERIFIED
     save_update_state(paths.state_dir.path, operation)
     emit("verified", "Artifact downloaded and verified")
-
-    if plan.artifact_sha256:
-        github.verify_checksum(artifact_path, plan.artifact_sha256)
-        emit("checksum_verified", "SHA-256 checksum verified")
 
     return artifact_path
 
@@ -575,6 +657,13 @@ def _create_pre_update_backup(
 
     operation.backup_id = manifest.backup_id
 
+    # Pin the pre-update backup so it's not pruned during retention window
+    try:
+        from ainews_config.backup import pin_backup
+        pin_backup(paths, manifest.backup_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not pin pre-update backup %s", manifest.backup_id)
+
     verify_result = verify_backup(paths, manifest.backup_id)
     if not verify_result.valid:
         if force:
@@ -593,8 +682,9 @@ def _run_migrations(
     operation: UpdateOperation,
     paths: ResolvedPaths,
     emit: ProgressCallback,
+    staging_path: Path | None = None,
 ) -> None:
-    """Run config and database migrations."""
+    """Run config and database migrations against staged files."""
     total = len(plan.config_migrations) + len(plan.db_migrations)
     if total == 0:
         return
@@ -603,7 +693,7 @@ def _run_migrations(
     save_update_state(paths.state_dir.path, operation)
     emit("migrating", f"Running {total} migration(s)...")
 
-    # Run config schema migrations
+    # Run config schema migrations against the staged directory
     if plan.config_migrations:
         emit("migrating_config", f"Running {len(plan.config_migrations)} config migration(s)...")
         try:
@@ -616,9 +706,9 @@ def _run_migrations(
                 plan.check.current_version,
                 plan.check.latest_version,
             )
-            # Use staging directory if available, otherwise use app dir
-            staging = Path(plan.check.artifact_url) if plan.check.artifact_url else paths.app_dir.path
-            report = execute_migration_plan(migration_plan.migrations, staging)
+            # Run migrations against staged config files, not the live directory
+            config_root = staging_path if staging_path else paths.config_dir.path
+            report = execute_migration_plan(migration_plan.migrations, config_root)
             for r in report:
                 operation.migration_results.append({
                     "migration": r.migration_id,
@@ -644,11 +734,8 @@ def _run_migrations(
         if not result.get("success"):
             raise RuntimeError(f"Database migration failed: {result.get('error')}")
 
-    # Post-migration validation
-    _validate_post_migration(paths, emit)
-
-    operation.phase = UpdatePhase.ACTIVATED
-    save_update_state(paths.state_dir.path, operation)
+    # Post-migration validation against staged config
+    _validate_post_migration(paths, emit, config_root=staging_path)
 
 
 def _validate_health(
@@ -718,6 +805,15 @@ def apply_update(
         emit("planned", f"Would update {plan.check.current_version} -> {plan.check.latest_version}")
         return operation
 
+    # Acquire exclusive lock to prevent concurrent updates
+    lock_fd = acquire_update_lock(paths)
+    if lock_fd is None:
+        operation.phase = UpdatePhase.FAILED
+        operation.error_message = "Another update operation is in progress."
+        save_update_state(paths.state_dir.path, operation)
+        emit("failed", "Another update operation is in progress.")
+        return operation
+
     # Disk space preflight
     disk_error = _check_disk_space(paths)
     if disk_error:
@@ -725,6 +821,7 @@ def apply_update(
         operation.error_message = disk_error
         save_update_state(paths.state_dir.path, operation)
         emit("failed", disk_error)
+        release_update_lock(lock_fd)
         return operation
 
     save_update_state(paths.state_dir.path, operation)
@@ -750,6 +847,9 @@ def apply_update(
             if not stop_result.success:
                 raise RuntimeError(f"Failed to stop services: {stop_result.message}")
 
+        # Run migrations against staged files BEFORE activating
+        _run_migrations(plan, operation, paths, emit, staging_path=staging)
+
         emit("activating", "Installing update...")
         previous = paths.app_dir.path.parent / f"previous-{plan.check.current_version}"
         activate_staged(staging, paths.app_dir.path, previous)
@@ -757,8 +857,6 @@ def apply_update(
         operation.phase = UpdatePhase.ACTIVATED
         save_update_state(paths.state_dir.path, operation)
         emit("activated", "Update files installed")
-
-        _run_migrations(plan, operation, paths, emit)
 
         emit("starting", "Starting services...")
         if driver is not None:
@@ -790,6 +888,7 @@ def apply_update(
     finally:
         if tmp_dir is not None and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
+        release_update_lock(lock_fd)
 
     return operation
 
@@ -826,6 +925,19 @@ def rollback_update(
             shutil.move(previous, str(paths.app_dir.path))
             _emit("rolled_back", "Previous version restored")
         elif operation.backup_id:
+            # Verify backup is within retention window
+            backup_age_ok = _check_backup_retention(paths, operation.backup_id)
+            if not backup_age_ok:
+                logger.warning(
+                    "Backup %s is older than %d days — rollback may be incompatible",
+                    operation.backup_id,
+                    ROLLBACK_RETENTION_WINDOW_DAYS,
+                )
+                _emit("rollback_warning",
+                       f"Warning: backup {operation.backup_id} is older than "
+                       f"{ROLLBACK_RETENTION_WINDOW_DAYS} days. "
+                       f"Rollback may have compatibility issues.")
+
             from ainews_config.backup import restore_backup
 
             restore_backup(paths, operation.backup_id)
@@ -861,6 +973,40 @@ def rollback_update(
         _emit("rollback_failed", "Rollback failed. Manual intervention may be required.")
         _emit_manual_recovery_instructions(operation, _emit)
         return False
+
+
+def _check_backup_retention(paths: ResolvedPaths, backup_id: str) -> bool:
+    """Check if a backup is within the retention window.
+
+    Returns True if the backup is recent enough, False if it's too old.
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from ainews_config.backup import verify_backup
+
+        verify_result = verify_backup(paths, backup_id)
+        if not verify_result.valid:
+            return False
+
+        # Check backup age from manifest
+        backup_dir = paths.backup_dir.path
+        manifest_path = backup_dir / backup_id / "manifest.json"
+        if not manifest_path.exists():
+            return False
+
+        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        created_at = manifest_data.get("created_at", "")
+        if not created_at:
+            return False
+
+        created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=ROLLBACK_RETENTION_WINDOW_DAYS)
+        return created_dt >= cutoff
+
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not check backup retention for %s", backup_id)
+        return True  # Assume OK if check fails
 
 
 def _emit_manual_recovery_instructions(

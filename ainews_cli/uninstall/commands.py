@@ -115,7 +115,7 @@ def _build_removal_plan(  # noqa: C901
         _add(plan["app_files"], app_dir)
 
     # ── Config files ─────────────────────────────────────────────
-    if not remove_app_only:
+    if purge:
         config_dir = paths.config_dir.path
         if config_dir.exists():
             _add(plan["config_files"], config_dir)
@@ -325,9 +325,10 @@ def register_commands(  # noqa: C901
     ) -> None:
         """Remove ainews application files while preserving operator-owned state.
 
-        By default removes only application files. Use --purge to remove
-        config, data, and backups as well. Operator-owned state (manual
-        backups, external databases) is always preserved.
+        By default removes only application files, CLI shims, and service
+        definitions. Config, data, and backups are preserved. Use --purge to
+        remove everything including config, data, and backups. Use
+        --remove-app-only to remove only the application directory itself.
         """
         # ── Load metadata ────────────────────────────────────────
         from ainews_config.paths import load_install_metadata

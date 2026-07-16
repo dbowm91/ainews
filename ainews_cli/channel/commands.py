@@ -184,7 +184,7 @@ def register_commands(  # noqa: C901
         if not dry_run:
             if apply:
                 out.info("Checking for updates on new channel...")
-                from ainews_cli.update.engine import check_for_update, plan_update
+                from ainews_cli.update.engine import apply_update, check_for_update, plan_update
 
                 try:
                     check_result = check_for_update(config.paths, channel=channel)
@@ -196,7 +196,27 @@ def register_commands(  # noqa: C901
                             for b in update_plan_result.blockers:
                                 out.warning(f"  - {b}")
                         else:
-                            out.info("Run 'ainews update apply' to apply the update.")
+                            out.info("Applying update...")
+
+                            def _emit_progress(phase: str, message: str) -> None:
+                                out.info(f"  [{phase}] {message}")
+
+                            operation = apply_update(
+                                config.paths,
+                                update_plan_result,
+                                yes=True,
+                                callback=_emit_progress,
+                            )
+                            if operation.phase.value == "complete":
+                                out.success(
+                                    f"Update complete: {operation.source_version} -> {operation.target_version}"
+                                )
+                            elif operation.phase.value == "failed":
+                                out.error(
+                                    f"Update failed: {operation.error_message or 'unknown error'}",
+                                )
+                            elif operation.phase.value == "rolled_back":
+                                out.warning("Update was rolled back.")
                     else:
                         out.success("Already running the latest version on this channel.")
                 except Exception as e:  # noqa: BLE001

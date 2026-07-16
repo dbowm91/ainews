@@ -1272,7 +1272,7 @@ class TestBuildRemovalPlan:
         with patch("ainews_cli.uninstall.commands._is_path_owned", return_value=True):
             plan = _build_removal_plan(paths, remove_app_only=False, purge=False)
         assert len(plan["app_files"]) == 1
-        assert len(plan["config_files"]) == 1
+        assert len(plan["config_files"]) == 0  # Config preserved in default mode
         assert len(plan["data_files"]) == 0
         assert len(plan["backup_files"]) == 0
 
@@ -2287,3 +2287,387 @@ class TestPriorVersionMigration:
         blockers = _migration_preflight(resolved_paths, "1.1.0", "1.0.0")
         # Should not have a minimum-version blocker (direction check is in plan_update)
         assert not any("minimum" in b.lower() for b in blockers)
+
+
+# ===================================================================
+# 21. Activation-before-migration ordering (WS5 Critical fix)
+# ===================================================================
+
+
+class TestActivationOrdering:
+    @patch("ainews_cli.update.engine._get_lifecycle_driver", return_value=None)
+    @patch("ainews_cli.update.engine._validate_health")
+    @patch("ainews_cli.update.engine._run_migrations")
+    @patch("ainews_cli.update.engine.activate_staged")
+    @patch("ainews_cli.update.engine._create_pre_update_backup")
+    @patch("ainews_cli.update.engine.stage_artifact")
+    @patch("ainews_cli.update.engine._download_artifact")
+    def test_migrations_run_before_activation(
+        self, mock_dl: MagicMock, mock_staging: MagicMock, mock_bu: MagicMock,
+        mock_activate: MagicMock, mock_migrations: MagicMock, mock_health: MagicMock,
+        mock_driver: MagicMock, resolved_paths: Any, tmp_path: Path
+    ) -> None:
+        """Migrations must run BEFORE activate_staged is called."""
+        from ainews_cli.update.engine import apply_update
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePlan
+
+        fake_artifact = tmp_path / "fake.tar.gz"
+        fake_artifact.write_bytes(b"fake")
+        mock_dl.return_value = fake_artifact
+
+        staging_dir = tmp_path / ".staging"
+        staging_dir.mkdir()
+        mock_staging.return_value = staging_dir
+
+        call_order: list[str] = []
+        mock_migrations.side_effect = lambda *a, **kw: call_order.append("migrate") or None
+        mock_activate.side_effect = lambda *a, **kw: call_order.append("activate") or None
+
+        check = UpdateCheckResult(
+            current_version="1.0.0", latest_version="1.1.0",
+            current_commit=None, latest_commit=None, channel="stable",
+            update_available=True, is_upgrade=True, is_downgrade=False,
+            is_reinstall=False, artifact_name="test.tar.gz",
+            artifact_url="https://example.com/test.tar.gz",
+            artifact_size=None, min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check, artifact_sha256=None, artifact_size=None,
+            config_migrations=["m1"], db_migrations=[],
+            service_restart_required=True, estimated_downtime="< 30s",
+            backup_required=False, rollback_capable=True,
+            paths_changed=["app_dir"], blockers=[],
+        )
+
+        apply_update(resolved_paths, plan)
+
+        assert "migrate" in call_order
+        assert "activate" in call_order
+        assert call_order.index("migrate") < call_order.index("activate")
+
+
+# ===================================================================
+# 22. Uninstall default preserves config (WS8 Critical fix)
+# ===================================================================
+
+
+class TestUninstallDefaultPreservesConfig:
+    def test_default_mode_does_not_remove_config(self, tmp_path: Path) -> None:
+        """Default uninstall must NOT include config files."""
+        from ainews_cli.uninstall.commands import _build_removal_plan
+
+        base = tmp_path / "ainews"
+        base.mkdir()
+        app_d = base / "app"
+        app_d.mkdir()
+        config_d = base / "config"
+        config_d.mkdir()
+        data_d = base / "data"
+        data_d.mkdir()
+
+        paths = MagicMock()
+        paths.app_dir.path = app_d
+        paths.config_dir.path = config_d
+        paths.data_dir.path = data_d
+        paths.state_dir.path = base / "state"
+        paths.backup_dir.path = base / "backups"
+
+        with patch("ainews_cli.uninstall.commands._is_path_owned", return_value=True):
+            plan = _build_removal_plan(paths, remove_app_only=False, purge=False)
+        assert len(plan["config_files"]) == 0, "Default mode must not remove config"
+        assert len(plan["app_files"]) == 1
+
+    def test_purge_mode_removes_config(self, tmp_path: Path) -> None:
+        """Purge mode must include config files."""
+        from ainews_cli.uninstall.commands import _build_removal_plan
+
+        base = tmp_path / "ainews"
+        base.mkdir()
+        app_d = base / "app"
+        app_d.mkdir()
+        config_d = base / "config"
+        config_d.mkdir()
+
+        paths = MagicMock()
+        paths.app_dir.path = app_d
+        paths.config_dir.path = config_d
+        paths.data_dir.path = base / "data"
+        paths.state_dir.path = base / "state"
+        paths.backup_dir.path = base / "backups"
+
+        with patch("ainews_cli.uninstall.commands._is_path_owned", return_value=True):
+            plan = _build_removal_plan(paths, remove_app_only=False, purge=True)
+        assert len(plan["config_files"]) == 1, "Purge mode must remove config"
+
+    def test_app_only_mode_does_not_remove_config(self, tmp_path: Path) -> None:
+        """--remove-app-only must not include config files."""
+        from ainews_cli.uninstall.commands import _build_removal_plan
+
+        base = tmp_path / "ainews"
+        base.mkdir()
+        app_d = base / "app"
+        app_d.mkdir()
+        config_d = base / "config"
+        config_d.mkdir()
+
+        paths = MagicMock()
+        paths.app_dir.path = app_d
+        paths.config_dir.path = config_d
+        paths.data_dir.path = base / "data"
+        paths.state_dir.path = base / "state"
+        paths.backup_dir.path = base / "backups"
+
+        with patch("ainews_cli.uninstall.commands._is_path_owned", return_value=True):
+            plan = _build_removal_plan(paths, remove_app_only=True, purge=False)
+        assert len(plan["config_files"]) == 0
+
+
+# ===================================================================
+# 23. Concurrent lock in apply_update (WS3 fix)
+# ===================================================================
+
+
+class TestApplyUpdateLocking:
+    def test_apply_fails_when_lock_held(self, resolved_paths: Any) -> None:
+        """apply_update must fail if another operation holds the lock."""
+        from ainews_cli.update.engine import acquire_update_lock, apply_update, release_update_lock
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePhase, UpdatePlan
+
+        # Acquire lock first
+        fd = acquire_update_lock(resolved_paths)
+        assert fd is not None
+
+        try:
+            check = UpdateCheckResult(
+                current_version="1.0.0", latest_version="1.1.0",
+                current_commit=None, latest_commit=None, channel="stable",
+                update_available=True, is_upgrade=True, is_downgrade=False,
+                is_reinstall=False, artifact_name="test.tar.gz",
+                artifact_url="https://example.com/test.tar.gz",
+                artifact_size=None, min_supported_version="1.0.0",
+            )
+            plan = UpdatePlan(
+                check=check, artifact_sha256=None, artifact_size=None,
+                config_migrations=[], db_migrations=[],
+                service_restart_required=True, estimated_downtime="< 30s",
+                backup_required=False, rollback_capable=False,
+                paths_changed=["app_dir"], blockers=[],
+            )
+
+            op = apply_update(resolved_paths, plan)
+            assert op.phase == UpdatePhase.FAILED
+            assert "progress" in (op.error_message or "").lower() or "another" in (op.error_message or "").lower()
+        finally:
+            release_update_lock(fd)
+
+
+# ===================================================================
+# 24. Tarball path traversal protection (WS3 fix)
+# ===================================================================
+
+
+class TestTarballPathTraversal:
+    def test_rejects_traversal_paths(self, tmp_path: Path) -> None:
+        """stage_artifact must reject tarballs with path traversal entries."""
+        import tarfile
+
+        from ainews_cli.update.engine import stage_artifact
+
+        # Create a tarball with a traversal entry
+        evil_tar = tmp_path / "evil.tar.gz"
+        with tarfile.open(evil_tar, "w:gz") as tar:
+            # Add a file with path traversal
+            info = tarfile.TarInfo(name="../../etc/passwd")
+            data = b"evil"
+            info.size = len(data)
+            from io import BytesIO
+            tar.addfile(info, BytesIO(data))
+
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+
+        with pytest.raises(RuntimeError, match="Unsafe path"):
+            stage_artifact(evil_tar, app_dir)
+
+    def test_accepts_safe_paths(self, tmp_path: Path) -> None:
+        """stage_artifact must accept tarballs with safe paths."""
+        import tarfile
+
+        from ainews_cli.update.engine import stage_artifact
+
+        safe_tar = tmp_path / "safe.tar.gz"
+        with tarfile.open(safe_tar, "w:gz") as tar:
+            info = tarfile.TarInfo(name="safe-dir/file.txt")
+            data = b"safe content"
+            info.size = len(data)
+            from io import BytesIO
+            tar.addfile(info, BytesIO(data))
+
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+
+        # Should not raise
+        stage_artifact(safe_tar, app_dir)
+
+
+# ===================================================================
+# 25. Backup failure blocks update (WS10 missing test)
+# ===================================================================
+
+
+class TestBackupFailureBlocksUpdate:
+    @patch("ainews_cli.update.engine._get_lifecycle_driver", return_value=None)
+    @patch("ainews_cli.update.engine._create_pre_update_backup", side_effect=RuntimeError("backup failed"))
+    @patch("ainews_cli.update.engine.stage_artifact")
+    @patch("ainews_cli.update.engine._download_artifact")
+    def test_backup_failure_blocks_update(
+        self, mock_dl: MagicMock, mock_staging: MagicMock, mock_bu: MagicMock,
+        mock_driver: MagicMock, resolved_paths: Any, tmp_path: Path
+    ) -> None:
+        """Update must fail when pre-update backup fails."""
+        from ainews_cli.update.engine import apply_update
+        from ainews_cli.update.models import UpdateCheckResult, UpdatePhase, UpdatePlan
+
+        fake_artifact = tmp_path / "fake.tar.gz"
+        fake_artifact.write_bytes(b"fake")
+        mock_dl.return_value = fake_artifact
+
+        staging_dir = tmp_path / ".staging"
+        staging_dir.mkdir()
+        mock_staging.return_value = staging_dir
+
+        check = UpdateCheckResult(
+            current_version="1.0.0", latest_version="1.1.0",
+            current_commit=None, latest_commit=None, channel="stable",
+            update_available=True, is_upgrade=True, is_downgrade=False,
+            is_reinstall=False, artifact_name="test.tar.gz",
+            artifact_url="https://example.com/test.tar.gz",
+            artifact_size=None, min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check, artifact_sha256=None, artifact_size=None,
+            config_migrations=[], db_migrations=[],
+            service_restart_required=True, estimated_downtime="< 30s",
+            backup_required=True, rollback_capable=True,
+            paths_changed=["app_dir"], blockers=[],
+        )
+
+        op = apply_update(resolved_paths, plan)
+        assert op.phase == UpdatePhase.FAILED
+        assert "backup failed" in (op.error_message or "").lower()
+
+
+# ===================================================================
+# 26. SHA-256 checksum verification (WS3 fix)
+# ===================================================================
+
+
+class TestChecksumVerification:
+    def test_download_stores_actual_sha256(self, resolved_paths: Any, tmp_path: Path) -> None:
+        """_download_artifact must store the actual SHA-256 hash, not file size."""
+        from ainews_cli.update.engine import _download_artifact
+        from ainews_cli.update.models import UpdateCheckResult, UpdateOperation, UpdatePlan
+
+        # Create a fake artifact
+        fake = tmp_path / "test-artifact.tar.gz"
+        fake.write_bytes(b"test content for checksum")
+
+        check = UpdateCheckResult(
+            current_version="1.0.0", latest_version="1.1.0",
+            current_commit=None, latest_commit=None, channel="stable",
+            update_available=True, is_upgrade=True, is_downgrade=False,
+            is_reinstall=False, artifact_name="test.tar.gz",
+            artifact_url="https://example.com/test.tar.gz",
+            artifact_size=None, min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check, artifact_sha256=None, artifact_size=None,
+            config_migrations=[], db_migrations=[],
+            service_restart_required=True, estimated_downtime="< 30s",
+            backup_required=False, rollback_capable=False,
+            paths_changed=["app_dir"], blockers=[],
+        )
+        op = UpdateOperation()
+
+        import hashlib
+        expected_sha = hashlib.sha256(b"test content for checksum").hexdigest()
+
+        with patch("ainews_cli.update.engine.github.download_file") as mock_dl:
+            def fake_download(url, dest, desc):
+                import shutil
+                shutil.copy(str(fake), str(dest))
+            mock_dl.side_effect = fake_download
+
+            result = _download_artifact(plan, op, resolved_paths, lambda p, m: None)
+
+        assert op.artifact_sha256 == expected_sha
+        assert result.exists()
+
+    def test_checksum_mismatch_raises(self, resolved_paths: Any, tmp_path: Path) -> None:
+        """_download_artifact must raise when checksum doesn't match."""
+        from ainews_cli.update.engine import _download_artifact
+        from ainews_cli.update.models import UpdateCheckResult, UpdateOperation, UpdatePlan
+
+        fake = tmp_path / "test-artifact.tar.gz"
+        fake.write_bytes(b"test content")
+
+        check = UpdateCheckResult(
+            current_version="1.0.0", latest_version="1.1.0",
+            current_commit=None, latest_commit=None, channel="stable",
+            update_available=True, is_upgrade=True, is_downgrade=False,
+            is_reinstall=False, artifact_name="test.tar.gz",
+            artifact_url="https://example.com/test.tar.gz",
+            artifact_size=None, min_supported_version="1.0.0",
+        )
+        plan = UpdatePlan(
+            check=check, artifact_sha256="0000000000000000000000000000000000000000000000000000000000000000",
+            artifact_size=None, config_migrations=[], db_migrations=[],
+            service_restart_required=True, estimated_downtime="< 30s",
+            backup_required=False, rollback_capable=False,
+            paths_changed=["app_dir"], blockers=[],
+        )
+        op = UpdateOperation()
+
+        with patch("ainews_cli.update.engine.github.download_file") as mock_dl:
+            def fake_download(url, dest, desc):
+                import shutil
+                shutil.copy(str(fake), str(dest))
+            mock_dl.side_effect = fake_download
+
+            with pytest.raises(RuntimeError, match="Checksum mismatch"):
+                _download_artifact(plan, op, resolved_paths, lambda p, m: None)
+
+
+# ===================================================================
+# 27. Retention window check on rollback (WS6 fix)
+# ===================================================================
+
+
+class TestRollbackRetentionCheck:
+    def test_rollback_with_old_backup_emits_warning(self, resolved_paths: Any) -> None:
+        """Rollback with an old backup should emit a warning but still proceed."""
+        from ainews_cli.update.engine import rollback_update
+        from ainews_cli.update.models import UpdateOperation, UpdatePhase
+
+        # Set up a backup that's too old — rollback should warn
+        op = UpdateOperation(
+            phase=UpdatePhase.STAGED,
+            source_version="1.0.0",
+            target_version="1.1.0",
+            previous_app_path=None,  # No previous dir, must use backup
+            backup_id="backup-old",
+        )
+
+        phases: list[tuple[str, str]] = []
+        def capture(phase: str, msg: str) -> None:
+            phases.append((phase, msg))
+
+        with patch("ainews_cli.update.engine._get_lifecycle_driver", return_value=None):
+            with patch("ainews_cli.update.engine._check_backup_retention", return_value=False):
+                with patch("ainews_config.backup.restore_backup") as mock_restore:
+                    result = rollback_update(resolved_paths, operation=op, emit=capture)
+
+        # Should have emitted a warning about old backup
+        warnings = [m for p, m in phases if p == "rollback_warning"]
+        assert len(warnings) > 0
+        assert "older than" in warnings[0].lower()

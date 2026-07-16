@@ -1546,3 +1546,700 @@ class TestEdgeCases:
             message="fallback message",
         )
         assert r.reason == "fallback message"
+
+
+# ---------------------------------------------------------------------------
+# WAL Snapshot Consistency Tests
+# ---------------------------------------------------------------------------
+
+
+class TestWALSnapshot:
+    def test_backup_with_active_wal(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        db_path = backup_paths.database_file.path
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO articles (title) VALUES ('WAL test article')")
+        conn.commit()
+        conn.close()
+
+        manifest = create_backup(backup_paths)
+        bd = backup_paths.backup_dir.path / manifest.backup_id
+        db_section = next(
+            s for s in manifest.sections if s.name == "database"
+        )
+        backup_db = bd / db_section.path
+
+        backup_conn = sqlite3.connect(f"file:{backup_db}?mode=ro", uri=True)
+        result = backup_conn.execute(
+            "SELECT title FROM articles WHERE title = 'WAL test article'"
+        ).fetchone()
+        backup_conn.close()
+        assert result is not None
+        assert result[0] == "WAL test article"
+
+    def test_backup_wal_files_captured(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        db_path = backup_paths.database_file.path
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO articles (title) VALUES ('WAL test')")
+        conn.commit()
+        wal_path = Path(str(db_path) + "-wal")
+        shm_path = Path(str(db_path) + "-shm")
+        conn.close()
+
+        manifest = create_backup(backup_paths)
+        bd = backup_paths.backup_dir.path / manifest.backup_id
+        db_section = next(
+            s for s in manifest.sections if s.name == "database"
+        )
+        backup_db = bd / db_section.path
+
+        backup_conn = sqlite3.connect(str(backup_db))
+        result = backup_conn.execute(
+            "SELECT COUNT(*) FROM articles"
+        ).fetchone()
+        backup_conn.close()
+        assert result[0] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Config Mutation Concurrent with Locking Tests
+# ---------------------------------------------------------------------------
+
+
+class TestConfigMutation:
+    def test_backup_during_config_write_blocks(self, backup_paths, monkeypatch):
+        import fcntl
+
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        lock_path = backup_paths.state_dir.path / "backup.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        try:
+            with pytest.raises(BackupError) as exc_info:
+                create_backup(backup_paths)
+            assert exc_info.value.code == "LOCK_BUSY"
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def test_backup_completes_after_lock_release(self, backup_paths, monkeypatch):
+        import fcntl
+
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        lock_path = backup_paths.state_dir.path / "backup.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        try:
+            with pytest.raises(BackupError):
+                create_backup(backup_paths)
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+        manifest = create_backup(backup_paths)
+        assert manifest.schema_version == 1
+
+
+# ---------------------------------------------------------------------------
+# Incomplete Backup Publication Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIncompleteBackup:
+    def test_staging_cleanup_on_failure(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        monkeypatch.setattr(
+            "ainews_config.backup._validate_config_files",
+            lambda paths: (_ for _ in ()).throw(
+                BackupError(message="Simulated validation failure", code="CONFIG_INVALID")
+            ),
+        )
+
+        with pytest.raises(BackupError):
+            create_backup(backup_paths)
+
+        staging_dirs = [
+            d
+            for d in backup_paths.backup_dir.path.iterdir()
+            if d.is_dir() and d.name.startswith(".staging-")
+        ]
+        assert staging_dirs == []
+
+    def test_no_partial_backup_on_config_failure(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        monkeypatch.setattr(
+            "ainews_config.backup._validate_config_files",
+            lambda paths: (_ for _ in ()).throw(
+                BackupError(message="Simulated validation failure", code="CONFIG_INVALID")
+            ),
+        )
+
+        with pytest.raises(BackupError):
+            create_backup(backup_paths)
+
+        backup_dirs = [
+            d
+            for d in backup_paths.backup_dir.path.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        ]
+        assert backup_dirs == []
+
+
+# ---------------------------------------------------------------------------
+# Health Check Rollback Tests
+# ---------------------------------------------------------------------------
+
+
+class TestHealthCheckRollback:
+    def test_rollback_on_health_failure(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        backup_paths.env_file.path.write_text(
+            "SECRET_KEY=changed-key\nADMIN_PASSWORD=changed-pass\n"
+        )
+
+        class FakeLifecycle:
+            def __init__(self):
+                self.stopped = False
+                self.started = False
+                self.health_checked = False
+
+            def stop_services(self) -> bool:
+                self.stopped = True
+                return True
+
+            def start_services(self, timeout: int = 120) -> bool:
+                self.started = True
+                return True
+
+            def check_health(self, timeout: int = 10) -> bool:
+                self.health_checked = True
+                return False
+
+        lifecycle = FakeLifecycle()
+
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        from ainews_config.backup import RestoreError
+
+        with pytest.raises(RestoreError) as exc_info:
+            restore_backup(backup_paths, m.backup_id, lifecycle=lifecycle)
+
+        assert "health check" in str(exc_info.value.message).lower()
+        assert lifecycle.stopped is True
+        assert lifecycle.health_checked is True
+
+    def test_rollback_reverts_to_pre_restore_state(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        original_env = backup_paths.env_file.path.read_text()
+        backup_paths.env_file.path.write_text(
+            "SECRET_KEY=changed\nADMIN_PASSWORD=changed\n"
+        )
+
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        class FailHealthLifecycle:
+            def stop_services(self) -> bool:
+                return True
+            def start_services(self, timeout: int = 120) -> bool:
+                return True
+            def check_health(self, timeout: int = 10) -> bool:
+                return False
+
+        from ainews_config.backup import RestoreError
+
+        with pytest.raises(RestoreError):
+            restore_backup(
+                backup_paths, m.backup_id, lifecycle=FailHealthLifecycle()
+            )
+
+        current_env = backup_paths.env_file.path.read_text()
+        assert "changed" in current_env
+
+
+# ---------------------------------------------------------------------------
+# Interrupted Restore Recovery Tests
+# ---------------------------------------------------------------------------
+
+
+class TestInterruptedRestore:
+    def test_safety_backup_created_before_restore(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        backups_before = list_backups(backup_paths.backup_dir.path)
+        count_before = len(backups_before)
+
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        restore_backup(backup_paths, m.backup_id)
+
+        backups_after = list_backups(backup_paths.backup_dir.path)
+        assert len(backups_after) > count_before
+
+    def test_staging_cleanup_after_restore(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        restore_backup(backup_paths, m.backup_id)
+
+        staging_dirs = [
+            d
+            for d in backup_paths.backup_dir.path.iterdir()
+            if d.is_dir() and d.name.startswith(".restore-staging-")
+        ]
+        assert staging_dirs == []
+
+
+# ---------------------------------------------------------------------------
+# Secret-Free Logs and JSON Tests
+# ---------------------------------------------------------------------------
+
+
+class TestSecretFreeOutput:
+    def test_manifest_no_secrets(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifest = create_backup(backup_paths)
+        d = manifest.to_dict()
+        manifest_json = json.dumps(d, indent=2)
+
+        assert "test-secret-key-12345" not in manifest_json
+        assert "admin123" not in manifest_json
+        assert "SECRET_KEY" not in manifest_json
+        assert "ADMIN_PASSWORD" not in manifest_json
+
+    def test_verify_result_no_secrets(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifest = create_backup(backup_paths)
+        result = verify_backup(
+            backup_paths.backup_dir.path, manifest.backup_id
+        )
+        result_json = json.dumps({
+            "valid": result.valid,
+            "reason": result.reason,
+            "message": result.message,
+        })
+        assert "test-secret-key-12345" not in result_json
+        assert "admin123" not in result_json
+
+    def test_restore_plan_no_secrets(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifest = create_backup(backup_paths)
+        plan = plan_restore(backup_paths, manifest.backup_id, dry_run=True)
+        plan_json = json.dumps({
+            "backup_id": plan.backup_id,
+            "sections": plan.sections,
+            "paths_affected": plan.paths_affected,
+        })
+        assert "test-secret-key-12345" not in plan_json
+        assert "admin123" not in plan_json
+
+    def test_prune_result_no_secrets(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        _create_standalone_backup(
+            backup_paths.backup_dir.path,
+            "2020-01-01T000000Z-1.0.0",
+            app_version="1.0.0",
+        )
+        result = prune_backups(
+            backup_paths, max_count=1, max_age_days=0, dry_run=True
+        )
+        result_json = json.dumps({
+            "deleted": result.deleted,
+            "kept": result.kept,
+        })
+        assert "SECRET_KEY" not in result_json
+
+
+# ---------------------------------------------------------------------------
+# Max Total Bytes Pruning Tests
+# ---------------------------------------------------------------------------
+
+
+class TestPruneMaxTotalBytes:
+    def test_prune_by_total_bytes(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        ids = []
+        for i in range(3):
+            m = _create_standalone_backup(
+                backup_paths.backup_dir.path,
+                f"2026-01-0{i + 1}T000000Z-1.4.0",
+                app_version="1.4.0",
+            )
+            old_time = time.time() - 86400 * 2
+            os.utime(
+                backup_paths.backup_dir.path / m.backup_id,
+                (old_time, old_time),
+            )
+            ids.append(m.backup_id)
+
+        total_size = 0
+        for bid in ids:
+            manifest_path = backup_paths.backup_dir.path / bid / "manifest.json"
+            data = json.loads(manifest_path.read_text())
+            total_size += data.get("total_size", 0)
+
+        result = prune_backups(
+            backup_paths,
+            max_count=100,
+            max_age_days=0,
+            max_total_bytes=total_size // 2,
+        )
+        assert len(result.deleted) > 0
+
+    def test_prune_max_total_bytes_dry_run(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = _create_standalone_backup(
+            backup_paths.backup_dir.path,
+            "2026-01-01T000000Z-1.4.0",
+            app_version="1.4.0",
+        )
+        old_time = time.time() - 86400 * 2
+        os.utime(
+            backup_paths.backup_dir.path / m.backup_id,
+            (old_time, old_time),
+        )
+
+        result = prune_backups(
+            backup_paths,
+            max_count=100,
+            max_age_days=0,
+            max_total_bytes=1,
+            dry_run=True,
+        )
+        assert result.dry_run is True
+        assert (backup_paths.backup_dir.path / m.backup_id).exists()
+
+
+# ---------------------------------------------------------------------------
+# RestorePlan New Fields Tests
+# ---------------------------------------------------------------------------
+
+
+class TestRestorePlanFields:
+    def test_plan_restore_secrets_impact(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifest = create_backup(backup_paths)
+        plan = plan_restore(backup_paths, manifest.backup_id, dry_run=True)
+
+        assert len(plan.secrets_impact) > 0
+        assert any(".env" in s or "secret" in s.lower() for s in plan.secrets_impact)
+
+    def test_plan_restore_restart_actions(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifest = create_backup(backup_paths)
+        plan = plan_restore(backup_paths, manifest.backup_id, dry_run=True)
+
+        assert len(plan.restart_actions) > 0
+        assert any("ainews start" in a for a in plan.restart_actions)
+
+    def test_plan_restore_permissions_impact(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifest = create_backup(backup_paths)
+        plan = plan_restore(backup_paths, manifest.backup_id, dry_run=True)
+
+        assert len(plan.permissions_impact) > 0
+        assert any("0o600" in p for p in plan.permissions_impact)
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle Driver Integration Tests
+# ---------------------------------------------------------------------------
+
+
+class TestLifecycleIntegration:
+    def test_restore_calls_lifecycle_stop(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        class TrackingLifecycle:
+            def __init__(self):
+                self.calls = []
+
+            def stop_services(self) -> bool:
+                self.calls.append("stop")
+                return True
+
+            def start_services(self, timeout: int = 120) -> bool:
+                self.calls.append("start")
+                return True
+
+            def check_health(self, timeout: int = 10) -> bool:
+                self.calls.append("health")
+                return True
+
+        lifecycle = TrackingLifecycle()
+        restore_backup(backup_paths, m.backup_id, lifecycle=lifecycle)
+
+        assert "stop" in lifecycle.calls
+        assert "start" in lifecycle.calls
+        assert "health" in lifecycle.calls
+
+    def test_restore_without_lifecycle(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        plan = restore_backup(backup_paths, m.backup_id, lifecycle=None)
+        assert plan.backup_id == m.backup_id
+
+
+# ---------------------------------------------------------------------------
+# Cross-File Config Validation Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCrossFileValidation:
+    def test_verify_catches_missing_provider_reference(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        import io
+
+        tar_path = backup_paths.backup_dir.path / "cross-validate-test"
+        tar_path.mkdir(parents=True, exist_ok=True)
+
+        config_tar = tar_path / "config.tar"
+        with tarfile.open(str(config_tar), "w") as tar:
+            providers_content = b"providers:\n  ollama:\n    type: ollama\n    enabled: true\n"
+            info = tarfile.TarInfo(name="providers.yaml")
+            info.size = len(providers_content)
+            tar.addfile(info, io.BytesIO(providers_content))
+
+            pipeline_content = b"pipeline:\n  selector:\n    provider: nonexistent\n"
+            info2 = tarfile.TarInfo(name="pipeline.yaml")
+            info2.size = len(pipeline_content)
+            tar.addfile(info2, io.BytesIO(pipeline_content))
+
+            env_content = b"SECRET_KEY=test\n"
+            info3 = tarfile.TarInfo(name=".env")
+            info3.size = len(env_content)
+            tar.addfile(info3, io.BytesIO(env_content))
+
+        from ainews_config.backup import _verify_config_cross_validation
+
+        result = _verify_config_cross_validation(tar_path)
+        assert result is not None
+        assert result.valid is False
+        assert result.reason_code == "config_parse_error"
+        assert "nonexistent" in result.message
+
+    def test_verify_valid_config_passes(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        import io
+
+        tar_path = backup_paths.backup_dir.path / "cross-validate-valid"
+        tar_path.mkdir(parents=True, exist_ok=True)
+
+        config_tar = tar_path / "config.tar"
+        with tarfile.open(str(config_tar), "w") as tar:
+            providers_content = b"providers:\n  ollama:\n    type: ollama\n    enabled: true\n"
+            info = tarfile.TarInfo(name="providers.yaml")
+            info.size = len(providers_content)
+            tar.addfile(info, io.BytesIO(providers_content))
+
+            pipeline_content = b"pipeline:\n  selector:\n    provider: ollama\n"
+            info2 = tarfile.TarInfo(name="pipeline.yaml")
+            info2.size = len(pipeline_content)
+            tar.addfile(info2, io.BytesIO(pipeline_content))
+
+            env_content = b"SECRET_KEY=test\n"
+            info3 = tarfile.TarInfo(name=".env")
+            info3.size = len(env_content)
+            tar.addfile(info3, io.BytesIO(env_content))
+
+        from ainews_config.backup import _verify_config_cross_validation
+
+        result = _verify_config_cross_validation(tar_path)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Include Logs Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIncludeLogs:
+    def test_backup_includes_logs_when_requested(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        log_dir = backup_paths.state_dir.path.parent / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "test.log"
+        log_file.write_text("2026-07-15 test log entry\n")
+
+        manifest = create_backup(backup_paths, include_logs=True)
+        bd = backup_paths.backup_dir.path / manifest.backup_id
+        config_section = next(
+            s for s in manifest.sections if s.name == "config"
+        )
+        tar_path = bd / config_section.path
+
+        with tarfile.open(str(tar_path), "r") as tar:
+            names = tar.getnames()
+            assert "logs/test.log" in names
+
+    def test_backup_excludes_logs_by_default(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        log_dir = backup_paths.state_dir.path.parent / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "test.log"
+        log_file.write_text("2026-07-15 test log entry\n")
+
+        manifest = create_backup(backup_paths, include_logs=False)
+        bd = backup_paths.backup_dir.path / manifest.backup_id
+        config_section = next(
+            s for s in manifest.sections if s.name == "config"
+        )
+        tar_path = bd / config_section.path
+
+        with tarfile.open(str(tar_path), "r") as tar:
+            names = tar.getnames()
+            assert not any("logs/" in n for n in names)

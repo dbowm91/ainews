@@ -461,7 +461,7 @@ The `ainews onboard` command implements a 16-stage state machine (`OnboardingSer
 
 **Backup format:** Versioned directory containing:
 - `manifest.json` — schema version, backup ID, application version, config schema version, database schema version, sections with SHA-256 checksums
-- `config.tar` — tarball of all config files (.env, providers.yaml, pipeline.yaml, sources.yaml, topics.yaml)
+- `config.tar` — tarball of all config files (.env, providers.yaml, pipeline.yaml, sources.yaml, topics.yaml). When `--include-logs` is used, log files are included under `logs/` prefix.
 - `database.sqlite` — consistent SQLite snapshot via backup API
 - `install_metadata.json` — installation metadata
 
@@ -478,13 +478,19 @@ backup_dir/
     restore-*.json
 ```
 
-**Backup creation:** Acquires flock on `state_dir/backup.lock`, validates config files, uses SQLite backup API for consistent snapshot, stages in temp dir, computes checksums, atomically publishes. Permissions: 0o700 for dirs, 0o600 for files.
+**Backup creation:** Acquires flock on `state_dir/backup.lock`, validates config files, uses SQLite backup API for consistent snapshot, stages in temp dir, computes checksums, atomically publishes. Permissions: 0o700 for dirs, 0o600 for files. Cleans up staging directories on failure.
 
-**Backup verification:** Non-mutating. Validates manifest schema, section presence/checksums/paths, SQLite integrity (`PRAGMA integrity_check`), config tarball parseability, version compatibility (same major version). Returns stable reason codes: `backup_not_found`, `manifest_missing`, `manifest_corrupt`, `manifest_invalid`, `schema_too_new`, `version_incompatible`, `section_missing`, `unsafe_path`, `file_missing`, `size_mismatch`, `checksum_mismatch`, `db_corrupt`, `config_tar_corrupt`, `config_parse_error`.
+**Backup verification:** Non-mutating. Validates manifest schema, section presence/checksums/paths, SQLite integrity (`PRAGMA integrity_check`), config tarball parseability, cross-file validation (pipeline stages must reference defined providers), version compatibility (same major version). Returns stable reason codes: `backup_not_found`, `manifest_missing`, `manifest_corrupt`, `manifest_invalid`, `schema_too_new`, `version_incompatible`, `section_missing`, `unsafe_path`, `file_missing`, `size_mismatch`, `checksum_mismatch`, `db_corrupt`, `config_tar_corrupt`, `config_parse_error`.
 
-**Retention/pruning:** Default 10 backups, 90 days max age. Respects pinned backups. Never deletes the only verified backup. Oldest-first selection. Supports `--dry-run`.
+**Retention/pruning:** Default 10 backups, 90 days max age. Optional `max_total_bytes` limit. Respects pinned backups. Never deletes the only verified backup. Oldest-first selection. Supports `--dry-run`. Reports `total_bytes_pruned`.
 
-**Restore:** Creates automatic pre-restore safety backup. Supports `--config-only`, `--data-only`, `--dry-run`. Acquires restore lock. Stages files, validates, atomically replaces. Writes restore record.
+**Restore:** Creates automatic pre-restore safety backup. Supports `--config-only`, `--data-only`, `--dry-run`, `--no-lifecycle`. Acquires restore lock. Stages files, validates, atomically replaces. Writes restore record. Integrates with lifecycle driver for service stop/start. Runs post-restore health check. Rolls back to safety backup on health check failure.
+
+**Restore plan fields:** `RestorePlan` includes `secrets_impact` (identifies .env files with secrets), `restart_actions` (post-restore steps), and `permissions_impact` (files set to 0o600).
+
+**Lifecycle integration:** Restore accepts optional `LifecycleOperations` protocol with `stop_services()`, `start_services()`, `check_health()`. When provided, services are stopped before restore and started after. Health check failure triggers automatic rollback.
+
+**Rollback:** On restore failure or health check failure, `_rollback_restore()` restores from the safety backup. Uses `restore_backup_inner()` (no lock acquisition, no safety backup) to avoid deadlocks.
 
 **Migration framework:** `Migration` protocol with `id`, `from_version`, `to_version`, `reversible`, `preflight()`, `apply()`, `rollback()`. `BaseMigration` abstract class. Deterministic ordering, idempotency, downgrade refusal. `plan_migrations()` and `execute_migration_plan()` functions.
 
@@ -494,8 +500,8 @@ ainews backup create [--include-logs] [--tag TAG]
 ainews backup list
 ainews backup show BACKUP_ID
 ainews backup verify BACKUP_ID
-ainews backup prune [--max-count N] [--max-age-days N] [--dry-run]
-ainews restore BACKUP_ID [--config-only] [--data-only] [--dry-run] [-y]
+ainews backup prune [--max-count N] [--max-age-days N] [--max-total-bytes N] [--dry-run]
+ainews restore BACKUP_ID [--config-only] [--data-only] [--dry-run] [--no-lifecycle] [-y]
 ainews migrations status
 ainews migrations plan
 ainews migrations apply [--dry-run] [-y]
@@ -503,9 +509,9 @@ ainews migrations apply [--dry-run] [-y]
 
 **Exit codes:** `BACKUP_ERROR = 9` added to `ainews_cli/exit_codes.py`.
 
-**Key types:** `BackupManifest`, `BackupSection`, `VerifyResult`, `RestorePlan`, `PruneResult`, `MigrationReport`, `MigrationStatusDetail`, `MigrationPlanDetail`, `MigrationApplyResult`.
+**Key types:** `BackupManifest`, `BackupSection`, `VerifyResult`, `RestorePlan`, `PruneResult`, `MigrationReport`, `MigrationStatusDetail`, `MigrationPlanDetail`, `MigrationApplyResult`, `LifecycleOperations` (protocol).
 
-**Tests:** `tests/test_backup_restore.py` — 73 tests covering creation, verification, listing, pinning, pruning, restore (full/config-only/data-only), version compatibility, migration framework, manifest serialization, locking, and edge cases.
+**Tests:** `tests/test_backup_restore.py` — 98 tests covering creation, verification, listing, pinning, pruning (count, age, total bytes), restore (full/config-only/data-only), health check rollback, lifecycle integration, WAL snapshot consistency, concurrent locking, incomplete backup cleanup, secret-free output, cross-file validation, include-logs, version compatibility, migration framework, manifest serialization, and edge cases.
 
 ### Provider Adapter Architecture
 Provider management uses a pluggable adapter pattern (`ainews_cli/providers/`). Each adapter implements the `ProviderSetupAdapter` protocol with `fields()`, `probe()`, `discover_models()`, and `remediation()`. The registry (`ainews_cli/providers/registry.py`) maps type IDs to adapter classes. Built-in adapters: `ollama`, `openai`, `anthropic`, `gemini`, `eggpool`, `generic`. Adapters are independent of the Flask runtime and can be tested in isolation.
@@ -660,7 +666,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `ainews_cli/onboard.py` | Onboarding state machine, stage definitions, orchestration service |
 | `ainews_config/backup.py` | Backup, restore, and migration framework (Flask-free) |
 | `ainews_cli/backup_commands.py` | CLI commands for backup, restore, migrations |
-| `tests/test_backup_restore.py` | 73 tests for backup/restore/migration system |
+| `tests/test_backup_restore.py` | 98 tests for backup/restore/migration system |
 | `ainews_cli/profiles.py` | Deployment, pipeline, and source profile definitions |
 | `ainews_cli/schema.py` | Declarative bootstrap YAML schema and validation |
 | `ainews_cli/secrets.py` | Secret generation, password hashing, admin setup |
@@ -669,6 +675,7 @@ The following are documented as intentional and should NOT be "fixed":
 | `ainews_cli/lifecycle/` | Lifecycle driver abstraction, Docker Compose and bare metal drivers, CLI commands |
 | `docs/cli-reference.md` | CLI command reference documentation |
 | `docs/configuration-contract.md` | Machine-oriented configuration inventory |
+| `docs/backup-restore.md` | Backup, restore, and migration documentation (disaster recovery, compatibility matrix) |
 
 ## CI Gates
 

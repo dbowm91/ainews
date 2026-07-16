@@ -8,6 +8,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import tarfile
 import tempfile
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = 1
 DEFAULT_MAX_BACKUPS = 10
 DEFAULT_MAX_AGE_DAYS = 90
+DEFAULT_MAX_TOTAL_BYTES: int | None = None
 _BACKUP_LOCK = "backup.lock"
 _RESTORE_LOCK = "restore.lock"
 _PINS_FILE = "pins.json"
@@ -164,6 +166,9 @@ class RestorePlan:
     services_to_stop: list[str]
     rollback_possible: bool
     safety_backup_id: str | None
+    secrets_impact: list[str] = field(default_factory=list)
+    restart_actions: list[str] = field(default_factory=list)
+    permissions_impact: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -171,6 +176,7 @@ class PruneResult:
     deleted: list[str]
     kept: list[str]
     dry_run: bool
+    total_bytes_pruned: int = 0
 
 
 @dataclass(frozen=True)
@@ -237,6 +243,13 @@ class Migration(Protocol):
     def rollback(
         self, staging_root: Path, context: dict[str, Any]
     ) -> MigrationReport: ...
+
+
+@runtime_checkable
+class LifecycleOperations(Protocol):
+    def stop_services(self) -> bool: ...
+    def start_services(self, timeout: int = 120) -> bool: ...
+    def check_health(self, timeout: int = 10) -> bool: ...
 
 
 def _get_application_version() -> str:
@@ -380,7 +393,7 @@ def _validate_config_files(paths: ResolvedPaths) -> None:
 
 
 def _build_config_tarball(
-    paths: ResolvedPaths, staging_dir: Path
+    paths: ResolvedPaths, staging_dir: Path, *, include_logs: bool = False
 ) -> Path:
     tar_path = staging_dir / "config.tar"
     config_files: list[tuple[str, Path]] = [
@@ -395,6 +408,13 @@ def _build_config_tarball(
         for arcname, src_path in config_files:
             if src_path.exists():
                 tar.add(str(src_path), arcname=arcname)
+
+        if include_logs:
+            log_dir = paths.state_dir.path.parent / "logs"
+            if log_dir.exists():
+                for log_file in log_dir.iterdir():
+                    if log_file.is_file() and log_file.suffix == ".log":
+                        tar.add(str(log_file), arcname=f"logs/{log_file.name}")
 
     return tar_path
 
@@ -530,7 +550,7 @@ def create_backup(
 
         sections: list[BackupSection] = []
 
-        tar_path = _build_config_tarball(paths, staging_dir)
+        tar_path = _build_config_tarball(paths, staging_dir, include_logs=include_logs)
         tar_sha = _compute_sha256(tar_path)
         tar_size = tar_path.stat().st_size
         sections.append(
@@ -818,6 +838,84 @@ def _verify_config_tarball(
     return None
 
 
+def _verify_config_cross_validation(
+    backup_dir: Path,
+) -> VerifyResult | None:
+    tar_path = backup_dir / "config.tar"
+    if not tar_path.exists():
+        return None
+
+    try:
+        extracted = _extract_config_from_tar(tar_path)
+        return _check_provider_references(extracted)
+    except tarfile.TarError:
+        pass
+
+    return None
+
+
+def _extract_config_from_tar(tar_path: Path) -> dict[str, Any]:
+    extracted: dict[str, Any] = {}
+    with tarfile.open(str(tar_path), "r") as tar:
+        for member in tar.getmembers():
+            f = tar.extractfile(member)
+            if f is None:
+                continue
+            data = f.read()
+            f.close()
+            if member.name.endswith(".yaml") or member.name.endswith(".yml"):
+                try:
+                    parsed = yaml.safe_load(data)
+                    extracted[member.name] = parsed
+                except yaml.YAMLError:
+                    pass
+            elif member.name == ".env":
+                try:
+                    text = data.decode("utf-8")
+                    env_vars: dict[str, str] = {}
+                    for line in text.splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, _, value = line.partition("=")
+                            env_vars[key.strip()] = value.strip()
+                    extracted[".env"] = env_vars
+                except UnicodeDecodeError:
+                    pass
+    return extracted
+
+
+def _check_provider_references(
+    extracted: dict[str, Any],
+) -> VerifyResult | None:
+    if "providers.yaml" not in extracted or "pipeline.yaml" not in extracted:
+        return None
+
+    providers = extracted.get("providers.yaml") or {}
+    pipeline = extracted.get("pipeline.yaml") or {}
+    if not isinstance(providers, dict) or not isinstance(pipeline, dict):
+        return None
+
+    provider_defs = providers.get("providers", {})
+    pipeline_cfg = pipeline.get("pipeline", {})
+    if not isinstance(provider_defs, dict) or not isinstance(pipeline_cfg, dict):
+        return None
+
+    for stage_name, stage_cfg in pipeline_cfg.items():
+        if isinstance(stage_cfg, dict):
+            pid = stage_cfg.get("provider")
+            if pid and pid not in provider_defs:
+                return VerifyResult(
+                    valid=False,
+                    reason_code="config_parse_error",
+                    message=(
+                        f"Pipeline stage '{stage_name}' references "
+                        f"provider '{pid}' not defined in providers.yaml"
+                    ),
+                )
+
+    return None
+
+
 def verify_backup(
     backup_source: Path | ResolvedPaths, backup_id: str
 ) -> VerifyResult:
@@ -848,6 +946,10 @@ def verify_backup(
     if err is not None:
         return err
 
+    err = _verify_config_cross_validation(backup_dir)
+    if err is not None:
+        return err
+
     return VerifyResult(
         valid=True,
         reason_code=None,
@@ -874,11 +976,47 @@ def show_backup(
     return BackupManifest.from_dict(data)
 
 
+def _get_backup_size(path: Path) -> int:
+    try:
+        manifest_path = path / "manifest.json"
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return data.get("total_size", 0)
+    except (json.JSONDecodeError, OSError):
+        return sum(f.stat().st_size for f in path.iterdir() if f.is_file())
+
+
+def _prune_by_total_bytes(
+    candidates: list[tuple[str, Path, float]],
+    kept: list[str],
+    backup_dirs: list[tuple[str, Path]],
+    max_total_bytes: int,
+) -> list[tuple[str, Path, float]]:
+    total_size = 0
+    kept_names = {name for name, _, _ in candidates}
+    for name, path in backup_dirs:
+        if name not in kept_names:
+            total_size += _get_backup_size(path)
+
+    candidates.sort(key=lambda x: x[2])
+    still_keep: list[tuple[str, Path, float]] = []
+    newly_delete: list[tuple[str, Path, float]] = []
+    for entry in candidates:
+        entry_size = _get_backup_size(entry[1])
+        if total_size + entry_size <= max_total_bytes:
+            total_size += entry_size
+            still_keep.append(entry)
+        else:
+            newly_delete.append(entry)
+    kept.extend(name for name, _, _ in still_keep)
+    return newly_delete
+
+
 def prune_backups(
     paths: ResolvedPaths,
     *,
     max_count: int = DEFAULT_MAX_BACKUPS,
     max_age_days: int = DEFAULT_MAX_AGE_DAYS,
+    max_total_bytes: int | None = DEFAULT_MAX_TOTAL_BYTES,
     dry_run: bool = False,
 ) -> PruneResult:
     backup_base = paths.backup_dir.path
@@ -927,22 +1065,32 @@ def prune_backups(
         kept.extend(name for name, _, _ in still_keep)
         candidates_for_deletion = newly_delete
 
+    if max_total_bytes is not None and candidates_for_deletion:
+        candidates_for_deletion = _prune_by_total_bytes(
+            candidates_for_deletion, kept, backup_dirs, max_total_bytes
+        )
+
     deleted: list[str] = []
+    total_bytes_pruned = 0
     for name, path, _ in candidates_for_deletion:
         if dry_run:
             deleted.append(name)
+            total_bytes_pruned += _get_backup_size(path)
             continue
 
         try:
-            import shutil
-
             shutil.rmtree(path)
             deleted.append(name)
             logger.info("Pruned backup: %s", name)
         except OSError as e:
             logger.warning("Failed to prune backup %s: %s", name, e)
 
-    return PruneResult(deleted=deleted, kept=kept, dry_run=dry_run)
+    return PruneResult(
+        deleted=deleted,
+        kept=kept,
+        dry_run=dry_run,
+        total_bytes_pruned=total_bytes_pruned,
+    )
 
 
 def list_backups(
@@ -1295,6 +1443,30 @@ def plan_restore(
             f"Cross-minor version restore: {manifest.application_version} -> {current_version}"
         )
 
+    secrets_impact: list[str] = []
+    restart_actions: list[str] = []
+    permissions_impact: list[str] = []
+
+    if _CONFIG_SECTION_NAME in sections:
+        secrets_impact.extend([
+            "Environment variables (.env) contain secrets — will be overwritten",
+            "providers.yaml and pipeline.yaml may contain API keys",
+        ])
+        permissions_impact.extend([
+            f"Config files will be set to 0o600 permissions",
+        ])
+
+    if _DATABASE_SECTION_NAME in sections:
+        restart_actions.extend([
+            "Celery workers must be restarted after database restore",
+            "Flask app must be restarted to pick up new schema state",
+        ])
+
+    if requires_migration:
+        restart_actions.append("Database migrations must be applied after restore")
+
+    restart_actions.append("Run 'ainews start' to restart services after restore")
+
     return RestorePlan(
         backup_id=manifest.backup_id,
         backup_version=manifest.application_version,
@@ -1306,6 +1478,9 @@ def plan_restore(
         services_to_stop=services_to_stop,
         rollback_possible=rollback_possible,
         safety_backup_id=safety_backup_id,
+        secrets_impact=secrets_impact,
+        restart_actions=restart_actions,
+        permissions_impact=permissions_impact,
     )
 
 
@@ -1377,19 +1552,17 @@ def _apply_metadata_restore(
         logger.info("Install metadata restored")
 
 
-def restore_backup(
-    paths: ResolvedPaths,
-    backup_id: str,
+def _filter_plan_for_mode(
+    plan: RestorePlan,
     *,
-    dry_run: bool = False,
     config_only: bool = False,
     data_only: bool = False,
 ) -> RestorePlan:
-    logger.info("Starting restore from backup: %s", backup_id)
-    plan = plan_restore(paths, backup_id, dry_run=dry_run)
+    if not config_only and not data_only:
+        return plan
 
     if config_only:
-        plan = RestorePlan(
+        return RestorePlan(
             backup_id=plan.backup_id,
             backup_version=plan.backup_version,
             current_version=plan.current_version,
@@ -1400,31 +1573,78 @@ def restore_backup(
             services_to_stop=plan.services_to_stop,
             rollback_possible=plan.rollback_possible,
             safety_backup_id=plan.safety_backup_id,
+            secrets_impact=[s for s in plan.secrets_impact if ".env" in s or "secret" in s.lower()],
+            restart_actions=["Run 'ainews start' to restart services after restore"],
+            permissions_impact=plan.permissions_impact,
         )
-    elif data_only:
-        plan = RestorePlan(
-            backup_id=plan.backup_id,
-            backup_version=plan.backup_version,
-            current_version=plan.current_version,
-            sections=[
-                s
-                for s in plan.sections
-                if s in (_DATABASE_SECTION_NAME, _INSTALL_METADATA_SECTION_NAME)
-            ],
-            requires_migration=plan.requires_migration,
-            migration_plan=plan.migration_plan,
-            paths_affected=[
-                p
-                for p in plan.paths_affected
-                if any(
-                    name in p
-                    for name in (_DATABASE_SECTION_NAME, _INSTALL_METADATA_SECTION_NAME)
-                )
-            ],
-            services_to_stop=plan.services_to_stop,
-            rollback_possible=plan.rollback_possible,
-            safety_backup_id=plan.safety_backup_id,
-        )
+
+    return RestorePlan(
+        backup_id=plan.backup_id,
+        backup_version=plan.backup_version,
+        current_version=plan.current_version,
+        sections=[
+            s
+            for s in plan.sections
+            if s in (_DATABASE_SECTION_NAME, _INSTALL_METADATA_SECTION_NAME)
+        ],
+        requires_migration=plan.requires_migration,
+        migration_plan=plan.migration_plan,
+        paths_affected=[
+            p
+            for p in plan.paths_affected
+            if any(
+                name in p
+                for name in (_DATABASE_SECTION_NAME, _INSTALL_METADATA_SECTION_NAME)
+            )
+        ],
+        services_to_stop=plan.services_to_stop,
+        rollback_possible=plan.rollback_possible,
+        safety_backup_id=plan.safety_backup_id,
+        secrets_impact=[],
+        restart_actions=plan.restart_actions,
+        permissions_impact=[],
+    )
+
+
+def _stop_services(lifecycle: LifecycleOperations | None) -> None:
+    if lifecycle is not None:
+        logger.info("Stopping services before restore")
+        stopped = lifecycle.stop_services()
+        if not stopped:
+            logger.warning("Could not stop services — proceeding with restore anyway")
+
+
+def _start_services(lifecycle: LifecycleOperations | None) -> bool:
+    if lifecycle is None:
+        return True
+    logger.info("Starting services after restore")
+    started = lifecycle.start_services(timeout=120)
+    if not started:
+        logger.warning("Services did not start cleanly after restore")
+    return started
+
+
+def _verify_post_restore_health(
+    lifecycle: LifecycleOperations | None,
+) -> bool:
+    if lifecycle is None:
+        return True
+    logger.info("Running post-restore health check")
+    return lifecycle.check_health(timeout=15)
+
+
+def restore_backup(
+    paths: ResolvedPaths,
+    backup_id: str,
+    *,
+    dry_run: bool = False,
+    config_only: bool = False,
+    data_only: bool = False,
+    lifecycle: LifecycleOperations | None = None,
+) -> RestorePlan:
+    logger.info("Starting restore from backup: %s", backup_id)
+    plan = plan_restore(paths, backup_id, dry_run=dry_run)
+    plan = _filter_plan_for_mode(plan, config_only=config_only, data_only=data_only)
 
     if dry_run:
         logger.info("Dry-run restore plan generated for %s", backup_id)
@@ -1433,6 +1653,9 @@ def restore_backup(
     backup_base = paths.backup_dir.path
     backup_dir = backup_base / backup_id
 
+    _stop_services(lifecycle)
+
+    safety_backup_id: str | None = None
     lock_fd: int | None = None
     staging_dir = backup_base / f".restore-staging-{backup_id}"
 
@@ -1441,7 +1664,8 @@ def restore_backup(
 
         try:
             safety_backup = create_backup(paths)
-            logger.info("Safety backup created: %s", safety_backup.backup_id)
+            safety_backup_id = safety_backup.backup_id
+            logger.info("Safety backup created: %s", safety_backup_id)
         except BackupError as e:
             logger.warning("Could not create safety backup: %s", e.message)
 
@@ -1465,16 +1689,84 @@ def restore_backup(
         restore_id = f"restore-{_make_backup_id(_get_application_version())}"
         _record_restore(backup_base, backup_id, restore_id)
 
+        if not _verify_post_restore_health(lifecycle):
+            logger.error("Post-restore health check failed — initiating rollback")
+            if safety_backup_id is not None:
+                _rollback_restore(paths, safety_backup_id, lifecycle)
+                raise RestoreError(
+                    message="Restore failed health check — rolled back to safety backup",
+                    code="HEALTH_CHECK_FAILED",
+                )
+
+        _start_services(lifecycle)
         logger.info("Restore completed from backup: %s", backup_id)
         return plan
 
+    except (RestoreError, BackupError):
+        raise
+    except Exception as e:
+        if safety_backup_id is not None and lifecycle is not None:
+            logger.error("Restore failed (%s) — initiating rollback", e)
+            _rollback_restore(paths, safety_backup_id, lifecycle)
+        raise RestoreError(
+            message=f"Restore failed: {e}",
+            code="RESTORE_FAILED",
+        ) from e
     finally:
         if staging_dir.exists():
-            import shutil
-
             shutil.rmtree(staging_dir, ignore_errors=True)
         if lock_fd is not None:
             _release_lock(lock_fd)
+
+
+def _rollback_restore(
+    paths: ResolvedPaths,
+    safety_backup_id: str,
+    lifecycle: LifecycleOperations | None = None,
+) -> None:
+    logger.info("Rolling back to safety backup: %s", safety_backup_id)
+    try:
+        if lifecycle is not None:
+            lifecycle.stop_services()
+
+        restore_backup_inner(paths, safety_backup_id, lifecycle=lifecycle)
+        logger.info("Rollback completed successfully")
+    except Exception as e:  # noqa: BLE001 — rollback must not propagate
+        logger.error("Rollback also failed: %s", e)
+
+
+def restore_backup_inner(
+    paths: ResolvedPaths,
+    backup_id: str,
+    *,
+    lifecycle: LifecycleOperations | None = None,
+) -> None:
+    """Restore without lock acquisition or safety backup (for rollback use)."""
+    plan = plan_restore(paths, backup_id, dry_run=False)
+
+    backup_base = paths.backup_dir.path
+    backup_dir = backup_base / backup_id
+    staging_dir = backup_base / f".restore-staging-{backup_id}"
+
+    try:
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        _stage_sections(backup_dir, plan, staging_dir)
+
+        if _CONFIG_SECTION_NAME in plan.sections:
+            _apply_config_restore(staging_dir, paths)
+
+        if _DATABASE_SECTION_NAME in plan.sections:
+            _apply_database_restore(staging_dir, paths)
+
+        if _INSTALL_METADATA_SECTION_NAME in plan.sections:
+            _apply_metadata_restore(staging_dir, paths)
+
+        if lifecycle is not None:
+            lifecycle.start_services(timeout=120)
+
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
 
 def pin_backup(backup_base: Path, backup_id: str) -> None:

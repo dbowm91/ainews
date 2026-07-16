@@ -183,9 +183,10 @@ def register_commands(  # noqa: C901
     def backup_prune(
         max_count: Optional[int] = typer.Option(None, "--max-count", help="Maximum backups to keep"),
         max_age_days: Optional[int] = typer.Option(None, "--max-age-days", help="Maximum age in days"),
+        max_total_bytes: Optional[int] = typer.Option(None, "--max-total-bytes", help="Maximum total bytes to keep"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Preview what would be pruned"),
     ) -> None:
-        """Prune old backups based on count and age limits."""
+        """Prune old backups based on count, age, and size limits."""
         from ainews_config.backup import prune_backups
 
         config = ctx.ensure_loaded()
@@ -193,8 +194,9 @@ def register_commands(  # noqa: C901
         try:
             result = prune_backups(
                 config.paths,
-                max_count=max_count,
-                max_age_days=max_age_days,
+                max_count=max_count or 10,
+                max_age_days=max_age_days or 90,
+                max_total_bytes=max_total_bytes,
                 dry_run=dry_run,
             )
         except (OSError, ValueError) as e:
@@ -206,6 +208,7 @@ def register_commands(  # noqa: C901
                 "deleted": result.deleted,
                 "kept": result.kept,
                 "dry_run": dry_run,
+                "total_bytes_pruned": result.total_bytes_pruned,
             })
         else:
             prefix = "Would delete" if dry_run else "Deleted"
@@ -221,6 +224,9 @@ def register_commands(  # noqa: C901
                 for bid in result.kept:
                     out.info(f"  - {bid}")
 
+            if result.total_bytes_pruned > 0:
+                out.info(f"Total bytes pruned: {_format_size(result.total_bytes_pruned)}")
+
             if dry_run:
                 out.info("\nDry run — no changes were made.")
 
@@ -233,9 +239,10 @@ def register_commands(  # noqa: C901
         data_only: bool = typer.Option(False, "--data-only", help="Restore database only"),
         dry_run: bool = typer.Option(False, "--dry-run", help="Show restore plan without executing"),
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+        no_lifecycle: bool = typer.Option(False, "--no-lifecycle", help="Skip service stop/start during restore"),
     ) -> None:
         """Restore configuration and/or data from a backup."""
-        from ainews_config.backup import restore_backup
+        from ainews_config.backup import RestoreError, restore_backup
 
         config = ctx.ensure_loaded()
 
@@ -258,17 +265,30 @@ def register_commands(  # noqa: C901
                 out.info("Restore cancelled.")
                 return
 
+        lifecycle = None
+        if not no_lifecycle:
+            try:
+                lifecycle = _get_lifecycle_driver(config)
+            except Exception:  # noqa: BLE001
+                out.warning("Could not initialize lifecycle driver — proceeding without service management")
+
         try:
             restore_backup(
                 config.paths,
                 backup_id,
                 config_only=config_only,
                 data_only=data_only,
+                lifecycle=lifecycle,
             )
+        except RestoreError as e:
+            out.error(f"Restore failed: {e.message}", exit_codes.ROLLBACK_ERROR)
+            return
         except FileNotFoundError as e:
             out.error(str(e), exit_codes.NOT_FOUND)
+            return
         except (OSError, ValueError) as e:
             out.error(f"Restore failed: {e}", exit_codes.ROLLBACK_ERROR)
+            return
 
         if ctx.json_output:
             out.json_data({
@@ -447,6 +467,9 @@ def _show_restore_plan(config: object, backup_id: str, ctx: CLIContext, out: Out
             "paths_affected": plan.paths_affected,
             "services_to_stop": plan.services_to_stop,
             "rollback_possible": plan.rollback_possible,
+            "secrets_impact": plan.secrets_impact,
+            "restart_actions": plan.restart_actions,
+            "permissions_impact": plan.permissions_impact,
         })
     else:
         out.info(f"Restore plan for backup {backup_id}:")
@@ -461,7 +484,26 @@ def _show_restore_plan(config: object, backup_id: str, ctx: CLIContext, out: Out
         out.info(f"  Rollback possible: {'yes' if plan.rollback_possible else 'no'}")
         if plan.safety_backup_id:
             out.info(f"  Safety backup: {plan.safety_backup_id}")
+        if plan.secrets_impact:
+            out.warning("Secrets impact:")
+            for s in plan.secrets_impact:
+                out.info(f"    - {s}")
+        if plan.permissions_impact:
+            out.info("Permissions impact:")
+            for p in plan.permissions_impact:
+                out.info(f"    - {p}")
+        if plan.restart_actions:
+            out.info("Post-restore actions:")
+            for a in plan.restart_actions:
+                out.info(f"    - {a}")
         out.info("\nDry run — no changes were made.")
+
+
+def _get_lifecycle_driver(config: object) -> object:
+    """Get a lifecycle driver for service management."""
+    from ainews_cli.lifecycle.docker_compose import DockerComposeDriver
+
+    return DockerComposeDriver(resolved_paths=config.paths)  # type: ignore[attr-defined]
 
 
 def _format_size(size_bytes: int) -> str:

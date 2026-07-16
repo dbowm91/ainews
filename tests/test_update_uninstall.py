@@ -2288,6 +2288,45 @@ class TestPriorVersionMigration:
         # Should not have a minimum-version blocker (direction check is in plan_update)
         assert not any("minimum" in b.lower() for b in blockers)
 
+    def test_plan_migrations_selects_090_to_100(self) -> None:
+        """plan_migrations selects the 0.9.0->1.0.0 config migration fixture."""
+        from ainews_config.backup import plan_migrations
+        from ainews_config.migrations import get_all_migrations
+
+        all_migrations = get_all_migrations()
+        applicable = plan_migrations(all_migrations, "0.9.0", "1.0.0")
+        assert len(applicable) >= 1
+
+        ids = [m.id for m in applicable]
+        assert "config_0.9.0_to_1.0.0" in ids
+        assert "install_metadata_0.9.0_to_1.0.0" in ids
+        assert "manifest_0.9.0_to_1.0.0" in ids
+
+    def test_execute_migration_plan_applies_090_to_100(self, tmp_path: Path) -> None:
+        """execute_migration_plan successfully applies all 0.9.0->1.0.0 migrations."""
+        from ainews_config.backup import execute_migration_plan, plan_migrations
+        from ainews_config.migrations import get_all_migrations
+
+        all_migrations = get_all_migrations()
+        applicable = plan_migrations(all_migrations, "0.9.0", "1.0.0")
+        staging = tmp_path / "staging"
+        staging.mkdir()
+
+        reports = execute_migration_plan(applicable, staging)
+        assert len(reports) >= 3  # config + install_metadata + manifest
+
+        for report in reports:
+            assert report.success, f"Migration {report.migration_id} failed: {report.message}"
+
+    def test_detect_config_migrations_returns_descriptions(self) -> None:
+        """_detect_config_migrations returns human-readable descriptions for 0.9.0->1.0.0."""
+        from ainews_cli.update.engine import _detect_config_migrations
+
+        result = _detect_config_migrations("0.9.0", "1.0.0")
+        assert len(result) >= 1
+        assert any("config_0.9.0_to_1.0.0" in desc for desc in result)
+        assert any("0.9.0 -> 1.0.0" in desc for desc in result)
+
 
 # ===================================================================
 # 21. Activation-before-migration ordering (WS5 Critical fix)

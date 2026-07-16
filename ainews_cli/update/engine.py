@@ -238,10 +238,10 @@ def _detect_config_migrations(
         from ainews_config.migrations import get_all_migrations
 
         all_migrations = get_all_migrations()
-        plan = plan_migrations(all_migrations, current_version, target_version)
+        applicable = plan_migrations(all_migrations, current_version, target_version)
         return [
-            f"{s.from_version} -> {s.to_version}: {s.description}"
-            for s in plan.steps
+            f"{m.from_version} -> {m.to_version}: {m.id}"
+            for m in applicable
         ]
     except Exception:  # noqa: BLE001
         logger.debug("Could not detect config migrations")

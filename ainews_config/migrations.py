@@ -124,6 +124,161 @@ INSTALL_METADATA_MIGRATIONS: list[InstallMetadataMigration] = []
 MANIFEST_MIGRATIONS: list[ManifestSchemaMigration] = []
 
 
+# ---------------------------------------------------------------------------
+# Prior-version migration fixtures (0.9.0 -> 1.0.0)
+# These demonstrate the migration interface pattern for testing.
+# ---------------------------------------------------------------------------
+
+
+class ConfigV090ToV100Migration(ConfigSchemaMigration):
+    """Stub migration: config schema 0.9.0 -> 1.0.0.
+
+    In a real migration, this would transform config files from
+    the old format to the new format (e.g., rename fields, add
+    required sections, update validation rules).
+    """
+
+    @property
+    def id(self) -> str:
+        return "config_0.9.0_to_1.0.0"
+
+    @property
+    def from_version(self) -> str:
+        return "0.9.0"
+
+    @property
+    def to_version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def reversible(self) -> bool:
+        return False
+
+    def apply(
+        self, staging_root: Path, context: dict[str, Any]
+    ) -> MigrationReport:
+        logger.info("Applying config migration 0.9.0 -> 1.0.0 (stub)")
+        return MigrationReport(
+            migration_id=self.id,
+            success=True,
+            message="Config schema migrated from 0.9.0 to 1.0.0",
+            from_version=self.from_version,
+            to_version=self.to_version,
+        )
+
+    def rollback(
+        self, staging_root: Path, context: dict[str, Any]
+    ) -> MigrationReport:
+        return MigrationReport(
+            migration_id=self.id,
+            success=False,
+            message="Rollback not supported for config 0.9.0 -> 1.0.0",
+            from_version=self.to_version,
+            to_version=self.from_version,
+        )
+
+
+class InstallMetadataV090ToV100Migration(InstallMetadataMigration):
+    """Stub migration: install metadata schema 0.9.0 -> 1.0.0.
+
+    In a real migration, this would transform the install-metadata.json
+    format from the old schema to the new schema.
+    """
+
+    @property
+    def id(self) -> str:
+        return "install_metadata_0.9.0_to_1.0.0"
+
+    @property
+    def from_version(self) -> str:
+        return "0.9.0"
+
+    @property
+    def to_version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def reversible(self) -> bool:
+        return False
+
+    def apply(
+        self, staging_root: Path, context: dict[str, Any]
+    ) -> MigrationReport:
+        logger.info("Applying install metadata migration 0.9.0 -> 1.0.0 (stub)")
+        return MigrationReport(
+            migration_id=self.id,
+            success=True,
+            message="Install metadata schema migrated from 0.9.0 to 1.0.0",
+            from_version=self.from_version,
+            to_version=self.to_version,
+        )
+
+    def rollback(
+        self, staging_root: Path, context: dict[str, Any]
+    ) -> MigrationReport:
+        return MigrationReport(
+            migration_id=self.id,
+            success=False,
+            message="Rollback not supported for install metadata 0.9.0 -> 1.0.0",
+            from_version=self.to_version,
+            to_version=self.from_version,
+        )
+
+
+class ManifestV090ToV100Migration(ManifestSchemaMigration):
+    """Stub migration: manifest schema 0.9.0 -> 1.0.0.
+
+    In a real migration, this would transform the manifest.json
+    format from the old schema to the new schema (e.g., add new
+    section types, update checksum format).
+    """
+
+    @property
+    def id(self) -> str:
+        return "manifest_0.9.0_to_1.0.0"
+
+    @property
+    def from_version(self) -> str:
+        return "0.9.0"
+
+    @property
+    def to_version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def reversible(self) -> bool:
+        return False
+
+    def apply(
+        self, staging_root: Path, context: dict[str, Any]
+    ) -> MigrationReport:
+        logger.info("Applying manifest migration 0.9.0 -> 1.0.0 (stub)")
+        return MigrationReport(
+            migration_id=self.id,
+            success=True,
+            message="Manifest schema migrated from 0.9.0 to 1.0.0",
+            from_version=self.from_version,
+            to_version=self.to_version,
+        )
+
+    def rollback(
+        self, staging_root: Path, context: dict[str, Any]
+    ) -> MigrationReport:
+        return MigrationReport(
+            migration_id=self.id,
+            success=False,
+            message="Rollback not supported for manifest 0.9.0 -> 1.0.0",
+            from_version=self.to_version,
+            to_version=self.from_version,
+        )
+
+
+# Register the prior-version fixtures
+CONFIG_MIGRATIONS.append(ConfigV090ToV100Migration())
+INSTALL_METADATA_MIGRATIONS.append(InstallMetadataV090ToV100Migration())
+MANIFEST_MIGRATIONS.append(ManifestV090ToV100Migration())
+
+
 def get_all_migrations() -> list[BaseMigration]:
     """Return all registered migrations across all schema types."""
     all_migrations: list[BaseMigration] = []

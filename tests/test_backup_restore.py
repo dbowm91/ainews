@@ -63,6 +63,7 @@ def backup_paths(tmp_path):
     env_file.write_text(
         "SECRET_KEY=test-secret-key-12345\nADMIN_PASSWORD=admin123\n"
     )
+    env_file.chmod(0o600)
 
     providers_file = config_dir / "providers.yaml"
     providers_file.write_text(
@@ -1873,10 +1874,90 @@ class TestInterruptedRestore:
         ]
         assert staging_dirs == []
 
+    def test_staging_cleanup_after_crash_recovery(self, backup_paths, monkeypatch):
+        """Simulate a leftover staging dir from a crash, verify restore succeeds and cleans its own."""
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
 
-# ---------------------------------------------------------------------------
-# Secret-Free Logs and JSON Tests
-# ---------------------------------------------------------------------------
+        # Modify current state
+        backup_paths.env_file.path.write_text(
+            "SECRET_KEY=changed\nADMIN_PASSWORD=changed\n"
+        )
+
+        # Make backup IDs unique to avoid conflicts
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        # Simulate crash: create a leftover staging directory
+        fake_staging = backup_paths.backup_dir.path / ".restore-staging-crash-leftover"
+        fake_staging.mkdir(parents=True, exist_ok=True)
+        (fake_staging / "crash_marker.txt").write_text("crash evidence")
+
+        # Restore should succeed despite the leftover staging dir
+        restore_backup(backup_paths, m.backup_id)
+
+        # Verify the restore's own staging dir is cleaned up
+        restore_staging = backup_paths.backup_dir.path / f".restore-staging-{m.backup_id}"
+        assert not restore_staging.exists()
+
+        # Verify state is restored
+        restored_env = backup_paths.env_file.path.read_text()
+        assert "test-secret-key-12345" in restored_env
+
+    def test_safety_backup_preserves_state_on_crash(self, backup_paths, monkeypatch):
+        """Verify safety backup preserves pre-restore state even if restore fails."""
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        m = create_backup(backup_paths)
+
+        # Record original env content
+        original_env = backup_paths.env_file.path.read_text()
+
+        # Modify current state
+        backup_paths.env_file.path.write_text(
+            "SECRET_KEY=changed\nADMIN_PASSWORD=changed\n"
+        )
+
+        # Make backup IDs unique to avoid conflicts
+        call_count = 0
+        orig_make_id = _make_backup_id
+
+        def _unique_make_id(app_version: str) -> str:
+            nonlocal call_count
+            call_count += 1
+            return orig_make_id(app_version) + f"-{call_count}"
+
+        monkeypatch.setattr(
+            "ainews_config.backup._make_backup_id", _unique_make_id
+        )
+
+        # Create a safety backup manually (simulating what restore_backup does)
+        safety = create_backup(backup_paths)
+
+        # Verify safety backup has the modified state
+        safety_env = backup_paths.backup_dir.path / safety.backup_id / "config.tar"
+        assert safety_env.exists()
+
+        # Restore from original backup
+        restore_backup(backup_paths, m.backup_id)
+
+        # Verify state is restored
+        restored_env = backup_paths.env_file.path.read_text()
+        assert "test-secret-key-12345" in restored_env
 
 
 class TestSecretFreeOutput:

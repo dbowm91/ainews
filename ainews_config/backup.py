@@ -919,6 +919,52 @@ def _check_provider_references(
     return None
 
 
+def _verify_secret_permissions(
+    backup_dir: Path, manifest: BackupManifest
+) -> VerifyResult | None:
+    """Verify that .env file in config tarball has restrictive permissions.
+
+    Extracts .env to a temporary directory and checks that it has 0o600
+    permissions (owner read/write only). This is a non-mutating check.
+    """
+    config_section = next(
+        (s for s in manifest.sections if s.name == _CONFIG_SECTION_NAME),
+        None,
+    )
+    if config_section is None:
+        return None
+
+    tar_path = backup_dir / config_section.path
+    try:
+        with tarfile.open(str(tar_path), "r") as tar:
+            for member in tar.getmembers():
+                if member.name == ".env" or member.name.endswith("/.env"):
+                    f = tar.extractfile(member)
+                    if f is None:
+                        continue
+                    data = f.read()
+                    f.close()
+
+                    if not data:
+                        continue
+
+                    expected_mode = 0o600
+                    actual_mode = member.mode & 0o777
+                    if actual_mode != expected_mode:
+                        return VerifyResult(
+                            valid=False,
+                            reason_code="unsafe_permissions",
+                            message=(
+                                f".env file has permissions {oct(actual_mode)}, "
+                                f"expected {oct(expected_mode)}"
+                            ),
+                        )
+    except tarfile.TarError:
+        pass
+
+    return None
+
+
 def verify_backup(
     backup_source: Path | ResolvedPaths, backup_id: str
 ) -> VerifyResult:
@@ -950,6 +996,10 @@ def verify_backup(
         return err
 
     err = _verify_config_cross_validation(backup_dir)
+    if err is not None:
+        return err
+
+    err = _verify_secret_permissions(backup_dir, manifest)
     if err is not None:
         return err
 
@@ -1357,7 +1407,23 @@ def execute_migration_plan(
     ctx = context or {}
     reports: list[MigrationReport] = []
 
+    history_path = staging_root / ".migration_history.json"
+    applied_ids = _load_migration_history(history_path)
+
     for m in migrations:
+        if m.id in applied_ids:
+            logger.info("Migration %s already applied — skipping", m.id)
+            reports.append(
+                MigrationReport(
+                    migration_id=m.id,
+                    success=True,
+                    message="Migration already applied (idempotent skip)",
+                    from_version=m.from_version,
+                    to_version=m.to_version,
+                )
+            )
+            continue
+
         logger.info("Running preflight for migration: %s", m.id)
         preflight_report = m.preflight(ctx)
         reports.append(preflight_report)
@@ -1378,11 +1444,33 @@ def execute_migration_plan(
             )
             break
 
+        applied_ids.add(m.id)
+        _save_migration_history(history_path, applied_ids)
+
         logger.info(
             "Migration %s applied: %s", m.id, report.message
         )
 
     return reports
+
+
+def _load_migration_history(history_path: Path) -> set[str]:
+    """Load the set of already-applied migration IDs."""
+    if not history_path.exists():
+        return set()
+    try:
+        data = json.loads(history_path.read_text(encoding="utf-8"))
+        return set(data.get("applied", []))
+    except (json.JSONDecodeError, OSError):
+        return set()
+
+
+def _save_migration_history(history_path: Path, applied_ids: set[str]) -> None:
+    """Persist the set of applied migration IDs."""
+    data = {"applied": sorted(applied_ids)}
+    history_path.write_text(
+        json.dumps(data, indent=2), encoding="utf-8"
+    )
 
 
 def plan_restore(
@@ -1523,6 +1611,87 @@ def _stage_sections(
             shutil.copy2(str(meta_src), str(meta_dst))
 
 
+def _validate_staged_config(staging_dir: Path) -> None:
+    """Validate staged config files before applying to live paths.
+
+    Raises RestoreError if staged files are invalid.
+    """
+    config_staging = staging_dir / "config"
+    if not config_staging.exists():
+        return
+
+    yaml_extensions = {".yaml", ".yml"}
+    for member in config_staging.rglob("*"):
+        if not member.is_file():
+            continue
+        _, ext = os.path.splitext(member.name)
+        if ext.lower() in yaml_extensions:
+            try:
+                data = yaml.safe_load(member.read_text(encoding="utf-8"))
+                if data is not None and not isinstance(data, (dict, list)):
+                    raise RestoreError(
+                        message=f"Invalid YAML in staged file {member.name}: expected dict or list",
+                        code="STAGED_CONFIG_INVALID",
+                    )
+            except yaml.YAMLError as e:
+                raise RestoreError(
+                    message=f"YAML parse error in staged file {member.name}: {e}",
+                    code="STAGED_CONFIG_INVALID",
+                ) from e
+
+    env_staging = config_staging / ".env"
+    if env_staging.exists():
+        try:
+            text = env_staging.read_text(encoding="utf-8")
+            for i, line in enumerate(text.splitlines(), 1):
+                line = line.strip()
+                if line and not line.startswith("#") and "=" not in line:
+                    raise RestoreError(
+                        message=f"Invalid .env format at line {i}: {line!r}",
+                        code="STAGED_CONFIG_INVALID",
+                    )
+        except UnicodeDecodeError as e:
+            raise RestoreError(
+                message=f"Cannot decode .env file: {e}",
+                code="STAGED_CONFIG_INVALID",
+            ) from e
+
+
+def _validate_staged_database(staging_dir: Path) -> None:
+    """Validate staged SQLite database before applying to live paths.
+
+    Raises RestoreError if database is corrupt.
+    """
+    db_path = staging_dir / "database.sqlite"
+    if not db_path.exists():
+        return
+
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            result = conn.execute("PRAGMA integrity_check").fetchone()
+            if result is None or result[0] != "ok":
+                raise RestoreError(
+                    message=f"Staged database integrity check failed: {result}",
+                    code="STAGED_DATABASE_CORRUPT",
+                )
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        raise RestoreError(
+            message=f"SQLite error validating staged database: {e}",
+            code="STAGED_DATABASE_CORRUPT",
+        ) from e
+
+
+def _validate_staged_files(staging_dir: Path, plan: RestorePlan) -> None:
+    """Validate all staged files before applying to live paths."""
+    if _CONFIG_SECTION_NAME in plan.sections:
+        _validate_staged_config(staging_dir)
+    if _DATABASE_SECTION_NAME in plan.sections:
+        _validate_staged_database(staging_dir)
+
+
 def _apply_config_restore(
     staging_dir: Path, paths: ResolvedPaths
 ) -> None:
@@ -1650,6 +1819,41 @@ def _verify_post_restore_health(
     return lifecycle.check_health(timeout=15)
 
 
+def _apply_restore_migrations(plan: RestorePlan, staging_dir: Path) -> None:
+    """Apply forward migrations during restore if required."""
+    if not plan.requires_migration:
+        return
+
+    logger.info("Migration required — applying forward migrations")
+    from ainews_config.migrations import get_all_migrations
+
+    all_migrations = get_all_migrations()
+    if not all_migrations:
+        logger.info("No migrations registered")
+        return
+
+    applicable = plan_migrations(
+        all_migrations,
+        plan.backup_version,
+        plan.current_version,
+    )
+    if not applicable:
+        logger.info(
+            "No applicable migrations found for %s -> %s",
+            plan.backup_version,
+            plan.current_version,
+        )
+        return
+
+    reports = execute_migration_plan(applicable, staging_dir)
+    failed = [r for r in reports if not r.success]
+    if failed:
+        raise RestoreError(
+            message=f"Migration failed: {failed[0].message}",
+            code="MIGRATION_FAILED",
+        )
+
+
 def restore_backup(
     paths: ResolvedPaths,
     backup_id: str,
@@ -1689,10 +1893,9 @@ def restore_backup(
         staging_dir.mkdir(parents=True, exist_ok=True)
         _stage_sections(backup_dir, plan, staging_dir)
 
-        if plan.requires_migration:
-            logger.info(
-                "Migration required — restoring database without migration"
-            )
+        _validate_staged_files(staging_dir, plan)
+
+        _apply_restore_migrations(plan, staging_dir)
 
         if _CONFIG_SECTION_NAME in plan.sections:
             _apply_config_restore(staging_dir, paths)
@@ -1768,6 +1971,10 @@ def restore_backup_inner(
     try:
         staging_dir.mkdir(parents=True, exist_ok=True)
         _stage_sections(backup_dir, plan, staging_dir)
+
+        _validate_staged_files(staging_dir, plan)
+
+        _apply_restore_migrations(plan, staging_dir)
 
         if _CONFIG_SECTION_NAME in plan.sections:
             _apply_config_restore(staging_dir, paths)

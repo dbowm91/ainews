@@ -24,7 +24,7 @@ This document provides instructions and context for agents working on the AI New
 *   `schemas/`: Pydantic models for validation and serialization.
 *   `utils/`: Pure helper functions with minimal dependencies (e.g., `utils/url.py` for URL normalization).
 *   `ainews_config/`: Configuration engine package (CLI-independent). Contains path resolver, field registry, loader, validator, and transactional writer.
-*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, onboard, providers (list/add/test/models/set-default/assign/remove), sources (list/show/add/update/enable/disable/remove/test/import-opml/export-opml), topics (list/show/add/update/remove), pipeline (show/validate/set-profile/assign/unassign/diff), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/set-secret/unset/diff/rollback), doctor. Subpackages: `providers/` (adapter protocol, registry, built-in adapters), `sources/` (adapter protocol, registry, OPML, built-in adapters), `topics/` (models, commands), `pipeline/` (models, commands), `lifecycle/` (Docker Compose/bare metal drivers), `doctor/` (diagnostic checks).
+*   `ainews_cli/`: Operator CLI package (Typer-based). Entry point: `ainews_cli.main:app`. Commands: version, onboard, providers (list/add/test/models/set-default/assign/remove), sources (list/show/add/update/enable/disable/remove/test/import-opml/export-opml), topics (list/show/add/update/remove), pipeline (show/validate/set-profile/assign/unassign/diff), start/stop/restart/status/logs/health/smoke, config (path/show/check/get/set/set-secret/unset/diff/rollback), doctor, update (check/plan/apply/rollback/status), channel (show/set), uninstall. Subpackages: `providers/` (adapter protocol, registry, built-in adapters), `sources/` (adapter protocol, registry, OPML, built-in adapters), `topics/` (models, commands), `pipeline/` (models, commands), `lifecycle/` (Docker Compose/bare metal drivers), `doctor/` (diagnostic checks), `update/` (GitHub API client, update engine, state machine), `channel/` (release channel management), `uninstall/` (safe removal with path ownership validation).
 
 ## Known Issues & Gotchas
 
@@ -370,6 +370,36 @@ Canonical paths:
 - User: `~/.local/share/ainews/app/`, `~/.config/ainews/`, `~/.local/state/ainews/`
 - System: `/opt/ainews/`, `/etc/ainews/`, `/var/lib/ainews/`, `/var/log/ainews/`
 
+### Update Architecture
+The update system at `ainews_cli/update/` provides safe, channel-aware in-place updates:
+- **State machine:** `UpdatePhase` enum tracks operation lifecycle: idle → checking → planned → downloading → verified → backed_up → staged → migrating → activated → validating → complete (or failed/rolled_back)
+- **GitHub client:** `ainews_cli/update/github.py` replicates installer's version resolution and artifact download logic in Python using `urllib.request`. Supports `AINEWS_GITHUB_TOKEN` and proxy env vars.
+- **Update engine:** `ainews_cli/update/engine.py` orchestrates the full pipeline: check → plan → download → verify checksum → create pre-update backup → extract to staging → stop services → activate → run migrations → start services → health check → auto-rollback on failure
+- **Locking:** Exclusive `fcntl.flock` on `state_dir/update.lock` prevents concurrent update/uninstall/restore operations
+- **State persistence:** `UpdateOperation` saved to `state_dir/update-state.json` for interrupted operation recovery
+- **Pre-update backup:** Full backup via `ainews_config.backup.create_backup()` before any migration, verified before proceeding
+- **Rollback:** Automatic on failure; explicit via `ainews update rollback` within retention window. Restores previous app version from staging backup or pre-update backup.
+- **Version comparison:** Uses `packaging.version.Version` when available, falls back to string comparison
+
+Commands: `ainews update check`, `ainews update plan`, `ainews update apply`, `ainews update rollback`, `ainews update status`
+
+### Channel Management
+Channel commands at `ainews_cli/channel/` manage the release channel:
+- `ainews channel show` — displays current channel, version, commit, installed-at from `install-metadata.json`
+- `ainews channel set <channel>` — validates channel (stable/prerelease/main), requires confirmation for risky channels (prerelease/main), writes metadata atomically, does NOT trigger implicit update
+
+### Uninstall Architecture
+The uninstall command at `ainews_cli/uninstall/` removes application files while preserving operator-owned state:
+- **Default behavior:** Removes only app files (binaries, code), preserves config, data, backups, and state
+- **`--remove-app-only`:** Removes only application files
+- **`--purge`:** Removes everything including config, data, and backups (requires `--yes` in non-interactive mode)
+- **Path ownership validation:** Each target path must be under an approved root (`~/.local/share/ainews`, `~/.config/ainews`, `/opt/ainews`, etc.)
+- **Safety checks:** Refuses without install metadata, rejects unsafe paths (root, home, empty, unresolved variables)
+- **Service lifecycle:** Stops services via lifecycle driver before removal
+- **Dry-run support:** Shows deletion plan without executing
+
+Commands: `ainews uninstall`, `ainews uninstall --remove-app-only`, `ainews uninstall --purge --yes`, `ainews uninstall --dry-run`
+
 ### Release Workflow Architecture
 The release workflow at `.github/workflows/release.yml` builds platform-specific release artifacts and creates GitHub Releases:
 - **Trigger:** Tag pushes matching `v*` (also supports `workflow_dispatch` for dry runs)
@@ -507,7 +537,7 @@ ainews migrations plan
 ainews migrations apply [--dry-run] [-y]
 ```
 
-**Exit codes:** `BACKUP_ERROR = 9` added to `ainews_cli/exit_codes.py`.
+**Exit codes:** `BACKUP_ERROR = 9` added to `ainews_cli/exit_codes.py`. `UPDATE_ERROR = 10` and `UNINSTALL_ERROR = 11` added for update and uninstall operations.
 
 **Key types:** `BackupManifest`, `BackupSection`, `VerifyResult`, `RestorePlan`, `PruneResult`, `MigrationReport`, `MigrationStatusDetail`, `MigrationPlanDetail`, `MigrationApplyResult`, `LifecycleOperations` (protocol).
 

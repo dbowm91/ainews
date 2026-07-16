@@ -283,6 +283,8 @@ Each check may include a `reason_code` field for machine-readable failure classi
 | `7` | `LOCK_ERROR` | Could not acquire configuration lock |
 | `8` | `ROLLBACK_ERROR` | Rollback operation failed |
 | `9` | `BACKUP_ERROR` | Backup/restore operation failed |
+| `10` | `UPDATE_ERROR` | Update operation failed |
+| `11` | `UNINSTALL_ERROR` | Uninstall operation failed |
 
 ## Configuration Precedence
 
@@ -1067,3 +1069,122 @@ Apply pending database migrations. Runs preflight checks before applying.
 **Exit codes:**
 - `0` — Migrations applied successfully
 - `1` — Migration failed
+
+---
+
+## Update Commands
+
+### `ainews update check`
+
+Check for available updates (non-mutating). Resolves the configured channel through the same GitHub API path as the installer.
+
+**Options:**
+- `-c`, `--channel CHANNEL` — Override release channel (stable, main, prerelease)
+- `-j`, `--json` — Output in JSON format
+
+**Output includes:** Current version, latest version, channel, whether update is available, upgrade/downgrade/reinstall classification.
+
+---
+
+### `ainews update plan`
+
+Show detailed update plan (non-mutating). Includes artifact size, checksum, migration steps, downtime estimate, and blockers.
+
+**Options:**
+- `-c`, `--channel CHANNEL` — Override release channel
+- `-j`, `--json` — Output in JSON format
+
+---
+
+### `ainews update apply`
+
+Apply an available update. Detects incomplete operations and offers resume/rollback. Creates pre-update backup, downloads artifact, verifies checksum, stops services, activates update, runs migrations, starts services, and runs health check.
+
+**Options:**
+- `-c`, `--channel CHANNEL` — Override release channel
+- `--dry-run` — Show what would happen without applying
+- `-y`, `--yes` — Skip confirmation prompts
+- `-j`, `--json` — Output in JSON format
+
+**Exit codes:**
+- `0` — Update completed successfully
+- `1` — Update failed
+- `7` — Lock error (concurrent operation)
+- `8` — Rollback error
+- `10` — Update error
+
+---
+
+### `ainews update rollback`
+
+Rollback a failed or incomplete update. Restores previous app version from backup or staging.
+
+**Options:**
+- `-y`, `--yes` — Skip confirmation prompts
+- `-j`, `--json` — Output in JSON format
+
+**Exit codes:**
+- `0` — Rollback completed successfully
+- `1` — Rollback failed
+- `8` — Rollback error
+
+---
+
+### `ainews update status`
+
+Show current update operation status. Reports phase, operation details, and incomplete operations.
+
+**Options:**
+- `-j`, `--json` — Output in JSON format
+
+---
+
+## Channel Commands
+
+### `ainews channel show`
+
+Show the current release channel, version, commit, and installation metadata.
+
+**Options:**
+- `-j`, `--json` — Output in JSON format
+
+---
+
+### `ainews channel set CHANNEL`
+
+Set the release channel. Validates channel, requires confirmation for risky channels (prerelease, main). Does NOT trigger an implicit update.
+
+**Arguments:**
+- `CHANNEL` — New channel: stable, prerelease, or main
+
+**Options:**
+- `--dry-run` — Show what would change without writing
+- `-y`, `--yes` — Skip confirmation prompt
+- `-j`, `--json` — Output in JSON format
+
+---
+
+## Uninstall Command
+
+### `ainews uninstall`
+
+Remove ainews application files while preserving operator-owned state. By default removes only application files (binaries, code). Use `--purge` to remove config, data, and backups.
+
+**Options:**
+- `--remove-app-only` — Only remove application files, keep config/data/backups
+- `--purge` — Remove everything including config, data, and backups (requires `--yes` in non-interactive mode)
+- `-y`, `--yes` — Skip confirmation prompts
+- `--dry-run` — Show what would be deleted without deleting
+- `-j`, `--json` — Output in JSON format
+
+**Safety:**
+- Requires install metadata to determine what to remove
+- Validates path ownership against approved roots
+- Rejects unsafe paths (root, home, empty, unresolved variables)
+- Stops services before removal
+
+**Exit codes:**
+- `0` — Uninstall completed successfully
+- `1` — Uninstall failed
+- `5` — Not found (no install metadata)
+- `11` — Uninstall error

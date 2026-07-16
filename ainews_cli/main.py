@@ -944,5 +944,14 @@ register_lifecycle_commands(app)
 from ainews_cli.backup_commands import register_commands as _register_backup_commands  # noqa: E402
 _register_backup_commands(app, _ctx, _out)
 
+from ainews_cli.channel.commands import register_commands as _register_channel_commands  # noqa: E402
+_register_channel_commands(app, _ctx, _out)
+
+from ainews_cli.uninstall.commands import register_commands as _register_uninstall_commands  # noqa: E402
+_register_uninstall_commands(app, _ctx, _out)
+
+from ainews_cli.update.commands import register_commands as _register_update_commands  # noqa: E402
+_register_update_commands(app, _ctx, _out)
+
 if __name__ == "__main__":
     app()

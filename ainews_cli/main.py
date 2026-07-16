@@ -953,5 +953,11 @@ _register_uninstall_commands(app, _ctx, _out)
 from ainews_cli.update.commands import register_commands as _register_update_commands  # noqa: E402
 _register_update_commands(app, _ctx, _out)
 
+from ainews_cli.service.commands import register_commands as _register_service_commands  # noqa: E402
+_register_service_commands(app)
+
+from ainews_cli.service.logrotate_commands import register_commands as _register_logrotate_commands  # noqa: E402
+_register_logrotate_commands(app)
+
 if __name__ == "__main__":
     app()

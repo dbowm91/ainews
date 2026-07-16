@@ -361,6 +361,10 @@ ainews uninstall --purge --yes           # Remove everything
 ainews uninstall --dry-run               # Preview without changes
 ```
 
+### Service Management
+- `ainews service render/install/validate/status/restart/remove` — systemd unit management
+- `ainews logs configure-rotation/validate-rotation/remove-rotation` — logrotate management
+
 See [CLI Reference](docs/cli-reference.md) for full documentation.
 
 ## Architecture

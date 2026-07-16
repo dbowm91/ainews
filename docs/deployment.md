@@ -565,6 +565,57 @@ Reload systemd after creating services:
 sudo systemctl daemon-reload
 ```
 
+### Automated Service Management
+
+The `ainews service` commands provide automated systemd unit generation and management:
+
+```bash
+# Preview generated unit files
+ainews service render --systemd
+
+# Install systemd units (user scope)
+ainews service install --systemd --enable
+
+# Install and start immediately
+ainews service install --systemd --enable --start
+
+# Validate configuration
+ainews service validate --systemd
+
+# Check service status
+ainews service status
+
+# Restart services
+ainews service restart
+
+# Remove installed units
+ainews service remove
+```
+
+For Docker Compose deployments:
+
+```bash
+ainews service render --systemd --profile docker_compose
+ainews service install --systemd --profile docker_compose --enable
+```
+
+### Log Rotation
+
+Configure automatic log rotation for file-backed logs:
+
+```bash
+# Install logrotate rule (requires root for system scope)
+sudo ainews logs configure-rotation
+
+# Validate installed rules
+ainews logs validate-rotation
+
+# Remove logrotate rules
+sudo ainews logs remove-rotation
+```
+
+**Note:** Log rotation is not needed for journald-managed systemd services or Docker container logs — the container runtime handles rotation for those.
+
 ---
 
 ## Docker Compose Production Example

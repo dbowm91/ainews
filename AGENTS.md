@@ -407,6 +407,51 @@ The uninstall command at `ainews_cli/uninstall/` removes application files while
 
 Commands: `ainews uninstall`, `ainews uninstall --remove-app-only`, `ainews uninstall --purge --yes`, `ainews uninstall --dry-run`
 
+### Service Management Architecture
+
+The service management subsystem at `ainews_cli/service/` provides systemd unit rendering, installation, and logrotate integration for installed ainews deployments.
+
+**Package structure:**
+- `models.py` — Typed dataclasses: `ServiceUnitSpec`, `LogrotateRuleSpec`, `RenderedUnit`, `RenderedLogrotateRule`, `ValidationResult`, `InstalledUnitRecord`
+- `systemd.py` — systemd unit file rendering engine with `render_unit()` and builder functions for web, celery-worker, celery-beat, and docker-compose profiles
+- `logrotate.py` — logrotate rule rendering engine with `render_logrotate_rule()` and `build_logrotate_rule()`
+- `state.py` — Installation state tracking (persisted to `service-state.json` in config dir)
+- `commands.py` — CLI commands: `ainews service {render,install,validate,status,restart,remove}`
+- `logrotate_commands.py` — CLI commands: `ainews logs {configure-rotation,validate-rotation,remove-rotation}`
+
+**Service topology:**
+- Docker Compose project managed as a unit (`docker compose up/down`)
+- Bare-metal web process (Granian ASGI via `python run.py`)
+- Bare-metal Celery worker
+- Optional Celery beat scheduler
+- Redis remains external or Compose-managed
+
+**systemd hardening defaults:**
+- `NoNewPrivileges=true`
+- `PrivateTmp=true`
+- `ProtectSystem=strict`
+- `ProtectHome=true`
+- `UMask=0027`
+- Bounded restart policy (on-failure, 5s delay, 5 burst in 60s)
+
+**Installation lifecycle:**
+1. Render to staging directory
+2. Validate (model checks, path checks, systemd-analyze verify)
+3. Show diff and impact
+4. Require confirmation
+5. Write atomically with correct permissions (0644)
+6. Record installed unit paths and content hashes in state
+7. Run daemon-reload
+8. Optionally enable/start only when requested
+
+**State tracking:** Installed units are tracked in `service-state.json` with SHA-256 content hashes. Modified units are detected on removal and require explicit confirmation.
+
+**Logrotate:** Rules are generated only for file-backed logs (not journald or Docker logs). Default: daily rotation, 10 rotations, compression with delay, 0640 permissions.
+
+**Exit codes:** `SERVICE_ERROR = 12` added to `ainews_cli/exit_codes.py`.
+
+**Tests:** `tests/test_service.py` (100+ tests), `tests/test_logrotate.py` (46 tests), `tests/test_cli_service.py` (34 tests).
+
 ### Release Workflow Architecture
 The release workflow at `.github/workflows/release.yml` builds platform-specific release artifacts and creates GitHub Releases:
 - **Trigger:** Tag pushes matching `v*` (also supports `workflow_dispatch` for dry runs)
@@ -544,7 +589,7 @@ ainews migrations plan
 ainews migrations apply [--dry-run] [-y]
 ```
 
-**Exit codes:** `BACKUP_ERROR = 9` added to `ainews_cli/exit_codes.py`. `UPDATE_ERROR = 10` and `UNINSTALL_ERROR = 11` added for update and uninstall operations.
+**Exit codes:** `BACKUP_ERROR = 9` added to `ainews_cli/exit_codes.py`. `UPDATE_ERROR = 10` and `UNINSTALL_ERROR = 11` added for update and uninstall operations. `SERVICE_ERROR = 12` added for service management operations.
 
 **Key types:** `BackupManifest`, `BackupSection`, `VerifyResult`, `RestorePlan`, `PruneResult`, `MigrationReport`, `MigrationStatusDetail`, `MigrationPlanDetail`, `MigrationApplyResult`, `LifecycleOperations` (protocol).
 
@@ -713,6 +758,12 @@ The following are documented as intentional and should NOT be "fixed":
 | `docs/cli-reference.md` | CLI command reference documentation |
 | `docs/configuration-contract.md` | Machine-oriented configuration inventory |
 | `docs/backup-restore.md` | Backup, restore, and migration documentation (disaster recovery, compatibility matrix) |
+| `ainews_cli/service/` | Service management: systemd units, logrotate, state tracking |
+| `ainews_cli/service/commands.py` | Service CLI commands (render, install, validate, status, restart, remove) |
+| `ainews_cli/service/logrotate_commands.py` | Logrotate CLI commands (configure-rotation, validate-rotation, remove-rotation) |
+| `tests/test_service.py` | Service models, systemd rendering, state tracking tests |
+| `tests/test_logrotate.py` | Logrotate rendering tests |
+| `tests/test_cli_service.py` | CLI service command tests |
 
 ## CI Gates
 

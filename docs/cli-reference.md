@@ -269,6 +269,151 @@ Each check may include a `reason_code` field for machine-readable failure classi
 - `0` — No blocking failures (all checks PASS, WARN, or SKIP)
 - `1` — One or more checks have FAIL status
 
+## Service Management
+
+### `ainews service render`
+
+Render service unit files to a staging directory.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--systemd` | Render systemd unit files (required) |
+| `--scope TEXT` | Service scope: `user` (default) or `system` |
+| `--profile TEXT` | Deployment profile: `docker_compose` or `bare_metal` |
+| `--output-dir, -o TEXT` | Output directory (default: `./service-output`) |
+| `--json, -j` | Output in JSON format |
+
+---
+
+### `ainews service install`
+
+Install service unit files to systemd.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--systemd` | Install systemd unit files (required) |
+| `--scope TEXT` | Service scope: `user` (default) or `system` |
+| `--profile TEXT` | Deployment profile |
+| `--enable` | Enable services after installation |
+| `--start` | Start services after installation |
+| `--force` | Skip confirmation prompt |
+| `--json, -j` | Output in JSON format |
+
+**System scope requires root.** User scope installs to `~/.config/systemd/user/`.
+
+---
+
+### `ainews service validate`
+
+Validate service unit specifications.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--systemd` | Validate systemd units (required) |
+| `--scope TEXT` | Service scope |
+| `--profile TEXT` | Deployment profile |
+| `--json, -j` | Output in JSON format |
+
+Runs internal model validation, path checks, secret detection, hardening verification, and `systemd-analyze verify` when available.
+
+---
+
+### `ainews service status`
+
+Show service manager status for installed units.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--scope TEXT` | Service scope |
+| `--json, -j` | Output in JSON format |
+
+---
+
+### `ainews service restart`
+
+Restart services via the service manager.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--scope TEXT` | Service scope |
+| `--json, -j` | Output in JSON format |
+
+**Arguments:**
+| Arg | Description |
+|-----|-------------|
+| `SERVICE` | Specific service to restart (default: all) |
+
+---
+
+### `ainews service remove`
+
+Remove installed service unit files.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--scope TEXT` | Service scope |
+| `--force` | Skip confirmation |
+| `--json, -j` | Output in JSON format |
+
+**Arguments:**
+| Arg | Description |
+|-----|-------------|
+| `SERVICE` | Specific service to remove (default: all) |
+
+Removal stops and disables units, removes files, and cleans state. Modified units require explicit confirmation.
+
+---
+
+## Log Rotation
+
+### `ainews logs configure-rotation`
+
+Configure logrotate for ainews file logs.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--scope TEXT` | Rotation scope: `system` (default) or `user` |
+| `--force` | Skip confirmation |
+| `--json, -j` | Output in JSON format |
+
+Installs a logrotate rule to `/etc/logrotate.d/` (system) or `~/.config/logrotate.d/` (user). Default: daily rotation, 10 rotations, compression with delay.
+
+---
+
+### `ainews logs validate-rotation`
+
+Validate installed logrotate configuration.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--json, -j` | Output in JSON format |
+
+Checks installed rules for existence, content hash integrity, and runs `logrotate --debug` when available.
+
+---
+
+### `ainews logs remove-rotation`
+
+Remove installed logrotate rules.
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--force` | Skip confirmation |
+| `--json, -j` | Output in JSON format |
+
+Removal of modified rules requires explicit confirmation.
+
+---
+
 ## Exit Codes
 
 | Code | Name | Description |
@@ -285,6 +430,7 @@ Each check may include a `reason_code` field for machine-readable failure classi
 | `9` | `BACKUP_ERROR` | Backup/restore operation failed |
 | `10` | `UPDATE_ERROR` | Update operation failed |
 | `11` | `UNINSTALL_ERROR` | Uninstall operation failed |
+| `12` | `SERVICE_ERROR` | Service management failure |
 
 ## Configuration Precedence
 

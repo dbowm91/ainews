@@ -234,6 +234,9 @@ class Migration(Protocol):
     @property
     def reversible(self) -> bool: ...
 
+    @property
+    def checksum(self) -> str: ...
+
     def preflight(self, context: dict[str, Any]) -> MigrationReport: ...
 
     def apply(
@@ -1258,6 +1261,14 @@ def apply_migrations_cli(
     )
 
 
+def _compute_migration_checksum(
+    migration_id: str, from_version: str, to_version: str
+) -> str:
+    """Compute a SHA-256 checksum for a migration's identity."""
+    identity = f"{migration_id}:{from_version}:{to_version}"
+    return hashlib.sha256(identity.encode()).hexdigest()
+
+
 class BaseMigration:
     @property
     def id(self) -> str:
@@ -1274,6 +1285,12 @@ class BaseMigration:
     @property
     def reversible(self) -> bool:
         return False
+
+    @property
+    def checksum(self) -> str:
+        return _compute_migration_checksum(
+            self.id, self.from_version, self.to_version
+        )
 
     def preflight(self, context: dict[str, Any]) -> MigrationReport:
         return MigrationReport(

@@ -18,6 +18,7 @@ from ainews_config.backup import (
     MigrationReport,
     RestorePlan,
     VerifyResult,
+    _compute_migration_checksum,
     _compute_sha256,
     _get_application_version,
     _get_database_schema_version,
@@ -2243,3 +2244,134 @@ class TestIncludeLogs:
         with tarfile.open(str(tar_path), "r") as tar:
             names = tar.getnames()
             assert not any("logs/" in n for n in names)
+
+
+# ---------------------------------------------------------------------------
+# Migration Identity Checksum Tests
+# ---------------------------------------------------------------------------
+
+
+class TestMigrationChecksum:
+    def test_checksum_is_sha256_hex(self):
+        from ainews_config.backup import _compute_migration_checksum
+
+        checksum = _compute_migration_checksum("test-id", "1.0.0", "2.0.0")
+        assert len(checksum) == 64
+        assert all(c in "0123456789abcdef" for c in checksum)
+
+    def test_checksum_deterministic(self):
+        from ainews_config.backup import _compute_migration_checksum
+
+        c1 = _compute_migration_checksum("id-1", "1.0.0", "2.0.0")
+        c2 = _compute_migration_checksum("id-1", "1.0.0", "2.0.0")
+        assert c1 == c2
+
+    def test_checksum_changes_with_id(self):
+        from ainews_config.backup import _compute_migration_checksum
+
+        c1 = _compute_migration_checksum("id-1", "1.0.0", "2.0.0")
+        c2 = _compute_migration_checksum("id-2", "1.0.0", "2.0.0")
+        assert c1 != c2
+
+    def test_checksum_changes_with_from_version(self):
+        from ainews_config.backup import _compute_migration_checksum
+
+        c1 = _compute_migration_checksum("id-1", "1.0.0", "2.0.0")
+        c2 = _compute_migration_checksum("id-1", "1.1.0", "2.0.0")
+        assert c1 != c2
+
+    def test_checksum_changes_with_to_version(self):
+        from ainews_config.backup import _compute_migration_checksum
+
+        c1 = _compute_migration_checksum("id-1", "1.0.0", "2.0.0")
+        c2 = _compute_migration_checksum("id-1", "1.0.0", "2.1.0")
+        assert c1 != c2
+
+    def test_base_migration_checksum_property(self):
+        class TestMigration(BaseMigration):
+            @property
+            def id(self) -> str:
+                return "test-migration"
+
+            @property
+            def from_version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def to_version(self) -> str:
+                return "2.0.0"
+
+            def apply(self, staging_root, context):
+                return MigrationReport(
+                    migration_id=self.id,
+                    success=True,
+                    message="Applied",
+                    from_version=self.from_version,
+                    to_version=self.to_version,
+                )
+
+        m = TestMigration()
+        assert len(m.checksum) == 64
+        assert m.checksum == _compute_migration_checksum(
+            "test-migration", "1.0.0", "2.0.0"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Migration Version Fixtures Tests
+# ---------------------------------------------------------------------------
+
+
+class TestMigrationFixtures:
+    def test_current_config_schema_version_defined(self):
+        from ainews_config.migrations import CURRENT_CONFIG_SCHEMA_VERSION
+
+        assert isinstance(CURRENT_CONFIG_SCHEMA_VERSION, str)
+        assert "." in CURRENT_CONFIG_SCHEMA_VERSION
+
+    def test_current_install_metadata_schema_version_defined(self):
+        from ainews_config.migrations import CURRENT_INSTALL_METADATA_SCHEMA_VERSION
+
+        assert isinstance(CURRENT_INSTALL_METADATA_SCHEMA_VERSION, str)
+        assert "." in CURRENT_INSTALL_METADATA_SCHEMA_VERSION
+
+    def test_current_manifest_schema_version_defined(self):
+        from ainews_config.migrations import CURRENT_MANIFEST_SCHEMA_VERSION
+
+        assert isinstance(CURRENT_MANIFEST_SCHEMA_VERSION, str)
+        assert "." in CURRENT_MANIFEST_SCHEMA_VERSION
+
+    def test_min_supported_source_version_defined(self):
+        from ainews_config.migrations import MIN_SUPPORTED_SOURCE_VERSION
+
+        assert isinstance(MIN_SUPPORTED_SOURCE_VERSION, str)
+        assert "." in MIN_SUPPORTED_SOURCE_VERSION
+
+    def test_config_schema_registry_is_list(self):
+        from ainews_config.migrations import CONFIG_MIGRATIONS
+
+        assert isinstance(CONFIG_MIGRATIONS, list)
+
+    def test_install_metadata_schema_registry_is_list(self):
+        from ainews_config.migrations import INSTALL_METADATA_MIGRATIONS
+
+        assert isinstance(INSTALL_METADATA_MIGRATIONS, list)
+
+    def test_manifest_schema_registry_is_list(self):
+        from ainews_config.migrations import MANIFEST_MIGRATIONS
+
+        assert isinstance(MANIFEST_MIGRATIONS, list)
+
+    def test_get_all_migrations_returns_list(self):
+        from ainews_config.migrations import get_all_migrations
+
+        all_migrations = get_all_migrations()
+        assert isinstance(all_migrations, list)
+
+    def test_migration_checksums_unique(self):
+        from ainews_config.migrations import get_all_migrations
+
+        migrations = get_all_migrations()
+        if len(migrations) > 1:
+            checksums = [m.checksum for m in migrations]
+            assert len(checksums) == len(set(checksums))

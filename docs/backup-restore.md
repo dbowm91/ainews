@@ -239,11 +239,14 @@ class Migration(Protocol):
     from_version: str
     to_version: str
     reversible: bool
+    checksum: str  # SHA-256 of "{id}:{from_version}:{to_version}"
 
     def preflight(self, context) -> MigrationReport: ...
     def apply(self, staging_root, context) -> MigrationReport: ...
     def rollback(self, staging_root, context) -> MigrationReport: ...
 ```
+
+Each migration has a **checksummed identity** — a SHA-256 hash of `{id}:{from_version}:{to_version}` — ensuring migrations are tamper-evident and uniquely identifiable.
 
 ### Migration rules
 
@@ -252,6 +255,22 @@ class Migration(Protocol):
 - **Preflight gating** — each migration must pass preflight before applying
 - **Idempotent execution** — migrations should be safe to run multiple times
 - **No network dependency** — migrations must work offline
+
+### Schema types
+
+Three schema types have explicit migration interfaces:
+
+| Schema type | Purpose | Migration base class |
+|-------------|---------|---------------------|
+| Config | `.env`, `providers.yaml`, `pipeline.yaml`, `sources.yaml`, `topics.yaml` | `ConfigSchemaMigration` |
+| Install metadata | `install-metadata.json` format | `InstallMetadataMigration` |
+| Backup manifest | `manifest.json` format and sections | `ManifestSchemaMigration` |
+
+Concrete migrations are registered in `ainews_config/migrations.py`. Database schema migrations use the existing Alembic infrastructure via `ainews_cli/migrations.py`.
+
+### Minimum supported source version
+
+Backups from versions older than `1.0.0` are not supported for restore. Cross-major-version restores are always rejected. Cross-minor-version restores within the same major version are allowed but warn about potential incompatibilities.
 
 ### Migration status
 
@@ -273,5 +292,6 @@ ainews migrations apply
 | 1.4.0 | 1.5.0 | Yes (same major) |
 | 1.4.0 | 2.0.0 | No (different major) |
 | 1.4.0 | 1.4.1 | Yes (same minor) |
+| 0.9.0 | 1.0.0 | No (below minimum supported) |
 
-Cross-major-version restores are always rejected. Cross-minor-version restores are allowed but warn about potential incompatibilities.
+Cross-major-version restores are always rejected. Cross-minor-version restores are allowed but warn about potential incompatibilities. Backups from versions prior to the minimum supported source version (`1.0.0`) cannot be restored.

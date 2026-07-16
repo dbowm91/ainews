@@ -142,16 +142,20 @@ uv run pytest tests/test_docs_alignment.py tests/test_docs_env_consistency.py -q
 - [ ] SHA256SUMS checksums are generated and attached to the release
 - [ ] Artifact safety validation passes (no absolute paths, no traversal entries)
 - [ ] Installer tests pass: `bash tests/test_install.sh`
+- [ ] Update/uninstall tests pass: `pytest tests/test_update_uninstall.py`
 
 ## 10. Rollback/Restore Readiness
 
 For self-hosted releases, docs should describe:
 
-- [ ] Database backup before upgrade (see `scripts/backup.sh`)
-- [ ] How to rollback code (git revert or checkout previous tag)
-- [ ] How to restore DB from backup
-- [ ] How to inspect logs (`docker compose logs`, application logs)
-- [ ] How to run migrations manually (`flask db upgrade`)
+- [ ] Pre-update backup created automatically by `ainews update apply`
+- [ ] How to rollback a failed update: `ainews update rollback`
+- [ ] How to create and verify backups: `ainews backup create` / `ainews backup verify`
+- [ ] How to restore from backup: `ainews restore BACKUP_ID`
+- [ ] How to inspect logs (`ainews logs`, `docker compose logs`)
+- [ ] How to check migration status: `ainews migrations status`
+- [ ] Update dry-run works: `ainews update plan`
+- [ ] Uninstall dry-run works: `ainews uninstall --dry-run`
 
 ## 11. Final Human Signoff
 

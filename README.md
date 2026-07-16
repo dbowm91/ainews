@@ -2,7 +2,7 @@
 
 AI-powered news aggregation and newsletter platform. Discovers, summarizes, and curates articles from configurable RSS/API sources using a multi-stage LLM pipeline with quality gates, subagent tool calling, and trend memory.
 
-> **Status:** Release 3 complete. Installer-based installation is the primary supported path. See [Release 3 Closure](docs/config-cli-release-3-closure.md) for evidence and gate audit.
+> **Status:** Release 4C complete. Channel-aware updates, safe uninstall, and backup/restore are fully implemented. See [Release 4C Closure](docs/config-cli-release-4c-closure.md) for evidence.
 
 ## Quick Start
 
@@ -248,15 +248,38 @@ If the installer cannot reach GitHub, it will fail with a clear error message. U
 | `Provider connection failed` | LLM provider unreachable | Check provider config with `ainews providers-test` |
 | `Redis connection refused` | Redis not running | Start Redis: `redis-server &` or check `CELERY_BROKER_URL` |
 
-### Uninstall / Update
+### Updating
 
-Uninstall and update commands are planned for **Release 4**. For now:
+```bash
+ainews update check                         # Check for available updates
+ainews update plan                          # Detailed update plan with migration detection
+ainews update apply                         # Apply update (auto-rollback on failure)
+ainews update rollback                      # Rollback to previous version
+ainews update status                        # Show current update operation status
+```
 
-- **Update:** Re-run the installer — it backs up the current installation before replacing files. Configuration in `~/.config/ainews/` is preserved.
-- **Uninstall:** Remove the canonical directories:
-  ```bash
-  rm -rf ~/.local/share/ainews ~/.config/ainews ~/.local/state/ainews ~/.local/bin/ainews
-  ```
+Updates are channel-aware, integrity-verified, and migration-aware. A pre-update backup is created automatically before any activation. If health checks fail after activation, the update rolls back automatically.
+
+### Channel Management
+
+```bash
+ainews channel show                         # Show current channel and version
+ainews channel set stable                   # Switch to stable channel
+ainews channel set prerelease               # Switch to prerelease (requires confirmation)
+ainews channel set main --apply             # Switch and immediately update
+ainews channel set stable --version 1.2.3   # Pin to a specific version
+```
+
+### Uninstalling
+
+```bash
+ainews uninstall                            # Remove app files, preserve config/data/backups
+ainews uninstall --remove-app-only          # Remove only the application directory
+ainews uninstall --purge --yes              # Remove everything (config, data, backups)
+ainews uninstall --dry-run                  # Preview what would be deleted
+```
+
+By default, uninstall preserves configuration, database, backups, and operator-created state. Only application files, CLI shims, and service definitions are removed. Use `--purge` to remove everything — a final verified backup is created automatically before purge.
 
 ### Windows (WSL)
 
@@ -322,6 +345,20 @@ ainews doctor                            # Full system diagnostics
 ainews doctor --quick                    # Basic checks only
 ainews doctor --network                  # Include connectivity checks
 ainews version                           # Show version info
+
+# Updates & Channels
+ainews update check                      # Check for available updates
+ainews update plan                       # Detailed update plan
+ainews update apply                      # Apply update (auto-rollback on failure)
+ainews update rollback                   # Rollback to previous version
+ainews update status                     # Show current operation status
+ainews channel show                      # Show current channel
+ainews channel set stable                # Switch channel
+
+# Uninstall
+ainews uninstall                         # Remove app, preserve config/data
+ainews uninstall --purge --yes           # Remove everything
+ainews uninstall --dry-run               # Preview without changes
 ```
 
 See [CLI Reference](docs/cli-reference.md) for full documentation.
@@ -406,6 +443,7 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [Onboarding](docs/onboarding.md) | First-run setup, profiles, bootstrap schema |
 | [Provider CLI](docs/providers-cli.md) | Provider management, testing, model discovery |
 | [Release 3 Closure](docs/config-cli-release-3-closure.md) | Release 3 evidence and gate audit |
+| [Release 4C Closure](docs/config-cli-release-4c-closure.md) | Update, channel, and uninstall evidence |
 
 ## Release Validation
 

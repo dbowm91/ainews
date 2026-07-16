@@ -36,6 +36,10 @@ This document provides a **bird's-eye view** of the entire system. Each module l
 |--------|--------|-----------|-------------|
 | **Configuration** | `config.py`, `pipeline.yaml`, `providers.yaml`, `sources.yaml`, `topics.yaml` | [config.md](config.md) | YAML configs validated by Pydantic, Redis-backed caching, environment variables, Celery beat schedule |
 | **Infrastructure** | `extensions.py`, `services/` | [infrastructure.md](infrastructure.md) | Redis (broker, cache, rate limiting), SQLite (WAL mode), Celery (task queue + beat), email (SMTP pooling), health checks, circuit breakers, metrics |
+| **Operator CLI** | `ainews_cli/` | — | CLI commands: onboarding, provider/source/topic/pipeline management, service lifecycle, config, diagnostics, backup/restore, update, channel management, uninstall |
+| **Update Engine** | `ainews_cli/update/` | — | Channel-aware updates: check, plan, apply with pre-update backup, staged activation, auto-rollback on health failure |
+| **Channel Manager** | `ainews_cli/channel/` | — | Release channel management: stable/prerelease/main with version pinning and transactional metadata writes |
+| **Uninstall** | `ainews_cli/uninstall/` | — | Safe uninstall: path ownership validation, app-only or purge modes, dry-run, lifecycle integration |
 
 ---
 
@@ -388,7 +392,8 @@ Schedule is reloadable at runtime via `POST /api/v1/config/reload`.
 | Celery worker | `celery -A celery_app worker` | Process pipeline tasks |
 | Celery beat | `celery -A celery_app beat` | Run scheduled tasks |
 | Password hashing | `python scripts/hash_password.py` | Generate admin password hash |
-| Backup | `scripts/backup.sh` | SQLite backup with verification |
+| Installer | `scripts/install.sh` | Channel-aware release installer |
+| Operator CLI | `ainews` | Onboarding, providers, sources, topics, pipeline, lifecycle, config, doctor, backup, restore, update, channel, uninstall |
 
 ---
 
@@ -642,6 +647,34 @@ ainews/
 │   ├── mock_redis.py       # MockRedis for testing
 │   ├── helpers/            # Pipeline test helpers
 │   └── test_*.py           # Test modules by component
+│
+├── ainews_cli/             # Operator CLI (Typer-based, Flask-free)
+│   ├── main.py             # CLI entry point, command registration
+│   ├── exit_codes.py       # Stable exit codes
+│   ├── context.py          # CLIContext, output formatting
+│   ├── profiles.py         # Deployment/pipeline/source profiles
+│   ├── schema.py           # Bootstrap YAML schema
+│   ├── onboard.py          # Onboarding state machine (16 stages)
+│   ├── migrations.py       # DB migration detection/execution
+│   ├── backup_commands.py  # Backup/restore CLI commands
+│   ├── channel/            # Channel management (show/set)
+│   ├── doctor/             # System diagnostics (7 check modules)
+│   ├── lifecycle/          # Service lifecycle (Docker Compose/bare metal)
+│   ├── pipeline/           # Pipeline administration
+│   ├── providers/          # Provider management (6 built-in adapters)
+│   ├── sources/            # Source management (OPML, adapters)
+│   ├── topics/             # Topic management
+│   ├── update/             # Update engine (check/plan/apply/rollback/status)
+│   └── uninstall/          # Safe uninstall (path ownership, purge)
+│
+├── ainews_config/          # Configuration engine (Flask-free)
+│   ├── paths.py            # 5-level path precedence, InstallMetadata
+│   ├── fields.py           # Typed field registry (80+ keys)
+│   ├── loader.py           # Dotenv/YAML parsing
+│   ├── validation.py       # Cross-file semantic checks
+│   ├── transaction.py      # Flock-based atomic writes
+│   ├── backup.py           # Backup/restore/migration framework
+│   └── migrations.py       # Config schema migrations
 │
 ├── migrations/             # Alembic database migrations (37 versions)
 ├── scripts/                # Utility scripts (backup, deploy, dev)

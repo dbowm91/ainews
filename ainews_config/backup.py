@@ -1094,6 +1094,8 @@ def prune_backups(
 
     candidates_for_deletion: list[tuple[str, Path, float]] = []
     kept: list[str] = []
+    name_to_path: dict[str, Path] = dict(backup_dirs)
+    name_to_mtime: dict[str, float] = {}
 
     for name, path in backup_dirs:
         if name in pinned_ids:
@@ -1101,12 +1103,24 @@ def prune_backups(
             continue
 
         mtime = path.stat().st_mtime
+        name_to_mtime[name] = mtime
         age_seconds = now - mtime
 
         if age_seconds > max_age_seconds:
             candidates_for_deletion.append((name, path, mtime))
         else:
             kept.append(name)
+
+    non_candidate_count = len(backup_dirs) - len(candidates_for_deletion)
+    if non_candidate_count > max_count:
+        excess = non_candidate_count - max_count
+        kept_non_pinned = sorted(
+            [(n, name_to_mtime.get(n, 0)) for n in kept if n not in pinned_ids],
+            key=lambda x: x[1],
+        )
+        for name, mtime in kept_non_pinned[:excess]:
+            kept.remove(name)
+            candidates_for_deletion.append((name, name_to_path[name], mtime))
 
     if len(backup_dirs) - len(candidates_for_deletion) < 1:
         excess = len(candidates_for_deletion) - (

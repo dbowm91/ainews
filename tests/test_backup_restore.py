@@ -799,6 +799,59 @@ class TestPruning:
         )
         assert len(result.deleted) >= 2
 
+    def test_prune_by_count_fresh_backups(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifests = []
+        for i in range(5):
+            m = _create_standalone_backup(
+                backup_paths.backup_dir.path,
+                f"2026-07-{10 + i:02d}T000000Z-1.4.0",
+                app_version="1.4.0",
+            )
+            manifests.append(m)
+
+        result = prune_backups(
+            backup_paths,
+            max_count=3,
+            max_age_days=365,
+        )
+        assert len(result.deleted) == 2
+        deleted_ids = {m.backup_id for m in manifests if m.backup_id in result.deleted}
+        assert len(deleted_ids) == 2
+        assert len(result.kept) == 3
+        assert len(result.kept) + len(result.deleted) == 5
+
+    def test_prune_by_count_respects_pins(self, backup_paths, monkeypatch):
+        monkeypatch.setattr(
+            "ainews_config.backup._get_application_version",
+            lambda: "1.4.0",
+        )
+        manifests = []
+        for i in range(5):
+            m = _create_standalone_backup(
+                backup_paths.backup_dir.path,
+                f"2026-07-{10 + i:02d}T000000Z-1.4.0",
+                app_version="1.4.0",
+            )
+            manifests.append(m)
+
+        pinned_file = backup_paths.backup_dir.path / "pins.json"
+        pinned_file.write_text(
+            json.dumps({"pinned": [manifests[0].backup_id, manifests[1].backup_id]})
+        )
+
+        result = prune_backups(
+            backup_paths,
+            max_count=3,
+            max_age_days=365,
+        )
+        assert manifests[0].backup_id in result.kept
+        assert manifests[1].backup_id in result.kept
+        assert len(result.deleted) == 2
+
     def test_prune_by_age(self, backup_paths, monkeypatch):
         monkeypatch.setattr(
             "ainews_config.backup._get_application_version",

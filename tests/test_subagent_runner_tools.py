@@ -78,8 +78,10 @@ class TestRunSubagentWithTools:
     def test_failure_returns_fallback(self, app):
         """When provider fails, returns fallback response."""
         with app.app_context():
+            from services.llm.errors import ProviderServerError
+
             mock_provider = MagicMock()
-            mock_provider.chat_with_tools.side_effect = Exception("LLM error")
+            mock_provider.chat_with_tools.side_effect = ProviderServerError("LLM error")
 
             with patch("services.subagent.resolve_subagent_config") as mock_resolve:
                 with patch("services.llm.get_provider_by_id") as mock_get_provider:

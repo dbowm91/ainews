@@ -159,13 +159,24 @@ class TestFinalize:
     """Test the _finalize function error handling."""
 
     def test_finalize_handles_commit_failure(self):
+        from sqlalchemy.exc import SQLAlchemyError
+
         from tasks.pipeline import _finalize
 
-        with patch("extensions.db") as mock_db:
+        with patch("extensions.db") as mock_db, patch(
+            "services.pipeline_degradation._should_route_to_review",
+            return_value=True,
+        ):
             article = MagicMock()
+            article.id = 1
+            article.original_title = "Test Article"
+            article.original_url = "https://example.com"
+            article.original_author = "Author"
+            article.extracted_text = "Content"
+            article.draft_article = '{"headline": "Test Article"}'
             mock_db.session.get.return_value = article
 
-            mock_db.session.commit.side_effect = Exception("DB error")
+            mock_db.session.commit.side_effect = SQLAlchemyError("DB error")
 
             _finalize(1)
 

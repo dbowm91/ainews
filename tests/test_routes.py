@@ -80,7 +80,10 @@ class TestPublicRoutes:
 
     def test_index_article_cards_include_client_state_id(self, client, create_article):
         """Read and bookmark state can target the rendered article card."""
+        from services.cache import get_response_cache
+
         article = create_article(original_title="Client state article")
+        get_response_cache().invalidate_prefix("pub:index")
 
         response = client.get("/")
 

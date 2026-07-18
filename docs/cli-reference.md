@@ -399,7 +399,7 @@ Removal stops and disables units, removes files, and cleans state. Modified unit
 
 ## Log Rotation
 
-### `ainews logs configure-rotation`
+### `ainews logrotate configure-rotation`
 
 Configure logrotate for ainews file logs.
 
@@ -414,7 +414,7 @@ Installs a logrotate rule to `/etc/logrotate.d/` (system) or `~/.config/logrotat
 
 ---
 
-### `ainews logs validate-rotation`
+### `ainews logrotate validate-rotation`
 
 Validate installed logrotate configuration.
 
@@ -427,7 +427,7 @@ Checks installed rules for existence, content hash integrity, and runs `logrotat
 
 ---
 
-### `ainews logs remove-rotation`
+### `ainews logrotate remove-rotation`
 
 Remove installed logrotate rules.
 

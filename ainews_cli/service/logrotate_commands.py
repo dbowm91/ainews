@@ -447,4 +447,4 @@ def remove_rotation(
 
 def register_commands(main_app: typer.Typer) -> None:
     """Register logrotate commands on the main CLI app."""
-    main_app.add_typer(app, name="logs")
+    main_app.add_typer(app, name="logrotate")

@@ -99,7 +99,7 @@ def _load_patterns() -> dict[str, list[str]]:
             ttl=300,
         )
         return result
-    except (ImportError, KeyError, AttributeError, ValueError) as e:
+    except Exception as e:
         logger.debug("Config cache failed for trend patterns: %s", e)
         return _load_patterns_from_file()
 

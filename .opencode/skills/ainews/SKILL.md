@@ -136,6 +136,18 @@ Celery tasks run outside Flask app context — do NOT use `current_app.config.ge
 
 **Lock pattern:** Distributed locks use task's `self.request.id` as lock value so retries can re-acquire.
 
+## Logrotate Commands
+
+Logrotate commands are under `ainews logrotate`, NOT `ainews logs`. The `logs` command is reserved for viewing service logs (`ainews logs [SERVICE]`).
+
+- `ainews logrotate configure-rotation` — install logrotate rule
+- `ainews logrotate validate-rotation` — validate installed rules
+- `ainews logrotate remove-rotation` — remove installed rules
+
+## Subagent Error Handling
+
+The subagent chain (`services/subagent/chain.py`) and runner (`services/subagent/runner.py`) catch `ProviderServerError` and `AuthError` (in addition to `ValueError`, `AttributeError`, and `ProviderTimeoutError`). These are mapped to graceful degradation responses — the parent pipeline continues without crashing.
+
 ## ASGI Deployment
 
 `run.py` exports `WsgiToAsgi(flask_app)` as module-level `app` for Granian. Flask remains WSGI internally. Do NOT remove the wrapper.
@@ -163,6 +175,10 @@ bash scripts/validate_release.sh --security   # Security gates only
 ```
 
 **Acceptance criteria:** Agents MUST NOT claim release readiness without `--full` mode passing on `scripts/validate_release.sh`.
+
+## Release 5 Closure
+
+Release 5 closure work has been completed. The closure matrix is at `docs/config-cli-roadmap-closure.md`. Baseline evidence is at `docs/config-cli-release-5-baseline.md`. Key stats: 4,434 pytest passed, 137 installer tests, 34 installer E2E tests, clean mypy, 3 non-blocking ruff warnings.
 
 ## Config System
 

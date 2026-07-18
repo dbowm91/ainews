@@ -13,6 +13,17 @@ This document provides instructions and context for agents working on the AI New
 4.  **Type Safety:** Aim for 0 Mypy errors. Use explicit typing and avoid `Any` where possible.
 5.  **Performance:** Be mindful of LLM latency. Use caching, batching, and async patterns where appropriate.
 
+## Release 5 Closure Status
+
+Release 5 closure work has been completed with the following results:
+- **Baseline:** Commit 330e9fd4760207256c058f762376a9a11a99bb10 (2026-07-17)
+- **Test suite:** 4,434 passed, 8 flaky (pass on re-run), 5 skipped
+- **Shell tests:** 171 passed (137 installer + 34 E2E)
+- **Mypy:** Clean (scripts/ excluded from type checking)
+- **Ruff:** 3 non-blocking complexity warnings in ainews_cli/service/
+- **Closure matrix:** docs/config-cli-roadmap-closure.md
+- **Baseline evidence:** docs/config-cli-release-5-baseline.md
+
 ## Project Structure
 
 *   `app.py`: Application factory and configuration.
@@ -181,6 +192,9 @@ Stable codes in `THEME_DIAGNOSTIC_CODES` dict in `services/themes/errors.py`. Us
 ### Installer Source Acquisition
 The installer downloads release artifacts from GitHub. It requires `curl` (preferred) or `wget`. The installer does NOT clone the repository — it downloads immutable versioned tarballs. The `main` channel is for development/evaluation only; `stable` is the default production path.
 
+### Logrotate Commands Namespace
+Logrotate commands are under `ainews logrotate {configure-rotation,validate-rotation,remove-rotation}`, NOT `ainews logs`. The `logs` command is reserved for viewing service logs via the lifecycle driver.
+
 ## Architecture Conventions
 
 ### Type Checking Pattern
@@ -302,6 +316,9 @@ In `tasks/pipeline.py:run_stage()`, the limiter release uses `provider_id or rc.
 ### Middleware Clone Fix (Fixed)
 `run_subagent_with_tools()` in `services/subagent/runner.py:349-355` creates a new `ToolDefinition` object when wrapping functions, preventing middleware compounding on cached tool definitions.
 
+### Subagent Exception Handling
+`ProviderServerError` and `AuthError` are caught in the subagent chain's exception handler (`services/subagent/chain.py:161-162`) and in the single-step runner (`services/subagent/runner.py:141`). These are non-retryable errors — the subagent returns a fallback response rather than retrying. `ProviderTimeoutError` is retryable via the self-correction mechanism.
+
 ### Subagent Tool Count
 The subagent system has **14 tools** (not 9 as some docs claim). 12 context tools + 2 search tools. Registered in `services/subagent/tools.py:306-603`. The tools are: `get_topic_note`, `context_notes`, `related_articles`, `get_trend_memory`, `get_article_by_id`, `search_articles`, `get_source_health`, `get_topic_gap_report`, `get_source_performance`, `get_quality_report`, `find_dedupe_candidates`, `estimate_stage_cost`, `web_search`, `get_search_provider`.
 
@@ -418,7 +435,7 @@ The service management subsystem at `ainews_cli/service/` provides systemd unit 
 - `state.py` — Installation state tracking (persisted to `service-state.json` in config dir)
 - `validation.py` — Path validation, conflict detection, and comprehensive unit spec validation
 - `commands.py` — CLI commands: `ainews service {render,install,validate,status,restart,remove}`
-- `logrotate_commands.py` — CLI commands: `ainews logs {configure-rotation,validate-rotation,remove-rotation}`
+- `logrotate_commands.py` — CLI commands: `ainews logrotate {configure-rotation,validate-rotation,remove-rotation}`
 
 **Service topology:**
 - Docker Compose project managed as a unit (`docker compose up/down`)

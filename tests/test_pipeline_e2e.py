@@ -271,6 +271,11 @@ class TestPipelineEndToEnd:
             redis_mock.set.return_value = False
             mocks["get_redis"].return_value = redis_mock
 
+            mock_provider = MagicMock()
+            mocks["get_provider_chain"].return_value = [
+                (mock_provider, "qwen3:8b", 2048, "ollama"),
+            ]
+
             with app.app_context():
                 article = create_article(pipeline_status="writing")
                 db.session.commit()

@@ -2,7 +2,24 @@
 
 AI-powered news aggregation and newsletter platform. Discovers, summarizes, and curates articles from configurable RSS/API sources using a multi-stage LLM pipeline with quality gates, subagent tool calling, and trend memory.
 
-> **Status:** Release 4C complete. Channel-aware updates, safe uninstall, and backup/restore are fully implemented. See [Release 4C Closure](docs/config-cli-release-4c-closure.md) for evidence.
+> **Status:** Release 5 in progress.
+
+## Release Status
+
+Release 5 (Configuration/CLI Closure) is in progress. The full operator CLI is available:
+- `ainews onboard` — interactive setup
+- `ainews providers` — LLM provider management
+- `ainews sources` — content source administration
+- `ainews topics` — topic management
+- `ainews pipeline` — pipeline configuration
+- `ainews start/stop/restart` — service lifecycle
+- `ainews config` — configuration management
+- `ainews backup/restore` — backup and recovery
+- `ainews update` — in-place updates
+- `ainews doctor` — system diagnostics
+- `ainews service` — systemd service management
+
+See `docs/cli-reference.md` for the complete command reference.
 
 ## Quick Start
 
@@ -363,7 +380,7 @@ ainews uninstall --dry-run               # Preview without changes
 
 ### Service Management
 - `ainews service render/install/validate/status/restart/remove` — systemd unit management
-- `ainews logs configure-rotation/validate-rotation/remove-rotation` — logrotate management
+- `ainews logrotate configure-rotation/validate-rotation/remove-rotation` — logrotate management
 
 See [CLI Reference](docs/cli-reference.md) for full documentation.
 

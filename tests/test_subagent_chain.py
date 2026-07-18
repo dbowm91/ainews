@@ -52,7 +52,7 @@ class TestSubagentChain:
 
                     result = run_subagent_chain(
                         chain_name="test_chain",
-                        steps=[],
+                        steps=None,
                         initial_prompt_data={"title": "test"},
                     )
 
@@ -99,7 +99,7 @@ class TestSubagentChain:
 
                     result = run_subagent_chain(
                         chain_name="test_chain",
-                        steps=[],
+                        steps=None,
                         initial_prompt_data={"title": "test"},
                     )
 
@@ -162,7 +162,7 @@ class TestSubagentChain:
 
                     result = run_subagent_chain(
                         chain_name="test_chain",
-                        steps=[],
+                        steps=None,
                         initial_prompt_data={"title": "test"},
                     )
 
@@ -224,7 +224,7 @@ class TestSubagentChain:
 
                     result = run_subagent_chain(
                         chain_name="test_chain",
-                        steps=[],
+                        steps=None,
                         initial_prompt_data={"title": "test"},
                     )
 

@@ -6,9 +6,8 @@ on long-running operations (HTTP fetches, LLM calls, DB queries).
 
 import functools
 import logging
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeout
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -26,10 +25,10 @@ class OperationTimeoutError(TimeoutError):
 def timeout(seconds: float, operation: Optional[str] = None):
     """Decorator to enforce a timeout on a function.
 
-    Uses ThreadPoolExecutor for cross-platform timeout support.
-    The decorated function runs in a separate thread and is abandoned
-    (not cancelled) if it exceeds the timeout. The thread continues
-    in the background but its result is discarded.
+    The decorated function runs in a daemon thread and is abandoned
+    if it exceeds the timeout. The thread continues in the background
+    but its result is discarded. Daemon threads do not prevent
+    interpreter shutdown.
 
     Args:
         seconds: Maximum execution time in seconds.
@@ -46,18 +45,26 @@ def timeout(seconds: float, operation: Optional[str] = None):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            executor = ThreadPoolExecutor(max_workers=1)
-            try:
-                future = executor.submit(func, *args, **kwargs)
+            result = []
+            exc = []
+
+            def target():
                 try:
-                    return future.result(timeout=seconds)
-                except FuturesTimeout as e:
-                    logger.warning(
-                        "Operation '%s' timed out after %.1fs", op_name, seconds,
-                    )
-                    raise OperationTimeoutError(op_name, seconds) from e
-            finally:
-                executor.shutdown(wait=False, cancel_futures=True)
+                    result.append(func(*args, **kwargs))
+                except BaseException as e:  # noqa: BLE001
+                    exc.append(e)
+
+            thread = threading.Thread(target=target, daemon=True)
+            thread.start()
+            thread.join(timeout=seconds)
+            if thread.is_alive():
+                logger.warning(
+                    "Operation '%s' timed out after %.1fs", op_name, seconds,
+                )
+                raise OperationTimeoutError(op_name, seconds)
+            if exc:
+                raise exc[0]
+            return result[0]
 
         return wrapper
 

@@ -652,13 +652,13 @@ Configure automatic log rotation for file-backed logs:
 
 ```bash
 # Install logrotate rule (requires root for system scope)
-sudo ainews logs configure-rotation
+sudo ainews logrotate configure-rotation
 
 # Validate installed rules
-ainews logs validate-rotation
+ainews logrotate validate-rotation
 
 # Remove logrotate rules
-sudo ainews logs remove-rotation
+sudo ainews logrotate remove-rotation
 ```
 
 **Note:** Log rotation is not needed for journald-managed systemd services or Docker container logs — the container runtime handles rotation for those.

@@ -1502,35 +1502,44 @@ class TestConcurrentFetchIsolation:
                 connection_targets.append(addr[0])
             return original_create(addr, *args, **kwargs)
 
+        def mock_validate(url):
+            """URL-based mock: returns different IPs depending on which server is targeted."""
+            if url.startswith(base1):
+                return (url, ["127.0.0.1", "10.0.0.1"])
+            else:
+                return (url, ["127.0.0.1", "10.0.0.2"])
+
         results = {}
         errors = {}
 
-        def fetch(key, url, target_ip):
+        def fetch(key, url):
             try:
-                with (
-                    patch("urllib3.util.connection.create_connection", side_effect=tracking_create),
-                    patch(
-                        "services.safe_fetch._validate_and_resolve",
-                        side_effect=lambda u: (u, ["127.0.0.1", target_ip]),
-                    ),
-                ):
-                    r = safe_fetch_url(url)
-                    results[key] = r
+                r = safe_fetch_url(url)
+                results[key] = r
             except Exception as e:  # noqa: BLE001
                 errors[key] = e
 
         threads = []
         for i in range(20):
-            t = threading.Thread(target=fetch, args=(f"s1_{i}", f"{base1}/test", "10.0.0.1"))
+            t = threading.Thread(target=fetch, args=(f"s1_{i}", f"{base1}/test"))
             threads.append(t)
         for i in range(20):
-            t = threading.Thread(target=fetch, args=(f"s2_{i}", f"{base2}/test", "10.0.0.2"))
+            t = threading.Thread(target=fetch, args=(f"s2_{i}", f"{base2}/test"))
             threads.append(t)
 
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=15)
+        # Patch once outside threads to avoid unittest.mock.patch race conditions
+        # when multiple threads patch the same target concurrently
+        with (
+            patch("urllib3.util.connection.create_connection", side_effect=tracking_create),
+            patch(
+                "services.safe_fetch._validate_and_resolve",
+                side_effect=mock_validate,
+            ),
+        ):
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=15)
 
         try:
             server1.shutdown()

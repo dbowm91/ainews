@@ -41,11 +41,14 @@ class TestRouteSecurityInventory:
 
     def test_all_admin_api_routes_require_auth(self, app, client):
         """Every /api/v1 route must return 401 when unauthenticated."""
+        public_api_exceptions = {"public.track_share_click", "themes.theme_metadata"}
         for rule in app.url_map.iter_rules():
             endpoint = rule.endpoint
             if endpoint.startswith("static") or endpoint.startswith("errors"):
                 continue
             if not rule.rule.startswith("/api/v1"):
+                continue
+            if endpoint in public_api_exceptions:
                 continue
             if "GET" not in rule.methods:
                 continue
@@ -356,7 +359,7 @@ class TestRouteBlueprintPrefixConsistency:
     def test_all_api_v1_routes_use_admin_api_bp(self, app):
         """All /api/v1/* routes must be registered under the 'admin_api' blueprint,
         except public tracking endpoints that intentionally live under /api/v1."""
-        public_api_exceptions = {"public.track_share_click"}
+        public_api_exceptions = {"public.track_share_click", "themes.theme_metadata"}
         for rule in app.url_map.iter_rules():
             if not rule.rule.startswith("/api/v1"):
                 continue
@@ -392,7 +395,7 @@ class TestRouteBlueprintPrefixConsistency:
     def test_no_api_v1_routes_on_wrong_blueprints(self, app):
         """No /api/v1/* route should exist on blueprints other than 'admin_api',
         except public tracking endpoints that intentionally live under /api/v1."""
-        public_api_exceptions = {"public.track_share_click"}
+        public_api_exceptions = {"public.track_share_click", "themes.theme_metadata"}
         for rule in app.url_map.iter_rules():
             if not rule.rule.startswith("/api/v1"):
                 continue

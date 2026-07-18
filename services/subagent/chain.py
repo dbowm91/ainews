@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from services.llm.errors import ProviderTimeoutError
+from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
 
 from .conditions import _evaluate_condition
 from .config import _get_subagent_provider_and_config, _subagent_executor
@@ -159,7 +159,7 @@ def run_subagent_chain(
                 "used_fallback": True,
                 }
         except (ImportError, ValidationError, json.JSONDecodeError,
-                ValueError, AttributeError) as e:
+                ValueError, AttributeError, ProviderServerError, AuthError) as e:
             logger.error(
                 "Chain %s step %d unexpected error: %s",
                 chain_name,

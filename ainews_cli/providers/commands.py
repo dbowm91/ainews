@@ -303,7 +303,7 @@ def register_commands(  # noqa: C901
                     "roles": role_assignments.get(pid, []),
                     "probe": probe_summary,
                 })
-            out.json_data({"providers": items, "default_provider": default_id})
+            out.json_data({"schema_version": 1, "providers": items, "default_provider": default_id})
         else:
             if not providers_data:
                 out.info("No providers configured.")

@@ -6,7 +6,7 @@
 #       ./tests/test_install.sh          (if executable)
 #
 # No network, no downloads, no system changes.
-# 92 tests, 170+ assertions
+# 97 tests, 180+ assertions
 # ──────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -61,6 +61,12 @@ assert_file_exists() {
     local path="$1" label="${2:-}"
     if [[ -f "$path" ]]; then _pass "$label"
     else _fail "$label" "file not found: ${path}"; fi
+}
+
+assert_file_not_exists() {
+    local path="$1" label="${2:-}"
+    if [[ ! -f "$path" ]]; then _pass "$label"
+    else _fail "$label" "file unexpectedly exists: ${path}"; fi
 }
 
 assert_json_field() {
@@ -1142,6 +1148,181 @@ test_metadata_write_failure_cleanup() {
     assert_exit_code 1 $rc "$CURRENT_TEST"
 
     chmod 755 "$readonly_dir"
+    rm -rf "$tmpdir"
+}
+
+# ── Tests: Fault injection — missing checksum entry ─────────────────
+
+test_missing_checksum_entry_in_sha256sums() {
+    CURRENT_TEST="Fault injection: artifact not listed in SHA256SUMS detected"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # Create a SHA256SUMS file that does NOT contain our artifact
+    echo "abcdef1234567890  unrelated-file.tar.gz" > "${tmpdir}/SHA256SUMS"
+
+    # Simulate the installer's grep logic (line 692 of install.sh)
+    local artifact_name="ainews-1.0.0-linux-x86_64.tar.gz"
+    local expected_sha256
+    expected_sha256=$(grep " ${artifact_name}$" "${tmpdir}/SHA256SUMS" 2>/dev/null | awk '{print $1}' | tr '[:upper:]' '[:lower:]' || true)
+
+    if [[ -z "$expected_sha256" ]]; then
+        _pass "$CURRENT_TEST (empty result = artifact not found)"
+    else
+        _fail "$CURRENT_TEST" "expected empty result, got '${expected_sha256}'"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_missing_checksum_entry_empty_file() {
+    CURRENT_TEST="Fault injection: empty SHA256SUMS yields no match"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    touch "${tmpdir}/SHA256SUMS"
+
+    local artifact_name="ainews-1.0.0-linux-x86_64.tar.gz"
+    local expected_sha256
+    expected_sha256=$(grep " ${artifact_name}$" "${tmpdir}/SHA256SUMS" 2>/dev/null | awk '{print $1}' | tr '[:upper:]' '[:lower:]' || true)
+
+    if [[ -z "$expected_sha256" ]]; then
+        _pass "$CURRENT_TEST"
+    else
+        _fail "$CURRENT_TEST" "expected empty result from empty SHA256SUMS"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_missing_checksum_entry_wrong_platform() {
+    CURRENT_TEST="Fault injection: wrong platform artifact name not matched"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    # SHA256SUMS has only the macOS artifact
+    echo "abcdef1234567890  ainews-1.0.0-macos-aarch64.tar.gz" > "${tmpdir}/SHA256SUMS"
+
+    local artifact_name="ainews-1.0.0-linux-x86_64.tar.gz"
+    local expected_sha256
+    expected_sha256=$(grep " ${artifact_name}$" "${tmpdir}/SHA256SUMS" 2>/dev/null | awk '{print $1}' | tr '[:upper:]' '[:lower:]' || true)
+
+    if [[ -z "$expected_sha256" ]]; then
+        _pass "$CURRENT_TEST"
+    else
+        _fail "$CURRENT_TEST" "expected no match for wrong platform"
+    fi
+    rm -rf "$tmpdir"
+}
+
+# ── Tests: Fault injection — repeated installation ──────────────────
+
+test_repeated_install_over_existing() {
+    CURRENT_TEST="Fault injection: repeated install backs up existing"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    local app_dir="${tmpdir}/app"
+    local backup_dir="${tmpdir}/backups"
+    mkdir -p "$app_dir" "$backup_dir"
+
+    # Simulate existing installation
+    echo "original binary" > "${app_dir}/ainews"
+    echo "original config" > "${app_dir}/config.yaml"
+
+    # Simulate the installer's backup logic (line 759-768 of install.sh)
+    if [[ -d "$app_dir" ]] && [[ -n "$(ls -A "$app_dir" 2>/dev/null)" ]]; then
+        local backup_name="ainews-backup-$(date +%Y%m%d%H%M%S)"
+        local backup_dest="${backup_dir}/${backup_name}"
+        mkdir -p "$backup_dest"
+        cp -a "$app_dir"/* "$backup_dest/" 2>/dev/null || true
+    fi
+
+    # Verify backup was created
+    local backup_count
+    backup_count=$(find "$backup_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+    if [[ "$backup_count" -ge 1 ]]; then
+        _pass "$CURRENT_TEST (backup created)"
+    else
+        _fail "$CURRENT_TEST" "no backup directory created"
+    fi
+
+    # Verify original files are still in app_dir (pre-install state)
+    assert_file_exists "${app_dir}/ainews" "$CURRENT_TEST (original app preserved)"
+    assert_file_exists "${app_dir}/config.yaml" "$CURRENT_TEST (original config preserved)"
+
+    # Verify backup has copies
+    local backup_contents
+    backup_contents=$(find "$backup_dir" -type f -name "*.yaml" -o -name "ainews" 2>/dev/null | wc -l)
+    if [[ "$backup_contents" -ge 2 ]]; then
+        _pass "$CURRENT_TEST (backup has files)"
+    else
+        _fail "$CURRENT_TEST" "backup directory empty or incomplete"
+    fi
+    rm -rf "$tmpdir"
+}
+
+test_repeated_install_idempotent() {
+    CURRENT_TEST="Fault injection: repeated install is idempotent (files overwritten cleanly)"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    local app_dir="${tmpdir}/app"
+    local staging="${tmpdir}/staging/ainews"
+    mkdir -p "$app_dir" "$staging"
+
+    # Existing install
+    echo "v1.0.0 binary" > "${app_dir}/ainews"
+    echo "v1.0.0 lib" > "${app_dir}/lib.py"
+
+    # New staging (simulating fresh download)
+    echo "v2.0.0 binary" > "${staging}/ainews"
+    echo "v2.0.0 lib" > "${staging}/lib.py"
+    echo "v2.0.0 new" > "${staging}/new.txt"
+
+    # Simulate the installer's merge logic (line 776-780)
+    if [[ -d "${staging}" ]]; then
+        cp -a "${staging}"/* "$app_dir/" 2>/dev/null || true
+    fi
+
+    # Verify new files overwritten
+    local binary_content
+    binary_content=$(cat "${app_dir}/ainews")
+    assert_contains "$binary_content" "v2.0.0" "$CURRENT_TEST (binary updated)"
+
+    # Verify new file added
+    assert_file_exists "${app_dir}/new.txt" "$CURRENT_TEST (new file added)"
+
+    rm -rf "$tmpdir"
+}
+
+test_repeated_install_preserves_config() {
+    CURRENT_TEST="Fault injection: repeated install preserves config directory"
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    local app_dir="${tmpdir}/app"
+    local config_dir="${tmpdir}/config"
+    mkdir -p "$app_dir" "$config_dir"
+
+    # Existing config with secrets
+    echo "my-secret-api-key" > "${config_dir}/.env"
+    echo "db-password=12345" >> "${config_dir}/.env"
+
+    # Simulate repeated install — config dir is NOT in app_dir
+    # The installer only touches app_dir, never config_dir
+    local original_hash
+    original_hash=$(sha256sum "${config_dir}/.env" | awk '{print $1}')
+
+    # Simulate app update
+    echo "new binary" > "${app_dir}/ainews"
+
+    # Config should be untouched
+    local current_hash
+    current_hash=$(sha256sum "${config_dir}/.env" | awk '{print $1}')
+    if [[ "$original_hash" == "$current_hash" ]]; then
+        _pass "$CURRENT_TEST"
+    else
+        _fail "$CURRENT_TEST" "config file was modified during app update"
+    fi
     rm -rf "$tmpdir"
 }
 

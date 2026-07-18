@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -321,6 +322,7 @@ class OnboardingService:
         data = self._state.to_dict()
         content = json.dumps(data, indent=2, default=str)
         state_path.write_text(content, encoding="utf-8")
+        os.chmod(str(state_path), 0o600)
 
     def load_state(self) -> bool:
         state_path = self._state_path()

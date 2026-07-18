@@ -98,7 +98,7 @@ def register_commands(  # noqa: C901
                     "schedule_minutes": src.get("schedule_minutes", 30),
                     "config_summary": _summarize_config(src),
                 })
-            out.json_data({"sources": items, "count": len(items)})
+            out.json_data({"schema_version": 1, "sources": items, "count": len(items)})
         else:
             if not sources:
                 out.info("No sources configured.")

@@ -300,7 +300,7 @@ def config_show(
     config = _ctx.ensure_loaded()
 
     if _ctx.json_output:
-        data: dict[str, Any] = {}
+        data: dict[str, Any] = {"schema_version": 1}
         for key in FIELD_REGISTRY.all_keys():
             fld = FIELD_REGISTRY.lookup(key)
             if fld is None:
@@ -358,6 +358,7 @@ def config_check(
     if _ctx.json_output:
         _out.diagnostics(all_diags)
         data = {
+            "schema_version": 1,
             "valid": result.is_valid,
             "errors": result.error_count,
             "warnings": result.warning_count,

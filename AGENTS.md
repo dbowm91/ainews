@@ -17,12 +17,19 @@ This document provides instructions and context for agents working on the AI New
 
 Release 5 closure work has been completed with the following results:
 - **Baseline:** Commit 330e9fd4760207256c058f762376a9a11a99bb10 (2026-07-17)
-- **Test suite:** 4,434 passed, 8 flaky (pass on re-run), 5 skipped
-- **Shell tests:** 171 passed (137 installer + 34 E2E)
+- **Closure commit:** e34adfc (2026-07-17)
+- **Test suite:** 4,471 passed, 1 pre-existing (pipeline_logs fixture), 5 skipped
+- **Shell tests:** 235 passed (147 installer + 34 E2E + 54 logrotate real-world)
 - **Mypy:** Clean (scripts/ excluded from type checking)
-- **Ruff:** 3 non-blocking complexity warnings in ainews_cli/service/
+- **Ruff:** 5 non-blocking warnings (3 C901 + 1 BLE001 + 1 test C901)
+- **Security review:** 0 critical, 0 high, 5 medium (fixed), 4 low (accepted)
+- **JSON contracts:** schema_version: 1 on 12 command families, 48 contract tests
 - **Closure matrix:** docs/config-cli-roadmap-closure.md
 - **Baseline evidence:** docs/config-cli-release-5-baseline.md
+- **Security review:** docs/config-cli-security-review.md
+- **Migration guide:** docs/migrating-repository-install.md
+- **Final closure:** docs/config-cli-release-5-closure.md
+- **Deferred items:** backup.py decomposition (tests pass), clean-host lifecycle (needs CI), systemd PID 1 validation (needs container)
 
 ## Project Structure
 

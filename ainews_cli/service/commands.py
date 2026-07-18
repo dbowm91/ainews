@@ -695,7 +695,7 @@ def status(
             return
 
         if json_output:
-            _out.json_data({"success": True, "units": [], "message": "No installed units found"})
+            _out.json_data({"schema_version": 1, "success": True, "units": [], "message": "No installed units found"})
         else:
             _out.info("No installed service units found. Use 'ainews service install --systemd' to install.")
         return
@@ -732,7 +732,7 @@ def status(
         )
 
     if json_output:
-        _out.json_data({"success": True, "units": service_statuses, "scope": scope})
+        _out.json_data({"schema_version": 1, "success": True, "units": service_statuses, "scope": scope})
     else:
         headers = ["Service", "Active State", "Sub State", "Installed At"]
         rows = [[s["name"], s["active_state"], s["sub_state"], s["installed_at"]] for s in service_statuses]

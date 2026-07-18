@@ -178,7 +178,7 @@ bash scripts/validate_release.sh --security   # Security gates only
 
 ## Release 5 Closure
 
-Release 5 closure work has been completed. The closure matrix is at `docs/config-cli-roadmap-closure.md`. Baseline evidence is at `docs/config-cli-release-5-baseline.md`. Key stats: 4,434 pytest passed, 137 installer tests, 34 installer E2E tests, clean mypy, 3 non-blocking ruff warnings.
+Release 5 closure work has been completed. The closure matrix is at `docs/config-cli-roadmap-closure.md`. Baseline evidence is at `docs/config-cli-release-5-baseline.md`. Final closure record is at `docs/config-cli-release-5-closure.md`. Key stats: 4,471 pytest passed, 147 installer tests, 34 installer E2E tests, 54 logrotate real-world tests, clean mypy, 5 non-blocking ruff warnings. Security review at `docs/config-cli-security-review.md`.
 
 ## Config System
 

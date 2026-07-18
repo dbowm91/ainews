@@ -68,17 +68,20 @@ def register_commands(  # noqa: C901
             return
 
         if ctx.json_output:
-            out.json_data([
-                {
-                    "backup_id": m.backup_id,
-                    "application_version": m.application_version,
-                    "created_at": m.created_at,
-                    "size_bytes": m.size_bytes,
-                    "pinned": m.pinned,
-                    "tag": m.tag,
-                }
-                for m in backups
-            ])
+            out.json_data({
+                "schema_version": 1,
+                "backups": [
+                    {
+                        "backup_id": m.backup_id,
+                        "application_version": m.application_version,
+                        "created_at": m.created_at,
+                        "size_bytes": m.size_bytes,
+                        "pinned": m.pinned,
+                        "tag": m.tag,
+                    }
+                    for m in backups
+                ],
+            })
         else:
             if not backups:
                 out.info("No backups found.")

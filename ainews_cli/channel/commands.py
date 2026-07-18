@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -31,6 +32,7 @@ def _write_metadata(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    os.chmod(str(tmp), 0o600)
     tmp.replace(path)
 
 

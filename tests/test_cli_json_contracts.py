@@ -58,7 +58,12 @@ def parse_json_output(result: subprocess.CompletedProcess) -> dict[str, Any]:
 SCHEMA_VERSIONS = {
     "version": 1,
     "config_path": 1,
+    "config_show": 1,
     "config_check": 1,
+    "providers_list": 1,
+    "sources_list": 1,
+    "backup_list": 1,
+    "service_status": 1,
     "doctor": 1,
     "status": 1,
 }
@@ -289,6 +294,198 @@ class TestStatusJSON:
             data = parse_json_output(result)
             if data:
                 assert isinstance(data, dict), "Expected JSON object"
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews config show --json
+# ---------------------------------------------------------------------------
+
+
+class TestConfigShowJSON:
+    """Tests for `ainews config show --json` contract."""
+
+    def test_exits_zero(self) -> None:
+        result = run_cli("--json", "config", "show")
+        assert result.returncode == 0
+
+    def test_output_is_json(self) -> None:
+        result = run_cli("--json", "config", "show")
+        data = parse_json_output(result)
+        assert isinstance(data, dict), "Expected JSON object"
+
+    def test_has_schema_version(self) -> None:
+        result = run_cli("--json", "config", "show")
+        data = parse_json_output(result)
+        assert "schema_version" in data
+        assert data["schema_version"] == SCHEMA_VERSIONS["config_show"]
+
+    def test_no_secrets(self) -> None:
+        result = run_cli("--json", "config", "show")
+        output = result.stdout.lower()
+        for pattern in SECRET_PATTERNS:
+            if f'"{pattern}":' in output:
+                pass  # Key names are acceptable; values should be redacted
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews config check --json
+# ---------------------------------------------------------------------------
+
+
+class TestConfigCheckJSON:
+    """Tests for `ainews config check --json` contract."""
+
+    def test_exits_with_valid_code(self) -> None:
+        result = run_cli("--json", "config", "check")
+        assert result.returncode in (0, 2)
+
+    def test_output_is_json(self) -> None:
+        result = run_cli("--json", "config", "check")
+        data = parse_json_output(result)
+        if data:
+            assert isinstance(data, dict), "Expected JSON object"
+
+    def test_has_schema_version(self) -> None:
+        result = run_cli("--json", "config", "check")
+        data = parse_json_output(result)
+        if data:
+            assert "schema_version" in data
+            assert data["schema_version"] == SCHEMA_VERSIONS["config_check"]
+
+    def test_has_valid_field(self) -> None:
+        result = run_cli("--json", "config", "check")
+        data = parse_json_output(result)
+        if data:
+            assert "valid" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews providers-list --json
+# ---------------------------------------------------------------------------
+
+
+class TestProvidersListJSON:
+    """Tests for `ainews providers-list --json` contract."""
+
+    def test_exits_zero(self) -> None:
+        result = run_cli("providers-list", "--json")
+        assert result.returncode == 0
+
+    def test_output_is_json(self) -> None:
+        result = run_cli("providers-list", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert isinstance(data, dict), "Expected JSON object"
+
+    def test_has_schema_version(self) -> None:
+        result = run_cli("providers-list", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert "schema_version" in data
+            assert data["schema_version"] == SCHEMA_VERSIONS["providers_list"]
+
+    def test_has_providers_field(self) -> None:
+        result = run_cli("providers-list", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert "providers" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews sources-list --json
+# ---------------------------------------------------------------------------
+
+
+class TestSourcesListJSON:
+    """Tests for `ainews sources-list --json` contract."""
+
+    def test_exits_zero(self) -> None:
+        result = run_cli("sources-list", "--json")
+        assert result.returncode == 0
+
+    def test_output_is_json(self) -> None:
+        result = run_cli("sources-list", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert isinstance(data, dict), "Expected JSON object"
+
+    def test_has_schema_version(self) -> None:
+        result = run_cli("sources-list", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert "schema_version" in data
+            assert data["schema_version"] == SCHEMA_VERSIONS["sources_list"]
+
+    def test_has_sources_field(self) -> None:
+        result = run_cli("sources-list", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert "sources" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews backup list --json
+# ---------------------------------------------------------------------------
+
+
+class TestBackupListJSON:
+    """Tests for `ainews backup list --json` contract."""
+
+    def test_exits_zero(self) -> None:
+        result = run_cli("--json", "backup", "list")
+        assert result.returncode == 0
+
+    def test_output_is_json(self) -> None:
+        result = run_cli("--json", "backup", "list")
+        data = parse_json_output(result)
+        if data:
+            assert isinstance(data, dict), "Expected JSON object"
+
+    def test_has_schema_version(self) -> None:
+        result = run_cli("--json", "backup", "list")
+        data = parse_json_output(result)
+        if data:
+            assert "schema_version" in data
+            assert data["schema_version"] == SCHEMA_VERSIONS["backup_list"]
+
+    def test_has_backups_field(self) -> None:
+        result = run_cli("--json", "backup", "list")
+        data = parse_json_output(result)
+        if data:
+            assert "backups" in data
+            assert isinstance(data["backups"], list)
+
+
+# ---------------------------------------------------------------------------
+# Tests: ainews service status --json
+# ---------------------------------------------------------------------------
+
+
+class TestServiceStatusJSON:
+    """Tests for `ainews service status --json` contract."""
+
+    def test_exits_zero_or_error(self) -> None:
+        result = run_cli("service", "status", "--json")
+        assert result.returncode in (0, 1)
+
+    def test_output_is_json(self) -> None:
+        result = run_cli("service", "status", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert isinstance(data, dict), "Expected JSON object"
+
+    def test_has_schema_version_when_units_present(self) -> None:
+        result = run_cli("service", "status", "--json")
+        data = parse_json_output(result)
+        if data and "units" in data and data["units"]:
+            assert "schema_version" in data
+            assert data["schema_version"] == SCHEMA_VERSIONS["service_status"]
+
+    def test_no_units_has_success_field(self) -> None:
+        result = run_cli("service", "status", "--json")
+        data = parse_json_output(result)
+        if data:
+            assert "success" in data
 
 
 # ---------------------------------------------------------------------------

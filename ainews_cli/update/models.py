@@ -6,6 +6,7 @@ import dataclasses
 import enum
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -183,6 +184,7 @@ def save_update_state(state_dir: Path, operation: UpdateOperation) -> None:
     data = dataclasses.asdict(operation)
     content = json.dumps(data, indent=2, default=str)
     path.write_text(content, encoding="utf-8")
+    os.chmod(str(path), 0o600)
 
 
 def clear_update_state(state_dir: Path) -> None:

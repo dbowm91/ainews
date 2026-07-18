@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 
 from ainews_cli.service.models import InstalledUnitRecord, ServiceScope
@@ -58,6 +59,7 @@ def save_installed_units(config_dir: Path, units: list[InstalledUnitRecord]) -> 
         ]
     }
     state_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.chmod(str(state_path), 0o600)
 
 
 def add_installed_unit(config_dir: Path, record: InstalledUnitRecord) -> None:

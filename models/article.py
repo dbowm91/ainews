@@ -60,7 +60,7 @@ class Article(db.Model):  # type: ignore[name-defined]
     embedding = db.Column(db.Text)
     tags = db.relationship("Tag", secondary=article_tags, lazy="selectin")
     metrics = db.relationship(
-        "ArticleMetric", backref="article", uselist=False, cascade="all, delete-orphan"
+        "ArticleMetric", backref="article", uselist=False, lazy="selectin", cascade="all, delete-orphan"
     )
 
     __table_args__ = (

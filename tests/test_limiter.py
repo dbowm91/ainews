@@ -28,7 +28,8 @@ class TestModelLimiterAcquire:
 
     def test_acquire_returns_false_when_at_limit(self):
         limiter, acquire_script, _ = self._make_limiter(acquire_return=0)
-        acquire_script.side_effect = [0] * 20
+        # Use a function that always returns 0 to handle unlimited calls
+        acquire_script.side_effect = lambda *args, **kwargs: 0
         result = limiter.acquire("ollama", "qwen3:8b", max_concurrent=4, timeout=1)
         assert result is False
 

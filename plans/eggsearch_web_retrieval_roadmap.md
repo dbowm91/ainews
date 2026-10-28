@@ -35,6 +35,15 @@ Celery research task and approved subagent tool -> ainews search service/typed o
 
 Implementation sequencing is strict: Phase 1 opt-in adapter and tests before Phase 2; Phase 2 evidence before any production use of new agent fetching; Phase 3 default decision only after complete evidence. Documentation and offline tests accompany each phase.
 
+## Registered corrective handoffs — 2026-10-28
+
+**Baseline for corrective work:** `c5d2c3596ee16340202ca7cb2515cfa3e458d290` (`plan/eggsearch-web-retrieval-20261028`). These are implementation tasks, not completion assertions; the earlier Phase 1–3 plans remain the scope authority.
+
+1. **Corrective 01 — result semantics, fallback, worker concurrency** ([plan](eggsearch_web_retrieval_corrective_01_result_semantics_fallback.md); **PLANNED**). Repair false PARTIAL from informational warnings, native compact-vs-standard payload/capability mapping, `error_class` preservation, per-call outcome ownership, shared-deadline opt-in runtime fallback, and end-to-end research failure/freshness reporting. Required before canary or default consideration.
+2. **Corrective 02 — CI, deployment qualification, security and rollout** ([plan](eggsearch_web_retrieval_corrective_02_ci_qualification_rollout.md); **PLANNED**). Prove real PR CI/required checks, binary wheels on Linux x86_64/arm64 and maintained environments, worker/CLI/Docker installation, scope isolation of upstream repo/fetch tools, reproducible news-search A/B evaluation, and a documented canary/rollback decision. Depends on Corrective 01 to close the Phase 3 gate.
+
+**Tracking order:** Corrective 01 (runtime correctness) -> Corrective 02 (verification + rollout decision). Changes to `eggsearch==0.4.4` optional packaging and published-wheel smoke are already recorded in `docs/eggsearch-retrieval-qualification.md`; they do not establish complete release readiness. Update plan checkboxes and qualification evidence only with exact commits, test commands, CI run links and observed outcomes. Keep DuckDuckGo default and `eggsearch` disabled until a separate reviewed change explicitly authorizes activation.
+
 ## Cross-cutting invariants
 
 1. Default installations and existing deployments work with zero eggsearch dependency, configuration, listener, Rust compiler, or search-provider credential changes.

@@ -1,6 +1,6 @@
 # Eggsearch External Web Retrieval Integration Roadmap
 
-**Status:** PLANNED — implementation handoff; no runtime changes in this planning branch.
+**Status:** IN PROGRESS — opt-in adapter and evidence groundwork implemented; a pinned upstream source build is now wheel-tested on local macOS arm64 and x86_64, but runtime fallback, full platform/release qualification, an upstream symlink-containment test failure, and rollout gates remain open. See docs/eggsearch-retrieval-qualification.md.
 **Date:** 2026-10-28
 **Baseline:** ainews main 97b5ec25f855a3b1d3b248ae64cb2242831ab1c1; eggstack/eggsearch main 13fcac0b7ac0125d38e4e9775ebe1d62028fda72 (Cargo 0.4.4). Recheck both at implementation start.
 **Owner:** ainews retrieval/research maintainers.

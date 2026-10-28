@@ -66,6 +66,12 @@ search_providers:
     config:
       host: "http://localhost:8888"
 
+  - id: eggsearch
+    type: eggsearch
+    enabled: false
+    config:
+      config_path: null # Set an explicit absolute path only after qualified SDK installation.
+
   - id: hybrid
     type: hybrid
     enabled: true
@@ -128,6 +134,14 @@ search_providers:
 - Most privacy-friendly option (self-hosted)
 - Uses `/healthz` endpoint for health checks
 - Validates search URL before calling
+
+### Eggsearch (`services/search/eggsearch.py`)
+
+Eggsearch is an **opt-in, qualification-only** external metasearch adapter. It is disabled in the sample configuration, is not a default dependency, and does not launch an MCP sidecar. The Python binding is imported lazily. To enable it, install a separately qualified Eggsearch SDK wheel, provide a readable explicit `config_path`, then enable the provider in `providers.yaml`. Do not use a working-directory-relative or developer-local path. Search failures are represented by `search_web_detailed()` as `failed`; valid empty responses remain `empty`. The compatibility `search_web()` API continues to return lists.
+
+Eggsearch result cards are structured data and undergo HTTP(S)/SSRF URL validation. Provider IDs and source IDs are preserved in `SearchResult.metadata`; publication timestamps are preserved only when timezone-aware and parseable. Requested freshness is not proof of enforcement. Eggsearch's own `web_fetch` is not used; source hydration must continue through `services/safe_fetch.py`.
+
+**Release status:** native wheel availability, ABI/platform matrix, tool fingerprint, clean-host install, and live corpus A/B evidence are not yet qualified. Keep Eggsearch disabled until the linked roadmap and qualification record show those gates passed.
 
 ### Hybrid (`services/search/hybrid.py`)
 

@@ -1,6 +1,6 @@
 # Eggsearch Web Retrieval Phase 3 — Packaging, Qualification, Canary and Rollout
 
-**Status:** PLANNED
+**Status:** BLOCKED — pinned-source macOS arm64/x86_64 wheels, checksums, fingerprint, and offline runtime tests now exist, but no upstream PyPI artifact, complete platform/clean-host packaging matrix, live comparison corpus, or canary evidence is available; the pinned upstream Rust suite also reproduces a macOS symlink-escape security-test failure. Eggsearch remains disabled.
 **Depends on:** Phase 1 adapter and Phase 2 evidence work.
 **Goal:** Make optional eggsearch integration operable on supported installations, decide whether it can become the default on evidence, and preserve rollback.
 

@@ -1,6 +1,6 @@
 # Eggsearch Web Retrieval Phase 1 — Optional Native Provider Adapter
 
-**Status:** PLANNED
+**Status:** IN PROGRESS — adapter/config sample/evidence contract implemented; pinned local macOS arm64 and x86_64 wheels, API contract, and fingerprint tested. Shared-deadline runtime fallback, release artifact parity, full tests, and cross-platform CI remain open.
 **Depends on:** plans/eggsearch_web_retrieval_roadmap.md.
 **Goal:** Ainews can select eggsearch for search without changing the default, adding an always-on MCP server, or breaking the existing SearchResult contract.
 

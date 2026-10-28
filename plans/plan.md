@@ -1,6 +1,6 @@
 # Master Implementation Plan (Consolidated)
 
-> **Active follow-on roadmap (registered 2026-10-28):** [Eggsearch external web retrieval integration](eggsearch_web_retrieval_roadmap.md) — three phased handoffs for optional provider integration, research evidence/provenance, and packaging/canary rollout. **Status: PLANNED.** The completed historical waves below are not reopened; eggsearch remains disabled by default until qualification.
+> **Active follow-on roadmap (registered 2026-10-28):** [Eggsearch external web retrieval integration](eggsearch_web_retrieval_roadmap.md) — three phased handoffs for optional provider integration, research evidence/provenance, and packaging/canary rollout. **Status: IN PROGRESS; Phase 3 rollout is blocked pending qualification.** Historical waves below are not reopened; eggsearch remains disabled by default. Evidence: `docs/eggsearch-retrieval-qualification.md`.
 
 **Status:** COMPLETED (All waves complete)
 **Last Updated:** 2026-06-02 (Wave 9 completed, all items verified)

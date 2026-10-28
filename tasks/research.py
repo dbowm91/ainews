@@ -40,6 +40,11 @@ def _format_web_results(web_results: list[dict]) -> str:
     for wr in web_results:
         parts.append(f"Source: {esc_xml_text(wr.get('title', 'Unknown'))}")
         parts.append(f"URL: {esc_xml_text(wr.get('url', ''))}")
+        parts.append(f"Source ID: {esc_xml_text(wr.get('source_id', 'unknown'))}")
+        parts.append(f"Provider: {esc_xml_text(wr.get('provider', 'unknown'))}")
+        parts.append(f"Date status: {esc_xml_text(wr.get('published_at_status', 'unknown'))}")
+        parts.append(f"Published at: {esc_xml_text(wr.get('published_at') or 'unknown')}")
+        parts.append(f"Trust: external_untrusted")
         parts.append(f"Snippet: {esc_xml_text(wr.get('snippet', '')[:300])}")
         parts.append("")
     return "\n".join(parts)
@@ -63,7 +68,13 @@ def _perform_web_search_and_synthesis(article, rc):
             search_query, max_results=rc.web_search_max_results or 5,
         )
     web_results = [
-        {"title": s.title, "url": s.url, "snippet": s.snippet}
+        {
+            "title": s.title, "url": s.url, "snippet": s.snippet,
+            "source_id": (getattr(s, "metadata", {}) or {}).get("source_id", s.url),
+            "provider": s.source,
+            "published_at": (getattr(s, "metadata", {}) or {}).get("published_at"),
+            "published_at_status": (getattr(s, "metadata", {}) or {}).get("published_at_status", "unknown"),
+        }
         for s in search_results
     ]
     if not web_results:

@@ -143,6 +143,14 @@ search_providers:
     config:
       host: "http://localhost:8888"
 
+  # Optional native Eggsearch binding is not installed by default. Enable only
+  # after installing a qualified wheel and setting an explicit config_path.
+  - id: eggsearch
+    type: eggsearch
+    enabled: false
+    config:
+      config_path: null
+
   - id: hybrid
     type: hybrid
     enabled: true

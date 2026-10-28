@@ -63,8 +63,13 @@ def build_research_prompt(
         parts.append("<external_sources>")
         for i, wr in enumerate(web_results, 1):
             parts.append(f"  <source index='{i}'>")
+            parts.append(f"    <source_id>{esc_xml_text(str(wr.get('source_id', wr['url']))[:256])}</source_id>")
+            parts.append(f"    <provider>{esc_xml_text(str(wr.get('provider', 'unknown'))[:100])}</provider>")
             parts.append(f"    <title>{esc_xml_text(wr['title'])}</title>")
             parts.append(f"    <url>{esc_xml_text(wr['url'])}</url>")
+            parts.append(f"    <published_at>{esc_xml_text(str(wr.get('published_at') or 'unknown'))}</published_at>")
+            parts.append(f"    <date_status>{esc_xml_text(str(wr.get('published_at_status', 'unknown')))}</date_status>")
+            parts.append(f"    <trust>external_untrusted</trust>")
             parts.append(f"    <snippet>{esc_xml_text(wr['snippet'][:300])}</snippet>")
             parts.append("  </source>")
         parts.append("</external_sources>")

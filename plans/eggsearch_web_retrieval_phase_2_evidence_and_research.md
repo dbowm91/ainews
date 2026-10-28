@@ -1,6 +1,6 @@
 # Eggsearch Web Retrieval Phase 2 — Provenance, Research Tools and Bounded Evidence
 
-**Status:** PLANNED
+**Status:** IN PROGRESS — source IDs/date uncertainty/untrusted framing/trust metadata and URL retention implemented and unit-tested; actual source hydration remains intentionally on safe_fetch, while end-to-end research-evidence evaluation and complete failure fixtures remain open.
 **Depends on:** Phase 1 provider adapter; see plans/eggsearch_web_retrieval_roadmap.md.
 **Goal:** Improve research reliability and citation auditability without replacing ainews's first-party fetch security or exposing unbounded model-directed network access.
 

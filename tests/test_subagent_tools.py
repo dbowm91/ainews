@@ -137,10 +137,14 @@ class TestBuiltInTools:
                 mock_result = MagicMock()
                 mock_result.title = "Test Result"
                 mock_result.snippet = "Test snippet content"
+                mock_result.url = "https://example.org/article?a=1&b=2"
+                mock_result.metadata = {"source_id": "source-7"}
                 mock_search.return_value = [mock_result]
 
                 result = tool.fn(query="test query", max_results=1)
-                assert "Test Result: Test snippet content..." in result
+                assert "[source-7] Test Result" in result
+                assert "URL: https://example.org/article?a=1&amp;b=2" in result
+                assert "Snippet (external_untrusted): Test snippet content" in result
 
     def test_search_web_no_results(self, app):
         with app.app_context():

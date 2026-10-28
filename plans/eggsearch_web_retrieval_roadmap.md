@@ -1,6 +1,6 @@
 # Eggsearch External Web Retrieval Integration Roadmap
 
-**Status:** IN PROGRESS — opt-in adapter and evidence groundwork implemented; a pinned upstream source build is now wheel-tested on local macOS arm64 and x86_64, but runtime fallback, full platform/release qualification, an upstream symlink-containment test failure, and rollout gates remain open. See docs/eggsearch-retrieval-qualification.md.
+**Status:** IN PROGRESS — opt-in adapter/evidence groundwork implemented and `eggsearch==0.4.4` is now pinned as an optional extra. Published macOS arm64/x86_64 wheels and a bounded DuckDuckGo live smoke have been tested; runtime fallback, clean-host/Linux qualification, upstream symlink-containment and DNS-pinning concerns, broad comparison, and canary gates remain open. See docs/eggsearch-retrieval-qualification.md.
 **Date:** 2026-10-28
 **Baseline:** ainews main 97b5ec25f855a3b1d3b248ae64cb2242831ab1c1; eggstack/eggsearch main 13fcac0b7ac0125d38e4e9775ebe1d62028fda72 (Cargo 0.4.4). Recheck both at implementation start.
 **Owner:** ainews retrieval/research maintainers.
@@ -11,7 +11,7 @@
 
 Ainews already splits external search (services/search/base.py, duckduckgo.py, google.py, searxng.py, __init__.py) from internal article search (sqlite_fts.py, hybrid.py). The externally-facing compatibility seam is search_web(query, max_results) returning SearchResult(title, url, snippet, source). Both tasks/research.py and services/subagent/tools.py use it. Ainews's subagent web_search formats only title and truncated snippet, losing URLs, despite the primary research task formatting URLs. ProviderManager.get_with_fallback chooses another provider when initialization fails but does not retry a different backend after a selected provider returns [] at runtime. Empty results and provider outages are conflated.
 
-Eggsearch provides live metasearch, RRF aggregation, stable source identifiers, bounded web fetch, structured warnings/provider failures, trust markers, optional publication metadata, and freshness/date/domain hints with capability-enforcement telemetry. Its AsyncEggsearch Python binding performs in-process Rust SDK operations; however, as documented in docs/python-library.md, the Python distribution is not yet published on PyPI, and documented wheel support is conditional on CI/release qualification. There is no justification for requiring an additional background MCP server by default.
+Eggsearch provides live metasearch, RRF aggregation, stable source identifiers, bounded web fetch, structured warnings/provider failures, trust markers, optional publication metadata, and freshness/date/domain hints with capability-enforcement telemetry. Its AsyncEggsearch Python binding performs in-process Rust SDK operations. Version 0.4.4 is published on PyPI and is available through ainews's optional extra; published macOS wheels have been smoke-tested locally, while documented wheel support and broader platform/deployment compatibility remain subject to CI/release qualification. There is no justification for requiring an additional background MCP server by default.
 
 ## Scope and ownership
 
@@ -50,7 +50,7 @@ Implementation sequencing is strict: Phase 1 opt-in adapter and tests before Pha
 
 ## External prerequisite / gate
 
-Eggsearch's Python binding supports AsyncEggsearch, but it is not yet a generally published dependency. Verify current upstream release status, locked native wheel availability, CPython/OS/arch matrix (Linux x86_64/arm64, macOS arm64; WSL supported through Linux), Rust version requirements for sdist, and stable tool schema/fingerprint. The initial adapter can be tested against a locally built wheel without changing default installation. Do not claim native packaging is release-ready until a clean-host, checksum-verified wheel path is demonstrated. A persistent localhost MCP transport may be evaluated only as an optional alternative; avoid a new mandatory sidecar.
+Eggsearch's Python binding is published as 0.4.4 and pinned in the optional extra. Published macOS arm64/x86_64 wheel checksums and tool fingerprints, and a checksum-verified local install path, are recorded in the qualification record. Still qualify the CPython/OS/architecture matrix (especially clean Linux x86_64/arm64), Rust/sdist requirements, deployment/rollback behavior, and schema stability before calling packaging release-ready. A persistent localhost MCP transport may be evaluated only as an optional alternative; avoid a new mandatory sidecar.
 
 ## Release decision / stop conditions
 

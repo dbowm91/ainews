@@ -1,6 +1,6 @@
 # Editorial Memory, Shared Blackboard, and Deterministic Pipeline Roadmap
 
-**Status:** IMPLEMENTATION IN PROGRESS — runtime work landed locally; release gates remain open
+**Status:** IMPLEMENTATION IN PR #19 (unmerged), corrective pass C01–C04 OPEN; feature activation and release gates remain open
 **Created:** 2026-10-29  
 **Baseline:** `main` at `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5` (revalidate against the implementation branch before coding)  
 **Owner:** AInews editorial pipeline / memory services  
@@ -64,9 +64,24 @@ Prevent memory poisoning through untrusted articles: treat stored text as data, 
 
 Milestones require failing regression tests first for verified bugs, migration upgrade/downgrade rehearsal, no loss of old entries, token-budget invariants, read path with and without embeddings, cross-category isolation/blackboard tests, citation lineage, idempotent async jobs, and a fixed article-fixture comparison of recall/quality/cost/latency. See M5 for exact release gates.
 
+## Corrective pass registration — 2026-10-29
+
+The first implementation underwent static/runtime-evidence review and requires **focused follow-up** before M1–M5 release closure. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). These are *implementation plans, not completed fixes*.
+
+| Corrective | Priority | Plan | Focus |
+| --- | --- | --- | --- |
+| C01 | P0 | [Relevance-first retrieval, feature gates and tool budgets](editor_memory_corrective_01_retrieval_gates_20261029.md) | Prevent importance-first truncation of relevant FTS matches; scope reads; cumulative context/tool bounds; coherent current synthesis |
+| C02 | P0 | [HIGH lifecycle, synthesis succession and shared currentness](editor_memory_corrective_02_lifecycle_synthesis_20261029.md) | FINITE active HIGH review/retirement, single current synthesized view, fair dirty-evidence selection and shared-state cleanup |
+| C03 | P1 | [Memory candidate provenance and importance](editor_memory_corrective_03_candidate_quality_20261029.md) | Decouple evidence confidence from editorial significance; validate final-article evidence and dedup |
+| C04 | P0 release | [CI, database migration and deployment gates](editor_memory_corrective_04_release_verification_20261029.md) | Triage failing GitHub Actions CI/installer jobs, inconsistent dev Alembic schema, shadow retrieval, canary and provider-backed quality/cost measurements |
+
+**Execution order:** C01 first; C02 and C03 separately; CI baseline work under C04 may proceed concurrently, but C04 closure follows tested C01–C03. Keep V2 read, maintenance, synthesis and optional optimizations **disabled until their specific deployment gates pass**. Maintain original M1–M5 plans; this corrective pass supplements them, and the roadmap is **not COMPLETED**.
+
+**Current CI:** GitHub Actions implementation SHA `f3aa498e`, runs `40928360912` (CI) and `40928361243` (Installer Smoke), failed. Logs indicate baseline Ruff findings, missing CI test secrets/`.env`, unavailable Redis in theme tests, Gitleaks API permission error, Werkzeug audit advisory, installer runner disk exhaustion, and a broken aarch64 launcher path. Root causes must be classified against `main` before attribution to the memory branch. The local 5,074-passing test claim does not replace green required CI. See C04.
+
 ## Implementation evidence — 2026-10-29
 
-Implementation work is on `plan/editor-memory-blackboard-synthesis-20261029`; the worktree is uncommitted. M1 wiring, prompt/tool validation, structured final-artifact proposals, legacy retrieval bounds, schema/idempotency fixes and metrics are implemented. M2 provides the additive category store, evidence/scopes/lineage/summary schema, FTS5 with bounded lexical fallback, scoped context/search/get, backfill, and feature-flagged V2 reads. M3 adds lifecycle review/archive, evidence-grounded synthesis with persisted retry slots, shared-scope operator actions, diagnostics and a separately registered maintenance task. M4 adds independent rollback switches for deterministic prefiltering, conditional research/edit subagents, structured memory-candidate reuse and optional-call budgets. M5 adds a synthetic retrieval/trigger suite, read-only baseline script and migration/backfill rehearsal evidence. Details and limits are in [verification evidence](../docs/editor-memory-verification-20261029.md).
+Implementation work is committed on `plan/editor-memory-blackboard-synthesis-20261029` as `f3aa498e4d0df40e16fc1b9c65f9c45c6103f636` (PR #19, still unmerged at corrective-pass review). M1 wiring, prompt/tool validation, structured final-artifact proposals, legacy retrieval bounds, schema/idempotency fixes and metrics are implemented. M2 provides the additive category store, evidence/scopes/lineage/summary schema, FTS5 with bounded lexical fallback, scoped context/search/get, backfill, and feature-flagged V2 reads. M3 adds lifecycle review/archive, evidence-grounded synthesis with persisted retry slots, shared-scope operator actions, diagnostics and a separately registered maintenance task. M4 adds independent rollback switches for deterministic prefiltering, conditional research/edit subagents, structured memory-candidate reuse and optional-call budgets. M5 adds a synthetic retrieval/trigger suite, read-only baseline script and migration/backfill rehearsal evidence. Details and limits are in [verification evidence](../docs/editor-memory-verification-20261029.md).
 
 Verification on the final implementation worktree: full suite **5,074 passed, 6 skipped**; repository mypy **clean (507 source files)**; repository Ruff reports only the same five existing findings, with no new findings in changed code; `git diff --check` clean. A disposable synthetic SQLite/WAL upgrade reached revision 041 with integrity check `ok`, and repeated backfill was idempotent without deleting legacy rows. The local `instance/dev.db` is inconsistent with its Alembic revision and was not modified.
 

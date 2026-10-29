@@ -98,9 +98,9 @@ def _validate_log_path(path: str) -> list[dict[str, str]]:
         if path_obj.is_symlink():
             target = path_obj.resolve()
             # Check if symlink points to sensitive location
-            sensitive_dirs = ["/etc", "/proc", "/sys", "/dev"]
+            sensitive_dirs = [Path(part).resolve() for part in ("/etc", "/proc", "/sys", "/dev")]
             for sensitive in sensitive_dirs:
-                if str(target).startswith(sensitive):
+                if target == sensitive or sensitive in target.parents:
                     checks.append({
                         "name": f"symlink_sensitive:{path}",
                         "status": "FAIL",
@@ -316,6 +316,35 @@ def configure_rotation(
             _out.info(f"  Validation: {validation_msg}")
 
 
+def _validate_installed_rule(rule: dict) -> list[dict[str, str]]:
+    """Run file, log-path, and logrotate checks for one installed rule."""
+    rule_path = Path(rule["path"])
+    if not rule_path.exists():
+        return [{"name": rule["name"], "status": "FAIL", "message": f"Rule file missing: {rule_path}"}]
+
+    checks: list[dict[str, str]] = []
+    for log_path in rule.get("log_paths", []):
+        checks.extend(_validate_log_path(log_path))
+
+    current_content = rule_path.read_text(encoding="utf-8")
+    current_hash = hashlib.sha256(current_content.encode()).hexdigest()
+    if current_hash != rule.get("content_hash"):
+        checks.append({"name": rule["name"], "status": "WARN", "message": "Rule has been modified since installation"})
+
+    if _check_logrotate():
+        result = subprocess.run(
+            ["logrotate", "-d", str(rule_path)],
+            capture_output=True, text=True, check=False,
+        )
+        if result.returncode != 0:
+            checks.append({"name": rule["name"], "status": "FAIL", "message": result.stderr.strip() or "validation failed"})
+        else:
+            checks.append({"name": rule["name"], "status": "PASS", "message": "logrotate --debug passed"})
+    else:
+        checks.append({"name": rule["name"], "status": "SKIP", "message": "logrotate not available"})
+    return checks
+
+
 @app.command()
 def validate_rotation(
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
@@ -338,31 +367,7 @@ def validate_rotation(
     checks: list[dict[str, str]] = []
 
     for rule in rules:
-        rule_path = Path(rule["path"])
-        if not rule_path.exists():
-            checks.append({"name": rule["name"], "status": "FAIL", "message": f"Rule file missing: {rule_path}"})
-            continue
-
-        # Validate log paths in the rule
-        for log_path in rule.get("log_paths", []):
-            checks.extend(_validate_log_path(log_path))
-
-        current_content = rule_path.read_text(encoding="utf-8")
-        current_hash = hashlib.sha256(current_content.encode()).hexdigest()
-        if current_hash != rule.get("content_hash"):
-            checks.append({"name": rule["name"], "status": "WARN", "message": "Rule has been modified since installation"})
-
-        if _check_logrotate():
-            result = subprocess.run(
-                ["logrotate", "-d", str(rule_path)],
-                capture_output=True, text=True, check=False,
-            )
-            if result.returncode != 0:
-                checks.append({"name": rule["name"], "status": "FAIL", "message": result.stderr.strip() or "validation failed"})
-            else:
-                checks.append({"name": rule["name"], "status": "PASS", "message": "logrotate --debug passed"})
-        else:
-            checks.append({"name": rule["name"], "status": "SKIP", "message": "logrotate not available"})
+        checks.extend(_validate_installed_rule(rule))
 
     failures = [c for c in checks if c["status"] == "FAIL"]
     warnings = [c for c in checks if c["status"] == "WARN"]

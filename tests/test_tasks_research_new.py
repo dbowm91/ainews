@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from services.search.evidence import SearchOutcome, SearchStatus
+
 
 def _make_brief(claims=None, impact_score=50):
     """Helper to build a ResearchBrief with mock claims that have .claim attr.
@@ -176,7 +178,10 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "synthesized"
 
         with (
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch(
+                "services.search.search_web_detailed",
+                return_value=SearchOutcome([mock_search_result], SearchStatus.OK),
+            ) as mock_search,
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.run_subagent", return_value=mock_synthesis),
         ):
@@ -185,8 +190,8 @@ class TestPerformWebSearchAndSynthesis:
         assert len(results) == 1
         assert results[0]["title"] == "Result"
         assert synthesis == "synthesized"
-        mock_provider.search.assert_called_once_with(
-            "Test Title ai", max_results=3,
+        mock_search.assert_called_once_with(
+            "Test Title ai", max_results=3, provider_id="duckduckgo",
         )
 
     def test_uses_default_search_when_no_provider(self):
@@ -217,7 +222,10 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "syn"
 
         with (
-            patch("services.search.search_web", return_value=[mock_search_result]),
+            patch(
+                "services.search.search_web_detailed",
+                return_value=SearchOutcome([mock_search_result], SearchStatus.OK),
+            ),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.run_subagent", return_value=mock_synthesis),
         ):
@@ -238,14 +246,39 @@ class TestPerformWebSearchAndSynthesis:
         rc.web_search_provider = "duckduckgo"
         rc.web_search_max_results = 5
 
-        mock_provider = MagicMock()
-        mock_provider.search.return_value = []
-
-        with patch("services.search.get_search_provider", return_value=mock_provider):
+        with patch(
+            "services.search.search_web_detailed",
+            return_value=SearchOutcome([], SearchStatus.EMPTY),
+        ):
             results, synthesis = _perform_web_search_and_synthesis(article, rc)
 
         assert results == []
         assert synthesis == ""
+
+    def test_unavailable_search_is_logged_differently_from_empty(self, caplog):
+        from tasks.research import _perform_web_search_and_synthesis
+
+        article = MagicMock()
+        article.original_title = "Title"
+        article.topics = []
+        article.id = 42
+        article.extracted_text = ""
+        rc = MagicMock()
+        rc.web_search = True
+        rc.web_search_provider = "eggsearch"
+        rc.web_search_max_results = 5
+        outcome = SearchOutcome(
+            [], SearchStatus.FAILED, provider_attempts=("eggsearch",),
+            provider_failures=("ConnectionError",), deadline_exceeded=True,
+        )
+        with patch("services.search.search_web_detailed", return_value=outcome):
+            results, synthesis = _perform_web_search_and_synthesis(article, rc)
+        assert results == []
+        assert synthesis == ""
+        record = next(record for record in caplog.records if record.message == "Research web search unavailable")
+        assert record.search_status == "failed"
+        assert record.search_deadline_exceeded is True
+        assert record.search_provider_attempts == ("eggsearch",)
 
     def test_uses_tools_when_configured(self):
         """Uses run_subagent_with_tools when stage_config.tools is set."""
@@ -278,7 +311,10 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "tools synthesis"
 
         with (
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch(
+                "services.search.search_web_detailed",
+                return_value=SearchOutcome([mock_search_result], SearchStatus.OK),
+            ),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.initialize_tool_registry", return_value=["tools"]),
             patch("services.subagent.run_subagent_with_tools", return_value=mock_synthesis),
@@ -318,7 +354,10 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "fallback"
 
         with (
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch(
+                "services.search.search_web_detailed",
+                return_value=SearchOutcome([mock_search_result], SearchStatus.OK),
+            ),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.run_subagent", return_value=mock_synthesis),
         ):

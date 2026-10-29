@@ -1472,6 +1472,36 @@ class TestNoGlobalSocketMonkeypatch:
             uconn.create_connection = before_uc
 
 
+def _run_concurrent_fetch_threads(threads, tracking_create, mock_validate):
+    """Run the concurrent fetch batch with process-wide mocks installed once."""
+    with (
+        patch("urllib3.util.connection.create_connection", side_effect=tracking_create),
+        patch(
+            "services.safe_fetch._validate_and_resolve",
+            side_effect=mock_validate,
+        ),
+    ):
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=15)
+
+
+def _assert_concurrent_fetch_results(results, errors, connection_targets):
+    assert len(errors) == 0, f"Errors: {errors}"
+    assert len(results) == 40, f"Expected 40 results, got {len(results)}"
+    for key, result in results.items():
+        assert result.status_code == 200, f"{key}: status {result.status_code}"
+
+    expected_ip_by_prefix = {"s1_": "10.0.0.1", "s2_": "10.0.0.2"}
+    for prefix, expected_ip in expected_ip_by_prefix.items():
+        for key, result in results.items():
+            if key.startswith(prefix):
+                assert expected_ip in result.resolved_ips, f"{key}: missing {expected_ip} in resolved_ips"
+    for target in connection_targets:
+        assert target == "127.0.0.1", f"Connect to wrong target: {target}"
+
+
 class TestConcurrentFetchIsolation:
     """Concurrent fetches to different servers with different IPs must not
     cross-contaminate pin assignments."""
@@ -1529,17 +1559,7 @@ class TestConcurrentFetchIsolation:
 
         # Patch once outside threads to avoid unittest.mock.patch race conditions
         # when multiple threads patch the same target concurrently
-        with (
-            patch("urllib3.util.connection.create_connection", side_effect=tracking_create),
-            patch(
-                "services.safe_fetch._validate_and_resolve",
-                side_effect=mock_validate,
-            ),
-        ):
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join(timeout=15)
+        _run_concurrent_fetch_threads(threads, tracking_create, mock_validate)
 
         try:
             server1.shutdown()
@@ -1547,20 +1567,7 @@ class TestConcurrentFetchIsolation:
         except Exception:  # noqa: BLE001
             pass
 
-        assert len(errors) == 0, f"Errors: {errors}"
-        assert len(results) == 40, f"Expected 40 results, got {len(results)}"
-        for key, r in results.items():
-            assert r.status_code == 200, f"{key}: status {r.status_code}"
-
-        s1_results = {k: r for k, r in results.items() if k.startswith("s1_")}
-        s2_results = {k: r for k, r in results.items() if k.startswith("s2_")}
-        for key, r in s1_results.items():
-            assert "10.0.0.1" in r.resolved_ips, f"{key}: missing 10.0.0.1 in resolved_ips"
-        for key, r in s2_results.items():
-            assert "10.0.0.2" in r.resolved_ips, f"{key}: missing 10.0.0.2 in resolved_ips"
-
-        for target in connection_targets:
-            assert target == "127.0.0.1", f"Connect to wrong target: {target}"
+        _assert_concurrent_fetch_results(results, errors, connection_targets)
 
 
 class TestSocketTargetEqualsSelectedIP:

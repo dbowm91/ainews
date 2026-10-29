@@ -49,3 +49,5 @@ def test_adapter_uses_native_sdk_offline(config_path):
     outcome = provider.search_detailed("offline contract smoke", max_results=1)
     assert outcome.status in {SearchStatus.EMPTY, SearchStatus.FAILED}
     assert outcome.provider_attempts == ("eggsearch",)
+    if outcome.status is SearchStatus.FAILED:
+        assert outcome.provider_failures

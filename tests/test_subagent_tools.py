@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+from services.search.evidence import SearchOutcome, SearchStatus
 
 
 class TestToolRegistry:
@@ -133,13 +134,13 @@ class TestBuiltInTools:
             tool = tools[0]
             assert tool.name == "web_search"
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_result = MagicMock()
                 mock_result.title = "Test Result"
                 mock_result.snippet = "Test snippet content"
                 mock_result.url = "https://example.org/article?a=1&b=2"
                 mock_result.metadata = {"source_id": "source-7"}
-                mock_search.return_value = [mock_result]
+                mock_search.return_value = SearchOutcome([mock_result], SearchStatus.OK)
 
                 result = tool.fn(query="test query", max_results=1)
                 assert "[source-7] Test Result" in result
@@ -154,8 +155,8 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
-                mock_search.return_value = []
+            with patch("services.search.search_web_detailed") as mock_search:
+                mock_search.return_value = SearchOutcome([], SearchStatus.EMPTY)
                 result = tool.fn(query="test query")
                 assert result == "No search results found."
 
@@ -167,7 +168,7 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_search.side_effect = ConnectionError("connection failed")
                 result = tool.fn(query="test query")
                 assert "Error performing web search" in result
@@ -219,7 +220,7 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_search.side_effect = TimeoutError("timeout")
                 result = tool.fn(query="test query")
                 assert "Error performing web search" in result
@@ -232,7 +233,7 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_search.side_effect = ValueError("invalid query")
                 result = tool.fn(query="test query")
                 assert "Error performing web search" in result

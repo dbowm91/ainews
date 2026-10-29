@@ -1,6 +1,6 @@
 # Eggsearch Retrieval Corrective 01 — Result Semantics, Fallback, and Worker Concurrency
 
-**Status:** PLANNED — corrective implementation handoff (2026-10-28).
+**Status:** IN PROGRESS — local semantics, opt-in deadline fallback, bounded concurrency, and research/tool propagation are implemented with focused regressions; supported-host worker lifecycle and full CI evidence remain open (2026-10-28).
 **Baseline:** `plan/eggsearch-web-retrieval-20261028` at `c5d2c3596ee16340202ca7cb2515cfa3e458d290`, `eggsearch==0.4.4`, upstream source/tag `13fcac0b7ac0125d38e4e9775ebe1d62028fda72`.
 **Related roadmap:** [eggsearch_web_retrieval_roadmap.md](eggsearch_web_retrieval_roadmap.md); closes corrective portions of Phase 1 and Phase 2.
 **Priority:** Complete this before a default-provider switch, release qualification, or live research canary.
@@ -70,12 +70,12 @@
 
 ## Closure criteria
 
-- [ ] Generic `generic_context_untrusted` warning with useful results no longer yields false PARTIAL.
-- [ ] Correct upstream `error_class`, status/deadline, and capability enforcement semantics are preserved for the selected projection.
-- [ ] Success, partial, empty, failure and security filtering are distinguishable end to end.
-- [ ] Runtime fallback policy is explicit, bounded by one request deadline, accurately attributed, and regression-tested.
-- [ ] Concurrent searches do not exchange source evidence/status; bounded native lifetime verified.
-- [ ] Research and subagents report failures without hallucinating “no results” or date enforcement.
-- [ ] All tests and operational checks required by this corrective plan are cited; no unsupported “fully completed” claims.
+- [x] Generic `generic_context_untrusted` warning with useful results no longer yields false PARTIAL (local regression).
+- [x] Upstream `error_class`/`failure_class`, compact/standard status, and capability enforcement semantics are preserved conservatively for the selected projection (fixture regressions).
+- [x] Success, partial, empty, failure and security filtering are distinguishable in the service/research/tool paths (local regressions).
+- [x] Runtime fallback policy is explicit, opt-in, deadline-bounded at the caller, accurately attributed, and regression-tested; legacy thread termination remains best-effort.
+- [ ] Concurrent native lifecycle/close stress and worker shutdown/restart are verified on supported worker hosts; the eight-slot bound and per-call ownership have local fake-provider regressions.
+- [x] Research and subagents consume detailed outcomes; unavailable is not rendered as “no results,” and requested-but-unenforced freshness is marked date-unverified (local regressions).
+- [ ] All operational checks required by this corrective plan are cited; no unsupported “fully completed” claims.
 
 **Implementation order:** A -> B -> C -> D -> E. The Phase 3 rollout gate cannot close until all checked.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -57,16 +58,43 @@ class SearchEvidence:
 
 
 @dataclass(frozen=True)
+class ProviderFailure:
+    """Sanitized, bounded provider failure information from upstream."""
+
+    provider_id: str = "unknown"
+    error_class: str = "unknown"
+    message: str = ""
+    retryable: bool = False
+
+
+@dataclass(frozen=True)
 class SearchOutcome:
     results: list[SearchResult]
     status: SearchStatus
     provider_attempts: tuple[str, ...] = ()
     provider_failures: tuple[str, ...] = ()
+    failure_details: tuple[ProviderFailure, ...] = ()
     warnings: tuple[str, ...] = ()
     requested_capabilities: dict[str, Any] = field(default_factory=dict)
-    enforced_capabilities: dict[str, bool] = field(default_factory=dict)
+    enforced_capabilities: dict[str, str] = field(default_factory=dict)
+    deadline_exceeded: bool = False
     duration_ms: float = 0.0
     fallback_used: bool = False
+    retryable: bool = False
+
+    def __post_init__(self) -> None:
+        # Frozen dataclasses are shallow; detach nested result metadata so cached
+        # provider calls cannot share mutable source cards or diagnostics.
+        copied_results = [
+            SearchResult(
+                title=result.title, url=result.url, snippet=result.snippet,
+                source=result.source, metadata=copy.deepcopy(result.metadata),
+            )
+            for result in self.results
+        ]
+        object.__setattr__(self, "results", copied_results)
+        object.__setattr__(self, "requested_capabilities", copy.deepcopy(self.requested_capabilities))
+        object.__setattr__(self, "enforced_capabilities", copy.deepcopy(self.enforced_capabilities))
 
     @classmethod
     def from_legacy(cls, provider_id: str, results: list[SearchResult]) -> "SearchOutcome":

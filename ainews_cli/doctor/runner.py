@@ -27,6 +27,7 @@ from ainews_cli.doctor.checks import (
     _check_celery_workers,
     _check_provider_auth,
     _check_provider_model_availability,
+    _check_eggsearch_installation,
     _check_smtp_connectivity,
     _check_source_connectivity,
     _check_port_conflicts,
@@ -59,6 +60,7 @@ def run_doctor(
     _check_directory_writable(paths.data_dir.path, "data", checks)
     _check_config_files(paths, checks)
     _check_config_validation(paths, checks, production=production)
+    _check_eggsearch_installation(paths, checks)
     _check_secret_permissions(paths, checks)
     _check_database_directory(paths, checks)
     _check_python_available(checks)

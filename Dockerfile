@@ -12,13 +12,22 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
+ARG WITH_EGGSEARCH=0
 COPY uv.lock pyproject.toml ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN if [ "$WITH_EGGSEARCH" = "1" ]; then \
+      uv sync --frozen --no-dev --extra eggsearch --no-build-package eggsearch --no-install-project; \
+    else \
+      uv sync --frozen --no-dev --no-install-project; \
+    fi
 
 RUN uv pip install --system "granian>=1.0.0,<2"
 
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN if [ "$WITH_EGGSEARCH" = "1" ]; then \
+      uv sync --frozen --no-dev --extra eggsearch --no-build-package eggsearch; \
+    else \
+      uv sync --frozen --no-dev; \
+    fi
 
 # Stage 2: Runtime - minimal image without build tools
 FROM python:3.12-slim AS runtime

@@ -20,102 +20,97 @@ def _systemd_bool(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _render_unit_lines(spec: ServiceUnitSpec) -> list[str]:
+    lines = [f"Description={spec.description}"]
+    if spec.documentation:
+        lines.append(f"Documentation={spec.documentation}")
+    if spec.after:
+        lines.append(f"After={' '.join(spec.after)}")
+    if spec.requires:
+        lines.append(f"Requires={' '.join(spec.requires)}")
+    return lines
+
+
+def _render_service_lines(spec: ServiceUnitSpec) -> list[str]:
+    lines = ["Type=simple", f"ExecStart={spec.exec_start}"]
+    for value, directive in (
+        (spec.exec_stop, "ExecStop"),
+        (spec.exec_reload, "ExecReload"),
+        (spec.working_directory, "WorkingDirectory"),
+        (spec.environment_file, "EnvironmentFile"),
+    ):
+        if value:
+            lines.append(f"{directive}={value}")
+    lines.extend([
+        f"Restart={spec.restart_policy.value}",
+        f"RestartSec={spec.restart_sec}",
+        f"TimeoutStartSec={spec.timeout_start_sec}",
+        f"TimeoutStopSec={spec.timeout_stop_sec}",
+    ])
+    for value, directive in ((spec.user, "User"), (spec.group, "Group")):
+        if value:
+            lines.append(f"{directive}={value}")
+    lines.extend([
+        f"StandardOutput={spec.standard_output}",
+        f"StandardError={spec.standard_error}",
+    ])
+    if spec.syslog_identifier:
+        lines.append(f"SyslogIdentifier={spec.syslog_identifier}")
+    lines.extend([
+        f"NoNewPrivileges={_systemd_bool(spec.no_new_privileges)}",
+        f"PrivateTmp={_systemd_bool(spec.private_tmp)}",
+    ])
+    if spec.protect_system:
+        lines.append(f"ProtectSystem={spec.protect_system}")
+    lines.extend([
+        f"ProtectHome={_systemd_bool(spec.protect_home)}",
+        f"UMask={spec.umask}",
+    ])
+    _append_hardening_lines(spec, lines)
+    return lines
+
+
+def _append_hardening_lines(spec: ServiceUnitSpec, lines: list[str]) -> None:
+    """Append optional systemd security directives in their established order."""
+    if spec.capability_bounding_set is not None:
+        lines.append(f"CapabilityBoundingSet={spec.capability_bounding_set}")
+    if spec.ambient_capabilities:
+        lines.append(f"AmbientCapabilities={spec.ambient_capabilities}")
+    flags = (
+        (spec.restrict_namespaces, "RestrictNamespaces"),
+        (spec.restrict_realtime, "RestrictRealtime"),
+        (spec.restrict_suidsgid, "RestrictSUIDSGID"),
+        (spec.memory_deny_write_execute, "MemoryDenyWriteExecute"),
+        (spec.lock_personality, "LockPersonality"),
+    )
+    lines.extend(f"{directive}=true" for enabled, directive in flags if enabled)
+    if spec.system_call_architectures:
+        lines.append(f"SystemCallArchitectures={spec.system_call_architectures}")
+    for enabled, directive in (
+        (spec.private_network, "PrivateNetwork"),
+        (spec.private_devices, "PrivateDevices"),
+        (spec.protect_kernel_tunables, "ProtectKernelTunables"),
+        (spec.protect_kernel_modules, "ProtectKernelModules"),
+        (spec.protect_control_groups, "ProtectControlGroups"),
+        (spec.protect_clock, "ProtectClock"),
+    ):
+        if enabled:
+            lines.append(f"{directive}=true")
+    if spec.restrict_address_families:
+        lines.append(f"RestrictAddressFamilies={spec.restrict_address_families}")
+    if spec.system_call_filter:
+        lines.append(f"SystemCallFilter={spec.system_call_filter}")
+
+
 def render_unit(spec: ServiceUnitSpec) -> RenderedUnit:
     """Render a ServiceUnitSpec into a systemd unit file content string."""
-    sections: list[str] = []
-
-    # [Unit] section
-    unit_lines: list[str] = []
-    unit_lines.append(f"Description={spec.description}")
-    if spec.documentation:
-        unit_lines.append(f"Documentation={spec.documentation}")
-    if spec.after:
-        unit_lines.append(f"After={' '.join(spec.after)}")
-    if spec.requires:
-        unit_lines.append(f"Requires={' '.join(spec.requires)}")
-    sections.append("[Unit]\n" + "\n".join(unit_lines))
-
-    # [Service] section
-    svc_lines: list[str] = []
-    svc_lines.append("Type=simple")
-    svc_lines.append(f"ExecStart={spec.exec_start}")
-    if spec.exec_stop:
-        svc_lines.append(f"ExecStop={spec.exec_stop}")
-    if spec.exec_reload:
-        svc_lines.append(f"ExecReload={spec.exec_reload}")
-    if spec.working_directory:
-        svc_lines.append(f"WorkingDirectory={spec.working_directory}")
-    if spec.environment_file:
-        svc_lines.append(f"EnvironmentFile={spec.environment_file}")
-    svc_lines.append(f"Restart={spec.restart_policy.value}")
-    svc_lines.append(f"RestartSec={spec.restart_sec}")
-    svc_lines.append(f"TimeoutStartSec={spec.timeout_start_sec}")
-    svc_lines.append(f"TimeoutStopSec={spec.timeout_stop_sec}")
-    if spec.user:
-        svc_lines.append(f"User={spec.user}")
-    if spec.group:
-        svc_lines.append(f"Group={spec.group}")
-    svc_lines.append(f"StandardOutput={spec.standard_output}")
-    svc_lines.append(f"StandardError={spec.standard_error}")
-    if spec.syslog_identifier:
-        svc_lines.append(f"SyslogIdentifier={spec.syslog_identifier}")
-    # Hardening
-    svc_lines.append(f"NoNewPrivileges={_systemd_bool(spec.no_new_privileges)}")
-    svc_lines.append(f"PrivateTmp={_systemd_bool(spec.private_tmp)}")
-    if spec.protect_system:
-        svc_lines.append(f"ProtectSystem={spec.protect_system}")
-    svc_lines.append(f"ProtectHome={_systemd_bool(spec.protect_home)}")
-    svc_lines.append(f"UMask={spec.umask}")
-    # Capability management
-    if spec.capability_bounding_set is not None:
-        svc_lines.append(f"CapabilityBoundingSet={spec.capability_bounding_set}")
-    if spec.ambient_capabilities:
-        svc_lines.append(f"AmbientCapabilities={spec.ambient_capabilities}")
-    # Namespace restrictions
-    if spec.restrict_namespaces:
-        svc_lines.append("RestrictNamespaces=true")
-    if spec.restrict_realtime:
-        svc_lines.append("RestrictRealtime=true")
-    if spec.restrict_suidsgid:
-        svc_lines.append("RestrictSUIDSGID=true")
-    # Memory and personality
-    if spec.memory_deny_write_execute:
-        svc_lines.append("MemoryDenyWriteExecute=true")
-    if spec.lock_personality:
-        svc_lines.append("LockPersonality=true")
-    if spec.system_call_architectures:
-        svc_lines.append(f"SystemCallArchitectures={spec.system_call_architectures}")
-    # Network restrictions
-    if spec.private_network:
-        svc_lines.append("PrivateNetwork=true")
-    # Device restrictions
-    if spec.private_devices:
-        svc_lines.append("PrivateDevices=true")
-    # Kernel protection
-    if spec.protect_kernel_tunables:
-        svc_lines.append("ProtectKernelTunables=true")
-    if spec.protect_kernel_modules:
-        svc_lines.append("ProtectKernelModules=true")
-    if spec.protect_control_groups:
-        svc_lines.append("ProtectControlGroups=true")
-    if spec.protect_clock:
-        svc_lines.append("ProtectClock=true")
-    # Address families
-    if spec.restrict_address_families:
-        svc_lines.append(f"RestrictAddressFamilies={spec.restrict_address_families}")
-    # System call filter
-    if spec.system_call_filter:
-        svc_lines.append(f"SystemCallFilter={spec.system_call_filter}")
-    sections.append("[Service]\n" + "\n".join(svc_lines))
-
-    # [Install] section
-    install_lines: list[str] = []
-    install_lines.append(f"WantedBy={spec.wanted_by}")
-    sections.append("[Install]\n" + "\n".join(install_lines))
-
+    sections = [
+        "[Unit]\n" + "\n".join(_render_unit_lines(spec)),
+        "[Service]\n" + "\n".join(_render_service_lines(spec)),
+        "[Install]\n" + f"WantedBy={spec.wanted_by}",
+    ]
     content = _GENERATOR_COMMENT + "\n\n" + "\n\n".join(sections) + "\n"
     filename = f"{spec.name}.service"
-
     return RenderedUnit(
         spec=spec,
         content=content,

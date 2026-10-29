@@ -4,7 +4,7 @@ This document covers the search provider infrastructure in the AI news pipeline.
 
 ## Overview
 
-Search providers enable web search functionality for the pipeline (primarily for research stages). They follow a common interface and support fallback chains, circuit breaking, and SSRF protection.
+Search providers enable web search functionality for the pipeline (primarily for research stages). They follow a common interface; provider-specific circuit breaking and SSRF controls apply where supported. Runtime retry fallback is a separate, opt-in policy configured through `search_runtime_fallback_providers`.
 
 ## Base Class
 
@@ -78,6 +78,13 @@ search_providers:
     config: {}  # FTS5 + vector similarity search
 
 default_search_provider: duckduckgo
+
+# Runtime retries are opt-in and require enabled provider IDs.
+# They apply to transient failures of the configured default only; explicit
+# provider overrides are never silently substituted. Legacy [] is ambiguous and
+# is treated as EMPTY rather than proof of failure.
+search_runtime_fallback_providers: []
+search_runtime_deadline_seconds: 20
 ```
 
 ### DuckDuckGo (`services/search/duckduckgo.py`)
@@ -139,9 +146,13 @@ search_providers:
 
 Eggsearch is an **opt-in, qualification-only** external metasearch adapter. Version `0.4.4` is published and pinned as an optional extra, not a default dependency: install it with `uv sync --extra eggsearch` or `pip install '.[eggsearch]'`. It does not launch an MCP sidecar, and the Python binding is imported lazily. The provider remains disabled in sample configuration. Do not enable it for production until the qualification record's outstanding security and rollout gates pass. For isolated testing, provide a readable absolute `config_path` and explicitly enable the provider in `providers.yaml`; do not use a working-directory-relative or developer-local path. Search failures are represented by `search_web_detailed()` as `failed`; valid empty responses remain `empty`. The compatibility `search_web()` API continues to return lists.
 
-Eggsearch result cards are structured data and undergo HTTP(S)/SSRF URL validation. Provider IDs and source IDs are preserved in `SearchResult.metadata`; publication timestamps are preserved only when timezone-aware and parseable. Requested freshness is not proof of enforcement. Eggsearch's own `web_fetch` is not used; source hydration must continue through `services/safe_fetch.py`.
+Eggsearch requests a small, hard-capped result headroom (up to five extra cards, never more than 20) so invalid/unsafe cards do not unnecessarily underfill the caller's validated result limit; output remains capped at the requested count. Result cards are structured data and undergo HTTP(S)/SSRF URL validation. Provider IDs and source IDs are preserved in `SearchResult.metadata`; publication timestamps are preserved only when timezone-aware and parseable. Standard retrieval telemetry is mapped per capability; compact aggregate counts do not prove enforcement. Requested freshness is not proof of enforcement, so affected results are marked `freshness_status=date_unverified`. Eggsearch's own `web_fetch` is not used; source hydration must continue through `services/safe_fetch.py`.
 
-**Release status:** published 0.4.4 ARM64/x86_64 artifacts and tool fingerprint are verified locally. The macOS symlink-containment test failure, full platform/clean-host matrix, runtime fallback, and live corpus A/B/canary remain unqualified. Keep Eggsearch disabled until the linked roadmap and qualification record show the gates passed.
+Runtime fallback is disabled unless `search_runtime_fallback_providers` names enabled IDs. It retries classified transient failures only, shares `search_runtime_deadline_seconds` across attempts, never substitutes for an explicit provider override, and never treats a valid empty result as an outage. A bounded eight-slot worker pool caps concurrent calls. The caller deadline is enforced, but Python cannot forcibly terminate an already-running legacy provider thread; timeout cancellation is best-effort for those legacy calls. The Eggsearch adapter also applies the remaining budget to its async request and close. Operators should use `search_web_detailed()` when status, attempts, fallback, or capability telemetry is needed; `search_web()` remains a list-only compatibility wrapper.
+
+To build an opt-in Docker image, use `docker build --build-arg WITH_EGGSEARCH=1 ...`; the build requires the published binary wheel (`--no-build-package eggsearch`) and does not compile Eggsearch from source. Default images omit Eggsearch. Package installation does not enable the provider: its `providers.yaml` entry remains disabled until separately configured and qualified.
+
+**Release status:** published 0.4.4 ARM64/x86_64 artifacts and tool fingerprints have local verification evidence. The local runtime fallback and semantics have deterministic tests, but have not passed PR CI or Linux/clean-host qualification. The upstream macOS symlink-containment failure, full platform matrix, comparative corpus evaluation, and approved canary/rollback remain release gates. Keep Eggsearch disabled until the linked roadmap and qualification record show all required gates passed.
 
 ### Hybrid (`services/search/hybrid.py`)
 

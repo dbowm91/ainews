@@ -17,6 +17,7 @@ concurrency:
 # Branch protection must require ALL of these jobs to pass before merge:
 #
 #   lint-and-test        — ruff lint + mypy type-check + pytest with coverage
+#   eggsearch-wheel-matrix — published optional wheel on Linux x86_64/aarch64
 #   pip-audit            — dependency vulnerability scan
 #   trivy                — filesystem vulnerability scan
 #   docker-build         — image build + testing/prod smoke
@@ -69,6 +70,37 @@ jobs:
       - name: Run mypy
         run: .venv/bin/mypy . --exclude .venv
 
+  eggsearch-wheel-matrix:
+    name: Eggsearch wheel (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install optional published wheel and test dependencies
+        run: uv sync --frozen --extra dev --extra eggsearch --no-build-package eggsearch
+
+      - name: Verify installed distribution
+        run: .venv/bin/python -c "from importlib.metadata import version; print('eggsearch', version('eggsearch'))"
+
+      - name: Test adapter, native contract, and runtime fallback
+        run: .venv/bin/python -m pytest tests/test_search_eggsearch.py tests/test_search_eggsearch_native.py tests/test_search_eggsearch_native_adapter.py tests/test_search_fallback.py -q
+
   pip-audit:
     runs-on: ubuntu-latest
 
@@ -119,6 +151,14 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t ainews-ci .
+
+      - name: Build optional Eggsearch image
+        run: docker build --build-arg WITH_EGGSEARCH=1 -t ainews-ci-eggsearch .
+
+      - name: Verify Eggsearch is installed only in opted-in image
+        run: |
+          docker run --rm ainews-ci python -c "from importlib.util import find_spec; assert find_spec('eggsearch') is None"
+          docker run --rm ainews-ci-eggsearch python -c "from importlib.metadata import version; print(version('eggsearch'))"
 
       - name: Smoke test image starts
         run: |

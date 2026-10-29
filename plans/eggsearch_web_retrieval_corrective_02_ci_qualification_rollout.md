@@ -1,6 +1,6 @@
 # Eggsearch Retrieval Corrective 02 — CI Qualification, Deployment, and Rollout Decision
 
-**Status:** PLANNED — release/validation corrective handoff (2026-10-28).
+**Status:** IN PROGRESS — Linux architecture and Docker opt-in CI checks are added but unrun on this branch; platform qualification, comparative evaluation, and canary/rollback gates remain open (2026-10-28).
 **Depends on:** [Corrective 01](eggsearch_web_retrieval_corrective_01_result_semantics_fallback.md) for accurate result and fallback semantics. This plan closes remaining Phase 3 gates; it does **not** itself authorize a default change.
 **Baseline:** `plan/eggsearch-web-retrieval-20261028` at `c5d2c3596ee16340202ca7cb2515cfa3e458d290`.
 **Security constraint:** Only expose eggsearch's search tool in this line; no repo/local tools and no `web_fetch`/browser/PDF fetching from the eggsearch client. Continue using `services/safe_fetch.py` for untrusted article content.

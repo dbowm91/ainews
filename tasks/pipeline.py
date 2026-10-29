@@ -89,14 +89,14 @@ def _assign_tags(articles, tag_names: list[str], db):
     article_ids = [a.id for a in articles]
 
     existing_links = {
-        r[0]
-        for r in db.session.execute(
+        (row[0], row[1])
+        for row in db.session.execute(
             article_tags.select()
             .where(
                 (article_tags.c.article_id.in_(article_ids))
                 & (article_tags.c.tag_id.in_(tag_ids)),
             )
-            .with_only_columns(article_tags.c.tag_id),
+            .with_only_columns(article_tags.c.article_id, article_tags.c.tag_id),
         ).all()
     }
 
@@ -116,7 +116,17 @@ def _acquire_stage_lock(redis_client, lock_key, task_id, timeout_seconds):
 
     try:
         acquired = redis_client.set(lock_key, task_id, nx=True, ex=timeout_seconds)
-        return acquired
+        if acquired:
+            return True
+        owner = redis_client.get(lock_key)
+        if isinstance(owner, bytes):
+            owner = owner.decode("utf-8", errors="replace")
+        if owner == task_id:
+            # Celery can redeliver an acks-late task with the same task ID
+            # after worker loss. Reclaim only its own lock, never another task's.
+            redis_client.expire(lock_key, timeout_seconds)
+            return True
+        return False
     except redis.exceptions.RedisError:
         logger.warning("Could not acquire stage lock, Redis unavailable")
         return False
@@ -141,6 +151,9 @@ def _transition_article_status(article, new_status: str) -> None:
     Validates the transition is allowed before updating. If validation fails,
     raises InvalidStateTransitionError.
 
+    In auto-review mode a transition *to* review publishes the article
+    instead of queueing it, because there is nobody waiting to approve it.
+
     Args:
         article: The Article instance
         new_status: The target status
@@ -148,7 +161,13 @@ def _transition_article_status(article, new_status: str) -> None:
     Raises:
         InvalidStateTransitionError: If the transition is not valid
     """
-    from constants import is_valid_transition
+    from constants import PipelineStatus, is_valid_transition
+
+    if new_status == PipelineStatus.REVIEW:
+        from services.auto_review import route_to_review
+
+        route_to_review(article)
+        return
 
     current = article.pipeline_status
     if not is_valid_transition(current, new_status):
@@ -314,8 +333,26 @@ def _run_stage_core(stage, article_id, work_fn, rc, t0, run_id):
         return {"article_id": article_id, "error": "not found"}, None, None
     
     if article.pipeline_started_at is not None:
-        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-        elapsed = (now_utc - article.pipeline_started_at).total_seconds()
+        now_utc = datetime.now(timezone.utc)
+        started_at = article.pipeline_started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        else:
+            started_at = started_at.astimezone(timezone.utc)
+
+        # Extraction can precede pipeline dispatch by hours or days. A pending
+        # article has not entered an active stage yet, so start its timeout at
+        # this first stage execution rather than dead-lettering it as stale.
+        if article.pipeline_status == PipelineStatus.PENDING:
+            article.pipeline_started_at = now_utc.replace(tzinfo=None)
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+            started_at = now_utc
+
+        elapsed = (now_utc - started_at).total_seconds()
         timeout = _get_pipeline_timeout_seconds()
         if elapsed > timeout:
             logger.error("Article %s exceeded pipeline timeout (%.0fs > %ds), dead-lettering", article_id, elapsed, timeout)
@@ -374,8 +411,21 @@ def run_stage(
     task_id = task_self.request.id or "manual"
     t0 = time.monotonic()
 
-    provider_info = _get_provider_for_stage(stage)
-    rc.provider, rc.model = provider_info[0], provider_info[1]
+    # Resolving the provider chain can fail on its own -- no provider at all,
+    # or a provider that cannot be constructed. It used to happen outside the
+    # try block below, so the failure escaped the stage untouched: no
+    # pipeline log, no error on the article, no metric. The article simply
+    # sat in `pending` with nothing to show for it.
+    try:
+        provider_info = _get_provider_for_stage(stage)
+    except CircuitOpenError as ce:
+        return _handle_circuit_open_module(ce, stage, run_id, t0, article_id)
+    except Exception as e:  # noqa: BLE001 - recorded and reported like any other stage failure
+        return _handle_stage_exception(e, stage, article_id, run_id, t0, None, None)
+
+    # Provider-chain entries are (provider, model, max_tokens, provider_id).
+    # The limiter keys its slots by provider ID, not the provider instance.
+    rc.provider, rc.model = provider_info[3], provider_info[1]
     limiter, redis_client, lock_acquired = _acquire_stage_resources(rc, task_self, retry_countdown, retry_max, lock_key, task_id)
     if not lock_acquired:
         if limiter is not None:

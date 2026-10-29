@@ -292,6 +292,52 @@ class TestArticleEditPage:
 
             resp = auth_client.get(f"/admin/articles/{article_id}/edit")
             assert resp.status_code == 200
+            assert b'name="csrf_token"' in resp.data
+
+    def test_edit_form_post_accepts_its_hidden_csrf_field(
+        self, auth_client, app, create_article
+    ):
+        """HTML form submissions use their hidden token, not an X-CSRFToken header."""
+        import re
+
+        from extensions import db
+        from models import Article
+        from routes.admin.articles import _admin_categories
+
+        app.config["WTF_CSRF_ENABLED"] = True
+        with app.app_context():
+            article = create_article()
+            db.session.commit()
+            article_id = article.id
+
+            edit_url = f"/admin/articles/{article_id}/edit"
+            form_response = auth_client.get(edit_url)
+            assert form_response.status_code == 200
+            token_match = re.search(
+                rb'name="csrf_token" value="([^"]+)"', form_response.data
+            )
+            assert token_match is not None
+
+            response = auth_client.post(
+                edit_url,
+                data={
+                    "csrf_token": token_match.group(1).decode(),
+                    "headline": "Updated headline",
+                    "tldr": "Summary",
+                    "why_it_matters": "Context",
+                    "body": "Article body",
+                    "what_to_watch": "Next steps",
+                    "key_points": "One point",
+                    "tags": "test",
+                    "category": _admin_categories()[0],
+                    "pipeline_status": "review",
+                },
+            )
+
+            assert response.status_code == 302
+            updated = db.session.get(Article, article_id)
+            assert updated is not None
+            assert '"headline": "Updated headline"' in updated.final_article
 
 
 class TestOriginalArticleView:

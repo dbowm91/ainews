@@ -49,12 +49,28 @@ PIPELINE_STAGES = ("crawl", "select", "research", "write", "edit")
 
 # Valid pipeline status transitions
 # Each status maps to the set of statuses it can transition to
+#
+# Every edge here has to match a transition the pipeline actually performs.
+# A missing edge does not merely reject a transition -- it raises
+# InvalidStateTransitionError in the middle of a stage, which strands the
+# article in its current status. It then sits there until the retry task
+# dead-letters it an hour later as "stuck in 'pending'".
 VALID_TRANSITIONS: dict[str, frozenset] = {
-    PipelineStatus.PENDING: frozenset([PipelineStatus.SELECTING, PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
+    # pending -> skipped: the selector rejects the article (tasks/select.py)
+    # pending -> failed:  the pipeline times out before the first stage moves
+    #                     the article on (tasks/pipeline.py)
+    PipelineStatus.PENDING: frozenset([
+        PipelineStatus.SELECTING,
+        PipelineStatus.RESEARCHING,
+        PipelineStatus.REVIEW,
+        PipelineStatus.SKIPPED,
+        PipelineStatus.FAILED,
+    ]),
     PipelineStatus.SELECTING: frozenset([PipelineStatus.SELECTED, PipelineStatus.FAILED]),
     PipelineStatus.SELECTED: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.FAILED]),
     PipelineStatus.RESEARCHING: frozenset([PipelineStatus.WRITING, PipelineStatus.FAILED]),
-    PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
+    # writing -> review: the writer's quality gate routes the draft to review
+    PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.REVIEW, PipelineStatus.FAILED]),
     PipelineStatus.WRITTEN: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
     PipelineStatus.EDITING: frozenset([PipelineStatus.REVIEW, PipelineStatus.DONE, PipelineStatus.FAILED]),
     PipelineStatus.REVIEW: frozenset([PipelineStatus.DONE, PipelineStatus.FAILED]),

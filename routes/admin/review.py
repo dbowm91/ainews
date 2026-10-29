@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime, timezone
 
 from flask import jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
@@ -7,7 +6,7 @@ from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 from routes.admin import admin_bp, require_auth
-from routes.decorators import validate_csrf_json
+from routes.decorators import validate_csrf_token
 from services.cache import get_response_cache
 from services.audit import log_admin_action
 
@@ -62,56 +61,27 @@ def review_queue():
 
 
 @admin_bp.route("/review/<int:article_id>/approve", methods=["POST"])
-@validate_csrf_json
+@validate_csrf_token
 @require_auth
 def approve_article(article_id):
     from extensions import db
     from models import Article
 
+    from services.auto_review import approve_article as publish
+
     article = db.get_or_404(Article, article_id)
     if article.pipeline_status != PipelineStatus.REVIEW:
         return jsonify({"error": "Article is not in review"}), 400
 
-    article.pipeline_status = PipelineStatus.DONE
-    article.retry_count = 0
-    article.last_error = None
-    article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
     try:
+        # The same primitive the auto-approver uses, so a human-approved
+        # article and an auto-approved one end up in the same state.
+        publish(article, reason="admin")
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"error": "Failed to approve article"}), 500
-
-    log_admin_action(
-        "article_approve",
-        target_type="article",
-        target_id=article.id,
-        details={"original_title": article.original_title},
-        category="article",
-    )
-
-    if article.crawled_at:
-        sla_duration = (article.published_at - article.crawled_at).total_seconds()
-        from services.metrics import get_metrics
-
-        get_metrics().histogram_observe("pipeline_sla_seconds", sla_duration)
-
-    try:
-        from services.cache import get_response_cache
-
-        cache = get_response_cache()
-        cache.invalidate_prefix("pub:index")
-        cache.invalidate_prefix("pub:topic")
-        cache.invalidate_prefix("pub:rss_feed")
-        if article.category:
-            cache.invalidate_prefix(f"pub:topic:{article.category}")
-    except Exception as e:  # noqa: BLE001
-        logger.warning("Failed to invalidate article cache: %s", e)
-
-    logger.info(
-        "Approved article %s: %s", article_id, (article.original_title or "")[:50],
-    )
 
     if request.headers.get("HX-Request"):
         return "", 200
@@ -119,7 +89,7 @@ def approve_article(article_id):
 
 
 @admin_bp.route("/review/<int:article_id>/reject", methods=["POST"])
-@validate_csrf_json
+@validate_csrf_token
 @require_auth
 def reject_article(article_id):
     from extensions import db

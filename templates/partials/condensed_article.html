@@ -29,7 +29,7 @@
 {% if fa.tldr %}
   <div class="article-tldr">
     <span class="tldr-label">tl;dr</span>
-    {{ fa.tldr }}
+    {{ fa.tldr|inline_html }}
   </div>
 {% endif %}
 
@@ -37,7 +37,7 @@
 {% if fa.why_it_matters %}
   <section class="article-why-matters">
     <h2 class="section-heading">why it matters</h2>
-    <div class="why-matters-text">{{ fa.why_it_matters }}</div>
+    <div class="why-matters-text">{{ fa.why_it_matters|markdown_html }}</div>
   </section>
 {% endif %}
 
@@ -47,7 +47,7 @@
     <h2 class="section-heading">key takeaways{% if fa.key_points|length > (max_key_points or 5) %} <span class="keypoints-count">({{ fa.key_points|length }} total)</span>{% endif %}</h2>
     <ul class="keypoints-list">
       {% for point in fa.key_points[:max_key_points or 5] %}
-        <li>{{ point }}</li>
+        <li>{{ point|inline_html }}</li>
       {% endfor %}
     </ul>
     {% if fa.key_points|length > (max_key_points or 5) %}
@@ -60,16 +60,19 @@
 {% if fa.body %}
   <section class="article-body-section">
     <h2 class="section-heading">condensed article</h2>
-    <div class="article-body">{{ fa.body }}</div>
+    <div class="article-body">{{ fa.body|body_html }}</div>
   </section>
 {% endif %}
 
 {# What To Watch #}
+{# Rendered inline, like every other section of the condensed article. It was
+   a <details> disclosure, which hid the single most forward-looking part of
+   the summary behind a click and broke the reading rhythm of the page. #}
 {% if fa.what_to_watch %}
-  <details class="article-what-to-watch">
-    <summary class="section-heading">what to watch <span class="details-arrow">&#9658;</span></summary>
-    <div class="what-to-watch-text">{{ fa.what_to_watch }}</div>
-  </details>
+  <section class="article-what-to-watch">
+    <h2 class="section-heading">what to watch</h2>
+    <div class="what-to-watch-text">{{ fa.what_to_watch|markdown_html }}</div>
+  </section>
 {% endif %}
 
 {# Tags #}
@@ -89,7 +92,7 @@
       <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" fill="none" stroke="currentColor" stroke-width="1.5"/>
     </svg>
   </div>
-  <span class="agent-name">this summary brought to you by <em>{{ (article.writer_model or 'ai agent')|e }}</em></span>
+  <span class="agent-name">this summary brought to you by <em>{{ article|agent_name|e }}</em></span>
 </div>
 
 {# References #}

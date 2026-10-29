@@ -114,7 +114,22 @@ class Config:
     ]
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SEND_FILE_MAX_AGE_DEFAULT = 31536000  # 1 year for static assets
+
+    # Static assets are served with revalidation rather than a long max-age.
+    # The asset URLs do not change when their contents do (there is no
+    # content hash in the filename), so a one year cache pins every
+    # returning visitor to the stylesheet they happened to load first: a CSS
+    # change then reaches the server but never reaches the browser. With
+    # `no-cache` the browser revalidates with the ETag and gets a 304 when
+    # nothing changed.
+    SEND_FILE_MAX_AGE_DEFAULT = 0
+
+    # Rendered-page cache. Disabled in the testing configuration so a test
+    # run never publishes throwaway documents into a shared Redis instance.
+    RESPONSE_CACHE_ENABLED = True
+    # The in-process cache layer expires quickly so that an invalidation
+    # applied by another worker becomes visible here within seconds.
+    L1_CACHE_TTL = 5
 
     # Session security
     SESSION_COOKIE_HTTPONLY = True
@@ -242,6 +257,7 @@ class Config:
         trend_memory_hour = int(sched.get("consolidate_trend_memory_hour", 3))
         cleanup_subscribers_hour = int(sched.get("cleanup_inactive_subscribers_hour", 1))
         cleanup_subscribers_minute = int(sched.get("cleanup_inactive_subscribers_minute", 0))
+        auto_approve_interval = int(sched.get("auto_approve_interval_minutes", 1))
 
         return {
             "run-all-sources": {
@@ -279,6 +295,10 @@ class Config:
             "publish-scheduled-articles": {
                 "task": "tasks.scheduler.publish_scheduled_articles",
                 "schedule": timedelta(minutes=publish_interval),
+            },
+            "auto-approve-review-articles": {
+                "task": "tasks.scheduler.auto_approve_review_articles",
+                "schedule": timedelta(minutes=auto_approve_interval),
             },
             "cleanup-stale-limiter-slots": {
                 "task": "tasks.cleanup.cleanup_stale_limiter_slots",
@@ -331,11 +351,22 @@ class DevelopmentConfig(Config):
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
 
+    # The rendered-page cache is a production concern. In development it
+    # makes every template and CSS change look like it did not take effect:
+    # a cached document keeps serving the previous markup -- including the
+    # inlined critical stylesheet -- for up to the cache TTL, so the page
+    # shows the old layout until the entry expires. Production keeps it.
+    RESPONSE_CACHE_ENABLED = False
+
 
 class TestingConfig(DevelopmentConfig):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
+    # A test run renders pages against a throwaway database. Caching those
+    # documents would publish them into a Redis instance that a development
+    # or production instance may also be using.
+    RESPONSE_CACHE_ENABLED = False
 
 
 class ProductionConfig(Config):

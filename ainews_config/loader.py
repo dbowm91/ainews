@@ -244,6 +244,32 @@ def _build_provenance_from_yaml(
     return provenance
 
 
+def _normalize_legacy_provider_list(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the legacy list-based providers.yaml shape for shared validation.
+
+    The Flask app still reads ``providers: [{id, type, enabled, config}]`` while
+    the shared config engine stores providers as an ID-keyed mapping.
+    """
+    raw_providers = data.get("providers")
+    if not isinstance(raw_providers, list):
+        return data
+
+    provider_map: dict[str, dict[str, Any]] = {}
+    for provider in raw_providers:
+        if not isinstance(provider, dict):
+            return data
+        provider_id = provider.get("id")
+        if not isinstance(provider_id, str) or not provider_id or provider_id in provider_map:
+            return data
+        provider_map[provider_id] = {
+            key: value for key, value in provider.items() if key != "id"
+        }
+
+    normalized = dict(data)
+    normalized["providers"] = provider_map
+    return normalized
+
+
 def _validate_providers_schema(
     data: dict[str, Any], file_name: str
 ) -> list[Diagnostic]:
@@ -375,7 +401,10 @@ def _validate_topics_schema(
     data: dict[str, Any], file_name: str
 ) -> list[Diagnostic]:
     diags: list[Diagnostic] = []
-    for tid, tval in data.items():
+    legacy_topics = data.get("topics")
+    uses_legacy_topic_format = isinstance(legacy_topics, dict)
+    topic_items = legacy_topics if uses_legacy_topic_format else data
+    for tid, tval in topic_items.items():
         if not isinstance(tval, dict):
             diags.append(
                 Diagnostic(
@@ -388,7 +417,9 @@ def _validate_topics_schema(
                 )
             )
             continue
-        if "query" not in tval:
+        if "query" not in tval and not (
+            uses_legacy_topic_format and isinstance(tval.get("display_name"), str)
+        ):
             diags.append(
                 Diagnostic(
                     severity="error",
@@ -445,6 +476,7 @@ def load_all_configs(
             resolved_data = data
 
         if provenance_prefix == "providers" and isinstance(resolved_data, dict):
+            resolved_data = _normalize_legacy_provider_list(resolved_data)
             providers_data = resolved_data
             all_diags.extend(
                 _validate_providers_schema(resolved_data, file_path.name)

@@ -6,7 +6,12 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from schemas.common import BASE_DIR, cached_config_with_mtime, load_yaml_file
+from schemas.common import (
+    BASE_DIR,
+    cached_config_with_mtime,
+    config_cache_key,
+    load_yaml_file,
+)
 
 
 class SourceType(str, Enum):
@@ -146,7 +151,7 @@ def _load_sources_from_file(path: Path) -> list[SourceConfig]:
 
 def load_sources(path: str | Path = BASE_DIR / "sources.yaml") -> list[SourceConfig]:
     return cached_config_with_mtime(  # type: ignore[type-var]
-        key="sources",
+        key=config_cache_key("sources", path),
         loader_fn=lambda: _load_sources_from_file(Path(path)),
         config_path=Path(path),
     )

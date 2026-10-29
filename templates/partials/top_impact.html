@@ -1,3 +1,27 @@
+{#
+  Top stories: one lead plus the rest.
+
+  The lead is the highest ranked story and gets the editorial headline
+  treatment; the secondaries are a single line each. On narrow viewports
+  the lead renders first and the secondaries stack below it.
+#}
+{% macro top_impact_card(article, lead=False) %}
+  <a href="/article/{{ article.id }}"
+     hx-get="{{ url_for('public.article_detail', article_id=article.id) }}"
+     hx-target="#content" hx-swap="innerHTML" hx-push-url="true"
+     class="top-impact-card{% if lead %} top-impact-card--lead{% endif %}">
+    <div class="top-impact-meta">
+      <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
+      <span class="card-time">{{ article.created_at.strftime('%b %d') if article.created_at }}</span>
+    </div>
+    <span class="top-impact-headline">
+      {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}
+    </span>
+    {% if article._fa and article._fa.tldr %}
+      <span class="top-impact-tldr">{{ article._fa.tldr[:160]|e }}{% if article._fa.tldr|length > 160 %}...{% endif %}</span>
+    {% endif %}
+  </a>
+{% endmacro %}
 {% if top_impact %}
   <section class="top-impact">
     <div class="top-impact-header">
@@ -5,23 +29,14 @@
       <span class="top-impact-subtitle">from the past 24 hours</span>
     </div>
     <div class="top-impact-grid">
-      {% for article in top_impact %}
-        <a href="/article/{{ article.id }}"
-           hx-get="{{ url_for('public.article_detail', article_id=article.id) }}"
-           hx-target="#content" hx-swap="innerHTML" hx-push-url="true"
-           class="top-impact-card">
-          <div class="top-impact-meta">
-            <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
-            <span class="card-time">{{ article.created_at.strftime('%b %d') if article.created_at }}</span>
-          </div>
-          <span class="top-impact-headline">
-            {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}
-          </span>
-          {% if article._fa and article._fa.tldr %}
-            <span class="top-impact-tldr">{{ article._fa.tldr[:120]|e }}{% if article._fa.tldr|length > 120 %}...{% endif %}</span>
-          {% endif %}
-        </a>
-      {% endfor %}
+      {{ top_impact_card(top_impact[0], lead=True) }}
+      {% if top_impact|length > 1 %}
+      <div class="top-impact-secondary">
+        {% for article in top_impact[1:] %}
+          {{ top_impact_card(article) }}
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </section>
 {% endif %}

@@ -27,22 +27,37 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
 
-  /* Font sizes (fluid typography with clamp()) */
-  --text-xs: clamp(0.6875rem, 0.65rem + 0.2vw, 0.75rem);    /* 11-12px */
-  --text-sm: clamp(0.75rem, 0.7rem + 0.3vw, 0.8125rem);    /* 12-13px */
-  --text-base: clamp(0.875rem, 0.8rem + 0.5vw, 0.9375rem);  /* 14-15px */
-  --text-md: clamp(0.875rem, 0.8rem + 0.5vw, 0.9375rem);   /* 14-15px */
-  --text-lg: clamp(0.9375rem, 0.85rem + 0.6vw, 1rem);      /* 15-16px */
-  --text-xl: clamp(1rem, 0.9rem + 0.8vw, 1.0625rem);      /* 16-17px */
-  --text-2xl: clamp(1.0625rem, 0.95rem + 1vw, 1.125rem);  /* 17-18px */
-  --text-3xl: clamp(1.125rem, 1rem + 1.2vw, 1.25rem);     /* 18-20px */
-  --text-4xl: clamp(1.25rem, 1.1rem + 1.4vw, 1.375rem);   /* 20-22px */
-  --text-5xl: clamp(1.375rem, 1.2rem + 1.6vw, 1.5rem);    /* 22-24px */
-  --text-6xl: clamp(1.5rem, 1.3rem + 2.5vw, 1.75rem);    /* 24-28px */
-  --text-7xl: clamp(1.75rem, 1.5rem + 3vw, 2rem);          /* 28-32px */
+  /* Font sizes (fluid typography with clamp())
+
+     Four editorial tiers sit above the UI sizes:
+
+       --text-xs    11-12px       badge, label, uppercase section rule
+       --text-sm    12.5-13.5px   metadata row
+       --text-md    14-15px       navigation, secondary UI
+       --text-lg    16-17px       deck / summary / body prose
+       --text-xl    18-20px       card headline
+       --text-2xl   22-26px       lead-story headline, page title
+       --text-3xl   28-34px       article detail headline
+
+     These are structural type sizes, not palette tokens. The theme system
+     deliberately does not override them, in the same way it does not
+     override --font-sans or --radius-*.
+  */
+  --text-xs: clamp(0.6875rem, 0.65rem + 0.2vw, 0.75rem);        /* 11-12px */
+  --text-sm: clamp(0.78125rem, 0.74rem + 0.3vw, 0.84375rem);    /* 12.5-13.5px */
+  --text-base: clamp(0.875rem, 0.8rem + 0.5vw, 0.9375rem);      /* 14-15px */
+  --text-md: clamp(0.875rem, 0.8rem + 0.5vw, 0.9375rem);        /* 14-15px */
+  --text-lg: clamp(1rem, 0.92rem + 0.6vw, 1.0625rem);           /* 16-17px */
+  --text-xl: clamp(1.125rem, 1rem + 0.8vw, 1.25rem);            /* 18-20px */
+  --text-2xl: clamp(1.375rem, 1.15rem + 1.2vw, 1.625rem);       /* 22-26px */
+  --text-3xl: clamp(1.75rem, 1.4rem + 1.8vw, 2.125rem);         /* 28-34px */
+  --text-4xl: clamp(2rem, 1.6rem + 2.2vw, 2.5rem);              /* 32-40px */
+  --text-5xl: clamp(2.5rem, 2rem + 2.6vw, 3rem);                /* 40-48px */
 
   /* Layout */
   --max-width: 900px;
+  --max-width-wide: 1200px;
+  --rail-width: 260px;
 
   /* Border radius */
   --radius-sm: 3px;
@@ -78,32 +93,47 @@
      2. FALLBACK PALETTE TOKENS (themeable, dark mode defaults)
      ───────────────────────────────────────────────────────────────── */
 
-  /* Background colors */
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --bg-subtle: #1c2128;
-  --bg-input: #0d1117;
-  --bg-hover: #21262d;
-  --bg-selected: #2d333b;
+  /* ─────────────────────────────────────────────────────────────
+     2a. DARK SURFACE RAMP
 
-  /* Border colors */
-  --border: #30363d;
-  --border-light: #3d444d;
+     Four deliberate steps, each one further from the page:
+
+       --bg-primary    page background
+       --bg-secondary  raised surface: cards, panels
+       --bg-tertiary   hover and inset
+       --bg-elevated   overlays, popovers, the theme selector
+
+     --bg-subtle, --bg-input and --bg-hover are aliases of the
+     appropriate step, so existing consumers keep working.
+     ───────────────────────────────────────────────────────────── */
+  --bg-primary: #0b0f16;
+  --bg-secondary: #111721;
+  --bg-tertiary: #18202c;
+  --bg-elevated: #1e2733;
+  --bg-subtle: var(--bg-tertiary);
+  --bg-input: var(--bg-primary);
+  --bg-hover: var(--bg-tertiary);
+  --bg-selected: #263244;
+
+  /* Border ramp: default edge, rules and dividers, focus */
+  --border: #2a323d;
+  --border-light: #414c59;
   --border-focus: #58a6ff;
 
   /* Text colors */
   --text-primary: #e6edf3;
   --text-secondary: #c9d1d9;
-  --text-muted: #8b949e;
+  --text-muted: #8d96a0;
   --text-dim: #adbac7;
-  --text-inverse: #0d1117;
+  --text-inverse: #0b0f16;
 
   /* Accent colors */
   --accent: #58a6ff;
   --accent-hover: #79b8ff;
   --accent-active: #1f6feb;
   --accent-dim: #1f6feb;
+  /* Label colour for a filled accent surface (buttons). */
+  --accent-contrast: #0b0f16;
   --link: #58a6ff;
   --link-hover: #79b8ff;
   --focus-ring: #58a6ff;
@@ -111,23 +141,23 @@
   /* Status colors (component-facing names) */
   --green: #3fb950;
   --orange: #d29922;
-  --red: #f85149;
+  --red: #f85d56;
   --purple: #bc8cff;
   --pink: #f778ba;
 
   /* Status semantic colors (new names) */
   --success: #3fb950;
   --warning: #d29922;
-  --error: #f85149;
+  --error: #f85d56;
   --info: #58a6ff;
 
   /* Category colors */
   --category-ai: #bc8cff;
   --category-privacy: #d29922;
-  --category-security: #f85149;
+  --category-security: #f85d56;
   --category-programming: #3fb950;
   --category-hardware: #58a6ff;
-  --category-other: #8b949e;
+  --category-other: #8d96a0;
 
   /* Skeleton loader colors */
   --skeleton-base: #161b22;
@@ -136,6 +166,49 @@
   /* Utility */
   --selection: #2d333b;
   --overlay: rgba(0,0,0,0.5);
+
+  /* ─────────────────────────────────────────────────────────────────
+     2c. DERIVED SURFACE TOKENS
+
+     These are not independent colours. Each one is derived from a palette
+     token with color-mix(), so it follows whichever theme is active
+     without the theme having to know about it -- the theme system emits
+     palette tokens only, and never structural or derived ones.
+
+     They exist so that surfaces can be given a little transparency: the
+     page gradient then shows through a panel, and the sticky header
+     reads as frosted glass rather than as a solid bar.
+
+     A browser without color-mix() support drops these declarations and
+     falls back to the opaque palette colours, so the layout is never
+     broken by them.
+     ───────────────────────────────────────────────────────────── */
+  --surface-glass: color-mix(in srgb, var(--bg-secondary) 74%, transparent);
+  --surface-glass-strong: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+  --surface-glass-subtle: color-mix(in srgb, var(--bg-tertiary) 66%, transparent);
+  --surface-border: color-mix(in srgb, var(--border) 88%, transparent);
+  --surface-blur: 12px;
+
+  /*
+     A single flat colour, a whisper away from the theme's own background.
+
+     It is what the page shows where the gradient does not reach, so the
+     gradient reads as a shape standing against a field rather than as the
+     page itself. It is derived from --bg-primary, so it follows whichever
+     theme is active: 8% of the theme's own text colour is mixed in, which
+     is enough to be visible on a dark theme and on a light one, and not
+     enough to stop being a background.
+  */
+  --bg-tint: color-mix(in srgb, var(--bg-primary) 92%, var(--text-primary) 8%);
+
+  /* Card surfaces: translucent, so the page gradient shows through them. */
+  --surface-card: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  --surface-card-hover: color-mix(in srgb, var(--bg-tertiary) 76%, transparent);
+
+  /* Page glow: two soft washes of the theme's own accent colours. */
+  --glow-accent: color-mix(in srgb, var(--accent) 13%, transparent);
+  --glow-secondary: color-mix(in srgb, var(--purple) 10%, transparent);
+  --glow-base: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
 
   /* ─────────────────────────────────────────────────────────────────
      3. ALPHA VARIANTS
@@ -157,10 +230,10 @@
   --orange-alpha-25: rgba(210, 153, 34, 0.25);
 
   /* Red / error alpha */
-  --red-alpha-08: rgba(248, 81, 73, 0.08);
-  --red-alpha-10: rgba(248, 81, 73, 0.10);
-  --red-alpha-15: rgba(248, 81, 73, 0.15);
-  --red-alpha-25: rgba(248, 81, 73, 0.25);
+  --red-alpha-08: rgba(248, 93, 86, 0.08);
+  --red-alpha-10: rgba(248, 93, 86, 0.10);
+  --red-alpha-15: rgba(248, 93, 86, 0.15);
+  --red-alpha-25: rgba(248, 93, 86, 0.25);
 
   /* Purple / category-ai alpha */
   --purple-alpha-10: rgba(188, 140, 255, 0.10);
@@ -171,8 +244,8 @@
   /* Category alpha variants */
   --category-privacy-alpha-15: rgba(210, 153, 34, 0.15);
   --category-privacy-alpha-40: rgba(210, 153, 34, 0.40);
-  --category-security-alpha-15: rgba(248, 81, 73, 0.15);
-  --category-security-alpha-40: rgba(248, 81, 73, 0.40);
+  --category-security-alpha-15: rgba(248, 93, 86, 0.15);
+  --category-security-alpha-40: rgba(248, 93, 86, 0.40);
   --category-programming-alpha-15: rgba(63, 185, 80, 0.15);
   --category-programming-alpha-40: rgba(63, 185, 80, 0.40);
   --category-hardware-alpha-15: rgba(88, 166, 255, 0.15);
@@ -185,7 +258,7 @@
   /* Semantic: Surfaces */
   --color-bg-page: var(--bg-primary);
   --color-bg-surface: var(--bg-secondary);
-  --color-bg-elevated: var(--bg-tertiary);
+  --color-bg-elevated: var(--bg-elevated);
   --color-bg-overlay: var(--bg-subtle);
 
   /* Semantic: Text */
@@ -220,114 +293,146 @@
    ───────────────────────────────────────────────────────────────── */
 
 [data-theme="light"] {
-  /* Background colors */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f6f8fa;
-  --bg-tertiary: #eaeef2;
-  --bg-subtle: #eaeef2;
-  --bg-input: #ffffff;
-  --bg-hover: #eaeef2;
-  --bg-selected: #ddf4ff;
+  /* ─────────────────────────────────────────────────────────────
+     5a. LIGHT SURFACE RAMP
 
-  /* Border colors */
-  --border: #d0d7de;
-  --border-light: #afb8c1;
-  --border-focus: #0969da;
+     The light ramp runs the other way: a tinted canvas with white raised
+     surfaces, so a card reads as raised rather than as a hole in the page.
+     ───────────────────────────────────────────────────────────── */
+  --bg-primary: #e9edf2;
+  --bg-secondary: #f7f9fb;
+  --bg-tertiary: #dde3ea;
+  --bg-elevated: #ffffff;
+  --bg-subtle: var(--bg-tertiary);
+  --bg-input: var(--bg-secondary);
+  --bg-hover: var(--bg-tertiary);
+  --bg-selected: #d7e8fb;
+
+  /* Border ramp */
+  --border: #d3dae3;
+  --border-light: #b9c2cd;
+  --border-focus: #0858b8;
 
   /* Text colors */
   --text-primary: #1f2328;
-  --text-secondary: #57606a;
-  --text-muted: #6e7781;
-  --text-dim: #57606a;
+  --text-secondary: #545d67;
+  --text-muted: #575e66;
+  --text-dim: #545d67;
   --text-inverse: #ffffff;
 
   /* Accent colors */
-  --accent: #0969da;
+  --accent: #0858b8;
   --accent-hover: #0550ae;
   --accent-active: #0550ae;
   --accent-dim: #0550ae;
-  --link: #0969da;
+  /* Label colour for a filled accent surface (buttons). */
+  --accent-contrast: #ffffff;
+  --link: #0858b8;
   --link-hover: #0550ae;
-  --focus-ring: #0969da;
+  --focus-ring: #0858b8;
 
   /* Status colors */
-  --green: #1a7f37;
-  --orange: #9a6700;
-  --red: #cf222e;
-  --purple: #8250df;
-  --pink: #bf3989;
+  --green: #166a2e;
+  --orange: #7d5300;
+  --red: #ae1c27;
+  --purple: #6b2fd9;
+  --pink: #9d2f71;
 
   /* Status semantic colors */
-  --success: #1a7f37;
-  --warning: #9a6700;
-  --error: #cf222e;
-  --info: #0969da;
+  --success: #166a2e;
+  --warning: #7d5300;
+  --error: #ae1c27;
+  --info: #0858b8;
 
   /* Category colors */
-  --category-ai: #8250df;
-  --category-privacy: #9a6700;
-  --category-security: #cf222e;
-  --category-programming: #1a7f37;
-  --category-hardware: #0969da;
-  --category-other: #6e7781;
+  --category-ai: #6b2fd9;
+  --category-privacy: #7d5300;
+  --category-security: #ae1c27;
+  --category-programming: #166a2e;
+  --category-hardware: #0858b8;
+  --category-other: #575e66;
 
   /* Skeleton loader colors */
-  --skeleton-base: #eaeef2;
-  --skeleton-shine: #d0d7de;
+  --skeleton-base: #dde3ea;
+  --skeleton-shine: #d3dae3;
 
   /* Utility */
-  --selection: #ddf4ff;
+  --selection: #d7e8fb;
   --overlay: rgba(0,0,0,0.3);
 
   /* Alpha variants */
-  --accent-alpha-08: rgba(9, 105, 218, 0.08);
-  --accent-alpha-10: rgba(9, 105, 218, 0.10);
-  --accent-alpha-25: rgba(9, 105, 218, 0.25);
+  --accent-alpha-08: rgba(8, 88, 184, 0.08);
+  --accent-alpha-10: rgba(8, 88, 184, 0.10);
+  --accent-alpha-25: rgba(8, 88, 184, 0.25);
 
-  --green-alpha-10: rgba(26, 127, 55, 0.10);
-  --green-alpha-15: rgba(26, 127, 55, 0.15);
-  --green-alpha-25: rgba(26, 127, 55, 0.25);
+  --green-alpha-10: rgba(22, 106, 46, 0.10);
+  --green-alpha-15: rgba(22, 106, 46, 0.15);
+  --green-alpha-25: rgba(22, 106, 46, 0.25);
 
-  --orange-alpha-10: rgba(154, 103, 0, 0.10);
-  --orange-alpha-15: rgba(154, 103, 0, 0.15);
-  --orange-alpha-25: rgba(154, 103, 0, 0.25);
+  --orange-alpha-10: rgba(125, 83, 0, 0.10);
+  --orange-alpha-15: rgba(125, 83, 0, 0.15);
+  --orange-alpha-25: rgba(125, 83, 0, 0.25);
 
-  --red-alpha-08: rgba(207, 34, 46, 0.08);
-  --red-alpha-10: rgba(207, 34, 46, 0.10);
-  --red-alpha-15: rgba(207, 34, 46, 0.15);
-  --red-alpha-25: rgba(207, 34, 46, 0.25);
+  --red-alpha-08: rgba(174, 28, 39, 0.08);
+  --red-alpha-10: rgba(174, 28, 39, 0.10);
+  --red-alpha-15: rgba(174, 28, 39, 0.15);
+  --red-alpha-25: rgba(174, 28, 39, 0.25);
 
-  --purple-alpha-10: rgba(130, 80, 223, 0.10);
-  --purple-alpha-25: rgba(130, 80, 223, 0.25);
-  --category-ai-alpha-15: rgba(130, 80, 223, 0.15);
-  --category-ai-alpha-40: rgba(130, 80, 223, 0.40);
+  --purple-alpha-10: rgba(107, 47, 217, 0.10);
+  --purple-alpha-25: rgba(107, 47, 217, 0.25);
+  --category-ai-alpha-15: rgba(107, 47, 217, 0.15);
+  --category-ai-alpha-40: rgba(107, 47, 217, 0.40);
 
-  --category-privacy-alpha-15: rgba(154, 103, 0, 0.15);
-  --category-privacy-alpha-40: rgba(154, 103, 0, 0.40);
-  --category-security-alpha-15: rgba(207, 34, 46, 0.15);
-  --category-security-alpha-40: rgba(207, 34, 46, 0.40);
-  --category-programming-alpha-15: rgba(26, 127, 55, 0.15);
-  --category-programming-alpha-40: rgba(26, 127, 55, 0.40);
-  --category-hardware-alpha-15: rgba(9, 105, 218, 0.15);
-  --category-hardware-alpha-40: rgba(9, 105, 218, 0.40);
+  --category-privacy-alpha-15: rgba(125, 83, 0, 0.15);
+  --category-privacy-alpha-40: rgba(125, 83, 0, 0.40);
+  --category-security-alpha-15: rgba(174, 28, 39, 0.15);
+  --category-security-alpha-40: rgba(174, 28, 39, 0.40);
+  --category-programming-alpha-15: rgba(22, 106, 46, 0.15);
+  --category-programming-alpha-40: rgba(22, 106, 46, 0.40);
+  --category-hardware-alpha-15: rgba(8, 88, 184, 0.15);
+  --category-hardware-alpha-40: rgba(8, 88, 184, 0.40);
 }
 
 /* ─────────────────────────────────────────────────────────────────
    6. HIGH CONTRAST OVERRIDES
    ───────────────────────────────────────────────────────────────── */
 
+/*
+   The declarations are `!important` on purpose. The palette lives in the
+   `variables` cascade layer and the active theme palette is an unlayered
+   `:root` block, so an unlayered theme declaration would otherwise beat
+   these overrides. An explicit operating-system contrast preference has
+   to win over both the fallback palette and the active theme.
+
+   Only text, accent and border tokens are overridden. The background
+   tokens are left alone so that the override keeps the polarity of the
+   theme in use: `data-theme` follows the theme's appearance, so the text
+   tokens and the theme's backgrounds stay on opposite sides.
+*/
 @media (prefers-contrast: high) {
   :root {
-    --border: #5a5a5a;
-    --border-light: #3a3a3a;
-    --text-muted: #5a5a5a;
-    --text-dim: #3a3a3a;
+    --border: #6e7681 !important;
+    --border-light: #8b949e !important;
+    --text-primary: #ffffff !important;
+    --text-secondary: #e6edf3 !important;
+    --text-muted: #c9d1d9 !important;
+    --text-dim: #c9d1d9 !important;
+    --accent: #9ecbff !important;
+    --link: #9ecbff !important;
+    --focus-ring: #9ecbff !important;
+    --border-focus: #9ecbff !important;
   }
 
   [data-theme="light"] {
-    --border: #4a4a4a;
-    --border-light: #2a2a2a;
-    --text-muted: #4a4a4a;
-    --text-dim: #2a2a2a;
+    --border: #444c56 !important;
+    --border-light: #636c76 !important;
+    --text-primary: #0b0d10 !important;
+    --text-secondary: #32383f !important;
+    --text-muted: #32383f !important;
+    --text-dim: #32383f !important;
+    --accent: #0a4fa8 !important;
+    --link: #0a4fa8 !important;
+    --focus-ring: #0a4fa8 !important;
+    --border-focus: #0a4fa8 !important;
   }
 }

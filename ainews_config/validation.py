@@ -77,6 +77,7 @@ _SCHEDULE_BOUNDS: dict[str, tuple[int, int]] = {
     "cleanup_old_logs_hour": (0, 23),
     "consolidate_trend_memory_hour": (0, 23),
     "cleanup_inactive_subscribers_hour": (0, 23),
+    "auto_approve_interval_minutes": (1, 1440),
 }
 
 _PIPELINE_NUMERIC_BOUNDS: dict[str, tuple[int, int]] = {
@@ -141,11 +142,30 @@ def validate_cross_file(config: dict[str, Any]) -> ValidationResult:
 
 
 def _get_providers(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return provider definitions as a list of ``{"id": ..., ...}`` entries.
+
+    Two on-disk shapes are supported:
+
+    * the legacy list shape ``providers: [{id, type, enabled, config}]``;
+    * the ID-keyed mapping shape ``providers: {id: {type, enabled, config}}``
+      that the shared config engine normalizes to and that the CLI writes.
+
+    The mapping key is authoritative for the provider ID.
+    """
     providers = config.get("providers", {})
     if not isinstance(providers, dict):
         return []
     raw = providers.get("providers", [])
-    return raw if isinstance(raw, list) else []
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        entries: list[dict[str, Any]] = []
+        for pid, body in raw.items():
+            if not isinstance(body, dict):
+                continue
+            entries.append({**body, "id": pid})
+        return entries
+    return []
 
 
 def _get_provider_ids(providers: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

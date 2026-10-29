@@ -775,6 +775,26 @@ class TestProvidersSchemaValidation:
             d.code == "SCHEMA_VIOLATION" for d in config.diagnostics
         )
 
+    def test_legacy_list_providers_are_normalized(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("OPENCODE_API_KEY=placeholder\n")
+        providers_file = tmp_path / "providers.yaml"
+        providers_file.write_text(
+            "providers:\n"
+            "  - id: opencode\n"
+            "    type: openai\n"
+            "    enabled: true\n"
+            "    config:\n"
+            "      api_key: ${OPENCODE_API_KEY}\n"
+            "default_provider: opencode\n"
+        )
+        for name in ["pipeline.yaml", "sources.yaml", "topics.yaml"]:
+            (tmp_path / name).write_text("{}\n")
+
+        config = load_all_configs(_make_resolved_paths(tmp_path))
+        assert config.providers["providers"]["opencode"]["type"] == "openai"
+        assert not any(d.code == "SCHEMA_VIOLATION" for d in config.diagnostics)
+
 
 class TestPipelineSchemaValidation:
     def test_pipeline_not_dict_error(self, tmp_path):
@@ -1009,6 +1029,21 @@ class TestTopicsSchemaValidation:
 
         paths = _make_resolved_paths(tmp_path)
         config = load_all_configs(paths)
+        assert not any(
+            d.code == "SCHEMA_VIOLATION" and d.key and d.key.startswith("topics.")
+            for d in config.diagnostics
+        )
+
+    def test_legacy_wrapped_topics_without_queries_are_accepted(self, tmp_path):
+        (tmp_path / ".env").write_text("")
+        (tmp_path / "providers.yaml").write_text("{}\n")
+        (tmp_path / "pipeline.yaml").write_text("{}\n")
+        (tmp_path / "sources.yaml").write_text("[]\n")
+        (tmp_path / "topics.yaml").write_text(
+            "topics:\n  ai:\n    display_name: AI\n    description: AI news\n"
+        )
+
+        config = load_all_configs(_make_resolved_paths(tmp_path))
         assert not any(
             d.code == "SCHEMA_VIOLATION" and d.key and d.key.startswith("topics.")
             for d in config.diagnostics

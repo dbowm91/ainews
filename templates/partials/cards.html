@@ -1,19 +1,27 @@
-<div id="feed" role="feed" aria-label="Article feed">
-  {% for article in articles %}
-    {% include "partials/article_card.html" %}
-  {% endfor %}
+{#
+  Additional article cards for the infinite scroll.
 
-  {% if has_next %}
-  <div id="scroll-sentinel"
-       hx-get="{{ url_for('public.index', page=next_page, category=category, q=query) }}"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       hx-target="#scroll-sentinel"
-       hx-indicator="#scroll-spinner"
-       aria-label="Load more articles">
-    <div id="scroll-spinner" class="loading-indicator">
-      <span class="spinner" aria-live="polite">loading more...</span>
-    </div>
+  The scroll sentinel lives inside the #feed container and swaps itself with
+  `hx-swap="outerHTML"`. This fragment therefore contains the new cards and
+  the next sentinel, and nothing else: wrapping it in a second #feed element
+  would nest a duplicate id inside the existing one.
+
+  Expects: articles, has_next, next_page, page, category, query, sort.
+#}
+{% for article in articles %}
+  {% include "partials/article_card.html" %}
+{% endfor %}
+
+{% if has_next %}
+<div id="scroll-sentinel"
+     hx-get="{{ url_for('public.index', page=next_page, category=category, q=query, sort=sort) }}"
+     hx-trigger="revealed"
+     hx-swap="outerHTML"
+     hx-target="#scroll-sentinel"
+     hx-indicator="#scroll-spinner"
+     aria-label="Load more articles">
+  <div id="scroll-spinner" class="loading-indicator">
+    <span class="spinner" aria-live="polite">loading more...</span>
   </div>
-  {% endif %}
 </div>
+{% endif %}

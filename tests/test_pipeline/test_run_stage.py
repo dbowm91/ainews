@@ -51,12 +51,54 @@ class TestRunStage:
         result = run_stage("selector", 1, work_fn, task_self)
 
         assert result == work_result
+        limiter.acquire.assert_called_once_with("ollama", "qwen3:8b", 4, 300)
         assert article.retry_count == 0
         assert article.last_error is None
         limiter.release.assert_called_once()
         redis_mock.set.assert_called_once()
         redis_mock.register_script.assert_called_once()
         mock_script.assert_called_once()
+
+    def test_stale_pending_article_starts_timeout_at_first_stage(self, mock_run_stage_deps):
+        from datetime import datetime, timedelta, timezone
+
+        from tasks.pipeline import run_stage
+
+        mocks = mock_run_stage_deps
+        rc = MagicMock()
+        rc.enabled = True
+        rc.provider = "ollama"
+        rc.concurrency = 4
+        rc.timeout_seconds = 300
+        mocks["get_role_config"].return_value = rc
+
+        article = MagicMock()
+        article.pipeline_status = "pending"
+        article.retry_count = 0
+        article.pipeline_started_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        original_started_at = article.pipeline_started_at
+        mocks["db"].session.get.return_value = article
+
+        limiter = MagicMock()
+        limiter.acquire.return_value = True
+        mocks["get_limiter"].return_value = limiter
+
+        redis_mock = MagicMock()
+        redis_mock.set.return_value = True
+        redis_mock.get.return_value = b"task-123"
+        redis_mock.register_script.return_value = MagicMock(return_value=1)
+        mocks["get_redis"].return_value = redis_mock
+
+        work_fn = MagicMock(return_value={"article_id": 1, "data": "ok"})
+        task_self = MagicMock()
+        task_self.request.id = "task-123"
+
+        result = run_stage("selector", 1, work_fn, task_self)
+
+        assert result == {"article_id": 1, "data": "ok"}
+        work_fn.assert_called_once()
+        assert article.pipeline_started_at != original_started_at
+        assert article.pipeline_status == "pending"
 
     def test_returns_degraded_when_handler_succeeds(self, mock_run_stage_deps):
         """When work raises but _handle_stage_failure returns True, run_stage returns degraded dict."""
@@ -230,6 +272,16 @@ class TestRunStage:
         result = _acquire_stage_lock(redis_mock, "lock:test", "task-123", 300)
 
         assert result is False
+
+    def test_reclaims_expired_delivery_lock_for_same_task(self, mock_run_stage_deps):
+        from tasks.pipeline import _acquire_stage_lock
+
+        redis_mock = MagicMock()
+        redis_mock.set.return_value = False
+        redis_mock.get.return_value = b"task-123"
+
+        assert _acquire_stage_lock(redis_mock, "lock:test", "task-123", 300) is True
+        redis_mock.expire.assert_called_once_with("lock:test", 300)
 
     def test_same_task_can_reacquire_lock(self, mock_run_stage_deps):
         """When lock is held by the same task ID (retry), set with nx succeeds."""

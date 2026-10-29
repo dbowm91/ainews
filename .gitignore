@@ -1,5 +1,6 @@
 .env
 instance/
+backups/
 *.db
 __pycache__/
 *.pyc
@@ -20,3 +21,4 @@ htmlcov/
 ._*
 .skills
 transaction.lock
+.worktrees/

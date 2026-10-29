@@ -61,6 +61,14 @@ THEME_DIAGNOSTIC_CODES: dict[str, str] = {
     # -- Contrast / accessibility -------------------------------------------
     "THEME_CONTRAST_WARNING": "Contrast below AAA threshold",
     "THEME_CONTRAST_CRITICAL": "Contrast below AA threshold (fatal)",
+    # -- Contrast AA failures for the text tokens the public UI renders ------
+    # These are advisory by default and fatal under --strict /
+    # THEMES_STRICT_CONTRAST. They are separate codes from the generic
+    # "contrast.*" pairings so that the strict policy can target them
+    # without promoting every AAA advisory.
+    "THEME_CONTRAST_SECONDARY_AA": "Secondary text below 4.5:1 on a rendered surface",
+    "THEME_CONTRAST_MUTED_AA": "Muted text below 4.5:1 on a rendered surface",
+    "THEME_CONTRAST_ACCENT_AA": "Accent or link below 4.5:1 on a rendered surface",
     # -- Registry / build ---------------------------------------------------
     "THEME_REGISTRY_EMPTY": "No usable bundled or external themes",
     "THEME_BUNDLED_EMPTY": "No bundled themes parsed successfully",
@@ -138,6 +146,9 @@ def get_diagnostic_description(code: str) -> str:
 # even in strict mode.
 STRICT_PROMOTABLE_CODES: frozenset[str] = frozenset({
     "THEME_CONTRAST_CRITICAL",
+    "THEME_CONTRAST_SECONDARY_AA",
+    "THEME_CONTRAST_MUTED_AA",
+    "THEME_CONTRAST_ACCENT_AA",
     "THEME_REGISTRY_EMPTY",
     "THEME_BUNDLED_EMPTY",
     "THEME_MANIFEST_DRIFT",
@@ -167,3 +178,19 @@ def is_advisory_diagnostic(diag: ThemeDiagnostic) -> bool:
     They remain warnings in all modes and do not affect exit codes.
     """
     return not is_fatal_diagnostic(diag) and not is_strict_promotable(diag)
+
+
+def is_advisory_by_default(diag: ThemeDiagnostic) -> bool:
+    """Return True if *diag* does not block unless strict mode is on.
+
+    A diagnostic is advisory by default when it is a warning rather than an
+    error. It stays advisory in the default mode and becomes blocking under
+    ``--strict`` or ``THEMES_STRICT_CONTRAST`` when its code is in
+    ``STRICT_PROMOTABLE_CODES``.
+
+    This is the property the AA contrast codes need: they are real WCAG AA
+    failures, but promoting them on every third-party Halloy port would make
+    the application fail to start, so they are warnings by default and fatal
+    in the release gate.
+    """
+    return not is_fatal_diagnostic(diag)

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import logging
 import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +139,33 @@ def get_signed_kwargs(task_name: str, args: tuple, kwargs: dict) -> dict:
     """
     signature_dict = sign_task(task_name, args, kwargs)
     return {**kwargs, **signature_dict}
+
+
+def verify_invocation(task_name: str, request: Any, args: tuple | None = None) -> bool:
+    """Verify the signature of the current task invocation.
+
+    A signature covers the arguments the task was *called* with. Celery
+    keeps those on the request, so that is what has to be verified.
+
+    Reconstructing the payload from the task's own parameters does not
+    work: the task's signature includes its defaults -- ``run_id=None``,
+    for instance -- which the caller never passed and never signed. The
+    rebuilt payload is therefore a different string, and the signature
+    fails every time even though nothing was tampered with.
+
+    Args:
+        task_name: The short name the task verifies against.
+        request: The Celery task request (``self.request``).
+        args: Positional arguments to verify against. Defaults to the
+            arguments the task was called with.
+
+    Returns:
+        True when the invocation carries no signature (an internal call),
+        or when the signature matches.
+    """
+    request_kwargs = dict(getattr(request, "kwargs", None) or {})
+    if args is not None:
+        request_args = tuple(args)
+    else:
+        request_args = tuple(getattr(request, "args", None) or ())
+    return verify_task(task_name, request_args, request_kwargs)

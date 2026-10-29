@@ -36,12 +36,28 @@ def _check_systemctl() -> bool:
 
 
 def _run_systemctl(*args: str, scope: str = "system", check: bool = True) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
-    """Run a systemctl command."""
+    """Run a systemctl command.
+
+    Hosts without systemd (macOS, minimal containers) have no ``systemctl``
+    binary. Callers use this for best-effort refreshes, so a missing binary
+    is reported as a failed command rather than raising ``FileNotFoundError``.
+    """
     cmd = ["systemctl"]
     if scope == "user":
         cmd.append("--user")
     cmd.extend(args)
-    return subprocess.run(cmd, capture_output=True, text=True, check=check)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=check)
+    except FileNotFoundError:
+        completed = subprocess.CompletedProcess(
+            args=cmd,
+            returncode=127,
+            stdout="",
+            stderr="systemctl is not available on this host",
+        )
+        if check:
+            raise subprocess.CalledProcessError(127, cmd, completed.stdout, completed.stderr)
+        return completed
 
 
 def _build_unit_specs(scope_str: str, profile: str | None = None) -> list:

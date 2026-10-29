@@ -125,6 +125,7 @@ class AinewsTheme(BaseModel):
     accent: str
     accent_hover: str
     accent_active: str
+    accent_contrast: str
     link: str
     link_hover: str
     focus_ring: str

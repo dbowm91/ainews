@@ -149,6 +149,123 @@ class TestRetryStuck:
         assert result["degraded"] == 0
         assert result["dead_lettered"] == 0
 
+    def test_sweep_survives_naive_timestamps(self, mock_celery_tasks, mock_article_query):
+        """The whole sweep must complete when the DB returns naive timestamps.
+
+        SQLite returns naive datetimes for timezone-less ``DateTime`` columns.
+        The previous implementation subtracted that naive value from an aware
+        ``now`` and raised ``TypeError``, aborting the entire sweep.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        from tasks.retry import retry_stuck
+
+        MockArticle, mock_query = mock_article_query
+        now = datetime.now(timezone.utc)
+        naive_updated_at = (now - timedelta(minutes=30)).replace(tzinfo=None)
+        article = self._create_mock_article(retry_count=1)
+        article.updated_at = naive_updated_at
+        mock_query.filter.return_value.yield_per.return_value.all.return_value = [
+            article
+        ]
+
+        with patch("extensions.db"):
+            with patch("services.pipeline_degradation.degrade_stage"):
+                with patch("tasks.retry._dead_letter"):
+                    with patch("services.pipeline_utils._dispatch_next"):
+                        result = retry_stuck()
+
+        assert result["retried"] == 1
+        assert result["degraded"] == 0
+        assert result["dead_lettered"] == 0
+
+
+class TestStuckArticleTimezoneHandling:
+    """Classification must survive the naive datetimes SQLite returns.
+
+    ``Article.updated_at`` is a timezone-less ``DateTime`` column, so SQLite
+    hands it back naive even though the default writes an aware UTC value.
+    Subtracting it from an aware ``now`` raises
+    ``TypeError: can't subtract offset-naive and offset-aware datetimes`` and
+    aborts the whole ``retry_stuck`` sweep.
+    """
+
+    @staticmethod
+    def _article(updated_at, retry_count=1):
+        article = MagicMock()
+        article.id = 1
+        article.pipeline_status = "writing"
+        article.retry_count = retry_count
+        article.updated_at = updated_at
+        return article
+
+    def test_naive_updated_at_does_not_raise(self):
+        """A naive updated_at must not raise a TypeError."""
+        from datetime import datetime, timedelta, timezone
+
+        from tasks.retry import _classify_stuck_article
+
+        now = datetime.now(timezone.utc)
+        naive_updated_at = (now - timedelta(minutes=30)).replace(tzinfo=None)
+
+        classification = _classify_stuck_article(self._article(naive_updated_at), now)
+
+        assert classification == "retry"
+
+    def test_naive_updated_at_is_treated_as_utc(self):
+        """A naive updated_at must be interpreted as UTC, not local time."""
+        from datetime import datetime, timedelta, timezone
+
+        from tasks.retry import _classify_stuck_article
+
+        now = datetime.now(timezone.utc)
+        naive_updated_at = (now - timedelta(minutes=30)).replace(tzinfo=None)
+
+        classification = _classify_stuck_article(self._article(naive_updated_at), now)
+
+        # 30 minutes old is under the stuck threshold, so it must be retried.
+        assert classification == "retry"
+
+    def test_aware_updated_at_still_classifies(self):
+        """An aware updated_at must keep the previous behaviour."""
+        from datetime import datetime, timedelta, timezone
+
+        from tasks.retry import _classify_stuck_article
+
+        now = datetime.now(timezone.utc)
+        aware_updated_at = now - timedelta(minutes=30)
+
+        classification = _classify_stuck_article(self._article(aware_updated_at), now)
+
+        assert classification == "retry"
+
+    def test_naive_updated_at_beyond_threshold_dead_letters(self):
+        """A naive updated_at beyond the threshold must dead-letter."""
+        from datetime import datetime, timedelta, timezone
+
+        from services.config_unified import get_stuck_threshold_minutes
+        from tasks.retry import _classify_stuck_article
+
+        now = datetime.now(timezone.utc)
+        stale = now - timedelta(minutes=get_stuck_threshold_minutes() + 30)
+        naive_updated_at = stale.replace(tzinfo=None)
+
+        classification = _classify_stuck_article(self._article(naive_updated_at), now)
+
+        assert classification == "dead_letter"
+
+    def test_missing_updated_at_defaults_to_retry(self):
+        """A missing updated_at must not raise; the article is simply retried."""
+        from datetime import datetime, timezone
+
+        from tasks.retry import _classify_stuck_article
+
+        classification = _classify_stuck_article(
+            self._article(None), datetime.now(timezone.utc)
+        )
+
+        assert classification == "retry"
+
 
 class TestRetryBudget:
     """Test global retry budget prevents infinite retries."""

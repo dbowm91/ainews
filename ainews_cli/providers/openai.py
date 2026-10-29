@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import time
+
 import requests
 
-from ainews_cli.providers.base import BaseProviderAdapter
+from ainews_cli.providers.base import TIMEOUT_DEFAULTS, BaseProviderAdapter
 from ainews_cli.providers.protocol import (
     ModelDiscoveryResult,
     ModelInfo,
@@ -60,6 +62,16 @@ class OpenAIProviderAdapter(BaseProviderAdapter):
     def build_definition(self, values: dict) -> ProviderDefinition:
         endpoint = self.normalize_endpoint(values)
         api_key = values.get("api_key", "")
+        config: dict = {
+            "base_url": endpoint.base_url,
+            "organization": values.get("organization", ""),
+        }
+        model = values.get("model")
+        if model:
+            config["model"] = model
+        headers = values.get("headers") or {}
+        if isinstance(headers, dict) and headers:
+            config["headers"] = {str(k): str(v) for k, v in headers.items()}
         return ProviderDefinition(
             id=values.get("id", "openai"),
             type_id=self.type_id,
@@ -67,27 +79,124 @@ class OpenAIProviderAdapter(BaseProviderAdapter):
             endpoint=endpoint,
             enabled=values.get("enabled", True),
             is_default=values.get("is_default", False),
-            config={
-                "base_url": endpoint.base_url,
-                "organization": values.get("organization", ""),
-            },
+            config=config,
             env_vars={"OPENAI_API_KEY": api_key},
         )
+
+    def _request_headers(
+        self, definition: ProviderDefinition, credentials: dict
+    ) -> dict[str, str]:
+        """Authorization plus whatever custom headers the provider declares.
+
+        Some OpenAI-compatible gateways require a routing header of their own
+        -- an account or session id -- and reject a request without it. The
+        application sends those headers when it calls the provider, so the
+        probe has to send them too or it would report a working provider as
+        broken.
+        """
+        api_key = credentials.get("api_key", "")
+        headers = {"Authorization": f"Bearer {api_key}"}
+        extra = definition.config.get("headers") or {}
+        if isinstance(extra, dict):
+            headers.update(
+                {str(k): str(v) for k, v in extra.items() if v is not None and str(v) != ""}
+            )
+        return headers
 
     def probe(
         self, definition: ProviderDefinition, credentials: dict
     ) -> ProviderProbeResult:
         url = f"{definition.endpoint.base_url}/models"
-        api_key = credentials.get("api_key", "")
-        headers = {"Authorization": f"Bearer {api_key}"}
-        return self.probe_with_timeout(url, headers=headers)
+        headers = self._request_headers(definition, credentials)
+        result = self.probe_with_timeout(url, headers=headers)
+        if result.status_code in (404, 405):
+            # The endpoint does not implement /models. That is normal for an
+            # OpenAI-compatible gateway, and it says nothing about whether
+            # the provider can serve a request. Prove it with a completion.
+            return self._probe_with_completion(definition, credentials, headers)
+        return result
+
+    def _probe_with_completion(
+        self,
+        definition: ProviderDefinition,
+        credentials: dict,
+        headers: dict[str, str],
+    ) -> ProviderProbeResult:
+        """Verify a provider with one minimal completion.
+
+        A reasoning model can spend the whole (small) token budget thinking
+        and return an empty message, so success is judged on the response
+        being well formed -- HTTP 200 with a choice -- not on the text.
+        """
+        url = f"{definition.endpoint.base_url}/chat/completions"
+        model = definition.config.get("model") or credentials.get("model") or ""
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 16,
+        }
+        start = time.monotonic()
+        try:
+            resp = requests.post(
+                url,
+                headers={**headers, "Content-Type": "application/json"},
+                json=payload,
+                timeout=(TIMEOUT_DEFAULTS["connect"], TIMEOUT_DEFAULTS["read"]),
+            )
+            elapsed = (time.monotonic() - start) * 1000
+            if resp.status_code >= 400:
+                return ProviderProbeResult(
+                    success=False,
+                    latency_ms=elapsed,
+                    error=f"Completion failed: HTTP {resp.status_code}",
+                    status_code=resp.status_code,
+                    endpoint_resolved=True,
+                    auth_success=resp.status_code not in (401, 403),
+                    remediation=[
+                        "Check the endpoint URL and the model name.",
+                        "Verify the API key has access to the model.",
+                    ],
+                )
+            body = resp.json()
+            if not body.get("choices"):
+                return ProviderProbeResult(
+                    success=False,
+                    latency_ms=elapsed,
+                    error="Completion response contained no choices",
+                    status_code=resp.status_code,
+                    endpoint_resolved=True,
+                )
+            return ProviderProbeResult(
+                success=True,
+                latency_ms=elapsed,
+                endpoint_resolved=True,
+                auth_success=True,
+                status_code=resp.status_code,
+            )
+        except requests.Timeout:
+            elapsed = (time.monotonic() - start) * 1000
+            return ProviderProbeResult(
+                success=False,
+                latency_ms=elapsed,
+                error="Request timed out",
+                remediation=[
+                    "Check your network connection.",
+                    "Verify the endpoint URL is correct and reachable.",
+                ],
+            )
+        except (requests.RequestException, ValueError) as exc:
+            elapsed = (time.monotonic() - start) * 1000
+            return ProviderProbeResult(
+                success=False,
+                latency_ms=elapsed,
+                error=self.sanitize_error(exc),
+            )
 
     def discover_models(
         self, definition: ProviderDefinition, credentials: dict
     ) -> ModelDiscoveryResult:
         url = f"{definition.endpoint.base_url}/models"
-        api_key = credentials.get("api_key", "")
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = self._request_headers(definition, credentials)
 
         try:
             resp = requests.get(url, headers=headers, timeout=10)

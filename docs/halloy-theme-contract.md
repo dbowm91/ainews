@@ -200,6 +200,76 @@ Implemented in `classify_contrast_findings()` at `services/themes/translate.py:4
 - **Primary text 4.5-7.0**: WARNING diagnostic (non-fatal, AAA not met)
 - **All other < 4.5**: WARNING diagnostic (non-fatal)
 
+### 10.1 AA failures for secondary, muted and link tokens
+
+The public pages render secondary text, muted text and link text on the
+page surface, the content surface and the elevated surface. A theme whose
+muted tone is unreadable on its own surfaces still satisfied the matrix
+above, because the fatal rule was limited to primary text.
+
+`classify_contrast_findings()` therefore checks these pairings at the WCAG
+AA threshold of 4.5:
+
+| Pairing | Surfaces | Code |
+|---|---|---|
+| `text_secondary` | `bg_primary`, `bg_secondary`, `bg_tertiary` | `THEME_CONTRAST_SECONDARY_AA` |
+| `text_muted` | `bg_primary`, `bg_secondary`, `bg_tertiary` | `THEME_CONTRAST_MUTED_AA` |
+| `link` | `bg_primary`, `bg_secondary`, `bg_tertiary` | `THEME_CONTRAST_ACCENT_AA` |
+
+`--accent` is deliberately *not* in this matrix. The accent is the brand
+colour used for chrome, badges and button fills, not for body text; the
+`--link` token carries the accent hue and is the token the pages render as
+link text.
+
+### 10.2 Severity policy
+
+| Finding class | Default | `--strict` | `THEMES_STRICT_CONTRAST` |
+|---|---|---|---|
+| primary text < 4.5 | fatal | fatal | fatal |
+| secondary / muted / link < 4.5 | advisory | **fatal** | **fatal** |
+| pairings below AAA | advisory | advisory | advisory |
+
+The new AA failures are a different class from the AAA advisories: they
+are real WCAG AA failures for text the public UI renders. They are
+advisory by default so that a third-party Halloy port cannot make the
+application fail to start, and fatal in the release gate so that the gate
+is meaningful. The three codes are in `STRICT_PROMOTABLE_CODES`.
+
+### 10.3 The readability floor
+
+`translate_theme()` raises the lightness of a low-contrast `text_secondary`,
+`text_muted` or `link` token until it reaches 4.5:1 against the theme's
+own surfaces. Only the lightness moves; hue and saturation are preserved,
+so the palette still reads as the theme it came from.
+
+The floor is applied in the translation layer rather than in the bundled
+TOML files. That keeps the 48 upstream Halloy files byte-identical to what
+Halloy ships, applies the same rule to external themes, and records the
+derivation in the theme's provenance. A theme's rendered palette therefore
+differs from its source TOML; `docs/themes-inventory.md` records this.
+
+### 10.4 The accent-surface label colour
+
+`--accent` is the background of the primary and subscribe buttons, so the
+label colour of those buttons cannot be a text token. The dark palette's
+text is near-white and the light palette's is near-black, so no text token
+is legible on both, and the light theme's `--text-primary` on `--accent`
+measured 1.63:1.
+
+`--accent-contrast` is therefore derived:
+
+1. `on_accent_color()` picks the label colour: black or white, whichever is
+   legible on the theme's accent.
+2. `ensure_fill_legible()` moves the hover fill if the label would be
+   illegible on it. A theme whose accent and hover accent straddle the
+   legible band would otherwise show an unreadable label for as long as the
+   pointer rests on the button.
+
+The result is a contract token of every theme: `--accent-contrast` is
+emitted by `to_css_variables()`, and the filled buttons label themselves
+with it. The fallback palette declares the same token in
+`static/css/variables.css`.
+
 ## 11. CSS output contract
 
 `to_css_variables()` at `services/themes/translate.py:516` emits a `:root` block with variables in this fixed order:
@@ -209,6 +279,7 @@ Implemented in `classify_contrast_findings()` at `services/themes/translate.py:4
   --bg-primary: #rrggbb;
   --bg-secondary: #rrggbb;
   --bg-tertiary: #rrggbb;
+  --bg-elevated: #rrggbb;   /* derived: bg_tertiary lightened by 0.04 */
   --bg-subtle: #rrggbb;
   --bg-input: #rrggbb;
   --bg-hover: #rrggbb;
@@ -224,6 +295,7 @@ Implemented in `classify_contrast_findings()` at `services/themes/translate.py:4
   --accent: #rrggbb;
   --accent-hover: #rrggbb;
   --accent-active: #rrggbb;
+  --accent-contrast: #rrggbb;   /* derived: label colour of a filled accent surface */
   --link: #rrggbb;
   --link-hover: #rrggbb;
   --focus-ring: #rrggbb;

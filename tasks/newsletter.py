@@ -6,7 +6,7 @@ from celery import group, shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from services.task_security import verify_task
+from services.task_security import verify_invocation, verify_task
 from constants import CELERY_TASK_MAX_RETRIES
 
 logger = get_task_logger(__name__)
@@ -494,15 +494,10 @@ def generate_daily_newsletters(self, dry_run_email=None, run_id=None, _signature
         logger.warning("Invalid generate_daily_newsletters input: %s", e)
         raise TypeError(f"Invalid generate_daily_newsletters input: {e}") from e
 
-    verify_kwargs: dict[str, object] = {
-        "dry_run_email": validated.dry_run_email,
-        "run_id": validated.run_id,
-    }
-    if _signature is not None:
-        verify_kwargs["_signature"] = _signature
-    if task_name is not None:
-        verify_kwargs["task_name"] = task_name
-    if not verify_task("generate_daily_newsletters", (), verify_kwargs):
+    # The signature covers the arguments this task was called with, so it
+    # is verified against the invocation rather than against a rebuilt
+    # dict of the task's own defaults.
+    if not verify_invocation("generate_daily_newsletters", self.request):
         logger.error("Invalid signature for generate_daily_newsletters task")
         raise ValueError("Invalid task signature")
 

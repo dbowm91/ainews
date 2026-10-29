@@ -169,9 +169,11 @@ The fix (merged in wave5_3) adds Redis key clearing in both:
 
 ### PENDING→REVIEW Transition Missing
 
-**Status**: Documented in AGENTS.md:694
+**Status**: Fixed. `VALID_TRANSITIONS[PENDING]` now includes `REVIEW`.
 
-The `VALID_TRANSITIONS` constant does not include PENDING→REVIEW. This means articles cannot transition directly from PENDING to REVIEW without going through SELECT first. This is a known limitation - see plan item wave7_5 for details.
+The `VALID_TRANSITIONS` constant did not include PENDING→REVIEW, which meant articles could not transition directly from PENDING to REVIEW without going through SELECT first. That edge is now present, together with the other edges the pipeline actually performs (`PENDING→SKIPPED`, `PENDING→FAILED`, `WRITING→REVIEW`).
+
+The general rule this defect illustrates: **every edge in `VALID_TRANSITIONS` has to match a transition the pipeline actually performs.** A missing edge raises `InvalidStateTransitionError` in the middle of a stage, which strands the article where it was until the retry task dead-letters it an hour later. See `tests/test_pipeline_transitions.py`.
 
 ## Integration with Pipeline
 

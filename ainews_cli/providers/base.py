@@ -103,6 +103,7 @@ class BaseProviderAdapter:
                     success=False,
                     latency_ms=elapsed,
                     error=f"Server error: HTTP {resp.status_code}",
+                    status_code=resp.status_code,
                     remediation=[
                         "Check provider status page for outages.",
                         "Verify the endpoint URL is correct.",
@@ -116,6 +117,7 @@ class BaseProviderAdapter:
                     error=f"Authentication failed: HTTP {resp.status_code}",
                     endpoint_resolved=True,
                     auth_success=False,
+                    status_code=resp.status_code,
                     remediation=[
                         "Verify your API key is correct and not expired.",
                         "Check that the API key has the required permissions.",
@@ -127,6 +129,7 @@ class BaseProviderAdapter:
                 latency_ms=elapsed,
                 endpoint_resolved=True,
                 auth_success=True,
+                status_code=resp.status_code,
             )
 
         except requests.Timeout:

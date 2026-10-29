@@ -176,6 +176,7 @@ def main(
     json_output: bool = _JSON,
     no_color: bool = _NO_COLOR,
 ) -> None:
+    _ctx.reset()
     _ctx.verbose = verbose
     _ctx.quiet = quiet
     _ctx.json_output = json_output
@@ -190,6 +191,7 @@ def version() -> None:
     from importlib.metadata import PackageNotFoundError, version as get_version
 
     from ainews_config import FIELD_REGISTRY, load_install_metadata, resolve_paths
+    from ainews_cli.context import path_env_overrides
 
     try:
         pkg_version = get_version("ainews")
@@ -217,7 +219,7 @@ def version() -> None:
 
     install_channel = "development"
     try:
-        paths = resolve_paths()
+        paths = resolve_paths(env_overrides=path_env_overrides())
         metadata = load_install_metadata(paths.install_metadata_file.path)
         if metadata is not None:
             install_channel = metadata.install_type
@@ -684,7 +686,8 @@ def _update_env_key(env_lines: list[str], env_key: str, env_val: str) -> list[st
 def _write_rotation_to_env(updates: dict[str, str], out: OutputFormatter) -> None:
     """Write rotation updates to .env file."""
     from ainews_config import resolve_paths, load_all_configs, transaction
-    config_paths = resolve_paths()
+    from ainews_cli.context import path_env_overrides
+    config_paths = resolve_paths(env_overrides=path_env_overrides())
     config = load_all_configs(config_paths)
     env_path = config_paths.env_file.path
     env_lines: list[str] = []

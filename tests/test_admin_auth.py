@@ -213,3 +213,24 @@ class TestLoginEndpoint:
             sess["admin"] = True
         response = client.post("/admin/logout", follow_redirects=False)
         assert response.status_code == 302
+
+
+def test_process_admin_password_overrides_empty_shared_config(monkeypatch):
+    """An empty shared-config placeholder must not disable env-configured admin auth."""
+    import config as app_config
+    from app import create_app
+
+    password_hash = "scrypt:32768:8:1$test-salt$test-hash"
+    monkeypatch.setenv("ADMIN_PASSWORD", password_hash)
+    monkeypatch.setattr(app_config.TestingConfig, "ADMIN_PASSWORD", "")
+    monkeypatch.setattr(
+        app_config,
+        "load_from_shared_loader",
+        lambda: {"ADMIN_PASSWORD": "", "SESSION_COOKIE_SECURE": True},
+    )
+
+    app = create_app("testing")
+    assert app.config["ADMIN_PASSWORD"] == password_hash
+    assert app.config["SESSION_COOKIE_SECURE"] is False
+    login_response = app.test_client().get("/admin/login")
+    assert "Secure" not in login_response.headers.get("Set-Cookie", "")

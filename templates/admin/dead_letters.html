@@ -113,7 +113,11 @@
               <td>{{ impact_score(article.impact_score) }}</td>
               <td>
                 {% if article.updated_at %}
-                  {% set age_minutes = (now() - article.updated_at).total_seconds() / 60 %}
+                  {# The column is timezone-less, so SQLite returns a naive
+                     value. Normalise before comparing with now(), which is
+                     naive UTC as well. #}
+                  {% set updated_at = article.updated_at.replace(tzinfo=None) %}
+                  {% set age_minutes = (now() - updated_at).total_seconds() / 60 %}
                   {% if age_minutes >= 60 %}
                     {{ (age_minutes / 60)|round|int }}h
                   {% else %}

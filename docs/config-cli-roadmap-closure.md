@@ -556,6 +556,7 @@ This document provides a requirement-by-requirement closure matrix for Releases 
 
 | Document | Size | Covers |
 |----------|------|--------|
+| `docs/frontend-rendering-closure.md` | — | Milestone G closure matrix: the public site's rendering correctness and visual identity |
 | `docs/configuration-contract.md` | 51.2 KB | Machine-oriented configuration inventory |
 | `docs/cli-reference.md` | 38.9 KB | Complete CLI command reference |
 | `docs/deployment.md` | 28.8 KB | Production deployment guide (installer, Docker, bare metal) |

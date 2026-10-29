@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum
 from typing import Optional
 
-from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import select
+from billiard.exceptions import SoftTimeLimitExceeded
+from pydantic import BaseModel, Field
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
@@ -219,16 +220,29 @@ def _call_llm_for_memory(
 def propose_trend_memory(article: Article, engagement_data: dict | None = None) -> SubagentResponse:
     """Ask the LLM to extract trend memory from a completed article.
 
+    The model call is the slow part of publication, and it can take minutes
+    on a local model. Everything the proposal needs is therefore read out of
+    the database first and the transaction is ended, so that nothing holds a
+    lock while the model is thinking. The response is buffered in memory and
+    written in one short transaction once it is complete.
+
     Args:
         article: The completed article to extract memory from.
         engagement_data: Optional dict with engagement metrics (e.g., newsletter_clicks, page_loads).
     """
+    article_id = article.id
     draft = article.draft_article or ""
-    topics = article.topics or []
+    topics = list(article.topics or [])
     summary = article.summary or ""
 
     if not topics:
         return SubagentResponse(synthesis="", used_fallback=False, fallback_stages=[])
+
+    # End the transaction before the model call. A read transaction in WAL
+    # mode does not block a writer, but a *write* transaction does, and the
+    # caller may well have one open. Ending it here means the request that
+    # follows cannot hold the database for as long as the model takes.
+    _release_transaction(article)
 
     engagement_info = ""
     if engagement_data:
@@ -240,15 +254,21 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
     try:
         result = _call_llm_for_memory(draft, topics, summary, engagement_info)
         entries = result.entries
-    except (ImportError, json.JSONDecodeError, ValidationError,
-            SQLAlchemyError, ValueError, AttributeError) as e:
+    except SoftTimeLimitExceeded:
+        # The task ran out of time. That is not a failure of the proposal,
+        # and it must not be swallowed: the task has to stop.
+        raise
+    except Exception as e:  # noqa: BLE001 - a missing memory must not break publication
+        # The provider can fail in a dozen ways -- a timeout, a rate limit,
+        # a refused request. None of them may stop an article that has
+        # already been published from being published.
         get_metrics().counter_inc(
             "trend_memory.propose_failure",
-            labels={"article_id": str(article.id) if article.id else "unknown"},
+            labels={"article_id": str(article_id) if article_id else "unknown"},
         )
         logging.getLogger(__name__).warning(
             "propose_trend_memory failed for article %s: %s",
-            article.id,
+            article_id,
             e,
         )
         return SubagentResponse(
@@ -259,7 +279,7 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
         return SubagentResponse(synthesis="", used_fallback=False, fallback_stages=[])
 
     try:
-        _save_memory_entries(entries, article.id)
+        _save_memory_entries(entries, article_id)
     except SQLAlchemyError:
         return SubagentResponse(
             synthesis="", used_fallback=True, fallback_stages=["trend_memory"],
@@ -268,7 +288,7 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
     get_metrics().counter_inc(
         "trend_memory.entries_created",
         labels={
-            "article_id": str(article.id) if article.id else "unknown",
+            "article_id": str(article_id) if article_id else "unknown",
             "importance": str(entries[0].importance) if entries else "0",
         },
     )
@@ -278,6 +298,48 @@ def propose_trend_memory(article: Article, engagement_data: dict | None = None) 
         used_fallback=False,
         fallback_stages=[],
     )
+
+
+def _release_transaction(article=None) -> None:
+    """End the current transaction, keeping the session usable.
+
+    A commit on a session with nothing pending is the cheapest way to end a
+    transaction. A rollback is used if the commit fails, so that a broken
+    session does not poison the work that follows.
+
+    The session that is committed is the one the article is actually
+    attached to, not merely the ambient one. The transaction that holds the
+    write lock is the one that owns the pending write, and that is the
+    session that has to be ended -- committing a different session would
+    leave the lock held.
+    """
+    from sqlalchemy.orm import Session, object_session
+
+    from extensions import db
+
+    session: Session | None = None
+    if article is not None:
+        try:
+            session = object_session(article)
+        except Exception:  # noqa: BLE001 - a detached object is not an error here
+            session = None
+    if session is None:
+        session = db.session()
+
+    try:
+        session.commit()
+    except SQLAlchemyError:
+        try:
+            session.rollback()
+        except SQLAlchemyError:
+            logging.getLogger(__name__).warning(
+                "Could not roll back the session before the trend memory request",
+                exc_info=True,
+            )
+        logging.getLogger(__name__).warning(
+            "Could not end the transaction before the trend memory request",
+            exc_info=True,
+        )
 
 
 def _should_consolidate_topic(topic: str) -> bool:
@@ -444,3 +506,109 @@ def semantic_search_trends(query: str, limit: int = 10) -> list[dict]:
 
     scored.sort(key=lambda x: x["similarity"], reverse=True)
     return scored[:limit]
+
+
+@dataclass(frozen=True)
+class MemoryTopicCount:
+    """How many memories a topic holds, and how many of them are important."""
+
+    topic: str
+    count: int
+    high: int
+
+
+@dataclass(frozen=True)
+class MemorySummary:
+    """A compact view of the trend memory, for the admin dashboard."""
+
+    total: int
+    high: int
+    medium: int
+    low: int
+    expired: int
+    topics: tuple[MemoryTopicCount, ...] = ()
+    recent: tuple[TrendMemory, ...] = ()
+
+
+def memory_summary(*, recent: int = 5, topics: int = 6) -> MemorySummary:
+    """Return a compact summary of the trend memory.
+
+    The trend-memory admin page answers "what is in memory". This answers
+    "how much is in memory, how much of it matters, and which topics is it
+    about" -- the shape an operator wants on the dashboard, where the
+    memory feed itself would be too much detail.
+    """
+    recent = max(1, min(recent, 50))
+    topics = max(1, min(topics, 50))
+
+    now = datetime.now(timezone.utc)
+
+    total = db.session.query(func.count(TrendMemory.id)).scalar() or 0
+    high = (
+        db.session.query(func.count(TrendMemory.id))
+        .filter(TrendMemory.importance == MemoryImportance.HIGH)
+        .scalar()
+        or 0
+    )
+    medium = (
+        db.session.query(func.count(TrendMemory.id))
+        .filter(TrendMemory.importance == MemoryImportance.MEDIUM)
+        .scalar()
+        or 0
+    )
+    low = (
+        db.session.query(func.count(TrendMemory.id))
+        .filter(TrendMemory.importance == MemoryImportance.LOW)
+        .scalar()
+        or 0
+    )
+    expired = (
+        db.session.query(func.count(TrendMemory.id))
+        .filter(
+            TrendMemory.expires_at.isnot(None),
+            TrendMemory.expires_at <= now,
+        )
+        .scalar()
+        or 0
+    )
+
+    topic_rows = (
+        db.session.query(
+            TrendMemory.topic,
+            func.count(TrendMemory.id),
+            func.sum(
+                case(
+                    (TrendMemory.importance == MemoryImportance.HIGH, 1),
+                    else_=0,
+                )
+            ),
+        )
+        .group_by(TrendMemory.topic)
+        .order_by(func.count(TrendMemory.id).desc(), TrendMemory.topic)
+        .limit(topics)
+        .all()
+    )
+
+    recent_rows = (
+        db.session.query(TrendMemory)
+        .order_by(TrendMemory.created_at.desc(), TrendMemory.id.desc())
+        .limit(recent)
+        .all()
+    )
+
+    return MemorySummary(
+        total=int(total),
+        high=int(high),
+        medium=int(medium),
+        low=int(low),
+        expired=int(expired),
+        topics=tuple(
+            MemoryTopicCount(
+                topic=str(row[0]),
+                count=int(row[1] or 0),
+                high=int(row[2] or 0),
+            )
+            for row in topic_rows
+        ),
+        recent=tuple(recent_rows),
+    )

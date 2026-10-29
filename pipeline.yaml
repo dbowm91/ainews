@@ -1,24 +1,28 @@
 pipeline:
   selector:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
-    max_tokens: 1024
+    provider: local
+    model: prism-ml/bonsai-27b
+    max_tokens: 4096
     temperature: 0.2
     concurrency: 4
     timeout_seconds: 60
     min_score: 6
-    system_prompt: |
-      You are a news editor deciding which stories to cover for a tech-savvy audience.
+    system_prompt: 'You are a news editor deciding which stories to cover for a tech-savvy audience.
+
       Evaluate each article for newsworthiness, relevance, and reader interest.
+
       Score 1-10 based on: significance to the tech community, novelty, lasting impact.
+
       Score 1-3: niche, incremental, or routine. 4-6: notable but not essential.
+
       7-8: significant, broad interest. 9-10: breaking, major, must-cover.
 
+      '
   researcher:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
+    provider: local
+    model: prism-ml/bonsai-27b
     max_tokens: 8192
     temperature: 0.0
     concurrency: 2
@@ -28,158 +32,139 @@ pipeline:
     web_search_provider: null
     db_related_max: 5
     max_article_text_length: 6000
-    system_prompt: |
-      You are a tech research analyst. Your job is to compile a comprehensive
-      research brief for a news article.
-
-      INSTRUCTIONS:
-      1. Extract all key factual claims from the source article.
-      2. Identify direct quotes with proper attribution.
-      3. Use the provided external sources and related articles to add context.
-      4. Explain why this matters to a tech-savvy audience.
-      5. Be precise with names, dates, numbers, and attributions.
-      6. Rate each claim's confidence as high/medium/low.
-      7. Provide an impact score (0-100) based on:
-         - Importance of the subject matter to the tech community
-         - Popularity/engagement signals of the original article
-         - Significance of research findings and external context
-         - Community excitement and discussion level
-         - Potential lasting impact on the industry
-         Scale: 0-25 niche/minor, 26-50 notable, 51-75 significant, 76-100 major/breaking.
-
+    system_prompt: "You are a tech research analyst. Your job is to compile a comprehensive\nresearch\
+      \ brief for a news article.\n\nINSTRUCTIONS:\n1. Extract all key factual claims from the source\
+      \ article.\n2. Identify direct quotes with proper attribution.\n3. Use the provided external sources\
+      \ and related articles to add context.\n4. Explain why this matters to a tech-savvy audience.\n\
+      5. Be precise with names, dates, numbers, and attributions.\n6. Rate each claim's confidence as\
+      \ high/medium/low.\n7. Provide an impact score (0-100) based on:\n   - Importance of the subject\
+      \ matter to the tech community\n   - Popularity/engagement signals of the original article\n   -\
+      \ Significance of research findings and external context\n   - Community excitement and discussion\
+      \ level\n   - Potential lasting impact on the industry\n   Scale: 0-25 niche/minor, 26-50 notable,\
+      \ 51-75 significant, 76-100 major/breaking.\n"
   writer:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
-    max_tokens: 4096
+    provider: local
+    model: prism-ml/bonsai-27b
+    max_tokens: 8192
     temperature: 0.3
     concurrency: 2
     timeout_seconds: 180
     max_key_points: 5
-    system_prompt: |
-      You are a professional tech news writer. Write condensed articles
-      inspired by the Smart Brevity format — short, scannable, high-signal.
-
-      STRUCTURE:
-      1. HEADLINE — Short, punchy, accurate. No clickbait.
-      2. TL;DR — One bold sentence that captures the essence. The busy-reader hook.
-      3. WHY IT MATTERS — 1-2 sentences on why this is significant to the reader.
-         Connect the story to a bigger trend or consequence.
-      4. BODY — 3-5 tight paragraphs. Lead with the most important fact.
-         Use clear, direct prose. No filler, no throat-clearing, no fluff.
-         Attribute every claim to a source. Include context from external sources.
-         Write in markdown with paragraphs, not bullet lists.
-      5. WHAT TO WATCH — Forward-looking: what happens next, what to monitor,
-         a key date, or why this story isn't over.
-
-      STYLE RULES:
-      - Sentences should be short and punchy. Vary rhythm.
-      - Use technical terms accurately. Assume the reader knows the basics.
-      - No opinions or speculation. Factual only.
-      - Include inline references to external sources in the body text.
-      - Reference related articles from the research brief where relevant.
-
+    system_prompt: "You are a professional tech news writer. Write condensed articles\ninspired by the\
+      \ Smart Brevity format — short, scannable, high-signal.\n\nSTRUCTURE:\n1. HEADLINE — Short, punchy,\
+      \ accurate. No clickbait.\n2. TL;DR — One bold sentence that captures the essence. The busy-reader\
+      \ hook.\n3. WHY IT MATTERS — 1-2 sentences on why this is significant to the reader.\n   Connect\
+      \ the story to a bigger trend or consequence.\n4. BODY — 3-5 tight paragraphs. Lead with the most\
+      \ important fact.\n   Use clear, direct prose. No filler, no throat-clearing, no fluff.\n   Attribute\
+      \ every claim to a source. Include context from external sources.\n   Write in markdown with paragraphs,\
+      \ not bullet lists.\n   Every paragraph must be separated by a blank line, and each paragraph\n\
+      \   must be at most 3 sentences long. Never emit HTML tags — output\n   markdown only, using **bold**\
+      \ and *italic* for emphasis.\n5. WHAT TO WATCH — Forward-looking: what happens next, what to monitor,\n\
+      \   a key date, or why this story isn't over.\n\nSTYLE RULES:\n- Sentences should be short and punchy.\
+      \ Vary rhythm.\n- Use technical terms accurately. Assume the reader knows the basics.\n- No opinions\
+      \ or speculation. Factual only.\n- Include inline references to external sources in the body text.\n\
+      - Reference related articles from the research brief where relevant.\n"
   editor:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
-    max_tokens: 4096
+    provider: local
+    model: prism-ml/bonsai-27b
+    max_tokens: 8192
     temperature: 0.0
     concurrency: 2
     timeout_seconds: 120
     max_tags: 3
-    system_prompt: |
-      You are a meticulous editor for a tech news publication that values
-      brevity, clarity, and accuracy. Review the draft and improve it.
-
-      EDITORIAL CHECKLIST:
-      1. Factual accuracy — verify claims against the research brief.
-      2. Attribution — ensure all quotes and claims have proper sources.
-      3. Clarity — fix awkward phrasing, unclear sentences, jargon without explanation.
-      4. Completeness — add missing context if obvious from the brief and contextualization.
-      5. Tone — professional, neutral, developer-friendly. No hype.
-      6. Brevity — cut any sentence that doesn't earn its place.
-         Every word must inform. If it doesn't add signal, delete it.
-      7. Structure — ensure the Smart Brevity format is followed:
-         headline → tldr → why it matters → body → what to watch.
-      8. Tags — assign 1-3 concise tags describing the article's specific topics.
-      9. Contextualization — use the provided contextualization to identify gaps,
-         missing attribution, and claims needing additional support.
-
-      Return the FULL corrected article in the same JSON schema format.
-      Preserve all citations and attributions. Fix any issues you find.
-
+    system_prompt: "You are a meticulous editor for a tech news publication that values\nbrevity, clarity,\
+      \ and accuracy. Review the draft and improve it.\n\nEDITORIAL CHECKLIST:\n1. Factual accuracy —\
+      \ verify claims against the research brief.\n2. Attribution — ensure all quotes and claims have\
+      \ proper sources.\n3. Clarity — fix awkward phrasing, unclear sentences, jargon without explanation.\n\
+      4. Completeness — add missing context if obvious from the brief and contextualization.\n5. Tone\
+      \ — professional, neutral, developer-friendly. No hype.\n6. Brevity — cut any sentence that doesn't\
+      \ earn its place.\n   Every word must inform. If it doesn't add signal, delete it.\n7. Structure\
+      \ — ensure the Smart Brevity format is followed:\n   headline → tldr → why it matters → body → what\
+      \ to watch.\n8. Tags — assign 1-3 concise tags describing the article's specific topics.\n9. Contextualization\
+      \ — use the provided contextualization to identify gaps,\n   missing attribution, and claims needing\
+      \ additional support.\n\nReturn the FULL corrected article in the same JSON schema format.\nPreserve\
+      \ all citations and attributions. Fix any issues you find.\n"
+  review:
+    enabled: false
+    auto_approve: true
 newsletter:
   max_articles: 10
-  send_time: "08:00"
-  timezone: "America/New_York"
-  site_url: "https://ainews.dev"  # Use default, override via SITE_URL env var if needed
+  send_time: 08:00
+  timezone: America/New_York
+  site_url: https://ainews.dev
   prep_minutes: 15
-
 newsletter_pipeline:
   reader:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
+    provider: opencode
+    model: muse-spark-1.3-contributor
     max_tokens: 4096
     temperature: 0.0
     concurrency: 2
     timeout_seconds: 120
-    system_prompt: |
-      You are a news analyst reading today's top tech stories.
+    system_prompt: 'You are a news analyst reading today''s top tech stories.
+
       Identify the major themes, highlights, and connections across articles.
 
+
       INSTRUCTIONS:
-      1. Read each article's headline and summary carefully.
+
+      1. Read each article''s headline and summary carefully.
+
       2. Identify 2-4 major themes that span multiple articles.
+
       3. Call out 3-5 individual stories that stand out.
+
       4. Note any patterns or connections between articles.
 
+      '
   writer:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
+    provider: opencode
+    model: muse-spark-1.3-contributor
     max_tokens: 2048
     temperature: 0.4
     concurrency: 1
     timeout_seconds: 120
-    system_prompt: |
-      You are a newsletter writer. Write an executive summary for today's
-      tech news in a Smart Brevity-inspired style.
-
-      STYLE:
-      1. Start with a short, punchy greeting — set the tone immediately.
-      2. Weave highlights naturally into a tight narrative.
-      3. Reference specific articles by headline where relevant.
-      4. Keep it 3-4 paragraphs max. Every sentence must earn its place.
-      5. End with a brief forward-looking teaser — what to watch next.
-      6. Tone: smart, direct, slightly informal. Like a sharp colleague
-         catching you up over coffee.
-
+    system_prompt: "You are a newsletter writer. Write an executive summary for today's\ntech news in\
+      \ a Smart Brevity-inspired style.\n\nSTYLE:\n1. Start with a short, punchy greeting — set the tone\
+      \ immediately.\n2. Weave highlights naturally into a tight narrative.\n3. Reference specific articles\
+      \ by headline where relevant.\n4. Keep it 3-4 paragraphs max. Every sentence must earn its place.\n\
+      5. End with a brief forward-looking teaser — what to watch next.\n6. Tone: smart, direct, slightly\
+      \ informal. Like a sharp colleague\n   catching you up over coffee.\n"
   editor:
     enabled: true
-    provider: ollama-local
-    model: qwen3:8b
+    provider: opencode
+    model: muse-spark-1.3-contributor
     max_tokens: 2048
     temperature: 0.0
     concurrency: 1
     timeout_seconds: 90
-    system_prompt: |
-      You are an editor reviewing a newsletter executive summary.
+    system_prompt: 'You are an editor reviewing a newsletter executive summary.
+
 
       CHECKLIST:
+
       1. Tone — sharp and smart, not robotic or fluffy.
-      2. Brevity — cut anything that doesn't inform. Tighten every sentence.
+
+      2. Brevity — cut anything that doesn''t inform. Tighten every sentence.
+
       3. Flow — smooth transitions between topics.
+
       4. Accuracy — verify article references are correct.
+
       5. Length — 3-4 paragraphs max.
+
       Return the corrected summary in the same JSON format.
 
+      '
 subagent:
   default:
     enabled: false
-    provider: ollama-local
-    model: qwen3:8b
+    provider: opencode
+    model: muse-spark-1.3-contributor
     max_tokens: 2048
     temperature: 0.0
     timeout_seconds: 120
@@ -191,20 +176,24 @@ subagent:
     model: null
     max_tokens: 2048
     temperature: 0.0
-    timeout_seconds: 120
-    max_retries: 1
+    timeout_seconds: 600
+    max_retries: 0
     retry_delay: 5.0
-    max_iterations: 5
+    max_iterations: 2
     tools:
-      - web_search
-      - context_notes
-      - related_articles
-      - get_source_health
-    system_prompt: |
-      You are a research synthesizer. Analyze external sources and the source article
+    - web_search
+    - context_notes
+    - related_articles
+    - get_source_health
+    system_prompt: 'You are a research synthesizer. Analyze external sources and the source article
+
       to provide a coherent synthesis that supplements the main research brief.
+
       Focus on facts, context, and perspectives not already covered in the source article.
+
       Return your synthesis as a concise paragraph.
+
+      '
     task_template: prompts/subagent_research_synthesis.txt
   edit:
     enabled: true
@@ -217,35 +206,36 @@ subagent:
     retry_delay: 5.0
     max_iterations: 5
     tools:
-      - context_notes
-      - related_articles
-      - trend_memory
-    system_prompt: |
-      You are an editorial contextualizer. Review the draft in light of the research
-      brief, topic notes, and related articles to identify gaps, missing attribution,
-      and claims that need additional support. Return a concise contextualization.
-    task_template: prompts/subagent_edit_contextualization.txt
+    - context_notes
+    - related_articles
+    - trend_memory
+    system_prompt: 'You are an editorial contextualizer. Review the draft in light of the research
 
+      brief, topic notes, and related articles to identify gaps, missing attribution,
+
+      and claims that need additional support. Return a concise contextualization.
+
+      '
+    task_template: prompts/subagent_edit_contextualization.txt
   chains:
     research_deep:
       max_length: 3
       steps:
-        - task_type: research
-          prompt_data_template: ""
-          condition: "article.impact_score >= 50"
-        - task_type: research
-          prompt_data_template: ""
-          condition: "previous.steps[0].success"
+      - task_type: research
+        prompt_data_template: ''
+        condition: article.impact_score >= 50
+      - task_type: research
+        prompt_data_template: ''
+        condition: previous.steps[0].success
     edit_review:
       max_length: 2
       steps:
-        - task_type: edit
-          prompt_data_template: ""
-          condition: "article.pipeline_status == 'editing'"
-        - task_type: edit
-          prompt_data_template: ""
-          condition: "previous.steps[0].success and article.degradation_count == 0"
-
+      - task_type: edit
+        prompt_data_template: ''
+        condition: article.pipeline_status == 'editing'
+      - task_type: edit
+        prompt_data_template: ''
+        condition: previous.steps[0].success and article.degradation_count == 0
 memory:
   ttl_days_low: 7
   ttl_days_medium: 30
@@ -253,44 +243,63 @@ memory:
   consolidation_cooldown_hours: 24
   max_entries_per_propose: 3
   consolidation_merge_window_hours: 72
-
 stages:
   research:
-    tools: ["search_web", "get_topic_note"]
+    tools:
+    - search_web
+    - get_topic_note
   write:
-    tools: ["search_web"]
+    tools:
+    - search_web
   edit:
-    tools: ["get_topic_note", "get_related_articles", "get_trend_memory"]
-
+    tools:
+    - get_topic_note
+    - get_related_articles
+    - get_trend_memory
 experiments:
   enabled: true
-  assignment_salt: "${EXPERIMENT_SALT}"
+  assignment_salt: ${EXPERIMENT_SALT}
   prompt_variants:
     writer:
-      control: |
-        You are a professional tech news writer. Write condensed articles
+      control: 'You are a professional tech news writer. Write condensed articles
+
         inspired by the Smart Brevity format — short, scannable, high-signal.
-      variant_a: |
-        You are a tech news writer specializing in concise, data-driven reporting.
+
+        '
+      variant_a: 'You are a tech news writer specializing in concise, data-driven reporting.
+
         Focus on key facts, numbers, and actionable insights. Keep sentences
+
         under 20 words. Use bullet points for complex information.
-      variant_b: |
-        You are a narrative tech journalist. Write engaging, story-driven articles
+
+        '
+      variant_b: 'You are a narrative tech journalist. Write engaging, story-driven articles
+
         that hook the reader with context and build to the key revelation.
+
         Use the inverted pyramid structure with a compelling lede.
+
+        '
     editor:
-      control: |
-        You are a meticulous editor for a tech news publication that values
+      control: 'You are a meticulous editor for a tech news publication that values
+
         brevity, clarity, and accuracy. Review the draft and improve it.
-      variant_a: |
-        You are a copy editor focused on clarity and conciseness. Eliminate
+
+        '
+      variant_a: 'You are a copy editor focused on clarity and conciseness. Eliminate
+
         redundant words, simplify complex sentences, and ensure every paragraph
+
         has a clear purpose. Aim for 30% reduction in word count.
-      variant_b: |
-        You are a content strategist editor. Focus on narrative flow, reader
+
+        '
+      variant_b: 'You are a content strategist editor. Focus on narrative flow, reader
+
         engagement, and information hierarchy. Ensure the article tells a
+
         compelling story while maintaining accuracy and completeness.
 
+        '
 schedule:
   crawl_interval_minutes: 30
   retry_stuck_interval_minutes: 60
@@ -304,3 +313,4 @@ schedule:
   cleanup_inactive_subscribers_hour: 1
   cleanup_inactive_subscribers_minute: 0
   cleanup_old_versions_days_to_keep: 90
+  auto_approve_interval_minutes: 1

@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from constants import PipelineStatus, truncate_for_log, CELERY_TASK_MAX_RETRIES
 from services.llm.errors import ProviderServerError
-from services.task_security import verify_task
+from services.task_security import verify_invocation
 
 logger = get_task_logger(__name__)
 
@@ -56,7 +56,7 @@ def _assign_experiment_group(article_id: int, salt: str = "") -> str:
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def select_article(self, article_id: int, run_id=None, _signature=None, task_name=None):  # noqa: C901
+def select_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
     try:
         from schemas.tasks import SelectArticleTask
         validated = SelectArticleTask(article_id=article_id, run_id=run_id)
@@ -64,12 +64,10 @@ def select_article(self, article_id: int, run_id=None, _signature=None, task_nam
         logger.warning("Invalid select_article input: %s", e)
         raise TypeError(f"Invalid select_article input: {e}") from e
 
-    verify_kwargs: dict[str, object] = {"run_id": validated.run_id}
-    if _signature is not None:
-        verify_kwargs["_signature"] = _signature
-    if task_name is not None:
-        verify_kwargs["task_name"] = task_name
-    if not verify_task("select_article", (validated.article_id,), verify_kwargs):
+    # The signature covers the arguments this task was called with, so it
+    # is verified against the invocation rather than against a rebuilt
+    # dict of the task's own defaults.
+    if not verify_invocation("select_article", self.request, args=(validated.article_id,)):
         logger.error("Invalid signature for select_article task")
         raise ValueError("Invalid task signature")
 

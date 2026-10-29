@@ -98,11 +98,73 @@ def require_auth(f):
     return decorated
 
 
-def validate_csrf_json(f):
-    """Decorator to validate CSRF token for JSON API endpoints.
+def _csrf_token_from_request():
+    """Return the CSRF token carried by the request, or None.
 
-    Flask-WTF CSRF only validates form/multipart requests.
-    Use this decorator on JSON endpoints to validate X-CSRFToken header.
+    A token may arrive two ways, and an endpoint has to accept both:
+
+    * in the ``X-CSRFToken`` header, which is what ``fetch`` and HTMX send,
+    * in the ``csrf_token`` form field, which is what a plain HTML form posts.
+
+    Flask-WTF's global ``CSRFProtect`` already accepts either, but the
+    ``/api/v1`` blueprints are exempt from it and rely on this decorator
+    instead. A decorator that only looked at the header made every ordinary
+    HTML form post to a protected endpoint fail with "CSRF token missing",
+    because a browser form never sends a custom header.
+    """
+    from flask import current_app
+
+    header_token = request.headers.get("X-CSRFToken")
+    if header_token:
+        return header_token
+
+    field_name = current_app.config.get("WTF_CSRF_FIELD_NAME", "csrf_token")
+
+    form_token = request.form.get(field_name)
+    if form_token:
+        return form_token
+
+    if request.is_json:
+        body = request.get_json(silent=True)
+        if isinstance(body, dict):
+            body_token = body.get(field_name)
+            if isinstance(body_token, str) and body_token:
+                return body_token
+
+    return None
+
+
+def wants_html() -> bool:
+    """True when the request came from an HTML form and expects a page back.
+
+    A form post that answers with a raw JSON body leaves the operator staring
+    at ``{"message": "Crawl started"}`` in the browser. These endpoints are
+    driven by plain forms as well as by HTMX, so a form post is answered
+    with a redirect and a flash message, and everything else keeps the JSON
+    it has always returned.
+
+    The test is deliberately narrow: only a form-encoded request that did not
+    ask for JSON and did not come from HTMX is treated as a browser form
+    submission. A scripted client that posts form data still gets JSON.
+    """
+    if request.headers.get("HX-Request"):
+        return False
+    if request.is_json:
+        return False
+    if request.mimetype not in (
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+    ):
+        return False
+    return "application/json" not in request.headers.get("Accept", "")
+
+
+def validate_csrf_token(f):
+    """Decorator to validate the CSRF token on a mutating endpoint.
+
+    Accepts the token from the ``X-CSRFToken`` header or from the
+    ``csrf_token`` form field, so both a JSON client and a plain HTML form
+    post work against the same endpoint.
 
     Respects WTF_CSRF_ENABLED = False in TestingConfig.
     """
@@ -112,7 +174,7 @@ def validate_csrf_json(f):
     def decorated(*args, **kwargs):
         if not current_app.config.get("WTF_CSRF_ENABLED", True):
             return f(*args, **kwargs)
-        token = request.headers.get("X-CSRFToken")
+        token = _csrf_token_from_request()
         if not token:
             return jsonify({"error": "CSRF token missing"}), 400
         try:
@@ -148,7 +210,7 @@ def csrf_for_session_auth(f):
             return jsonify({"error": "Authentication required before CSRF validation"}), 401
 
         # Validate CSRF for session-authenticated requests
-        token = request.headers.get("X-CSRFToken")
+        token = _csrf_token_from_request()
         if not token:
             return jsonify({"error": "CSRF token missing"}), 400
         try:

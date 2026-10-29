@@ -60,6 +60,24 @@ def _set_celery_task_secret(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _pin_auto_review_off(monkeypatch):
+    """Keep the review path deterministic, whatever the live configuration says.
+
+    The test suite reads the repository's own ``pipeline.yaml``. An operator
+    who turns auto-review mode on for their site would otherwise change what
+    these tests do, and a test that only passes when the switch is off is not
+    a test.
+
+    The patch is on the module attribute rather than on the configuration
+    loader, so a test that wants to exercise the real decision can still
+    reach it through a reference it captured before the patch.
+    """
+    from services import auto_review
+
+    monkeypatch.setattr(auto_review, "is_auto_approve_enabled", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_redis():
     """Reset the global Redis singleton and config cache between tests."""
     from services.metrics import reset_metrics
@@ -256,3 +274,43 @@ def setup_pipeline_mocks():
     yield mocks
     for p in patches.values():
         p.stop()
+
+
+# ---------------------------------------------------------------------------
+# Browser test availability
+# ---------------------------------------------------------------------------
+
+
+def _playwright_browser_available() -> bool:
+    """Return True when a Playwright Chromium binary is installed."""
+    from pathlib import Path
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+
+    try:
+        with sync_playwright() as playwright:
+            return Path(playwright.chromium.executable_path).exists()
+    except Exception:  # noqa: BLE001 - any probe failure means "no browser"
+        return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip browser-marked tests when no browser binary is installed.
+
+    The browser suites run in their own CI job, which installs Chromium.
+    The default test job does not, and without this guard every browser
+    test would error there rather than skip.
+    """
+    browser_items = [item for item in items if "browser" in item.keywords]
+    if not browser_items:
+        return
+
+    if _playwright_browser_available():
+        return
+
+    skip_browser = pytest.mark.skip(reason="no Playwright browser installed")
+    for item in browser_items:
+        item.add_marker(skip_browser)

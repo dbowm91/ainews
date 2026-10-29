@@ -10,21 +10,51 @@
   <script id="ainews-theme-metadata" type="application/json">{{ theme_metadata|tojson }}</script>
   {% endif %}
   <link id="ainews-app-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link id="ainews-theme-stylesheet" rel="stylesheet" href="">
   <style>
+/* Inlined critical CSS. It participates in the cascade layer order declared
+   by static/css/style.css so that the reset and base-element rules lose to
+   the layout, component, page and utility layers. */
+@layer reset {
 {% include "partials/critical_css.html" %}
 {% include "partials/critical_css_admin.html" %}
+}
   </style>
+  <link id="ainews-theme-stylesheet" rel="stylesheet" href="">
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script nonce="{{ csp_nonce() }}">
-    htmx.config.inlineScriptNonce = "{{ csp_nonce() }}";
+    /* htmx.min.js is loaded with `defer`, so it has not executed yet while
+       this inline script runs — touching htmx.config here raised
+       "htmx is not defined" on every admin page. Wait until htmx is
+       actually available before configuring it. */
+    (function () {
+      var nonce = "{{ csp_nonce() }}";
+      function apply() {
+        if (!window.htmx) return false;
+        window.htmx.config.inlineScriptNonce = nonce;
+        return true;
+      }
+      if (apply()) return;
+      document.addEventListener('htmx:load', apply, { once: true });
+      document.addEventListener('DOMContentLoaded', apply, { once: true });
+      window.addEventListener('load', apply, { once: true });
+    })();
   </script>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/admin.js') }}" defer nonce="{{ csp_nonce() }}"></script>
 </head>
-<body class="admin-body" hx-boost="true">
+{#
+  No body-level hx-boost here.
+
+  The admin routes always render a complete page, so a boosted navigation
+  replaces the whole <body> with a full document body. The replacement loses
+  the <head>, so per-request state (the CSP nonce, the theme metadata) goes
+  stale, and deferred admin scripts do not run again for the swapped page.
+  Admin navigation is a normal full page load; the row-level editors declare
+  their own hx-get with an explicit target.
+#}
+<body class="admin-body">
   <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>
   <div id="offline-toast" class="toast toast-hidden" role="status" aria-live="polite">You are offline.</div>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -51,6 +81,16 @@
         {% include "partials/theme_selector.html" %}
       </div>
     </nav>
+    {# The primary nav scrolls horizontally with a hidden scrollbar, so the
+       remaining admin sections live in a second, always visible row. #}
+    <nav class="admin-subnav" aria-label="Admin sections">
+      <a href="/admin/sources" {% if request.path.startswith('/admin/sources') %}class="active"{% endif %}>sources</a>
+      <a href="/admin/topic-notes" {% if request.path.startswith('/admin/topic-notes') %}class="active"{% endif %}>topic notes</a>
+      <a href="/admin/webhooks" {% if request.path.startswith('/admin/webhooks') %}class="active"{% endif %}>webhooks</a>
+      <a href="/admin/dead-letters" {% if request.path.startswith('/admin/dead-letters') %}class="active"{% endif %}>dead letters</a>
+      <a href="/admin/pipeline-audit" {% if request.path.startswith('/admin/pipeline-audit') or '/audit' in request.path %}class="active"{% endif %}>pipeline audit</a>
+      <a href="/admin/settings" {% if request.path.startswith('/admin/settings') %}class="active"{% endif %}>settings</a>
+    </nav>
     <div class="nav-logout">
       <form method="POST" action="/admin/logout" class="inline" hx-boost="false">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -61,6 +101,18 @@
 
   <main class="container">
     {% block breadcrumbs %}{% endblock %}
+    {# The admin routes report what they did through a flash message. Without
+       this the message was never shown, so saving a setting looked exactly
+       like a page that ignored the click. #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-messages" role="status" aria-live="polite">
+      {% for category, message in messages %}
+      <div class="flash-message flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
     <div id="content">
       {% block content %}{% endblock %}
     </div>

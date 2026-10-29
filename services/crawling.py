@@ -65,8 +65,16 @@ def should_skip_source(source: Source, schedule_minutes: int) -> bool:
         True if the source should be skipped
     """
     if source and source.last_crawled:
+        last_crawled = source.last_crawled
+        # SQLite returns timezone-naive values for DateTime columns even when
+        # they were written as UTC-aware timestamps. Treat those values as UTC
+        # before comparing with the aware UTC clock.
+        if last_crawled.tzinfo is None:
+            last_crawled = last_crawled.replace(tzinfo=timezone.utc)
+        else:
+            last_crawled = last_crawled.astimezone(timezone.utc)
         elapsed = (
-            datetime.now(timezone.utc) - source.last_crawled
+            datetime.now(timezone.utc) - last_crawled
         ).total_seconds() / 60
         should_skip: bool = elapsed < schedule_minutes
         return should_skip

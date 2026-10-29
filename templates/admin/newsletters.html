@@ -18,7 +18,7 @@
     <div class="header-actions">
       <form method="POST" action="/admin/newsletters/generate" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn-primary">generate now</button>
+        <button type="submit" class="btn btn-primary">generate now</button>
       </form>
     </div>
   </div>
@@ -30,7 +30,7 @@
     <form hx-post="/admin/newsletters/dry-run" hx-target="#dry-run-result" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}' class="dry-run-form" id="dry-run-form">
       <div class="form-row">
         <input type="email" name="test_email" placeholder="test@example.com" class="form-input" required>
-        <button type="submit" class="btn-secondary">
+        <button type="submit" class="btn btn-secondary">
           dry run
           <span class="htmx-indicator spinner" aria-label="Sending...">...</span>
         </button>

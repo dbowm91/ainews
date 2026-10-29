@@ -16,7 +16,7 @@
 <div class="dashboard">
   <div class="dashboard-header">
     <h1 class="dashboard-title">edit article</h1>
-    <a href="/admin/articles" class="btn-primary no-decoration">&larr; back to articles</a>
+    <a href="/admin/articles" class="btn btn-primary no-decoration">&larr; back to articles</a>
   </div>
 
   <section class="dash-card dash-card-full">
@@ -36,9 +36,9 @@
       <span>source: {{ (article.source.name if article.source else 'unknown') | e }}</span>
       <span>created: {{ article.created_at.strftime('%b %d %Y %H:%M') if article.created_at }}</span>
       {% if article.original_ai_article %}
-      <span><a href="/admin/articles/{{ article.id }}/original" target="_blank" class="btn-secondary btn-sm">view original AI version</a></span>
+      <span><a href="/admin/articles/{{ article.id }}/original" target="_blank" class="btn btn-secondary btn-sm">view original AI version</a></span>
       {% endif %}
-      <span><a href="/admin/articles/{{ article.id }}/versions" class="btn-secondary btn-sm">version history</a></span>
+      <span><a href="/admin/articles/{{ article.id }}/versions" class="btn btn-secondary btn-sm">version history</a></span>
     </div>
 
     <form method="POST" action="/admin/articles/{{ article.id }}/edit" class="edit-form">
@@ -105,8 +105,8 @@
       </div>
 
       <div class="form-actions">
-        <button type="submit" class="btn-primary">save changes</button>
-        <a href="/admin/articles" class="btn-secondary">cancel</a>
+        <button type="submit" class="btn btn-primary">save changes</button>
+        <a href="/admin/articles" class="btn btn-secondary">cancel</a>
       </div>
     </form>
 
@@ -118,21 +118,21 @@
               hx-confirm="Re-run full pipeline from selector?"
               hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
           <input type="hidden" name="from_stage" value="select">
-          <button type="submit" class="btn-secondary">from selector</button>
+          <button type="submit" class="btn btn-secondary">from selector</button>
         </form>
         <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
               hx-post="/admin/articles/{{ article.id }}/reprocess"
               hx-confirm="Re-run from researcher?"
               hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
           <input type="hidden" name="from_stage" value="research">
-          <button type="submit" class="btn-secondary">from researcher</button>
+          <button type="submit" class="btn btn-secondary">from researcher</button>
         </form>
         <form method="POST" action="/admin/articles/{{ article.id }}/reprocess" class="inline"
               hx-post="/admin/articles/{{ article.id }}/reprocess"
               hx-confirm="Re-run from writer?"
               hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
           <input type="hidden" name="from_stage" value="write">
-          <button type="submit" class="btn-secondary">from writer</button>
+          <button type="submit" class="btn btn-secondary">from writer</button>
         </form>
       </div>
     </div>

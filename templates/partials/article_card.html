@@ -1,15 +1,11 @@
 {% from "partials/share_macro.html" import share_button %}
 {% from "partials/topic_icon.html" import topic_icon %}
-{% from "macros/badges.html" import pipeline_badge %}
 <article class="article-card" data-article-id="{{ article.id }}">
   <div class="card-header">
     {% if topic_icons and article.category in topic_icons %}
       {{ topic_icon(article.category) }}
     {% endif %}
     <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
-    {% if article.pipeline_status and article.pipeline_status != 'pending' %}
-      {{ pipeline_badge(article.pipeline_status) }}
-    {% endif %}
   </div>
   <h2 class="card-title">
     <a href="{{ url_for('public.article_detail', article_id=article.id) }}"
@@ -17,8 +13,7 @@
        hx-target="#content"
        hx-swap="innerHTML"
        hx-push-url="true"
-       hx-indicator="#content-loading"
-       aria-label="Read article: {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}">
+       hx-indicator="#content-loading">
       {% if article._fa and article._fa.headline %}{{ article._fa.headline|e }}{% else %}{{ article.original_title|e }}{% endif %}
     </a>
   </h2>
@@ -49,7 +44,23 @@
       <span class="meta-separator">&middot;</span>
     {% endif %}
     <span class="card-time-relative">{{ article.created_at|format_date if article.created_at }}</span>
+    {% set read_time = article|reading_time %}
+    {% if read_time %}
+      <span class="meta-separator">&middot;</span>
+      <span class="card-read-time">{{ read_time }}</span>
+    {% endif %}
   </div>
+  {% set provenance = article|agent_provenance %}
+  {% if provenance %}
+  <div class="card-agent-line">
+    <span class="agent-mark" aria-hidden="true">✦</span>
+    <span class="agent-label">condensed by agent</span>
+    <span class="agent-model">{{ article|agent_name|e }}</span>
+    {% if provenance.impact_score %}
+      <span class="agent-impact">impact {{ provenance.impact_score }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="card-footer">
     <button type="button" class="bookmark-btn" data-article-id="{{ article.id }}" aria-label="Bookmark article">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

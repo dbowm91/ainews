@@ -1,10 +1,10 @@
-from flask import current_app, g, jsonify, render_template, request
+from flask import current_app, flash, g, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
 
 from constants import PER_PAGE_PIPELINE, PER_PAGE_PIPELINE_LOGS
 from extensions import db
 from routes.admin import admin_bp, require_auth
-from routes.decorators import validate_csrf_json
+from routes.decorators import validate_csrf_token, wants_html
 from services.audit import log_admin_action
 from services.task_security import get_signed_kwargs
 
@@ -83,7 +83,7 @@ def pipeline_logs(run_id):
 
 @admin_bp.route("/trigger-crawl", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@validate_csrf_token
 def trigger_crawl():
     from extensions import db
     from models import PipelineRun
@@ -127,6 +127,9 @@ def trigger_crawl():
                 f'<div class="dash-action"><span class="health-dot green blink"></span> {message}</div>',
                 202,
             )
+        if wants_html():
+            flash(f"{message} (run #{run.id}).", "success")
+            return redirect(url_for("admin.pipelines"))
         return jsonify(
             {"message": message, "task_id": result.id, "run_id": run.id},
         ), 202
@@ -138,4 +141,7 @@ def trigger_crawl():
                 f'<div class="dash-action"><span class="health-dot red"></span> {message}</div>',
                 503,
             )
+        if wants_html():
+            flash(message, "error")
+            return redirect(url_for("admin.pipelines"))
         return jsonify({"error": message}), 503

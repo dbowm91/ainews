@@ -4,7 +4,7 @@ Covers:
 - CSRF skipped when WTF_CSRF_ENABLED=False (TestingConfig)
 - CSRF enforced when WTF_CSRF_ENABLED=True
 - Bearer-token requests bypass CSRF
-- Unit tests for validate_csrf_json and csrf_for_session_auth decorators
+- Unit tests for validate_csrf_token and csrf_for_session_auth decorators
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import os
 
 from flask import jsonify
 
-from routes.decorators import csrf_for_session_auth, validate_csrf_json
+from routes.decorators import csrf_for_session_auth, validate_csrf_token
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ class TestCsrfBearerBypass:
     global CSRF check and flow through to per-route auth-aware decorators.
 
     Routes using csrf_for_session_auth skip CSRF entirely for bearer requests
-    (g.auth_mode == "bearer"). Routes using validate_csrf_json still require
+    (g.auth_mode == "bearer"). Routes using validate_csrf_token still require
     CSRF (no bearer bypass).
     """
 
@@ -370,7 +370,7 @@ class TestCsrfForSessionAuthDecorator:
 
 
 class TestValidateCsrfJsonDecorator:
-    """Unit tests for the validate_csrf_json decorator.
+    """Unit tests for the validate_csrf_token decorator.
 
     Uses minimal Flask apps WITHOUT CSRFProtect initialized, so the
     decorator handles CSRF validation directly and returns JSON responses.
@@ -386,7 +386,7 @@ class TestValidateCsrfJsonDecorator:
         app.config["TESTING"] = True
 
         @app.route("/endpoint", methods=["POST"])
-        @validate_csrf_json
+        @validate_csrf_token
         def endpoint():
             return jsonify({"ok": True})
 

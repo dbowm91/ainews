@@ -44,6 +44,10 @@ class ProviderProbeResult:
     remediation: list[str] | None = None
     endpoint_resolved: bool = False
     auth_success: bool = False
+    # The HTTP status the probe actually saw. A probe that only reports
+    # success or failure cannot tell "the endpoint answered" from "the
+    # endpoint does not implement this route".
+    status_code: int | None = None
 
 
 @dataclass

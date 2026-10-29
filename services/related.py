@@ -38,6 +38,7 @@ def find_related_articles_cached(article, limit: int = 5) -> list:
                 .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
                 .where(Article.id.in_(article_ids))
             )
+            .unique()
             .scalars()
             .all()
         )

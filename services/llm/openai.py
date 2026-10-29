@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import time
@@ -15,7 +16,11 @@ from services.llm.base import (
     ToolDefinition,
     register_provider,
 )
-from services.llm.errors import RateLimitError as CustomRateLimitError, make_error_handler
+from services.llm.errors import (
+    ProviderServerError,
+    RateLimitError as CustomRateLimitError,
+    make_error_handler,
+)
 from services.url import validate_url_safe
 
 from schemas.llm import OpenAIConfig
@@ -23,6 +28,55 @@ from schemas.llm import OpenAIConfig
 logger = logging.getLogger(__name__)
 
 _HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
+
+# A local endpoint that needs no credential still has to satisfy the OpenAI
+# SDK, which refuses to construct a client without an API key.
+_LOCAL_PLACEHOLDER_KEY = "local-no-key-required"
+
+
+def _make_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a Pydantic schema for OpenAI-compatible strict JSON mode.
+
+    OpenAI-compatible endpoints require every object to explicitly disallow
+    additional properties and require every declared property. Optional Pydantic
+    fields are represented as nullable unions, so making their keys required
+    still permits the model to return ``null`` while keeping the schema strict.
+    """
+    strict_schema = copy.deepcopy(schema)
+
+    def normalize(node: Any) -> None:
+        if isinstance(node, dict):
+            node.pop("default", None)
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                node["additionalProperties"] = False
+                node["required"] = list(properties)
+            for value in node.values():
+                normalize(value)
+        elif isinstance(node, list):
+            for value in node:
+                normalize(value)
+
+    normalize(strict_schema)
+    return strict_schema
+
+
+def _message_text(message: Any) -> str:
+    """Return the assistant text carried by a chat-completion message.
+
+    A reasoning model spends part of its token budget thinking and can put
+    the answer in ``reasoning_content`` while leaving ``content`` empty --
+    especially when ``max_tokens`` is small. Treating that as an empty
+    response makes the provider look broken, so fall back to the reasoning
+    text when there is no ordinary content.
+    """
+    content = getattr(message, "content", None)
+    if isinstance(content, str) and content.strip():
+        return content
+    reasoning = getattr(message, "reasoning_content", None)
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning
+    return content if isinstance(content, str) else ""
 
 
 def _handle_openai_error(e: Exception) -> Exception:
@@ -57,12 +111,26 @@ class OpenAIProvider(BaseLLMProvider):
         cfg = OpenAIConfig(**self.config)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
-        validate_url_safe(cfg.base_url)
+        self.is_local = cfg.local
+        # A provider declared local may live on loopback or a private
+        # network -- a local inference server, for instance. The SSRF guard
+        # blocks those addresses by design, so it is relaxed for a provider
+        # the operator has explicitly marked local. Everything else about
+        # the URL is still checked.
+        validate_url_safe(cfg.base_url, allow_private=cfg.local)
         self._client_kwargs = {
-            "api_key": cfg.api_key,
+            # The OpenAI SDK refuses to start without a credential. A local
+            # endpoint that needs none still gets a placeholder, which it
+            # ignores; the point is that the request is made at all.
+            "api_key": cfg.api_key or _LOCAL_PLACEHOLDER_KEY,
             "base_url": cfg.base_url,
             "timeout": DEFAULT_LLM_TIMEOUT_SECONDS,
+            # BaseLLMProvider owns transient retries. Disable the SDK's nested
+            # retries so one request cannot silently multiply the stage budget.
+            "max_retries": 0,
         }
+        if cfg.headers:
+            self._client_kwargs["default_headers"] = cfg.headers
 
     def _create_client(self):
         from openai import OpenAI
@@ -101,8 +169,13 @@ class OpenAIProvider(BaseLLMProvider):
         input_toks = resp.usage.prompt_tokens if resp.usage else 0
         output_toks = resp.usage.completion_tokens if resp.usage else 0
         cached_toks = getattr(resp.usage, "cached_tokens", 0) or 0
+        content = _message_text(resp.choices[0].message)
+        if not content.strip():
+            raise ProviderServerError(
+                f"OpenAI-compatible provider {self.provider_id} returned empty content"
+            )
         return LLMResponse(
-            text=resp.choices[0].message.content or "",
+            text=content,
             model=model,
             tokens_used=input_toks + output_toks,
             input_tokens=input_toks,
@@ -146,8 +219,14 @@ class OpenAIProvider(BaseLLMProvider):
                 stream=True,
             )
             for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                text = getattr(delta, "content", None)
+                if not (isinstance(text, str) and text.strip()):
+                    text = getattr(delta, "reasoning_content", None)
+                if isinstance(text, str) and text:
+                    yield text
         except (KeyboardInterrupt, SystemExit):
             raise
         except (ImportError, httpx.HTTPError, ConnectionError,
@@ -167,6 +246,7 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
+        strict_schema = _make_strict_json_schema(schema)
         try:
             resp = self.client.chat.completions.create(
                 model=model,
@@ -178,7 +258,7 @@ class OpenAIProvider(BaseLLMProvider):
                     "json_schema": {
                         "name": "response",
                         "strict": True,
-                        "schema": schema,
+                        "schema": strict_schema,
                     },
                 },
             )
@@ -189,7 +269,15 @@ class OpenAIProvider(BaseLLMProvider):
             raise _handle_openai_error(e) from e
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
-        return resp.choices[0].message.content or "{}"
+        choice = resp.choices[0]
+        content = _message_text(choice.message)
+        if not content.strip():
+            finish_reason = getattr(choice, "finish_reason", None) or "unknown"
+            raise ProviderServerError(
+                f"OpenAI-compatible provider {self.provider_id} returned empty "
+                f"structured content (finish_reason={finish_reason})"
+            )
+        return content
 
     def _chat_with_schema(
         self,
@@ -287,7 +375,7 @@ class OpenAIProvider(BaseLLMProvider):
                         arguments=fn_args,
                     ),
                 )
-        return msg.content or "", tool_calls
+        return _message_text(msg), tool_calls
 
     def _format_tool_result(self, tool_call: ToolCall, result_content: str) -> dict:
         return {

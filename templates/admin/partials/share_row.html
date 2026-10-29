@@ -10,7 +10,7 @@
   </td>
   <td>
     <div class="flex gap-05">
-      <button class="btn-secondary btn-sm"
+      <button class="btn btn-secondary btn-sm"
               hx-get="/admin/shares/{{ config.id }}/edit-form"
               hx-target="#share-{{ config.id }}"
               hx-swap="outerHTML">
@@ -21,7 +21,7 @@
             hx-target="#share-{{ config.id }}"
             hx-swap="outerHTML"
             hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-        <button type="submit" class="btn-secondary btn-sm">{{ 'deactivate' if config.active else 'activate' }}</button>
+        <button type="submit" class="btn btn-secondary btn-sm">{{ 'deactivate' if config.active else 'activate' }}</button>
       </form>
       <form method="POST" action="/admin/shares/{{ config.id }}/delete" class="inline"
             hx-post="/admin/shares/{{ config.id }}/delete"
@@ -29,7 +29,7 @@
             hx-swap="outerHTML"
             hx-confirm="Delete this share config?"
             hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-        <button type="submit" class="btn-danger btn-sm">delete</button>
+        <button type="submit" class="btn btn-danger btn-sm">delete</button>
       </form>
     </div>
   </td>

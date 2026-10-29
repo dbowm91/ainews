@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import json
+from tests.cli_json import parse_cli_json
+
 
 from typer.testing import CliRunner
 
@@ -94,7 +95,7 @@ start: false
             ["--json", "onboard", "--config-file", str(config_file), "--dry-run"],
         )
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert data["dry_run"] is True
         assert "bootstrap" in data
 
@@ -192,7 +193,7 @@ start: false
             env={"ADMIN_PASSWORD": "SecureP@ss1"},
         )
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "status" in data
         assert "summary" in data
         assert data["status"] == "success"

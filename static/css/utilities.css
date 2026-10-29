@@ -26,6 +26,44 @@
   text-align: center;
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   REDUCED MOTION
+   ───────────────────────────────────────────────────────────────── */
+
+/*
+   The critical stylesheet carries a universal reduced-motion rule, but it
+   only ships with the pages that inline it. This block names the
+   animations the public stylesheets actually declare, so the guarantee
+   does not depend on the critical sheet being present, and so a reviewer
+   can see which animations are covered.
+
+   The animations themselves:
+     fade-in-up      static/css/articles.css
+     skeleton-pulse  static/css/articles.css, static/css/pages.css
+     toast-slide-up  static/css/components.css
+     blink           static/css/pages.css
+     pulse           static/css/layout.css (loading indicator)
+     pulse-scale     static/css/layout.css (htmx indicator)
+     progress-bar    static/css/critical.css (reading progress)
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .htmx-indicator.spinner,
+  .loading-indicator .spinner,
+  .skeleton-card,
+  .dash-skeleton {
+    animation: none !important;
+  }
+}
+
 @media print {
   *,
   *::before,

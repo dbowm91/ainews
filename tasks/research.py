@@ -257,8 +257,11 @@ def _handle_quality_gate_and_transition(brief, article, run_id, article_id, db):
     task_reject_on_worker_lost=True,
     max_retries=CELERY_TASK_MAX_RETRIES,
     default_retry_delay=60,
-    soft_time_limit=300,
-    time_limit=360,
+    # Research includes optional multi-iteration synthesis and a structured
+    # brief. Keep Celery's hard limit above the bounded provider retry budget
+    # so a slow-but-progressing run is not killed and redelivered mid-call.
+    soft_time_limit=1740,
+    time_limit=1800,
     autoretry_for=(ConnectionError, TimeoutError, ProviderServerError),
     retry_backoff=True,
     retry_backoff_max=300,
@@ -267,7 +270,7 @@ def _handle_quality_gate_and_transition(brief, article, run_id, article_id, db):
 def research_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
     from extensions import db
     from schemas.pipeline import get_role_config
-    from tasks.pipeline import run_stage
+    from tasks.pipeline import run_stage, _transition_article_status
 
     def work(article, provider, model, max_tokens):
         rc = get_role_config("researcher")

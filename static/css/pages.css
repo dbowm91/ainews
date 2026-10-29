@@ -8,8 +8,8 @@
 }
 
 .login-box {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
   padding: 2.5rem;
   width: 100%;
@@ -124,14 +124,27 @@
 
 .admin-body .admin-header {
   border-bottom: 1px solid var(--accent-dim);
-  display: flex;
+  /* Two rows: the primary sections on the first, the remaining admin
+     sections on the second. They used to share one row, which left the
+     primary nav so narrow that its last links scrolled out of sight
+     behind a scrollbar nobody could see. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "nav     logout"
+    "subnav  subnav";
   align-items: center;
-  justify-content: space-between;
+  column-gap: 1rem;
   padding-right: 1rem;
 }
 
 .admin-header .nav {
-  flex: 1;
+  grid-area: nav;
+  min-width: 0;
+}
+
+.admin-header .nav-logout {
+  grid-area: logout;
 }
 
 .breadcrumbs {
@@ -176,8 +189,8 @@
 }
 
 .dash-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-glass);
+  border: 1px solid var(--surface-border);
   border-radius: 6px;
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -269,6 +282,14 @@
   background: var(--red);
 }
 
+.health-dot.amber {
+  background: var(--orange);
+}
+
+.health-dot.blink {
+  animation: health-pulse 1.2s ease-in-out infinite;
+}
+
 .health-link {
   font-size: var(--text-xs);
 }
@@ -303,7 +324,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .article-link {
@@ -438,6 +459,380 @@
   background: rgba(210, 153, 34, 0.03);
 }
 
+.log-error-detail {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PIPELINE AUDIT
+   The admin surfaces that make the pipeline auditable: the activity
+   feed, the per-article trail, and the provenance of one article.
+   ───────────────────────────────────────────────────────────────── */
+
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  align-items: flex-end;
+}
+
+.audit-filters .form-group {
+  flex: 1 1 12rem;
+  margin-bottom: 0;
+}
+
+.audit-filters .form-actions {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  flex: 0 0 auto;
+}
+
+.stat-sub {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+/* The stage summary. Fixed to four columns on a wide screen so the eight
+   pipeline stages land as two even rows instead of seven and an orphan. */
+.audit-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+@media (min-width: 900px) {
+  .audit-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.audit-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-5);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.audit-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.audit-fact-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.audit-fact-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.audit-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--red-alpha-25);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--red-alpha-10);
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.audit-error-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.audit-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.audit-chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  background: var(--bg-tertiary);
+}
+
+.audit-chip.is-present {
+  color: var(--green);
+  border-color: var(--green-alpha-25);
+  background: var(--green-alpha-10);
+}
+
+/* A row of chips summarising a dimension -- pipeline stages, memory
+   topics. Each chip links to the filtered view of the thing it counts. */
+.audit-stage-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: var(--space-3) 0;
+}
+
+.audit-stage-strip .audit-chip {
+  text-decoration: none;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.audit-stage-strip .audit-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+  background: var(--bg-tertiary);
+}
+
+.audit-chip-count {
+  color: var(--text-muted);
+  margin-left: 0.25rem;
+}
+
+.audit-chip.is-error {
+  color: var(--red);
+  border-color: var(--red-alpha-25);
+  background: var(--red-alpha-10);
+}
+
+.audit-chip.is-warning {
+  color: var(--orange);
+  border-color: var(--orange-alpha-25);
+  background: var(--orange-alpha-10);
+}
+
+/* The settings panel. Three forms, each saving one configuration file. */
+.settings-table {
+  margin-top: var(--space-3);
+}
+
+.settings-table td,
+.settings-table th {
+  vertical-align: middle;
+}
+
+.settings-role-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.settings-provider-type {
+  display: inline-block;
+  margin-left: 0.4rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+}
+
+.settings-col-enabled,
+.settings-col-default {
+  width: 4rem;
+  text-align: center;
+}
+
+.settings-model-input {
+  min-width: 14rem;
+}
+
+/* A topic description is a sentence, not an identifier, so it needs more
+   room than a model name — but the topics table has to stay inside the
+   card, so the columns are sized against each other rather than generously. */
+.settings-topic-description {
+  min-width: 12rem;
+}
+
+.settings-name-input {
+  min-width: 11rem;
+}
+
+/* The query is an advanced field: narrow, with a short placeholder. */
+.settings-query-input {
+  min-width: 8rem;
+}
+
+.settings-topic-sources {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* The actions column holds one short button and must not be squeezed into
+   a share of the remaining width. */
+.settings-col-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.settings-endpoint-input {
+  min-width: 18rem;
+}
+
+.settings-test-btn {
+  padding: 0.2rem 0.6rem;
+  font-size: var(--text-sm);
+}
+
+.settings-test-result {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  max-width: 22rem;
+}
+
+.settings-test-result.is-ok {
+  color: var(--green);
+}
+
+.settings-test-result.is-fail {
+  color: var(--red);
+}
+
+@media (max-width: 768px) {
+  .settings-model-input,
+  .settings-endpoint-input,
+  .settings-topic-description,
+  .settings-name-input,
+  .settings-query-input {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* The dashboard's compact activity feed. The full audit page uses
+   .audit-event, which is a four-column timeline; this is a three-column
+   list that fits inside a dashboard card. */
+.audit-feed {
+  margin: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+
+.audit-feed-item {
+  display: grid;
+  grid-template-columns: 6rem 5rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.audit-feed-item--error .audit-event-message {
+  color: var(--red);
+}
+
+.audit-feed-item--warning .audit-event-message {
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .audit-feed-item {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}
+
+.audit-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--border);
+}
+
+.audit-event {
+  display: grid;
+  grid-template-columns: 7.5rem 5rem 4.5rem minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: baseline;
+  padding: var(--space-4) 0 var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.audit-event:last-child {
+  border-bottom: none;
+}
+
+.audit-event-time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.audit-event-stage {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.audit-event-message {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.audit-event-duration {
+  margin-left: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.audit-event--error {
+  border-left: 2px solid var(--red);
+  margin-left: -1px;
+}
+
+.audit-event--warning .audit-event-message {
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .audit-event {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+
+  .audit-filters .form-group {
+    flex: 1 1 100%;
+  }
+}
+
 .dry-run-form .form-row {
   align-items: center;
 }
@@ -454,6 +849,21 @@
   gap: 0.3rem;
   padding-bottom: 0.25rem;
   position: relative;
+}
+
+/* On a wide screen the primary nav has a row to itself, so it can wrap
+   rather than scroll: every section stays visible. Below the breakpoint
+   it becomes a dropdown, which has its own rules. */
+@media (min-width: 769px) {
+  .admin-header .nav-links {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 0.2rem;
+  }
+
+  .admin-header .nav-links::after {
+    display: none;
+  }
 }
 
 .admin-header .nav-links::after {
@@ -478,10 +888,52 @@
   white-space: nowrap;
 }
 
+/* Second row of admin sections. The primary nav scrolls horizontally with a
+   hidden scrollbar, so the remaining sections get their own visible row
+   rather than being pushed off the end of a scroller nobody can see. */
+.admin-subnav {
+  grid-area: subnav;
+  display: flex;
+  /* Wrap rather than scroll. A second row that scrolls sideways hides the
+     admin sections past its edge behind a scrollbar nobody can see, which
+     is the same problem the single-row header had. */
+  flex-wrap: wrap;
+  overflow-x: visible;
+  align-items: center;
+  gap: 0.75rem;
+  row-gap: 0.2rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.admin-subnav::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-subnav a {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.admin-subnav a:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.admin-subnav a.active {
+  color: var(--accent);
+  background: var(--accent-alpha-10);
+}
+
 .dash-link {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--accent);
+  color: var(--link);
   display: inline-block;
   margin-top: 0.5rem;
 }
@@ -505,6 +957,8 @@
 
 .admin-table-wrapper {
   position: relative;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-table-wrapper .dash-table thead th {
@@ -586,10 +1040,19 @@
   padding: 2rem;
 }
 
-.error-title {
+.error-code {
   font-family: var(--font-mono);
   font-size: 3rem;
   font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.error-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
@@ -638,7 +1101,7 @@
 .verify-card {
   max-width: 600px;
   width: 100%;
-  background: var(--bg-primary);
+  background: var(--surface-card);
   color: var(--text-primary);
   border-radius: 8px;
   overflow: hidden;
@@ -647,7 +1110,7 @@
 
 .verify-header {
   padding: var(--space-9) var(--space-10);
-  background: var(--bg-secondary);
+  background: var(--surface-card-hover);
   color: var(--text-primary);
 }
 
@@ -658,7 +1121,7 @@
 }
 
 .verify-header span em {
-  color: var(--accent);
+  color: var(--text-muted);
   font-style: normal;
 }
 
@@ -681,7 +1144,7 @@
 }
 
 .verify-body a {
-  color: var(--accent);
+  color: var(--link);
 }
 
 .verify-footer {
@@ -781,7 +1244,214 @@
   50% { opacity: 0.5; }
 }
 
-.admin-table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+
+/* ─────────────────────────────────────────────────────────────────
+   PAGE GRID AND FEED RAIL
+   ───────────────────────────────────────────────────────────────── */
+
+/*
+   Above 1024px the feed becomes a two-column page: a 260px rail carrying
+   the live pipeline state, and the main column. Below that the layout is
+   a single column and the rail collapses to a compact band that carries
+   only the pipeline state and the subscribe call to action.
+
+   The article detail page deliberately uses the single-column variant: the
+   rail is a discovery surface, not a reading surface.
+*/
+.page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-10);
+}
+
+@media (min-width: 1024px) {
+  .container--wide {
+    max-width: var(--max-width-wide);
+  }
+
+  .page-grid--rail {
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.page-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+/*
+   Below 1024px the rail collapses to a compact band above the feed. The
+   topics list and the impact leaders duplicate what the main column already
+   shows (the toolbar filters and the top-stories panel), so only the
+   pipeline state and the subscribe call to action survive the collapse.
+*/
+/*
+   Below 1024px the rail collapses to a compact horizontal band above the
+   feed. The topics list survives as a single scrollable row of chips --
+   it is the fastest way to switch topic on a phone. The impact leaders and
+   the tag list are secondary and are dropped: the top-stories panel and the
+   tag pages already cover them.
+*/
+@media (max-width: 1023px) {
+  .page-rail {
+    display: block;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .page-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page-rail .rail-section {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .page-rail .rail-section--impact,
+  .page-rail .rail-section--tags {
+    display: none;
+  }
+
+  .page-rail .rail-section--topics .rail-heading {
+    display: none;
+  }
+
+  .page-rail .rail-section--topics .rail-list {
+    flex-direction: row;
+    gap: var(--space-4);
+    width: max-content;
+    padding-bottom: var(--space-2);
+  }
+
+  .page-rail .rail-section--topics .rail-list li {
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 599px) {
+  .page-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rail-section {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-5);
+}
+
+.rail-heading {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--space-4);
+}
+
+.rail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.rail-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.rail-stat dt {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.rail-stat dd {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.rail-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rail-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.rail-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-link:hover {
+  color: var(--link);
+}
+
+.rail-link.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rail-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.rail-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.rail-status {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.rail-status--done,
+.rail-status--published {
+  background: var(--green);
+}
+
+.rail-status--failed,
+.rail-status--error {
+  background: var(--red);
+}
+
+.rail-status--review {
+  background: var(--orange);
 }

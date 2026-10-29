@@ -17,9 +17,11 @@ import redis.exceptions
 logger = logging.getLogger(__name__)
 
 _cache_instance: Optional["ResponseCache"] = None
+_cache_scope: str = ""
 _cache_lock = threading.Lock()
 
 _L1_CACHE_MAXSIZE = 1000
+_L1_CACHE_TTL = 5
 
 
 def _get_l1_cache_maxsize() -> int:
@@ -29,19 +31,72 @@ def _get_l1_cache_maxsize() -> int:
     return get_config_with_default("L1_CACHE_MAXSIZE", _L1_CACHE_MAXSIZE)
 
 
+def _get_l1_ttl() -> int:
+    """Get the maximum lifetime of an in-process cache entry.
+
+    The in-process layer must expire quickly so that an invalidation applied
+    in another worker becomes visible here.
+    """
+    from services.config_utils import get_config_with_default
+
+    return get_config_with_default("L1_CACHE_TTL", _L1_CACHE_TTL)
+
+
+def scope_for_database(database_uri: str) -> str:
+    """Return a short, stable identifier for a database URI.
+
+    The identifier is part of every cache key, so two deployments that share
+    a Redis instance (a developer machine and a staging box, for example)
+    cannot read each other's cached documents. The URI is hashed rather than
+    embedded, because it can contain credentials.
+    """
+    if not database_uri:
+        return "default"
+    return hashlib.sha256(database_uri.encode("utf-8")).hexdigest()[:12]
+
+
+def set_cache_scope(scope: str) -> None:
+    """Set the namespace scope used by cache instances created from now on.
+
+    The application factory calls this once it knows which database it
+    serves, so the scope does not depend on which request happens to create
+    the cache singleton first.
+    """
+    global _cache_scope
+    with _cache_lock:
+        _cache_scope = scope
+
+
+def _current_scope() -> str:
+    """Return the active cache scope, falling back to the running app."""
+    if _cache_scope:
+        return _cache_scope
+    try:
+        from flask import current_app
+
+        uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "") or ""
+    except RuntimeError:
+        uri = ""
+    return scope_for_database(uri)
+
+
 class ResponseCache:
     """Redis-backed cache with in-memory L1 layer.
 
     Designed for read-heavy routes (article detail, RSS feeds).
     Uses short TTLs by default since articles are written infrequently.
     Implements LRU eviction when the in-memory cache reaches max size.
+
+    The key namespace is scoped to the database the process serves, so two
+    deployments that share a Redis instance never read each other's cached
+    documents.
     """
 
     _memory: OrderedDict[str, tuple[float, float, str]]
 
-    def __init__(self, redis_client, prefix: str = "ainews:cache"):
+    def __init__(self, redis_client, prefix: str = "ainews:cache", scope: str = ""):
         self._redis = redis_client
-        self.prefix = prefix
+        self.prefix = f"{prefix}:{scope}" if scope else prefix
         self._memory = OrderedDict()
         self._hits = 0
         self._misses = 0
@@ -120,19 +175,28 @@ class ResponseCache:
         return None
 
     def set(self, key: str, value: Any, ttl: int = 120) -> None:
-        """Cache a value with TTL in seconds."""
+        """Cache a value with TTL in seconds.
+
+        The in-process layer is capped at ``L1_CACHE_TTL`` seconds even when
+        the Redis entry lives longer. Redis is shared by every worker, but
+        the in-process layer is not: an entry that one worker invalidates in
+        Redis stays readable in another worker's memory until it expires
+        there. Capping the local lifetime keeps a cross-worker invalidation
+        effective within seconds instead of minutes.
+        """
         full_key = self._make_key(key)
         raw = json.dumps(value)
 
         # L1: in-memory with LRU eviction
         self._evict_batch()
+        local_ttl = min(ttl, _get_l1_ttl())
         with self._memory_lock:
             if (
                 len(self._memory) >= _get_l1_cache_maxsize()
                 and full_key not in self._memory
             ):
                 self._memory.popitem(last=False)
-            self._memory[full_key] = (time.monotonic() + ttl, time.monotonic(), raw)
+            self._memory[full_key] = (time.monotonic() + local_ttl, time.monotonic(), raw)
 
         # L2: Redis
         try:
@@ -244,6 +308,36 @@ class ResponseCache:
         }
 
 
+class NullResponseCache:
+    """A response cache that stores nothing.
+
+    Used when the application disables response caching. The testing
+    configuration does, so that a test run never publishes rendered documents
+    into a Redis instance that a development or production instance also
+    uses.
+    """
+
+    prefix = "ainews:cache:disabled"
+
+    def get(self, key: str) -> None:
+        return None
+
+    def set(self, key: str, value: Any, ttl: int = 120) -> None:
+        return None
+
+    def get_or_set(self, key: str, loader_fn: Callable[[], Any], ttl: int = 120) -> Any:
+        return loader_fn()
+
+    def invalidate(self, key: str) -> None:
+        return None
+
+    def invalidate_prefix(self, prefix: str) -> None:
+        return None
+
+    def get_stats(self) -> dict:
+        return {"hits": 0, "misses": 0, "hit_rate": 0.0, "memory_entries": 0}
+
+
 def get_response_cache() -> ResponseCache:
     """Get or create the singleton ResponseCache instance (thread-safe)."""
     global _cache_instance
@@ -253,8 +347,14 @@ def get_response_cache() -> ResponseCache:
         if _cache_instance is not None:
             return _cache_instance
         from extensions import get_redis
+        from services.config_utils import get_config_with_default
 
-        _cache_instance = ResponseCache(get_redis())
+        if not get_config_with_default(
+            "RESPONSE_CACHE_ENABLED", True, log_missing=False
+        ):
+            return NullResponseCache()  # type: ignore[return-value]
+
+        _cache_instance = ResponseCache(get_redis(), scope=_current_scope())
         return _cache_instance
 
 

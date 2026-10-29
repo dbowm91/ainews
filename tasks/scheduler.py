@@ -99,3 +99,44 @@ def publish_scheduled_articles(self):
             release_lock(redis_client, lock_key, task_id)
         except redis.exceptions.RedisError:
             logger.warning("Failed to release publish_scheduled lock")
+
+
+@shared_task(
+    bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
+    soft_time_limit=120,
+    time_limit=180,
+    autoretry_for=(ConnectionError, TimeoutError),
+    max_retries=CELERY_TASK_MAX_RETRIES,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def auto_approve_review_articles(self):
+    """Publish the articles waiting in the review queue, in auto-review mode.
+
+    The pipeline normally publishes an article the moment it routes it to
+    review, because in auto-review mode there is nobody waiting to approve
+    it. This task is the safety net for the articles that the pipeline did
+    not handle that way: ones that were already queued when the switch was
+    turned on, and ones queued by a path that bypasses the pipeline stages.
+
+    In manual mode it does nothing at all.
+    """
+    if not verify_task("auto_approve_review_articles", (), {}):
+        logger.error("Invalid signature for auto_approve_review_articles")
+        raise ValueError("Invalid task signature")
+
+    from services.auto_review import auto_approve_queued, is_auto_approve_enabled
+
+    if not is_auto_approve_enabled():
+        return {"approved": 0, "skipped": True, "reason": "auto_review_disabled"}
+
+    try:
+        approved = auto_approve_queued()
+    except Exception as e:  # noqa: BLE001
+        logger.error("Auto-approve pass failed: %s", e)
+        return {"approved": 0, "error": str(e)[:200]}
+
+    return {"approved": approved, "skipped": False}

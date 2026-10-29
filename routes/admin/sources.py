@@ -6,7 +6,7 @@ from flask import Response, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from routes.admin import admin_bp, require_auth
-from routes.decorators import commit, validate_csrf_json
+from routes.decorators import commit, validate_csrf_token
 from services.audit import log_admin_action
 from services.cache import get_response_cache
 
@@ -104,7 +104,7 @@ def add_source() -> str | tuple[str, int]:
 
 
 @admin_bp.route("/sources/<int:source_id>/enable", methods=["POST"])
-@validate_csrf_json
+@validate_csrf_token
 @require_auth
 def enable_source(source_id: int) -> tuple[Response, int]:
     from extensions import db
@@ -140,7 +140,7 @@ def enable_source(source_id: int) -> tuple[Response, int]:
 
 
 @admin_bp.route("/sources/<int:source_id>/disable", methods=["POST"])
-@validate_csrf_json
+@validate_csrf_token
 @require_auth
 def disable_source(source_id: int) -> tuple[Response, int]:
     from datetime import datetime, timezone

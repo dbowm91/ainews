@@ -309,48 +309,72 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     if routing_result:
         return routing_result
 
-    quality_result = None
-    try:
-        from services.quality_report import build_quality_report, persist_quality_report
-        quality_result = build_quality_report(article)
-        if quality_result:
-            persist_quality_report(article, quality_result, stage="edit")
-            logger.info(
-                "Quality report: article_id=%s passed=%s needs_review=%s overall=%.3f citation=%.3f claim=%.3f findings=%d",
-                article.id,
-                quality_result.passed,
-                quality_result.needsreview,
-                quality_result.overall_score,
-                quality_result.citation_score,
-                quality_result.claim_score,
-                len(quality_result.findings),
-            )
-            if not quality_result.passed:
-                from constants import PipelineStatus, truncate_for_log
-                from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status
+    from constants import PipelineStatus, truncate_for_log
+    from services.quality_report import build_quality_report, persist_quality_report
+    from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status
 
-                _transition_article_status(article, PipelineStatus.REVIEW)
-                article.last_error = f"Quality gate failed: {quality_result.findings[0].message if quality_result.findings else 'unknown'}"
-                try:
-                    db.session.commit()
-                except SQLAlchemyError:
-                    db.session.rollback()
-                    raise
-                if run_id:
-                    _log_pipeline(
-                        run_id,
-                        "edit",
-                        "info",
-                        "Quality gate failed, queued for review: %s",
-                        truncate_for_log(article.original_title),
-                        article_id=article.id,
-                    )
-                _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
-                return {"article_id": article.id, "status": "review"}
-    except Exception as e:  # noqa: BLE001 - quality report failures are non-critical, log and continue
-        logger.warning(
-            "Quality report generation failed for article %s: %s", article.id, e
+    try:
+        quality_result = build_quality_report(article)
+        if quality_result is None:
+            raise ValueError("quality report builder returned no result")
+        persist_quality_report(article, quality_result, stage="edit")
+    except Exception as e:
+        logger.exception("Quality report unavailable for article %s", article.id)
+        _transition_article_status(article, PipelineStatus.REVIEW)
+        article.last_error = f"Quality report unavailable: {str(e)[:300]}"
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+        if run_id:
+            _log_pipeline(
+                run_id,
+                "edit",
+                "warning",
+                "Quality report unavailable; queued for review: %s",
+                truncate_for_log(article.original_title),
+                article_id=article.id,
+            )
+        _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+        return {"article_id": article_id, "status": "review"}
+
+    logger.info(
+        "Quality report: article_id=%s passed=%s needs_review=%s overall=%.3f citation=%.3f claim=%.3f findings=%d",
+        article.id,
+        quality_result.passed,
+        quality_result.needsreview,
+        quality_result.overall_score,
+        quality_result.citation_score,
+        quality_result.claim_score,
+        len(quality_result.findings),
+    )
+    if not quality_result.passed or quality_result.needsreview:
+        _transition_article_status(article, PipelineStatus.REVIEW)
+        finding_message = (
+            quality_result.findings[0].message
+            if quality_result.findings
+            else "quality report requires manual review"
         )
+        gate_status = "failed" if not quality_result.passed else "requires review"
+        article.last_error = f"Quality gate {gate_status}: {finding_message}"
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+        if run_id:
+            _log_pipeline(
+                run_id,
+                "edit",
+                "info",
+                "Quality gate %s, queued for review: %s",
+                gate_status,
+                truncate_for_log(article.original_title),
+                article_id=article.id,
+            )
+        _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+        return {"article_id": article.id, "status": "review"}
 
     _post_finalize_article(article, run_id)
 
@@ -378,6 +402,17 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 )
 def edit_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
     from tasks.pipeline import run_stage
+
+    def work(article, provider, model, max_tokens):
+        return _execute_editor_work(
+            article,
+            provider,
+            model,
+            max_tokens,
+            article_id,
+            run_id=run_id,
+        )
+
     return run_stage(
-        "editor", article_id, _execute_editor_work, task_self=self, run_id=run_id, skip_next="finalize",
+        "editor", article_id, work, task_self=self, run_id=run_id, skip_next="finalize",
     )

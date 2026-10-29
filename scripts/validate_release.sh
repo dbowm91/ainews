@@ -167,6 +167,10 @@ if [ "$MODE" = "fast" ]; then
 
     run_step "Bundled theme validation" uv run python scripts/validate_themes.py --bundled || true
 
+    run_step "Critical CSS freshness" uv run python scripts/build_critical_css.py --check || true
+
+    run_step "Frontend rendering contracts" uv run pytest tests/test_critical_css_build.py tests/test_cascade_layers.py tests/test_theme_precedence.py tests/test_palette_contrast.py tests/test_ui_static_contracts.py -q || true
+
     run_step "Production config smoke" uv run pytest tests/test_smoke_production_config.py -q || true
 
     run_step "Docs/env consistency" uv run pytest tests/test_docs_env_consistency.py -q || true
@@ -246,8 +250,18 @@ run_step "Ruff lint" uv run ruff check . --exclude .venv || true
 # Step 1.5: Bundled theme validation
 run_step "Bundled theme validation" uv run python scripts/validate_themes.py --bundled --strict || true
 
+# Step 1.75: Critical CSS freshness — the committed partial must match a fresh
+# generation, otherwise the shipped stylesheet and its source have drifted.
+run_step "Critical CSS freshness" uv run python scripts/build_critical_css.py --check || true
+
 # Step 2: Full test suite
 run_step "Full test suite" uv run pytest tests/ -q || true
+
+# Step 2.5: Frontend rendering contracts
+run_step "Frontend rendering contracts" uv run pytest tests/test_critical_css_build.py tests/test_cascade_layers.py tests/test_theme_precedence.py tests/test_palette_contrast.py tests/test_ui_static_contracts.py tests/test_response_cache_scope.py -q || true
+
+# Step 2.75: Browser rendering regressions (skipped without a Chromium binary)
+run_step "Browser rendering regressions" uv run pytest tests/test_frontend_rendering_browser.py tests/test_theme_browser_smoke.py -q --timeout=180 || true
 
 # Step 3: Targeted smoke tests
 run_step "Production config smoke" uv run pytest tests/test_smoke_production_config.py -q || true

@@ -273,6 +273,9 @@ from routes.admin import (  # noqa: E402
     articles as articles,
 )
 from routes.admin import (  # noqa: E402
+    audit as audit,
+)
+from routes.admin import (  # noqa: E402
     auth as auth,
 )
 from routes.admin import (  # noqa: E402
@@ -292,6 +295,9 @@ from routes.admin import (  # noqa: E402
 )
 from routes.admin import (  # noqa: E402
     shares as shares,
+)
+from routes.admin import (  # noqa: E402
+    settings as settings,
 )
 from routes.admin import (  # noqa: E402
     sources as sources,

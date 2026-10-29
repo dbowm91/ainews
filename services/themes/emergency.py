@@ -48,6 +48,7 @@ _EMERGENCY_LABELS: dict[str, str] = {
     "accent": "#58a6ff",
     "accent_hover": "#79b8ff",
     "accent_active": "#1f6feb",
+    "accent_contrast": "#0d1117",
     "link": "#58a6ff",
     "link_hover": "#79b8ff",
     "focus_ring": "#58a6ff",

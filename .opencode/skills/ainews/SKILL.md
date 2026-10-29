@@ -239,9 +239,9 @@ def _get_something() -> int:
 
 ```python
 VALID_TRANSITIONS = {
-    PENDING: [RESEARCHING, REVIEW],
+    PENDING: [SELECTING, RESEARCHING, REVIEW, SKIPPED, FAILED],
     RESEARCHING: [WRITING, FAILED],
-    WRITING: [EDITING, FAILED],
+    WRITING: [EDITING, REVIEW, FAILED],
     EDITING: [REVIEW, DONE, FAILED],
     REVIEW: [DONE, FAILED],
     # ...
@@ -249,6 +249,8 @@ VALID_TRANSITIONS = {
 ```
 
 Use `_transition_article_status()` in `tasks/pipeline.py` for atomic state changes. This validates the transition is allowed and updates atomically.
+
+Every edge in `VALID_TRANSITIONS` has to match a transition the pipeline actually performs. A missing edge raises `InvalidStateTransitionError` mid-stage and strands the article until the retry task dead-letters it an hour later.
 
 ## Per-Stage Failure Tracking
 

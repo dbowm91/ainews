@@ -1,0 +1,420 @@
+{% extends "base_admin.html" %}
+
+{% block title %}ainews// admin — settings{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">›</span>
+  <span class="breadcrumb-current">settings</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1 class="dashboard-title">settings</h1>
+
+  {# ── Pipeline roles ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">pipeline stages</h2>
+    <div class="form-hint">
+      Which provider and model each stage of the pipeline uses. A role with no
+      provider keeps the model it already had.
+    </div>
+
+    <form method="post" action="/admin/settings/roles">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="admin-table-wrapper">
+      <table class="dash-table settings-table">
+        <thead>
+          <tr>
+            <th>stage</th>
+            <th>provider</th>
+            <th>model</th>
+            <th class="settings-col-enabled">on</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for role in roles %}
+          <tr>
+            <td class="settings-role-name">{{ role.role }}</td>
+            <td>
+              <select class="form-select" name="role_{{ role.role }}_provider">
+                <option value="">— keep —</option>
+                {% for provider_id in provider_ids %}
+                <option value="{{ provider_id }}" {% if provider_id == role.provider %}selected{% endif %}>{{ provider_id }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <input type="text" class="form-input settings-model-input"
+                     name="role_{{ role.role }}_model"
+                     value="{{ role.model }}"
+                     placeholder="— keep —"
+                     aria-label="Model for the {{ role.role }} stage">
+            </td>
+            <td class="settings-col-enabled">
+              <input type="checkbox" name="role_{{ role.role }}_enabled"
+                     {% if role.enabled %}checked{% endif %}
+                     aria-label="Enable the {{ role.role }} stage">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">save stages</button>
+      </div>
+    </form>
+  </section>
+
+  {# ── Providers ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">providers</h2>
+    <div class="form-hint">
+      The credentials themselves are never shown here. A provider marked
+      <strong>local</strong> may run on this machine without a credential and
+      may point at a private address.
+    </div>
+
+    <form method="post" action="/admin/settings/providers" id="providers-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="admin-table-wrapper">
+      <table class="dash-table settings-table">
+        <thead>
+          <tr>
+            <th>provider</th>
+            <th>endpoint</th>
+            <th>model</th>
+            <th class="settings-col-enabled">on</th>
+            <th class="settings-col-enabled">local</th>
+            <th class="settings-col-default">default</th>
+            <th>test</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for provider in providers %}
+          <tr>
+            <td class="settings-role-name">
+              <input type="hidden" name="provider_row" value="{{ provider.id }}">
+              {{ provider.id }}
+              <span class="settings-provider-type">{{ provider.type }}</span>
+              {% if provider.is_default %}
+              <span class="audit-chip is-present">default</span>
+              {% endif %}
+            </td>
+            <td>
+              <input type="text" class="form-input settings-endpoint-input"
+                     name="endpoint_{{ provider.id }}"
+                     value="{{ provider.endpoint }}"
+                     aria-label="Endpoint for {{ provider.id }}">
+            </td>
+            <td>
+              <input type="text" class="form-input settings-model-input"
+                     name="model_{{ provider.id }}"
+                     value="{{ provider.model }}"
+                     aria-label="Model for {{ provider.id }}">
+            </td>
+            <td class="settings-col-enabled">
+              <input type="checkbox" name="enabled_{{ provider.id }}"
+                     {% if provider.enabled %}checked{% endif %}
+                     aria-label="Enable {{ provider.id }}">
+            </td>
+            <td class="settings-col-enabled">
+              <input type="checkbox" name="local_{{ provider.id }}"
+                     {% if provider.local %}checked{% endif %}
+                     aria-label="Allow a private address for {{ provider.id }}">
+            </td>
+            <td class="settings-col-default">
+              <input type="radio" name="default_provider"
+                     value="{{ provider.id }}"
+                     {% if provider.is_default %}checked{% endif %}
+                     aria-label="Make {{ provider.id }} the default provider">
+            </td>
+            <td>
+              <button type="button"
+                      class="btn btn-secondary settings-test-btn"
+                      data-provider-id="{{ provider.id }}"
+                      data-test-url="/admin/settings/providers/{{ provider.id }}/test">
+                test
+              </button>
+              <span class="settings-test-result" data-result-for="{{ provider.id }}"></span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">save providers</button>
+      </div>
+    </form>
+  </section>
+
+  {# ── Site identity ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">agent name</h2>
+    <div class="form-hint">
+      The name the site credits for a summary. A per-topic name wins over the
+      site-wide one. Leave both empty and each summary keeps naming the model
+      that wrote it.
+    </div>
+
+    <form method="post" action="/admin/settings/identity">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label class="form-label" for="agent_name">site-wide name</label>
+        <input type="text" class="form-input" id="agent_name" name="agent_name"
+               value="{{ identity.global_agent_name }}"
+               placeholder="— name the model that wrote it —">
+      </div>
+
+      <div class="admin-table-wrapper">
+      <table class="dash-table settings-table">
+        <thead>
+          <tr>
+            <th>topic</th>
+            <th>name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key, display, agent_name in identity.topics %}
+          <tr>
+            <td class="settings-role-name">{{ display or key }}</td>
+            <td>
+              <input type="text" class="form-input settings-model-input"
+                     name="topic_agent_name_{{ key }}"
+                     value="{{ agent_name }}"
+                     placeholder="— use the site-wide name —"
+                     aria-label="Agent name for {{ display or key }}">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">save agent name</button>
+      </div>
+    </form>
+  </section>
+
+  {# ── Topics ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">topics</h2>
+    <div class="form-hint">
+      The topics the site follows. A source collects into a topic, and a topic
+      with no source behind it collects nothing. Removing a topic also takes
+      it off every source that still lists it.
+    </div>
+
+    <form method="post" action="/admin/settings/topics" id="topics-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {# The save button comes first, so the primary action is the first
+         thing a keyboard reaches. The per-row remove buttons belong to
+         their own forms further down the page, and they come last. #}
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" id="save-topics">save topics</button>
+      </div>
+      <div class="admin-table-wrapper">
+      <table class="dash-table settings-table">
+        <thead>
+          <tr>
+            <th>topic</th>
+            <th>name</th>
+            <th>description</th>
+            <th>colour</th>
+            <th>query</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for topic in topics %}
+          <tr>
+            <td class="settings-role-name">
+              <input type="hidden" name="topic_row" value="{{ topic.id }}">
+              {{ topic.id }}
+              <span class="settings-topic-sources">{{ topic.source_count }} src</span>
+            </td>
+            <td>
+              <input type="text" class="form-input settings-name-input"
+                     name="display_name_{{ topic.id }}"
+                     value="{{ topic.display_name }}"
+                     aria-label="Name of the {{ topic.id }} topic">
+            </td>
+            <td>
+              <input type="text" class="form-input settings-topic-description"
+                     name="description_{{ topic.id }}"
+                     value="{{ topic.description }}"
+                     aria-label="Description of the {{ topic.id }} topic">
+            </td>
+            <td>
+              <select class="form-select" name="color_{{ topic.id }}"
+                      aria-label="Colour of the {{ topic.id }} topic">
+                {% for color in topic_colors %}
+                <option value="{{ color }}" {% if color == topic.color %}selected{% endif %}>{{ color }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <input type="text" class="form-input settings-query-input"
+                     name="query_{{ topic.id }}"
+                     value="{{ topic.query }}"
+                     placeholder="— default —"
+                     aria-label="Query for the {{ topic.id }} topic">
+            </td>
+            <td class="settings-col-actions">
+              <button type="submit" class="btn btn-danger btn-sm"
+                      form="topic-delete-{{ topic.id }}"
+                      aria-label="Remove the {{ topic.id }} topic">
+                remove
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </form>
+
+    {# One delete form per topic. A button may only belong to one form, so
+       the remove button points at the form that lives here instead of
+       nesting a form inside the form above. #}
+    {% for topic in topics %}
+    <form method="post" action="/admin/settings/topics/delete"
+          id="topic-delete-{{ topic.id }}" class="hidden-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="topic_id" value="{{ topic.id }}">
+    </form>
+    {% endfor %}
+
+    <div class="section-header">
+      <h3 class="section-title">add a topic</h3>
+    </div>
+    <form method="post" action="/admin/settings/topics/add">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-row">
+        <div class="form-group-half">
+          <label class="form-label" for="topic_id">id</label>
+          <input type="text" class="form-input" id="topic_id" name="topic_id"
+                 placeholder="— robotics —" autocomplete="off">
+        </div>
+        <div class="form-group-half">
+          <label class="form-label" for="topic_display_name">name</label>
+          <input type="text" class="form-input" id="topic_display_name" name="display_name"
+                 placeholder="— Robotics —" autocomplete="off">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="topic_description">description</label>
+        <input type="text" class="form-input" id="topic_description" name="description"
+               placeholder="— what this topic collects —" autocomplete="off">
+      </div>
+      <div class="form-row">
+        <div class="form-group-half">
+          <label class="form-label" for="topic_color">colour</label>
+          <select class="form-select" id="topic_color" name="color">
+            {% for color in topic_colors %}
+            <option value="{{ color }}">{{ color }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group-half">
+          <label class="form-label" for="topic_query">query</label>
+          <input type="text" class="form-input" id="topic_query" name="query"
+                 placeholder="— the keywords a source matches on —" autocomplete="off">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">add topic</button>
+      </div>
+    </form>
+  </section>
+
+  {# ── Schedule ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">schedule</h2>
+    <div class="form-hint">
+      How often the pipeline runs on its own. A shorter crawl interval means
+      the site picks up stories sooner, and costs more requests to the
+      sources.
+    </div>
+
+    <form method="post" action="/admin/settings/schedule">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% for name, label, low, high in schedule_fields %}
+      <div class="form-group">
+        <label class="form-label" for="{{ name }}">{{ label }}</label>
+        <input type="number" class="form-input settings-model-input"
+               id="{{ name }}" name="{{ name }}"
+               value="{{ schedule[name] }}"
+               min="{{ low }}" max="{{ high }}">
+      </div>
+      {% endfor %}
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">save schedule</button>
+      </div>
+    </form>
+  </section>
+
+  {# ── Review ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">review</h2>
+    <div class="form-hint">
+      <strong>Auto-review mode</strong> publishes every article the pipeline
+      routes to review, without waiting for a person. Turn it on for a site
+      that generates on its own. With it off, the articles wait in the
+      <a href="/admin/review">review queue</a>.
+    </div>
+
+    {% if review.auto_approve %}
+    <div class="dash-action">
+      <span class="health-dot green"></span>
+      auto-review mode is on — articles publish without a human
+    </div>
+    {% else %}
+    <div class="dash-action">
+      <span class="health-dot amber"></span>
+      auto-review mode is off — articles wait for a human
+    </div>
+    {% endif %}
+
+    <form method="post" action="/admin/settings/review">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label class="form-check">
+          <input type="checkbox" name="auto_approve"
+                 {% if review.auto_approve %}checked{% endif %}>
+          <span>auto-review mode — publish without a human</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-check">
+          <input type="checkbox" name="review_enabled"
+                 {% if review.enabled %}checked{% endif %}>
+          <span>send editorial picks to the review queue</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="auto_publish_threshold">
+          publish without review at or above this impact score
+        </label>
+        <input type="number" class="form-input settings-model-input"
+               id="auto_publish_threshold" name="auto_publish_threshold"
+               value="{{ review.auto_publish_threshold if review.auto_publish_threshold is not none else '' }}"
+               min="0" max="100"
+               placeholder="— never —">
+        <div class="form-hint">
+          Leave this empty to publish nothing without review. It applies only
+          while the review queue above is on.
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">save review settings</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

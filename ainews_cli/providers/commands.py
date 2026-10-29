@@ -22,12 +22,29 @@ def _dump_yaml(data: dict[str, Any]) -> bytes:
 
 
 def _commit_providers(config: Any) -> None:
+    """Write the provider file in the shape the application reads.
+
+    The loader normalises the provider list into a mapping keyed by provider
+    id, so writing that mapping straight back out would leave the
+    application with a file it cannot parse: it reads a *list* of provider
+    definitions. The mapping is turned back into that list here, so a
+    change made from the CLI and a change made from the admin panel leave
+    the same file behind.
+    """
     from ainews_config.transaction import transaction
+
+    data = dict(config.providers)
+    providers = data.get("providers")
+    if isinstance(providers, dict):
+        data["providers"] = [
+            {"id": provider_id, **{k: v for k, v in entry.items() if k != "id"}}
+            for provider_id, entry in providers.items()
+        ]
 
     with transaction(config.paths) as txn:
         txn.modify_file(
             config.paths.providers_file.path,
-            _dump_yaml(config.providers),
+            _dump_yaml(data),
         )
 
 

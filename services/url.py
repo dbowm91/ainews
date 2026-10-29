@@ -133,7 +133,7 @@ class UnsafeURLError(ValueError):
     pass
 
 
-def _resolve_and_check(hostname: str) -> list[str]:
+def _resolve_and_check(hostname: str, *, allow_private: bool = False) -> list[str]:
     """Resolve hostname to IP addresses and validate all against blocked networks.
 
     DNS Resolution Policy (fail-closed):
@@ -146,6 +146,13 @@ def _resolve_and_check(hostname: str) -> list[str]:
 
     This policy prevents DNS rebinding attacks where an attacker alternates
     between safe and malicious IPs across multiple lookups.
+
+    Args:
+        hostname: The host to resolve.
+        allow_private: When true, a private or reserved address is accepted.
+            The resolution still fails closed on a DNS error -- only the
+            network check is relaxed, and only for a caller that has
+            explicitly declared the endpoint local.
     """
     cached = _get_dns_cache().get(hostname)
     if cached is not None:
@@ -173,12 +180,16 @@ def _resolve_and_check(hostname: str) -> list[str]:
         seen_ips.add(ip)
         for network in _BLOCKED_NETWORKS:
             if ip in network:
+                if allow_private:
+                    break
                 raise UnsafeURLError(
                     f"Hostname {hostname} resolves to private/reserved IP {ip} ({network})",
                 )
             if isinstance(ip, ipaddress.IPv6Address):
                 ipv4_mapped = _is_ipv4_mapped(ip)
                 if ipv4_mapped and ipv4_mapped in network:
+                    if allow_private:
+                        break
                     raise UnsafeURLError(
                         f"Hostname {hostname} resolves to private/reserved IP {ip} mapped to {ipv4_mapped} ({network})",
                     )
@@ -188,7 +199,24 @@ def _resolve_and_check(hostname: str) -> list[str]:
     return safe_ips
 
 
-def validate_url_safe(url: str) -> str:
+def validate_url_safe(url: str, *, allow_private: bool = False) -> str:
+    """Validate a URL for outbound use.
+
+    Args:
+        url: The URL to validate.
+        allow_private: Permit a host that resolves to a private, loopback or
+            otherwise reserved address. This is for endpoints an operator has
+            explicitly declared local -- a local inference server, for
+            instance. It is not a general relaxation: the scheme and
+            hostname checks still apply, and the caller has to opt in.
+
+    Returns:
+        The URL, unchanged.
+
+    Raises:
+        UnsafeURLError: If the URL is empty, uses an unsupported scheme, has
+            no hostname, or resolves to a blocked address.
+    """
     if not url:
         raise UnsafeURLError("Empty URL")
 
@@ -200,6 +228,9 @@ def validate_url_safe(url: str) -> str:
     if not hostname:
         raise UnsafeURLError("URL has no hostname")
 
-    _resolve_and_check(hostname)
+    if allow_private:
+        _resolve_and_check(hostname, allow_private=True)
+    else:
+        _resolve_and_check(hostname)
 
     return url

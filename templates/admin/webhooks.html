@@ -53,12 +53,12 @@
                 {% endif %}
               </td>
               <td>
-                <button class="btn-sm"
+                <button class="btn btn-secondary btn-sm"
                         hx-get="/api/v1/webhooks/{{ w.id }}/events"
                         hx-target="#webhook-events-{{ w.id }}"
                         hx-swap="innerHTML"
                         aria-label="View events for {{ w.name | e }}">events</button>
-                <button class="btn-sm"
+                <button class="btn btn-secondary btn-sm"
                         hx-post="/api/v1/webhooks/{{ w.id }}/test"
                         hx-target="#webhook-events-{{ w.id }}"
                         hx-swap="innerHTML"

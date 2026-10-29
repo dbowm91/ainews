@@ -154,9 +154,12 @@ def _console_error_guard(page: Page):
     yield
     # Filter out known benign errors:
     # - favicon 404 in test
-    # - variables.css MIME type (test server static file routing)
     # - Service Worker scope warning (benign in test env)
-    _BENIGN = ("favicon", "variables.css", "Service Worker", "service worker", "503")
+    #
+    # A stylesheet MIME-type error is NOT benign and is no longer filtered:
+    # every stylesheet the page loads is served as text/css, and a regression
+    # that changed that would be invisible behind a whitelist entry.
+    _BENIGN = ("favicon", "Service Worker", "service worker", "503")
     unexpected = [e for e in errors if not any(b.lower() in e.lower() for b in _BENIGN)]
     assert not unexpected, f"Unexpected console errors: {unexpected}"
 
@@ -566,10 +569,9 @@ class TestHtmxNavigationPreservesTheme:
         theme_href_before = page.locator("#ainews-theme-stylesheet").get_attribute("href")
         app_href_before = page.locator("#ainews-app-stylesheet").get_attribute("href")
 
-        # Trigger an HTMX request — use a search form or direct hx-get
-        # The home page has hx-boost="true" on body, so clicking internal links
-        # triggers HTMX. We simulate by firing an htmx.ajax or navigating with
-        # HX-Request header via JS.
+        # Trigger an HTMX request. The app declares explicit hx-get with
+        # hx-target="#content" for the in-page updates (search, sort), so we
+        # fire the same shape of request here.
         page.evaluate("""
             () => {
                 // Fire an HTMX-style GET to the same page via htmx.ajax if available

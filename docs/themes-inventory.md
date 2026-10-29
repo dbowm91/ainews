@@ -82,6 +82,58 @@ These themes parse successfully but `translate_theme()` raises `ThemeContrastErr
 
 These themes remain valid Halloy themes and parse without errors — only the translation step fails. They are excluded from the bundle; re-inclusion would require explicit contrast remapping or a per-theme override, which is not currently planned.
 
+## Rendered palette vs source TOML
+
+The translation layer applies a readability floor, so the palette the browser
+paints is not always the palette the source TOML declares. The floor raises
+the lightness of a `text_secondary`, `text_muted` or `link` tone that is
+unreadable on the theme's own surfaces; hue and saturation are preserved, so
+the palette still reads as the theme it came from. The upstream Halloy files
+in `resources/themes/` are byte-identical to what Halloy ships.
+
+**33 of the 48 bundled themes** have at least one adjusted token:
+
+| Theme | Adjusted tokens |
+|-------|-----------------|
+| `catppuccin-latte` | `text_secondary` `#6C6F85` → `#5f6275`; `link` `#1E66F5` → `#0a55ea` |
+| `discord-80-saturation` | `text_secondary` `#9C9DA2` → `#afb0b4`; `link` `#2AAAF8` → `#50b9f9` |
+| `discord` | `text_secondary` `#9C9DA2` → `#afb0b4`; `link` `#2AAAF8` → `#50b9f9` |
+| `dracula` | `text_secondary` `#727794` → `#8d91a8` |
+| `ferra-light` | `text_secondary` `#A79891` → `#72635c`; `link` `#6360D6` → `#5754d3` |
+| `flexor-dark` | `link` `#4385BE` → `#4989c0` |
+| `gruvbox` | `link` `#458588` → `#509b9e` |
+| `kanagawa` | `text_secondary` `#727169` → `#94938a` |
+| `macaw-dark` | `link` `#2884FC` → `#539dfd` |
+| `macaw-light` | `text_secondary` `#6C6F85` → `#696c81`; `link` `#1E66F5` → `#1661f5` |
+| `noctis-lilac` | `text_secondary` `#75718E` → `#65617a`; `link` `#00C6E0` → `#006f7d` |
+| `nord` | `text_secondary` `#616E88` → `#a6afc0` |
+| `one-dark` | `text_secondary` `#878E9B` → `#999faa` |
+| `oxocarbon` | `text_secondary` `#525252` → `#848484` |
+| `rose-pine-moon` | `text_secondary` `#908CAA` → `#928eac` |
+| `solarized-dark` | `text_secondary` `#586E75` → `#859ca3`; `link` `#2AA198` → `#2daba1` |
+| `sonokai` | `text_secondary` `#7F8490` → `#9a9ea7` |
+| `zenburn` | `text_secondary` `#95958A` → `#aaaaa1` |
+| `acton` | `text_secondary` `#CE779D` → `#dea3bc` |
+| `bam` | `text_secondary` `#557528` → `#7baa3a` |
+| `base16-atelier-forest-light` | `text_secondary` `#766E6B` → `#6b6461`; `link` `#407EE7` → `#1a5ed2` |
+| `berlin` | `text_secondary` `#2A6D8D` → `#459dc7` |
+| `black-but-with-important-highlights` | `text_secondary` `#8F8F8F` → `#989898` |
+| `broc` | `text_secondary` `#857D50` → `#b3ac81` |
+| `cork` | `text_secondary` `#3A793F` → `#5cb162` |
+| `forest` | `text_secondary` `#A49D87` → `#a9a28d`; `link` `#9A8C98` → `#aba0aa` |
+| `lisbon` | `text_secondary` `#48709D` → `#7a9cc2` |
+| `midnight` | `text_secondary` `#778DA9` → `#788eaa` |
+| `plum` | `text_secondary` `#72778E` → `#a5a8b7` |
+| `portland` | `text_secondary` `#8F8F8F` → `#989898` |
+| `tofino` | `text_secondary` `#4363A2` → `#7a94c8` |
+| `vanimo` | `text_secondary` `#994386` → `#c376b2` |
+| `vik` | `text_secondary` `#823722` → `#d16c4f` |
+
+Every theme additionally gains two derived tokens that no source TOML declares:
+`--link` (the accent hue, floored for legibility) and `--accent-contrast`
+(the label colour of a filled accent surface). `--bg-elevated` is derived from
+`bg_tertiary`. See `docs/halloy-theme-contract.md` §10.3 and §10.4.
+
 ## Normalized identifier examples
 
 The `normalize_identifier()` function in `services/themes/halloy.py:21` applies: NFKD Unicode normalization, ASCII fold, lowercase, replace `[^a-z0-9]+` with `-`, strip leading/trailing `-`.

@@ -250,6 +250,10 @@ class TestPipelineEndToEnd:
             _assign_tags(article, ["machine-learning", "ai", "python"], db)
             db.session.commit()
 
+            # Reprocessing an article must not insert duplicate association rows.
+            _assign_tags(article, ["machine-learning", "ai", "python"], db)
+            db.session.commit()
+
             # Verify tags
             from models import Article, Tag
 

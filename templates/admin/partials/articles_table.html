@@ -47,11 +47,11 @@
   <div class="table-responsive">
   <table class="dash-table" aria-label="Articles list">
     <thead>
-      <tr><th><input type="checkbox" id="select-all-checkbox" aria-label="Select all"></th><th>title</th><th>category</th><th>status</th><th>impact</th><th>created</th><th>actions</th></tr>
+      <tr><th><input type="checkbox" id="select-all-checkbox" aria-label="Select all"></th><th>title</th><th>category</th><th>status</th><th>impact</th><th>quality</th><th>created</th><th>actions</th></tr>
     </thead>
     <tfoot>
       <tr id="select-matching-row" class="hidden">
-        <td colspan="7">
+        <td colspan="8">
           <button type="button" class="btn btn-sm btn-secondary" id="select-all-matching-btn">
             select all {{ total_count }} matching
           </button>
@@ -71,9 +71,20 @@
           <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
           <td>{{ pipeline_badge(article.pipeline_status) }}</td>
           <td>{{ impact_score(article.impact_score) }}</td>
+          <td>
+            {% if article.quality_score is not none %}
+              <span class="agent-quality">{{ '%.2f'|format(article.quality_score) }}</span>
+            {% else %}
+              <span class="text-muted">&mdash;</span>
+            {% endif %}
+            {% if article.degradation_count %}
+              <span class="agent-degraded" title="The pipeline fell back {{ article.degradation_count }} time{{ 's' if article.degradation_count != 1 else '' }} while producing this article">degraded &times;{{ article.degradation_count }}</span>
+            {% endif %}
+          </td>
           <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
           <td class="actions-cell">
             <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
+            <a href="/admin/articles/{{ article.id }}/audit" class="newsletter-preview-link">audit</a>
             <form method="POST" action="/admin/articles/{{ article.id }}/delete" class="inline"
                   hx-post="/admin/articles/{{ article.id }}/delete"
                   hx-confirm="Delete this article?"

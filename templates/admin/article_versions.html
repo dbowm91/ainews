@@ -18,7 +18,7 @@
 <div class="dashboard">
   <div class="dashboard-header">
     <h1 class="dashboard-title">version history</h1>
-    <a href="/admin/articles/{{ article.id }}/edit" class="btn-primary no-decoration">&larr; back to edit</a>
+    <a href="/admin/articles/{{ article.id }}/edit" class="btn btn-primary no-decoration">&larr; back to edit</a>
   </div>
 
   <section class="dash-card dash-card-full">
@@ -44,7 +44,7 @@
                         hx-post="/admin/articles/{{ article.id }}/versions/{{ v.id }}/rollback"
                         hx-confirm="Rollback to version {{ v.version_number }}? Current content will be saved as a new version first."
                         hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-                    <button type="submit" class="btn-secondary btn-sm">rollback</button>
+                    <button type="submit" class="btn btn-secondary btn-sm">rollback</button>
                   </form>
                 </td>
               </tr>

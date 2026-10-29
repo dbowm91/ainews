@@ -50,7 +50,8 @@ def run_doctor(
 
     if paths is None:
         from ainews_config import resolve_paths
-        paths = resolve_paths()
+        from ainews_cli.context import path_env_overrides
+        paths = resolve_paths(env_overrides=path_env_overrides())
 
     _check_package_version(checks)
     _check_schema_version(checks)

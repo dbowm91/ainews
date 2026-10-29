@@ -23,7 +23,23 @@ class TestCeleryBeatSchedule:
 
     def test_all_tasks_present(self):
         schedule = Config.get_beat_schedule()
-        assert len(schedule) == 14
+        assert len(schedule) == 15
+
+    def test_auto_approve_review_articles_is_scheduled(self):
+        schedule = Config.get_beat_schedule()
+        assert (
+            schedule["auto-approve-review-articles"]["task"]
+            == "tasks.scheduler.auto_approve_review_articles"
+        )
+
+    def test_celery_app_installs_schedule_at_startup(self):
+        from celery_app import celery_app
+
+        assert "run-all-sources" in celery_app.conf.beat_schedule
+        assert (
+            celery_app.conf.beat_schedule["run-all-sources"]["task"]
+            == "tasks.crawl.run_all_sources"
+        )
 
     def test_run_all_sources_task(self):
         schedule = Config.get_beat_schedule()

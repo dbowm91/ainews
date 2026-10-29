@@ -24,7 +24,7 @@
         <input type="hidden" name="topic" value="{{ note.topic|e }}">
         <input type="hidden" name="source" value="{{ (note.source or '')|e }}">
         <button type="submit" class="btn btn-sm btn-danger"
-                hx-confirm="Delete this note?">delete</button>
+                data-confirm="Delete this note?">delete</button>
       </form>
     </div>
   </td>

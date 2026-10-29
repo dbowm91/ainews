@@ -13,21 +13,5 @@
 {% endblock %}
 
 {% block content %}
-<article class="article-full htmx-skeleton-target">
-  <div class="htmx-indicator" id="article-skeleton">
-    {% include "partials/skeleton_article_detail.html" %}
-  </div>
-  {% if article._fa %}
-    {% set fa = article._fa %}
-    {% include "partials/condensed_article.html" %}
-  {% else %}
-    {% include "partials/article_body.html" %}
-  {% endif %}
-
-  {% include "partials/related_articles.html" %}
-
-  <nav class="article-nav">
-    <a href="/" class="back-link">&larr; back to feed</a>
-  </nav>
-</article>
+{% include "partials/article_detail.html" %}
 {% endblock %}

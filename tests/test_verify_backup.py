@@ -1,4 +1,5 @@
 import gzip
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -8,7 +9,20 @@ import pytest
 
 VERIFY_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "verify_backup.sh"
 
-REQUIRED_TABLES = ["articles", "sources", "tags", "subscribers", "newsletters"]
+
+def _required_tables() -> list[str]:
+    """Read the required table list straight from the verification script.
+
+    Deriving the list keeps the fixture and the script from drifting apart
+    when a table is added to the schema.
+    """
+    script = VERIFY_SCRIPT.read_text(encoding="utf-8")
+    match = re.search(r"REQUIRED_TABLES=\((.*?)\)", script, re.DOTALL)
+    assert match, "verify_backup.sh no longer declares REQUIRED_TABLES"
+    return re.findall(r'"([^"]+)"', match.group(1))
+
+
+REQUIRED_TABLES = _required_tables()
 
 requires_sqlite3_cli = pytest.mark.skipif(
     shutil.which("sqlite3") is None,

@@ -4,6 +4,7 @@ from typing import Literal
 
 from services.themes.colors import (
     Color,
+    adjust_lightness,
     composite_over,
     contrast_ratio,
     derive_border,
@@ -79,6 +80,7 @@ def classify_contrast_findings(theme: AinewsTheme) -> list[ThemeDiagnostic]:
     tp = parse_hex_color(theme.text_primary)
     bg = parse_hex_color(theme.bg_primary)
     bg2 = parse_hex_color(theme.bg_secondary)
+    bg3 = parse_hex_color(theme.bg_tertiary)
     bg_input = parse_hex_color(theme.bg_input)
     bg_selected = parse_hex_color(theme.bg_selected)
     ts = parse_hex_color(theme.text_secondary)
@@ -146,6 +148,37 @@ def classify_contrast_findings(theme: AinewsTheme) -> list[ThemeDiagnostic]:
     # 14. Selected text vs selected surface (normal text — 4.5 AA)
     _check_contrast(findings, tp, bg_selected, 4.5, "bg_selected", "contrast.selection",
                     "Selected text vs bg_selected")
+
+    # 15. Extended AA matrix for the surfaces the public UI actually paints.
+    #
+    # The public pages render secondary and muted text on the page surface,
+    # the raised surface and the elevated surface, and they render accent and
+    # link colours as text on all three. The checks above only covered
+    # bg_secondary for secondary and muted text, so a theme could satisfy
+    # them and still render unreadable body copy.
+    #
+    # These findings use their own diagnostic codes so that the strict
+    # policy can promote them without promoting every AAA advisory.
+    for surface_name, surface in (
+        ("bg_primary", bg),
+        ("bg_secondary", bg2),
+        ("bg_tertiary", bg3),
+    ):
+        _check_contrast(
+            findings, ts, surface, 4.5, "text_secondary",
+            "THEME_CONTRAST_SECONDARY_AA",
+            f"Secondary text vs {surface_name}",
+        )
+        _check_contrast(
+            findings, tm, surface, 4.5, "text_muted",
+            "THEME_CONTRAST_MUTED_AA",
+            f"Muted text vs {surface_name}",
+        )
+        _check_contrast(
+            findings, link, surface, 4.5, "link",
+            "THEME_CONTRAST_ACCENT_AA",
+            f"Link vs {surface_name}",
+        )
 
     return findings
 
@@ -306,6 +339,81 @@ def _resolve_surface(
     return serialize_color(Color(r=128, g=128, b=128))
 
 
+def _floor_readable(
+    value: str,
+    backgrounds: tuple[Color, ...],
+    threshold: float,
+) -> str:
+    """Return ``value`` adjusted until it is legible on every surface."""
+    from services.themes.colors import ensure_contrast
+
+    return serialize_color(
+        ensure_contrast(parse_hex_color(value), backgrounds, threshold)
+    )
+
+
+def _apply_text_readability_floor(
+    *,
+    text_secondary_hex: str,
+    text_muted_hex: str,
+    backgrounds: tuple[Color, ...],
+    threshold: float,
+) -> tuple[str, str]:
+    """Raise low-contrast text tones until they are legible on every surface.
+
+    Halloy palettes are free to choose their own text tones, and a number of
+    bundled themes use a muted tone that is unreadable on the theme's own
+    surfaces -- ``catppuccin-latte`` renders muted text at 2.6:1 on its own
+    content surface.
+
+    The floor is applied here, in the translation layer, rather than in the
+    48 upstream TOML files. That keeps the bundled files byte-identical to
+    what Halloy ships, applies the same rule to external themes, and moves
+    only the lightness of the author's colour so the palette still reads as
+    the theme it came from.
+
+    ``--accent`` is deliberately left alone: it is the brand colour used for
+    chrome, badges and button fills, not for body text. ``--link`` carries
+    the accent hue but is floored, and it is the token the public pages use
+    for link text.
+    """
+    return (
+        _floor_readable(text_secondary_hex, backgrounds, threshold),
+        _floor_readable(text_muted_hex, backgrounds, threshold),
+    )
+
+
+def _derive_accent_surface_label(
+    accent: Color,
+    accent_hover_hex: str,
+    provenance: dict[str, TokenProvenance],
+) -> tuple[str, str]:
+    """Derive the label colour of a filled accent surface.
+
+    A filled accent button paints its background with the accent colour and
+    shows its label on top. The label cannot be a text token: the dark
+    palette's text is near-white and the light palette's is near-black, so
+    neither is legible on both a light and a dark accent fill. The label is
+    therefore chosen here.
+
+    The hover fill has to keep the label legible too. A theme whose accent
+    and hover accent straddle the legible band would otherwise show an
+    unreadable label for as long as the pointer rests on the button.
+
+    Returns the label colour and the hover fill that keeps it legible.
+    """
+    from services.themes.colors import ensure_fill_legible, on_accent_color
+
+    label = on_accent_color((accent,), 4.5)
+    hover = ensure_fill_legible(label, parse_hex_color(accent_hover_hex), 4.5)
+    adjusted_hover = serialize_color(hover)
+    if adjusted_hover != accent_hover_hex:
+        provenance["accent_hover"] = TokenProvenance(
+            token="accent_hover", source=TokenSource.DERIVED
+        )
+    return serialize_color(label), adjusted_hover
+
+
 def translate_theme(halloy: HalloyTheme) -> ThemeTranslationResult:
     warnings: list[ThemeDiagnostic] = []
     provenance: dict[str, TokenProvenance] = {}
@@ -426,6 +534,22 @@ def translate_theme(halloy: HalloyTheme) -> ThemeTranslationResult:
     text_muted_hex = _resolve("text_muted", "buffer.topic")
     text_dim_hex = _resolve("text_dim", "buffer.timestamp")
 
+    # Readability floor. Applied here rather than in the upstream TOML files
+    # so that bundled and external themes get the same treatment and the
+    # bundled files stay byte-identical to what Halloy ships.
+    text_secondary_hex, text_muted_hex = _apply_text_readability_floor(
+        text_secondary_hex=text_secondary_hex,
+        text_muted_hex=text_muted_hex,
+        backgrounds=(bg_primary, bg_secondary, bg_tertiary),
+        threshold=4.5,
+    )
+    provenance["text_secondary"] = TokenProvenance(
+        token="text_secondary", source=TokenSource.DERIVED
+    )
+    provenance["text_muted"] = TokenProvenance(
+        token="text_muted", source=TokenSource.DERIVED
+    )
+
     text_inverse = safe_foreground(
         bg_primary, Color(r=255, g=255, b=255), Color(r=0, g=0, b=0)
     )
@@ -434,6 +558,16 @@ def translate_theme(halloy: HalloyTheme) -> ThemeTranslationResult:
 
     accent_hex = _resolve("accent", "buffer.url")
     accent = parse_hex_color(accent_hex)
+
+    # The link token carries the accent hue but is floored for legibility.
+    # `--accent` itself stays the author's brand colour: it is used for
+    # chrome, badges and button fills, not for body text.
+    link_hex = _floor_readable(accent_hex, (bg_primary, bg_secondary, bg_tertiary), 4.5)
+    link_hover_hex = serialize_color(derive_hover(parse_hex_color(link_hex)))
+    provenance["link"] = TokenProvenance(token="link", source=TokenSource.DERIVED)
+    provenance["link_hover"] = TokenProvenance(
+        token="link_hover", source=TokenSource.DERIVED
+    )
 
     btn_primary_hover = _parse_optional(halloy, "buttons.primary.background_hover")
     if btn_primary_hover is not None:
@@ -453,12 +587,20 @@ def translate_theme(halloy: HalloyTheme) -> ThemeTranslationResult:
         _warn("accent_active")
         _derived("accent_active")
 
+    # The label colour for a filled accent button. It is chosen here rather
+    # than taken from the theme's text palette, because a text token cannot
+    # be legible on both a light and a dark accent fill.
+    accent_contrast_hex, accent_hover_hex = _derive_accent_surface_label(
+        accent, accent_hover_hex, provenance
+    )
+    _derived("accent_contrast")
+    _warn("accent_contrast")
+
     from services.themes.colors import adjust_lightness as _adj
 
     focus_ring = _adj(accent, 0.1)
     _derived("focus_ring")
     _warn("focus_ring")
-
     success_hex = _resolve("success", "text.success")
     warning_hex = _resolve("warning", "buffer.action")
     error_hex = _resolve("error", "text.error")
@@ -504,8 +646,9 @@ def translate_theme(halloy: HalloyTheme) -> ThemeTranslationResult:
         accent=accent_hex,
         accent_hover=accent_hover_hex,
         accent_active=accent_active_hex,
-        link=accent_hex,
-        link_hover=accent_hover_hex,
+        accent_contrast=accent_contrast_hex,
+        link=link_hex,
+        link_hover=link_hover_hex,
         focus_ring=serialize_color(focus_ring),
         success=success_hex,
         warning=warning_hex,
@@ -557,6 +700,7 @@ _PALETTE_ORDER: list[str] = [
     "accent",
     "accent-hover",
     "accent-active",
+    "accent-contrast",
     "link",
     "link-hover",
     "focus-ring",
@@ -636,6 +780,7 @@ def to_css_variables(theme: AinewsTheme) -> str:
         "accent": "accent",
         "accent_hover": "accent-hover",
         "accent_active": "accent-active",
+        "accent_contrast": "accent-contrast",
         "link": "link",
         "link_hover": "link-hover",
         "focus_ring": "focus-ring",
@@ -682,6 +827,15 @@ def to_css_variables(theme: AinewsTheme) -> str:
     accent_active_val = getattr(theme, "accent_active", None)
     if accent_active_val is not None:
         lines.append(f"  --accent-dim: {accent_active_val};")
+
+    # 3a. Elevated surface: one step further from the page than the
+    # tertiary ramp. The public UI uses it for popovers, dropdowns and the
+    # theme selector. It is derived rather than declared, so a theme that
+    # predates the token still produces a valid, four-step ramp.
+    bg_tertiary_val = getattr(theme, "bg_tertiary", None)
+    if bg_tertiary_val is not None:
+        elevated = adjust_lightness(parse_hex_color(bg_tertiary_val), 0.04)
+        lines.append(f"  --bg-elevated: {serialize_color(elevated)};")
 
     # 4. Legacy status aliases: new semantic → old component names
     success_val = getattr(theme, "success", None)

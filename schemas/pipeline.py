@@ -9,6 +9,7 @@ from schemas.common import (
     BASE_DIR,
     MAX_TOKENS_FIELD,
     cached_config_with_mtime,
+    config_cache_key,
     load_yaml_file,
 )
 
@@ -34,7 +35,15 @@ class RoleConfig(BaseModel):
 
 class ReviewConfig(BaseModel):
     """Configuration for the review stage and auto-publish behavior."""
+
     enabled: bool = False
+    auto_approve: bool = Field(
+        default=False,
+        description=(
+            "Approve and publish every article that reaches the review queue "
+            "without waiting for a human. Default: False (a human decides)."
+        ),
+    )
     auto_publish_threshold: Optional[int] = Field(
         default=None,
         description="Auto-publish articles with impact_score >= this value, bypassing review. Default: None (disabled).",
@@ -184,7 +193,7 @@ def load_pipeline_config(
     path: str | Path = BASE_DIR / "pipeline.yaml",
 ) -> PipelineRootConfig:
     return cached_config_with_mtime(
-        key="pipeline",
+        key=config_cache_key("pipeline", path),
         loader_fn=lambda: _load_pipeline_config_from_file(path),
         config_path=Path(path),
     )

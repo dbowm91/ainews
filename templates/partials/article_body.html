@@ -12,7 +12,7 @@
 {% if sd and sd.tldr %}
   <div class="article-tldr">
     <span class="tldr-label">tl;dr</span>
-    {{ sd.tldr|e }}
+    {{ sd.tldr|inline_html }}
   </div>
 {% elif article.summary and not sd %}
   <div class="article-summary">{{ article.summary|e }}</div>
@@ -21,7 +21,7 @@
 {% if sd and sd.why_it_matters %}
   <section class="article-why-matters">
     <h2 class="section-heading">why it matters</h2>
-    <div class="why-matters-text">{{ sd.why_it_matters|e }}</div>
+    <div class="why-matters-text">{{ sd.why_it_matters|markdown_html }}</div>
   </section>
 {% endif %}
 
@@ -30,7 +30,7 @@
     <h2 class="section-heading">key takeaways{% if sd.key_points|length > 5 %} <span class="keypoints-count">({{ sd.key_points|length }} total)</span>{% endif %}</h2>
     <ul class="keypoints-list">
       {% for p in sd.key_points[:5] %}
-        <li>{{ p|e }}</li>
+        <li>{{ p|inline_html }}</li>
       {% endfor %}
     </ul>
     {% if sd.key_points|length > 5 %}

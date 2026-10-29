@@ -1,0 +1,212 @@
+{% extends "base_admin.html" %}
+{% from "macros/badges.html" import pipeline_badge, impact_score %}
+
+{% block title %}ainews// admin — article #{{ provenance.article_id }} audit{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">&rsaquo;</span>
+  <a href="/admin/articles">articles</a>
+  <span class="breadcrumb-separator">&rsaquo;</span>
+  <span class="breadcrumb-current">audit #{{ provenance.article_id }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">audit trail &mdash; article #{{ provenance.article_id }}</h1>
+    <a href="/admin/articles" class="btn btn-secondary no-decoration">&larr; all articles</a>
+  </div>
+
+  <div class="form-hint">
+    {{ provenance.title|e }}
+  </div>
+
+  {# ── Provenance ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">provenance</h2>
+    <div class="audit-stat-grid">
+      <div class="stat-box">
+        <span class="stat-value">{{ provenance.pipeline_status }}</span>
+        <span class="stat-label">status</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-value">{% if provenance.selector_score is not none %}{{ provenance.selector_score }}/10{% else %}&mdash;{% endif %}</span>
+        <span class="stat-label">selector</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-value">{{ provenance.impact_score }}</span>
+        <span class="stat-label">impact</span>
+      </div>
+      <div class="stat-box {% if provenance.quality_score is not none and provenance.quality_score >= 7 %}stat-high{% elif provenance.quality_score is not none %}stat-medium{% endif %}">
+        <span class="stat-value">{% if provenance.quality_score is not none %}{{ '%.2f'|format(provenance.quality_score) }}{% else %}&mdash;{% endif %}</span>
+        <span class="stat-label">quality</span>
+      </div>
+      <div class="stat-box {% if provenance.degradation_count %}stat-low{% endif %}">
+        <span class="stat-value">{{ provenance.degradation_count }}</span>
+        <span class="stat-label">degradations</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-value">{{ provenance.total_retries }}</span>
+        <span class="stat-label">retries</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-value">{{ provenance.version_count }}</span>
+        <span class="stat-label">versions</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-value">{{ provenance.extraction_status or '—' }}</span>
+        <span class="stat-label">extraction</span>
+      </div>
+    </div>
+
+    <div class="audit-facts">
+      <div class="audit-fact">
+        <span class="audit-fact-label">source</span>
+        <span class="audit-fact-value">{{ provenance.source_name or '—' }}</span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">topic</span>
+        <span class="audit-fact-value">
+          {% if provenance.category %}
+            <span class="category-badge cat-{{ provenance.category|e }}">{{ provenance.category|e }}</span>
+          {% else %}&mdash;{% endif %}
+        </span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">writer model</span>
+        <span class="audit-fact-value">{{ provenance.writer_model or '—' }}</span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">crawled</span>
+        <span class="audit-fact-value">{{ provenance.crawled_at.strftime('%b %d %H:%M') if provenance.crawled_at else '—' }}</span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">pipeline started</span>
+        <span class="audit-fact-value">{{ provenance.pipeline_started_at.strftime('%b %d %H:%M') if provenance.pipeline_started_at else '—' }}</span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">selected</span>
+        <span class="audit-fact-value">{{ provenance.selected_at.strftime('%b %d %H:%M') if provenance.selected_at else '—' }}</span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">published</span>
+        <span class="audit-fact-value">{{ provenance.published_at.strftime('%b %d %H:%M') if provenance.published_at else '—' }}</span>
+      </div>
+      <div class="audit-fact">
+        <span class="audit-fact-label">quality gate</span>
+        <span class="audit-fact-value">
+          {% if provenance.quality_passed is none %}
+            &mdash;
+          {% elif provenance.quality_passed %}
+            passed
+          {% elif provenance.quality_needs_review %}
+            needs review
+          {% else %}
+            failed
+          {% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% if provenance.selector_reason %}
+    <div class="form-hint">
+      <strong>selector:</strong> {{ provenance.selector_reason|e }}
+    </div>
+    {% endif %}
+
+    {% if provenance.last_error %}
+    <div class="audit-error">
+      <span class="audit-error-label">last error</span>
+      <span>{{ provenance.last_error|e }}</span>
+    </div>
+    {% endif %}
+
+    <div class="audit-artifacts">
+      <span class="audit-fact-label">artifacts</span>
+      <span class="audit-chip {% if provenance.has_research_brief %}is-present{% endif %}">research brief</span>
+      <span class="audit-chip {% if provenance.has_draft %}is-present{% endif %}">draft</span>
+      <span class="audit-chip {% if provenance.has_final %}is-present{% endif %}">final</span>
+    </div>
+  </section>
+
+  {# ── Stage timeline ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">stage timeline <span class="text-muted">({{ events|length }} events)</span></h2>
+
+    {% if summaries %}
+    <div class="audit-stat-grid mb-1">
+      {% for summary in summaries %}
+      <div class="stat-box {% if summary.errors %}stat-high{% elif summary.warnings %}stat-medium{% endif %}">
+        <span class="stat-value">{{ summary.total }}</span>
+        <span class="stat-label">{{ summary.label }}</span>
+        {% if summary.warnings or summary.errors %}
+        <span class="stat-sub">
+          {% if summary.warnings %}{{ summary.warnings }} warn{% endif %}
+          {% if summary.errors %}{{ summary.errors }} err{% endif %}
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if events %}
+    <ol class="audit-timeline">
+      {% for event in events %}
+      <li class="audit-event audit-event--{{ event.level }}">
+        <span class="audit-event-time">{{ event.created_at.strftime('%b %d %H:%M:%S') if event.created_at }}</span>
+        <span class="audit-event-stage">{{ event.stage }}</span>
+        <span class="log-level log-level-{{ event.level }}">{{ event.level }}</span>
+        <span class="audit-event-message">
+          {{ event.message|e }}
+          {% if event.error %}
+            <span class="log-error-detail">{{ event.error|e }}</span>
+          {% endif %}
+          {% if event.duration_ms is not none %}
+            <span class="audit-event-duration">{{ event.duration_ms }}ms</span>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <div class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="12" y="8" width="40" height="48" rx="4" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="20" x2="44" y2="20" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="28" x2="38" y2="28" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="36" x2="42" y2="36" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="44" x2="32" y2="44" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <span>no pipeline events recorded for this article</span>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ── Versions ── #}
+  {% if versions %}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">versions</h2>
+    <div class="table-responsive">
+      <table class="dash-table" aria-label="Article versions">
+        <thead>
+          <tr><th>version</th><th>change reason</th><th>created</th></tr>
+        </thead>
+        <tbody>
+          {% for version_number, change_reason, created_at in versions %}
+          <tr>
+            <td>v{{ version_number }}</td>
+            <td>{{ (change_reason or '—')|e }}</td>
+            <td class="log-time">{{ created_at.strftime('%b %d %H:%M') if created_at else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

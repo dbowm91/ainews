@@ -76,7 +76,7 @@ class TestPublicRoutes:
 
         assert b"<!DOCTYPE html>" in full.data
         assert b"<!DOCTYPE html>" not in fragment.data
-        assert b'class="feed-header"' in fragment.data
+        assert b'class="feed-toolbar"' in fragment.data
 
     def test_index_article_cards_include_client_state_id(self, client, create_article):
         """Read and bookmark state can target the rendered article card."""
@@ -88,6 +88,46 @@ class TestPublicRoutes:
         response = client.get("/")
 
         assert f'data-article-id="{article.id}"'.encode() in response.data
+
+    def test_article_detail_caches_rendered_html_without_error(self, app, client, create_article):
+        """Rendered response bytes are converted to a cache-safe text value."""
+        from services.cache import get_response_cache
+
+        article = create_article(original_title="Cacheable public article")
+        # Response caching is off in the testing configuration, so the cache
+        # contract is exercised with caching explicitly enabled.
+        from services.cache import reset_response_cache
+
+        app.config["RESPONSE_CACHE_ENABLED"] = True
+        reset_response_cache()
+        cache = get_response_cache()
+        cache.invalidate(f"pub:article_detail:view:page:{article.id}")
+
+        first = client.get(f"/article/{article.id}")
+        second = client.get(f"/article/{article.id}")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.data == first.data
+        cached_html = cache.get(f"pub:article_detail:view:page:{article.id}")
+        assert isinstance(cached_html, str)
+        assert cached_html.encode() == first.data
+        reset_response_cache()
+
+    def test_critical_css_import_targets_existing_static_asset(self, client):
+        """The fallback palette comes from the app stylesheet, not the critical sheet.
+
+        The inlined critical stylesheet is palette-free by contract so that the
+        theme stylesheet, which is linked after it, is the only palette source
+        that can win the cascade.
+        """
+        response = client.get("/")
+        assert response.status_code == 200
+        assert b"/static/css/variables.css" not in response.data
+        assert client.get("/static/css/variables.css").status_code == 200
+        stylesheet = client.get("/static/css/style.css")
+        assert stylesheet.status_code == 200
+        assert b"variables.css" in stylesheet.data
 
     def test_health_returns_ok(self, client):
         resp = client.get("/health")

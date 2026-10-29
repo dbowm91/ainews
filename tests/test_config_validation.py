@@ -130,6 +130,52 @@ class TestValidConfigPasses:
 
 
 class TestDefaultProviderValidation:
+    def test_mapping_provider_shape_is_validated(self):
+        """The ID-keyed mapping shape must validate like the legacy list shape.
+
+        The shared config engine normalizes ``providers: [{id, ...}]`` into
+        ``providers: {id: {...}}``, and the CLI writes the mapping shape. The
+        cross-file validator must understand both, otherwise every mapping
+        shaped file reports the default provider as missing.
+        """
+        cfg = _base_config()
+        cfg["providers"]["providers"] = {
+            "ollama-local": {
+                "type": "ollama",
+                "enabled": True,
+                "config": {"host": "http://localhost:11434"},
+            },
+        }
+        result = validate_cross_file(cfg)
+        assert result.is_valid, [e.message for e in result.errors]
+
+    def test_mapping_provider_shape_detects_missing_default(self):
+        cfg = _base_config()
+        cfg["providers"]["providers"] = {"other": {"type": "ollama", "enabled": True}}
+        result = validate_cross_file(cfg)
+        assert not result.is_valid
+        assert any(
+            e.code == "PROVIDER_MISSING" and "does not exist" in e.message
+            for e in result.errors
+        )
+
+    def test_mapping_provider_shape_detects_disabled_default(self):
+        cfg = _base_config()
+        cfg["providers"]["providers"] = {
+            "ollama-local": {"type": "ollama", "enabled": False},
+        }
+        result = validate_cross_file(cfg)
+        assert not result.is_valid
+        assert any(e.code == "PROVIDER_DISABLED" for e in result.errors)
+
+    def test_mapping_provider_key_wins_over_embedded_id(self):
+        cfg = _base_config()
+        cfg["providers"]["providers"] = {
+            "ollama-local": {"id": "stale", "type": "ollama", "enabled": True},
+        }
+        result = validate_cross_file(cfg)
+        assert result.is_valid, [e.message for e in result.errors]
+
     def test_missing_default_provider(self):
         cfg = _base_config()
         cfg["providers"]["default_provider"] = None

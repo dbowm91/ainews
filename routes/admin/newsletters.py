@@ -1,12 +1,21 @@
 import logging
 
-from flask import current_app, g, jsonify, render_template, request
+from flask import (
+    current_app,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_NEWSLETTERS
 from extensions import db
 from routes.admin import admin_api_bp, admin_bp, require_auth
-from routes.decorators import validate_csrf_json
+from routes.decorators import validate_csrf_token, wants_html
 from services.audit import log_admin_action
 from services.task_security import get_signed_kwargs
 
@@ -99,7 +108,7 @@ def view_newsletter(newsletter_id):
 
 @admin_bp.route("/newsletters/generate", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@validate_csrf_token
 def trigger_newsletter():
     from tasks.newsletter import generate_daily_newsletters
 
@@ -115,17 +124,23 @@ def trigger_newsletter():
             details={"task_id": result.id},
             category="pipeline",
         )
+        if wants_html():
+            flash("Newsletter generation started.", "success")
+            return redirect(url_for("admin.newsletters"))
         return jsonify(
             {"message": "Newsletter generation started", "task_id": result.id},
         ), 202
     except Exception:
         current_app.logger.exception("Failed to trigger newsletter")
+        if wants_html():
+            flash("Failed to start newsletter generation.", "error")
+            return redirect(url_for("admin.newsletters"))
         return jsonify({"error": "Failed to start newsletter generation"}), 503
 
 
 @admin_bp.route("/newsletters/dry-run", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@validate_csrf_token
 def newsletter_dry_run():
     from tasks.newsletter import generate_daily_newsletters
 
@@ -220,7 +235,7 @@ def newsletters_stats():
 
 @admin_api_bp.route("/newsletter/preview", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@validate_csrf_token
 def newsletter_preview():
     """Generate newsletter HTML preview without sending emails."""
     from datetime import datetime, timedelta, timezone

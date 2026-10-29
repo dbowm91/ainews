@@ -21,17 +21,37 @@
   <script id="ainews-theme-metadata" type="application/json">{{ theme_metadata|tojson }}</script>
   {% endif %}
   <link id="ainews-app-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link id="ainews-theme-stylesheet" rel="stylesheet" href="">
   <style>
+/* Inlined critical CSS. It participates in the cascade layer order declared
+   by static/css/style.css so that the reset and base-element rules lose to
+   the layout, component, page and utility layers. */
+@layer reset {
 {% include "partials/critical_css.html" %}
+}
   </style>
+  <link id="ainews-theme-stylesheet" rel="stylesheet" href="">
   <link rel="alternate" type="application/rss+xml" href="/feed" title="All articles">
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/toast.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
-<body hx-boost="true">
+{#
+  No body-level hx-boost here.
+
+  hx-boost makes every anchor an HTMX request, and the server answers an
+  HTMX request with a bare fragment (partials/feed.html) that has no page
+  chrome. htmx then replaces the whole <body> with that fragment, which
+  strips the header, the footer and the #content wrapper and leaves the feed
+  rendering edge to edge — the "zoomed in" layout. It also destroys #content,
+  which is the swap target every article link depends on, so no article can
+  be opened any more.
+
+  In-page updates (search, sort, infinite scroll, article detail) declare
+  their own hx-get with an explicit target, and page-level navigation is a
+  normal full page load.
+#}
+<body>
   <noscript><p class="noscript-warning">JavaScript is disabled. Some features may not work.</p></noscript>
   <a href="#content" class="skip-link">Skip to content</a>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -62,15 +82,34 @@
     </nav>
   </header>
 
-  <main class="container">
+  <main class="container{% if show_rail %} container--wide{% endif %}">
     <span id="content-loading" class="htmx-indicator">&nbsp;&nbsp;loading...</span>
-    <div id="content">
-      {% block content %}{% endblock %}
+    <div class="page-grid{% if show_rail %} page-grid--rail{% endif %}">
+      {% if show_rail %}
+      <aside class="page-rail" aria-label="Publication overview">
+        {# The rail is part of the page frame on every public page, so it is
+           included here rather than per template. A template that needs a
+           different rail can still override the block. #}
+        {% block rail %}{% include "partials/feed_rail.html" %}{% endblock %}
+      </aside>
+      {% endif %}
+      <div id="content" class="page-main">
+        {% block content %}{% endblock %}
+      </div>
     </div>
   </main>
 
   <footer class="site-footer">
-    <p>ainews// &middot; autonomous news condensation &middot; <a href="/feed" hx-boost="false">feed</a> &middot; <a href="/admin/">admin</a></p>
+    {# The subscribe form lives in the footer, once, on every content page.
+       Pages that are not about the content -- an error, an unsubscribe --
+       override this block rather than inheriting a call to action they do
+       not want. #}
+    {% block footer_subscribe %}
+    <div class="footer-subscribe">
+      {% include "partials/subscribe_box.html" %}
+    </div>
+    {% endblock %}
+    <p class="footer-meta">ainews// &middot; autonomous news condensation &middot; <a href="/feed" hx-boost="false">feed</a> &middot; <a href="/admin/">admin</a></p>
   </footer>
 </body>
 </html>

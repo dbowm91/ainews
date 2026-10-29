@@ -43,7 +43,7 @@
         </div>
       {% endif %}
       <form method="POST" action="/admin/trigger-crawl" class="dash-action" hx-post="/admin/trigger-crawl" hx-swap="outerHTML" hx-target="closest .dash-action" hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-        <button type="submit" class="btn-primary" hx-disable="true" hx-indicator="#crawl-spinner">trigger crawl now</button>
+        <button type="submit" class="btn btn-primary" hx-disable="true" hx-indicator="#crawl-spinner">trigger crawl now</button>
         <span id="crawl-spinner" class="htmx-indicator">working...</span>
       </form>
       <a href="/admin/pipelines" class="dash-link">pipelines &rarr;</a>
@@ -55,12 +55,17 @@
       <h2 class="dash-card-title">quick actions</h2>
       <div class="quick-actions">
         <form method="POST" action="/admin/trigger-crawl" hx-post="/admin/trigger-crawl" hx-swap="none" hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-          <button type="submit" class="btn-primary" hx-indicator="#quick-crawl-spinner">trigger crawl</button>
+          <button type="submit" class="btn btn-primary" hx-indicator="#quick-crawl-spinner">trigger crawl</button>
           <span id="quick-crawl-spinner" class="htmx-indicator">working...</span>
         </form>
-        <a href="/admin/review" class="btn-secondary">review queue</a>
-        <a href="/admin/newsletters/generate" class="btn-secondary">generate newsletter</a>
-        <a href="/admin/pipelines" class="btn-secondary">view pipelines</a>
+        <a href="/admin/review" class="btn btn-secondary">review queue</a>
+        {# /admin/newsletters/generate is a POST-only route. An anchor to it
+           answers with 405 Method Not Allowed. #}
+        <form method="POST" action="/admin/newsletters/generate" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-secondary">generate newsletter</button>
+        </form>
+        <a href="/admin/pipelines" class="btn btn-secondary">view pipelines</a>
       </div>
     </section>
 
@@ -103,6 +108,112 @@
         {% endfor %}
       </div>
       <a href="/admin/metrics" class="dash-link">detailed metrics &rarr;</a>
+    </section>
+    {% endif %}
+
+    {# ── Pipeline Audit ── #}
+    {% if audit %}
+    <section class="dash-card dash-card-full">
+      <h2 class="dash-card-title">pipeline audit <span class="text-muted">({{ audit.total_events }} events)</span></h2>
+      <div class="audit-stat-grid">
+        <div class="stat-box {% if audit.error_count %}stat-high{% else %}stat-low{% endif %}">
+          <span class="stat-value">{{ audit.error_count }}</span>
+          <span class="stat-label">errors</span>
+        </div>
+        <div class="stat-box {% if audit.warning_count %}stat-medium{% else %}stat-low{% endif %}">
+          <span class="stat-value">{{ audit.warning_count }}</span>
+          <span class="stat-label">warnings</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value">{{ audit.articles_touched }}</span>
+          <span class="stat-label">articles</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value">{{ audit.stage_summaries|length }}</span>
+          <span class="stat-label">stages</span>
+        </div>
+      </div>
+
+      {% if audit.stage_summaries %}
+      <div class="audit-stage-strip">
+        {% for summary in audit.stage_summaries %}
+        <a href="/admin/pipeline-audit?stage={{ summary.stage|e }}"
+           class="audit-chip {% if summary.errors %}is-error{% elif summary.warnings %}is-warning{% endif %}">
+          {{ summary.label }} <span class="audit-chip-count">{{ summary.total }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if audit.recent_events %}
+      <div class="audit-feed">
+        {% for event in audit.recent_events %}
+        <div class="audit-feed-item audit-feed-item--{{ event.level }}">
+          <span class="audit-event-time">{{ event.created_at }}</span>
+          <span class="audit-event-stage">{{ event.stage }}</span>
+          <span class="audit-event-message">
+            {% if event.article_id %}
+              <a href="/admin/articles/{{ event.article_id }}/audit">#{{ event.article_id }}</a>
+            {% endif %}
+            {{ (event.message or '')|e|truncate(90) }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="form-hint">no pipeline events recorded yet</div>
+      {% endif %}
+      <a href="/admin/pipeline-audit" class="dash-link">full audit trail &rarr;</a>
+    </section>
+    {% endif %}
+
+    {# ── Trend Memory ── #}
+    {% if memory %}
+    <section class="dash-card dash-card-full">
+      <h2 class="dash-card-title">memory <span class="text-muted">({{ memory.total }} entries)</span></h2>
+      <div class="audit-stat-grid">
+        <div class="stat-box stat-high">
+          <span class="stat-value">{{ memory.high }}</span>
+          <span class="stat-label">high</span>
+        </div>
+        <div class="stat-box stat-medium">
+          <span class="stat-value">{{ memory.medium }}</span>
+          <span class="stat-label">medium</span>
+        </div>
+        <div class="stat-box stat-low">
+          <span class="stat-value">{{ memory.low }}</span>
+          <span class="stat-label">low</span>
+        </div>
+        <div class="stat-box {% if memory.expired %}stat-medium{% endif %}">
+          <span class="stat-value">{{ memory.expired }}</span>
+          <span class="stat-label">expired</span>
+        </div>
+      </div>
+
+      {% if memory.topics %}
+      <div class="audit-stage-strip">
+        {% for topic in memory.topics %}
+        <a href="/admin/trend-memory?topic={{ topic.topic|e }}" class="audit-chip">
+          {{ topic.topic }} <span class="audit-chip-count">{{ topic.count }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if memory.recent %}
+      <div class="audit-feed">
+        {% for entry in memory.recent %}
+        <div class="audit-feed-item">
+          <span class="audit-event-time">{{ entry.created_at }}</span>
+          <span class="audit-event-stage">{{ entry.topic }}</span>
+          <span class="audit-event-message">{{ entry.signal|e }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="form-hint">no trend memory recorded yet</div>
+      {% endif %}
+      <a href="/admin/trend-memory" class="dash-link">full memory &rarr;</a>
     </section>
     {% endif %}
 
@@ -155,7 +266,7 @@
     <div class="table-responsive">
     <table class="dash-table" aria-label="Recent articles table">
       <thead>
-        <tr><th>title</th><th>topic</th><th>status</th><th>score</th><th>impact</th><th>created</th></tr>
+        <tr><th>title</th><th>topic</th><th>status</th><th>source</th><th>score</th><th>impact</th><th>created</th><th>audit</th></tr>
       </thead>
       <tbody>
         {% for article in recent %}
@@ -165,16 +276,30 @@
                 {{ (article.original_title if article.original_title else '')|e }}
               </a>
             </td>
-            <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
-            <td>{{ pipeline_badge(article.pipeline_status) }}</td>
             <td>
-              {% if article.selector_result is mapping and article.selector_result.score is defined %}
-                {{ article.selector_result.score }}/10
+              {% if article.category %}
+                <span class="category-badge cat-{{ article.category|e }}">{{ article.category|e }}</span>
+              {% else %}
+                <span class="text-muted">&mdash;</span>
+              {% endif %}
+            </td>
+            <td>{{ pipeline_badge(article.pipeline_status) }}</td>
+            <td><span class="text-muted">{{ (article.source_name or '')|e }}</span></td>
+            <td>
+              {% if article.selector_score is not none %}
+                {{ article.selector_score }}/10
+              {% else %}
+                <span class="text-muted">&mdash;</span>
               {% endif %}
             </td>
             <td>{{ impact_score(article.impact_score) }}</td>
-            <td>{{ article.created_at.strftime('%b %d %H:%M') if article.created_at }}</td>
+            <td><span class="text-muted">{{ article.created_at }}</span></td>
+            <td>
+              <a href="/admin/articles/{{ article.id }}/audit" class="newsletter-preview-link">audit</a>
+            </td>
           </tr>
+        {% else %}
+          <tr><td colspan="8" class="text-muted">no articles yet</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -1,0 +1,169 @@
+{% extends "base_admin.html" %}
+{% from "partials/pagination.html" import pagination_nav %}
+
+{% block title %}ainews// admin — pipeline audit{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/admin/">dashboard</a>
+  <span class="breadcrumb-separator">&rsaquo;</span>
+  <span class="breadcrumb-current">pipeline audit</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">pipeline audit</h1>
+    <a href="/admin/pipelines" class="btn btn-secondary no-decoration">runs &rarr;</a>
+  </div>
+
+  <div class="form-hint">
+    Every stage the pipeline recorded, newest first. This is the pipeline's
+    own log: the same rows the workers write as they crawl, extract, select,
+    research, write and edit. Drill into an article to see its full trail.
+  </div>
+
+  {# ── Stage summary ── #}
+  {% if summaries %}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">activity by stage</h2>
+    <div class="audit-stat-grid">
+      {% for summary in summaries %}
+      <div class="stat-box {% if summary.errors %}stat-high{% elif summary.warnings %}stat-medium{% endif %}">
+        <span class="stat-value">{{ summary.total }}</span>
+        <span class="stat-label">{{ summary.label }}</span>
+        {% if summary.warnings or summary.errors %}
+        <span class="stat-sub">
+          {% if summary.warnings %}{{ summary.warnings }} warn{% endif %}
+          {% if summary.errors %}{{ summary.errors }} err{% endif %}
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── Filters ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">filters</h2>
+    <form method="get" action="/admin/pipeline-audit" class="audit-filters">
+      <div class="form-group">
+        <label for="filter-stage" class="form-label">stage</label>
+        <select id="filter-stage" name="stage" class="form-input">
+          <option value="">all stages</option>
+          {% for s in stages %}
+          <option value="{{ s }}" {% if stage_filter == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="filter-level" class="form-label">level</label>
+        <select id="filter-level" name="level" class="form-input">
+          <option value="">all levels</option>
+          {% for l in ['info', 'warning', 'error'] %}
+          <option value="{{ l }}" {% if level_filter == l %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="filter-article" class="form-label">article id</label>
+        <input type="text" id="filter-article" name="article_id" class="form-input"
+               placeholder="e.g. 54" value="{{ article_filter|e }}"
+               inputmode="numeric" pattern="[0-9]*">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">apply</button>
+        {% if stage_filter or level_filter or article_filter %}
+        <a href="/admin/pipeline-audit" class="btn btn-secondary no-decoration">reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </section>
+
+  {# ── Activity feed ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">activity <span class="text-muted">({{ total }} events)</span></h2>
+    {% if events %}
+    <div class="table-responsive">
+      <table class="dash-table logs-table" aria-label="Pipeline activity">
+        <thead>
+          <tr><th>time</th><th>stage</th><th>level</th><th>article</th><th>message</th></tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr class="log-row log-{{ event.level }}">
+            <td class="log-time">{{ event.created_at.strftime('%b %d %H:%M:%S') if event.created_at }}</td>
+            <td><span class="source-type">{{ event.stage }}</span></td>
+            <td><span class="log-level log-level-{{ event.level }}">{{ event.level }}</span></td>
+            <td>
+              {% if event.article_id %}
+                <a href="/admin/articles/{{ event.article_id }}/audit">#{{ event.article_id }}</a>
+              {% else %}
+                <span class="text-muted">&mdash;</span>
+              {% endif %}
+            </td>
+            <td class="log-message">
+              {{ event.message|e }}
+              {% if event.error %}
+                <span class="log-error-detail">{{ event.error|e }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pagination_nav(page, has_next, page + 1, total, per_page, "/admin/pipeline-audit",
+                     {"stage": stage_filter, "level": level_filter, "article_id": article_filter}) }}
+    {% else %}
+    <div class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="12" y="8" width="40" height="48" rx="4" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="20" x2="44" y2="20" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="28" x2="38" y2="28" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="36" x2="42" y2="36" stroke="currentColor" stroke-width="2"/>
+        <line x1="20" y1="44" x2="32" y2="44" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <span>no pipeline events match these filters</span>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ── Operator actions ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">operator actions <span class="text-muted">({{ action_total }} recorded)</span></h2>
+    {% if actions %}
+    <div class="table-responsive">
+      <table class="dash-table" aria-label="Operator actions">
+        <thead>
+          <tr><th>time</th><th>action</th><th>target</th><th>user</th><th>details</th></tr>
+        </thead>
+        <tbody>
+          {% for action in actions %}
+          <tr>
+            <td class="log-time">{{ action.created_at.strftime('%b %d %H:%M') if action.created_at }}</td>
+            <td><span class="source-type">{{ action.action }}</span></td>
+            <td>
+              {% if action.target_type %}
+                {{ action.target_type }}{% if action.target_id %} #{{ action.target_id }}{% endif %}
+              {% else %}
+                <span class="text-muted">&mdash;</span>
+              {% endif %}
+            </td>
+            <td><span class="text-muted">{{ action.user }}</span></td>
+            <td class="log-message">
+              {% if action.details %}{{ action.details|string|truncate(120) }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="form-hint">no operator actions recorded yet</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

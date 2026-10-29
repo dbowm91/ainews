@@ -49,6 +49,7 @@ from services.themes.errors import (
     ThemeTranslationError,
     ThemeValidationError,
     get_diagnostic_description,
+    is_advisory_by_default,
     is_advisory_diagnostic,
     is_fatal_diagnostic,
     is_strict_promotable,
@@ -114,6 +115,7 @@ __all__ = [
     "STRICT_PROMOTABLE_CODES",
     "is_fatal_diagnostic",
     "is_strict_promotable",
+    "is_advisory_by_default",
     "is_advisory_diagnostic",
     "get_diagnostic_description",
     # Models

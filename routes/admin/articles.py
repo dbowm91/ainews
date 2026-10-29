@@ -10,7 +10,7 @@ from sqlalchemy.orm import joinedload
 
 from constants import PER_PAGE_ADMIN_ARTICLES, PipelineStatus
 from routes.admin import admin_bp, require_auth
-from routes.decorators import validate_csrf_json
+from routes.decorators import validate_csrf_token
 from services.audit import log_admin_action
 from services.article import _escape_like_pattern
 from services.task_security import get_signed_kwargs
@@ -243,6 +243,12 @@ def articles():
     total_count = q.count()
     articles, has_next, next_page = paginate_query(q, page, per_page)
 
+    # The quality score is pipeline internals. It is not shown on the public
+    # index; it is shown here, in the admin articles table.
+    from services.feed_stats import annotate_quality_scores
+
+    annotate_quality_scores(articles)
+
     # Get sources for filter dropdown
     sources = Source.query.order_by(Source.name).all()
 
@@ -384,7 +390,6 @@ def _save_article_edit(article, fa, new_category, new_status):
 
 @admin_bp.route("/articles/<int:article_id>/edit", methods=["GET", "POST"])
 @require_auth
-@validate_csrf_json
 def edit_article(article_id):
     from extensions import db
     from models import Article
@@ -504,7 +509,7 @@ def rollback_article(article_id, version_id):
 
 @admin_bp.route("/articles/<int:article_id>/delete", methods=["POST"])
 @require_auth
-@validate_csrf_json
+@validate_csrf_token
 def delete_article(article_id):
     from extensions import db
     from models import Article
@@ -532,7 +537,7 @@ def delete_article(article_id):
 
 
 @admin_bp.route("/articles/<int:article_id>/reprocess", methods=["POST"])
-@validate_csrf_json
+@validate_csrf_token
 @require_auth
 def reprocess_article(article_id):
     from extensions import db

@@ -97,6 +97,36 @@ def _get_tag_cloud() -> list[dict]:
     return result
 
 
+def _get_feed_stats():
+    """Return the feed rail view model, or ``None`` if it cannot be built.
+
+    The rail is a discovery surface that now appears on every public page --
+    the index, the topic and tag feeds, and the article page -- so its
+    aggregates are assembled in one place. A failure here degrades to a page
+    without a rail rather than to a 500.
+    """
+    from services.feed_stats import get_feed_stats
+
+    try:
+        return get_feed_stats()
+    except Exception:
+        logger.exception("Failed to build feed rail statistics")
+        return None
+
+
+def _rail_stats():
+    """Return the feed rail's aggregates, or ``None`` when there is no rail.
+
+    An HTMX request answers with a fragment -- the feed, the cards or the
+    article detail -- and none of those fragments carries the rail. Building
+    the aggregates for them would run three grouped queries whose result is
+    thrown away.
+    """
+    if request.headers.get("HX-Request"):
+        return None
+    return _get_feed_stats()
+
+
 def _get_share_configs() -> list[dict]:
     def _load() -> list[dict]:
         from models import ShareConfig

@@ -29,6 +29,30 @@ _LOGROTATE_STATE_FILE = "logrotate-state.json"
 _JOURNALD_PATHS = {"/var/log/journal", "/run/log/journal"}
 _DOCKER_LOG_DRIVER = "json-file"  # Default Docker log driver
 
+# Directories a log file must never resolve into.
+_SENSITIVE_DIRS = ("/etc", "/proc", "/sys", "/dev")
+
+
+def _is_within(target: Path, sensitive: str) -> bool:
+    """Return True when ``target`` is ``sensitive`` or lives inside it.
+
+    Both the literal and the resolved form of ``sensitive`` are compared, so
+    the check still holds on hosts where the sensitive directory is itself a
+    symlink (for example ``/etc`` -> ``/private/etc`` on macOS).
+    """
+    candidates = {sensitive}
+    try:
+        candidates.add(str(Path(sensitive).resolve()))
+    except OSError:
+        pass
+    target_str = str(target)
+    for candidate in candidates:
+        if target_str == candidate:
+            return True
+        if target_str.startswith(candidate.rstrip(os.sep) + os.sep):
+            return True
+    return False
+
 # Unsafe path patterns
 _PATH_TRAVERSAL_PATTERN = re.compile(r"\.\./|/\.\.|\\.\\|\\.\\.\\.")
 _NEWLINE_PATTERN = re.compile(r"[\n\r]")
@@ -97,10 +121,12 @@ def _validate_log_path(path: str) -> list[dict[str, str]]:
         path_obj = Path(path.split("*")[0])  # Handle glob patterns
         if path_obj.is_symlink():
             target = path_obj.resolve()
-            # Check if symlink points to sensitive location
-            sensitive_dirs = ["/etc", "/proc", "/sys", "/dev"]
-            for sensitive in sensitive_dirs:
-                if str(target).startswith(sensitive):
+            # Check if symlink points to sensitive location. The sensitive
+            # directories are resolved too, because on some hosts (macOS, some
+            # container images) /etc is itself a symlink to /private/etc and a
+            # plain string comparison would not match the resolved target.
+            for sensitive in _SENSITIVE_DIRS:
+                if _is_within(target, sensitive):
                     checks.append({
                         "name": f"symlink_sensitive:{path}",
                         "status": "FAIL",

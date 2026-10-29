@@ -44,7 +44,10 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(provider_id, resolve_env_vars(config))
         cfg = OllamaConfig(**self.config)
         self.host = cfg.host
-        validate_url_safe(self.host)
+        # Ollama normally runs on the operator's own machine. A provider
+        # declared local may therefore live on loopback or a private
+        # network, which the SSRF guard blocks by design.
+        validate_url_safe(self.host, allow_private=cfg.local)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
 

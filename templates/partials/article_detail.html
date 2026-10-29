@@ -1,0 +1,36 @@
+{#
+  Article detail content, without the surrounding page chrome.
+
+  This partial is the HTMX swap target for the feed: the card title issues
+  `hx-get` against the article route and swaps the response into `#content`
+  with `hx-swap="innerHTML"`. It therefore has to be a fragment — a full
+  document would be injected into the page as nested <html>/<head>/<body>
+  markup.
+
+  `templates/article.html` renders the same fragment for full page loads, so
+  the two paths can never drift apart.
+
+  There is deliberately no loading skeleton here. A skeleton that ships with
+  the response can never be seen: it arrives after the request it was meant
+  to cover has already finished. It was only ever an invisible box, and at
+  476px tall it pushed the headline 563px down the page. The in-flight state
+  is covered by the `#content-loading` indicator, which lives in the page
+  rather than in the response.
+
+  Expects: article, topic_def, max_key_points, related_articles,
+  share_configs, reading_time.
+#}
+<article class="article-full">
+  {% if article._fa %}
+    {% set fa = article._fa %}
+    {% include "partials/condensed_article.html" %}
+  {% else %}
+    {% include "partials/article_body.html" %}
+  {% endif %}
+
+  {% include "partials/related_articles.html" %}
+
+  <nav class="article-nav">
+    <a href="/" class="back-link">&larr; back to feed</a>
+  </nav>
+</article>

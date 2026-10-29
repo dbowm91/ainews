@@ -6,6 +6,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _passing_quality_report():
+    result = MagicMock()
+    result.passed = True
+    result.needsreview = False
+    result.overall_score = 0.9
+    result.citation_score = 1.0
+    result.claim_score = 1.0
+    result.findings = []
+    return result
+
+
 class TestExecuteEditorWork:
     """Tests for _execute_editor_work function."""
 
@@ -40,7 +51,8 @@ class TestExecuteEditorWork:
                 patch("services.article.create_article_version"),
                 patch("services.article.sanitize_final_article", side_effect=lambda x: x),
                 patch("tasks.edit._handle_validation_and_routing", return_value=None),
-                patch("services.quality_report.build_quality_report", return_value=None),
+                patch("services.quality_report.build_quality_report", return_value=_passing_quality_report()),
+                patch("services.quality_report.persist_quality_report"),
                 patch("tasks.edit._post_finalize_article"),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
@@ -94,8 +106,11 @@ class TestExecuteEditorWork:
 
             assert result["status"] == "review"
 
-    def test_routes_to_review_on_quality_gate_failure(self, app, create_article, monkeypatch):
-        """Routes to review when quality report fails the gate."""
+    @pytest.mark.parametrize("passed,needsreview", [(False, True), (True, True)])
+    def test_routes_to_review_when_quality_report_requires_it(
+        self, app, create_article, monkeypatch, passed, needsreview,
+    ):
+        """A failed or review-required report cannot finalize the article."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
         with app.app_context():
             from tasks.edit import _execute_editor_work
@@ -115,8 +130,8 @@ class TestExecuteEditorWork:
             provider.chat_structured.return_value = result_model
 
             quality_result = MagicMock()
-            quality_result.passed = False
-            quality_result.needsreview = True
+            quality_result.passed = passed
+            quality_result.needsreview = needsreview
             quality_result.overall_score = 0.3
             quality_result.citation_score = 0.2
             quality_result.claim_score = 0.1
@@ -149,8 +164,8 @@ class TestExecuteEditorWork:
 
             assert result["status"] == "review"
 
-    def test_continues_when_quality_report_raises(self, app, create_article, monkeypatch):
-        """Quality report exceptions are non-critical; article still finalizes."""
+    def test_routes_to_review_when_quality_report_raises(self, app, create_article, monkeypatch):
+        """A report failure cannot finalize an article without a quality result."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
         with app.app_context():
             from tasks.edit import _execute_editor_work
@@ -180,7 +195,8 @@ class TestExecuteEditorWork:
                 patch("services.article.sanitize_final_article", side_effect=lambda x: x),
                 patch("tasks.edit._handle_validation_and_routing", return_value=None),
                 patch("services.quality_report.build_quality_report", side_effect=RuntimeError("boom")),
-                patch("tasks.edit._post_finalize_article"),
+                patch("tasks.edit._post_finalize_article") as mock_finalize,
+                patch("tasks.pipeline._dispatch_next"),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
             ):
@@ -191,7 +207,10 @@ class TestExecuteEditorWork:
                     article, provider, "gpt-4", 4000, article.id, run_id=None,
                 )
 
-            assert result["status"] == "done"
+            assert result["status"] == "review"
+            assert article.pipeline_status == "review"
+            assert article.last_error.startswith("Quality report unavailable:")
+            mock_finalize.assert_not_called()
 
     def test_shadow_quality_assessment_logs_on_success(self, app, create_article, monkeypatch):
         """Shadow quality assessment logs scores when it succeeds."""
@@ -231,7 +250,8 @@ class TestExecuteEditorWork:
                 patch("services.article.sanitize_final_article", side_effect=lambda x: x),
                 patch("tasks.edit._handle_validation_and_routing", return_value=None),
                 patch("services.quality.lightweight_quality_signals", return_value=quality_score),
-                patch("services.quality_report.build_quality_report", return_value=None),
+                patch("services.quality_report.build_quality_report", return_value=_passing_quality_report()),
+                patch("services.quality_report.persist_quality_report"),
                 patch("tasks.edit._post_finalize_article"),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
@@ -276,7 +296,8 @@ class TestExecuteEditorWork:
                 patch("services.article.sanitize_final_article", side_effect=lambda x: x),
                 patch("tasks.edit._handle_validation_and_routing", return_value=None),
                 patch("services.quality.lightweight_quality_signals", side_effect=RuntimeError("quality boom")),
-                patch("services.quality_report.build_quality_report", return_value=None),
+                patch("services.quality_report.build_quality_report", return_value=_passing_quality_report()),
+                patch("services.quality_report.persist_quality_report"),
                 patch("tasks.edit._post_finalize_article"),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
@@ -512,6 +533,31 @@ class TestEditArticleTask:
             assert call_args[1]["run_id"] == 42
             assert call_args[1]["skip_next"] == "finalize"
             assert result == {"article_id": article.id, "status": "done"}
+
+    def test_edit_article_work_receives_article_and_run_ids(
+        self, app, create_article, monkeypatch
+    ):
+        """The run_stage work callback supplies the arguments the editor helper needs."""
+        monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+        with app.app_context():
+            from tasks.edit import edit_article
+
+            article = create_article(pipeline_status="editing")
+            provider = MagicMock()
+
+            def run_work_inline(_stage, _article_id, work, **_kwargs):
+                return work(article, provider, "test-model", 8192)
+
+            with (
+                patch("tasks.pipeline.run_stage", side_effect=run_work_inline),
+                patch("tasks.edit._execute_editor_work", return_value={"article_id": article.id}) as execute,
+            ):
+                result = edit_article.run(article.id, run_id=42)
+
+            execute.assert_called_once_with(
+                article, provider, "test-model", 8192, article.id, run_id=42
+            )
+            assert result == {"article_id": article.id}
 
     def test_edit_article_with_none_run_id(self, app, create_article, monkeypatch):
         """edit_article works with default run_id=None."""

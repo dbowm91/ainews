@@ -2,7 +2,7 @@
 
 ## Context
 
-This roadmap converts the current repository inspection into an execution plan for getting `ainews` ready for deployment and public release. The inspection found that the repository has a coherent production-oriented skeleton: Docker Compose, Celery/Redis background processing, migrations, CI, security documentation, health checks, and a public-facing README. The blocking gaps are concentrated in authentication registration, API-token semantics, production validation, SSRF-safe fetching, CI smoke coverage, and documentation/runtime drift.
+This roadmap converts the current repository inspection into an execution plan for getting `ainews` ready for deployment and public release. The inspection found that the repository has a coherent production-oriented skeleton: Docker Compose, Celery/Redis background processing, migrations, CI, security documentation, health checks, and a public-facing README. The blocking gaps are concentrated in authentication registration, API-token semantics, production validation, SSRF-safe fetching, CI smoke coverage, documentation/runtime drift, and frontend rendering correctness.
 
 The release objective is a self-hosted, single-node news aggregation and AI-assisted newsletter platform that can be deployed by an external user with clear expectations, reproducible setup steps, and defensible security defaults.
 
@@ -24,6 +24,8 @@ Minimum public-release gate:
 - Article fetching rejects private/reserved/redirected internal targets through the real fetch path.
 - Docker Compose boots in CI and serves `/health` with a generated test `.env`.
 - Documentation no longer contradicts runtime behavior.
+- The public article page renders instead of returning HTTP 500.
+- The theming subsystem changes the rendered palette.
 
 ## Milestone A — Auth, token, and CSRF blocker closure
 
@@ -161,6 +163,49 @@ Acceptance criteria:
 - Backup/restore commands are validated.
 - Health checks are actionable for operators.
 
+## Milestone G — Frontend rendering correctness and visual identity
+
+The public site renders, but three structural CSS defects silently disable most of the design system and two live functional bugs break the article page and the error pages. The site looks unpolished because it is damaged, not because it is undesigned.
+
+Scope:
+
+- Repair the critical CSS generator, which drops three closing braces and causes the browser to discard 23 rules.
+- Restore the cascade contract so the critical stylesheet participates in the declared layer order, instead of zeroing every component's padding and margin.
+- Restore theme precedence so the active theme's palette is the palette the browser paints.
+- Repair the article detail page, which returns HTTP 500 once the related-article cache is warm.
+- Return HTML error pages to browser navigations instead of raw JSON.
+- Correct the service worker registration scope, which is rejected on every page load.
+- Extend theme contrast validation to the tokens that actually fail, and remediate the shipped fallback palette and the bundled themes.
+- Correct the category filter's ARIA tab misuse and enforce minimum target sizes.
+- Rebuild the public site's visual identity as a technical AI publication.
+- Add build-time and browser-level assertions that observe rendered output rather than generated text.
+
+Known defects to correct, from `docs/ui-review-2026-10.md`:
+
+- The article page returns HTTP 500 with a public Werkzeug traceback; `services/related.py` is missing `.unique()` on a query with a joined eager load against a collection.
+- All 48 bundled themes render identically; the inline critical stylesheet imports the fallback palette unlayered and after the theme stylesheet.
+- Every component's padding and margin computes to `0px`; the unlayered universal reset outranks all layered component rules.
+- Mobile overflows by up to 469 px; the `@media (max-width: 640px)` block is one of the discarded rules, so the navigation never collapses.
+- 404 and 500 responses return raw JSON to real browsers; `_wants_json()` matches the `*/*` wildcard in the `Accept` header.
+- The service worker registration is rejected because the requested scope exceeds the script's maximum permitted scope.
+
+Acceptance criteria:
+
+- The article detail page returns 200 on both the cache-miss and cache-hit paths.
+- The generated critical stylesheet is brace-balanced and its parsed rule count equals the source rule count.
+- The active theme's palette is the palette the browser paints, in dark and light.
+- Components render with their authored spacing, and headlines render in primary text rather than the accent colour.
+- No horizontal overflow at 375, 390, 768, 1280 or 1440 px, and the mobile navigation toggle is visible and functional.
+- Browser navigations to unknown paths receive the styled HTML error pages.
+- The service worker registers without a console error, and the benign-error whitelist in the browser smoke tests is empty of real defects.
+- Every text token in the shipped palette passes AA against the surface it renders on, in both light and dark mode.
+- The public site is delivered through one stylesheet path with one cascade model.
+- Every repair carries a regression test that fails without it, and every such test is wired into CI.
+
+Detailed plan: `plans/milestone_g_frontend_rendering_overview.md`. Phase plans: `plans/milestone_g_01_cascade_and_delivery.md`, `plans/milestone_g_02_interaction_and_accessibility.md`, `plans/milestone_g_03_visual_identity.md`. Closure and verification: `plans/milestone_g_closure_pass.md`. Source review: `docs/ui-review-2026-10.md`.
+
+**Status: closed.** All five blockers, ten major and nine minor findings are closed, plus ten defects found during verification. The closure matrix is `docs/frontend-rendering-closure.md`. The browser regression suite runs in the `theme-browser-smoke` CI job.
+
 ## Recommended execution order
 
 1. Milestone A: Auth, token, and CSRF blocker closure.
@@ -169,8 +214,11 @@ Acceptance criteria:
 4. Milestone D: CI smoke gates.
 5. Milestone E: Documentation and release polish.
 6. Milestone F: Schema and operational hardening.
+7. Milestone G: Frontend rendering correctness and visual identity.
 
 Milestones A through D are the minimum engineering gate for a release candidate. Milestone E is the minimum public-announcement gate. Milestone F can be split before or immediately after the public release depending on how much deployment surface is promised.
+
+Milestone G G1 (cascade and delivery correctness) is a hard release blocker: the article page returns HTTP 500 and the theming subsystem has no visible effect. It must land before any public announcement. Milestone G G2 (interaction and accessibility) is required before public release. Milestone G G3 (visual identity) is the only part that may follow the public release.
 
 ## General implementation constraints
 

@@ -11,7 +11,6 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
-import bleach  # type: ignore[import-untyped]
 from sqlalchemy import Column, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -22,31 +21,25 @@ from models import Article, ArticleMetric
 
 from services.article_parser import parse_articles
 from services.article_parser import parse_article_json as parse_article_json
+from services.markup import sanitize_html
 from services.pagination import _escape_like_pattern
 
 logger = logging.getLogger(__name__)
 
 _TITLE_WORDS_RE = re.compile(r"[a-z0-9]+")
 
-_SAFE_TAGS = ["a", "b", "i", "ul", "li"]
-_SAFE_ATTRS = {"a": ["href", "title"]}
-
 
 def sanitize_final_article(content: str) -> str:
-    """Sanitize HTML content in final_article body field using bleach.
+    """Sanitize the HTML content in the final_article body field using bleach.
 
-    Allows safe tags: a, b, i, ul, li
-    For a tags, allows href and title attributes.
-    Strips all other HTML to prevent XSS.
+    Block level elements are preserved so that paragraph structure survives,
+    and the allowlist matches the one applied at render time. Dangerous
+    elements are removed together with their content, so a script body never
+    reaches the reader as visible text.
     """
     parsed = json.loads(content) if isinstance(content, str) else content
     if "body" in parsed and parsed["body"]:
-        parsed["body"] = bleach.clean(
-            parsed["body"],
-            tags=_SAFE_TAGS,
-            attributes=_SAFE_ATTRS,
-            strip=True,
-        )
+        parsed["body"] = sanitize_html(str(parsed["body"]))
     return json.dumps(parsed)
 
 

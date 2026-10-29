@@ -168,13 +168,13 @@ class TestGenerateDailyNewsletters:
                 generate_daily_newsletters(dry_run_email="not-an-email")
 
     def test_raises_on_invalid_signature(self, app, monkeypatch):
-        """Raises ValueError when verify_task fails."""
+        """Raises ValueError when the signature check fails."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
 
         with app.app_context():
             from tasks.newsletter import generate_daily_newsletters
 
-            with patch("tasks.newsletter.verify_task", return_value=False):
+            with patch("tasks.newsletter.verify_invocation", return_value=False):
                 with pytest.raises(ValueError, match="Invalid task signature"):
                     generate_daily_newsletters()
 
@@ -186,7 +186,7 @@ class TestGenerateDailyNewsletters:
             from tasks.newsletter import generate_daily_newsletters
 
             with (
-                patch("tasks.newsletter.verify_task", return_value=True),
+                patch("tasks.newsletter.verify_invocation", return_value=True),
                 patch("tasks.newsletter._generate_daily_newsletters_core", return_value=[]) as mock_core,
             ):
                 result = generate_daily_newsletters(dry_run_email="test@example.com", run_id=5)

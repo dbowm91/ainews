@@ -52,6 +52,14 @@ class TestShouldSkipSource:
             source.last_crawled = datetime.now(timezone.utc) - timedelta(minutes=60)
             assert should_skip_source(source, 30) is False
 
+    def test_naive_database_timestamp_is_treated_as_utc(self, app, create_source):
+        from services.crawling import should_skip_source
+
+        with app.app_context():
+            source = create_source()
+            source.last_crawled = datetime.now(timezone.utc).replace(tzinfo=None)
+            assert should_skip_source(source, 30) is True
+
 
 class TestGetExistingExternalIds:
     def test_empty_source(self, app, create_source):

@@ -9,8 +9,10 @@ from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import Article, ArticleMetric
-from routes.decorators import validate_csrf_json
+from routes.decorators import validate_csrf_token
 from routes.public import (
+    _get_categories,
+    _rail_stats,
     _get_share_configs,
     _request_variant,
     public_bp,
@@ -73,6 +75,15 @@ def article_detail(article_id: int) -> Response:
         "related_articles": related,
         "share_configs": share_configs,
         "reading_time": reading_time,
+        # The navigation lists the topic taxonomy. Without it the article
+        # page renders a shorter header than every other page, so the frame
+        # jumps when the reader moves between the feed and an article.
+        "categories": _get_categories(),
+        # The article page keeps the sidebar so that the page frame does not
+        # change when the reader moves between the index, a topic tab and an
+        # article.
+        "show_rail": True,
+        "feed_stats": _rail_stats(),
     }
     if request.headers.get("HX-Request"):
         response = render_template("partials/article_detail.html", **ctx)
@@ -88,7 +99,9 @@ def article_detail(article_id: int) -> Response:
         resp.headers["Last-Modified"] = article.updated_at.strftime(
             "%a, %d %b %Y %H:%M:%S GMT",
         )
-    cache.set(cache_key, resp.get_data(), ttl=300)
+    # ResponseCache stores JSON values; cache the rendered HTML as text rather
+    # than the bytes returned by Response.get_data().
+    cache.set(cache_key, resp.get_data(as_text=True), ttl=300)
     return resp
 
 
@@ -122,7 +135,7 @@ def short_url_tracking_page(short_id: str) -> str:
 
 
 @public_bp.route("/api/v1/track/share-click/<int:article_id>", methods=["POST"])
-@validate_csrf_json
+@validate_csrf_token
 def track_share_click(article_id: int) -> tuple[dict, int]:
     track_metric(article_id, ArticleMetric.share_button_clicks)
     return {"success": True}, 204

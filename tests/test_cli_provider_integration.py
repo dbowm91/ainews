@@ -1,6 +1,8 @@
 """Provider management integration tests using local fake HTTP servers."""
 from __future__ import annotations
 
+from tests.cli_json import parse_cli_json
+
 import json
 import threading
 import time
@@ -205,7 +207,7 @@ class TestProviderIntegration:
                 env={"HOME": str(tmp_path)},
             )
             assert result.exit_code == exit_codes.SUCCESS
-            data = json.loads(result.output)
+            data = parse_cli_json(result)
             assert data["success"] is True
             assert len(data["models"]) == 2
             assert data["models"][0]["id"] == "gpt-4"
@@ -250,7 +252,7 @@ class TestProviderIntegration:
                 env={"HOME": str(tmp_path)},
             )
             assert result.exit_code == exit_codes.SUCCESS
-            data = json.loads(result.output)
+            data = parse_cli_json(result)
             assert len(data["results"]) == 1
             assert data["results"][0]["success"] is False
             assert data["results"][0]["auth_success"] is False
@@ -458,7 +460,7 @@ class TestProviderIntegration:
                 env={"HOME": str(tmp_path)},
             )
             assert result.exit_code == exit_codes.SUCCESS
-            data = json.loads(result.output)
+            data = parse_cli_json(result)
             assert len(data["providers"]) >= 1
             assert data["providers"][0]["id"] == "test-provider"
         finally:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import json
+from tests.cli_json import parse_cli_json
+
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -103,14 +104,14 @@ class TestProvidersList:
         _setup_provider_files(tmp_path)
         result = runner.invoke(app, ["--json", "providers-list"], env={"HOME": str(tmp_path)})
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "providers" in data
         assert len(data["providers"]) >= 1
 
     def test_default_provider_marked(self, tmp_path):
         _setup_provider_files(tmp_path)
         result = runner.invoke(app, ["--json", "providers-list"], env={"HOME": str(tmp_path)})
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert data["default_provider"] == "ollama-local"
         ollama = next(p for p in data["providers"] if p["id"] == "ollama-local")
         assert ollama["is_default"] is True
@@ -127,7 +128,7 @@ class TestProvidersAdd:
         _setup_provider_files(tmp_path)
         result = runner.invoke(app, ["--json", "providers-add"], env={"HOME": str(tmp_path)})
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "available_types" in data
         type_ids = [t["type_id"] for t in data["available_types"]]
         assert "ollama" in type_ids
@@ -188,7 +189,7 @@ class TestProvidersTest:
                 env={"HOME": str(tmp_path)},
             )
             assert result.exit_code == exit_codes.SUCCESS
-            data = json.loads(result.output)
+            data = parse_cli_json(result)
             assert "results" in data
             assert data["results"][0]["success"] is True
 
@@ -231,7 +232,7 @@ class TestProvidersModels:
                 env={"HOME": str(tmp_path)},
             )
             assert result.exit_code == exit_codes.SUCCESS
-            data = json.loads(result.output)
+            data = parse_cli_json(result)
             assert data["success"] is True
             assert len(data["models"]) >= 1
 

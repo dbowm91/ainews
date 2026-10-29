@@ -1,7 +1,10 @@
 """Feed and content routes: index, topics, tags, RSS, sitemap."""
 
+import json
+import logging
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from flask import Response, make_response, render_template, request
 from sqlalchemy import select
@@ -12,6 +15,7 @@ from extensions import db
 from models import Article, Tag
 from routes.public import (
     _get_categories,
+    _rail_stats,
     _get_share_configs,
     _get_tag_cloud,
     _get_topic_icons,
@@ -24,6 +28,8 @@ from services.article import (
     parse_articles,
 )
 
+logger = logging.getLogger(__name__)
+
 PER_PAGE = PER_PAGE_PUBLIC
 
 
@@ -32,6 +38,51 @@ def offline() -> Response:
     """Offline fallback page for service worker."""
     html = render_template("offline.html")
     return make_response(html, 503)
+
+
+@public_bp.route("/service-worker.js")
+def service_worker() -> Response:
+    """Serve the service worker from the site root.
+
+    The worker precaches ``/`` and ``/offline/`` and intercepts navigation
+    requests, so its scope has to cover the whole site. A worker script
+    served from ``/static/`` may only claim the ``/static/`` scope, so the
+    script is served from the root instead and ``Service-Worker-Allowed`` is
+    set explicitly.
+
+    The worker's cache name is derived from ``self.__SW_VERSION``. That value
+    is injected here from a fingerprint of the shipped static assets, so the
+    worker script itself changes whenever the assets change. The browser then
+    installs the new worker, and the new worker purges the stale cache on
+    activation. Without this the worker pins every returning visitor to the
+    assets they first loaded and CSS/JS changes never reach the browser.
+    """
+    from flask import Response, current_app
+
+    from services.static_version import get_static_version
+
+    static_folder = current_app.static_folder
+    if not static_folder:  # pragma: no cover - defensive
+        raise RuntimeError("Flask app has no static folder configured")
+
+    source = Path(static_folder) / "service-worker.js"
+    try:
+        script = source.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("Failed to read the service worker script")
+        return Response("/* service worker unavailable */", mimetype="application/javascript")
+
+    version = get_static_version()
+    injected = "self.__SW_VERSION = %s;\n" % json.dumps(version)
+    body = injected + script
+
+    response = Response(body, mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    # The worker script must never be served stale, otherwise a new worker
+    # would not be picked up after a deploy.
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Static-Version"] = version
+    return response
 
 
 def _get_top_impact(limit: int = 3) -> list[Article]:
@@ -127,6 +178,8 @@ def index() -> str:
         else [],
         "newsletter_type": "main",
         "share_configs": share_configs,
+        "show_rail": True,
+        "feed_stats": _rail_stats(),
     }
 
     result = _render_feed_or_page(ctx, "index.html")
@@ -177,6 +230,10 @@ def topic_feed(category: str) -> str:
         "topic_def": topic_def,
         "newsletter_type": category,
         "share_configs": share_configs,
+        # The rail is part of the site's frame, not of the index. A topic page
+        # that drops it makes the layout jump when you navigate between tabs.
+        "show_rail": True,
+        "feed_stats": _rail_stats(),
     }
 
     result = _render_feed_or_page(ctx, "topic.html")
@@ -229,6 +286,8 @@ def tag_feed(slug: str) -> str:
         "all_tags": _get_tag_cloud(),
         "tag_slug": slug,
         "share_configs": share_configs,
+        "show_rail": True,
+        "feed_stats": _rail_stats(),
     }
 
     result = _render_feed_or_page(ctx, "tag.html")

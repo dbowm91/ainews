@@ -101,7 +101,9 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
     article.last_error = None
 
     if article.degradation_count >= 2:
-        article.pipeline_status = PipelineStatus.REVIEW
+        from services.auto_review import route_to_review
+
+        route_to_review(article)
         try:
             db.session.commit()
         except SQLAlchemyError:
@@ -149,7 +151,9 @@ def _degrade_edit_stage(article, run_id):
         get_metrics().counter_inc("pipeline.multi_stage_degradation")
 
     if article.degradation_count >= 2 or _should_route_to_review(article):
-        article.pipeline_status = PipelineStatus.REVIEW
+        from services.auto_review import route_to_review
+
+        route_to_review(article)
         try:
             db.session.commit()
         except SQLAlchemyError:
@@ -210,15 +214,34 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
 
 
 def post_finalize_article(article, run_id=None):
-    """Post-finalize article: published_at, trend memory, webhooks, SLA metrics, embeddings."""
+    """Post-finalize article: published_at, trend memory, webhooks, SLA metrics, embeddings.
+
+    The publication is committed **before** any of the slow work starts.
+
+    The trend memory proposal is an LLM request, and a local model can take
+    minutes to answer it. If the write transaction were still open when that
+    request went out, the database would be locked for the whole of it: every
+    other writer would block, and a task killed by its own time limit would
+    leave the lock held behind it. Committing the publication first means
+    the lock is released before the model is asked anything, so the request
+    can take as long as it needs.
+
+    Everything below the commit is a side effect of the publication. None of
+    it can hold the database, and none of it can unpublish the article.
+    """
     from extensions import db
-    from models import ArticleMetric
     from services.metrics import get_metrics
-    from services.trend_memory import propose_trend_memory
     from services.webhooks import trigger_event
     from tasks.embeddings import generate_article_embedding
 
     article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Release the write lock before anything slow happens.
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
 
     if article.crawled_at:
         sla_duration = (article.published_at - article.crawled_at).total_seconds()
@@ -235,17 +258,10 @@ def post_finalize_article(article, run_id=None):
         )
 
     try:
-        metric = db.session.get(ArticleMetric, article.id)
-        engagement_data = {}
-        if metric:
-            engagement_data = {
-                "newsletter_clicks": metric.newsletter_clicks or 0,
-                "page_loads": metric.page_loads or 0,
-            }
-        propose_trend_memory(article, engagement_data=engagement_data)
-    except SQLAlchemyError:
+        _dispatch_trend_memory(article)
+    except Exception:  # noqa: BLE001 - the memory is a side effect, not a condition
         logger.warning(
-            "propose_trend_memory failed for article %s, continuing",
+            "Failed to dispatch the trend memory proposal for article %s, continuing",
             article.id,
         )
 
@@ -277,6 +293,43 @@ def post_finalize_article(article, run_id=None):
         logger.debug("Failed to enqueue embedding generation for article %s", article.id)
 
 
+def _dispatch_trend_memory(article) -> None:
+    """Ask for trend memory, out of band.
+
+    The proposal runs in its own task so that the publication does not wait
+    for the model. The task reads what it needs, ends its transaction, waits
+    for the answer with no lock held, and writes the result in one short
+    transaction once the answer is complete.
+    """
+    from extensions import db
+    from models import ArticleMetric
+
+    try:
+        metric = db.session.get(ArticleMetric, article.id)
+        engagement_data = {}
+        if metric:
+            engagement_data = {
+                "newsletter_clicks": metric.newsletter_clicks or 0,
+                "page_loads": metric.page_loads or 0,
+            }
+    except SQLAlchemyError:
+        logger.warning(
+            "Could not read the engagement metrics for article %s, continuing",
+            article.id,
+        )
+        engagement_data = {}
+
+    try:
+        from tasks.trend_memory import propose_trend_memory_for_article
+
+        propose_trend_memory_for_article.delay(article.id, engagement_data)
+    except Exception:  # noqa: BLE001 - the proposal is not critical to publication
+        logger.warning(
+            "Failed to enqueue the trend memory proposal for article %s, continuing",
+            article.id,
+        )
+
+
 def _finalize(article_id: int):
     from extensions import db
     from models import Article
@@ -290,7 +343,9 @@ def _finalize(article_id: int):
             article.last_error = None
 
             if _should_route_to_review(article):
-                article.pipeline_status = PipelineStatus.REVIEW
+                from services.auto_review import route_to_review
+
+                route_to_review(article)
                 db.session.commit()
                 logger.info("Article %s queued for review (finalize)", article_id)
                 return

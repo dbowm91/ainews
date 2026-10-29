@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from services.themes.errors import ThemeParseError
@@ -237,3 +238,113 @@ def derive_border(color: Color) -> Color:
         l = max(l - 0.04, 0.0)
     r, g, b = _hsl_to_rgb(h, s, l)
     return Color(r=r, g=g, b=b, a=color.a)
+
+
+def on_accent_color(
+    backgrounds: Sequence[Color],
+    threshold: float = 4.5,
+) -> Color:
+    """Return a label colour that is legible on every accent fill.
+
+    A filled button uses the accent colour as its background, and its label
+    cannot use the theme's own text tokens: a dark theme's text colour is
+    light and a light theme's is dark, so either can be unreadable on the
+    accent fill. The label colour is therefore chosen here, independently of
+    the theme's text palette.
+    """
+    if not backgrounds:
+        return Color(r=255, g=255, b=255)
+
+    black = Color(r=0, g=0, b=0)
+    white = Color(r=255, g=255, b=255)
+
+    def worst_ratio(color: Color) -> float:
+        return min(contrast_ratio(color, bg) for bg in backgrounds)
+
+    best = max((black, white), key=worst_ratio)
+    if worst_ratio(best) >= threshold:
+        return best
+    return ensure_contrast(best, backgrounds, threshold)
+
+
+def ensure_fill_legible(
+    label: Color,
+    fill: Color,
+    threshold: float = 4.5,
+) -> Color:
+    """Move ``fill`` along its lightness axis until ``label`` is legible on it.
+
+    A filled button shows two fills: the resting one and the hover one. A
+    label that is legible on the resting fill can be illegible on the hover
+    fill when the two straddle the legible band, so the hover fill is moved
+    away from the label until the label stays legible on both.
+    """
+    if contrast_ratio(label, fill) >= threshold:
+        return fill
+
+    label_is_dark = relative_luminance(label) < 0.5
+    target_lightness = 1.0 if label_is_dark else 0.0
+
+    h, s, l = _rgb_to_hsl(float(fill.r), float(fill.g), float(fill.b))
+    best = fill
+    best_ratio = contrast_ratio(label, fill)
+
+    for step in range(1, 101):
+        fraction = step / 100.0
+        candidate_lightness = l + (target_lightness - l) * fraction
+        r, g, b = _hsl_to_rgb(h, s, candidate_lightness)
+        candidate = Color(r=r, g=g, b=b, a=fill.a)
+        ratio = contrast_ratio(label, candidate)
+        if ratio >= threshold:
+            return candidate
+        if ratio > best_ratio:
+            best = candidate
+            best_ratio = ratio
+
+    return best
+
+
+def ensure_contrast(
+    fg: Color,
+    backgrounds: Sequence[Color],
+    threshold: float = 4.5,
+) -> Color:
+    """Move ``fg`` along its lightness axis until it is legible everywhere.
+
+    Hue and saturation are preserved; only lightness moves, so the result
+    still reads as the author's colour. The colour is moved away from the
+    luminance of the surfaces it has to stay readable on: a light theme
+    darkens its text, a dark theme lightens it.
+
+    If no lightness value satisfies every surface, the candidate with the
+    best worst-case contrast is returned.
+    """
+    if not backgrounds:
+        return fg
+
+    def worst_ratio(color: Color) -> float:
+        return min(contrast_ratio(color, bg) for bg in backgrounds)
+
+    if worst_ratio(fg) >= threshold:
+        return fg
+
+    average = sum(relative_luminance(bg) for bg in backgrounds) / len(backgrounds)
+    target_lightness = 0.0 if average > 0.5 else 1.0
+
+    h, s, l = _rgb_to_hsl(float(fg.r), float(fg.g), float(fg.b))
+    best = fg
+    best_ratio = worst_ratio(fg)
+
+    for step in range(1, 101):
+        fraction = step / 100.0
+        candidate_lightness = l + (target_lightness - l) * fraction
+        r, g, b = _hsl_to_rgb(h, s, candidate_lightness)
+        candidate = Color(r=r, g=g, b=b, a=fg.a)
+        ratio = worst_ratio(candidate)
+        if ratio >= threshold:
+            return candidate
+        if ratio > best_ratio:
+            best = candidate
+            best_ratio = ratio
+
+    return best

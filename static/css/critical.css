@@ -1,7 +1,20 @@
 /* ainews - Critical CSS (above-the-fold styles) */
 /* Source of truth for templates/partials/critical_css.html and critical_css_admin.html */
 
-@import "./variables.css";
+/*
+   CASCADE CONTRACT
+   This file is inlined into templates/base.html inside `@layer reset`.
+   Two rules are absolute:
+
+   1. It must never define a palette token. The fallback palette lives in
+      exactly one shipped source -- the `variables` layer of
+      static/css/variables.css -- and the active theme's `:root` palette
+      lives in /assets/themes/<id>.css. An unlayered definition here would
+      outrank both.
+   2. It must never contain an unlayered rule. Unlayered declarations beat
+      every layered declaration regardless of specificity, which is how the
+      `*` reset below used to zero out the padding of every component.
+*/
 
 * {
   margin: 0;
@@ -13,34 +26,67 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-primary);
+  /* The page canvas lives on the root element, not on the body. The body
+     carries the gradient; if the body's background were opaque the gradient
+     would be hidden behind it. */
+  background: var(--bg-primary);
 }
 
 body {
   font-family: var(--font-sans);
-  background: var(--bg-primary);
   color: var(--text-secondary);
   line-height: 1.6;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* The theme's own background colour stays the base layer: the body must
+     paint --bg-primary, so that the active theme is what the reader
+     actually sees. The gradient is a separate background *image* layer and
+     paints on top of it.
+     The colours are derived from the active theme's own accent tokens, so
+     every theme gets a glow in its own colour. A browser without
+     color-mix() simply shows the flat themed page.
+     The bottom layer is a single flat colour a whisper away from
+     --bg-primary. It is what shows through where the gradient does not
+     reach, so the gradient reads as a shape standing against a field
+     instead of as the page itself. */
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(70rem 38rem at 8% -16%, var(--glow-accent), transparent 62%),
+    radial-gradient(60rem 32rem at 96% -12%, var(--glow-secondary), transparent 60%),
+    linear-gradient(180deg, var(--glow-base), transparent 26rem),
+    linear-gradient(var(--bg-tint), var(--bg-tint));
+  background-size: 100% 38rem, 100% 32rem, 100% 26rem, 100% 100%;
+  background-repeat: no-repeat;
+  background-position: top left;
+  /* Both the gradient and the flat tint are painted relative to the
+     viewport, so neither travels with the content when the page scrolls.
+     The background stays where the reader put it. */
+  background-attachment: fixed;
 }
 
 .skip-link {
   position: absolute;
-  top: -40px;
+  top: 0;
   left: 0;
+  /* Hidden by a transform rather than by a negative offset: the element's
+     own height is unknown, so `top: -40px` left a sliver of the accent
+     colour visible along the top edge of every page. */
+  transform: translateY(-100%);
   background: var(--accent);
   color: #fff;
   padding: 0.5rem 1rem;
   font-family: var(--font-mono);
   font-size: var(--text-lg);
   z-index: var(--z-index-skip-link);
-  transition: top 0.15s;
+  transition: transform 0.15s;
   text-decoration: none;
 }
 
 .skip-link:focus {
-  top: 0;
+  transform: translateY(0);
 }
 
 .sr-only {
@@ -56,7 +102,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--link);
   text-decoration: none;
   transition: color 0.15s;
 }
@@ -67,11 +113,34 @@ a:hover {
 }
 
 .site-header {
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--surface-border);
+  /* Frosted, not solid: the feed glides underneath the sticky bar and stays
+     legible through the blur. The colour is derived from the active theme's
+     own surface token, so every theme gets its own tint. */
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--surface-blur)) saturate(1.4);
   position: sticky;
   top: 0;
   z-index: var(--z-index-sticky);
+}
+
+/* A single accent hairline under the bar, fading out at both ends. */
+.site-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-alpha-25) 35%,
+    var(--accent-alpha-25) 65%,
+    transparent
+  );
+  pointer-events: none;
 }
 
 .nav {
@@ -126,13 +195,25 @@ a:hover {
   flex-shrink: 0;
 }
 
+/*
+   The "condensed by agents" tagline is decoration. Below 900px the
+   navigation and its category links already fill the row, and the tagline
+   pushed the header past the viewport.
+*/
+@media (max-width: 900px) {
+  .nav-meta {
+    display: none;
+  }
+}
+
 .nav-tag {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+  line-height: 1.2;
   color: var(--text-dim);
   border: 1px solid var(--border);
-  padding: 0.15rem 0.5rem;
-  border-radius: 3px;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-sm);
 }
 
 .container {
@@ -171,7 +252,8 @@ a:hover {
 }
 
 .site-footer {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface-glass);
   padding: 1.25rem;
   text-align: center;
 }
@@ -182,6 +264,17 @@ a:hover {
   color: var(--text-dim);
 }
 
+/* The subscribe form lives in the footer, so the footer carries it as a
+   wide, centred strip rather than as a narrow column. */
+.footer-subscribe {
+  max-width: 34rem;
+  margin: 0 auto var(--space-6);
+}
+
+.footer-subscribe .subscribe-box {
+  margin-top: 0;
+}
+
 .site-footer a {
   color: var(--text-muted);
 }
@@ -190,13 +283,28 @@ a:hover {
   color: var(--accent);
 }
 
+/* An idle indicator must not reserve layout space.
+
+   `opacity: 0` alone leaves the element in the flow: it is invisible but
+   still occupies its box. That is how the article-detail skeleton used to
+   push the headline 563px down the page, and how `#content-loading` used to
+   leave a blank line above the fold on every page.
+
+   `display: none` removes the element from the flow entirely while it is
+   idle. htmx adds the `htmx-request` class to the indicator element when
+   the request starts and removes it when the request ends, so
+   `display: revert` puts the indicator back at its natural display type
+   (inline for a span, block for a div) for exactly the duration of the
+   request. */
 .htmx-indicator {
+  display: none;
   opacity: 0;
   transition: opacity 200ms ease-in;
 }
 
 .htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator {
+  display: revert;
   opacity: 1;
 }
 
@@ -237,7 +345,7 @@ a:hover {
 .rss-link {
   display: inline-flex;
   align-items: center;
-  color: var(--orange);
+  color: var(--text-muted);
 }
 
 .rss-link svg {
@@ -331,11 +439,6 @@ a:hover {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-light);
-}
-
-html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--bg-primary);
 }
 
 ::selection {

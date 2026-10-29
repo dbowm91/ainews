@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.cli_json import parse_cli_json
+
 import json
 from pathlib import Path
 from typing import Any
@@ -44,11 +46,52 @@ def _make_resolved_paths(tmp_path: Path) -> Any:
 
 
 def _setup_config_files(tmp_path: Path) -> None:
+    """Write schema-valid config fixtures.
+
+    The shapes below mirror what the config engine validates: providers are
+    an ID-keyed mapping, topics live under a ``topics:`` key, and sources use
+    the ``sources:`` list wrapper.
+    """
     (tmp_path / ".env").write_text("SECRET_KEY=test-secret\n")
-    (tmp_path / "providers.yaml").write_text("default_provider: ollama-local\nproviders:\n  ollama-local:\n    type: openai\n    enabled: true\n")
+    (tmp_path / "providers.yaml").write_text(
+        "default_provider: ollama-local\n"
+        "providers:\n"
+        "  ollama-local:\n"
+        "    type: ollama\n"
+        "    enabled: true\n"
+        "    config:\n"
+        "      host: \"http://localhost:11434\"\n"
+        "      model: \"qwen3:8b\"\n"
+    )
     (tmp_path / "pipeline.yaml").write_text("pipeline:\n  selector:\n    enabled: true\n")
-    (tmp_path / "sources.yaml").write_text("- name: test\n  type: rss\n")
-    (tmp_path / "topics.yaml").write_text("ai:\n  display_name: AI\n")
+    (tmp_path / "sources.yaml").write_text(
+        "sources:\n"
+        "  - id: test\n"
+        "    name: Test\n"
+        "    type: rss\n"
+        "    url: \"https://example.com/feed.xml\"\n"
+    )
+    (tmp_path / "topics.yaml").write_text("topics:\n  ai:\n    display_name: AI\n")
+
+
+def _fixture_env(tmp_path: Path) -> dict[str, str]:
+    """Pin every resolved config path to the fixture directory.
+
+    In development mode the CLI resolves config files from the repository
+    checkout, so a test that only overrides ``HOME`` still reads the
+    developer's live ``providers.yaml``/``pipeline.yaml``. Pinning the
+    documented ``AINEWS_*`` path overrides keeps these tests hermetic and
+    independent of whatever the working tree happens to contain.
+    """
+    return {
+        "HOME": str(tmp_path),
+        "AINEWS_CONFIG_DIR": str(tmp_path),
+        "AINEWS_ENV_FILE": str(tmp_path / ".env"),
+        "AINEWS_PROVIDERS_FILE": str(tmp_path / "providers.yaml"),
+        "AINEWS_PIPELINE_FILE": str(tmp_path / "pipeline.yaml"),
+        "AINEWS_SOURCES_FILE": str(tmp_path / "sources.yaml"),
+        "AINEWS_TOPICS_FILE": str(tmp_path / "topics.yaml"),
+    }
 
 
 class TestVersion:
@@ -60,7 +103,7 @@ class TestVersion:
     def test_version_json_output(self):
         result = runner.invoke(app, ["--json", "version"])
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "version" in data
         assert "python" in data
 
@@ -68,49 +111,94 @@ class TestVersion:
 class TestConfigPath:
     def test_config_path_shows_paths(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "path"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "path"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
         assert "config_dir" in result.output
 
     def test_config_path_json_output(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["--json", "config", "path"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["--json", "config", "path"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "config_dir" in data
 
 
 class TestConfigShow:
     def test_config_show_displays_values(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "show"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "show"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
 
     def test_config_show_redacts_secrets(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "show"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "show"], env=_fixture_env(tmp_path))
         assert "test-secret" not in result.output
 
     def test_config_show_json_output(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["--json", "config", "show"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["--json", "config", "show"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert isinstance(data, dict)
 
 
 class TestConfigCheck:
     def test_config_check_valid(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "check"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "check"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
 
     def test_config_check_json_output(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["--json", "config", "check"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["--json", "config", "check"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "valid" in data
+
+
+class TestPathEnvOverrides:
+    """The CLI must honour the documented ``AINEWS_*`` path overrides.
+
+    ``docs/configuration.md`` documents these variables as the second
+    precedence step, below explicit flags and above the platform default.
+    Without them the CLI silently ignored the operator's configuration and
+    read the repository checkout instead.
+    """
+
+    def test_providers_file_override_is_honoured(self, tmp_path):
+        _setup_config_files(tmp_path)
+        (tmp_path / "providers.yaml").write_text(
+            "default_provider: overridden-provider\n"
+            "providers:\n"
+            "  overridden-provider:\n"
+            "    type: ollama\n"
+            "    enabled: true\n"
+        )
+        result = runner.invoke(
+            app, ["config", "get", "default_provider"], env=_fixture_env(tmp_path)
+        )
+        assert result.exit_code == exit_codes.SUCCESS
+        assert "overridden-provider" in result.output
+
+    def test_config_dir_override_is_honoured(self, tmp_path):
+        _setup_config_files(tmp_path)
+        result = runner.invoke(app, ["config", "path"], env=_fixture_env(tmp_path))
+        assert result.exit_code == exit_codes.SUCCESS
+        assert str(tmp_path.resolve()) in result.output
+
+    def test_path_env_overrides_ignores_unset_variables(self, monkeypatch):
+        from ainews_cli.context import path_env_overrides
+
+        monkeypatch.delenv("AINEWS_PROVIDERS_FILE", raising=False)
+        monkeypatch.setenv("AINEWS_CONFIG_DIR", "/tmp/ainews-config")
+        overrides = path_env_overrides()
+        assert overrides == {"AINEWS_CONFIG_DIR": "/tmp/ainews-config"}
+
+    def test_path_env_overrides_ignores_empty_values(self, monkeypatch):
+        from ainews_cli.context import path_env_overrides
+
+        monkeypatch.setenv("AINEWS_PROVIDERS_FILE", "")
+        assert "AINEWS_PROVIDERS_FILE" not in path_env_overrides()
 
 
 class TestConfigGet:
@@ -120,15 +208,15 @@ class TestConfigGet:
 
     def test_get_valid_key(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "get", "default_provider"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "get", "default_provider"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
         assert "ollama-local" in result.output
 
     def test_get_json_output(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["--json", "config", "get", "default_provider"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["--json", "config", "get", "default_provider"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert data["key"] == "default_provider"
         assert data["value"] == "ollama-local"
 
@@ -143,7 +231,7 @@ class TestConfigSet:
         result = runner.invoke(
             app,
             ["config", "set", "default_provider", "new-provider", "--dry-run"],
-            env={"HOME": str(tmp_path)},
+            env=_fixture_env(tmp_path),
         )
         assert result.exit_code == exit_codes.SUCCESS
         assert "Would change" in result.output
@@ -153,10 +241,10 @@ class TestConfigSet:
         result = runner.invoke(
             app,
             ["--json", "config", "set", "default_provider", "new-provider", "--dry-run"],
-            env={"HOME": str(tmp_path)},
+            env=_fixture_env(tmp_path),
         )
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert data["dry_run"] is True
 
 
@@ -169,14 +257,14 @@ class TestConfigUnset:
 class TestConfigDiff:
     def test_diff_shows_differences(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "diff"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "diff"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
 
     def test_diff_json_output(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["--json", "config", "diff"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["--json", "config", "diff"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "diffs" in data
         assert "count" in data
 
@@ -184,14 +272,14 @@ class TestConfigDiff:
 class TestConfigRollback:
     def test_rollback_list_empty(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["config", "rollback", "--list"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["config", "rollback", "--list"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
 
     def test_rollback_json_output(self, tmp_path):
         _setup_config_files(tmp_path)
-        result = runner.invoke(app, ["--json", "config", "rollback", "--list"], env={"HOME": str(tmp_path)})
+        result = runner.invoke(app, ["--json", "config", "rollback", "--list"], env=_fixture_env(tmp_path))
         assert result.exit_code == exit_codes.SUCCESS
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "snapshots" in data
 
 
@@ -203,7 +291,7 @@ class TestDoctor:
     def test_doctor_json_output(self):
         result = runner.invoke(app, ["--json", "doctor"])
         assert result.exit_code in (exit_codes.SUCCESS, exit_codes.GENERAL_ERROR)
-        data = json.loads(result.output)
+        data = parse_cli_json(result)
         assert "outcome" in data
         assert "counts" in data
         assert "checks" in data

@@ -59,6 +59,12 @@ def get_provider_chain(role: str):
 
     Yields primary provider first, then enabled fallback providers in order.
     Filters out providers with open circuits.
+
+    A provider that cannot even be constructed -- a missing credential, a
+    malformed block -- is skipped rather than fatal. It used to take the
+    whole chain down with it, including the primary that had already been
+    yielded, which left the pipeline with no provider at all and no visible
+    error.
     """
     rc = get_role_config(role)
     breaker = get_breaker(
@@ -67,13 +73,21 @@ def get_provider_chain(role: str):
         recovery_timeout=_LLM_RECOVERY_TIMEOUT,
     )
     if breaker.can_execute():
-        provider = get_provider_by_id(rc.provider)
-        yield provider, rc.model, rc.max_tokens, rc.provider
+        try:
+            provider = get_provider_by_id(rc.provider)
+        except (ImportError, AttributeError, ValueError, KeyError, RuntimeError) as e:
+            logger.error(
+                "Primary LLM provider %r could not be created (%s); trying fallbacks",
+                rc.provider,
+                e,
+            )
+        else:
+            yield provider, rc.model, rc.max_tokens, rc.provider
+    else:
+        logger.warning(
+            "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model,
+        )
 
-    # Primary circuit is open or failed — try other enabled providers
-    logger.warning(
-        "LLM provider %s/%s circuit open, trying fallbacks", rc.provider, rc.model,
-    )
     config = _get_providers_config_cached()
     for pdef in config.providers:
         if pdef.id == rc.provider or not pdef.enabled:
@@ -86,15 +100,20 @@ def get_provider_chain(role: str):
             failure_threshold=_LLM_FAILURE_THRESHOLD,
             recovery_timeout=_LLM_RECOVERY_TIMEOUT,
         )
-        if fallback_breaker.can_execute():
-            logger.info("Falling back to LLM provider %s", pdef.id)
+        if not fallback_breaker.can_execute():
+            continue
+        try:
             provider = get_provider_by_id(pdef.id)
-            yield (
-                provider,
-                fallback_model,
-                pdef.config.get("max_tokens", rc.max_tokens),
-                pdef.id,
-            )
+        except (ImportError, AttributeError, ValueError, KeyError, RuntimeError) as e:
+            logger.warning("Skipping LLM fallback provider %r: %s", pdef.id, e)
+            continue
+        logger.info("Falling back to LLM provider %s", pdef.id)
+        yield (
+            provider,
+            fallback_model,
+            pdef.config.get("max_tokens", rc.max_tokens),
+            pdef.id,
+        )
 
 
 def record_provider_success(

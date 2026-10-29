@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -80,6 +81,21 @@ def resolve_env_vars(config: dict) -> dict:
 def load_yaml_file(path: str | Path) -> dict[str, Any]:
     """Load a YAML file and return its contents as a dict."""
     return yaml.safe_load(Path(path).read_text()) or {}
+
+
+def config_cache_key(name: str, path: str | Path) -> str:
+    """Return a cache key that identifies the source file.
+
+    The configuration cache is shared: every process on the host, and every
+    deployment that shares the Redis instance, reads and writes the same
+    entries. A key that names only the kind of configuration would let one
+    file be served in place of another — for example a process that points
+    ``LLM_PROVIDERS_FILE`` at a different providers.yaml would be served the
+    repository's. The key therefore carries an identity of the file it was
+    loaded from.
+    """
+    identity = hashlib.sha256(str(Path(path)).encode("utf-8")).hexdigest()[:16]
+    return f"{name}:{identity}"
 
 
 def cached_config(key: str, loader_fn: Callable[[], T], ttl: int = 300) -> T:

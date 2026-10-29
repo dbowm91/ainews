@@ -13,8 +13,19 @@ document.addEventListener("DOMContentLoaded", function () {
     window.addEventListener("online", function () {
       offlineToast.classList.add("toast-hidden");
     });
-    if (!navigator.onLine) {
-      offlineToast.classList.remove("toast-hidden");
+    /* navigator.onLine is not a reliable connectivity signal. An embedded
+       browser can report false while the network works perfectly, which
+       showed the reader a permanent "you appear to be offline" banner over
+       a fully working page. Probe the server before claiming the reader is
+       offline, and keep the toast hidden when the probe succeeds. */
+    if (navigator.onLine === false) {
+      fetch("/health", { method: "HEAD", cache: "no-store" })
+        .then(function (response) {
+          if (response.ok) offlineToast.classList.add("toast-hidden");
+        })
+        .catch(function () {
+          offlineToast.classList.remove("toast-hidden");
+        });
     }
   }
 

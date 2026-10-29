@@ -130,6 +130,8 @@ def _setup_security(app):
         app,
         content_security_policy=csp,
         content_security_policy_nonce_in=["script-src"],
+        force_https=not app.debug,
+        session_cookie_secure=app.config.get("SESSION_COOKIE_SECURE", True),
         frame_options="SAMEORIGIN",
         referrer_policy="strict-origin-when-cross-origin",
         strict_transport_security_max_age=31536000,
@@ -161,6 +163,21 @@ def _setup_middleware(app):
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @app.after_request
+    def vary_on_htmx_request(response):
+        """Keep the HTMX fragment and the full page in separate cache entries.
+
+        A route that answers an HTMX request returns a bare fragment, and the
+        same URL returns a complete page for a normal navigation. Both are
+        cacheable, and without a ``Vary`` header the browser's HTTP cache
+        keys them only by URL -- so the fragment cached by an in-page swap is
+        handed to a later full page load. The reader then gets a document
+        with no header, no footer and no navigation, which looks nothing
+        like the rest of the site.
+        """
+        response.vary.add("HX-Request")
         return response
 
 
@@ -218,11 +235,21 @@ def _register_blueprints(app):
 
 
 def _wants_json() -> bool:
-    """Detect if the client expects a JSON response."""
-    return (
-        request.path.startswith("/api/v1/")
-        or request.is_json
-        or "application/json" in request.accept_mimetypes
+    """Detect if the client expects a JSON response.
+
+    Content negotiation must use the *best* match, not membership. Werkzeug's
+    ``MIMEAccept`` treats the ``*/*`` wildcard as matching
+    ``application/json``, and every browser navigation sends an ``Accept``
+    header ending in ``*/*;q=0.8``. A membership test therefore classified
+    every browser page view as a JSON client and served raw JSON in place of
+    the styled HTML error pages.
+    """
+    if request.path.startswith("/api/v1/"):
+        return True
+    if request.is_json:
+        return True
+    return request.accept_mimetypes.best_match(["text/html", "application/json"]) == (
+        "application/json"
     )
 
 
@@ -309,6 +336,95 @@ def _register_template_filters(app):
 
         return format_date(dt)
 
+    @app.template_filter("reading_time")
+    def reading_time_filter(article):
+        """Return a human reading time for an article.
+
+        The word count is derived from the article body rather than stored:
+        a derived value does not belong in a column, and the body is the
+        thing the reader is about to read.
+        """
+        from services.article_provenance import reading_time_minutes
+
+        minutes = reading_time_minutes(article)
+        if not minutes:
+            return ""
+        if minutes == 1:
+            return "1 min read"
+        return f"{minutes} min read"
+
+    @app.template_filter("agent_provenance")
+    def agent_provenance_filter(article):
+        """Return the machine-provenance view model, or None."""
+        from services.article_provenance import agent_provenance
+
+        return agent_provenance(article)
+
+    @app.template_filter("agent_name")
+    def agent_name_filter(article):
+        """Return the name the site attributes this article's summary to.
+
+        An operator can set a site-wide agent name and a per-topic
+        override. Without one, the article names the model that wrote it.
+        """
+        from services.agent_identity import agent_display_name
+
+        return agent_display_name(article)
+
+
+def _register_markup_filters(app):
+    """Register the filters that render LLM-authored article content."""
+
+    @app.template_filter("body_html")
+    def body_html_filter(value):
+        """Render an article body (Markdown or HTML) as sanitized HTML."""
+        from markupsafe import Markup
+
+        from services.markup import render_body
+
+        if not value:
+            return Markup("")
+        return Markup(render_body(str(value)))
+
+    @app.template_filter("inline_html")
+    def inline_html_filter(value):
+        """Render Markdown as sanitized HTML without a wrapping paragraph."""
+        from markupsafe import Markup
+
+        from services.markup import render_inline
+
+        if not value:
+            return Markup("")
+        return Markup(render_inline(str(value)))
+
+    @app.template_filter("markdown_html")
+    def markdown_html_filter(value):
+        """Render Markdown as sanitized block HTML."""
+        from markupsafe import Markup
+
+        from services.markup import render_markdown
+
+        if not value:
+            return Markup("")
+        return Markup(render_markdown(str(value)))
+
+
+def _register_template_globals(app):
+    """Register the global helpers templates can call."""
+
+    @app.template_global("now")
+    def now_global():
+        """Return the current UTC time.
+
+        The value is naive on purpose. ``db.DateTime`` columns are declared
+        without a timezone and SQLite returns them naive, so an aware value
+        here would raise ``TypeError: can't subtract offset-naive and
+        offset-aware datetimes`` the moment a template compares the two.
+        """
+        from datetime import datetime, timezone
+
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 def create_app(config_name=None):
     if config_name is None:
@@ -328,6 +444,27 @@ def create_app(config_name=None):
     shared_overrides = load_from_shared_loader()
     if shared_overrides:
         app.config.update(shared_overrides)
+
+    # Secrets supplied through the process environment must remain authoritative.
+    # The shared loader can contain empty placeholders, which must not disable
+    # admin login or replace runtime secret values.
+    for secret_key in ("SECRET_KEY", "ADMIN_PASSWORD", "CELERY_TASK_SECRET"):
+        if secret_key in os.environ:
+            app.config[secret_key] = os.environ[secret_key]
+
+    # Local development and test servers are served over plain HTTP.
+    # Keep their session cookie compatible with localhost; production stays secure.
+    if config_name in {"development", "testing"}:
+        app.config["SESSION_COOKIE_SECURE"] = False
+
+    # Scope the shared response cache to this application's database, so two
+    # deployments that share a Redis instance never read each other's cached
+    # documents.
+    from services.cache import scope_for_database, set_cache_scope
+
+    set_cache_scope(
+        scope_for_database(app.config.get("SQLALCHEMY_DATABASE_URI", "") or "")
+    )
 
     # Setup structured logging
     setup_logging(
@@ -361,6 +498,8 @@ def create_app(config_name=None):
 
     # Register template filters
     _register_template_filters(app)
+    _register_markup_filters(app)
+    _register_template_globals(app)
 
     # Initialize tool registry
     from services.subagent import initialize_tool_registry

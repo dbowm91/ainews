@@ -431,9 +431,16 @@ class TestExternalDiscovery:
     def test_duplicate_external_id_independent_of_order(
         self, tmp_path: Path
     ) -> None:
-        # "custom.toml" and "CUSTOM.toml" both normalize to "custom"
+        # "custom.toml" and "CUSTOM.toml" both normalize to "custom".
+        # On a case-insensitive filesystem (macOS APFS, Windows) those two
+        # names are the same file, so the collision cannot be constructed
+        # and the test would assert against a single theme.
         (tmp_path / "custom.toml").write_text(VALID_DARK)
         (tmp_path / "CUSTOM.toml").write_text(VALID_DARK)
+        if len(list(tmp_path.glob("*.toml"))) < 2:
+            pytest.skip(
+                "filesystem is case-insensitive; duplicate id cannot be constructed"
+            )
         settings = RegistryBuildSettings(
             enabled=True, custom_dir=tmp_path, allow_custom=True
         )

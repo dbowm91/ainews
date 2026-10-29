@@ -4,7 +4,7 @@ from celery import chord, group, shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
 
-from services.task_security import verify_task
+from services.task_security import verify_invocation
 from constants import CELERY_TASK_MAX_RETRIES
 
 logger = get_task_logger(__name__)
@@ -197,7 +197,11 @@ def crawl_source(self, source_config: dict, run_id: int, _signature: str | None 
         if source:
             record_crawl_failure(source, str(e))
         record_stage_result("crawl", success=False, run_id=run_id, reason="error")
-        raise
+        # Return a structured per-source failure so the chord callback always
+        # runs and marks the parent PipelineRun completed/failed. A raised
+        # non-retryable leaf error would prevent the callback and strand the run
+        # in "running" indefinitely.
+        return {"source_id": source_id, "error": str(e)}
     finally:
         try:
             from services.redis_utils import release_lock
@@ -268,12 +272,10 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
 )
 def run_all_sources(self, run_id=None, _signature=None, task_name=None):
     """Orchestrate crawling of all sources using parallel task execution."""
-    verify_kwargs: dict[str, object] = {"run_id": run_id}
-    if _signature is not None:
-        verify_kwargs["_signature"] = _signature
-    if task_name is not None:
-        verify_kwargs["task_name"] = task_name
-    if not verify_task("run_all_sources", (), verify_kwargs):
+    # The signature covers the arguments this task was called with, so it
+    # is verified against the invocation rather than against a rebuilt
+    # dict of the task's own defaults.
+    if not verify_invocation("run_all_sources", self.request):
         logger.error("Invalid signature for run_all_sources task")
         raise ValueError("Invalid task signature")
 

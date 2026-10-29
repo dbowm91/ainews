@@ -1,0 +1,56 @@
+{#
+  The feed rail.
+
+  The rail is a discovery surface, not a reading surface -- it shows what the
+  reader can browse: the topic taxonomy and the articles the editor ranked
+  highest. It appears on every public page so the page frame does not change
+  when the reader moves between the index, a topic tab and an article.
+
+  The subscribe form is deliberately NOT here: it lives in the footer, where
+  it does not compete with the rail's discovery links for attention.
+
+  Pipeline state (how many articles are in flight, which stage they are in,
+  how many failed) is deliberately NOT shown here. It is operational
+  information and lives in the admin area, where it belongs.
+#}
+{% if feed_stats and feed_stats.topic_counts %}
+<section class="rail-section rail-section--topics">
+  <h2 class="rail-heading">topics</h2>
+  <ul class="rail-list">
+    {% for entry in feed_stats.topic_counts[:8] %}
+    <li>
+      <a href="/topic/{{ entry.topic|urlencode }}" class="rail-link">{{ entry.topic }}</a>
+      <span class="rail-count">{{ entry.count }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if all_tags %}
+<section class="rail-section rail-section--tags">
+  <h2 class="rail-heading">tags</h2>
+  <ul class="rail-list">
+    {% for t in all_tags %}
+    <li>
+      <a href="/tag/{{ t.slug }}" class="rail-link{% if t.slug == tag_slug %} active{% endif %}">{{ t.name }}</a>
+      <span class="rail-count">{{ t.count }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if feed_stats and feed_stats.impact_leaders %}
+<section class="rail-section rail-section--impact">
+  <h2 class="rail-heading">impact leaders</h2>
+  <ol class="rail-list">
+    {% for leader in feed_stats.impact_leaders %}
+    <li>
+      <a href="/article/{{ leader.article_id }}" class="rail-link">{{ leader.title }}</a>
+      <span class="rail-count">impact {{ leader.impact_score }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}

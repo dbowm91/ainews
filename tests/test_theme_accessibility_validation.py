@@ -24,6 +24,7 @@ from services.themes.emergency import get_emergency_ainews_theme
 from services.themes.translate import (
     classify_accessibility_findings,
     classify_contrast_findings,
+    to_css_variables,
     translate_theme,
 )
 from services.themes.halloy import parse_halloy_toml
@@ -394,3 +395,249 @@ class TestScreenReaderSupport:
         resp = _client.get("/")
         html = resp.data.decode()
         assert 'role="radiogroup"' in html
+
+
+# ---------------------------------------------------------------------------
+# 9. AA contrast matrix for secondary, muted and link tokens
+# ---------------------------------------------------------------------------
+
+class TestExtendedContrastMatrix:
+    """The public UI renders secondary, muted and link text on real surfaces.
+
+    The original matrix only checked primary text fatally, so a theme whose
+    muted tone was unreadable on its own surface still validated.
+    """
+
+    def _theme_with(self, **overrides):
+        from services.themes.models import AinewsTheme
+
+        base = {
+            "bg_primary": "#0d1117",
+            "bg_secondary": "#161b22",
+            "bg_tertiary": "#21262d",
+            "bg_subtle": "#1c2128",
+            "bg_input": "#0d1117",
+            "bg_hover": "#21262d",
+            "bg_selected": "#2d333b",
+            "border": "#30363d",
+            "border_light": "#3d444d",
+            "border_focus": "#58a6ff",
+            "text_primary": "#e6edf3",
+            "text_secondary": "#c9d1d9",
+            "text_muted": "#8b949e",
+            "text_dim": "#adbac7",
+            "text_inverse": "#0d1117",
+            "accent": "#58a6ff",
+            "accent_hover": "#79b8ff",
+            "accent_active": "#1f6feb",
+            "accent_contrast": "#0d1117",
+            "link": "#58a6ff",
+            "link_hover": "#79b8ff",
+            "focus_ring": "#58a6ff",
+            "success": "#3fb950",
+            "warning": "#d29922",
+            "error": "#f85149",
+            "info": "#58a6ff",
+            "category_ai": "#bc8cff",
+            "category_privacy": "#d29922",
+            "category_security": "#f85149",
+            "category_programming": "#3fb950",
+            "category_hardware": "#58a6ff",
+            "category_other": "#8b949e",
+            "skeleton_base": "#161b22",
+            "skeleton_shine": "#21262d",
+            "selection": "#2d333b",
+            "overlay": "#161b22",
+            "appearance": "dark",
+        }
+        base.update(overrides)
+        return AinewsTheme(**base)
+
+    def test_secondary_text_contrast_reported(self):
+        theme = self._theme_with(text_secondary="#3a3a3a")
+        findings = classify_contrast_findings(theme)
+        codes = [f.code for f in findings]
+        assert "THEME_CONTRAST_SECONDARY_AA" in codes
+
+    def test_muted_text_contrast_reported(self):
+        theme = self._theme_with(text_muted="#3a3a3a")
+        findings = classify_contrast_findings(theme)
+        codes = [f.code for f in findings]
+        assert "THEME_CONTRAST_MUTED_AA" in codes
+
+    def test_link_contrast_reported(self):
+        theme = self._theme_with(link="#3a3a3a")
+        findings = classify_contrast_findings(theme)
+        codes = [f.code for f in findings]
+        assert "THEME_CONTRAST_ACCENT_AA" in codes
+
+    def test_passing_theme_produces_no_new_diagnostics(self):
+        theme = self._theme_with()
+        findings = classify_contrast_findings(theme)
+        codes = [f.code for f in findings]
+        for code in (
+            "THEME_CONTRAST_SECONDARY_AA",
+            "THEME_CONTRAST_MUTED_AA",
+            "THEME_CONTRAST_ACCENT_AA",
+        ):
+            assert code not in codes
+
+    def test_new_codes_are_registered(self):
+        from services.themes.errors import THEME_DIAGNOSTIC_CODES
+
+        for code in (
+            "THEME_CONTRAST_SECONDARY_AA",
+            "THEME_CONTRAST_MUTED_AA",
+            "THEME_CONTRAST_ACCENT_AA",
+        ):
+            assert code in THEME_DIAGNOSTIC_CODES
+            assert THEME_DIAGNOSTIC_CODES[code]
+
+    def test_new_codes_are_strict_promotable(self):
+        from services.themes.errors import Severity, ThemeDiagnostic, is_strict_promotable
+
+        for code in (
+            "THEME_CONTRAST_SECONDARY_AA",
+            "THEME_CONTRAST_MUTED_AA",
+            "THEME_CONTRAST_ACCENT_AA",
+        ):
+            diagnostic = ThemeDiagnostic(
+                severity=Severity.WARNING, field="text_muted", message="x", code=code
+            )
+            assert is_strict_promotable(diagnostic) is True
+
+    def test_new_codes_are_advisory_by_default(self):
+        """The new codes warn in the default mode and fail in strict mode."""
+        from services.themes.errors import (
+            Severity,
+            ThemeDiagnostic,
+            is_advisory_by_default,
+            is_fatal_diagnostic,
+        )
+
+        for code in (
+            "THEME_CONTRAST_SECONDARY_AA",
+            "THEME_CONTRAST_MUTED_AA",
+            "THEME_CONTRAST_ACCENT_AA",
+        ):
+            diagnostic = ThemeDiagnostic(
+                severity=Severity.WARNING, field="text_muted", message="x", code=code
+            )
+            assert is_fatal_diagnostic(diagnostic) is False
+            assert is_advisory_by_default(diagnostic) is True
+
+    def test_diagnostic_description_is_human_readable(self):
+        from services.themes.errors import get_diagnostic_description
+
+        for code in (
+            "THEME_CONTRAST_SECONDARY_AA",
+            "THEME_CONTRAST_MUTED_AA",
+            "THEME_CONTRAST_ACCENT_AA",
+        ):
+            description = get_diagnostic_description(code)
+            assert description
+            assert description != code
+
+
+class TestBundledThemesMeetExtendedMatrix:
+    """Every bundled theme must pass the extended matrix."""
+
+    def _bundled_files(self):
+        from services.themes.loader import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        return manifest
+
+    def test_all_bundled_themes_meet_aa_text_contrast(self):
+        from pathlib import Path
+
+        from services.themes.halloy import parse_halloy_toml
+
+        root = Path(__file__).resolve().parent.parent / "resources/themes"
+        failures = []
+        for path in sorted(root.rglob("*.toml")):
+            halloy = parse_halloy_toml(path.read_text())
+            theme = translate_theme(halloy).theme
+            findings = classify_contrast_findings(theme)
+            aa = [f for f in findings if f.code.startswith("THEME_CONTRAST_")]
+            if aa:
+                failures.append(
+                    f"{path.name}: {sorted({f.code for f in aa})}"
+                )
+        assert not failures, failures
+
+    def test_derived_tokens_are_reported_in_provenance(self):
+        from pathlib import Path
+
+        from services.themes.halloy import parse_halloy_toml
+
+        root = Path(__file__).resolve().parent.parent / "resources/themes"
+        path = root / "Nord.toml"
+        halloy = parse_halloy_toml(path.read_text())
+        result = translate_theme(halloy)
+
+        # Nord declares an unreadable secondary tone; the translation layer
+        # floors it, and the provenance must record the derivation.
+        assert result.provenance["text_secondary"].source.value == "derived"
+        assert result.provenance["text_muted"].source.value == "derived"
+        assert result.provenance["link"].source.value == "derived"
+
+
+class TestAccentSurfaceLabel:
+    """Every bundled theme must label a filled accent surface legibly.
+
+    The accent colour is the background of the primary and subscribe
+    buttons. The label colour is chosen by the translation layer
+    independently of the theme's text palette, because no single text token
+    can be legible on both a light and a dark accent fill.
+    """
+
+    def test_on_accent_colour_is_legible_on_light_and_dark_accents(self):
+        from services.themes.colors import on_accent_color
+
+        light = on_accent_color([parse_hex_color("#58a6ff")])
+        dark = on_accent_color([parse_hex_color("#0858b8")])
+
+        assert contrast_ratio(light, parse_hex_color("#58a6ff")) >= 4.5
+        assert contrast_ratio(dark, parse_hex_color("#0858b8")) >= 4.5
+
+    def test_bundled_themes_emit_a_legible_accent_contrast_token(self):
+        from pathlib import Path
+
+        from services.themes.translate import translate_theme
+
+        resources_dir = Path(__file__).parent.parent / "resources" / "themes"
+        manifest_path = resources_dir / "manifest.json"
+        with open(manifest_path) as handle:
+            manifest = json.load(handle)
+
+        failures: list[str] = []
+        checked = 0
+        for entry in manifest["entries"]:
+            toml_path = resources_dir / entry["source_filename"]
+            if not toml_path.exists():
+                continue
+            try:
+                halloy = parse_halloy_toml(toml_path.read_text())
+                theme = translate_theme(halloy).theme
+            except (ValueError, KeyError):
+                continue
+            checked += 1
+            css = to_css_variables(theme)
+            match = re.search(r"--accent-contrast:\s*(#[0-9a-fA-F]{6,8});", css)
+            if not match:
+                failures.append(f"{entry['id']}: --accent-contrast not emitted")
+                continue
+            label = parse_hex_color(match.group(1))
+            for fill_name in ("accent", "accent_hover"):
+                fill = getattr(theme, fill_name, None)
+                if not fill:
+                    continue
+                ratio = contrast_ratio(label, parse_hex_color(fill))
+                if ratio < 4.5:
+                    failures.append(
+                        f"{entry['id']}: --accent-contrast on --{fill_name} "
+                        f"is {ratio:.2f}:1"
+                    )
+        assert checked > 0, "no bundled themes were checked"
+        assert not failures, "\n".join(failures)

@@ -4,79 +4,79 @@
 
 <h1 class="sr-only">AI News Feed</h1>
 
-<div class="feed-header">
-  <form role="search" class="search-container">
-    <label for="search-input" class="sr-only">Search articles</label>
-    <input
-      id="search-input"
-      type="search"
-      name="q"
-      value="{{ query }}"
-      placeholder="search articles..."
-      aria-label="Search articles (press / to focus)"
-      class="search-input"
-      minlength="2"
-      hx-get="{{ url_for('public.index') }}"
-      hx-trigger="keyup changed delay:500ms, search"
-      hx-target="#content"
-      hx-swap="innerHTML"
-      hx-push-url="true"
-      hx-indicator="#search-spinner"
-      hx-include="[name='category']"
-    >
-    <button type="button" class="search-clear" aria-label="Clear search">&times;</button>
-    <kbd class="search-kbd">/</kbd>
-    <span id="search-spinner" class="htmx-indicator spinner" aria-hidden="true">...</span>
-    <input type="hidden" name="category" value="{{ category }}">
-  </form>
+<div class="feed-toolbar">
+  <div class="feed-toolbar-row">
+    <form role="search" class="search-container feed-search">
+      <label for="search-input" class="sr-only">Search articles</label>
+      <input
+        id="search-input"
+        type="search"
+        name="q"
+        value="{{ query }}"
+        placeholder="search articles..."
+        aria-label="Search articles (press / to focus)"
+        class="search-input"
+        minlength="2"
+        hx-get="{{ url_for('public.index') }}"
+        hx-trigger="keyup changed delay:500ms, search"
+        hx-target="#content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        hx-indicator="#search-spinner"
+        hx-include="[name='category']"
+      >
+      <button type="button" class="search-clear" aria-label="Clear search">&times;</button>
+      <span id="search-spinner" class="htmx-indicator spinner" aria-hidden="true">...</span>
+      <kbd class="search-kbd" aria-hidden="true">/</kbd>
+      <input type="hidden" name="category" value="{{ category }}">
+    </form>
 
-  <div id="category-filter" class="filter-bar" role="tablist" aria-label="Category filter">
-    <a href="/" role="tab" aria-selected="{% if not category %}true{% else %}false{% endif %}" class="filter-btn {% if not category %}active{% endif %}">all</a>
+    <select name="sort" class="sort-select" aria-label="Sort articles"
+            hx-get="{{ url_for('public.index') }}"
+            hx-trigger="change"
+            hx-target="#content"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            hx-include="[name='category'],[name='q']">
+      <option value="recent" {% if sort == 'recent' %}selected{% endif %}>most recent</option>
+      <option value="impact" {% if sort == 'impact' %}selected{% endif %}>highest impact</option>
+      <option value="published" {% if sort == 'published' %}selected{% endif %}>published date</option>
+    </select>
+  </div>
+
+  <nav id="category-filter" class="filter-bar" aria-label="Category filter">
+    <a href="/" {% if not category %}aria-current="page"{% endif %} class="filter-btn {% if not category %}active{% endif %}">all</a>
     {% for cat in categories %}
-      <a href="/topic/{{ cat }}" role="tab" aria-selected="{% if category == cat %}true{% else %}false{% endif %}" class="filter-btn {% if category == cat %}active{% endif %}">{{ cat }}</a>
+      <a href="/topic/{{ cat }}" {% if category == cat %}aria-current="page"{% endif %} class="filter-btn {% if category == cat %}active{% endif %}">{{ cat }}</a>
     {% endfor %}
-  </div>
+  </nav>
+</div>
 
-  <select name="sort" class="sort-select" aria-label="Sort articles"
-          hx-get="{{ url_for('public.index') }}"
-          hx-trigger="change"
-          hx-target="#content"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          hx-include="[name='category'],[name='q']">
-    <option value="recent" {% if sort == 'recent' %}selected{% endif %}>most recent</option>
-    <option value="impact" {% if sort == 'impact' %}selected{% endif %}>highest impact</option>
-    <option value="published" {% if sort == 'published' %}selected{% endif %}>published date</option>
-  </select>
+<div id="active-filters" class="active-filters">
+  {% if category %}
+    <span class="filter-pill">{{ category }}<a href="/" class="pill-close" aria-label="Remove {{ category }} filter">&times;</a></span>
+  {% endif %}
+  {% if query %}
+    <span class="filter-pill">"{{ query }}"<a href="{% if category %}/topic/{{ category }}{% else %}/{% endif %}" class="pill-close" aria-label="Remove search filter">&times;</a></span>
+  {% endif %}
+</div>
 
-  <div id="active-filters" class="active-filters">
-    {% if category %}
-      <span class="filter-pill">{{ category }}<a href="/" class="pill-close" aria-label="Remove {{ category }} filter">&times;</a></span>
-    {% endif %}
-    {% if query %}
-      <span class="filter-pill">"{{ query }}"<a href="{% if category %}/topic/{{ category }}{% else %}/{% endif %}" class="pill-close" aria-label="Remove search filter">&times;</a></span>
-    {% endif %}
-  </div>
-
-  <div aria-live="polite" aria-atomic="true">
-    {% if articles %}
-      <span id="result-count" class="result-count">{{ articles|length }} articles</span>
-    {% elif query or category %}
-      <h2 class="empty-title">no articles match your filters</h2>
-      <p class="empty-description">try adjusting your search terms or <a href="/">clearing all filters</a></p>
-    {% else %}
-      <h2 class="empty-title">no articles yet</h2>
-      <p class="empty-description">first crawl is in progress &mdash; check back soon</p>
-      <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="8" y="12" width="48" height="40" rx="4" stroke="currentColor" stroke-width="2"/>
-        <line x1="16" y1="24" x2="48" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <line x1="16" y1="32" x2="40" y2="32" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <line x1="16" y1="40" x2="36" y2="40" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-    {% endif %}
-  </div>
-
-  {% include "partials/subscribe_box.html" %}
+<div class="feed-status" aria-live="polite" aria-atomic="true">
+  {% if articles %}
+    <span id="result-count" class="result-count">{{ articles|length }} articles</span>
+  {% elif query or category %}
+    <h2 class="empty-title">no articles match your filters</h2>
+    <p class="empty-description">try adjusting your search terms or <a href="/">clearing all filters</a></p>
+  {% else %}
+    <h2 class="empty-title">no articles yet</h2>
+    <p class="empty-description">first crawl is in progress &mdash; check back soon</p>
+    <svg class="empty-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="8" y="12" width="48" height="40" rx="4" stroke="currentColor" stroke-width="2"/>
+      <line x1="16" y1="24" x2="48" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="16" y1="32" x2="40" y2="32" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="16" y1="40" x2="36" y2="40" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  {% endif %}
 </div>
 
 <div id="feed" role="feed" aria-label="Article feed" class="htmx-skeleton-target">
@@ -101,7 +101,7 @@
       <span class="spinner" aria-live="polite">loading more...</span>
     </div>
     <noscript>
-      <a href="{{ url_for('public.index', page=next_page, category=category, q=query, sort=sort) }}" class="btn-secondary mt-05">load more articles</a>
+      <a href="{{ url_for('public.index', page=next_page, category=category, q=query, sort=sort) }}" class="btn btn-secondary mt-05">load more articles</a>
     </noscript>
   </div>
   {% endif %}

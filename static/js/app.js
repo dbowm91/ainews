@@ -405,7 +405,12 @@ document.addEventListener("DOMContentLoaded", function () {
   /* Service worker registration for PWA */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/static/service-worker.js', {scope: '/'}).catch(function() {});
+      /* The worker is served from the site root so that its scope covers the
+         whole site. A worker served from /static/ may only claim /static/,
+         and registering it with scope '/' was rejected on every page load. */
+      navigator.serviceWorker.register('/service-worker.js').catch(function(err) {
+        console.warn('Service worker registration failed:', err);
+      });
     });
   }
 });

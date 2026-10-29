@@ -61,7 +61,9 @@ def build_writer_prompt(
         f"'what_to_watch' (what happens next or what to monitor). "
         f"Limit key_points to {max_key_points} items. "
         f"Reference external sources and related articles from the brief in the body text. "
-        f"List all citations used.",
+        f"List all citations used. "
+        f"The 'body' field is markdown: separate paragraphs with a blank line, "
+        f"keep each paragraph to at most 3 sentences, and emit no HTML tags.",
     )
 
     return "".join(parts)

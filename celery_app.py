@@ -60,9 +60,15 @@ def _init_celery():
     from app import create_app
 
     app = create_app()
+
+    # CELERY_BEAT_SCHEDULE is intentionally empty in the static config; populate
+    # it from pipeline.yaml before Celery snapshots Flask's config so `celery
+    # beat` actually dispatches the configured autonomous jobs.
+    from config import Config
+
+    app.config["CELERY_BEAT_SCHEDULE"] = Config.get_beat_schedule()
     _celery.config_from_object(app.config, namespace="CELERY")
     _celery.Task = FlaskTask
-
 
     app.extensions["celery"] = _celery
 

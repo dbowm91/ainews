@@ -275,6 +275,7 @@ _SCHEDULE_FIELDS = [
     _yaml("schedule.publish_scheduled_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "publish_scheduled_interval_minutes"), field_type=FieldType.INT, default=5, description="Minutes between scheduled publish checks"),
     _yaml("schedule.cleanup_stale_limiter_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_stale_limiter_interval_minutes"), field_type=FieldType.INT, default=5, description="Minutes between stale limiter slot cleanups"),
     _yaml("schedule.cleanup_inactive_subscribers_minute", dest=ConfigFile.PIPELINE, path=("schedule", "cleanup_inactive_subscribers_minute"), field_type=FieldType.INT, default=0, description="Minute of hour for inactive subscriber cleanup"),
+    _yaml("schedule.auto_approve_interval_minutes", dest=ConfigFile.PIPELINE, path=("schedule", "auto_approve_interval_minutes"), field_type=FieldType.INT, default=1, description="Minutes between auto-review mode passes over the review queue"),
 ]
 
 _EXPERIMENTS_FIELDS = [

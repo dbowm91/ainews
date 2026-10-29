@@ -9,11 +9,17 @@ The pipeline uses a state machine defined in `constants.py:52-64`:
 
 ```python
 VALID_TRANSITIONS: dict[str, frozenset] = {
-    PipelineStatus.PENDING: frozenset([PipelineStatus.SELECTING, PipelineStatus.RESEARCHING, PipelineStatus.REVIEW]),
+    PipelineStatus.PENDING: frozenset([
+        PipelineStatus.SELECTING,
+        PipelineStatus.RESEARCHING,
+        PipelineStatus.REVIEW,
+        PipelineStatus.SKIPPED,
+        PipelineStatus.FAILED,
+    ]),
     PipelineStatus.SELECTING: frozenset([PipelineStatus.SELECTED, PipelineStatus.FAILED]),
     PipelineStatus.SELECTED: frozenset([PipelineStatus.RESEARCHING, PipelineStatus.FAILED]),
     PipelineStatus.RESEARCHING: frozenset([PipelineStatus.WRITING, PipelineStatus.FAILED]),
-    PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
+    PipelineStatus.WRITING: frozenset([PipelineStatus.EDITING, PipelineStatus.REVIEW, PipelineStatus.FAILED]),
     PipelineStatus.WRITTEN: frozenset([PipelineStatus.EDITING, PipelineStatus.FAILED]),
     PipelineStatus.EDITING: frozenset([PipelineStatus.REVIEW, PipelineStatus.DONE, PipelineStatus.FAILED]),
     PipelineStatus.REVIEW: frozenset([PipelineStatus.DONE, PipelineStatus.FAILED]),
@@ -27,11 +33,11 @@ VALID_TRANSITIONS: dict[str, frozenset] = {
 
 | Current | Next (success) | Next (quality gate) | Next (fail) |
 |---------|----------------|---------------------|-------------|
-| `pending` | `selecting`, `researching` | `review` | `failed` |
+| `pending` | `selecting`, `researching` | `review`, `skipped` | `failed` |
 | `selecting` | `selected` | - | `failed` |
 | `selected` | `researching` | - | `failed` |
-| `researching` | `writing` | - | `failed` |
-| `writing` | `editing` | - | `failed` |
+| `researching` | `writing` | `review` | `failed` |
+| `writing` | `editing` | `review` | `failed` |
 | `written` | `editing` | - | `failed` |
 | `editing` | `done` | `review` | `failed` |
 | `review` | `done` | - | `failed` |
@@ -40,6 +46,8 @@ VALID_TRANSITIONS: dict[str, frozenset] = {
 | `failed` | `pending` | - | - |
 
 Use `is_valid_transition(from_status, to_status)` in `constants.py` to validate transitions.
+
+**Every edge in the table has to match a transition the pipeline actually performs.** A missing edge raises `InvalidStateTransitionError` in the middle of a stage and strands the article where it was, until the retry task dead-letters it an hour later. When you add a `_transition_article_status` call, add the edge in the same change.
 
 ## Quality Gates
 

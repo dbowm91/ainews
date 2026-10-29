@@ -19,9 +19,29 @@ from services.pipeline_failure import _get_max_stage_retries
 logger = get_task_logger(__name__)
 
 
+def _as_utc_aware(value):
+    """Normalize a datetime to timezone-aware UTC.
+
+    The ``DateTime`` columns are declared without a timezone, but their
+    defaults write ``datetime.now(timezone.utc)``. SQLite hands the value
+    back naive, so an aware ``now`` cannot be subtracted from it directly.
+    Naive values are interpreted as UTC, which is what was written.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _classify_stuck_article(article, now):
     """Classify a stuck article as dead_letter, degrade, or retry."""
-    age_minutes = (now - article.updated_at).total_seconds() / 60
+    now = _as_utc_aware(now)
+    updated_at = _as_utc_aware(article.updated_at)
+    if now is None or updated_at is None:
+        return "retry"
+
+    age_minutes = (now - updated_at).total_seconds() / 60
     
     if age_minutes >= get_stuck_threshold_minutes():
         return "dead_letter"

@@ -2,6 +2,10 @@
 
 {% block title %}ainews// unsubscribe{% endblock %}
 
+{# This page is not about the content: a subscribe call to action here would
+   be wrong, so the footer's subscribe strip is suppressed. #}
+{% block footer_subscribe %}{% endblock %}
+
 {% block content %}
 <div class="unsubscribe-page">
   {% if confirmed %}

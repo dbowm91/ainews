@@ -22,6 +22,7 @@ concurrency:
 #   docker-build         — image build + testing/prod smoke
 #   smoke-tests          — production config, Celery, migration, docs consistency
 #   theme-validation     — theme CLI validation + lifecycle/preference/recovery tests
+#   theme-browser-smoke  — Playwright: theme switching + frontend rendering regressions
 #   compose-smoke        — full Docker Compose boot + health check
 #   gitleaks             — secret scanning
 # ---------------------------------------------------------------------------
@@ -238,6 +239,9 @@ jobs:
 
       - name: Run theme browser smoke tests
         run: .venv/bin/python -m pytest tests/test_theme_browser_smoke.py -v --timeout=180
+
+      - name: Run frontend rendering browser tests
+        run: .venv/bin/python -m pytest tests/test_frontend_rendering_browser.py -v --timeout=180
 
       - name: Upload browser test artifacts
         if: failure()

@@ -57,6 +57,20 @@ def _dispatch_next(
     status = next_status or (article.pipeline_status if article else None)
     if not status:
         return
+
+    if status == "review":
+        from services.auto_review import is_auto_approve_enabled
+
+        if is_auto_approve_enabled():
+            # Auto-review mode published the article instead of queueing it.
+            # Re-running the editor on a published article would edit it a
+            # second time for no reason.
+            logger.info(
+                "Skipping the review dispatch for article %s: auto-review mode published it",
+                article_id,
+            )
+            return
+
     with _task_fn_cache_lock:
         if status not in _task_fn_cache:
             module_path, task_name = _STAGE_TASKS.get(status, (None, None))

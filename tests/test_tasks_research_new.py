@@ -625,6 +625,22 @@ class TestGenerateResearchBrief:
 class TestResearchArticleTask:
     """Tests for the research_article Celery task entry point."""
 
+    def test_research_task_budget_exceeds_nested_request_budget(self):
+        """Research must not be worker-killed before its bounded LLM calls finish."""
+        from tasks.research import research_article
+
+        assert research_article.soft_time_limit == 1740
+        assert research_article.time_limit == 1800
+
+    def test_research_synthesis_budget_is_bounded(self):
+        """Whole-subagent retries and excessive tool iterations stay disabled."""
+        from schemas.pipeline import load_pipeline_config
+
+        research = load_pipeline_config().subagent.research
+        assert research.timeout_seconds == 600
+        assert research.max_retries == 0
+        assert research.max_iterations == 2
+
     def test_research_article_calls_run_stage(self, app, create_article, monkeypatch):
         """research_article delegates to run_stage with correct args."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
@@ -642,6 +658,39 @@ class TestResearchArticleTask:
             assert call_args[0][1] == article.id
             assert call_args[1]["run_id"] == 42
             assert call_args[1]["skip_next"] == PipelineStatus.WRITING
+
+    def test_research_article_work_transitions_before_generating_brief(
+        self, app, create_article, monkeypatch
+    ):
+        """The research work closure resolves its pipeline transition helper."""
+        monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+        with app.app_context():
+            from constants import PipelineStatus
+            from tasks.research import research_article
+
+            article = create_article(pipeline_status="selected")
+            role_config = MagicMock(web_search=False, db_related_max=5)
+            brief = MagicMock()
+            brief.impact_score = 55
+            brief.model_dump_json.return_value = '{"impact_score": 55}'
+
+            def run_work_inline(_stage, _article_id, work, task_self, **_kwargs):
+                return work(article, MagicMock(), "test-model", 4096)
+
+            with (
+                patch("tasks.pipeline.run_stage", side_effect=run_work_inline),
+                patch("schemas.pipeline.get_role_config", return_value=role_config),
+                patch("tasks.pipeline._transition_article_status") as transition,
+                patch("tasks.research._perform_web_search_and_synthesis", return_value=([], "")),
+                patch("tasks.research._get_related_and_context", return_value=([], "", "")),
+                patch("tasks.research._generate_research_brief", return_value=brief),
+                patch("tasks.research._perform_quality_assessment"),
+                patch("tasks.research._handle_quality_gate_and_transition", return_value={"article_id": article.id}),
+            ):
+                result = research_article.run(article.id)
+
+            transition.assert_called_once_with(article, PipelineStatus.RESEARCHING)
+            assert result == {"article_id": article.id}
 
     def test_research_article_with_none_run_id(self, app, create_article, monkeypatch):
         """research_article works with default run_id=None."""

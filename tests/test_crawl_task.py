@@ -142,8 +142,9 @@ class TestCrawlSource:
                 "adapters.base.get_adapter_class",
                 side_effect=RuntimeError("adapter init failed"),
             ):
-                with pytest.raises(RuntimeError, match="adapter init failed"):
-                    _call_crawl(cfg)
+                result = _call_crawl(cfg)
+
+        assert result == {"source_id": "src_err", "error": "adapter init failed"}
 
     @patch("extensions.get_redis")
     def test_lock_held_by_different_task_skips(
@@ -262,3 +263,30 @@ class TestRunAllSources:
             result = run_all_sources.__wrapped__()
         assert result["message"] == "Dispatched 1 sources for crawling"
         mock_chord.assert_called_once()
+
+    def test_aggregate_marks_parent_run_failed_for_source_error(self, app):
+        from datetime import datetime, timezone
+
+        from extensions import db
+        from models import PipelineRun
+        from tasks.crawl import aggregate_crawl_results
+
+        with app.app_context():
+            run = PipelineRun(
+                run_type="crawl",
+                status="running",
+                triggered_by="scheduled",
+                started_at=datetime.now(timezone.utc),
+            )
+            db.session.add(run)
+            db.session.commit()
+
+            result = aggregate_crawl_results.__wrapped__(
+                [{"source_id": "broken-source", "error": "fetch failed"}],
+                run.id,
+            )
+            db.session.refresh(run)
+
+            assert result["errors"] == 1
+            assert run.status == "failed"
+            assert run.finished_at is not None

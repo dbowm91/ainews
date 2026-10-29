@@ -83,6 +83,110 @@ def dead_letters() -> str:
     )
 
 
+def _selector_score(selector_result) -> float | None:
+    """Extract the selector's score from a raw ``selector_result`` value.
+
+    ``Article.selector_result`` is a JSON column that is NULL for articles the
+    selector never scored (anything rejected before selection). When present
+    it is a mapping with a ``score`` key. Defensive parsing keeps a malformed
+    value from breaking the whole dashboard.
+    """
+    if not isinstance(selector_result, dict):
+        return None
+    score = selector_result.get("score")
+    if score is None:
+        return None
+    try:
+        return float(score)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_summary(builder, label: str) -> dict:
+    """Build a summary payload, degrading to an empty one on failure.
+
+    The audit and memory panels are additions to the dashboard, not the
+    dashboard itself. If one of them cannot be read the page still has to
+    render.
+    """
+    try:
+        return builder()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Dashboard %s summary failed: %s", label, e)
+        return {}
+
+
+def _audit_payload() -> dict:
+    """Return the pipeline audit summary as a JSON-safe payload.
+
+    The dashboard stats blob is stored in the response cache as JSON, so
+    every value in it has to survive ``json.dumps``. Timestamps are
+    formatted here rather than handed to the template as datetimes.
+    """
+    from services.pipeline_audit import dashboard_summary
+
+    summary = dashboard_summary()
+
+    def _event(event) -> dict:  # type: ignore[no-untyped-def]
+        return {
+            "id": event.id,
+            "article_id": event.article_id,
+            "stage": event.stage,
+            "level": event.level,
+            "message": event.message,
+            "error": event.error,
+            "created_at": event.created_at.strftime("%b %d %H:%M:%S") if event.created_at else "",
+        }
+
+    return {
+        "total_events": summary.total_events,
+        "error_count": summary.error_count,
+        "warning_count": summary.warning_count,
+        "articles_touched": summary.articles_touched,
+        "recent_events": [_event(e) for e in summary.recent_events],
+        "recent_errors": [_event(e) for e in summary.recent_errors],
+        "stage_summaries": [
+            {
+                "stage": s.stage,
+                "label": s.label,
+                "total": s.total,
+                "warnings": s.warnings,
+                "errors": s.errors,
+            }
+            for s in summary.stage_summaries
+        ],
+    }
+
+
+def _memory_payload() -> dict:
+    """Return the trend-memory summary as a JSON-safe payload."""
+    from services.trend_memory import memory_summary
+
+    summary = memory_summary()
+
+    return {
+        "total": summary.total,
+        "high": summary.high,
+        "medium": summary.medium,
+        "low": summary.low,
+        "expired": summary.expired,
+        "topics": [
+            {"topic": t.topic, "count": t.count, "high": t.high}
+            for t in summary.topics
+        ],
+        "recent": [
+            {
+                "id": int(m.id),
+                "topic": m.topic,
+                "signal": (m.signal or "")[:140],
+                "importance": int(m.importance or 0),
+                "created_at": m.created_at.strftime("%b %d %H:%M") if m.created_at else "",
+            }
+            for m in summary.recent
+        ],
+    }
+
+
 def _compute_dashboard_stats():
     from extensions import db
     from models import Article, PipelineRun, Source
@@ -113,8 +217,21 @@ def _compute_dashboard_stats():
     sources_query = [(s[0], s[1], s[2]) for s in sources_with_counts]
     article_counts = {s[0]: s[3] for s in sources_with_counts}
 
+    # The recent-articles table renders title, topic, status, selection score,
+    # impact and creation time. Every one of those columns has to be selected
+    # here: the template reads them off the row, so a column that is not in
+    # the SELECT list renders as an empty cell rather than raising.
     recent = (
-        db.session.query(Article.id, Article.original_title, Article.pipeline_status, Source.name)
+        db.session.query(
+            Article.id,
+            Article.original_title,
+            Article.category,
+            Article.pipeline_status,
+            Article.selector_result,
+            Article.impact_score,
+            Article.created_at,
+            Source.name,
+        )
         .outerjoin(Source, Article.source_id == Source.id)
         .order_by(Article.created_at.desc())
         .limit(15)
@@ -162,9 +279,15 @@ def _compute_dashboard_stats():
         "recent": [
             {
                 "id": a[0],
-                "title": a[1],
-                "pipeline_status": a[2],
-                "source_name": a[3],
+                "original_title": a[1],
+                "category": a[2],
+                "pipeline_status": a[3],
+                "selector_score": _selector_score(a[4]),
+                "impact_score": a[5],
+                # The dashboard stats blob is stored in the response cache as
+                # JSON, which cannot carry a datetime. Format it here.
+                "created_at": a[6].strftime("%b %d %H:%M") if a[6] else "",
+                "source_name": a[7],
             }
             for a in recent
         ],
@@ -184,6 +307,8 @@ def _compute_dashboard_stats():
         "running_count": running_count,
         "pipeline_health": pipeline_health,
         "source_count": source_count,
+        "audit": _safe_summary(_audit_payload, "audit"),
+        "memory": _safe_summary(_memory_payload, "memory"),
     }
     cache.set(cache_key, stats, 180)
     return stats
@@ -220,4 +345,6 @@ def dashboard() -> str:
         running_count=cached["running_count"],
         pipeline_health=cached.get("pipeline_health"),
         source_count=cached.get("source_count"),
+        audit=cached.get("audit") or {},
+        memory=cached.get("memory") or {},
     )

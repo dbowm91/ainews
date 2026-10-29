@@ -1,7 +1,13 @@
 /* ainews - Layout (unique enhancements not in critical.css) */
 
+/* The indicator is hidden with `opacity: 0` (see .htmx-indicator in
+   static/css/critical.css). An animation that animates `opacity` overrides
+   that declaration -- CSS animations sit above normal author declarations in
+   the cascade -- so the spinner was visible at rest on every page. This
+   animation scales the glyph instead, which does not compete with the
+   visibility state. */
 .htmx-indicator.spinner {
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: pulse-scale 1.5s ease-in-out infinite;
 }
 
 .nav-logout {
@@ -22,6 +28,13 @@
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
+}
+
+/* Scale-only variant for indicators whose visibility is controlled by the
+   `opacity` declaration on .htmx-indicator. */
+@keyframes pulse-scale {
+  0%, 100% { transform: scale(0.85); }
+  50% { transform: scale(1); }
 }
 
 .loading-indicator .spinner {
@@ -61,6 +74,30 @@
 
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* WCAG 2.2 SC 2.5.8 "Target Size (Minimum)" is 24x24 CSS px. The floor
+   below applies to pointer-fine devices; the coarse-pointer floor further
+   down raises it to 44x44. The two media queries are mutually exclusive by
+   definition, so the coarse rule always wins on a touch device. */
+@media (pointer: fine) {
+  .filter-btn,
+  .tag-pill,
+  .search-input,
+  .search-clear,
+  .sort-select,
+  .share-btn,
+  .subscribe-btn,
+  .subscribe-input,
+  .btn-primary,
+  .btn-secondary,
+  .theme-toggle,
+  .nav-toggle-label,
+  .pill-close,
+  .rss-link {
+    min-height: 24px;
+    min-width: 24px;
   }
 }
 

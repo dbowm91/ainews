@@ -713,6 +713,69 @@ def test_synthesis_rejects_unknown_memory_ids_without_replacing_projection(app, 
         assert unchanged["llm_calls"] == 0
 
 
+def test_synthesis_retries_truncated_output_once_with_larger_budget(app, create_article):
+    from unittest.mock import MagicMock, patch
+
+    from extensions import db
+    from models import MemoryEvidence, MemoryItem
+    from schemas.pipeline import MemoryConfig, PipelineRootConfig
+    from services.llm.errors import ProviderResponseIncompleteError
+    from services.memory.synthesis import SynthesisProposal, synthesize_category
+
+    with app.app_context():
+        article = create_article(category="ai")
+        observations = [
+            _item(MemoryItem, "ai", f"AI policy evidence record number {index} for synthesis.", f"fp-budget-{index}")
+            for index in range(2)
+        ]
+        db.session.add_all(observations)
+        db.session.flush()
+        for item in observations:
+            db.session.add(MemoryEvidence(
+                memory_id=item.id,
+                source_article_id=article.id,
+                source_article_version="v1",
+                evidence_text=item.text,
+                relation="supports",
+                first_seen_at=datetime.now(timezone.utc),
+                last_seen_at=datetime.now(timezone.utc),
+            ))
+        db.session.commit()
+
+        config = PipelineRootConfig.model_construct(memory=MemoryConfig(
+            memory_synthesis_enabled=True,
+            memory_synthesis_provider="test-provider",
+            memory_synthesis_model="test-model",
+            memory_synthesis_max_tokens=256,
+            memory_synthesis_retry_max_tokens=512,
+            memory_max_syntheses_per_day=5,
+        ))
+        provider = MagicMock()
+        provider.is_local = True
+        provider.supports_reasoning_effort = True
+        provider.reasoning_effort = None
+        provider.chat_structured.side_effect = [
+            ProviderResponseIncompleteError("output cap reached", finish_reason="length"),
+            SynthesisProposal(
+                category_id="ai",
+                synthesis_text="AI policy evidence record number 0 for synthesis.",
+                supporting_ids=[observations[0].id],
+                confidence_qualifier="Qualified historical observation.",
+            ),
+        ]
+
+        with patch("services.memory.synthesis.load_pipeline_config", return_value=config), patch(
+            "services.llm.get_provider_by_id", return_value=provider,
+        ):
+            result = synthesize_category("ai")
+
+        assert result["status"] == "completed"
+        assert result["llm_calls"] == 2
+        assert [call.kwargs["max_tokens"] for call in provider.chat_structured.call_args_list] == [256, 512]
+        assert all(call.kwargs["stage"] == "memory_synthesis" for call in provider.chat_structured.call_args_list)
+        assert all(call.kwargs["reasoning_effort"] == "none" for call in provider.chat_structured.call_args_list)
+
+
 def test_inflight_synthesis_reservation_prevents_duplicate_category_work(app):
     from extensions import db
     from models import MemorySynthesisAttempt

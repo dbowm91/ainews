@@ -17,7 +17,7 @@ from services.llm.base import (
     register_provider,
 )
 from services.llm.errors import (
-    ProviderServerError,
+    ProviderResponseIncompleteError,
     RateLimitError as CustomRateLimitError,
     make_error_handler,
 )
@@ -106,12 +106,17 @@ def _handle_openai_error(e: Exception) -> Exception:
 
 @register_provider("openai")
 class OpenAIProvider(BaseLLMProvider):
+    supports_reasoning_effort = True
+
     def __init__(self, provider_id: str, config: dict):
         super().__init__(provider_id, resolve_env_vars(config))
         cfg = OpenAIConfig(**self.config)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
         self.is_local = cfg.local
+        self.reasoning_effort = cfg.reasoning_effort
+        self.timeout_seconds = cfg.timeout_seconds
+        self.retry_attempts = cfg.retry_attempts
         # A provider declared local may live on loopback or a private
         # network -- a local inference server, for instance. The SSRF guard
         # blocks those addresses by design, so it is relaxed for a provider
@@ -124,7 +129,7 @@ class OpenAIProvider(BaseLLMProvider):
             # ignores; the point is that the request is made at all.
             "api_key": cfg.api_key or _LOCAL_PLACEHOLDER_KEY,
             "base_url": cfg.base_url,
-            "timeout": DEFAULT_LLM_TIMEOUT_SECONDS,
+            "timeout": self.timeout_seconds,
             # BaseLLMProvider owns transient retries. Disable the SDK's nested
             # retries so one request cannot silently multiply the stage budget.
             "max_retries": 0,
@@ -157,6 +162,7 @@ class OpenAIProvider(BaseLLMProvider):
                 messages=msgs,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}),
             )
         except (KeyboardInterrupt, SystemExit):
             raise
@@ -169,9 +175,16 @@ class OpenAIProvider(BaseLLMProvider):
         input_toks = resp.usage.prompt_tokens if resp.usage else 0
         output_toks = resp.usage.completion_tokens if resp.usage else 0
         cached_toks = getattr(resp.usage, "cached_tokens", 0) or 0
-        content = _message_text(resp.choices[0].message)
+        choice = resp.choices[0]
+        finish_reason = getattr(choice, "finish_reason", None)
+        if finish_reason == "length":
+            raise ProviderResponseIncompleteError(
+                f"OpenAI-compatible provider {self.provider_id} reached the output limit",
+                finish_reason=finish_reason,
+            )
+        content = _message_text(choice.message)
         if not content.strip():
-            raise ProviderServerError(
+            raise ProviderResponseIncompleteError(
                 f"OpenAI-compatible provider {self.provider_id} returned empty content"
             )
         return LLMResponse(
@@ -243,6 +256,7 @@ class OpenAIProvider(BaseLLMProvider):
         max_tokens: int,
         schema: dict,
         model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         model = model or self.default_model
         msgs = self._build_messages(messages, system)
@@ -253,6 +267,8 @@ class OpenAIProvider(BaseLLMProvider):
                 messages=msgs,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                **({"reasoning_effort": reasoning_effort or self.reasoning_effort}
+                   if reasoning_effort or self.reasoning_effort else {}),
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -270,12 +286,22 @@ class OpenAIProvider(BaseLLMProvider):
         if not resp.choices:
             raise RuntimeError(f"OpenAI returned empty choices for model {model}")
         choice = resp.choices[0]
+        finish_reason = getattr(choice, "finish_reason", None)
+        if finish_reason == "length":
+            raise ProviderResponseIncompleteError(
+                f"OpenAI-compatible provider {self.provider_id} reached the structured output limit",
+                finish_reason=finish_reason,
+            )
+        # Some OpenAI-compatible reasoning models put their completed JSON in
+        # reasoning_content. Only accept that fallback after a normal stop;
+        # length-terminated responses were rejected above, and the JSON is
+        # still parsed and validated by chat_structured before use.
         content = _message_text(choice.message)
         if not content.strip():
-            finish_reason = getattr(choice, "finish_reason", None) or "unknown"
-            raise ProviderServerError(
+            raise ProviderResponseIncompleteError(
                 f"OpenAI-compatible provider {self.provider_id} returned empty "
-                f"structured content (finish_reason={finish_reason})"
+                f"structured content (finish_reason={finish_reason or 'unknown'})",
+                finish_reason=finish_reason,
             )
         return content
 
@@ -288,11 +314,13 @@ class OpenAIProvider(BaseLLMProvider):
         max_tokens: int,
         schema: dict,
         model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         return cast(str, self._retry_with_backoff(
             self._do_chat_with_schema, model,
             messages=messages, response_model=response_model, system=system,
             temperature=temperature, max_tokens=max_tokens, schema=schema,
+            reasoning_effort=reasoning_effort,
         ))
 
     @circuit_protected("llm_openai")

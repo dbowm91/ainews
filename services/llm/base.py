@@ -126,14 +126,15 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         """
         trace_id = get_current_trace_id()
         last_exc: Optional[Exception] = None
-        for attempt in range(self.RETRY_MAX_ATTEMPTS):
+        max_attempts = max(1, min(int(getattr(self, "retry_attempts", self.RETRY_MAX_ATTEMPTS)), 5))
+        for attempt in range(max_attempts):
             try:
                 return func(*args, **kwargs)
             except (AuthError, CircuitOpenError):
                 raise
             except (RateLimitError, ProviderTimeoutError, ProviderServerError) as e:
                 last_exc = e
-                if attempt == self.RETRY_MAX_ATTEMPTS - 1:
+                if attempt == max_attempts - 1:
                     self._record_failure(model or self.default_model or "unknown")
                     break
                 if isinstance(e, RateLimitError) and e.retry_after is not None:
@@ -148,7 +149,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     trace_id,
                     self.provider_id,
                     attempt + 1,
-                    self.RETRY_MAX_ATTEMPTS,
+                    max_attempts,
                     e,
                     delay,
                 )
@@ -226,6 +227,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         max_tokens: int = 4096,
         max_validation_retries: int = 2,
         stage: str = "",
+        reasoning_effort: Optional[str] = None,
     ) -> T:
         """Chat with structured output, returns validated Pydantic model.
 
@@ -242,6 +244,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             model: Model name override; uses ``self.default_model`` when *None*.
             system: System prompt prepended to the conversation.
             temperature: Sampling temperature (default 0.0).
+            reasoning_effort: Optional OpenAI-compatible reasoning setting. Providers
+                that do not support it ignore the setting at their adapter boundary.
             max_tokens: Maximum tokens for the LLM response.
             max_validation_retries: How many times to retry after a Pydantic
                 ``ValidationError`` / ``json.JSONDecodeError`` / ``ValueError`` /
@@ -277,7 +281,8 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         )
         t0 = time.monotonic()
         resp = self._chat_with_schema(
-            messages, response_model, system, temperature, max_tokens, schema, model=model,
+            messages, response_model, system, temperature, max_tokens, schema,
+            model=model, reasoning_effort=reasoning_effort,
         )
         latency_ms = (time.monotonic() - t0) * 1000
         try:
@@ -333,6 +338,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
                     max_tokens,
                     schema,
                     model=model,
+                    reasoning_effort=reasoning_effort,
                 )
                 resp = extract_json(resp)
                 result = response_model.model_validate_json(resp)
@@ -426,6 +432,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         max_tokens: int,
         schema: dict,
         model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         """Provider-specific schema-guided chat, returns raw JSON string."""
         ...

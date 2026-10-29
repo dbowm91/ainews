@@ -61,6 +61,14 @@ class ProviderServerError(Exception):
     pass
 
 
+class ProviderResponseIncompleteError(Exception):
+    """A truncated or empty model response that needs changed request settings."""
+
+    def __init__(self, message: str, *, finish_reason: str | None = None):
+        super().__init__(message)
+        self.finish_reason = finish_reason
+
+
 def handle_provider_error(
     e: Exception,
     provider_name: str,

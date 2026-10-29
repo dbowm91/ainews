@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from string import Formatter
-from typing import Optional, cast
+from typing import Literal, Optional, cast
 
 from pydantic import BaseModel, Field
 
@@ -176,7 +176,9 @@ class MemoryConfig(BaseModel):
     memory_synthesis_enabled: bool = False
     memory_synthesis_provider: Optional[str] = None
     memory_synthesis_model: Optional[str] = None
+    memory_synthesis_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
     memory_synthesis_max_tokens: int = Field(default=768, ge=128, le=2048)
+    memory_synthesis_retry_max_tokens: int = Field(default=2048, ge=128, le=4096)
     max_high_age_days: int = Field(default=90, ge=1, le=3650)
     high_review_grace_days: int = Field(default=30, ge=0, le=365)
 

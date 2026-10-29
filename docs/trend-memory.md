@@ -8,6 +8,23 @@ An additive V2 store lives in `services/memory/` and migrations 038–042: categ
 
 The V2 retrieval API is `memory_context()`, `memory_search()`, and `memory_get()`. It uses the article's normalized category, active-state/expiry/HIGH-review checks, bounded ranked FTS5 candidates followed by relevance scoring, and a bounded SQLite lexical fallback. Embedding reranking is deliberately not claimed or enabled. Model-facing tools are read-only, require a trusted article category, and share cumulative per-stage token, record, and character budgets across repeated calls. FTS5 is optional; the bounded fallback remains available.
 
+Editorial-memory synthesis uses strict structured output and a single bounded output-budget retry when the provider reports `finish_reason=length` or returns empty content (including an empty normal-stop response). It retries with `memory_synthesis_retry_max_tokens` (default 2048; maximum 4096); an incomplete second response fails that attempt and leaves the current category summary intact. Incomplete responses are not retried as transient server errors with identical settings. The OpenAI-compatible provider supports opt-in `reasoning_effort`, `timeout_seconds`, and total `retry_attempts` (including the first attempt); defaults preserve current behavior. A local OpenAI-compatible provider defaults to `reasoning_effort=none` for V2 synthesis only; set `memory_synthesis_reasoning_effort` to override that choice. Example for LM Studio Bonsai 27B:
+
+```yaml
+providers:
+  - id: lm-studio-bonsai
+    type: openai
+    enabled: true
+    config:
+      local: true
+      base_url: http://127.0.0.1:1234/v1
+      model: prism-ml/bonsai-27b
+      timeout_seconds: 60
+      retry_attempts: 2
+```
+
+The local-provider example keeps reasoning behavior unchanged for other pipeline roles; V2 synthesis disables reasoning by default for that local provider only. Set `memory_synthesis_reasoning_effort` to override the synthesis choice. Keep `memory_synthesis_max_tokens` lower than `memory_synthesis_retry_max_tokens` to enable the one larger-budget recovery call. The recovery is deliberately limited to one additional structured request per synthesis run.
+
 `memory_v2_writes_enabled` controls additive dual writes while preserving legacy writes. `memory_v2_enabled` controls automatic V2 prompt context. `memory_tools_enabled` controls scoped model tools. `memory_maintenance_enabled` owns V2 lifecycle work and suppresses conflicting legacy consolidation; `memory_synthesis_enabled` separately allows capped semantic synthesis. HIGH observations enter review after `max_high_age_days`, remain active only through `high_review_grace_days`, and are archived without deleting history if not renewed. An authenticated operator can renew a HIGH item with a reason. One active synthesis per category is enforced; replacement atomically supersedes the old row, updates the summary pointer, records lineage, and removes stale shared visibility.
 
 Nightly V2 maintenance is deterministic and LLM-free by default. It archives expired, unpinned V2 rows and reports HIGH review backlog without deleting due HIGH entries. Semantic synthesis requires an explicit provider and model, a nonzero persistent daily cap, and changed evidence. Shared promotion is an explicit audited admin action and requires source evidence plus a valid-as-of date. These paths are feature flagged and have not been enabled on a live deployment.

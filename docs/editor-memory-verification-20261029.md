@@ -36,10 +36,17 @@ This report records local implementation evidence for the [editor memory roadmap
 - The requested local comparison endpoint and model (`http://127.0.0.1:1234`, `prism-ml/bonsai-27b`) were available. Initial multi-case requests exhausted their output allowances on hidden reasoning, but a retry with a minimal one-article prompt completed: a `READY` probe returned text in 15.59 seconds, and the Rivian/VW comparison returned JSON in 66.25 seconds (269 prompt tokens, 1,507 completion tokens, of which 1,462 were reasoning). It preferred V2 because the legacy set had more unrelated items; the V2 set still included off-topic memories, so this is one narrow model judgment, not a quality result. The endpoint and model can return answers; the earlier failures appear tied to prompt/output-budget behavior, though one successful sample cannot rule out intermittent failures. No external provider was used.
 - Final trial DB checks returned `PRAGMA integrity_check = ok`, 0 `PRAGMA foreign_key_check` violations, and revision 042. The original development DB was not written. Temporary trial files remain under `/tmp`; this does not rehearse the absent private-install DB or change any feature gates.
 
+## Structured synthesis reliability follow-up
+
+- OpenAI-compatible provider settings now support optional `reasoning_effort`, `timeout_seconds`, and total `retry_attempts`; defaults preserve prior provider behavior. V2 synthesis can override reasoning effort, defaults local OpenAI-compatible providers to `none` for this structured task only, and leaves other pipeline roles unchanged.
+- The adapter treats `finish_reason=length` and empty output (including an empty normal-stop response) as incomplete responses, outside the transient-server retry class. V2 synthesis gets at most one changed-budget retry (default 768 tokens, then up to 2,048; configurable maximum 4,096). A second incomplete response marks the attempt failed and preserves the prior category projection. Calls report the additional synthesis request in `llm_calls`.
+- A live adapter call to `prism-ml/bonsai-27b` using the `SynthesisProposal` JSON schema and `reasoning_effort=none` returned a validated proposal in 8.5 seconds. It cited both supplied observation IDs. This verifies the configured adapter path on the local model; it is not an editorial-quality benchmark.
+- Final verification: **5,094 passed, 6 skipped, 157 warnings** across the full pytest suite; mypy clean across 508 source files; Ruff clean on changed files; `git diff --check` passes. The three newsletter tests that failed before preserving normal-stop reasoning compatibility passed in the final full run.
+
 ## Verification commands
 
-- `.venv/bin/pytest --cache-clear -q --tb=no`: **5,089 passed, 6 skipped, 37 warnings** (5,095 collected) in 701.19 seconds. This includes all corrective regression tests, migration smoke, Celery Beat registration and the synthetic FTS query-plan assertion.
-- `.venv/bin/mypy . --exclude .venv`: **clean, 507 source files**.
+- `.venv/bin/pytest --cache-clear -q --tb=no`: **5,094 passed, 6 skipped, 157 warnings** in 405.64 seconds. This includes all corrective and synthesis-reliability tests, migration smoke, Celery Beat registration and the synthetic FTS query-plan assertion.
+- `.venv/bin/mypy . --exclude .venv`: **clean, 508 source files**.
 - `ruff check . --exclude .venv`: the same **five existing findings** remain in unrelated `logrotate_commands.py`, `systemd.py`, `commands.py`, `trend_detector.py`, and `tests/test_safe_fetch.py`; changed memory files add no Ruff findings.
 - Migration rehearsal and baseline script were run without writing to the development database. `git diff --check` is part of final verification.
 

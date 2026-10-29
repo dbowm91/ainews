@@ -10,15 +10,15 @@ Three defects are covered here:
    resolution failure escaped the stage untouched: no pipeline log, no error
    on the article, no metric. The article sat in ``pending`` forever.
 3. A reasoning model can spend its whole token budget thinking and leave
-   ``content`` empty while the answer sits in ``reasoning_content``. The
-   adapter treated that as an empty response.
+   ``content`` empty while the answer sits in ``reasoning_content``. Structured
+   output must not parse hidden reasoning as a complete answer.
 """
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from services.llm.errors import ProviderServerError
+from services.llm.errors import ProviderResponseIncompleteError
 
 
 def _provider_def(provider_id, enabled=True, model="some-model"):
@@ -379,7 +379,7 @@ class TestReasoningContentFallback:
 
         assert result.text == "LOCAL OK"
 
-    def test_do_chat_still_raises_when_both_are_empty(self):
+    def test_do_chat_raises_when_both_answer_channels_are_empty(self):
         from services.llm.openai import OpenAIProvider
 
         provider = OpenAIProvider(
@@ -405,10 +405,10 @@ class TestReasoningContentFallback:
         client.chat.completions.create.return_value = resp
         provider._client = client
 
-        with pytest.raises(ProviderServerError):
+        with pytest.raises(ProviderResponseIncompleteError):
             provider._do_chat([{"role": "user", "content": "hi"}])
 
-    def test_structured_call_uses_reasoning_content(self):
+    def test_structured_call_rejects_reasoning_only_truncated_content(self):
         from services.llm.openai import OpenAIProvider
 
         provider = OpenAIProvider(
@@ -434,13 +434,13 @@ class TestReasoningContentFallback:
         client.chat.completions.create.return_value = resp
         provider._client = client
 
-        out = provider._do_chat_with_schema(
-            [{"role": "user", "content": "hi"}],
-            MagicMock(),
-            None,
-            0.0,
-            1024,
-            {"type": "object"},
-        )
-
-        assert out == '{"selected": true}'
+        with pytest.raises(ProviderResponseIncompleteError) as exc_info:
+            provider._do_chat_with_schema(
+                [{"role": "user", "content": "hi"}],
+                MagicMock(),
+                None,
+                0.0,
+                1024,
+                {"type": "object"},
+            )
+        assert exc_info.value.finish_reason == "length"

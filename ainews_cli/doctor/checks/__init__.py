@@ -26,6 +26,7 @@ from ainews_cli.doctor.checks.providers import (
     _check_provider_auth,
     _check_provider_model_availability,
 )
+from ainews_cli.doctor.checks.search import _check_eggsearch_installation
 from ainews_cli.doctor.checks.sources import (
     _check_source_connectivity,
     _extract_primary_url,
@@ -65,6 +66,7 @@ __all__ = [
     "_check_database_migrations",
     "_check_provider_auth",
     "_check_provider_model_availability",
+    "_check_eggsearch_installation",
     "_check_source_connectivity",
     "_extract_primary_url",
     "_check_docker_available",

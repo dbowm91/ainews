@@ -40,6 +40,12 @@ def _format_web_results(web_results: list[dict]) -> str:
     for wr in web_results:
         parts.append(f"Source: {esc_xml_text(wr.get('title', 'Unknown'))}")
         parts.append(f"URL: {esc_xml_text(wr.get('url', ''))}")
+        parts.append(f"Source ID: {esc_xml_text(wr.get('source_id', 'unknown'))}")
+        parts.append(f"Provider: {esc_xml_text(wr.get('provider', 'unknown'))}")
+        parts.append(f"Date status: {esc_xml_text(wr.get('published_at_status', 'unknown'))}")
+        parts.append(f"Freshness status: {esc_xml_text(wr.get('freshness_status', 'unknown'))}")
+        parts.append(f"Published at: {esc_xml_text(wr.get('published_at') or 'unknown')}")
+        parts.append(f"Trust: external_untrusted")
         parts.append(f"Snippet: {esc_xml_text(wr.get('snippet', '')[:300])}")
         parts.append("")
     return "\n".join(parts)
@@ -51,20 +57,42 @@ def _perform_web_search_and_synthesis(article, rc):
     if not rc.web_search:
         return web_results, web_synthesis
     search_query = f"{article.original_title} {' '.join(article.topics or [])}"
-    if rc.web_search_provider:
-        from services.search import get_search_provider
-        search_prov = get_search_provider(rc.web_search_provider)
-        search_results = search_prov.search(
-            search_query, max_results=rc.web_search_max_results or 5,
-        )
-    else:
-        from services.search import search_web
-        search_results = search_web(
-            search_query, max_results=rc.web_search_max_results or 5,
-        )
+    from services.search import search_web_detailed
+    outcome = search_web_detailed(
+        search_query, max_results=rc.web_search_max_results or 5,
+        provider_id=rc.web_search_provider,
+    )
+    search_log_fields = {
+        "article_id": article.id,
+        "search_status": outcome.status.value,
+        "search_provider_attempts": outcome.provider_attempts,
+        "search_fallback_used": outcome.fallback_used,
+        "search_deadline_exceeded": outcome.deadline_exceeded,
+        "search_failure_classes": outcome.provider_failures,
+        "search_warning_codes": outcome.warnings,
+        "search_capabilities": outcome.enforced_capabilities,
+    }
+    if outcome.status.value in {"failed", "disabled"}:
+        logger.warning("Research web search unavailable", extra=search_log_fields)
+    elif outcome.status.value == "empty":
+        logger.info("Research web search returned no results", extra=search_log_fields)
     web_results = [
-        {"title": s.title, "url": s.url, "snippet": s.snippet}
-        for s in search_results
+        {
+            "title": s.title, "url": s.url, "snippet": s.snippet,
+            "source_id": (getattr(s, "metadata", {}) or {}).get("source_id", s.url),
+            "provider": s.source,
+            "published_at": (getattr(s, "metadata", {}) or {}).get("published_at"),
+            "published_at_status": (getattr(s, "metadata", {}) or {}).get("published_at_status", "unknown"),
+            "freshness_status": (getattr(s, "metadata", {}) or {}).get("freshness_status", "unknown"),
+            "search_status": outcome.status.value,
+            "search_provider_attempts": outcome.provider_attempts,
+            "search_provider_failures": outcome.provider_failures,
+            "search_fallback_used": outcome.fallback_used,
+            "search_deadline_exceeded": outcome.deadline_exceeded,
+            "search_warning_codes": outcome.warnings,
+            "search_capabilities": outcome.enforced_capabilities,
+        }
+        for s in outcome.results
     ]
     if not web_results:
         return web_results, web_synthesis

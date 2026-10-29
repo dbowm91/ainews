@@ -1,6 +1,10 @@
 import threading
+from typing import TYPE_CHECKING
 
-_app_cache = {}
+if TYPE_CHECKING:
+    from flask import Flask
+
+_app_cache: dict[str, "Flask"] = {}
 _app_cache_lock = threading.Lock()
 
 

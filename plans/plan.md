@@ -1,5 +1,7 @@
 # Master Implementation Plan (Consolidated)
 
+> **Active follow-on roadmap (registered 2026-10-28):** [Eggsearch external web retrieval integration](eggsearch_web_retrieval_roadmap.md) — three phased handoffs, plus [Corrective 01: result semantics/fallback](eggsearch_web_retrieval_corrective_01_result_semantics_fallback.md) and [Corrective 02: CI/qualification/rollout](eggsearch_web_retrieval_corrective_02_ci_qualification_rollout.md). **Status: IN PROGRESS; both correctives have local implementation/testing underway; default rollout BLOCKED pending PR CI, platform/security qualification, evaluation, and rollback evidence.** Historical waves below are not reopened; DuckDuckGo remains the default and eggsearch disabled. Evidence: `docs/eggsearch-retrieval-qualification.md`.
+
 **Status:** COMPLETED (All waves complete)
 **Last Updated:** 2026-06-02 (Wave 9 completed, all items verified)
 **Goal:** Address code quality, security gaps, performance, documentation accuracy, and technical debt.

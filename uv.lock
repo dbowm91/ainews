@@ -62,6 +62,9 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
 ]
+eggsearch = [
+    { name = "eggsearch" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -72,6 +75,7 @@ requires-dist = [
     { name = "celery", extras = ["redis"], specifier = "==5.6.2" },
     { name = "defusedxml", specifier = "==0.7.1" },
     { name = "duckduckgo-search", specifier = "==8.1.1" },
+    { name = "eggsearch", marker = "extra == 'eggsearch'", specifier = "==0.4.4" },
     { name = "feedparser", specifier = "==6.0.12" },
     { name = "flask", specifier = "==3.1.3" },
     { name = "flask-compress", specifier = "==1.23" },
@@ -111,7 +115,7 @@ requires-dist = [
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0,<7" },
     { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31,<3" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["eggsearch", "dev"]
 
 [[package]]
 name = "alembic"
@@ -901,6 +905,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/10/ef/07791a05751e6cc9de1dd49fb12730259ee109b18e6d097e25e6c32d5617/duckduckgo_search-8.1.1.tar.gz", hash = "sha256:9da91c9eb26a17e016ea1da26235d40404b46b0565ea86d75a9f78cc9441f935", size = 22868, upload-time = "2025-07-06T15:30:59.73Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/72/c027b3b488b1010cf71670032fcf7e681d44b81829d484bb04e31a949a8d/duckduckgo_search-8.1.1-py3-none-any.whl", hash = "sha256:f48adbb06626ee05918f7e0cef3a45639e9939805c4fc179e68c48a12f1b5062", size = 18932, upload-time = "2025-07-06T15:30:58.339Z" },
+]
+
+[[package]]
+name = "eggsearch"
+version = "0.4.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/16/4b7ac41e09043849139e7bf33b056fb6892841624b119075ad93832e8ddb/eggsearch-0.4.4.tar.gz", hash = "sha256:42e57e1c9a4ec02b97d715cc28f522e7effde2e1cb9d0ca43ee0fecaac7ae436", size = 1299743, upload-time = "2026-10-28T18:13:58.348Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/6d/7f04a9b2e21fca4116a93acc7df9113febe6ef76c13829eef52def6090a4/eggsearch-0.4.4-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:cb5dd563ee71f1aa8844c4c454effad17c1838ce315c01f14776dbf2733db7ad", size = 8727305, upload-time = "2026-10-28T18:13:46.106Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/08/d453cf3319f6dfb6b43473e97406382bbe41531828b3df444e3c9a7c1cdb/eggsearch-0.4.4-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:adaadee8bd530f302b642a48886ca723f19c245c5249e107aa885a0cfe78349e", size = 8498057, upload-time = "2026-10-28T18:13:48.296Z" },
+    { url = "https://files.pythonhosted.org/packages/04/9b/30994abf253eb21b308978eeabd1f01e1c21496a0c39636faf5e0f7b4311/eggsearch-0.4.4-cp311-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:840e8689a9ec52d26e480f3946e8a389ad0bdab816940681a1431b2faea52ccb", size = 9252055, upload-time = "2026-10-28T18:13:50.357Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/77/2d1a7a34224515fec2f51cac62c19321a0bc53d2a74ea58d555be5d4c756/eggsearch-0.4.4-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:96247b088c2ae924e49c459c5a29b7b9ac348c776a9c928e1eaafc09f032a4e0", size = 9461830, upload-time = "2026-10-28T18:13:52.362Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/15/96ce29a3e72873812ab15adbdf84700ca37963b10aa5cc810632a2874f19/eggsearch-0.4.4-cp311-abi3-manylinux_2_28_armv7l.whl", hash = "sha256:530c31f51018886caaa70659e037ed6ceff5a4d053f762ebef46f92c8ec82eb0", size = 8938271, upload-time = "2026-10-28T18:13:54.613Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/8d/20f0153673fb8f0e8ae84febabae086b226c7bb82bf365a77a480b783ed1/eggsearch-0.4.4-cp311-abi3-win_amd64.whl", hash = "sha256:62bedfea95581d906e5f4749310c2013a277754e05f177d93d4f08a271bc8340", size = 8327031, upload-time = "2026-10-28T18:13:56.69Z" },
 ]
 
 [[package]]

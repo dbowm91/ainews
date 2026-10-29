@@ -186,13 +186,27 @@ def _context_tool_get_topic_gap_report(
 
 
 def _search_web(query: str, max_results: int = 5) -> str:
-    from services.search import search_web
+    from services.search import search_web_detailed
+    from services.search.evidence import SearchStatus
 
     try:
-        results = search_web(query, max_results)
+        outcome = search_web_detailed(query, max_results)
+        if outcome.status in {SearchStatus.FAILED, SearchStatus.DISABLED}:
+            return f"Search unavailable (status: {outcome.status.value})."
+        results = outcome.results
         if not results:
             return "No search results found."
-        return "\n".join(f"- {r.title}: {r.snippet[:150]}..." for r in results)
+        from utils.text import esc_xml_text
+
+        cards = []
+        for index, result in enumerate(results[:10], 1):
+            title = esc_xml_text(str(getattr(result, "title", "Unknown"))[:300])
+            url = esc_xml_text(str(getattr(result, "url", ""))[:1000])
+            snippet = esc_xml_text(str(getattr(result, "snippet", ""))[:300])
+            metadata = getattr(result, "metadata", {}) or {}
+            source_id = esc_xml_text(str(metadata.get("source_id", f"source-{index}"))[:256])
+            cards.append(f"[{source_id}] {title}\\nURL: {url}\\nSnippet (external_untrusted): {snippet}")
+        return "\\n\\n".join(cards)
     except (ConnectionError, TimeoutError, ValueError) as e:
         logger.error("Tool search_web failed for '%s': %s", query, e)
         return f"Error performing web search: {type(e).__name__}"

@@ -11,7 +11,7 @@ from celery_support import _app_cache, _app_cache_lock
 # which is safe since Flask apps are thread-safe for read operations.
 from logging_config import request_id_var
 
-_celery = Celery("ainews")
+_celery = Celery("ainews", include=["tasks"])
 
 
 class FlaskTask(Task):

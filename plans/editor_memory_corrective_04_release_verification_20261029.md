@@ -1,6 +1,6 @@
 # C04 — CI Triage, SQLite Migration Reconciliation, and Private-Instance Validation
 
-**Status:** OPEN / P0 operational-readiness gate for enabling editor memory V2. **Baseline:** PR #19 `f3aa498e4d0d`.
+**Status:** CI baseline and disposable migration checks verified. The owner identified the local install as the target and will restore its missing database later; private-instance backup, migration rehearsal and activation remain OPEN until then. **Priority:** P0 operational-readiness gate for enabling editor memory V2. **Baseline:** PR #19 `f3aa498e4d0d`.
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M1–M5. **Logic prerequisite:** C01–C03 before enabling behavior.
 

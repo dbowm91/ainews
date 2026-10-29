@@ -105,6 +105,9 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     )
     if memory_config.memory_v2_enabled:
         from services.memory import memory_context
+        from services.memory.preflight import ensure_memory_schema
+
+        ensure_memory_schema()
 
         trend_memory = memory_context(
             article.category or "uncategorized",
@@ -147,7 +150,10 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
 
     # Check for tool-calling config
     stage_config = resolve_subagent_config("edit", default_role="editor")
-    memory_is_tool_backed = memory_config.memory_v2_enabled and bool(
+    from services.memory.repository import normalize_category
+
+    trusted_category = normalize_category(article.category)
+    memory_is_tool_backed = memory_config.memory_tools_enabled and trusted_category != "uncategorized" and bool(
         {"memory_search", "memory_get"} & set(stage_config.tools)
     )
     prompt_memory = "" if memory_is_tool_backed else trend_memory
@@ -163,7 +169,12 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
 
         selector = StageAwareToolSelector(stage_config.tools)
         tools = initialize_tool_registry(
-            selector=selector, context={"category_id": article.category or "uncategorized"}
+            selector=selector,
+            context={
+                "category_id": article.category,
+                "stage": "edit",
+                "memory_tool_max_tokens": remaining_memory_budget,
+            },
         )
         context_result = run_subagent_with_tools(
             task_type="edit_contextualization",

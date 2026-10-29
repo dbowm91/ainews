@@ -1,6 +1,6 @@
 # C01 — Relevance-First Retrieval, Memory Gate Boundaries, and Tool Budgets
 
-**Status:** OPEN / P0. **Baseline:** PR #19 `f3aa498e4d0d`.
+**Status:** IMPLEMENTED and verified in the full local suite, including the FTS query plan and synthetic latency sample. Real-article target-instance spot checks remain under C04 until the owner's database is restored. **Priority:** P0. **Baseline:** PR #19 `f3aa498e4d0d`.
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M1, M2, M5.
 

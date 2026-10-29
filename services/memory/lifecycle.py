@@ -4,10 +4,19 @@ import hashlib
 import unicodedata
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from extensions import db
-from models import Article, MemoryEvidence, MemoryItem, MemoryMaintenanceState, MemoryScope, TrendMemory
+from models import (
+    Article,
+    MemoryCategorySummary,
+    MemoryEvidence,
+    MemoryItem,
+    MemoryLineage,
+    MemoryMaintenanceState,
+    MemoryScope,
+    TrendMemory,
+)
 from services.memory.repository import normalize_category
 
 
@@ -26,6 +35,10 @@ def add_observation(
     source_url: str | None = None,
     confidence: str | None = "medium",
     valid_as_of: datetime | None = None,
+    claim_id: str | None = None,
+    decision_reason: str | None = None,
+    relation: str = "supports",
+    supersedes_claim_id: str | None = None,
 ) -> MemoryItem | None:
     owner = normalize_category(owner_category)
     signal = " ".join(text.split())[:1200]
@@ -33,11 +46,32 @@ def add_observation(
         return None
     fingerprint = _fingerprint(owner, signal, article_version)
     item = db.session.execute(select(MemoryItem).where(MemoryItem.fingerprint == fingerprint)).scalar_one_or_none()
+    prior = None
+    if relation == "corrects":
+        if not supersedes_claim_id:
+            return None
+        prior = db.session.execute(
+            select(MemoryItem)
+            .join(MemoryEvidence, MemoryEvidence.memory_id == MemoryItem.id)
+            .where(
+                MemoryItem.owner_category == owner,
+                MemoryItem.id != (item.id if item else -1),
+                MemoryEvidence.claim_id == supersedes_claim_id,
+                MemoryItem.status.in_(("active", "synthesized")),
+            )
+            .order_by(MemoryItem.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if prior is None:
+            return None
     now = datetime.now(timezone.utc)
     importance = max(1, min(int(importance), 3))
     ttl_days = {1: 7, 2: 30}.get(importance)
     expiry = now + timedelta(days=ttl_days) if ttl_days else None
-    review = now + timedelta(days={1: 7, 2: 30, 3: 90}[importance])
+    from schemas.pipeline import load_pipeline_config
+
+    memory_config = load_pipeline_config().memory
+    review = now + timedelta(days={1: 7, 2: 30, 3: memory_config.max_high_age_days}[importance])
     if item is None:
         item = MemoryItem(
             owner_category=owner,
@@ -54,6 +88,10 @@ def add_observation(
             last_evidence_at=now,
             fingerprint=fingerprint,
             evidence_digest=hashlib.sha256(f"{article_id}:{article_version}".encode()).hexdigest(),
+            decision_metadata={
+                "policy_version": "editor-memory-candidate-v1",
+                "importance_reason": decision_reason or "importance supplied by proposal; confidence is stored separately",
+            },
         )
         db.session.add(item)
         db.session.flush()
@@ -63,6 +101,7 @@ def add_observation(
             MemoryEvidence.memory_id == item.id,
             MemoryEvidence.source_article_id == article_id,
             MemoryEvidence.source_article_version == article_version,
+            MemoryEvidence.claim_id == claim_id,
         ).limit(1)).scalar_one_or_none()
         if not exists:
             db.session.add(MemoryEvidence(
@@ -70,14 +109,61 @@ def add_observation(
                 source_article_id=article_id,
                 source_article_version=article_version,
                 source_url=source_url,
-                source_reference=f"article:{article_id}",
+                source_reference=f"article:{article_id}" + (f":claim:{claim_id}" if claim_id else ""),
+                claim_id=claim_id,
                 evidence_text=signal[:500],
-                relation="supports",
+                relation=relation,
                 first_seen_at=now,
                 last_seen_at=now,
             ))
             item.last_evidence_at = now
+    if prior is not None:
+        prior.status = "superseded"
+        prior.review_status = "superseded"
+        prior.review_reason = "corrected_by_source_backed_memory"
+        prior.updated_at = now
+        db.session.add(MemoryLineage(
+            source_memory_id=prior.id,
+            target_memory_id=item.id,
+            relation="supersedes",
+            actor="trend-memory-proposal",
+        ))
+        projection = db.session.get(MemoryCategorySummary, owner)
+        if projection is not None and prior.id in (projection.evidence_ids or []):
+            current = db.session.get(MemoryItem, projection.current_memory_id) if projection.current_memory_id else None
+            if current is not None and current.status == "active":
+                current.status = "superseded"
+                current.review_status = "superseded"
+                current.review_reason = "underlying_evidence_corrected"
+                current.updated_at = now
+                for scope_row in db.session.execute(select(MemoryScope).where(
+                    MemoryScope.memory_id == current.id,
+                    MemoryScope.scope_type == "shared",
+                    MemoryScope.scope_id == "global",
+                )).scalars().all():
+                    db.session.delete(scope_row)
+            projection.current_memory_id = None
+            projection.content = ""
+            projection.evidence_ids = []
+            projection.evidence_digest = None
+            projection.revision += 1
+            projection.updated_at = now
     return item
+
+
+def has_claim_memory(owner_category: str, claim_id: str) -> bool:
+    """Return whether an active source-backed V2 observation has this claim ID."""
+    owner = normalize_category(owner_category)
+    return db.session.execute(
+        select(MemoryItem.id)
+        .join(MemoryEvidence, MemoryEvidence.memory_id == MemoryItem.id)
+        .where(
+            MemoryItem.owner_category == owner,
+            MemoryItem.status.in_(("active", "synthesized")),
+            MemoryEvidence.claim_id == claim_id,
+        )
+        .limit(1)
+    ).scalar_one_or_none() is not None
 
 
 def backfill_legacy_memories(*, batch_size: int = 250, dry_run: bool = True, offset: int = 0) -> dict[str, int]:
@@ -160,8 +246,17 @@ def backfill_legacy_memories(*, batch_size: int = 250, dry_run: bool = True, off
 
 def maintain_memory(*, limit: int = 500, dry_run: bool = False) -> dict[str, int]:
     """Deterministic bounded lifecycle pass; it never invokes an LLM."""
+    from services.memory.preflight import ensure_memory_schema
+
+    ensure_memory_schema()
     now = datetime.now(timezone.utc)
     limit = max(1, min(int(limit), 5000))
+    from schemas.pipeline import load_pipeline_config
+
+    memory_config = load_pipeline_config().memory
+    grace_days = memory_config.high_review_grace_days
+    fallback_review_date = now - timedelta(days=memory_config.max_high_age_days)
+    fallback_retirement_date = fallback_review_date - timedelta(days=grace_days)
     expired = db.session.execute(select(MemoryItem).where(
         MemoryItem.status == "active",
         MemoryItem.is_pinned.is_(False),
@@ -171,15 +266,41 @@ def maintain_memory(*, limit: int = 500, dry_run: bool = False) -> dict[str, int
     due_high = db.session.execute(select(MemoryItem.id).where(
         MemoryItem.status == "active",
         MemoryItem.importance == 3,
-        MemoryItem.review_due_at.is_not(None),
-        MemoryItem.review_due_at <= now,
+        or_(
+            MemoryItem.review_due_at <= now,
+            and_(MemoryItem.review_due_at.is_(None), MemoryItem.created_at <= fallback_review_date),
+        ),
+    ).order_by(MemoryItem.review_due_at, MemoryItem.id).limit(limit)).scalars().all()
+    retirement_cutoff = now - timedelta(days=grace_days)
+    retired_high = db.session.execute(select(MemoryItem).where(
+        MemoryItem.status == "active",
+        MemoryItem.importance == 3,
+        MemoryItem.is_pinned.is_(False),
+        or_(
+            MemoryItem.review_due_at <= retirement_cutoff,
+            and_(MemoryItem.review_due_at.is_(None), MemoryItem.created_at <= fallback_retirement_date),
+        ),
     ).order_by(MemoryItem.review_due_at, MemoryItem.id).limit(limit)).scalars().all()
     if not dry_run:
         for item in expired:
             item.status = "archived"
+            item.review_status = "archived"
+            item.review_reason = "retention_expired"
+            item.updated_at = now
+        for item in retired_high:
+            item.status = "archived"
+            item.review_status = "overdue_archived"
+            item.review_reason = "high_review_grace_elapsed"
+            item.review_attempted_at = now
+            item.review_count = int(item.review_count or 0) + 1
             item.updated_at = now
         state = db.session.get(MemoryMaintenanceState, 1)
-        stats = {"archived_expired": len(expired), "high_review_due": len(due_high), "llm_calls": 0}
+        stats = {
+            "archived_expired": len(expired),
+            "high_review_due": len(due_high),
+            "high_retired": len(retired_high),
+            "llm_calls": 0,
+        }
         if state is None:
             state = MemoryMaintenanceState(id=1, last_run_at=now, stats=stats)
             db.session.add(state)
@@ -187,7 +308,33 @@ def maintain_memory(*, limit: int = 500, dry_run: bool = False) -> dict[str, int
             state.last_run_at = now
             state.stats = stats
         db.session.commit()
-    return {"archived_expired": len(expired), "high_review_due": len(due_high), "llm_calls": 0}
+    return {
+        "archived_expired": len(expired),
+        "high_review_due": len(due_high),
+        "high_retired": len(retired_high),
+        "llm_calls": 0,
+    }
+
+
+def renew_high_memory(memory_id: int, *, reason: str) -> bool:
+    """Record an explicit operator review and renew finite HIGH eligibility."""
+    item = db.session.get(MemoryItem, memory_id)
+    clean_reason = " ".join(reason.split())[:256]
+    if item is None or item.importance != 3 or len(clean_reason) < 10:
+        return False
+    now = datetime.now(timezone.utc)
+    from schemas.pipeline import load_pipeline_config
+
+    item.status = "active"
+    item.review_status = "renewed"
+    item.review_reason = clean_reason
+    item.last_reviewed_at = now
+    item.review_attempted_at = now
+    item.review_due_at = now + timedelta(days=load_pipeline_config().memory.max_high_age_days)
+    item.expires_at = None
+    item.review_count = int(item.review_count or 0) + 1
+    item.updated_at = now
+    return True
 
 
 def promote_shared(memory_id: int, *, approved_by: str) -> bool:

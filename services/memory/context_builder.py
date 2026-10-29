@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from extensions import db
-from models import MemoryCategorySummary
+from models import MemoryCategorySummary, MemoryItem
 from services.memory.repository import MemoryRecord, memory_search, normalize_category
 from services.metrics import get_metrics
 from utils.text import esc_xml_attr, esc_xml_text
@@ -55,31 +55,45 @@ def memory_context(
     category = normalize_category(category_id)
     budget = max(0, min(int(token_budget), 2400))
     stage = stage if stage in {"research", "edit", "deep"} else "edit"
+    from schemas.pipeline import load_pipeline_config
+
+    memory_config = load_pipeline_config().memory
     if budget == 0:
         return ContextPack(category, stage, (), (), "", 0, False, "memory-v1-empty")
 
     summary = db.session.get(MemoryCategorySummary, category)
     summary_text = summary.content if summary else ""
+    current_synthesis = db.session.get(MemoryItem, summary.current_memory_id) if summary and summary.current_memory_id else None
     records = memory_search(
         query or category,
         category_id=category,
         scope="combined",
-        limit=11,
+        limit=min(20, memory_config.max_records_per_context + memory_config.max_shared_records_per_context),
         historical=False,
+        exclude_article_id=article_id,
     )
-    records = [record for record in records if record.item_type == "observation"]
+    # The summary is the canonical rendering of its current synthesis. Do not
+    # spend the context budget repeating that same synthesis as a record.
+    records = [
+        record for record in records
+        if record.id != (summary.current_memory_id if summary else None)
+    ]
     metrics = get_metrics()
-    metrics.gauge_set("memory.candidates", len(records), labels={"stage": stage, "mode": "hybrid_lexical"})
-    local = [record for record in records if not record.shared][:8]
-    shared = [record for record in records if record.shared][:3]
+    metrics.gauge_set("memory.candidates", len(records), labels={"stage": stage, "mode": "fts5_lexical"})
+    local = [record for record in records if not record.shared][:memory_config.max_records_per_context]
+    shared = [record for record in records if record.shared][:memory_config.max_shared_records_per_context]
     selected = local + shared
 
     def render(chosen: list[MemoryRecord], include_summary: bool) -> str:
         blocks = ["<editorial_memory_context>"]
         if include_summary and summary_text:
             evidence_ids = ",".join(str(value) for value in (summary.evidence_ids or [])[:8]) if summary else ""
+            as_of = current_synthesis.valid_as_of.date().isoformat() if current_synthesis and current_synthesis.valid_as_of else "date unknown"
+            qualifier = esc_xml_attr(current_synthesis.qualifier or "qualified historical synthesis") if current_synthesis else "qualified historical synthesis"
             blocks.append(
-                f'<category_summary evidence_memory_ids="{evidence_ids}">'
+                f'<category_summary revision="{summary.revision if summary else 0}" '
+                f'current_memory_id="{summary.current_memory_id if summary and summary.current_memory_id else "unknown"}" '
+                f'evidence_memory_ids="{evidence_ids}" as_of="{as_of}" qualifier="{qualifier}">'
                 + esc_xml_text(summary_text[:1000])
                 + "</category_summary>"
             )
@@ -111,7 +125,7 @@ def memory_context(
         selected = []
     metrics.gauge_set("memory.selected", len(selected), labels={"stage": stage})
     metrics.gauge_set("memory.tokens_estimate", _tokens(rendered), labels={"stage": stage})
-    metrics.counter_inc("memory.retrieval_calls", labels={"stage": stage, "mode": "hybrid_lexical"})
+    metrics.counter_inc("memory.retrieval_calls", labels={"stage": stage, "mode": "fts5_lexical"})
     if selected:
         metrics.counter_inc("memory.category_hits", labels={"category": category, "stage": stage})
     if truncated:

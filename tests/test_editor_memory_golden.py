@@ -55,6 +55,7 @@ def test_synthetic_golden_retrieval_recall_precision_and_scope(app):
                 importance=3,
                 confidence="high",
                 status="active",
+                    review_due_at=datetime.now(timezone.utc) + timedelta(days=30),
                 fingerprint=f"golden-{key}",
                 last_evidence_at=datetime.now(timezone.utc) - timedelta(days=2),
             )

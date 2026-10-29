@@ -1,6 +1,6 @@
 # C03 — Editorial Importance, Candidate Extraction, and Evidence-Quality Corrections
 
-**Status:** OPEN / P1. **Baseline:** PR #19 `f3aa498e4d0d`.
+**Status:** IMPLEMENTED and verified in the full local suite. Provider-backed quality comparison remains under C04 before enabling optional reuse. **Priority:** P1. **Baseline:** PR #19 `f3aa498e4d0d`.
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M1, M3, M4.
 

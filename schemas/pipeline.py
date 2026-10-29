@@ -161,7 +161,14 @@ class MemoryConfig(BaseModel):
     max_records_per_context: int = Field(default=8, ge=0, le=50)
     max_shared_records_per_context: int = Field(default=3, ge=0, le=20)
     max_query_topics: int = Field(default=20, ge=1, le=100)
+    # These gates have independent rollback semantics: writes may be dual-written
+    # before V2 reads/tools, maintenance, or synthesis are activated.
+    memory_v2_writes_enabled: bool = False
     memory_v2_enabled: bool = False
+    memory_tools_enabled: bool = False
+    memory_tool_max_tokens_per_stage: int = Field(default=800, ge=0, le=2400)
+    memory_tool_max_records_per_stage: int = Field(default=16, ge=0, le=100)
+    memory_tool_max_chars_per_stage: int = Field(default=6000, ge=0, le=20000)
     memory_maintenance_enabled: bool = False
     memory_maintenance_max_items: int = Field(default=500, ge=1, le=5000)
     memory_maintenance_max_categories: int = Field(default=20, ge=1, le=200)
@@ -171,6 +178,7 @@ class MemoryConfig(BaseModel):
     memory_synthesis_model: Optional[str] = None
     memory_synthesis_max_tokens: int = Field(default=768, ge=128, le=2048)
     max_high_age_days: int = Field(default=90, ge=1, le=3650)
+    high_review_grace_days: int = Field(default=30, ge=0, le=365)
 
 
 class PipelineOptimizationConfig(BaseModel):

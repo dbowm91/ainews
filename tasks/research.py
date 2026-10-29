@@ -94,7 +94,7 @@ def _perform_web_search_and_synthesis(article, rc):
         from services.tool_selection import StageAwareToolSelector
         selector = StageAwareToolSelector(stage_config.tools)
         tools = initialize_tool_registry(
-            selector=selector, context={"category_id": article.category or "uncategorized"}
+            selector=selector, context={"category_id": article.category, "stage": "research"}
         )
         web_synthesis_result = run_subagent_with_tools(
             task_type="research_synthesis",
@@ -158,6 +158,9 @@ def _get_related_and_context(article, rc):
         )
         if memory_config.memory_v2_enabled:
             from services.memory import memory_context
+            from services.memory.preflight import ensure_memory_schema
+
+            ensure_memory_schema()
 
             trend_memory = memory_context(
                 article.category or "uncategorized",

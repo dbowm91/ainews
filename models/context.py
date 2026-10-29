@@ -78,6 +78,11 @@ class MemoryItem(db.Model):  # type: ignore[name-defined]
     fingerprint = db.Column(db.String(64), nullable=False, unique=True)
     evidence_digest = db.Column(db.String(64), nullable=True)
     revision = db.Column(db.Integer, nullable=False, default=1)
+    review_status = db.Column(db.String(16), nullable=False, default="current")
+    review_reason = db.Column(db.String(256), nullable=True)
+    review_attempted_at = db.Column(db.DateTime, nullable=True)
+    review_count = db.Column(db.Integer, nullable=False, default=0)
+    decision_metadata = db.Column(db.JSON, nullable=False, default=dict)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -88,6 +93,13 @@ class MemoryItem(db.Model):  # type: ignore[name-defined]
         db.Index("ix_memory_owner_status_importance", "owner_category", "status", "importance"),
         db.Index("ix_memory_review", "status", "review_due_at"),
         db.Index("ix_memory_expires", "status", "expires_at"),
+        db.Index(
+            "uq_memory_current_synthesis",
+            "owner_category",
+            unique=True,
+            sqlite_where=db.text("item_type='synthesis' AND status='active'"),
+            postgresql_where=db.text("item_type='synthesis' AND status='active'"),
+        ),
     )
 
 
@@ -155,6 +167,7 @@ class MemoryCategorySummary(db.Model):  # type: ignore[name-defined]
     evidence_ids = db.Column(db.JSON, nullable=False, default=list)
     revision = db.Column(db.Integer, nullable=False, default=1)
     evidence_digest = db.Column(db.String(64), nullable=True)
+    current_memory_id = db.Column(db.Integer, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 

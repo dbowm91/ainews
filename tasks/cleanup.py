@@ -142,6 +142,13 @@ def consolidate_trend_memory(self):
         logger.error("Invalid signature for consolidate_trend_memory")
         raise ValueError("Invalid task signature")
 
+    from schemas.pipeline import load_pipeline_config
+
+    memory_config = load_pipeline_config().memory
+    if memory_config.memory_maintenance_enabled or memory_config.memory_v2_writes_enabled:
+        logger.info("Legacy consolidation skipped while V2 writes or lifecycle maintenance is enabled")
+        return {"merged": 0, "topics": {}, "skipped": "v2_owns_memory_lifecycle"}
+
     from extensions import db
     from services.trend_memory import consolidate_all_topics
 
@@ -186,10 +193,13 @@ def maintain_editorial_memory(self):
     from models import MemoryItem, MemoryMaintenanceState
     from schemas.pipeline import load_pipeline_config
     from services.memory.lifecycle import maintain_memory
+    from services.memory.preflight import ensure_memory_schema
 
     memory_config = load_pipeline_config().memory
     if not memory_config.memory_maintenance_enabled:
         return {"status": "disabled", "llm_calls": 0}
+
+    ensure_memory_schema()
 
     result = maintain_memory(limit=memory_config.memory_maintenance_max_items)
     if memory_config.memory_synthesis_enabled and memory_config.memory_max_syntheses_per_day:
@@ -211,8 +221,8 @@ def maintain_editorial_memory(self):
             state.stats = {**(state.stats or {}), "synthesis": synthesis_results, "llm_calls": result["llm_calls"]}
             db.session.commit()
     logger.info(
-        "Editorial memory maintenance completed: archived=%s high_review_due=%s llm_calls=%s",
-        result["archived_expired"], result["high_review_due"], result["llm_calls"],
+        "Editorial memory maintenance completed: archived=%s high_review_due=%s high_retired=%s llm_calls=%s",
+        result["archived_expired"], result["high_review_due"], result["high_retired"], result["llm_calls"],
     )
     return result
 
@@ -301,7 +311,14 @@ def purge_trend_memory(self):
     from extensions import db
     from schemas.pipeline import load_pipeline_config
 
-    if load_pipeline_config().memory.memory_v2_enabled:
+    memory_config = load_pipeline_config().memory
+    if any((
+        memory_config.memory_v2_enabled,
+        memory_config.memory_v2_writes_enabled,
+        memory_config.memory_tools_enabled,
+        memory_config.memory_maintenance_enabled,
+        memory_config.memory_synthesis_enabled,
+    )):
         logger.info("Legacy trend memory retained for rollback; expired rows are excluded by retrieval")
         return {"purged": 0, "retained_for_rollback": True}
 

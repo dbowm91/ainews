@@ -36,7 +36,7 @@ class TestTrendMemory:
         with app.app_context():
             article = create_article(
                 pipeline_status="done",
-                final_article='{"headline": "Test Article", "body": "Test body content"}',
+                final_article='{"headline": "Test Article", "body": "Test signal about AI and ML trend signal"}',
             )
             article.topics = ["AI", "machine-learning"]
             article.summary = "Test summary for the article"
@@ -47,8 +47,8 @@ class TestTrendMemory:
                 mock_provider = MagicMock()
                 mock_provider.chat_structured.return_value = MagicMock(
                     entries=[
-                        MagicMock(topic="AI", importance=2, signal="Test signal about AI"),
-                        MagicMock(topic="machine-learning", importance=1, signal="ML trend signal"),
+                        MagicMock(topic="AI", importance=2, signal="Test signal about AI", candidate_source_url=None),
+                        MagicMock(topic="machine-learning", importance=1, signal="ML trend signal", candidate_source_url=None),
                     ]
                 )
                 mock_get_provider.return_value = (mock_provider, "gpt-4", 2048, "openai")
@@ -66,23 +66,131 @@ class TestTrendMemory:
         with app.app_context():
             article = create_article(
                 pipeline_status="done",
-                final_article='{"headline":"Before","body":"Final article"}',
+                final_article='{"headline":"Before","body":"A durable AI infrastructure observation"}',
             )
             article.topics = ["ai"]
             db.session.commit()
             with patch("services.trend_memory.get_provider_for_role") as mocked:
                 provider = MagicMock()
                 provider.chat_structured.return_value = MagicMock(entries=[
-                    MagicMock(topic="ai", importance=2, signal="A durable AI infrastructure observation")
+                    MagicMock(topic="ai", importance=2, signal="A durable AI infrastructure observation", candidate_source_url=None)
                 ])
                 mocked.return_value = (provider, "model", 1024, "test")
                 propose_trend_memory(article)
-                article.final_article = '{"headline":"After","body":"Revised final article"}'
+                article.final_article = '{"headline":"After","body":"A durable AI infrastructure observation remains supported"}'
                 db.session.commit()
                 propose_trend_memory(article)
 
             assert TrendMemory.query.filter_by(source_article_id=article.id).count() == 1
-            assert MemoryEvidence.query.filter_by(source_article_id=article.id).count() == 2
+            # V2 dual writes are independently gated and disabled in the default
+            # test configuration; the legacy proposal remains idempotent.
+            assert MemoryEvidence.query.filter_by(source_article_id=article.id).count() == 0
+
+    def test_deterministic_reuse_separates_source_confidence_from_importance(self, app):
+        from types import SimpleNamespace
+
+        from services.trend_memory import _deterministic_candidates
+
+        brief = SimpleNamespace(
+            external_sources=[SimpleNamespace(url="https://reports.example.com/policy")],
+            key_claims=[SimpleNamespace(
+                claim="The policy committee published a routine weekly status update for its public dashboard.",
+                confidence="high",
+                source="https://reports.example.com/policy",
+            )],
+        )
+        candidates = _deterministic_candidates(
+            brief,
+            {"ai": "ai"},
+            "https://origin.example.com/article",
+            "{\"headline\":\"Routine policy update\",\"body\":\"The policy committee published a routine weekly status update for its public dashboard.\"}",
+        )
+
+        assert len(candidates) == 1
+        assert candidates[0].evidence_confidence == "high"
+        assert candidates[0].importance == 2
+        assert candidates[0].candidate_source_url == "https://reports.example.com/policy"
+        assert "capped at MEDIUM" in candidates[0].decision_reason
+
+    def test_deterministic_reuse_rejects_fabricated_or_invalid_source_claims(self, app):
+        from types import SimpleNamespace
+
+        from services.trend_memory import _deterministic_candidates
+
+        brief = SimpleNamespace(
+            external_sources=[SimpleNamespace(url="javascript:alert(1)")],
+            key_claims=[SimpleNamespace(
+                claim="The agency released a major new safety standard for the latest model generation.",
+                confidence="high",
+                source="javascript:alert(1)",
+            )],
+        )
+        candidates = _deterministic_candidates(
+            brief,
+            {"ai": "ai"},
+            "file:///private/source",
+            "{\"headline\":\"Unrelated article\",\"body\":\"A different subject with no matching claim.\"}",
+        )
+
+        assert candidates == []
+
+    def test_v2_dual_write_is_explicitly_gated(self, app, create_article):
+        from unittest.mock import patch
+
+        from extensions import db
+        from models import MemoryEvidence, MemoryItem
+        from schemas.pipeline import MemoryConfig, PipelineRootConfig
+        from services.trend_memory import TrendMemoryEntry, _save_memory_entries
+
+        with app.app_context():
+            article = create_article(category="ai")
+            db.session.commit()
+            entry = TrendMemoryEntry(topic="ai", importance=2, signal="A durable AI source-backed observation")
+            config = PipelineRootConfig.model_construct(memory=MemoryConfig(memory_v2_writes_enabled=True))
+            with patch("schemas.pipeline.load_pipeline_config", return_value=config):
+                _save_memory_entries(
+                    [entry], article.id, "article-v1", owner_category="ai",
+                    source_url=article.original_url,
+                )
+
+            item = MemoryItem.query.filter_by(owner_category="ai").one()
+            evidence = MemoryEvidence.query.filter_by(memory_id=item.id).one()
+            assert evidence.source_article_id == article.id
+            assert evidence.source_url == article.original_url
+            assert item.confidence == "medium"
+            assert db.session.query(MemoryItem).count() == 1
+
+    def test_corrected_claim_supersedes_prior_memory_with_lineage(self, app, create_article):
+        from extensions import db
+        from models import MemoryEvidence, MemoryLineage
+        from services.memory.lifecycle import add_observation
+
+        with app.app_context():
+            article = create_article(category="ai")
+            db.session.commit()
+            prior = add_observation(
+                owner_category="ai", text="The policy takes effect in June.", importance=2,
+                article_id=article.id, article_version="v1", source_url=article.original_url,
+                claim_id="policy-effective-date", decision_reason="source-backed policy date",
+            )
+            corrected = add_observation(
+                owner_category="ai", text="The policy takes effect in July.", importance=2,
+                article_id=article.id, article_version="v2", source_url=article.original_url,
+                claim_id="policy-effective-date-v2", relation="corrects",
+                supersedes_claim_id="policy-effective-date",
+                decision_reason="official correction",
+            )
+            db.session.commit()
+
+            assert prior is not None and corrected is not None
+            db.session.refresh(prior)
+            assert prior.status == "superseded"
+            assert corrected.status == "active"
+            correction_evidence = MemoryEvidence.query.filter_by(memory_id=corrected.id).one()
+            assert correction_evidence.relation == "corrects"
+            assert MemoryLineage.query.filter_by(
+                source_memory_id=prior.id, target_memory_id=corrected.id, relation="supersedes",
+            ).count() == 1
 
     def test_get_memory_for_topics_returns_matching_entries(self, app, create_article):
         """get_memory_for_topics should return entries matching the given topics."""

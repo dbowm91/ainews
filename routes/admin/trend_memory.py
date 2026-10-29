@@ -3,7 +3,7 @@ import logging
 from flask import flash, g, jsonify, redirect, render_template, request, url_for
 
 from extensions import db
-from models import MemoryCategorySummary, MemoryEvidence, MemoryItem, MemoryMaintenanceState, MemoryScope, TrendMemory
+from models import MemoryCategorySummary, MemoryEvidence, MemoryItem, MemoryLineage, MemoryMaintenanceState, MemoryScope, TrendMemory
 from routes.admin import admin_api_bp, admin_bp, require_auth
 from routes.decorators import validate_csrf_token
 from services.audit import log_admin_action
@@ -147,12 +147,16 @@ def trend_memory_semantic_search():
 @require_auth
 def memory_overview():
     """Authenticated operational view for the additive category memory store."""
-    from datetime import datetime, timezone
-    from sqlalchemy import func
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import and_, func, or_
     from sqlalchemy.exc import SQLAlchemyError
     from services.metrics import get_metrics
+    from schemas.pipeline import load_pipeline_config
 
     now = datetime.now(timezone.utc)
+    memory_config = load_pipeline_config().memory
+    fallback_review_date = now - timedelta(days=memory_config.max_high_age_days)
+    fallback_retirement_date = fallback_review_date - timedelta(days=memory_config.high_review_grace_days)
     rows = db.session.query(
         MemoryItem.owner_category,
         MemoryItem.status,
@@ -182,8 +186,26 @@ def memory_overview():
         "high_review_backlog": MemoryItem.query.filter(
             MemoryItem.importance == 3,
             MemoryItem.status == "active",
-            MemoryItem.review_due_at.is_not(None),
-            MemoryItem.review_due_at <= now,
+            or_(
+                MemoryItem.review_due_at <= now,
+                and_(MemoryItem.review_due_at.is_(None), MemoryItem.created_at <= fallback_review_date),
+            ),
+        ).count(),
+        "high_overdue_beyond_grace": MemoryItem.query.filter(
+            MemoryItem.importance == 3,
+            MemoryItem.status == "active",
+            or_(
+                MemoryItem.review_due_at <= now - timedelta(days=memory_config.high_review_grace_days),
+                and_(MemoryItem.review_due_at.is_(None), MemoryItem.created_at <= fallback_retirement_date),
+            ),
+        ).count(),
+        "high_archived_for_review": MemoryItem.query.filter(
+            MemoryItem.importance == 3,
+            MemoryItem.review_status == "overdue_archived",
+        ).count(),
+        "high_renewed": MemoryItem.query.filter(
+            MemoryItem.importance == 3,
+            MemoryItem.review_status == "renewed",
         ).count(),
         "expired_active": MemoryItem.query.filter(
             MemoryItem.status == "active",
@@ -244,6 +266,10 @@ def memory_item_detail(memory_id: int):
         "expires_at": item.expires_at.isoformat() if item.expires_at else None,
         "review_due_at": item.review_due_at.isoformat() if item.review_due_at else None,
         "last_evidence_at": item.last_evidence_at.isoformat() if item.last_evidence_at else None,
+        "review_status": item.review_status,
+        "review_reason": item.review_reason,
+        "review_attempted_at": item.review_attempted_at.isoformat() if item.review_attempted_at else None,
+        "review_count": item.review_count,
         "revision": item.revision,
         "evidence_count": len(record[0]["evidence"]),
     })
@@ -252,8 +278,10 @@ def memory_item_detail(memory_id: int):
 @admin_api_bp.route("/memory/items/<int:memory_id>/action", methods=["POST"])
 @validate_csrf_token
 @require_auth
-def memory_item_action(memory_id: int):
+def memory_item_action(memory_id: int):  # noqa: C901 - lifecycle mutation and audit share one transaction
     """Perform a small audited set of operator-only lifecycle actions."""
+    from datetime import datetime, timezone
+
     item = db.session.get(MemoryItem, memory_id)
     if item is None:
         return jsonify({"error": "not_found"}), 404
@@ -262,20 +290,54 @@ def memory_item_action(memory_id: int):
     reason = str(payload.get("reason") or "").strip()
     if action in {"archive", "supersede"} and len(reason) < 10:
         return jsonify({"error": "reason_required", "minimum_length": 10}), 400
-    from services.memory.lifecycle import demote_shared, promote_shared
+    from services.memory.lifecycle import demote_shared, promote_shared, renew_high_memory
 
     if action == "pin":
         item.is_pinned = True
     elif action == "unpin":
         item.is_pinned = False
     elif action in {"archive", "supersede"}:
+        successor = None
+        if action == "supersede":
+            successor_id = payload.get("successor_id")
+            successor = db.session.get(MemoryItem, successor_id) if isinstance(successor_id, int) else None
+            if successor is None or successor.id == item.id or successor.owner_category != item.owner_category:
+                return jsonify({"error": "valid_same_category_successor_required"}), 400
+            db.session.add(MemoryLineage(
+                source_memory_id=item.id,
+                target_memory_id=successor.id,
+                relation="supersedes",
+                actor="admin",
+            ))
         item.status = "archived" if action == "archive" else "superseded"
+        item.review_status = item.status
+        item.review_reason = reason[:256]
+        item.review_attempted_at = datetime.now(timezone.utc)
+        for scope_row in db.session.query(MemoryScope).filter_by(
+            memory_id=item.id, scope_type="shared", scope_id="global",
+        ).all():
+            db.session.delete(scope_row)
+        summary = db.session.get(MemoryCategorySummary, item.owner_category)
+        if summary is not None and summary.current_memory_id == item.id:
+            if successor is not None and successor.item_type == "synthesis":
+                summary.current_memory_id = successor.id
+                summary.content = successor.text
+                summary.evidence_digest = successor.evidence_digest
+            else:
+                summary.current_memory_id = None
+                summary.content = ""
+                summary.evidence_ids = []
+            summary.revision += 1
+            summary.updated_at = datetime.now(timezone.utc)
     elif action == "promote_shared":
         actor = "api_token" if getattr(g, "auth_mode", "session") == "bearer" else "admin"
         if not promote_shared(item.id, approved_by=actor):
             return jsonify({"error": "provenance_or_validity_required"}), 409
     elif action == "demote_shared":
         demote_shared(item.id)
+    elif action == "renew_high":
+        if not renew_high_memory(item.id, reason=reason):
+            return jsonify({"error": "high_importance_and_review_reason_required"}), 400
     else:
         return jsonify({"error": "unsupported_action"}), 400
     if action not in {"promote_shared", "demote_shared"}:

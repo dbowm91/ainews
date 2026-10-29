@@ -43,7 +43,7 @@ These are code-inspection findings, **not** claims about a running deployment or
 | Order | Plan | Deliverable | Dependency |
 |---|---|---|---|
 | M1 | [Correctness and observability](editor_memory_m1_correctness_20261029.md) | Fix wiring/schema hazards; hard caps; regression fixtures; baseline metrics | None |
-| M2 | [Namespaces and retrieval](editor_memory_m2_scoped_retrieval_20261029.md) | Backward-compatible schema, per-category memory, shared read API, FTS5/hybrid search | M1 |
+| M2 | [Namespaces and retrieval](editor_memory_m2_scoped_retrieval_20261029.md) | Backward-compatible schema, per-category memory, shared read API, ranked lexical FTS5 and bounded SQLite fallback | M1 |
 | M3 | [Synthesis, lifecycle, blackboard](editor_memory_m3_synthesis_blackboard_20261029.md) | Real synthesis, archival, review of HIGH, cross-category promotion, evidence lineage | M2 |
 | M4 | [Deterministic pipeline offload](editor_memory_m4_deterministic_pipeline_20261029.md) | Reuse structured research; conditional LLM work; deterministic gates and tag/citation handling | M2; M3 for synthesis reuse |
 | M5 | [Local verification and activation](editor_memory_m5_verification_20261029.md) | Target SQLite backup/migration rehearsal, limited shadow comparison and private-instance operations evidence | M1–M4 |
@@ -54,7 +54,7 @@ M1 should land first as a focused corrective PR. M2/M3 should be independently g
 
 For ordinary research: max **900 memory tokens** across category summary, selected category records, shared records, and provenance. For editor: max **640**. For deep investigation: max **1,600**. Set hard record caps as well (for example local 8, shared 3), relevance thresholds, per-scope candidate limits and score explanations. Empty budgets stay empty; do not fill with unrelated HIGH records. Count with provider tokenizer if available, use a conservative deterministic estimator otherwise, enforce the final assembled total, and never slice a citation/memory halfway.
 
-Default priority order: canonical scope eligibility → `active` state → hybrid textual relevance → evidence/recency/confidence → importance → diversity. Do **not** make HIGH bypass relevance or budget limits. Search across archived items only via explicit historical filter.
+Default priority order: canonical scope eligibility → active/expiry/review eligibility → lexical relevance and FTS5 rank → evidence/recency/confidence → importance → diversity. Do **not** make HIGH bypass relevance or budget limits. Search across archived items only via explicit historical filter. Local embedding union/reranking is not implemented; it remains gated pending target-device evidence.
 
 ## Initial lifecycle policy (calibrate, not rigid truth)
 

@@ -97,10 +97,17 @@ def test_deterministic_memory_candidates_require_confidence_source_and_topic():
         newsworthiness="A significant model release.",
         impact_score=90,
     )
-    candidates = _deterministic_candidates(brief, {"ai": "ai"}, "https://example.com/story")
+    final_article = (
+        '{"headline":"OpenAI model release","body":"OpenAI released a new model with a published '
+        'context window of one million tokens."}'
+    )
+    candidates = _deterministic_candidates(
+        brief, {"ai": "ai"}, "https://example.com/story", final_article,
+    )
     assert len(candidates) == 1
     assert candidates[0].topic == "ai"
-    assert candidates[0].importance == 3
+    assert candidates[0].importance == 2
+    assert candidates[0].evidence_confidence == "high"
 
 
 def test_pipeline_optimization_switches_default_off_and_call_caps_validate():
@@ -176,6 +183,10 @@ def test_memory_proposal_reuses_structured_claim_without_provider_call(app, crea
             pipeline_status="done",
             category="ai",
             topics=["ai"],
+            final_article=(
+                '{"headline":"AI model release","body":"A company released a new AI model with a '
+                'documented one million token context window."}'
+            ),
             research_brief=brief.model_dump_json(),
         )
         db.session.commit()

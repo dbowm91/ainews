@@ -185,8 +185,6 @@ subagent:
     - context_notes
     - related_articles
     - get_source_health
-    - memory_search
-    - memory_get
     system_prompt: 'You are a research synthesizer. Analyze external sources and the source article
 
       to provide a coherent synthesis that supplements the main research brief.
@@ -252,7 +250,12 @@ memory:
   max_records_per_context: 8
   max_shared_records_per_context: 3
   max_query_topics: 20
+  memory_v2_writes_enabled: false
   memory_v2_enabled: false
+  memory_tools_enabled: false
+  memory_tool_max_tokens_per_stage: 800
+  memory_tool_max_records_per_stage: 16
+  memory_tool_max_chars_per_stage: 6000
   memory_maintenance_enabled: false
   memory_maintenance_max_items: 500
   memory_maintenance_max_categories: 20
@@ -262,6 +265,7 @@ memory:
   memory_synthesis_model: null
   memory_synthesis_max_tokens: 768
   max_high_age_days: 90
+  high_review_grace_days: 30
 optimizations:
   selector_prefilter_enabled: false
   conditional_research_synthesis_enabled: false

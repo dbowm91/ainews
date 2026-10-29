@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
@@ -19,6 +19,7 @@ from models import (
     MemoryLineage,
     MemorySynthesisAttempt,
     MemorySynthesisRun,
+    MemoryScope,
 )
 from schemas.pipeline import load_pipeline_config
 from services.memory.repository import normalize_category
@@ -53,13 +54,37 @@ def _snapshot(category_id: str) -> tuple[list[MemoryItem], list[MemoryEvidence],
         MemoryItem.owner_category == category_id,
         MemoryItem.item_type == "observation",
         MemoryItem.status.in_(("active", "synthesized")),
-    ).order_by(MemoryItem.importance.desc(), MemoryItem.last_evidence_at.desc(), MemoryItem.id).limit(8)).scalars().all()
+    ).order_by(
+        case((MemoryItem.status == "active", 0), else_=1),
+        func.coalesce(MemoryItem.last_evidence_at, MemoryItem.created_at),
+        MemoryItem.id,
+    ).limit(8)).scalars().all()
     item_ids = [item.id for item in items]
-    evidence = db.session.execute(select(MemoryEvidence).where(
-        MemoryEvidence.memory_id.in_(item_ids), MemoryEvidence.source_article_id.is_not(None)
-    ).order_by(MemoryEvidence.id).limit(32)).scalars().all() if item_ids else []
+    if item_ids:
+        ranked_evidence = select(
+            MemoryEvidence.id.label("evidence_id"),
+            func.row_number().over(
+                partition_by=MemoryEvidence.memory_id,
+                order_by=(MemoryEvidence.last_seen_at.desc(), MemoryEvidence.id),
+            ).label("evidence_rank"),
+        ).where(
+            MemoryEvidence.memory_id.in_(item_ids),
+            MemoryEvidence.source_article_id.is_not(None),
+        ).subquery()
+        evidence = db.session.execute(
+            select(MemoryEvidence).join(
+                ranked_evidence, ranked_evidence.c.evidence_id == MemoryEvidence.id,
+            ).where(ranked_evidence.c.evidence_rank <= 4).order_by(
+                MemoryEvidence.memory_id, ranked_evidence.c.evidence_rank,
+            )
+        ).scalars().all()
+    else:
+        evidence = []
     source_data = {
-        "items": [(item.id, item.text, item.importance, item.confidence, item.valid_as_of.isoformat() if item.valid_as_of else None) for item in items],
+        "items": [
+            (item.id, item.text, item.importance, item.confidence, item.valid_as_of.isoformat() if item.valid_as_of else None)
+            for item in sorted(items, key=lambda candidate: candidate.id)
+        ],
         "evidence": [
             (
                 row.id,
@@ -72,7 +97,7 @@ def _snapshot(category_id: str) -> tuple[list[MemoryItem], list[MemoryEvidence],
                 row.evidence_text,
                 row.relation,
             )
-            for row in evidence
+            for row in sorted(evidence, key=lambda candidate: candidate.id)
         ],
     }
     digest = hashlib.sha256(json.dumps(source_data, sort_keys=True).encode()).hexdigest()
@@ -215,6 +240,9 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
     category = normalize_category(category_id)
     if not config.memory_synthesis_enabled or not config.memory_synthesis_provider or not config.memory_synthesis_model:
         return {"category": category, "status": "disabled", "llm_calls": 0}
+    from services.memory.preflight import ensure_memory_schema
+
+    ensure_memory_schema()
     if config.memory_max_syntheses_per_day == 0:
         return {"category": category, "status": "daily_cap_zero", "llm_calls": 0}
 
@@ -287,6 +315,19 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
     now = datetime.now(timezone.utc)
     synthesis_fp = hashlib.sha256(f"synthesis:{category}:{digest}".encode()).hexdigest()
     item_by_id = {item.id: item for item in items}
+    projection = db.session.get(MemoryCategorySummary, category)
+    previous_synthesis = db.session.get(MemoryItem, projection.current_memory_id) if projection and projection.current_memory_id else None
+    if previous_synthesis is not None and previous_synthesis.status == "active":
+        previous_synthesis.status = "superseded"
+        previous_synthesis.review_status = "superseded"
+        previous_synthesis.review_reason = "replaced_by_current_category_synthesis"
+        previous_synthesis.updated_at = now
+        for scope_row in db.session.execute(select(MemoryScope).where(
+            MemoryScope.memory_id == previous_synthesis.id,
+            MemoryScope.scope_type == "shared",
+            MemoryScope.scope_id == "global",
+        )).scalars().all():
+            db.session.delete(scope_row)
     synthesis = MemoryItem(
         owner_category=category,
         item_type="synthesis",
@@ -296,14 +337,24 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
         qualifier=proposal.confidence_qualifier[:300],
         valid_as_of=proposal.valid_as_of,
         status="active",
-        review_due_at=now + timedelta(days=90),
+        review_due_at=now + timedelta(days=config.max_high_age_days),
         first_seen_at=now,
         last_evidence_at=now,
         fingerprint=synthesis_fp,
         evidence_digest=digest,
+        review_status="current",
+        decision_metadata={"policy_version": "editor-memory-synthesis-v1", "evidence_digest": digest},
     )
     db.session.add(synthesis)
     db.session.flush()
+    if previous_synthesis is not None:
+        db.session.add(MemoryLineage(
+            source_memory_id=previous_synthesis.id,
+            target_memory_id=synthesis.id,
+            relation="supersedes",
+            actor="memory-synthesis",
+            model_version=config.memory_synthesis_model,
+        ))
     for source_id in sorted(support_ids):
         db.session.add(MemoryLineage(source_memory_id=source_id, target_memory_id=synthesis.id, relation="synthesizes", actor="memory-synthesis", model_version=config.memory_synthesis_model))
     for source_id in sorted(contradict_ids):
@@ -325,18 +376,24 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
     for item in items:
         if item.id in support_ids:
             item.status = "synthesized"
-    projection = db.session.get(MemoryCategorySummary, category)
     if projection is None:
         projection = MemoryCategorySummary(category_id=category, content="", evidence_ids=[], revision=0)
         db.session.add(projection)
     projection.content = proposal.synthesis_text.strip()
     projection.evidence_ids = sorted(support_ids | contradict_ids)
     projection.evidence_digest = digest
+    projection.current_memory_id = synthesis.id
     projection.revision += 1
     projection.updated_at = now
     reservation.run.status = "completed"
     reservation.run.completed_at = now
     reservation.attempt.status = "completed"
     reservation.attempt.completed_at = now
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as exc:  # noqa: BLE001 - a racing synthesis must preserve the prior projection
+        db.session.rollback()
+        logger.warning("Editorial memory synthesis commit conflicted for category %s: %s", category, type(exc).__name__)
+        _finish(reservation, "failed")
+        return {"category": category, "status": "concurrent_conflict", "llm_calls": 1}
     return {"category": category, "status": "completed", "synthesis_id": synthesis.id, "llm_calls": 1}

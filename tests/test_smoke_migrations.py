@@ -123,6 +123,58 @@ class TestFlaskDbUpgrade:
             )
             assert result.returncode == 0, f"flask db upgrade (run {i + 1}) failed:\n{result.stderr}"
 
+    def test_corrective_upgrade_repairs_current_synthesis_and_high_review_dates(self, tmp_path):
+        env = _make_prod_env(tmp_path, _OLLAMA_PROVIDERS)
+        db_path = tmp_path / "smoke.db"
+        upgrade_041 = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "upgrade", "041_memory_synthesis_attempts"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert upgrade_041.returncode == 0, upgrade_041.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            for index, status in ((1, "active"), (2, "active")):
+                conn.execute(
+                    "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
+                    "VALUES ('ai','synthesis',?,2,?,'2026-10-01','synthesis-{}','2026-10-01','2026-10-01')".format(index),
+                    (f"Synthesis revision {index}", status),
+                )
+            conn.execute(
+                "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
+                "VALUES ('ai','observation','legacy high item',3,'active','2025-01-01','legacy-high','2025-01-01','2025-01-01')"
+            )
+            conn.execute(
+                "INSERT INTO memory_category_summaries(category_id,content,evidence_ids,revision,evidence_digest,updated_at) "
+                "VALUES ('ai','stale projection','[]',2,'old-digest','2026-10-01')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        upgrade = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "upgrade"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert upgrade.returncode == 0, upgrade.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            syntheses = conn.execute(
+                "SELECT id,status FROM memory_items WHERE item_type='synthesis' ORDER BY id"
+            ).fetchall()
+            assert syntheses == [(1, "superseded"), (2, "active")]
+            pointer, = conn.execute(
+                "SELECT current_memory_id FROM memory_category_summaries WHERE category_id='ai'"
+            ).fetchone()
+            assert pointer == 2
+            review_due, = conn.execute(
+                "SELECT review_due_at FROM memory_items WHERE fingerprint='legacy-high'"
+            ).fetchone()
+            assert review_due is not None
+            assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+        finally:
+            conn.close()
+
     def test_populated_editor_memory_blocks_destructive_downgrade(self, tmp_path):
         env = _make_prod_env(tmp_path, _OLLAMA_PROVIDERS)
         db_path = tmp_path / "smoke.db"
@@ -150,7 +202,11 @@ class TestFlaskDbUpgrade:
         conn = sqlite3.connect(str(db_path))
         try:
             assert conn.execute("SELECT COUNT(*) FROM memory_items").fetchone()[0] == 1
-            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "041_memory_synthesis_attempts"
+            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "042_editor_memory_corrective_state"
+            item_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_items)")}
+            summary_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_category_summaries)")}
+            assert {"review_status", "review_reason", "review_count", "decision_metadata"} <= item_columns
+            assert "current_memory_id" in summary_columns
         finally:
             conn.close()
 

@@ -1,6 +1,6 @@
 # C02 — HIGH-Memory Retirement, Synthesis Supersession, and Blackboard Currentness
 
-**Status:** OPEN / P0. **Baseline:** PR #19 `f3aa498e4d0d`.
+**Status:** IMPLEMENTED and verified in the full local suite. Target-instance maintenance/synthesis trial remains under C04 until the owner's database is restored. **Priority:** P0. **Baseline:** PR #19 `f3aa498e4d0d`.
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M3, M5. **Prerequisite:** C01 read-side context/synthesis eligibility design.
 

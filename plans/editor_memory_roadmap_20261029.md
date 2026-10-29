@@ -1,10 +1,14 @@
 # Editorial Memory, Shared Blackboard, and Deterministic Pipeline Roadmap
 
-**Status:** IMPLEMENTATION IN PR #19 (unmerged), corrective pass C01–C04 OPEN; feature activation and release gates remain open
+**Status:** IMPLEMENTATION IN PR #19 (unmerged), corrective pass C01–C04 OPEN; private-instance activation checks remain open
 **Created:** 2026-10-29  
 **Baseline:** `main` at `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5` (revalidate against the implementation branch before coding)  
 **Owner:** AInews editorial pipeline / memory services  
 **Scope:** category-specific editor memory, bounded shared blackboard, retrieval correctness, synthesis/retirement, and reductions in unnecessary LLM work.
+
+## Intended operating scope
+
+AInews is being developed for **personal/local or privately operated use**. This roadmap is not a public product launch, general distribution, hosted-service readiness, or multi-platform installer certification program. Treat "release" and "rollout" in earlier milestone language as **code integration and optional enablement on the owner's installation**, not a public release. Memory correctness and actual SQLite backup/restore remain important regardless of who can access the instance. Unrelated CI/installer failures are tracked but are not intrinsically blockers to a disabled memory feature; see [C04](editor_memory_corrective_04_release_verification_20261029.md).
 
 ## Objective and decision
 
@@ -42,9 +46,9 @@ These are code-inspection findings, **not** claims about a running deployment or
 | M2 | [Namespaces and retrieval](editor_memory_m2_scoped_retrieval_20261029.md) | Backward-compatible schema, per-category memory, shared read API, FTS5/hybrid search | M1 |
 | M3 | [Synthesis, lifecycle, blackboard](editor_memory_m3_synthesis_blackboard_20261029.md) | Real synthesis, archival, review of HIGH, cross-category promotion, evidence lineage | M2 |
 | M4 | [Deterministic pipeline offload](editor_memory_m4_deterministic_pipeline_20261029.md) | Reuse structured research; conditional LLM work; deterministic gates and tag/citation handling | M2; M3 for synthesis reuse |
-| M5 | [Verification and rollout](editor_memory_m5_verification_20261029.md) | Shadow comparison, migration/rollback, deploy and operational evidence, acceptance matrix | M1–M4 |
+| M5 | [Local verification and activation](editor_memory_m5_verification_20261029.md) | Target SQLite backup/migration rehearsal, limited shadow comparison and private-instance operations evidence | M1–M4 |
 
-M1 should land first as a focused corrective PR. M2/M3 should be independently gated and feature-flagged. M4 changes publication behavior and must be measured independently of the memory migration. M5 provides release closure; performance claims require measured baselines.
+M1 should land first as a focused corrective PR. M2/M3 should be independently gated and feature-flagged. M4 changes publication behavior and must be measured independently of the memory migration. M5 closes private-instance implementation/activation checks; performance claims require measured baselines, not a public release process.
 
 ## Initial retrieval policy (calibrate with fixtures)
 
@@ -62,22 +66,22 @@ Prevent memory poisoning through untrusted articles: treat stored text as data, 
 
 ## Acceptance and handoff
 
-Milestones require failing regression tests first for verified bugs, migration upgrade/downgrade rehearsal, no loss of old entries, token-budget invariants, read path with and without embeddings, cross-category isolation/blackboard tests, citation lineage, idempotent async jobs, and a fixed article-fixture comparison of recall/quality/cost/latency. See M5 for exact release gates.
+Milestones require failing regression tests first for verified bugs, migration upgrade/downgrade rehearsal, no loss of old entries, token-budget invariants, read path with and without embeddings, cross-category isolation/blackboard tests, citation lineage, idempotent async jobs, and a fixed article-fixture comparison of recall/quality/cost/latency. See M5 and C04 for local activation checks.
 
 ## Corrective pass registration — 2026-10-29
 
-The first implementation underwent static/runtime-evidence review and requires **focused follow-up** before M1–M5 release closure. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). These are *implementation plans, not completed fixes*.
+The first implementation underwent static/runtime-evidence review and requires **focused follow-up** before M1–M5 local activation closure. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). These are *implementation plans, not completed fixes*.
 
 | Corrective | Priority | Plan | Focus |
 | --- | --- | --- | --- |
 | C01 | P0 | [Relevance-first retrieval, feature gates and tool budgets](editor_memory_corrective_01_retrieval_gates_20261029.md) | Prevent importance-first truncation of relevant FTS matches; scope reads; cumulative context/tool bounds; coherent current synthesis |
 | C02 | P0 | [HIGH lifecycle, synthesis succession and shared currentness](editor_memory_corrective_02_lifecycle_synthesis_20261029.md) | FINITE active HIGH review/retirement, single current synthesized view, fair dirty-evidence selection and shared-state cleanup |
 | C03 | P1 | [Memory candidate provenance and importance](editor_memory_corrective_03_candidate_quality_20261029.md) | Decouple evidence confidence from editorial significance; validate final-article evidence and dedup |
-| C04 | P0 release | [CI, database migration and deployment gates](editor_memory_corrective_04_release_verification_20261029.md) | Triage failing GitHub Actions CI/installer jobs, inconsistent dev Alembic schema, shadow retrieval, canary and provider-backed quality/cost measurements |
+| C04 | P0 operational | [Private-instance CI, database and activation checks](editor_memory_corrective_04_release_verification_20261029.md) | Triage relevant checks vs unrelated CI/installer debt; rehearse migration and rollback on real target copy; verify representative memory behavior |
 
-**Execution order:** C01 first; C02 and C03 separately; CI baseline work under C04 may proceed concurrently, but C04 closure follows tested C01–C03. Keep V2 read, maintenance, synthesis and optional optimizations **disabled until their specific deployment gates pass**. Maintain original M1–M5 plans; this corrective pass supplements them, and the roadmap is **not COMPLETED**.
+**Execution order:** C01 first; C02 and C03 separately; CI baseline work under C04 may proceed concurrently, but C04 closure follows tested C01–C03. Keep V2 read, maintenance, synthesis and optional optimizations **disabled until their specific target-instance activation checks pass**. Maintain original M1–M5 plans; this corrective pass supplements them, and the roadmap is **not COMPLETED**.
 
-**Current CI:** GitHub Actions implementation SHA `f3aa498e`, runs `40928360912` (CI) and `40928361243` (Installer Smoke), failed. Logs indicate baseline Ruff findings, missing CI test secrets/`.env`, unavailable Redis in theme tests, Gitleaks API permission error, Werkzeug audit advisory, installer runner disk exhaustion, and a broken aarch64 launcher path. Root causes must be classified against `main` before attribution to the memory branch. The local 5,074-passing test claim does not replace green required CI. See C04.
+**Current CI:** GitHub Actions implementation SHA `f3aa498e`, runs `40928360912` (CI) and `40928361243` (Installer Smoke), failed. Logs indicate baseline Ruff findings, missing CI test secrets/`.env`, unavailable Redis in theme tests, Gitleaks API permission error, Werkzeug audit advisory, installer runner disk exhaustion, and a broken aarch64 launcher path. Root causes must be classified against `main` before attribution to the memory branch. The local 5,074-passing test claim requires relevant CI/reproduction checks; classify inherited/unrelated CI jobs independently rather than blocking private memory work on the entire installer matrix. See C04.
 
 ## Implementation evidence — 2026-10-29
 
@@ -93,4 +97,4 @@ Verification on the final implementation worktree: full suite **5,074 passed, 6 
 
 **M4:** conservative prefilter, conditional triggers, candidate reuse and optional-call caps are implemented behind independent flags. Synthetic fixture triggers reduce optional calls from 32 to 16 in the test harness, but no provider-backed quality/cost/latency comparison has run; this is not a production savings claim.
 
-**M5:** local synthetic and migration evidence is recorded. The roadmap remains **OPEN for release closure** because target deployment database migration/rollback, real-article human review, provider A/B and cost/latency comparison, shadow/category/synthesis canaries, scheduled no-change operation and backup/restore evidence require the deployment environment. Keep all behavior flags off until those gates are recorded; do not mark this roadmap COMPLETED based on local tests alone.
+**M5:** local synthetic and migration evidence is recorded. The roadmap remains **OPEN for private-instance activation closure**: before enabling V2, verify migration/backup/restore on a copy of the owner's real database, relevant category isolation, representative article retrieval, and bounded lifecycle behavior. Provider-backed comparisons are needed before asserting savings or enabling optional M4 optimizations, not to merge feature-disabled code. Existing unrelated CI/installer work is separate; do not mark the roadmap COMPLETED based on local synthetic tests alone.

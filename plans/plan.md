@@ -287,4 +287,8 @@ The following items from architecture reviews were verified as **already correct
 
 **Note 3 (Plan Maintenance):** This plan file is now complete. All items have been verified as implemented. Future work should be tracked in issue trackers or as separate documents, not in this plan.
 
+## Active feature roadmaps (independent of the completed historical waves)
+
+- **LLM-native access, immutable newsletter editions and email-as-distribution** — **PLANNED** (2026-10-29). See [roadmap](llm_native_publication_roadmap_20261029.md) and its five handoff plans: [M1 identity and visibility](llm_native_m1_public_identity_visibility_20261029.md), [M2 REST/MCP and agent quotas](llm_native_m2_agent_access_20261029.md), [M3 newsletter corrective and edition foundation](llm_native_m3_newsletter_correctness_editions_20261029.md), [M4 optional email distribution/outbox](llm_native_m4_distribution_email_20261029.md), [M5 independent schedule, editorial selection and archive](llm_native_m5_newsletter_profiles_archive_20261029.md). This roadmap targets optional private-instance capabilities, **not public-release certification**. It is not implemented by merely registering the plans.
+
 (End of file - reduced from 789 to ~200 lines)

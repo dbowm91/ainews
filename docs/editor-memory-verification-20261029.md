@@ -1,6 +1,6 @@
 # Editorial Memory Verification Evidence — 2026-10-29
 
-This report records local implementation evidence for the [editor memory roadmap](../plans/editor_memory_roadmap_20261029.md). It does not claim a production canary, model-quality improvement, or measured monetary savings.
+This report records local implementation evidence for the [editor memory roadmap](../plans/editor_memory_roadmap_20261029.md). AInews is intended here for personal/local or privately operated use, not a public release. The report does not claim real-instance activation, model-quality improvement, or measured monetary savings.
 
 ## Local baseline
 
@@ -25,6 +25,6 @@ This report records local implementation evidence for the [editor memory roadmap
 - `ruff check . --exclude .venv`: the same **five existing findings** remain in unrelated `logrotate_commands.py`, `systemd.py`, `commands.py`, `trend_detector.py`, and `tests/test_safe_fetch.py`; changed memory files add no Ruff findings.
 - Migration rehearsal and baseline script were run without writing to the development database. `git diff --check` is part of final verification.
 
-## Deployment-only release gates
+## Remaining checks before enabling features on a private/local instance
 
-The implementation flags remain off by default. This environment has no target deployment database, provider-backed A/B run, representative human-reviewed real-article golden set, scheduled no-change production cycle, target-hardware latency/cost sample, backup/restore rehearsal, or category canary. Those measurements must be collected in the deployment environment before enabling V2 reads, semantic synthesis, or M4 optimizations. The local development database's Alembic/schema inconsistency must be reconciled from a verified backup before it is used as a migration target.
+The implementation flags remain off by default. Before enabling V2 on the owner's actual SQLite database, verify a restorable backup, rehearsal on a copy, representative category-scoped real-article retrieval, and bounded memory lifecycle behavior. A small local trial is sufficient to start; there is no public launch, external-hosting or OS-distribution requirement. Real provider-backed comparisons are still needed before asserting monetary savings or enabling model-skipping optimizations without quality review. No real-instance enablement, scheduled no-change run or backup/restore rehearsal has yet been recorded. The drifted local development database must be diagnosed before it is used as a migration target; if it is not the actual target, it is independent repair work. General CI/installer failures should be triaged separately from memory-specific regressions.

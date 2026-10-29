@@ -2,13 +2,13 @@
 
 **Status:** Legacy waves 1–9 COMPLETED; editorial memory implementation in unmerged PR #19, corrective C01–C04 OPEN
 **Last Updated:** 2026-10-29 (editorial memory corrective C01–C04 plans registered; historical waves unchanged)
-**Goal:** Track new active workstreams while preserving the completed security, quality, and release history.
+**Goal:** Track active workstreams for the personal/local or privately operated AInews instance while preserving historical completed security, quality and operational work. No public-release program is implied.
 
 ---
 
 ## Active Plan Registry — Editorial Memory, Shared Blackboard, and Pipeline Offload (2026-10-29)
 
-**Status:** PR #19 implementation committed; unmerged, flags off; corrective pass and M5 release gates OPEN.  
+**Status:** PR #19 implementation committed; unmerged, flags off; corrective pass and M5 private-instance activation checks OPEN.  
 **Baseline:** `main` commit `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5`.  
 **Handoff branch:** `plan/editor-memory-blackboard-synthesis-20261029`.  
 **Master workstream:** [Editorial memory architecture roadmap](editor_memory_roadmap_20261029.md).
@@ -19,18 +19,18 @@ Implementation order and independently verifiable plan documents:
 2. **M2 (P1):** [Scoped category memories, evidence schema, migration, hybrid search and read-only tools](editor_memory_m2_scoped_retrieval_20261029.md) — OPEN; depends on M1.
 3. **M3 (P1):** [Incremental evidence-backed synthesis, HIGH review/retirement, shared blackboard](editor_memory_m3_synthesis_blackboard_20261029.md) — OPEN; depends on M2.
 4. **M4 (P2):** [Deterministic pipeline offloading and conditional LLM invocations](editor_memory_m4_deterministic_pipeline_20261029.md) — OPEN; depends on baseline and retrieval; synthesis reuse depends on M3.
-5. **M5 (release gate):** [Verification, shadow comparison, rollout, migration/rollback and closure evidence](editor_memory_m5_verification_20261029.md) — OPEN; closes after M1–M4 evidence.
+5. **M5 (local readiness):** [Verification, bounded shadow comparison, SQLite migration/rollback and internal closure evidence](editor_memory_m5_verification_20261029.md) — OPEN; closes after M1–M4 evidence.
 
 ### Active corrective implementation pass (2026-10-29)
 
-Following the first runtime implementation commit `f3aa498e` on PR #19, additional correctness and release gaps were identified. The [corrective pass overview](editor_memory_corrective_pass_overview_20261029.md) registers these independently executable handoffs:
+Following the first runtime implementation commit `f3aa498e` on PR #19, additional correctness and safe private-instance activation gaps were identified. The [corrective pass overview](editor_memory_corrective_pass_overview_20261029.md) registers these independently executable handoffs:
 
 1. **C01 (P0):** [Relevance-first FTS retrieval, current synthesis context, feature-gate isolation and cumulative tool budgets](editor_memory_corrective_01_retrieval_gates_20261029.md) — OPEN.
 2. **C02 (P0):** [HIGH-memory active retirement, current synthesis supersession, fair incremental synthesis, shared blackboard](editor_memory_corrective_02_lifecycle_synthesis_20261029.md) — OPEN; C01 read-contract prerequisite.
 3. **C03 (P1):** [Confidence/importance separation, provenance checking, conditional candidate reuse](editor_memory_corrective_03_candidate_quality_20261029.md) — OPEN; compatible with C02 in parallel after C01 gates.
-4. **C04 (P0 release):** [CI/installer failures, Alembic drift reconciliation, real-article shadow/canary and rollback verification](editor_memory_corrective_04_release_verification_20261029.md) — OPEN; final gate after C01–C03.
+4. **C04 (P0 operational):** [Relevant CI triage, SQLite migration/rollback and limited private-instance verification](editor_memory_corrective_04_release_verification_20261029.md) — OPEN; final local activation check after C01–C03. Cross-platform installer and inherited CI debt remain separate work.
 
-**Evidence status:** Local report `docs/editor-memory-verification-20261029.md` lists 5,074 passing tests, but PR #19 has failing GitHub Actions checks; target-database migration, production canary and provider-backed quality/cost evaluation remain unverified. Do **not** mark M1–M5 or C01–C04 complete or activate V2 on the strength of plans/local fixtures alone.
+**Evidence status:** Local report `docs/editor-memory-verification-20261029.md` lists 5,074 passing tests; GitHub Actions has failures requiring relevant-regression vs unrelated-CI classification. Actual target-DB backup/migration rehearsal and small real-article memory checks remain unverified. Optional model-cost savings must not be claimed without observed provider measurements. Do **not** activate V2 solely on the strength of plans/local fixtures; this is not a public release project.
 
 This registry is the entry point for the new workstream; do not mark milestones complete until runtime changes, tests, and measurable evidence have landed. Existing completed wave history below remains historical and is not reopened.
 

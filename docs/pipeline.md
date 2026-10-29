@@ -190,3 +190,8 @@ curl http://localhost:5000/admin/api/pipeline/dead-letter/stats
 - Error message on failure
 
 `PipelineLog` provides per-article, per-stage logging with levels: info, warning, error.
+## Editorial memory pipeline integration
+
+Research and edit tasks use canonical subagent stages `research` and `edit`; role identifiers `researcher` and `editor` remain for model routing and traces. External edit contextualization templates must include the same placeholders as the inline template, including `{trend_memory}`. Configured tool names are checked against the registry and unknown names raise a configuration error.
+
+Legacy memory injection uses bounded exact-topic retrieval and a final rendered token cap. V2 category context is enabled by `memory.memory_v2_enabled` and uses `services.memory.memory_context()` with category ownership from `Article.category`; unknown categories map to `uncategorized`. V2 model tools receive the category through trusted runner context. Feature flags stay disabled until shadow retrieval, migration and quality gates pass. See [trend-memory.md](trend-memory.md) for migration and lifecycle contracts.

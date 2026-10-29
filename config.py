@@ -280,6 +280,10 @@ class Config:
                 "task": "tasks.cleanup.consolidate_trend_memory",
                 "schedule": crontab(hour=trend_memory_hour, minute=30),
             },
+            "maintain-editorial-memory": {
+                "task": "tasks.cleanup.maintain_editorial_memory",
+                "schedule": crontab(hour=trend_memory_hour, minute=35),
+            },
             "purge-trend-memory": {
                 "task": "tasks.cleanup.purge_trend_memory",
                 "schedule": crontab(hour=trend_memory_hour, minute=45),

@@ -53,6 +53,7 @@ def test_previously_unregistered_task_modules_are_imported() -> None:
         "cleanup_expired_verifications",
         "cleanup_stale_limiter_slots",
         "consolidate_trend_memory",
+        "maintain_editorial_memory",
         "purge_trend_memory",
         "recalculate_impact_scores",
         "cleanup_old_article_versions",

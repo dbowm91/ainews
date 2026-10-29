@@ -13,6 +13,7 @@ from tasks.cleanup import (
     cleanup_old_pipeline_logs,
     cleanup_stale_limiter_slots,
     consolidate_trend_memory,
+    maintain_editorial_memory,
     purge_trend_memory,
     recalculate_impact_scores,
 )
@@ -62,6 +63,7 @@ __all__ = [
     "cleanup_expired_verifications",
     "cleanup_stale_limiter_slots",
     "consolidate_trend_memory",
+    "maintain_editorial_memory",
     "purge_trend_memory",
     "recalculate_impact_scores",
     "cleanup_old_article_versions",

@@ -1,6 +1,6 @@
 # Editorial Memory, Shared Blackboard, and Deterministic Pipeline Roadmap
 
-**Status:** PROPOSED — implementation handoff; no runtime changes in this planning branch  
+**Status:** IMPLEMENTATION IN PROGRESS — runtime work landed locally; release gates remain open
 **Created:** 2026-10-29  
 **Baseline:** `main` at `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5` (revalidate against the implementation branch before coding)  
 **Owner:** AInews editorial pipeline / memory services  
@@ -64,4 +64,18 @@ Prevent memory poisoning through untrusted articles: treat stored text as data, 
 
 Milestones require failing regression tests first for verified bugs, migration upgrade/downgrade rehearsal, no loss of old entries, token-budget invariants, read path with and without embeddings, cross-category isolation/blackboard tests, citation lineage, idempotent async jobs, and a fixed article-fixture comparison of recall/quality/cost/latency. See M5 for exact release gates.
 
-**Implementation status:** All milestones OPEN. A plan file alone is not evidence of implemented behavior. Update this roadmap with PR/commit, test evidence, and deviations as each milestone closes.
+## Implementation evidence — 2026-10-29
+
+Implementation work is on `plan/editor-memory-blackboard-synthesis-20261029`; the worktree is uncommitted. M1 wiring, prompt/tool validation, structured final-artifact proposals, legacy retrieval bounds, schema/idempotency fixes and metrics are implemented. M2 provides the additive category store, evidence/scopes/lineage/summary schema, FTS5 with bounded lexical fallback, scoped context/search/get, backfill, and feature-flagged V2 reads. M3 adds lifecycle review/archive, evidence-grounded synthesis with persisted retry slots, shared-scope operator actions, diagnostics and a separately registered maintenance task. M4 adds independent rollback switches for deterministic prefiltering, conditional research/edit subagents, structured memory-candidate reuse and optional-call budgets. M5 adds a synthetic retrieval/trigger suite, read-only baseline script and migration/backfill rehearsal evidence. Details and limits are in [verification evidence](../docs/editor-memory-verification-20261029.md).
+
+Verification on the final implementation worktree: full suite **5,074 passed, 6 skipped**; repository mypy **clean (507 source files)**; repository Ruff reports only the same five existing findings, with no new findings in changed code; `git diff --check` clean. A disposable synthetic SQLite/WAL upgrade reached revision 041 with integrity check `ok`, and repeated backfill was idempotent without deleting legacy rows. The local `instance/dev.db` is inconsistent with its Alembic revision and was not modified.
+
+**M1:** code and local regression gates are implemented and pass. Runtime provider-call and article-quality baselines remain deployment evidence.
+
+**M2:** additive migration, scoped retrieval, bounded context, restartable/provenance-preserving backfill and FTS shortlist filtering have local coverage. V2 reads remain disabled pending a target-database shadow retrieval comparison and backup/restore rehearsal.
+
+**M3:** synthesis grounding/rejection/retry, conflicting lineage, persistent attempt caps, operator auth/CSRF/audit, and task registration have local coverage. Maintenance and synthesis remain disabled by default pending a scheduled no-change cycle and deployment canary.
+
+**M4:** conservative prefilter, conditional triggers, candidate reuse and optional-call caps are implemented behind independent flags. Synthetic fixture triggers reduce optional calls from 32 to 16 in the test harness, but no provider-backed quality/cost/latency comparison has run; this is not a production savings claim.
+
+**M5:** local synthetic and migration evidence is recorded. The roadmap remains **OPEN for release closure** because target deployment database migration/rollback, real-article human review, provider A/B and cost/latency comparison, shadow/category/synthesis canaries, scheduled no-change operation and backup/restore evidence require the deployment environment. Keep all behavior flags off until those gates are recorded; do not mark this roadmap COMPLETED based on local tests alone.

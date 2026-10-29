@@ -80,6 +80,13 @@ class TestFlaskDbUpgrade:
                 "api_tokens",
                 "pipeline_runs",
                 "newsletters",
+                "memory_items",
+                "memory_evidence",
+                "memory_scopes",
+                "memory_lineage",
+                "memory_category_summaries",
+                "memory_synthesis_runs",
+                "memory_synthesis_attempts",
                 "tags",
                 "alembic_version",
             ]:
@@ -95,6 +102,9 @@ class TestFlaskDbUpgrade:
             columns = {col[1] for col in cursor.fetchall()}
             assert "token_hash" in columns, "api_tokens missing token_hash column"
             assert "revoked_at" in columns, "api_tokens missing revoked_at column"
+
+            trend_columns = {col[1] for col in conn.execute("PRAGMA table_info(trend_memory)").fetchall()}
+            assert {"last_accessed_at", "proposal_key"}.issubset(trend_columns)
         finally:
             conn.close()
 
@@ -112,6 +122,37 @@ class TestFlaskDbUpgrade:
                 timeout=120,
             )
             assert result.returncode == 0, f"flask db upgrade (run {i + 1}) failed:\n{result.stderr}"
+
+    def test_populated_editor_memory_blocks_destructive_downgrade(self, tmp_path):
+        env = _make_prod_env(tmp_path, _OLLAMA_PROVIDERS)
+        db_path = tmp_path / "smoke.db"
+        upgrade = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "upgrade"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert upgrade.returncode == 0, upgrade.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute(
+                "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
+                "VALUES ('ai','observation','retained memory',3,'active','2026-10-29','test-fingerprint','2026-10-29','2026-10-29')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        downgrade = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "downgrade", "037_trend_memory_proposal_idempotency"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert downgrade.returncode != 0
+        assert "Refusing to downgrade populated editor memory" in downgrade.stdout + downgrade.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            assert conn.execute("SELECT COUNT(*) FROM memory_items").fetchone()[0] == 1
+            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "041_memory_synthesis_attempts"
+        finally:
+            conn.close()
 
 
 class TestMigrationDirectory:

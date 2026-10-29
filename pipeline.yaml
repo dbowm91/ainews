@@ -185,6 +185,8 @@ subagent:
     - context_notes
     - related_articles
     - get_source_health
+    - memory_search
+    - memory_get
     system_prompt: 'You are a research synthesizer. Analyze external sources and the source article
 
       to provide a coherent synthesis that supplements the main research brief.
@@ -208,7 +210,8 @@ subagent:
     tools:
     - context_notes
     - related_articles
-    - trend_memory
+    - memory_search
+    - memory_get
     system_prompt: 'You are an editorial contextualizer. Review the draft in light of the research
 
       brief, topic notes, and related articles to identify gaps, missing attribution,
@@ -243,18 +246,42 @@ memory:
   consolidation_cooldown_hours: 24
   max_entries_per_propose: 3
   consolidation_merge_window_hours: 72
+  research_token_budget: 900
+  editor_token_budget: 640
+  deep_token_budget: 1600
+  max_records_per_context: 8
+  max_shared_records_per_context: 3
+  max_query_topics: 20
+  memory_v2_enabled: false
+  memory_maintenance_enabled: false
+  memory_maintenance_max_items: 500
+  memory_maintenance_max_categories: 20
+  memory_max_syntheses_per_day: 0
+  memory_synthesis_enabled: false
+  memory_synthesis_provider: null
+  memory_synthesis_model: null
+  memory_synthesis_max_tokens: 768
+  max_high_age_days: 90
+optimizations:
+  selector_prefilter_enabled: false
+  conditional_research_synthesis_enabled: false
+  conditional_edit_contextualization_enabled: false
+  memory_candidate_reuse_enabled: false
+  optional_llm_call_caps_enabled: false
+  max_optional_llm_calls_per_article_per_day: 3
+  max_optional_llm_calls_per_day: 200
 stages:
   research:
     tools:
-    - search_web
+    - web_search
     - get_topic_note
   write:
     tools:
-    - search_web
+    - web_search
   edit:
     tools:
-    - get_topic_note
-    - get_related_articles
+    - context_notes
+    - related_articles
     - get_trend_memory
 experiments:
   enabled: true

@@ -1,5 +1,17 @@
 # Trend Memory System
 
+## Current implementation contract (2026-10-29)
+
+The legacy `TrendMemory` table remains for compatibility and rollback. Retrieval is now capped at 20 SQL rows and by a rendered token budget; HIGH rows older than the configured 90-day retrieval window remain stored but are not injected until revalidated. `last_accessed_at` is schema telemetry only and is not updated on reads. Proposals require a `DONE`, non-degraded article with `final_article`, use a structured empty `entries: []` response, canonical topic aliases, and an article-version/content fingerprint. The model request runs outside the database transaction.
+
+An additive V2 store lives in `services/memory/` and migrations 038–040: category-owned observations/syntheses, evidence links, visibility references, lineage, category summary projections, optional FTS5, persistent synthesis-run caps, and last-maintenance diagnostics. V2 dual writes are enabled for valid proposals, while V2 reads and maintenance remain disabled by default in `pipeline.yaml` pending migration rehearsal and shadow comparison. Run `scripts/backfill_editor_memory.py` first without `--execute`; the import is batched, repeatable, and does not delete legacy rows.
+
+The V2 retrieval API is `memory_context()`, `memory_search()`, and `memory_get()`. It uses the article's normalized category, active-state/expiry checks, bounded lexical candidates, relevance scoring, a hard output token budget, and at most three shared references. Model-facing memory tools are read-only and bind scope to the caller's article category. FTS5 is optional; bounded lexical fallback remains available.
+
+Nightly V2 maintenance is deterministic and LLM-free by default. It archives expired, unpinned V2 rows and reports HIGH review backlog without deleting due HIGH entries. Semantic synthesis requires an explicit provider and model, a nonzero persistent daily cap, and changed evidence. Shared promotion is an explicit audited admin action and requires source evidence plus a valid-as-of date. These paths are feature flagged and have not been enabled on a live deployment.
+
+The implementation handoff is not fully closed: migration upgrade/downgrade rehearsal against populated WAL databases, golden-set retrieval measurements, production shadow/canary evidence, and the M4 inference-quality comparison remain rollout gates. The older sections below describe the legacy behavior and should be read with this section's corrections in mind.
+
 ## Overview
 
 The trend memory system provides tiered, LLM-judged memory for the editor agent. After an article is finalized, `propose_trend_memory(article)` asks the LLM to extract 0-3 high-signal memory entries that capture factual trends, patterns, or significant observations relevant to the article's topics. These entries are stored and later injected into editor prompts via `get_memory_for_topics()` so the LLM can see prior patterns before contextualizing new articles.

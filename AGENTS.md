@@ -253,6 +253,9 @@ def run_subagent(task_type: str, stage: str, prompt_data: dict, response_model: 
 ```
 Not the documented `run_subagent(task, context, tools, model)`.
 
+### Editorial Memory V2
+`TopicNote` remains human-authored editorial guidance. AI memory uses `services/memory/`: normalize ownership from `Article.category` through `schemas.topic.normalize_topic()` and map unknown categories to `uncategorized`; shared visibility is a `MemoryScope` reference, never a copied row. V2 proposals dual-write from finalized, non-degraded articles with evidence links and a stable fingerprint. Read via `memory_context()`, `memory_search()`, and `memory_get()`; the model-facing tools bind category from trusted task context. V2 reads and maintenance are off by default pending migration rehearsal and shadow comparison. Legacy `TrendMemory` rows remain available for rollback. See `docs/trend-memory.md` for current rollout gates.
+
 ### Pipeline Stage Status Values
 Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`. The `review` status is handled by `tasks/edit.py`.
 
@@ -262,6 +265,7 @@ Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `s
 - `Article.finalized_at` doesn't exist - use `published_at`
 - `TrendMemory.observation` is actually `signal`
 - `TrendMemory.embedding` is `db.Text` (not a vector type)
+- `TrendMemory.last_accessed_at` is not updated on retrieval; migration `037_trend_memory_proposal_idempotency` repairs it for Alembic installs and adds a stable proposal fingerprint
 - `Source.adapter_config` doesn't exist (documented but never implemented) - adapter config is in `schemas/source.py` as `SourceConfig.config`
 
 ### Fallback Chain Behavior
@@ -278,7 +282,7 @@ Key scheduled tasks:
 - `publish-scheduled-articles`: Every 5 minutes (publish_interval)
 - `auto-approve-review-articles`: Every 1 minute (`schedule.auto_approve_interval_minutes`) — publishes the review queue when auto-review mode is on
 - `retry-stuck`: Every 60 minutes
-- `consolidate-trend-memory`: Daily at 3:30 AM
+- `consolidate-trend-memory`: Daily at 3:30 AM; runs legacy LOW→MEDIUM promotion unless `memory_maintenance_enabled` selects deterministic V2 maintenance. Optional synthesis needs an explicit provider, model and daily cap.
 - `purge-trend-memory`: Daily at 3:45 AM
 - `cleanup-old-versions`: Daily at 3:45 AM
 - `cleanup-expired-verifications`: Every 15 minutes

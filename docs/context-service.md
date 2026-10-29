@@ -1,5 +1,13 @@
 # Context Service
 
+## Editorial memory is a separate surface
+
+`TopicNote` remains the human-authored editorial guidance store. AI-extracted factual observations use the additive `MemoryItem` store in `services/memory/`; a category key is normalized against `topics.yaml`, and unknown or null values resolve to `uncategorized`. Shared access is represented by a `MemoryScope` reference to the same item, not a copied record.
+
+Use `memory_context(category_id, article_id, token_budget, stage, query)` for bounded automatic prompt context, `memory_search()` for top-k lexical retrieval, and `memory_get()` for evidence and lineage. The acting category comes from the article/task context; model tool arguments cannot choose another category. `memory_search` excludes archived and superseded entries unless `historical=True`. Editors receive at most eight local and three shared records and a hard assembled token cap. V2 pipeline reads remain controlled by `memory.memory_v2_enabled` in `pipeline.yaml` until rollout evidence is collected.
+
+The migration importer is restartable and preserves `TrendMemory` rows. Preview a bounded batch with `scripts/backfill_editor_memory.py --batch-size 250 --offset 0`; pass `--execute` only after reviewing the counters. See [trend-memory.md](trend-memory.md) for retention, synthesis, and rollout status.
+
 This document covers the context service for topic notes and related article lookup.
 
 ## Overview

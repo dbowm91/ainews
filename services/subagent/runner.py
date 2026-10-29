@@ -5,6 +5,7 @@ from concurrent.futures import TimeoutError
 from typing import Any, Callable, Type
 
 import json
+from string import Formatter
 
 from pydantic import BaseModel, ValidationError
 
@@ -32,7 +33,26 @@ def _get_task_template(task_type: str, stage_config: SubagentStageConfig) -> str
         loaded = load_prompt_template(stage_config.task_template)
         if loaded:
             return loaded
-    return SUBAGENT_TASK_TEMPLATES.get(task_type, "")
+    template = loaded if stage_config.task_template and loaded else SUBAGENT_TASK_TEMPLATES.get(task_type, "")
+    required = {
+        "edit_contextualization": {"draft", "brief", "topic_notes", "related_articles", "trend_memory"},
+        "research_synthesis": {"title", "body", "web_results"},
+    }.get(task_type, set())
+    placeholders = {field for _, field, _, _ in Formatter().parse(template) if field}
+    missing = required - placeholders
+    if missing:
+        raise ValueError(
+            f"Subagent template {task_type!r} is missing required placeholders: {', '.join(sorted(missing))}"
+        )
+    return template
+
+
+def _canonical_subagent_stage(stage: str) -> str:
+    return {"researcher": "research", "editor": "edit"}.get(stage, stage)
+
+
+def _role_stage_name(stage: str) -> str:
+    return {"research": "researcher", "edit": "editor"}.get(stage, stage)
 
 
 def _run_subagent_core(
@@ -174,7 +194,7 @@ def _run_subagent_core(
             event="subagent.failure",
             article_id=article_id,
             task_type=task_type,
-            stage_name=stage,
+            stage_name=_role_stage_name(stage),
             error=str(last_exc) if last_exc else None,
         )
     else:
@@ -187,7 +207,7 @@ def _run_subagent_core(
             event="subagent.complete",
             article_id=article_id,
             task_type=task_type,
-            stage_name=stage,
+            stage_name=_role_stage_name(stage),
         )
 
     get_metrics().counter_inc(
@@ -215,8 +235,12 @@ def run_subagent(
 ) -> SubagentResponse:
     from . import resolve_subagent_config, log_pipeline_event
 
+    stage = _canonical_subagent_stage(stage)
     default_role = "researcher" if stage == "research" else "editor"
     stage_config = resolve_subagent_config(stage, default_role=default_role)
+    from . import get_metrics
+
+    get_metrics().counter_inc("subagent.config", labels={"stage": stage, "enabled": str(stage_config.enabled).lower()})
     if not stage_config.enabled:
         return SubagentResponse(
             synthesis="",
@@ -229,10 +253,11 @@ def run_subagent(
         event="subagent.start",
         article_id=article_id,
         task_type=task_type,
-        stage_name=stage,
+        stage_name=_role_stage_name(stage),
     )
 
     template = _get_task_template(task_type, stage_config)
+    get_metrics().counter_inc("subagent.template", labels={"stage": stage, "template_id": task_type})
     try:
         prompt_data_escaped = escape_prompt_data(prompt_data)
         prompt = template.format(**prompt_data_escaped)
@@ -255,7 +280,7 @@ def run_subagent(
             event="subagent.failure",
             article_id=article_id,
             task_type=task_type,
-            stage_name=stage,
+            stage_name=_role_stage_name(stage),
             error=f"template missing key: {e}",
         )
         return SubagentResponse(
@@ -284,7 +309,7 @@ def run_subagent(
     def _call_with_timeout() -> Any:
         from . import traced_llm_call
 
-        with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
+        with traced_llm_call(provider=provider.provider_id, model=model, stage=_role_stage_name(stage)):
             if tools:
                 # Use chat_with_tools for tool-calling support
                 max_iterations = getattr(stage_config, 'max_iterations', 5)
@@ -342,8 +367,12 @@ def run_subagent_with_tools(
     """Run subagent with tool calling support."""
     from . import resolve_subagent_config, log_pipeline_event
 
+    stage = _canonical_subagent_stage(stage)
     default_role = "researcher" if stage == "research" else "editor"
     stage_config = resolve_subagent_config(stage, default_role=default_role)
+    from . import get_metrics
+
+    get_metrics().counter_inc("subagent.config", labels={"stage": stage, "enabled": str(stage_config.enabled).lower()})
     if not stage_config.enabled:
         return SubagentResponse(
             synthesis="",
@@ -356,10 +385,12 @@ def run_subagent_with_tools(
         event="subagent.start",
         article_id=article_id,
         task_type=task_type,
-        stage_name=stage,
+        stage_name=_role_stage_name(stage),
     )
 
     template = _get_task_template(task_type, stage_config)
+    get_metrics().counter_inc("subagent.template", labels={"stage": stage, "template_id": task_type})
+    get_metrics().gauge_set("subagent.tools_selected", len(tools), labels={"stage": stage})
     prompt = _format_subagent_prompt(template, prompt_data, stage, task_type)
     if prompt is None:
         return SubagentResponse(
@@ -397,7 +428,7 @@ def run_subagent_with_tools(
     def _call_with_timeout() -> Any:
         from . import traced_llm_call
 
-        with traced_llm_call(provider=provider.provider_id, model=model, stage=stage):
+        with traced_llm_call(provider=provider.provider_id, model=model, stage=_role_stage_name(stage)):
             return provider.chat_with_tools(
                 messages=messages,
                 tools=tools,

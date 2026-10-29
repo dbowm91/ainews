@@ -58,6 +58,32 @@ class TestTrendMemory:
             entries = TrendMemory.query.filter_by(source_article_id=article.id).all()
             assert len(entries) == 2, f"Expected 2 TrendMemory entries, got {len(entries)}"
 
+    def test_reproposal_after_article_revision_does_not_duplicate_signal(self, app, create_article):
+        from extensions import db
+        from models import MemoryEvidence, TrendMemory
+        from services.trend_memory import propose_trend_memory
+
+        with app.app_context():
+            article = create_article(
+                pipeline_status="done",
+                final_article='{"headline":"Before","body":"Final article"}',
+            )
+            article.topics = ["ai"]
+            db.session.commit()
+            with patch("services.trend_memory.get_provider_for_role") as mocked:
+                provider = MagicMock()
+                provider.chat_structured.return_value = MagicMock(entries=[
+                    MagicMock(topic="ai", importance=2, signal="A durable AI infrastructure observation")
+                ])
+                mocked.return_value = (provider, "model", 1024, "test")
+                propose_trend_memory(article)
+                article.final_article = '{"headline":"After","body":"Revised final article"}'
+                db.session.commit()
+                propose_trend_memory(article)
+
+            assert TrendMemory.query.filter_by(source_article_id=article.id).count() == 1
+            assert MemoryEvidence.query.filter_by(source_article_id=article.id).count() == 2
+
     def test_get_memory_for_topics_returns_matching_entries(self, app, create_article):
         """get_memory_for_topics should return entries matching the given topics."""
         from models import TrendMemory
@@ -199,11 +225,11 @@ class TestTrendMemory:
             assert valid_remaining is not None, "Valid entry should remain"
 
     def test_format_memory_for_prompt_empty(self, app):
-        """_format_memory_for_prompt should return 'No prior trend memory' for empty list."""
+        """Empty retrieval stays empty so callers can use an explicit has-memory check."""
         from services.trend_memory import _format_memory_for_prompt
 
         result = _format_memory_for_prompt([])
-        assert "No prior trend memory" in result
+        assert result == ""
 
     def test_format_memory_for_prompt_groups_by_importance(self, app, create_article):
         """_format_memory_for_prompt should group entries by importance tier."""

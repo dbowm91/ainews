@@ -1,6 +1,7 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.exc import SQLAlchemyError
+import math
 
 from constants import PipelineStatus, truncate_for_log, CELERY_TASK_MAX_RETRIES
 from schemas.llm_responses import ResearchBrief
@@ -40,6 +41,7 @@ def _format_web_results(web_results: list[dict]) -> str:
     for wr in web_results:
         parts.append(f"Source: {esc_xml_text(wr.get('title', 'Unknown'))}")
         parts.append(f"URL: {esc_xml_text(wr.get('url', ''))}")
+        parts.append("Source type: search snippet (lead only; not independently verified)")
         parts.append(f"Snippet: {esc_xml_text(wr.get('snippet', '')[:300])}")
         parts.append("")
     return "\n".join(parts)
@@ -62,11 +64,26 @@ def _perform_web_search_and_synthesis(article, rc):
         search_results = search_web(
             search_query, max_results=rc.web_search_max_results or 5,
         )
-    web_results = [
-        {"title": s.title, "url": s.url, "snippet": s.snippet}
-        for s in search_results
-    ]
+    from schemas.pipeline import load_pipeline_config
+    from services.pipeline_optimizations import prepare_web_evidence, should_synthesize_web_results
+
+    web_results = prepare_web_evidence(
+        [{"title": s.title, "url": s.url, "snippet": s.snippet} for s in search_results],
+        limit=rc.web_search_max_results or 5,
+    )
     if not web_results:
+        return web_results, web_synthesis
+    optimization_config = load_pipeline_config().optimizations
+    if (
+        optimization_config.conditional_research_synthesis_enabled
+        and not should_synthesize_web_results(article, web_results)
+    ):
+        from services.metrics import get_metrics
+
+        get_metrics().counter_inc("pipeline.optional_subagent", labels={"stage": "research", "decision": "skipped", "reason": "routine_evidence"})
+        return web_results, web_synthesis
+    from services.optional_llm_budget import reserve_optional_llm_call
+    if not reserve_optional_llm_call(article.id, "research_synthesis"):
         return web_results, web_synthesis
     from schemas.llm_responses import ResearchSynthesisResponse
     from schemas.pipeline import resolve_subagent_config
@@ -76,10 +93,12 @@ def _perform_web_search_and_synthesis(article, rc):
         from services.subagent import initialize_tool_registry
         from services.tool_selection import StageAwareToolSelector
         selector = StageAwareToolSelector(stage_config.tools)
-        tools = initialize_tool_registry(selector=selector)
+        tools = initialize_tool_registry(
+            selector=selector, context={"category_id": article.category or "uncategorized"}
+        )
         web_synthesis_result = run_subagent_with_tools(
             task_type="research_synthesis",
-            stage="researcher",
+            stage="research",
             prompt_data={
                 "title": article.original_title or "",
                 "body": article.extracted_text or "",
@@ -92,7 +111,7 @@ def _perform_web_search_and_synthesis(article, rc):
     else:
         web_synthesis_result = run_subagent(
             task_type="research_synthesis",
-            stage="researcher",
+            stage="research",
             prompt_data={
                 "title": article.original_title or "",
                 "body": article.extracted_text or "",
@@ -102,6 +121,9 @@ def _perform_web_search_and_synthesis(article, rc):
             article_id=article.id,
         )
     web_synthesis = web_synthesis_result.synthesis
+    from services.metrics import get_metrics
+
+    get_metrics().counter_inc("pipeline.optional_subagent", labels={"stage": "research", "decision": "called", "reason": "evidence_complexity" if optimization_config.conditional_research_synthesis_enabled else "legacy_policy"})
     if web_synthesis_result.used_fallback:
         logger.warning(
             "Research web synthesis subagent failed, proceeding without synthesis",
@@ -119,18 +141,39 @@ def _get_related_and_context(article, rc):
     trend_memory = ""
     if article.topics:
         from services.context_service import get_topic_notes_for_topics
-        from services.trend_memory import (
-            _format_memory_for_prompt,
-            get_memory_for_topics,
-        )
+        from schemas.pipeline import load_pipeline_config
+
+        memory_config = load_pipeline_config().memory
         topic_notes_dict = get_topic_notes_for_topics(article.topics)
         if topic_notes_dict:
             topic_notes = "\n".join(
                 f"- {note}" for notes in topic_notes_dict.values() for note in notes
             )
-        trend_memory = _format_memory_for_prompt(
-            get_memory_for_topics(article.topics, min_importance=1),
+        from services.memory.context_builder import fit_context_text
+
+        topic_notes = fit_context_text(topic_notes, memory_config.research_token_budget)
+        remaining_memory_budget = max(
+            0,
+            memory_config.research_token_budget - math.ceil(len(topic_notes) / 3),
         )
+        if memory_config.memory_v2_enabled:
+            from services.memory import memory_context
+
+            trend_memory = memory_context(
+                article.category or "uncategorized",
+                article.id,
+                remaining_memory_budget,
+                "research",
+                query=f"{article.original_title or ''} {article.summary or ''}",
+            ).rendered
+        else:
+            from services.trend_memory import _format_memory_for_prompt, get_memory_for_topics
+
+            trend_memory = _format_memory_for_prompt(
+                get_memory_for_topics(article.topics, min_importance=1),
+                token_budget=remaining_memory_budget,
+                stage="research",
+            )
     return related, topic_notes, trend_memory
 
 

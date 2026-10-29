@@ -29,6 +29,7 @@ class TopicDef(BaseModel):
     # A per-topic override for the agent name. Empty means the site-wide
     # name applies.
     agent_name: Optional[str] = None
+    aliases: list[str] = Field(default_factory=list)
 
 
 class TopicsConfig(BaseModel):
@@ -54,6 +55,15 @@ def load_topics(path: str | Path = BASE_DIR / "topics.yaml") -> TopicsConfig:
 
 def get_topic_keys(path: str | Path = BASE_DIR / "topics.yaml") -> list[str]:
     return list(load_topics(path).topics.keys())
+
+
+def normalize_topic(value: str, path: str | Path = BASE_DIR / "topics.yaml") -> str | None:
+    normalized = " ".join(value.casefold().replace("-", " ").replace("_", " ").split())
+    for key, definition in load_topics(path).topics.items():
+        candidates = [key, definition.display_name, *definition.aliases]
+        if any(normalized == " ".join(candidate.casefold().replace("-", " ").replace("_", " ").split()) for candidate in candidates):
+            return key
+    return None
 
 
 def get_topic_colors(path: str | Path = BASE_DIR / "topics.yaml") -> dict[str, str]:

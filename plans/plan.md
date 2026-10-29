@@ -1,14 +1,33 @@
 # Master Implementation Plan (Consolidated)
 
-**Status:** COMPLETED (All waves complete)
-**Last Updated:** 2026-06-02 (Wave 9 completed, all items verified)
-**Goal:** Address code quality, security gaps, performance, documentation accuracy, and technical debt.
+**Status:** Legacy waves 1–9 COMPLETED; new editorial memory workstream PROPOSED (M1–M5 open)
+**Last Updated:** 2026-10-29 (editorial memory plans registered; historical waves unchanged)
+**Goal:** Track new active workstreams while preserving the completed security, quality, and release history.
+
+---
+
+## Active Plan Registry — Editorial Memory, Shared Blackboard, and Pipeline Offload (2026-10-29)
+
+**Status:** PLANNING / OPEN — plans only; implementation not begun.  
+**Baseline:** `main` commit `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5`.  
+**Handoff branch:** `plan/editor-memory-blackboard-synthesis-20261029`.  
+**Master workstream:** [Editorial memory architecture roadmap](editor_memory_roadmap_20261029.md).
+
+Implementation order and independently verifiable plan documents:
+
+1. **M1 (P0):** [Correctness, subagent/tool/prompt wiring, bounded retrieval and schema parity](editor_memory_m1_correctness_20261029.md) — OPEN.
+2. **M2 (P1):** [Scoped category memories, evidence schema, migration, hybrid search and read-only tools](editor_memory_m2_scoped_retrieval_20261029.md) — OPEN; depends on M1.
+3. **M3 (P1):** [Incremental evidence-backed synthesis, HIGH review/retirement, shared blackboard](editor_memory_m3_synthesis_blackboard_20261029.md) — OPEN; depends on M2.
+4. **M4 (P2):** [Deterministic pipeline offloading and conditional LLM invocations](editor_memory_m4_deterministic_pipeline_20261029.md) — OPEN; depends on baseline and retrieval; synthesis reuse depends on M3.
+5. **M5 (release gate):** [Verification, shadow comparison, rollout, migration/rollback and closure evidence](editor_memory_m5_verification_20261029.md) — OPEN; closes after M1–M4 evidence.
+
+This registry is the entry point for the new workstream; do not mark milestones complete until runtime changes, tests, and measurable evidence have landed. Existing completed wave history below remains historical and is not reopened.
 
 ---
 
 ## Executive Summary
 
-This is the **single consolidated implementation plan** for the ainews project. All other plan files have been merged into this document. Previous architecture review output files (`plans/review_*.md`) have been deleted — their findings are incorporated into the wave tasks below.
+This is the **historical consolidated implementation plan** for the completed early waves of the ainews project. New workstreams, including editorial memory, are registered above with separate milestone handoffs. Previous architecture review output files (`plans/review_*.md`) have been deleted — their findings are incorporated into the wave tasks below.
 
 **Key Targets:**
 - **Test Coverage:** 80% (Current: 80%) ✅

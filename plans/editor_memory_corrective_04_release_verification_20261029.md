@@ -12,7 +12,7 @@ Distinguish three kinds of work:
 
 1. **Blocking for code integration:** memory-specific regression coverage, reliable imports/config/task registration, no new critical failure, and auditable schema compatibility.
 2. **Blocking before enabling V2 on a real database:** an actual backup/restore rehearsal; known Alembic state; migrations/backfill and rollback tested on a copy; scoped retrieval, lifecycle and tool budgets; representative article spot checks.
-3. **Independent repository maintenance:** unrelated legacy CI failures, Docker/installer and architecture matrix problems, dependency security advisories. Record and prioritize them appropriately, but **do not** turn every failing cross-platform workflow into a blocker for the memory feature**.** A security issue affecting the actual installation remains actionable on its merits.
+3. **Independent repository maintenance:** unrelated legacy CI failures, Docker/installer and architecture matrix problems, dependency security advisories. Record and prioritize them appropriately, but **do not** turn every failing cross-platform workflow into a blocker for the memory feature. A security issue affecting the actual installation remains actionable on its merits.
 
 No deployment or real-provider benchmark is required merely to **merge disabled, backward-compatible code**. Do not claim measured operational savings or mark optional optimizations validated until exercised on the target instance.
 

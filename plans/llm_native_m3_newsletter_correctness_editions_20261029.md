@@ -52,7 +52,7 @@ tasks/newsletter.py, services/newsletter.py, services/newsletter_pipeline.py, ce
 - Exactly the selected ordered article set appears in frozen edition, HTML and JSON; changing source articles afterward does not rewrite historical edition.
 - Zero subscribers or no SMTP does not prevent a published edition; transport exceptions do not delete it.
 - Parent task status follows actual successful/failing child work, not mere queue acceptance; no ORM objects serialized through broker.
-- Upgrade/rollback tested on disposable copy of representative SQLite/WAL DB; old rows preserved; untrusted legacy HTML is not exposed publicly without safe migration.
+- Fresh/idempotent and both-parent SQLite upgrades preserve representative rows and converge on the combined Alembic head; untrusted legacy HTML is not exposed publicly. Restoring an operator DB to rehearse migration or rollback is not required at this stage (see C05).
 - Tests cover race/Redis failure, unauthorized preview/send routes, stable idempotency and bounded article selection.
 
 **Gate:** No live schedule rollout before M4 delivery isolation and M5 slot tests pass. Record implementation SHAs, commands, migration revisions, unresolved historical-data exceptions and local-instance verification before marking VERIFIED.

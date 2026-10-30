@@ -220,7 +220,7 @@ Global and per-profile email switches both default off. An edition can be publis
 
 ### LLM-native migration history
 
-Apply database migrations before starting the web, worker or Beat processes. The converged publication/editorial-memory history ends at `046_newsletter_distribution_intent`; `045_merge_publication_and_memory` joins the independently deployable publication and memory parents. Back up the private database and rehearse upgrade/restore on a copy before upgrading an existing installation. Never stamp an Alembic revision to bypass a failed migration.
+Apply database migrations before starting the web, worker or Beat processes. The converged publication/editorial-memory history ends at `046_newsletter_distribution_intent`; `045_merge_publication_and_memory` joins the independently deployable publication and memory parents. For the LLM-native publication roadmap's qualification, restoring an operator database to rehearse this migration is not required: C01 is closed by fresh, idempotent, and both-parent SQLite migration tests. Operators may still follow their normal backup and recovery procedures for an actual upgrade. Never stamp an Alembic revision to bypass a failed migration.
 
 ### Recovering from Stuck Locks
 

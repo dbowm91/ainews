@@ -1,6 +1,6 @@
 # LLM-native publication, newsletter editions, and distribution roadmap
 
-**Status:** M1–M5 implementation recorded; C01–C04 corrective code implemented and locally tested; C05 private-instance qualification remains open. See [corrective pass](llm_native_corrective_pass_overview_20261030.md).
+**Status:** M1–M5 implementation recorded; C01–C04 corrective code implemented and locally tested; C05 private-instance runtime qualification remains open. Restored-target DB migration rehearsal is explicitly closed as unnecessary at this stage. See [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Date:** 2026-10-29
 **Baseline:** main at 60fd18eda3a5e8852943e70bf32d4f957dbb3ff5. Recheck on merge and against ongoing PRs #18 (Eggsearch retrieval) and #19 (editorial memory).
 **Operating intent:** personal/local or privately operated AInews, with *optional* exposure to external agents or an optional public instance. Not a public-launch or broad packaging-readiness program.
@@ -56,13 +56,13 @@ These are **static source findings**, not evidence of current live behavior. The
 
 ## Verification, handoff, registration
 
-Each milestone owns tests and migrations; no milestone is complete based only on docs. Use GitHub PRs against main; preserve this index and annotate each row PLANNED -> IN PROGRESS -> VERIFIED with implementation SHA, tests, migration rehearsal, limitations, and target-instance proof. First fixes to newsletter defects require failing regression tests. Use stubbed SMTP and local Celery worker tests in ordinary CI, with optional manual mailbox/target-host smoke. Inspect the explicit dependency and regression matrices in M1–M5. No real subscriber delivery in tests. Completion means correct behavior on the intended installation, not public product launch.
+Each milestone owns tests and migrations; no milestone is complete based only on docs. Use GitHub PRs against main; preserve this index and annotate each row PLANNED -> IN PROGRESS -> VERIFIED with implementation SHA, tests, migration evidence where relevant, limitations, and applicable target-runtime proof. First fixes to newsletter defects require failing regression tests. Use stubbed SMTP and local Celery worker tests in ordinary CI, with optional manual mailbox/target-host smoke. Inspect the explicit dependency and regression matrices in M1–M5. No real subscriber delivery in tests. Completion means correct behavior on the intended installation, not public product launch.
 
 **Excluded:** outbound syndication of full publisher content; general-purpose autonomous agent tools; mutable MCP tools; marketing/deliverability infrastructure; new channels beyond email; paid email-provider integration; multi-tenant user accounts; public-release certification. Any such expansion requires a separate plan.
 
 ## Implementation evidence
 
-- **Branch/rebase:** `plan/llm-native-editions-delivery-20261029`; `origin/main` at `60fd18e` was already an ancestor of the PR branch. Corrective docs arrived on the fetched PR branch; local corrections are uncommitted.
+- **Branch/rebase:** `plan/llm-native-editions-delivery-20261029`; `origin/main` at `60fd18e` was already an ancestor of the PR branch. Corrective docs arrived on the fetched PR branch; implementation and qualification notes were committed and pushed as recorded in Git history.
 - **M1:** cryptographically random article public IDs, explicit visibility/read DTO, URL and search/feed/RSS/sitemap filters, withdrawal on reprocessing, hardened numeric-route default, additive migration `037_llm_native_publication`.
 - **M2:** separately hashed read-only agent keys, REST and seven-tool Streamable HTTP MCP surfaces, signed keyset cursors, ETags/OpenAPI/discovery docs, fail-closed Redis fixed-hour plus burst quotas, admin credential controls. MCP uses the optional `agent` dependency extra.
 - **M3:** deterministic frozen edition snapshots, occurrence-key idempotency, safe preview, scheduled task registration, persistent profile/local-time planning, catch-up and DST handling.
@@ -80,12 +80,12 @@ Each milestone owns tests and migrations; no milestone is complete based only on
 
 | Corrective | Priority | Plan | Focus and activation dependency |
 | --- | --- | --- | --- |
-| C01 | P0 | [Migration/visibility](llm_native_corrective_01_migration_visibility_20261030.md) | Implemented as revisions 044–046; one Alembic head and fresh/both-parent SQLite upgrade tests pass; target DB rehearsal remains C05 |
+| C01 | P0 | [Migration/visibility](llm_native_corrective_01_migration_visibility_20261030.md) | Implemented as revisions 044–046; one Alembic head and fresh/both-parent SQLite upgrade tests pass; restored-target DB rehearsal is closed/not required |
 | C02 | P0 access / P1 performance | [Agent read contract](llm_native_corrective_02_agent_read_contract_20261030.md) | Shared REST/MCP read service, public-ID cursors, private/no-store responses, bounded FTS and fail-closed Authorization implemented; proxy/runtime qualification remains C05 |
 | C03 | P0 email | [Email delivery](llm_native_corrective_03_email_delivery_20261030.md) | RFC 8058 header, HTTPS trusted links, durable send reconciliation and claim ownership implemented; SMTP relay/DKIM/worker qualification remains C05 |
 | C04 | P1 | [Scheduling/editorial](llm_native_corrective_04_schedule_editorial_20261030.md) | Profile revision CAS, stable partial schedule updates, published-at bounded selection and diversity/text improvements implemented; operator-host evidence remains C05 |
-| C05 | P0 operational | [Integration qualification](llm_native_corrective_05_integration_qualification_20261030.md) | CI logs classified and isolated combined migration/local regression evidence added; target DB, broker, SMTP, proxy, and hardware qualification remains open |
+| C05 | P0 operational | [Integration qualification](llm_native_corrective_05_integration_qualification_20261030.md) | CI logs classified and combined migration/local regression evidence added; broker, SMTP, proxy and applicable hardware runtime qualification remains open; target DB rehearsal closed |
 
-**Execution/evidence:** Corrective patches are in the branch worktree. `tests/test_smoke_migrations.py` covers fresh/idempotent upgrade and both parent states to 046; scoped Ruff passed. Keep API, anonymous, MCP, archive and email switches default-off until their target runtime gates are satisfied. C05 remains open; no public-release certification is sought.
+**Execution/evidence:** Corrective patches are in the branch worktree. `tests/test_smoke_migrations.py` covers fresh/idempotent upgrade and both parent states to 046; scoped Ruff passed. Keep API, anonymous, MCP, archive and email switches default-off until their applicable runtime gates are satisfied. C05 runtime qualification remains open; restored-target migration evidence is closed/not required. No public-release certification is sought.
 
 **Corrective verification (2026-10-30):** Full `pytest -q --tb=short` → 5,010 passed, 6 skipped. Final focused migration/profile/publication/email/search regression run → 84 passed. Changed-code Ruff, `mypy . --exclude .venv` (512 source files), `uv lock --check`, and `git diff --check` passed. Repository-wide Ruff still reports the five existing C05 findings. The original M1/M3 references to revision 037 describe their initial branch state; the converged published migration is now 044 joined with memory at 045 and extended by 046.

@@ -1,6 +1,6 @@
 # Editorial Memory V2 — Corrective Pass Overview (2026-10-29)
 
-**Status:** C01–C03 implemented and verified locally; C04 code/CI and disposable migration checks verified. Private-instance backup/activation remains open until the owner restores the identified local database.
+**Status:** C01–C03 implemented and verified locally; C04 CI and disposable migration checks verified. Deployment-database backup/migration exploration is out of scope because no active deployed DB requires this capability; staged local behavior checks remain separate.
 **Baseline:** PR #19, `plan/editor-memory-blackboard-synthesis-20261029`, implementation commit `f3aa498e4d0df40e16fc1b9c65f9c45c6103f636`.
 **Parent:** [Editorial Memory Roadmap](editor_memory_roadmap_20261029.md).
 **Goal:** Close correctness and safe-activation gaps in editor memory V2 for a personal/local or privately operated AInews instance, without rebuilding the architecture or setting public-release requirements.

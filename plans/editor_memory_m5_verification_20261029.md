@@ -1,6 +1,6 @@
 # M5 — Private-Instance Verification, Migration Enablement, and Closure Evidence
 
-**Status:** OPEN / priority P1 for private-instance operational closure  
+**Status:** OPEN for staged local behavior evidence; deployment-database backup/migration exploration is out of scope because no active deployed DB requires this capability.
 **Requires:** M1–M4 implementation where applicable  
 **Parent:** [Editorial memory roadmap](editor_memory_roadmap_20261029.md)
 

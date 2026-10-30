@@ -1,12 +1,16 @@
 # C04 — CI Triage, SQLite Migration Reconciliation, and Private-Instance Validation
 
-**Status:** CI baseline and disposable migration checks verified. The owner identified the local install as the target and will restore its missing database later; private-instance backup, migration rehearsal and activation remain OPEN until then. **Priority:** P0 operational-readiness gate for enabling editor memory V2. **Baseline:** PR #19 `f3aa498e4d0d`.
+**Status:** CI baseline and disposable migration checks verified. Target-database backup, migration and rollback exploration is out of scope: there are no active deployed databases needing this capability. **Priority:** P0 code correctness gate for enabling editor memory V2. **Baseline:** PR #19 `f3aa498e4d0d`.
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M1–M5. **Logic prerequisite:** C01–C03 before enabling behavior.
 
 ## Scope and non-goals
 
 AInews is being developed for the owner's **personal/local or privately operated instance**. This workstream does **not** target a public release, hosted multi-user service, general distribution, cross-platform installer certification, or a formal product-release program. "Ready" means the owner can safely merge the memory changes and, separately, turn on selected feature flags on their actual installation with data preserved and an easy rollback.
+
+## Scope decision — no active deployment database
+
+There is no active database in the wild that needs this capability. Do not spend time locating, restoring, backing up, migrating, or rehearsing rollback against a deployment database. Continue to use disposable SQLite databases for automated migration, integrity, and downgrade-guard tests. This scope decision supersedes the target-install database checks below; it does not replace the separate staged local behavior checks or real-article comparisons needed before enabling optional optimizations.
 
 Distinguish three kinds of work:
 

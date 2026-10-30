@@ -69,11 +69,18 @@ if ! command -v curl &>/dev/null; then
     exit 1
 fi
 
+# Prefer the project venv (has werkzeug for hash_password.py); the CI job
+# installs it via `uv sync`, while local runs usually have it too.
+PYTHON_BIN="python3"
+if [ -x "$PROJECT_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$PROJECT_DIR/.venv/bin/python"
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
     echo "=== Step 0: Generating $ENV_FILE ==="
-    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-    CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-    HASHED_ADMIN_PW=$(python3 scripts/hash_password.py ci-test-password-123 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+    SECRET_KEY=$($PYTHON_BIN -c "import secrets; print(secrets.token_hex(32))")
+    CELERY_TASK_SECRET=$($PYTHON_BIN -c "import secrets; print(secrets.token_urlsafe(32))")
+    HASHED_ADMIN_PW=$($PYTHON_BIN scripts/hash_password.py ci-test-password-123 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
 
     cat > "$ENV_FILE" <<EOF
 FLASK_CONFIG=production

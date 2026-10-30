@@ -51,12 +51,18 @@ jobs:
           cat > ainews <<'WRAPPER'
           #!/bin/bash
           set -euo pipefail
+          # Resolve symlinks (the entry point is symlinked into ~/.local/bin).
           SOURCE="${BASH_SOURCE[0]}"
           while [ -L "$SOURCE" ]; do
             SOURCE="$(readlink "$SOURCE")"
           done
           SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
-          exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
+          # Run from the install root so `python -m` resolves the shipped
+          # source tree. The .venv console-script shebangs carry absolute
+          # build-time paths and break when the venv is relocated, so the
+          # venv's own python with `-m` is the relocation-proof entry point.
+          cd "$SCRIPT_DIR" || exit 1
+          exec "${SCRIPT_DIR}/.venv/bin/python" -m ainews_cli "$@"
           WRAPPER
           chmod +x ainews
 
@@ -407,12 +413,18 @@ jobs:
           cat > ainews <<'WRAPPER'
           #!/bin/bash
           set -euo pipefail
+          # Resolve symlinks (the entry point is symlinked into ~/.local/bin).
           SOURCE="${BASH_SOURCE[0]}"
           while [ -L "$SOURCE" ]; do
             SOURCE="$(readlink "$SOURCE")"
           done
           SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
-          exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
+          # Run from the install root so `python -m` resolves the shipped
+          # source tree. The .venv console-script shebangs carry absolute
+          # build-time paths and break when the venv is relocated, so the
+          # venv's own python with `-m` is the relocation-proof entry point.
+          cd "$SCRIPT_DIR" || exit 1
+          exec "${SCRIPT_DIR}/.venv/bin/python" -m ainews_cli "$@"
           WRAPPER
           chmod +x ainews
 

@@ -131,7 +131,11 @@ jobs:
           cat > ainews <<'WRAPPER'
           #!/bin/bash
           set -euo pipefail
-          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          SOURCE="${BASH_SOURCE[0]}"
+          while [ -L "$SOURCE" ]; do
+            SOURCE="$(readlink "$SOURCE")"
+          done
+          SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
           exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
           WRAPPER
           chmod +x ainews

@@ -59,7 +59,8 @@ def _load_model(model_id: str, revision: str, local_dir: str | None):
 
 
 def _request(session: requests.Session, method: str, base: str, path: str, **kwargs):
-    return session.request(method, f"{base.rstrip('/')}{path}", timeout=(10, 60), **kwargs)
+    kwargs.setdefault("timeout", (10, 60))
+    return session.request(method, f"{base.rstrip('/')}{path}", **kwargs)
 
 
 def _split(text: str, size: int = 1200) -> list[str]:

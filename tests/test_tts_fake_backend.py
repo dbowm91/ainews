@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tts_worker.fake_backend import FakeBackend
-from tts_worker.worker import _job_runtime_budget_seconds
+from tts_worker.worker import _job_runtime_budget_seconds, _request
 
 
 def test_native_worker_job_runtime_budget_is_bounded_by_recipe():
@@ -16,6 +16,17 @@ def test_native_worker_job_runtime_budget_is_bounded_by_recipe():
     assert _job_runtime_budget_seconds({"max_minutes": 60}) == 10800
     with pytest.raises(ValueError):
         _job_runtime_budget_seconds({"max_minutes": 0})
+
+
+def test_worker_request_allows_longer_timeout_override_for_audio_upload():
+    class FakeSession:
+        def request(self, method, url, **kwargs):
+            return method, url, kwargs
+
+    default = _request(FakeSession(), "POST", "http://127.0.0.1:5000", "/claim")
+    upload = _request(FakeSession(), "POST", "http://127.0.0.1:5000", "/result", timeout=(10, 180))
+    assert default[2]["timeout"] == (10, 60)
+    assert upload[2]["timeout"] == (10, 180)
 
 
 def test_fake_cpu_backend_is_repeatable_and_emits_valid_wav():

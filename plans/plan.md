@@ -1,8 +1,25 @@
 # Master Implementation Plan (Consolidated)
 
 **Status:** Legacy waves 1–9 COMPLETED; editorial-memory C01–C03 implemented, C04 baseline triaged; C05 merge-readiness corrective OPEN on draft PR #19
-**Last Updated:** 2026-10-30 (C05 merge-readiness plan registered; historical waves unchanged)
+**Last Updated:** 2026-10-30 (optional local TTS/MLX planning registered; historical waves unchanged)
 **Goal:** Track active workstreams for the personal/local or privately operated AInews instance while preserving historical completed security, quality and operational work. No public-release program is implied.
+
+---
+
+## Active Plan Registry — Optional Local TTS / Audio Narration (2026-10-30)
+
+**Status:** PLANNED; handoff documents only; all TTS options default OFF.  
+**Baseline:** main at 8fdfc61f9c7f450f686064a5cdb65fce020b9c04.  
+**Handoff branch:** plan/optional-tts-mlx-audio-20261030.  
+**Parent:** [Optional local narration roadmap](tts_audio_roadmap_20261030.md).  
+**Integration dependency:** PR #20 (plan/llm-native-editions-delivery-20261029) for immutable NewsletterEdition and public publication/identity contracts; do not modify in-flight PR branch as part of planning.
+
+1. **M1 (P0):** [Durable post-publication jobs and deterministic narration scripts](tts_audio_m1_jobs_and_script_20261030.md) — PLANNED; no TTS may delay publication.
+2. **M2 (P1):** [Native macOS MLX Breeze 4-bit, audio encoding and secure worker transfer](tts_audio_m2_mlx_worker_media_20261030.md) — PLANNED; separate from ordinary Docker workers.
+3. **M3 (P1):** [Admin settings, authenticated media serving and READY-only playback](tts_audio_m3_admin_playback_20261030.md) — PLANNED; disabled/missing/stale assets never expose controls.
+4. **M4 (P1):** [Frozen newsletter narration and target-instance qualification](tts_audio_m4_editions_qualification_20261030.md) — PLANNED; waits for PR #20 integration.
+
+**Policy:** Breeze TTS 2 self-hosted weights/quantizations/outputs are research/non-commercial only; enable only in a compliant private instance or obtain separate rights. No public release or restored-operator-database rehearsal is mandated. Implementation completion requires code, tests and exact SHA/runtime evidence; this registration does not claim implementation.
 
 ---
 

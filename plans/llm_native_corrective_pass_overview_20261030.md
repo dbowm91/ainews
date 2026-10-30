@@ -46,6 +46,12 @@ Keep original M1–M5 implementation evidence intact and append dated correction
 
 Static findings: migrations/versions/037_llm_native_publication.py; PR #19 migrations 037_trend_memory_proposal_idempotency through 043_memory_synthesis_fairness_cursor; routes/public/api.py; services/mcp_public.py; services/agent_access.py; services/email.py; services/newsletter_editions.py; services/newsletter_scheduler.py; routes/admin/api/newsletter_profiles.py; services/distribution/{email,dispatch}.py; tasks/{newsletter,distribution}.py. Revalidate against latest head before implementing or attributing findings to other PRs.
 
+## Reader and worker-lifetime follow-up — 2026-10-30
+
+The local ASGI policy matrix and process-lifetime regressions are now implemented and pass; the detailed evidence and exact focused test command are in [C05](llm_native_corrective_05_integration_qualification_20261030.md). The development helper now owns the web, worker and Beat process groups, and generated systemd units bind both worker services to the web unit. The app's standard Celery CLI configuration imports `tasks` so newsletter task names are registered.
+
+The direct Granian smoke previously established authorized REST/MCP behavior, Redis quota limiting and private response headers without a proxy. This follow-up adds in-process ASGI coverage for invalid/revoked credentials, two-reader quota identity, disabled access, Redis failure and ETag/304 admission semantics. It does not claim that every matrix case has been re-run through Granian. The attempted local Beat/worker run did not complete a new edition-persistence assertion, and systemd shutdown propagation cannot be exercised on this macOS host. Keep the applicable target-runtime gates open as documented; no reverse-proxy test is required here.
+
 ## Corrective implementation evidence — 2026-10-30
 
 - **Branch/base:** `plan/llm-native-editions-delivery-20261029` at the fetched PR #20 head plus local corrective edits. `origin/main` remained `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5`; the new corrective documents were present on the PR branch, so there was no newer main commit to rebase onto.

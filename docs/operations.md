@@ -23,6 +23,14 @@ Fourteen scheduled tasks run via Celery Beat:
 
 All schedules are configurable via `pipeline.yaml` `schedule:` section.
 
+## Web, worker and Beat process lifetime
+
+The web process owns the lifecycle of its Celery worker and Beat scheduler. On bare-metal systemd installs, `ainews-web.service` starts both units with `Wants=`; each worker unit uses `BindsTo=ainews-web.service` and starts after the web unit. Stopping or losing the web service therefore stops both worker services. Start or stop the stack through the installed service commands so systemd can apply these dependencies.
+
+For local development, use `bash scripts/dev.sh start|stop|status`. The script runs one supervisor that owns the web, worker and Beat process groups. It stops every child when the web process exits, when another managed child exits, or when the supervisor receives shutdown. The supervisor lock prevents a second managed stack from starting, and stop targets only its owned process groups.
+
+Worker and Beat use the standard `python -m celery -A celery_app:celery_app ...` entrypoint. `CELERY_IMPORTS` loads `tasks` so beat-dispatched task names, including scheduled edition tasks, are registered in the worker. The supported Docker Compose lifecycle starts and stops the complete project stack; do not manage the web container separately from its worker/Beat siblings.
+
 ## Dead Letter Queue
 
 Articles stuck in the pipeline (no progress within threshold) are tracked in the dead letter queue.

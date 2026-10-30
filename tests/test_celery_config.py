@@ -1,7 +1,10 @@
 """Tests for Celery beat schedule configuration."""
 
 import os
+import subprocess
+import sys
 from datetime import timedelta
+from pathlib import Path
 
 from celery.schedules import crontab
 
@@ -13,6 +16,18 @@ from config import Config
 
 
 class TestCeleryBeatSchedule:
+    def test_development_config_honors_database_url_for_isolated_runtime(self, tmp_path):
+        database_url = f"sqlite:///{tmp_path / 'isolated-runtime.db'}"
+        env = os.environ.copy()
+        env["DATABASE_URL"] = database_url
+        env["SECRET_KEY"] = "isolated-runtime-test-secret"
+        result = subprocess.run(
+            [sys.executable, "-c", "from config import DevelopmentConfig; print(DevelopmentConfig.SQLALCHEMY_DATABASE_URI)"],
+            cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True,
+            text=True, check=True,
+        )
+        assert result.stdout.strip() == database_url
+
     def test_celery_beat_schedule_deprecated(self):
         assert hasattr(Config, "CELERY_BEAT_SCHEDULE")
         assert isinstance(Config.CELERY_BEAT_SCHEDULE, dict)
@@ -36,6 +51,11 @@ class TestCeleryBeatSchedule:
         from celery_app import celery_app
 
         assert "run-all-sources" in celery_app.conf.beat_schedule
+
+    def test_standard_celery_cli_imports_registered_tasks(self):
+        from celery_app import celery_app
+
+        assert "tasks" in celery_app.conf.imports
         assert (
             celery_app.conf.beat_schedule["run-all-sources"]["task"]
             == "tasks.crawl.run_all_sources"

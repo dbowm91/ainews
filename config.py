@@ -230,6 +230,9 @@ class Config:
     CELERY_TASK_TRACK_STARTED = True
     CELERY_TASK_ACKS_LATE = True
     CELERY_TASK_REJECT_ON_WORKER_LOST = True
+    # Make worker/Beat startup through the standard Celery CLI load every
+    # registered task module without relying on an undocumented shell wrapper.
+    CELERY_IMPORTS = ("tasks",)
     CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
     CELERY_RESULT_EXPIRES = timedelta(hours=24)
     CELERY_TASK_SEND_SENT_EVENT = True
@@ -364,7 +367,9 @@ class DevelopmentConfig(Config):
         raise RuntimeError("SECRET_KEY must be changed from default value")
     SECRET_KEY: str = _secret_key_val
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-    SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
+    )
 
     # The rendered-page cache is a production concern. In development it
     # makes every template and CSS change look like it did not take effect:

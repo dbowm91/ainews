@@ -384,7 +384,7 @@ class TestBuildWebUnit:
             spec = build_web_unit(paths)
         assert spec.name == "ainews-web"
         assert spec.scope == ServiceScope.USER
-        assert "ainews start" in spec.exec_start
+        assert spec.exec_start.endswith("run.py")
 
     def test_default_scope(self):
         from unittest.mock import MagicMock
@@ -404,15 +404,14 @@ class TestBuildWebUnit:
             spec = build_web_unit(paths, scope=ServiceScope.SYSTEM)
         assert spec.scope == ServiceScope.SYSTEM
 
-    def test_has_exec_stop(self):
+    def test_uses_systemd_process_stop(self):
         from unittest.mock import MagicMock
 
         paths = MagicMock()
         paths.app_dir.path = Path("/opt/ainews")
         with patch("ainews_cli.service.systemd._find_cli_executable", return_value="ainews"):
             spec = build_web_unit(paths)
-        assert spec.exec_stop is not None
-        assert "stop" in spec.exec_stop
+        assert spec.exec_stop is None
 
     def test_has_exec_reload(self):
         from unittest.mock import MagicMock
@@ -453,7 +452,8 @@ class TestBuildCeleryWorkerUnit:
         with patch("ainews_cli.service.systemd._find_cli_executable", return_value="ainews"):
             spec = build_celery_worker_unit(paths)
         assert spec.name == "ainews-celery-worker"
-        assert "celery-worker" in spec.exec_start
+        assert " -m celery " in spec.exec_start
+        assert " worker " in spec.exec_start
 
     def test_after_includes_web(self):
         from unittest.mock import MagicMock
@@ -492,7 +492,8 @@ class TestBuildCeleryBeatUnit:
         with patch("ainews_cli.service.systemd._find_cli_executable", return_value="ainews"):
             spec = build_celery_beat_unit(paths)
         assert spec.name == "ainews-celery-beat"
-        assert "celery-beat" in spec.exec_start
+        assert " -m celery " in spec.exec_start
+        assert " beat " in spec.exec_start
 
     def test_after_includes_web(self):
         from unittest.mock import MagicMock

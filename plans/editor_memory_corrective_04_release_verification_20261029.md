@@ -4,6 +4,10 @@
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M1–M5. **Logic prerequisite:** C01–C03 before enabling behavior.
 
+## Scope precedence — 2026-10-30
+
+**C04 CI attribution and existing disposable-test evidence are recorded; no active deployed database requires migration.** The owner explicitly does **not** require database migration evidence for this handoff. References below to target-instance DB backup/migration/recovery and staged deployment are historical conditional guidance, **not** prerequisites to merging PR #19 and **not** tasks to execute now. [C05](editor_memory_c05_merge_readiness_20261030.md) supersedes them for merge readiness. Preserve ordinary existing tests and all default-off feature gates; defer real-instance operation and provider-backed optimization comparisons to any separately authorized future activation.
+
 ## Scope and non-goals
 
 AInews is being developed for the owner's **personal/local or privately operated instance**. This workstream does **not** target a public release, hosted multi-user service, general distribution, cross-platform installer certification, or a formal product-release program. "Ready" means the owner can safely merge the memory changes and, separately, turn on selected feature flags on their actual installation with data preserved and an easy rollback.

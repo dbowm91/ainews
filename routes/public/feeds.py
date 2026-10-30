@@ -27,6 +27,7 @@ from services.article import (
     get_articles_paginated,
     parse_articles,
 )
+from services.publication import published_article_filters
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +102,7 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         articles = (
             Article.query
             .options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
-            .filter(Article.id.in_(cached_ids), Article.publicly_visible.is_(True),
-                    Article.final_article.is_not(None), Article.final_article != "")
+            .filter(Article.id.in_(cached_ids), *published_article_filters(Article))
             .all()
         )
         return sorted(articles, key=lambda a: cached_ids.index(a.id)) if articles else []
@@ -113,8 +113,7 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         Article.query
         .options(joinedload(Article.source))
         .filter(
-            Article.publicly_visible.is_(True),
-            Article.final_article.is_not(None),
+            *published_article_filters(Article),
             Article.impact_score > 0,
             or_(
                 Article.original_published_at >= cutoff,
@@ -265,7 +264,7 @@ def tag_feed(slug: str) -> str:
         Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
         .filter(
             Article.tags.any(Tag.id == tag.id),
-            Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
+            *published_article_filters(Article),
         )
         .order_by(Article.created_at.desc())
     )
@@ -313,7 +312,7 @@ def feed_all() -> Response:
         articles = (
             Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(
-                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
+                *published_article_filters(Article),
             )
             .order_by(Article.created_at.desc())
             .limit(50)
@@ -360,7 +359,7 @@ def feed_topic(category: str) -> Response:
             Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(
                 Article.category == category,
-                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
+                *published_article_filters(Article),
             )
             .order_by(Article.created_at.desc())
             .limit(50)
@@ -397,7 +396,7 @@ def sitemap() -> Response:
 
         rows = (
             Article.query.filter(
-                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
+                *published_article_filters(Article),
             )
             .with_entities(Article.public_id, Article.created_at)
             .order_by(Article.created_at.desc())

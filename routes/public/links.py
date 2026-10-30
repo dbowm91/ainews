@@ -4,7 +4,6 @@ import logging
 import re
 
 from flask import Response, abort, make_response, redirect, render_template, request
-from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from extensions import db
@@ -18,6 +17,7 @@ from routes.public import (
     public_bp,
 )
 from services.article import parse_article_json, track_metric
+from services.publication import published_article_query
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,11 @@ def article_detail(public_id: str) -> Response:
         )
         return resp
 
-    article = Article.query.options(
+    article = db.session.scalar(published_article_query().options(
         joinedload(Article.tags), joinedload(Article.source),  # type: ignore[arg-type]
-    ).filter_by(id=article_id, publicly_visible=True).first_or_404()
+    ).where(Article.id == article_id))
+    if article is None:
+        abort(404)
     parse_article_json(article)
 
     track_metric(article_id, ArticleMetric.page_loads)
@@ -113,9 +115,11 @@ def article_detail(public_id: str) -> Response:
 def legacy_article_detail(article_id: int) -> Response:
     """Temporary legacy URL resolution; set PUBLIC_LEGACY_NUMERIC_ARTICLE_URLS=false to harden."""
     from flask import current_app
-    if not current_app.config.get("PUBLIC_LEGACY_NUMERIC_ARTICLE_URLS", True):
+    if not current_app.config.get("PUBLIC_LEGACY_NUMERIC_ARTICLE_URLS", False):
         abort(404)
-    article = Article.query.filter_by(id=article_id, publicly_visible=True).first_or_404()
+    article = db.session.scalar(published_article_query().where(Article.id == article_id))
+    if article is None:
+        abort(404)
     return redirect(f"/article/{article.public_id}", code=301)  # type: ignore[return-value]
 
 
@@ -123,12 +127,10 @@ def legacy_article_detail(article_id: int) -> Response:
 def short_url_redirect(short_id: str) -> Response:
     if not _SHORT_ID_RE.match(short_id):
         abort(404)
-    article = db.first_or_404(select(Article).filter_by(short_id=short_id))
-    if not article.publicly_visible or not article.final_article:
+    article = db.session.scalar(published_article_query().where(Article.short_id == short_id))
+    if article is None:
         abort(404)
     track_metric(article.id, ArticleMetric.share_link_views)
-    if not article.publicly_visible:
-        abort(404)
     return redirect(f"/article/{article.public_id}")  # type: ignore[return-value]
 
 
@@ -136,8 +138,8 @@ def short_url_redirect(short_id: str) -> Response:
 def short_url_tracking_page(short_id: str) -> str:
     if not _SHORT_ID_RE.match(short_id):
         abort(404)
-    article = db.first_or_404(select(Article).filter_by(short_id=short_id))
-    if not article.publicly_visible or not article.final_article:
+    article = db.session.scalar(published_article_query().where(Article.short_id == short_id))
+    if article is None:
         abort(404)
     parse_article_json(article)
     track_metric(article.id, ArticleMetric.share_link_views)
@@ -157,15 +159,17 @@ def short_url_tracking_page(short_id: str) -> str:
 @public_bp.route("/api/v1/track/share-click/<public_id>", methods=["POST"])
 @validate_csrf_token
 def track_share_click(public_id: str) -> tuple[dict, int]:
-    article = Article.query.filter_by(public_id=public_id, publicly_visible=True).first_or_404()
+    article = db.session.scalar(published_article_query().where(Article.public_id == public_id))
+    if article is None:
+        abort(404)
     track_metric(article.id, ArticleMetric.share_button_clicks)
     return {"success": True}, 204
 
 
 @public_bp.route("/track/newsletter-click/<public_id>")
 def track_newsletter_click(public_id: str) -> Response:
-    article = Article.query.filter_by(public_id=public_id, publicly_visible=True).first_or_404()
-    track_metric(article.id, ArticleMetric.newsletter_clicks)
-    if not article.publicly_visible:
+    article = db.session.scalar(published_article_query().where(Article.public_id == public_id))
+    if article is None:
         abort(404)
+    track_metric(article.id, ArticleMetric.newsletter_clicks)
     return redirect(f"/article/{article.public_id}", code=302)  # type: ignore[return-value]

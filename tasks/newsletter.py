@@ -25,7 +25,8 @@ def generate_edition(self, profile_key: str, occurrence_key: str) -> dict:
         occurrence.state = "skipped"
         db.session.commit()
         return {"status": "skipped", "reason": "profile_disabled", "profile": profile_key}
-    edition = create_edition(profile_key, occurrence_key=occurrence_key)
+    edition = create_edition(profile_key, occurrence_key=occurrence_key,
+        send_email=bool(occurrence and occurrence.email_requested))
     if edition is None:
         if occurrence is not None:
             occurrence.state = "skipped"

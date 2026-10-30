@@ -15,6 +15,7 @@ from services.embeddings import (
     deserialize_embedding,
     generate_embedding,
 )
+from services.publication import published_sql_predicate
 from services.search.base import SearchProvider, get_db_search_provider, register_db_search_provider
 from services.search.sqlite_fts import (
     SQLiteFTSProvider,
@@ -162,24 +163,24 @@ class HybridSearchProvider(SearchProvider):
             return []
 
         if category:
-            sql = text("""
+            sql = text(f"""
                 SELECT a.id, rank
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.publicly_visible = 1 AND a.final_article IS NOT NULL AND a.final_article != ''
+                  AND {published_sql_predicate('a')}
                   AND a.category = :category
                 ORDER BY rank
                 LIMIT :limit
             """)
             params = {"query": fts_query, "category": category, "limit": limit}
         else:
-            sql = text("""
+            sql = text(f"""
                 SELECT a.id, rank
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.publicly_visible = 1 AND a.final_article IS NOT NULL AND a.final_article != ''
+                  AND {published_sql_predicate('a')}
                 ORDER BY rank
                 LIMIT :limit
             """)
@@ -206,10 +207,10 @@ class HybridSearchProvider(SearchProvider):
 
         # Fetch articles with embeddings
         if category:
-            sql = text("""
+            sql = text(f"""
                 SELECT id, embedding, category
                 FROM articles
-                WHERE publicly_visible = 1 AND final_article IS NOT NULL AND final_article != ''
+                WHERE {published_sql_predicate('articles')}
                   AND category = :category
                   AND embedding IS NOT NULL
                   AND embedding != ''
@@ -218,10 +219,10 @@ class HybridSearchProvider(SearchProvider):
             """)
             params = {"category": category, "limit": max_candidates}
         else:
-            sql = text("""
+            sql = text(f"""
                 SELECT id, embedding, category
                 FROM articles
-                WHERE publicly_visible = 1 AND final_article IS NOT NULL AND final_article != ''
+                WHERE {published_sql_predicate('articles')}
                   AND embedding IS NOT NULL
                   AND embedding != ''
                 ORDER BY id DESC

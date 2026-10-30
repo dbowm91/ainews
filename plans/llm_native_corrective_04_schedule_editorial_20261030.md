@@ -1,6 +1,6 @@
 # C04 — Newsletter profile updates, schedule idempotency and editorial selection quality
 
-**Status:** PLANNED / OPEN; P1 correctness/quality before activating independent daily schedules.
+**Status:** IMPLEMENTED; local profile, schedule and selection tests pass. Real broker/restart and editorial inspection remain C05 gates.
 **Parent:** [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Dependencies:** M3/M5 already implemented, C01 for combined migration. Live fanout additionally needs C03.
 **Scope:** deterministic profile and edition behavior, bounded quality improvements, no expanded channel framework.
@@ -50,3 +50,9 @@
 routes/admin/api/newsletter_profiles.py, templates/admin/newsletter_settings.html, services/{newsletter_scheduler,newsletter_editions}.py, tasks/newsletter.py, models/newsletter.py, config.py and related Beat settings, routes/public/{subscribe,newsletters}.py, tests/test_llm_native_publication.py, tests/test_tasks_newsletter.py, new profile-mutation/selection-quality/scheduler-race tests, docs/newsletter-pipeline.md and docs/operations.md.
 
 **Stop:** Do not claim "low overlap" or safe twice-daily operation without fixed editorial corpus and broker/restart test evidence. Maintain disable-by-default for new schedules, preserve existing subscriptions, and publish evidence with SHA, exact commands, selection examples and target timezone/worker configuration.
+
+## Implementation evidence — 2026-10-30
+
+- Profile update preserves omitted schedules, explicitly clears on `schedules: []`, validates exact weekday integers/booleans, uses policy-revision compare-and-set, and updates schedules by `(profile_id, local_time)`. Admin form carries the revision. Focused regressions: `tests/test_newsletter_profile_mutations.py`.
+- Edition selection uses `published_at`, suppresses stories since the last edition within a 36-hour ceiling, normalizes canonical URLs, normalizes impact rank before title/category diversity penalties, and uses stored sentence-bounded text only. The selector remains deterministic and does not call an LLM.
+- The admin next-slot calculation handles IANA zones, first fold, and spring gaps. Local DST/idempotency coverage remains in `tests/test_llm_native_publication.py`; target Beat restarts and two-worker concurrent qualification are still C05 evidence gates. No low-overlap claim is made without editorial corpus inspection.

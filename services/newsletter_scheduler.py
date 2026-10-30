@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import NewsletterProfile, ScheduledOccurrence
+from models import NewsletterDeliveryConfig, NewsletterProfile, ScheduledOccurrence
 
 
 def plan_due_occurrences(now: datetime | None = None) -> list[ScheduledOccurrence]:
@@ -25,6 +25,7 @@ def plan_due_occurrences(now: datetime | None = None) -> list[ScheduledOccurrenc
         ScheduledOccurrence.scheduled_for_utc >= (now - timedelta(minutes=60)).replace(tzinfo=None)
     )).all())
     profiles = db.session.scalars(select(NewsletterProfile).where(NewsletterProfile.enabled.is_(True))).all()
+    delivery_config = db.session.get(NewsletterDeliveryConfig, 1)
     window_start = now - timedelta(minutes=60)
     for profile in profiles:
         try:
@@ -56,7 +57,8 @@ def plan_due_occurrences(now: datetime | None = None) -> list[ScheduledOccurrenc
                     continue
                 row = ScheduledOccurrence(profile_id=profile.id, occurrence_key=key, local_date=local_date.isoformat(),
                     local_time=schedule.local_time, timezone_name=profile.timezone_name,
-                    scheduled_for_utc=scheduled_utc.replace(tzinfo=None), state="queued")
+                    scheduled_for_utc=scheduled_utc.replace(tzinfo=None), state="queued",
+                    email_requested=bool(profile.email_enabled and delivery_config and delivery_config.email_enabled))
                 db.session.add(row)
                 try:
                     db.session.commit()

@@ -255,6 +255,7 @@ def newsletter_preview():
     from datetime import datetime, timedelta, timezone
 
     from models import Article
+    from services.publication import published_article_filters
     from services.newsletter import generate_main_newsletter
     from services.newsletter_pipeline import generate_executive_summary
 
@@ -266,7 +267,7 @@ def newsletter_preview():
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     articles = (
         Article.query.filter(
-            Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
+            *published_article_filters(Article),
             Article.impact_score > 0,
             Article.created_at >= cutoff,
         )

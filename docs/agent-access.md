@@ -7,7 +7,7 @@ AInews can expose published article and newsletter snapshots to external clients
 1. Open Admin → Agent access and enable the REST API, MCP, and anonymous access independently. The same policy can be managed through authenticated `/api/v1/agent-access` routes.
 2. Issue a reader credential under Admin → Agent access. Its secret is shown once; store it in the consumer's secret store. Credentials are separate from admin API tokens, limited to `public.read`, optionally expiring, individually revocable and optionally assigned a quota override.
 3. Set hourly limits for credentials and anonymous clients. Anonymous identity uses the socket peer address and ignores forwarded headers, so reverse proxy deployments must set and validate their client-IP boundary deliberately.
-4. Configure `SITE_URL` to the operator-controlled public origin. Article, edition, unsubscribe and MCP host validation must not derive trusted links from inbound `Host` values.
+4. Configure `SITE_URL` to the operator-controlled public origin and `NEWSLETTER_SITE_URL` if newsletter mail uses a separate canonical host. Subscription links use configured origins, never inbound `Host`; RFC 8058 unsubscribe links must use HTTPS.
 
 The REST API is available at `/api/public/v1`. Read [API documentation](api.md) and `/api/public/openapi.json` for its contract. The consumer skill at `/SKILL.md` is a public client guide, not an internal agent instruction or server-side agent.
 

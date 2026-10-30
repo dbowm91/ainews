@@ -1,6 +1,6 @@
 # LLM-native publication and editions — corrective pass
 
-**Status:** OPEN / PLANNED — corrective implementation has not been completed.
+**Status:** CODE COMPLETE FOR C01–C04; C05 LOCAL QUALIFICATION COMPLETE / PRIVATE-INSTANCE GATE OPEN.
 **Date:** 2026-10-30
 **Target:** PR #20, branch plan/llm-native-editions-delivery-20261029, implementation commit bee8dee3fca6c12d61771b16bececc234f8ce31a.
 **Parent:** [LLM-native publication roadmap](llm_native_publication_roadmap_20261029.md).
@@ -45,3 +45,13 @@ Keep original M1–M5 implementation evidence intact and append dated correction
 ## Notes on source review
 
 Static findings: migrations/versions/037_llm_native_publication.py; PR #19 migrations 037_trend_memory_proposal_idempotency through 043_memory_synthesis_fairness_cursor; routes/public/api.py; services/mcp_public.py; services/agent_access.py; services/email.py; services/newsletter_editions.py; services/newsletter_scheduler.py; routes/admin/api/newsletter_profiles.py; services/distribution/{email,dispatch}.py; tasks/{newsletter,distribution}.py. Revalidate against latest head before implementing or attributing findings to other PRs.
+
+## Corrective implementation evidence — 2026-10-30
+
+- **Branch/base:** `plan/llm-native-editions-delivery-20261029` at the fetched PR #20 head plus local corrective edits. `origin/main` remained `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5`; the new corrective documents were present on the PR branch, so there was no newer main commit to rebase onto.
+- **C01:** local publication migration is `044_llm_native_publication` after `036_api_token_phase2`; `045_merge_publication_and_memory` joins it with `043_memory_synthesis_fairness_cursor`; `046_newsletter_distribution_intent` is the sole head. Public publication filters are shared across REST/MCP, feeds, links, tag counts, article/related reads, and newsletter selection. Migration graph and isolated SQLite upgrade tests cover both parent heads and fresh upgrade.
+- **C02:** REST and MCP delegate to `services/public_read.py`; cursors use public IDs, credential responses are private/no-store, FTS candidate search is bounded, malformed Authorization fails closed, and OpenAPI query parameter limits are explicit.
+- **C03:** RFC 8058 headers and HTTPS checks are implemented; subscription email links use configured origins; explicit send intent is stored before fanout; scheduled recovery materializes intents idempotently; claim-token compare-and-set prevents expired workers from overwriting current results. SMTP acceptance/unknown remain separate and unknown is never auto-replayed.
+- **C04:** Profile updates preserve omitted schedules, clear only on explicit `schedules: []`, require `policy_revision`, use compare-and-set and stable schedule identities, and reject bool weekdays. Selection uses publication time, last-edition lookback bounded by 36 hours, normalized impact/diversity scoring, URL normalization and sentence-bounded stored text. DST preview uses the first fold and skips spring gaps.
+- **Local checks:** full suite `pytest -q --tb=short` passed **5,010 tests, 6 skipped**. The final corrective/search/migration subset passed **84 tests**; changed-code Ruff, `mypy . --exclude .venv` (512 files), `uv lock --check`, and `git diff --check` passed. Repository-wide Ruff still reports five inherited findings listed in C05. Main-branch GitHub failures were attributed by job logs earlier in this pass (shared Ruff findings and Redis refusal; installer runner disk exhaustion).
+- **C05 remains open for target qualification:** this worktree has no target installation, restored private DB, Redis/Celery worker pair, configured SMTP relay, or intended hardware. Do not turn on optional readers or live email based on local tests. The 100/500/5,000 recipient load, SMTP relay/DKIM confirmation, proxy-cache/MCP runtime probe, target backup/restore, and target performance numbers remain operator-host evidence gates.

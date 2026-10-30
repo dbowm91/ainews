@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -36,9 +37,26 @@ def is_publicly_visible(article: Article) -> bool:
     return bool(article.publicly_visible and article.pipeline_status == "done" and article.final_article and article.final_article.strip())
 
 
+def published_article_filters(model=Article):
+    """SQLAlchemy predicates shared by every public article query."""
+    return (
+        model.publicly_visible.is_(True),
+        model.pipeline_status == "done",
+        model.final_article.is_not(None),
+        func.trim(model.final_article) != "",
+    )
+
+
+def published_sql_predicate(alias: str) -> str:
+    """Return the canonical publication guard for fixed-alias raw SQL queries."""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", alias):
+        raise ValueError("SQL table alias must be an identifier")
+    return (f"{alias}.publicly_visible = 1 AND {alias}.pipeline_status = 'done' "
+            f"AND {alias}.final_article IS NOT NULL AND length(trim({alias}.final_article)) > 0")
+
+
 def published_article_query():
-    return select(Article).where(Article.publicly_visible.is_(True), Article.pipeline_status == "done",
-        Article.final_article.is_not(None), func.trim(Article.final_article) != "")
+    return select(Article).where(*published_article_filters(Article))
 
 
 def invalidate_publication_cache() -> None:

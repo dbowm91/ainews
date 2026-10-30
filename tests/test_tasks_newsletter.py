@@ -12,7 +12,8 @@ def _published_article(title="Newsletter task story"):
     db.session.add(source)
     db.session.flush()
     article = Article(source_id=source.id, original_title=title, pipeline_status="done", publicly_visible=True,
-        final_article=json.dumps({"headline": title, "why_it_matters": "Why it matters.", "body": "Published content."}))
+        final_article=json.dumps({"headline": title, "why_it_matters": "Why it matters.", "body": "Published content."}),
+        published_at=datetime.now(timezone.utc).replace(tzinfo=None))
     db.session.add(article)
     db.session.commit()
     return article

@@ -1,6 +1,6 @@
 # C01 — Alembic convergence, public visibility contract and migration safety
 
-**Status:** PLANNED / OPEN; P0 merge and data correctness.
+**Status:** IMPLEMENTED; local migration and publication tests pass. Target restored-database qualification remains under C05.
 **Parent:** [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Prerequisite:** none; complete before combining PR #19 and PR #20 or migrating a real AInews installation.
 
@@ -42,3 +42,10 @@ migrations/versions, alembic config/env.py, models/article.py, models/newsletter
 ## Stop criteria and handoff
 
 Do not merge or enable both feature sets with independent, unapproved heads. Do not declare safe public access while publication membership/counts differ between surfaces. Record exact migration IDs, merge order, sample DB checks, downgrade/restore policy, failed reproduction, fixed test commands, and implementation SHAs. C05 validates target-instance execution after this work.
+
+## Implementation evidence — 2026-10-30
+
+- Publication migration renumbered to `044_llm_native_publication` after the existing `036_api_token_phase2` base. `045_merge_publication_and_memory` has both real parents; `046_newsletter_distribution_intent` is the sole current head.
+- Fresh SQLite upgrade, repeated upgrade, and upgrades beginning at each independently deployable parent (`043_memory_synthesis_fairness_cursor` and `044_llm_native_publication`) converge to `046`; integrity check passes and representative memory/newsletter schema is present (`tests/test_smoke_migrations.py`). The target database remains untested.
+- `published_article_filters()` now governs public listing/count/link/related/REST/MCP/feed and edition selection paths; numeric legacy link fallback is disabled.
+- Structural graph regression: `tests/test_migration.py::TestMigrationChain::test_publication_and_memory_histories_merge_to_one_head`. Focused SQLite upgrade regression: `tests/test_smoke_migrations.py::TestFlaskDbUpgrade::test_publication_and_memory_parent_states_converge`.

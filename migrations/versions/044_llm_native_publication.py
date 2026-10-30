@@ -6,7 +6,7 @@ import secrets
 from alembic import op
 import sqlalchemy as sa
 
-revision = "037_llm_native_publication"
+revision = "044_llm_native_publication"
 down_revision = "036_api_token_phase2"
 branch_labels = None
 depends_on = None

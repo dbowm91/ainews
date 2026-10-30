@@ -1,21 +1,27 @@
-"""Opt-in read-only agent JSON API over the shared publication read model."""
+"""Opt-in read-only agent JSON API over the shared public read service."""
 from __future__ import annotations
 
 import hashlib
-import json
-from datetime import datetime, timezone
 
 from flask import current_app, jsonify, request
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import joinedload
-from itsdangerous import BadSignature, URLSafeSerializer
 
-from extensions import db
-from models import Article, NewsletterEdition, Tag, article_tags
 from routes.public import public_bp
-from services.agent_access import admit_request
-from services.publication import published_article_query, serialize_public_article
-from services.newsletter_editions import get_public_edition, serialize_edition
+from services.agent_access import admit_request, get_policy
+from services.public_read import (
+    ArticleFilters,
+    EditionFilters,
+    PublicReadError,
+    get_article,
+    get_categories,
+    get_edition,
+    get_tags,
+    list_articles,
+    list_editions,
+    parse_date,
+    search_articles,
+)
+from services.newsletter_editions import serialize_edition
+from services.publication import serialize_public_article
 
 
 @public_bp.before_request
@@ -24,32 +30,13 @@ def _public_api_access_gate():
         return admit_request()
 
 
-def _cursor_encode(payload: dict) -> str:
-    return _cursor_serializer().dumps(payload)
-
-
-def _cursor_serializer() -> URLSafeSerializer:
-    return URLSafeSerializer(current_app.secret_key, salt="ainews-public-cursor-v1")
-
-
-def _cursor_decode(value: str | None, expected: dict) -> dict | None:
-    if not value:
-        return None
-    try:
-        payload = _cursor_serializer().loads(value)
-        if not isinstance(payload, dict):
-            return None
-        if any(payload.get(k) != v for k, v in expected.items()):
-            return None
-        return payload
-    except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
-        return None
-
-
 def _json_response(payload: dict, status: int = 200):
     response = jsonify(payload)
     response.status_code = status
-    response.headers["Cache-Control"] = "public, max-age=60"
+    # Reader-key responses include quota state and must never enter shared
+    # caches. Conditional handling happens only after the before_request gate.
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
     response.set_etag(hashlib.sha256(response.get_data()).hexdigest())
     response.make_conditional(request)
     if hasattr(request, "agent_quota_remaining"):
@@ -57,84 +44,49 @@ def _json_response(payload: dict, status: int = 200):
     return response
 
 
-def _params():
-    limit = request.args.get("limit", default=20, type=int)
-    if limit < 1:
-        limit = 1
-    limit = min(50, limit)
+def _limit() -> int:
+    raw_limit = request.args.get("limit", "20")
+    try:
+        return min(max(int(raw_limit), 1), 50)
+    except (TypeError, ValueError):
+        raise PublicReadError("invalid_limit", "limit must be an integer from 1 to 50") from None
+
+
+def _params() -> tuple[int, str | None, str | None, str]:
+    limit = _limit()
     category = request.args.get("category", "").strip() or None
     tag = request.args.get("tag", "").strip() or None
     sort = request.args.get("sort", "recent").strip()
     if sort not in {"recent", "published", "impact"}:
-        sort = "recent"
+        raise PublicReadError("invalid_sort", "sort must be recent, published, or impact")
     return limit, category, tag, sort
 
 
 def _date_filter(name: str):
-    raw = request.args.get(name, "").strip()
-    if not raw:
-        return None
-    try:
-        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    except ValueError:
-        raise ValueError(name)
+    return parse_date(request.args.get(name), name)
 
 
-def _cursor_stamp(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-    return parsed
+def _public_error(exc: PublicReadError):
+    status = 404 if exc.code == "disabled" else 400
+    return _json_response({"error": {"code": exc.code, "message": str(exc)}}, status)
 
 
 @public_bp.route("/api/public/v1/articles")
 def api_articles():
-    limit, category, tag, sort = _params()
     try:
-        start, end = _date_filter("from"), _date_filter("to")
-    except ValueError as exc:
-        return _json_response({"error": {"code": "invalid_date", "message": f"{exc.args[0]} must be ISO 8601"}}, 400)
-    if start and end and start > end:
-        return _json_response({"error": {"code": "invalid_date_range", "message": "from must not be after to"}}, 400)
-    expected = {"category": category, "tag": tag, "sort": sort, "from": request.args.get("from"), "to": request.args.get("to")}
-    cursor = _cursor_decode(request.args.get("cursor"), expected)
-    if request.args.get("cursor") and cursor is None:
-        return _json_response({"error": {"code": "invalid_cursor", "message": "Cursor is invalid for these filters"}}, 400)
-    q = published_article_query().options(joinedload(Article.tags), joinedload(Article.source), joinedload(Article.citations))
-    if category:
-        q = q.where(Article.category == category)
-    if tag:
-        q = q.where(Article.tags.any(Tag.slug == tag))
-    if start:
-        q = q.where(Article.published_at >= start)
-    if end:
-        q = q.where(Article.published_at <= end)
-    if sort == "impact":
-        if cursor:
-            q = q.where(or_(Article.impact_score < cursor["v"], (Article.impact_score == cursor["v"]) & (Article.id < cursor["id"])))
-        q = q.order_by(Article.impact_score.desc(), Article.id.desc())
-        key = lambda a: {**expected, "v": a.impact_score or 0, "id": a.id}
-    else:
-        col = Article.published_at if sort == "published" else Article.created_at
-        if cursor:
-            stamp = _cursor_stamp(cursor["v"])
-            q = q.where(or_(col < stamp, (col == stamp) & (Article.id < cursor["id"])))
-        q = q.order_by(col.desc(), Article.id.desc())
-        key = lambda a: {**expected, "v": (a.published_at if sort == "published" else a.created_at).replace(tzinfo=timezone.utc).isoformat(), "id": a.id}
-    rows = db.session.scalars(q.limit(limit + 1)).unique().all()
-    more = len(rows) > limit
-    rows = rows[:limit]
-    next_cursor = _cursor_encode(key(rows[-1])) if more and rows else None
-    return _json_response({"items": [serialize_public_article(a) for a in rows], "next_cursor": next_cursor, "has_more": more})
+        limit, category, tag, sort = _params()
+        filters = ArticleFilters(limit, category, tag, sort, request.args.get("cursor"),
+                                 _date_filter("from"), _date_filter("to"))
+        if filters.date_from and filters.date_to and filters.date_from > filters.date_to:
+            raise PublicReadError("invalid_date_range", "from must not be after to")
+        return _json_response(list_articles(filters))
+    except PublicReadError as exc:
+        return _public_error(exc)
 
 
 @public_bp.route("/api/public/v1/articles/<public_id>")
 def api_article(public_id: str):
-    article = db.session.scalar(published_article_query().where(Article.public_id == public_id).options(
-        joinedload(Article.tags), joinedload(Article.source), joinedload(Article.citations)))
+    article = get_article(public_id)
     if article is None:
         return _json_response({"error": {"code": "not_found", "message": "Article not found"}}, 404)
     return _json_response({"item": serialize_public_article(article)})
@@ -142,142 +94,95 @@ def api_article(public_id: str):
 
 @public_bp.route("/api/public/v1/search")
 def api_search():
-    query = request.args.get("q", "").strip()
-    if len(query) < 2 or len(query) > 256 or len(query.split()) > 12:
-        return _json_response({"error": {"code": "invalid_query", "message": "q must contain 2 to 256 characters and at most 12 terms"}}, 400)
-    limit, category, tag, sort = _params()
     try:
-        start, end = _date_filter("from"), _date_filter("to")
-    except ValueError as exc:
-        return _json_response({"error": {"code": "invalid_date", "message": f"{exc.args[0]} must be ISO 8601"}}, 400)
-    terms = [term[:64] for term in query.split()[:12]]
-    expected = {"q": hashlib.sha256(query.encode()).hexdigest(), "category": category, "tag": tag, "sort": sort,
-                "from": request.args.get("from"), "to": request.args.get("to")}
-    cursor = _cursor_decode(request.args.get("cursor"), expected)
-    if request.args.get("cursor") and cursor is None:
-        return _json_response({"error": {"code": "invalid_cursor", "message": "Cursor is invalid for this query"}}, 400)
-    q = published_article_query().options(joinedload(Article.tags), joinedload(Article.source), joinedload(Article.citations))
-    for term in terms:
-        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{escaped}%"
-        q = q.where(or_(Article.original_title.ilike(pattern, escape="\\"), Article.final_article.ilike(pattern, escape="\\")))
-    if category:
-        q = q.where(Article.category == category)
-    if tag:
-        q = q.where(Article.tags.any(Tag.slug == tag))
-    if start:
-        q = q.where(Article.published_at >= start)
-    if end:
-        q = q.where(Article.published_at <= end)
-    if sort == "impact":
-        if cursor:
-            q = q.where(or_(Article.impact_score < cursor["v"], (Article.impact_score == cursor["v"]) & (Article.id < cursor["id"])))
-        q = q.order_by(Article.impact_score.desc(), Article.id.desc())
-        next_payload = lambda a: {**expected, "v": a.impact_score or 0, "id": a.id}
-    else:
-        col = Article.published_at if sort == "published" else Article.created_at
-        if cursor:
-            stamp = _cursor_stamp(cursor["v"])
-            q = q.where(or_(col < stamp, (col == stamp) & (Article.id < cursor["id"])))
-        q = q.order_by(col.desc(), Article.id.desc())
-        next_payload = lambda a: {**expected, "v": col_value(a, sort), "id": a.id}
-    rows = db.session.scalars(q.limit(limit + 1)).unique().all()
-    more = len(rows) > limit
-    rows = rows[:limit]
-    next_cursor = _cursor_encode(next_payload(rows[-1])) if more and rows else None
-    return _json_response({"items": [serialize_public_article(a) for a in rows], "next_cursor": next_cursor, "has_more": more})
-
-
-def col_value(article: Article, sort: str) -> str:
-    value = article.published_at if sort == "published" else article.created_at
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.isoformat()
+        limit, category, tag, sort = _params()
+        filters = ArticleFilters(limit, category, tag, sort, request.args.get("cursor"),
+                                 _date_filter("from"), _date_filter("to"), request.args.get("q", "").strip())
+        if filters.date_from and filters.date_to and filters.date_from > filters.date_to:
+            raise PublicReadError("invalid_date_range", "from must not be after to")
+        return _json_response(search_articles(filters))
+    except PublicReadError as exc:
+        return _public_error(exc)
 
 
 @public_bp.route("/api/public/v1/categories")
 def api_categories():
-    rows = db.session.execute(select(Article.category, func.count(Article.id)).where(Article.publicly_visible.is_(True), Article.final_article != "", Article.category.is_not(None)).group_by(Article.category).order_by(Article.category)).all()
-    return _json_response({"items": [{"key": key, "count": count} for key, count in rows]})
+    return _json_response({"items": get_categories()})
 
 
 @public_bp.route("/api/public/v1/tags")
 def api_tags():
-    rows = db.session.execute(select(Tag.name, Tag.slug, func.count(article_tags.c.article_id)).join(article_tags, Tag.id == article_tags.c.tag_id)
-        .join(Article, Article.id == article_tags.c.article_id).where(Article.publicly_visible.is_(True), Article.final_article != "")
-        .group_by(Tag.id).order_by(func.count(article_tags.c.article_id).desc(), Tag.name).limit(200)).all()
-    return _json_response({"items": [{"name": name, "slug": slug, "count": count} for name, slug, count in rows]})
-
-
-def _edition_payloads():
-    return db.session.scalars(select(NewsletterEdition).where(NewsletterEdition.status == "published", NewsletterEdition.published_at.is_not(None))
-        .order_by(NewsletterEdition.published_at.desc(), NewsletterEdition.id.desc()).limit(50)).all()
+    return _json_response({"items": get_tags()})
 
 
 @public_bp.route("/api/public/v1/newsletters")
 def api_newsletters():
-    if not current_app.config.get("NEWSLETTER_ARCHIVE_ENABLED", False):
-        return _json_response({"error": {"code": "disabled", "message": "Newsletter archive is disabled"}}, 404)
-    limit = min(max(request.args.get("limit", 20, type=int), 1), 50)
-    profile = request.args.get("type", "").strip() or None
     try:
-        start, end = _date_filter("from"), _date_filter("to")
-    except ValueError as exc:
-        return _json_response({"error": {"code": "invalid_date", "message": f"{exc.args[0]} must be ISO 8601"}}, 400)
-    expected = {"type": profile, "from": request.args.get("from"), "to": request.args.get("to")}
-    cursor = _cursor_decode(request.args.get("cursor"), expected)
-    if request.args.get("cursor") and cursor is None:
-        return _json_response({"error": {"code": "invalid_cursor", "message": "Cursor is invalid for these filters"}}, 400)
-    q = select(NewsletterEdition).where(NewsletterEdition.status == "published", NewsletterEdition.published_at.is_not(None))
-    if profile:
-        q = q.where(NewsletterEdition.profile_key == profile)
-    if start:
-        q = q.where(NewsletterEdition.published_at >= start)
-    if end:
-        q = q.where(NewsletterEdition.published_at <= end)
-    if cursor:
-        stamp = _cursor_stamp(cursor["v"])
-        q = q.where(or_(NewsletterEdition.published_at < stamp, (NewsletterEdition.published_at == stamp) & (NewsletterEdition.id < cursor["id"])))
-    rows = db.session.scalars(q.order_by(NewsletterEdition.published_at.desc(), NewsletterEdition.id.desc()).limit(limit + 1)).all()
-    more = len(rows) > limit
-    rows = rows[:limit]
-    next_cursor = _cursor_encode({**expected, "v": rows[-1].published_at.replace(tzinfo=timezone.utc).isoformat(), "id": rows[-1].id}) if more and rows else None
-    return _json_response({"items": [serialize_edition(e) for e in rows], "next_cursor": next_cursor, "has_more": more})
+        filters = EditionFilters(
+            limit=_limit(),
+            profile=request.args.get("type", "").strip() or None,
+            cursor=request.args.get("cursor"),
+            date_from=_date_filter("from"),
+            date_to=_date_filter("to"),
+        )
+        if filters.date_from and filters.date_to and filters.date_from > filters.date_to:
+            raise PublicReadError("invalid_date_range", "from must not be after to")
+        return _json_response(list_editions(filters))
+    except PublicReadError as exc:
+        return _public_error(exc)
 
 
 @public_bp.route("/api/public/v1/newsletters/<public_id>")
 def api_newsletter(public_id: str):
-    if not current_app.config.get("NEWSLETTER_ARCHIVE_ENABLED", False):
-        return _json_response({"error": {"code": "disabled", "message": "Newsletter archive is disabled"}}, 404)
-    edition = get_public_edition(public_id)
+    edition = get_edition(public_id)
     if edition is None:
+        if not current_app.config.get("NEWSLETTER_ARCHIVE_ENABLED", False):
+            return _json_response({"error": {"code": "disabled", "message": "Newsletter archive is disabled"}}, 404)
         return _json_response({"error": {"code": "not_found", "message": "Newsletter not found"}}, 404)
     return _json_response({"item": serialize_edition(edition)})
 
 
 @public_bp.route("/api/public/openapi.json")
 def public_openapi():
-    def operation(summary: str, *, security: bool = True) -> dict:
-        value = {"summary": summary, "responses": {
+    def operation(summary: str) -> dict:
+        return {"summary": summary, "security": [{"AgentReader": []}], "responses": {
             "200": {"description": "Published public content"},
             "400": {"description": "Invalid filter or cursor"},
-            "429": {"description": "Request quota reached"},
+            "401": {"description": "Reader credential required or invalid"},
+            "404": {"description": "Not found or feature disabled"},
+            "429": {"description": "Request quota reached; includes Retry-After"},
             "503": {"description": "Quota service unavailable"}}}
-        if security:
-            value["security"] = [{"AgentReader": []}]
-        return value
 
+    common_params = [
+        {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20}},
+        {"name": "cursor", "in": "query", "schema": {"type": "string", "maxLength": 2048}},
+        {"name": "from", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+        {"name": "to", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+    ]
+    article_params = common_params + [
+        {"name": "category", "in": "query", "schema": {"type": "string", "maxLength": 64}},
+        {"name": "tag", "in": "query", "schema": {"type": "string", "maxLength": 128}},
+        {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["recent", "published", "impact"], "default": "recent"}},
+    ]
     paths = {
         "/api/public/v1/articles": {"get": operation("List published articles with keyset pagination")},
         "/api/public/v1/articles/{public_id}": {"get": operation("Get one published article")},
-        "/api/public/v1/search": {"get": operation("Search published articles")},
-        "/api/public/v1/categories": {"get": operation("List visible categories")},
-        "/api/public/v1/tags": {"get": operation("List tags attached to visible articles")},
+        "/api/public/v1/search": {"get": operation("Search published articles using bounded full-text search")},
+        "/api/public/v1/categories": {"get": operation("List categories with published articles")},
+        "/api/public/v1/tags": {"get": operation("List tags attached to published articles")},
         "/api/public/v1/newsletters": {"get": operation("List immutable published editions")},
         "/api/public/v1/newsletters/{public_id}": {"get": operation("Get one published edition")},
     }
-    paths["/api/public/v1/articles/{public_id}"]["get"]["parameters"] = [{"name": "public_id", "in": "path", "required": True, "schema": {"type": "string"}}]
-    paths["/api/public/v1/newsletters/{public_id}"]["get"]["parameters"] = [{"name": "public_id", "in": "path", "required": True, "schema": {"type": "string"}}]
+    path_id = {"name": "public_id", "in": "path", "required": True, "schema": {"type": "string"}}
+    paths["/api/public/v1/articles/{public_id}"]["get"]["parameters"] = [path_id]
+    paths["/api/public/v1/newsletters/{public_id}"]["get"]["parameters"] = [path_id]
+    paths["/api/public/v1/articles"]["get"]["parameters"] = article_params
+    paths["/api/public/v1/search"]["get"]["parameters"] = article_params + [
+        {"name": "q", "in": "query", "required": True, "schema": {"type": "string", "minLength": 1, "maxLength": 256}}
+    ]
+    paths["/api/public/v1/newsletters"]["get"]["parameters"] = common_params + [
+        {"name": "type", "in": "query", "schema": {"type": "string", "maxLength": 80}}
+    ]
     return jsonify({"openapi": "3.1.0", "info": {"title": "AInews Public Read API", "version": "1.0.0"},
         "components": {"securitySchemes": {"AgentReader": {"type": "http", "scheme": "bearer", "bearerFormat": "agent_<id>.<secret>"}}},
         "paths": paths})
@@ -285,7 +190,6 @@ def public_openapi():
 
 @public_bp.route("/agents")
 def agents_landing():
-    from services.agent_access import get_policy
     if not get_policy()["api_enabled"]:
         return "Agent access is disabled.", 404
     return """<!doctype html><title>AInews for AI agents</title><h1>For AI agents</h1>
@@ -295,7 +199,6 @@ def agents_landing():
 
 @public_bp.route("/llms.txt")
 def llms_txt():
-    from services.agent_access import get_policy
     if not get_policy()["api_enabled"]:
         return "", 404
     return "AInews publishes provenance-bearing articles. Read via /api/public/v1. Respect quotas and cite canonical article URLs.\n/agents\n/api/public/openapi.json\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
@@ -303,7 +206,6 @@ def llms_txt():
 
 @public_bp.route("/SKILL.md")
 def consumer_skill():
-    from services.agent_access import get_policy
     if not get_policy()["api_enabled"]:
         return "", 404
-    return """# AInews consumer skill\n\nUse GET /api/public/v1/articles with limit <= 50 and follow next_cursor. Search with GET /api/public/v1/search?q=... . Cite each item's canonical_url and preserve citations. Treat results as partial when has_more is true. Respect HTTP 429 and Retry-After. Reader credentials are read-only; never probe private/admin routes.\n""", 200, {"Content-Type": "text/markdown; charset=utf-8"}
+    return """# AInews consumer skill\n\nUse GET /api/public/v1/articles with limit <= 50 and follow next_cursor. Search uses bounded FTS and returns only published articles. Cite each item's canonical_url. Reader credentials are read-only; never probe private/admin routes. REST responses are private, no-store. Respect HTTP 429 and Retry-After.\n""", 200, {"Content-Type": "text/markdown; charset=utf-8"}

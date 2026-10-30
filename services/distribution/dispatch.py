@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import secrets
 from flask import current_app
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import DeliveryAttempt, DeliveryIntent, NewsletterDeliveryConfig, NewsletterEdition, NewsletterProfile, Subscriber
+from models import (DeliveryAttempt, DeliveryIntent, NewsletterDeliveryConfig, NewsletterEdition,
+    NewsletterProfile, ScheduledOccurrence, Subscriber)
 
 
 def email_channel_enabled(profile_key: str) -> bool:
@@ -17,9 +19,36 @@ def email_channel_enabled(profile_key: str) -> bool:
     return bool(profile and profile.email_enabled and delivery_config and delivery_config.email_enabled)
 
 
+def cancel_email_requests(*, profile_id: int | None = None, now: datetime | None = None) -> int:
+    """Cancel queued campaigns when a gate is disabled; claimed sends may finish."""
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    editions = update(NewsletterEdition).where(
+        NewsletterEdition.email_requested.is_(True), NewsletterEdition.email_cancelled.is_(False)
+    )
+    occurrences = update(ScheduledOccurrence).where(
+        ScheduledOccurrence.email_requested.is_(True),
+        ScheduledOccurrence.state.in_(["queued", "dispatched"]),
+    )
+    if profile_id is not None:
+        editions = editions.where(NewsletterEdition.profile_id == profile_id)
+        occurrences = occurrences.where(ScheduledOccurrence.profile_id == profile_id)
+    edition_ids = select(NewsletterEdition.id).where(
+        NewsletterEdition.email_requested.is_(True), NewsletterEdition.email_cancelled.is_(False)
+    )
+    if profile_id is not None:
+        edition_ids = edition_ids.where(NewsletterEdition.profile_id == profile_id)
+    cancelled = db.session.scalars(update(DeliveryIntent).where(
+        DeliveryIntent.edition_id.in_(edition_ids), DeliveryIntent.state.in_(["pending", "failed"])
+    ).values(state="cancelled", next_attempt_at=None, claim_until=None, claim_token=None,
+             error_code="delivery_gate_disabled", updated_at=now).returning(DeliveryIntent.id)).all()
+    db.session.execute(editions.values(email_cancelled=True))
+    db.session.execute(occurrences.values(email_requested=False))
+    return len(cancelled)
+
+
 def plan_edition_deliveries(edition_id: int) -> int:
     edition = db.session.get(NewsletterEdition, edition_id)
-    if edition is None or edition.status != "published":
+    if edition is None or edition.status != "published" or not edition.email_requested or edition.email_cancelled:
         return 0
     profile = db.session.get(NewsletterProfile, edition.profile_id)
     delivery_config = db.session.get(NewsletterDeliveryConfig, 1)
@@ -41,6 +70,14 @@ def plan_edition_deliveries(edition_id: int) -> int:
     return count
 
 
+def reconcile_requested_editions(limit: int = 100) -> int:
+    """Materialize durable recipient intents for explicit send requests."""
+    rows: list[int] = list(db.session.scalars(select(NewsletterEdition.id).where(
+        NewsletterEdition.status == "published", NewsletterEdition.email_requested.is_(True)
+    ).order_by(NewsletterEdition.id).limit(max(1, min(limit, 1000)))).all())
+    return sum(plan_edition_deliveries(int(edition_id)) for edition_id in rows)
+
+
 def deliver_intent(intent_id: int, *, now: datetime | None = None) -> str:
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     intent = db.session.get(DeliveryIntent, intent_id)
@@ -52,9 +89,11 @@ def deliver_intent(intent_id: int, *, now: datetime | None = None) -> str:
         intent.state = "suppressed"
         db.session.commit()
         return str(intent.state)
+    claim_token = secrets.token_hex(16)
     claim_id = db.session.execute(update(DeliveryIntent).where(DeliveryIntent.id == intent_id,
         DeliveryIntent.state.in_(["pending", "failed"]), or_(DeliveryIntent.next_attempt_at.is_(None), DeliveryIntent.next_attempt_at <= now))
-        .values(state="claimed", claim_until=now + timedelta(minutes=10), attempt_count=DeliveryIntent.attempt_count + 1, updated_at=now)
+        .values(state="claimed", claim_until=now + timedelta(minutes=10), claim_token=claim_token,
+                attempt_count=DeliveryIntent.attempt_count + 1, updated_at=now)
         .returning(DeliveryIntent.id)).scalar_one_or_none()
     if claim_id is None:
         db.session.rollback()
@@ -63,14 +102,22 @@ def deliver_intent(intent_id: int, *, now: datetime | None = None) -> str:
     attempt = DeliveryAttempt(intent_id=intent.id, outcome="claimed")
     db.session.add(attempt)
     db.session.commit()  # do not hold the database transaction during SMTP
-    from services.distribution.email import EmailChannel
-    outcome = EmailChannel().send(intent_id)
-    intent = db.session.get(DeliveryIntent, intent_id)
+    profile = db.session.get(NewsletterProfile, intent.edition.profile_id) if intent.edition else None
+    delivery_config = db.session.get(NewsletterDeliveryConfig, 1)
+    if not profile or not profile.email_enabled or not delivery_config or not delivery_config.email_enabled:
+        from services.distribution.base import DeliveryOutcome
+        outcome = DeliveryOutcome("suppressed", "delivery_disabled")
+    else:
+        from services.distribution.email import EmailChannel
+        outcome = EmailChannel().send(intent_id)
+    intent = db.session.scalar(select(DeliveryIntent).where(DeliveryIntent.id == intent_id,
+        DeliveryIntent.state == "claimed", DeliveryIntent.claim_token == claim_token))
     saved_attempt = db.session.get(DeliveryAttempt, attempt.id)
     if intent is None:
         return "unknown"
     intent.updated_at = now
     intent.claim_until = None
+    intent.claim_token = None
     intent.error_code = outcome.error_code
     if outcome.code == "accepted":
         intent.state = "accepted"
@@ -98,6 +145,7 @@ def reconcile_stale_claims(*, now: datetime | None = None) -> int:
         row.error_code = "stale_claim_outcome_unknown"
         row.updated_at = now
         row.claim_until = None
+        row.claim_token = None
         attempt = db.session.scalar(select(DeliveryAttempt).where(DeliveryAttempt.intent_id == row.id,
             DeliveryAttempt.finished_at.is_(None)).order_by(DeliveryAttempt.id.desc()).limit(1))
         if attempt:

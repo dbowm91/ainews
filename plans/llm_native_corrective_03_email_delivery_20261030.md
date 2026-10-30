@@ -1,6 +1,6 @@
 # C03 — Email distribution RFC compliance, outbox lifecycle and safe retries
 
-**Status:** PLANNED / OPEN; P0 before any real newsletter fanout.
+**Status:** IMPLEMENTED; local MIME/outbox tests pass. Relay and target-host rehearsal remain C05 gates; delivery stays default-off.
 **Parent:** [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Dependency:** M3/M4 implementation exists on PR #20. C01 needed for deployment. C03 may be coded independently of C02.
 **Default:** global and per-profile email delivery remain OFF until targeted tests and intended-host rehearsal are complete.
@@ -39,3 +39,10 @@ services/email.py, services/distribution/{base,email,dispatch}.py, tasks/{distri
 ## Closure gate
 
 Do not enable live scheduled or manual broad subscriber email until the RFC header test, no-duplicate/recovery ledger scenarios, opt-out safety, explicit send planning and target SMTP sink rehearsal pass. Document how ambiguous outcomes are handled, exact tests, SHA, and operator enablement/rollback procedure. C05 supplies final target-instance evidence.
+
+## Implementation evidence — 2026-10-30
+
+- RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click` is serialized and parsed in `tests/test_email.py::test_serialized_newsletter_message_has_rfc8058_headers`; one-click links require HTTPS. Subscription verification/welcome URLs use configured `NEWSLETTER_SITE_URL`/`SITE_URL`, never request Host.
+- Explicit send intent is stored on the edition/occurrence; a five-minute reconciliation seam plans recipient intents after a worker interruption. Planning is idempotent and respects both current gates. Per-attempt claim tokens protect state updates; stale outcomes become terminal `unknown` and are not replayed automatically.
+- Disabling the global or profile email gate cancels pending/failed intents, marks editions canceled, and clears queued occurrence requests; turning the gate back on does not resume those campaigns. A send already claimed by a worker may finish and is tracked by its attempt.
+- Local outbox regression evidence: `tests/test_llm_native_publication.py` and `tests/test_tasks_newsletter.py`. A real relay, DKIM coverage, Celery/Redis worker crash, and controlled recipient remain unverified and email stays off.

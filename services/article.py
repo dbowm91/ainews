@@ -158,6 +158,8 @@ def get_articles_paginated(
     Returns:
         Tuple of (articles, has_next, next_page)
     """
+    from services.publication import published_article_filters
+
     # Use search for text search when query is provided
     if query:
         try:
@@ -183,7 +185,7 @@ def get_articles_paginated(
                             joinedload(Article.tags),  # type: ignore[arg-type]
                             joinedload(Article.metrics),  # type: ignore[arg-type]
                         )
-                        .where(Article.id.in_(article_ids), Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
+                        .where(Article.id.in_(article_ids), *published_article_filters(Article))
                     )
                     .unique()
                     .scalars()
@@ -206,7 +208,7 @@ def get_articles_paginated(
             joinedload(Article.tags),  # type: ignore[arg-type]
             joinedload(Article.metrics),  # type: ignore[arg-type]
         )
-        .where(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
+        .where(*published_article_filters(Article))
         .order_by(_get_sort_order(sort))
     )
 

@@ -219,7 +219,7 @@ def test_delivery_planning_is_per_recipient_idempotent_and_records_acceptance(ap
         subscriber = Subscriber(email="reader@example.test", newsletter_type="ai", confirmed_at=datetime.now(timezone.utc).replace(tzinfo=None), active=True)
         db.session.add_all([profile, subscriber, NewsletterDeliveryConfig(id=1, email_enabled=True)])
         db.session.commit()
-        edition = create_edition("ai", [article], occurrence_key="delivery:once")
+        edition = create_edition("ai", [article], occurrence_key="delivery:once", send_email=True)
         assert edition is not None
         assert plan_edition_deliveries(edition.id) == 1
         assert plan_edition_deliveries(edition.id) == 0
@@ -247,7 +247,7 @@ def test_email_channel_uses_frozen_snapshot_and_one_click_headers(app, monkeypat
             confirmed_at=datetime.now(timezone.utc).replace(tzinfo=None), active=True)
         db.session.add_all([profile, subscriber, NewsletterDeliveryConfig(id=1, email_enabled=True)])
         db.session.commit()
-        edition = create_edition("smtp-sink", [article], occurrence_key="smtp-sink:edition")
+        edition = create_edition("smtp-sink", [article], occurrence_key="smtp-sink:edition", send_email=True)
         assert edition is not None and plan_edition_deliveries(edition.id) == 1
         intent_id = DeliveryIntent.query.filter_by(edition_id=edition.id).one().id
         assert deliver_intent(intent_id) == "accepted"
@@ -255,7 +255,7 @@ def test_email_channel_uses_frozen_snapshot_and_one_click_headers(app, monkeypat
         assert "&lt;script&gt;" in captured["body"]
         assert "script>alert" not in captured["body"]
         assert f"/unsubscribe/{subscriber.unsubscribe_token}" in captured["body"]
-        assert captured["headers"]["List-Unsubscribe-Post"] == "One-Click"
+        assert captured["headers"]["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
         trusted_site = app.config.get("NEWSLETTER_SITE_URL") or app.config["SITE_URL"]
         assert captured["headers"]["List-Unsubscribe"].startswith(f"<{trusted_site}/unsubscribe/")
 
@@ -273,7 +273,7 @@ def test_delivery_task_suppresses_unconfirmed_and_retries_only_temporary_intent(
         unconfirmed = Subscriber(email="unconfirmed@example.test", newsletter_type="retry", active=True)
         db.session.add_all([profile, confirmed, unconfirmed, NewsletterDeliveryConfig(id=1, email_enabled=True)])
         db.session.commit()
-        edition = create_edition("retry", [article], occurrence_key="retry:once")
+        edition = create_edition("retry", [article], occurrence_key="retry:once", send_email=True)
         assert edition is not None and plan_edition_deliveries(edition.id) == 1
         intent = DeliveryIntent.query.filter_by(edition_id=edition.id).one()
         intent_id = intent.id
@@ -298,7 +298,7 @@ def test_unknown_delivery_is_not_automatically_replayed(app, monkeypatch):
             confirmed_at=datetime.now(timezone.utc).replace(tzinfo=None), active=True)
         db.session.add_all([profile, subscriber, NewsletterDeliveryConfig(id=1, email_enabled=True)])
         db.session.commit()
-        edition = create_edition("unknown", [article], occurrence_key="unknown:once")
+        edition = create_edition("unknown", [article], occurrence_key="unknown:once", send_email=True)
         assert edition is not None and plan_edition_deliveries(edition.id) == 1
         intent_id = DeliveryIntent.query.filter_by(edition_id=edition.id).one().id
         monkeypatch.setattr("services.distribution.email.EmailChannel.send", lambda self, value: DeliveryOutcome("unknown", "smtp_outcome_unknown"))
@@ -316,7 +316,7 @@ def test_temporary_delivery_retries_are_bounded_at_five(app, monkeypatch):
             confirmed_at=datetime.now(timezone.utc).replace(tzinfo=None), active=True)
         db.session.add_all([profile, subscriber, NewsletterDeliveryConfig(id=1, email_enabled=True)])
         db.session.commit()
-        edition = create_edition("bounded", [article], occurrence_key="bounded:once")
+        edition = create_edition("bounded", [article], occurrence_key="bounded:once", send_email=True)
         assert edition is not None and plan_edition_deliveries(edition.id) == 1
         intent = DeliveryIntent.query.filter_by(edition_id=edition.id).one()
         intent_id = intent.id

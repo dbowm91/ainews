@@ -29,6 +29,7 @@ from sqlalchemy import select
 
 from extensions import db
 from models import Article
+from services.publication import published_article_filters
 
 #: Statuses that mean an article reached the end of the pipeline.
 TERMINAL_STATUSES = ("done", "published")
@@ -69,7 +70,7 @@ class FeedStats:
 def _recent_article_ids(limit: int = RECENT_WINDOW) -> list[int]:
     """Return the ids of the most recently created articles."""
     rows: list[int] = list(db.session.execute(
-        select(Article.id).where(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "").order_by(Article.created_at.desc()).limit(limit)
+        select(Article.id).where(*published_article_filters(Article)).order_by(Article.created_at.desc()).limit(limit)
     ).scalars().all())
     return rows
 
@@ -112,7 +113,7 @@ def get_impact_leaders(limit: int = IMPACT_LEADER_LIMIT) -> tuple[ImpactLeader, 
     """Return the highest ranked articles."""
     rows: list[tuple[Any, Any, Any, Any]] = list(db.session.execute(
         select(Article.public_id, Article.original_title, Article.impact_score, Article.category)
-        .where(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
+        .where(*published_article_filters(Article))
         .order_by(Article.impact_score.desc(), Article.id.desc())
         .limit(limit)
     ).all())

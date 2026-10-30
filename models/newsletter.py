@@ -85,6 +85,7 @@ class ScheduledOccurrence(db.Model):  # type: ignore[name-defined]
     timezone_name = db.Column(db.String(64), nullable=False)
     scheduled_for_utc = db.Column(db.DateTime, nullable=False, index=True)
     state = db.Column(db.String(16), nullable=False, default="queued")
+    email_requested = db.Column(db.Boolean, nullable=False, default=False)
     dispatched_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
@@ -110,6 +111,8 @@ class NewsletterEdition(db.Model):  # type: ignore[name-defined]
     generated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     published_at = db.Column(db.DateTime, nullable=True, index=True)
     content_revision = db.Column(db.Integer, nullable=False, default=1)
+    email_requested = db.Column(db.Boolean, nullable=False, default=False)
+    email_cancelled = db.Column(db.Boolean, nullable=False, default=False)
     items = db.relationship("NewsletterEditionItem", backref="edition", cascade="all, delete-orphan", order_by="NewsletterEditionItem.position")
 
 
@@ -169,6 +172,7 @@ class DeliveryIntent(db.Model):  # type: ignore[name-defined]
     attempt_count = db.Column(db.Integer, nullable=False, default=0)
     next_attempt_at = db.Column(db.DateTime, nullable=True, index=True)
     claim_until = db.Column(db.DateTime, nullable=True)
+    claim_token = db.Column(db.String(32), nullable=True)
     error_code = db.Column(db.String(48), nullable=True)
     subscriber = db.relationship("Subscriber")
     edition = db.relationship("NewsletterEdition")

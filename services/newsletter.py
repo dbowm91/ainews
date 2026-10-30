@@ -148,10 +148,11 @@ def _generate_newsletter(
         Tuple of (html, subject, article_count)
     """
     from models import Article
+    from services.publication import published_article_filters
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     base_query = Article.query.filter(
-        Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
+        *published_article_filters(Article),
         Article.created_at >= cutoff,
     ).options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
     query = articles_filter(base_query)

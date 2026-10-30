@@ -86,6 +86,7 @@ def _get_tag_cloud() -> list[dict]:
 
         from extensions import db
         from models import Article, Tag, article_tags
+        from services.publication import published_article_filters
 
         results = (
             db.session.query(
@@ -96,7 +97,7 @@ def _get_tag_cloud() -> list[dict]:
             )
             .outerjoin(article_tags, Tag.id == article_tags.c.tag_id)
             .outerjoin(Article, Article.id == article_tags.c.article_id)
-            .filter(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
+            .filter(*published_article_filters(Article))
             .group_by(Tag.id)
             .order_by(func.count(article_tags.c.article_id).desc())
             .all()

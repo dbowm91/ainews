@@ -1,6 +1,6 @@
 # C05 — CI attribution, combined-branch verification and private-instance activation
 
-**Status:** PLANNED / OPEN; P0 operational acceptance gate.
+**Status:** LOCAL CODE/CI TRIAGE COMPLETE; PRIVATE-INSTANCE QUALIFICATION OPEN because target installation and relay are unavailable in this worktree.
 **Parent:** [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Dependencies:** final closure follows C01–C04. CI-failure triage may start immediately.
 **Objective:** qualify the corrected code on the intended AInews installation and actual broker/SMTP/API paths, without turning this into an unrelated public-release campaign.
@@ -53,3 +53,11 @@ The roadmap reports branch-local 5,004 passed, 6 skipped, MyPy clean (510 files)
 **Merge readiness** after C01 migration graph and feature regression tests pass with no new untriaged high-risk failures; inherited CI debt can be tracked separately with exact impact. **Private-instance activation** only after target data restore/migration proof and the relevant runtime path exercises pass. **External reader activation** additionally requires C02 cache/credentials/quotas. **Live email activation** additionally requires C03 RFC+outbox and one controlled sink/recipient. **Multiple daily schedules** additionally require C04 profile and scheduler test results.
 
 Do not convert these gates into Docker installer certification, public uptime SLA, multi-tenant auth, an email SaaS, or a broad release checklist. Report unresolved blockers honestly, update C01–C05 status/links in the parent roadmap, and leave unrelated PR #18 Eggsearch and PR #19 memory corrective work under their own ownership.
+
+## Local evidence — 2026-10-30
+
+- `ruff check` passed on all changed implementation and regression-test files.
+- Full `python -m pytest -q --tb=short` passed **5,010 tests, 6 skipped**. Final targeted publication/profile/email/search/migration regression run passed **84 tests**. `mypy . --exclude .venv` passed for 512 source files, `uv lock --check` passed, and `git diff --check` passed.
+- Fresh, idempotent and SQLite upgrade tests passed; the expanded convergence test upgrades from each of `043_memory_synthesis_fairness_cursor` and `044_llm_native_publication` to `046_newsletter_distribution_intent`, including SQLite integrity and representative memory/publication schema.
+- The earlier CI log comparison found the same named Ruff findings on the branch and main, Redis refused connections in theme-validation on both, and branch installer artifact packaging ran out of disk space before its missing CLI wrapper follow-up. These are infrastructure/baseline findings, not green CI evidence. The linked original run SHAs predate corrective changes.
+- No target database backup/restore copy, private Redis/Celery worker/Beat, real MCP HTTP client/proxy, SMTP relay/DKIM configuration or intended hardware measurements are available from this worktree. Accordingly C05 and activation are still **OPEN**; maintain reader/archive and email flags default-off pending the operator-host checklist above.

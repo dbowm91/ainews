@@ -8,7 +8,7 @@ Fourteen scheduled tasks run via Celery Beat:
 |------|----------|--------|
 | run-all-sources | Every 30 min | Crawl all active RSS/API sources |
 | retry-stuck | Every 60 min | Retry articles stuck in pipeline |
-| generate-newsletters | Daily 8:00 AM | Generate newsletter emails |
+| newsletter-slot-tick | Every minute | Plan durable local-time profile occurrences |
 | cleanup-old-logs | Daily 3:00 AM | Purge old pipeline logs |
 | cleanup-expired-verifications | Every 15 min | Clean expired subscriber tokens |
 | cleanup-stale-limiter-slots | Every 5 min | Release stale limiter slots |
@@ -17,7 +17,7 @@ Fourteen scheduled tasks run via Celery Beat:
 | cleanup-old-versions | Daily 3:45 AM | Purge old article versions |
 | publish-scheduled-articles | Every 5 min | Publish time-scheduled articles |
 | backfill-embeddings | Daily 2:00 AM | Backfill article embeddings |
-| retry-failed-newsletter-deliveries | Every 2 hours | Retry failed newsletter sends |
+| retry-failed-newsletter-deliveries | Every 5 minutes | Reconcile explicit send requests and queue due outbox intents |
 | recalculate-impact-scores | Daily 4:00 AM | Recalculate article impact scores |
 | cleanup-inactive-subscribers | Daily 1:00 AM | Remove inactive subscribers |
 
@@ -216,7 +216,11 @@ python scripts/verify_backup.sh
 
 Newsletter generation is driven by durable profile schedules and the `newsletter-slot-tick` task. Slots stuck in `queued` or `dispatched` are requeued for up to 60 minutes; the occurrence key makes duplicate workers safe. `retry-newsletter-deliveries` runs every five minutes and queues only due per-recipient outbox intents. Review intent counts at `/api/v1/newsletter-editions/<public_id>/deliveries`; never retry an `unknown` SMTP result automatically. Use the explicit `retry_unknown` action only after operator review and with `confirm_unknown_retry: true`. A claimed message may already have been accepted by SMTP.
 
-Global and per-profile email switches both default off. An edition can be published and read from the archive without either switch. Do not enable scheduled mail until delivery configuration, unsubscribe URLs, SMTP credentials and the intended recipient policy have been checked in the local deployment.
+Global and per-profile email switches both default off. An edition can be published and read from the archive without either switch. A durable email request is captured only for explicit manual send or a scheduled slot whose profile and global switches were enabled at planning time. Configure HTTPS `NEWSLETTER_SITE_URL` (or HTTPS `SITE_URL`) for one-click unsubscribe; inbound `Host` is never trusted for subscription links. RFC 8058 headers must be covered by the relay's DKIM signing policy. Do not enable scheduled mail until delivery configuration, SMTP credentials and intended recipient policy have been checked in the local deployment.
+
+### LLM-native migration history
+
+Apply database migrations before starting the web, worker or Beat processes. The converged publication/editorial-memory history ends at `046_newsletter_distribution_intent`; `045_merge_publication_and_memory` joins the independently deployable publication and memory parents. Back up the private database and rehearse upgrade/restore on a copy before upgrading an existing installation. Never stamp an Alembic revision to bypass a failed migration.
 
 ### Recovering from Stuck Locks
 

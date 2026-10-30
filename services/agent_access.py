@@ -89,6 +89,8 @@ def admit_request():
         return jsonify({"error": {"code": "disabled", "message": "Public API is disabled"}}), 404
     authorization = request.headers.get("Authorization", "")
     bearer = authorization[7:] if authorization.lower().startswith("bearer ") else ""
+    if authorization and not bearer.startswith("agent_"):
+        return jsonify({"error": {"code": "unauthorized", "message": "A valid reader credential is required"}}), 401
     identity = "anonymous"
     limit = int(policy["anonymous_requests_per_hour"])
     if bearer.startswith("agent_"):

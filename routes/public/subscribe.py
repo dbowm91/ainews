@@ -115,7 +115,7 @@ def subscribe() -> str | Response | WerkzeugResponse:
             )
         return redirect("/")
 
-    site_url = request.host_url.rstrip("/")
+    site_url = str(current_app.config.get("NEWSLETTER_SITE_URL") or current_app.config.get("SITE_URL") or "").rstrip("/")
     verification_url = f"{site_url}/verify/{verify_token}"
     unsubscribe_url = f"{site_url}/unsubscribe/{unsub_token}"
     email_failed = False
@@ -234,7 +234,7 @@ def verify(token: str) -> str:
         return render_template("verify.html", found=False)
 
     # Send welcome email
-    site_url = request.host_url.rstrip("/")
+    site_url = str(current_app.config.get("NEWSLETTER_SITE_URL") or current_app.config.get("SITE_URL") or "").rstrip("/")
     unsubscribe_url = f"{site_url}/unsubscribe/{subscriber.unsubscribe_token}"
     try:
         from services.email import send_welcome_email

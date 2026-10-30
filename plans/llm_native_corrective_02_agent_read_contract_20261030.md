@@ -1,6 +1,6 @@
 # C02 — Shared REST/MCP read layer, opaque cursors, cache safety and bounded search
 
-**Status:** PLANNED / OPEN; P0 access-boundary risk, P1 contract and performance correctness.
+**Status:** IMPLEMENTED; local REST/MCP contract tests pass. Proxy and target-runtime qualification remains under C05.
 **Parent:** [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Dependency:** C01 shared publication predicate and migration graph. Can develop isolated read-service code in parallel.
 **Activation gate:** before enabling API/MCP for external agents or putting authenticated routes behind a caching proxy.
@@ -47,3 +47,10 @@ routes/public/api.py; services/mcp_public.py; services/publication.py; services/
 ## Stop/closure
 
 Keep REST, anonymous and MCP default-off until the source parity, cache boundary and quota tests pass on branch and target proxy configuration. Record exact curl/httpx/MCP conformance commands, request outcomes and realistic SQLite query latency, plus implementation SHA. C05 determines integration-ready status; C02 alone does not establish public-product readiness.
+
+## Implementation evidence — 2026-10-30
+
+- REST and MCP delegate to `services/public_read.py`; MCP no longer imports Flask route helpers or owns parallel SQL. Cursor payloads bind public IDs, filter digest, sort, version and expiry.
+- API responses are `private, no-store`, vary on Authorization, and conditional handling follows the auth/quota gate. Unknown/malformed Authorization fails closed. Search uses FTS5 with a 500-candidate cap and bounded title-only fallback.
+- OpenAPI documents bounded query parameter schemas; invalid limit/sort/date values return structured errors. Feature flags remain default-off.
+- Local tests exercise cursor ordering, ETags/auth gating, reader API and MCP parity. Real MCP SDK/client, shared-cache/proxy, concurrent Redis quota and target p95 remain C05 gates.

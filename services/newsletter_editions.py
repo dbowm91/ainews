@@ -9,12 +9,13 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from flask import current_app
 
 from extensions import db
 from models import Article, NewsletterEdition, NewsletterEditionItem, NewsletterProfile
+from services.publication import published_article_filters
 
 MAX_EDITION_ITEMS = 20
 
@@ -36,22 +37,33 @@ def _editorial_text(article: Article) -> tuple[str, str, str]:
     except (TypeError, json.JSONDecodeError):
         parsed = {}
     headline = str(parsed.get("headline") or article.original_title or "Untitled")[:512]
-    why = str(parsed.get("why_it_matters") or parsed.get("tldr") or article.summary or "")[:1200]
+    why_raw = re.sub(r"\s+", " ", str(parsed.get("why_it_matters") or parsed.get("tldr") or article.summary or "")).strip()
+    why_match = re.match(r"(.{1,240}?[.!?])(?:\s|$)", why_raw)
+    why = (why_match.group(1) if why_match else why_raw[:240].rsplit(" ", 1)[0]).strip()
     body = html.unescape(re.sub(r"<[^>]+>", " ", str(parsed.get("body") or "")))
     paragraph = re.sub(r"\s+", " ", body).strip()
-    sentence = re.match(r"(.{1,700}?[.!?])(?:\s|$)", paragraph)
-    paragraph = sentence.group(1) if sentence else paragraph[:700].rsplit(" ", 1)[0]
+    sentence = re.match(r"(.{40,500}?[.!?])(?:\s|$)", paragraph)
+    if sentence:
+        paragraph = sentence.group(1)
+    else:
+        fallback = re.sub(r"\s+", " ", str(parsed.get("tldr") or article.summary or "")).strip()
+        fallback_sentence = re.match(r"(.{40,500}?[.!?])(?:\s|$)", fallback)
+        paragraph = fallback_sentence.group(1) if fallback_sentence else ""
     return headline, why, paragraph
 
 
 def select_articles(profile_key: str, *, limit: int = MAX_EDITION_ITEMS, now: datetime | None = None) -> list[Article]:
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    cutoff = now - timedelta(hours=36)
     profile = cast(NewsletterProfile | None, db.session.scalar(select(NewsletterProfile).where(NewsletterProfile.key == profile_key)))
     min_impact = profile.min_impact if profile else 0
-    q = Article.query.filter(Article.publicly_visible.is_(True), Article.pipeline_status == "done",
-                             Article.final_article.is_not(None), Article.final_article != "",
-                             Article.created_at >= cutoff, Article.impact_score >= min_impact)
+    cutoff = now - timedelta(hours=36)
+    last_published = db.session.scalar(select(func.max(NewsletterEdition.published_at)).where(
+        NewsletterEdition.profile_key == profile_key, NewsletterEdition.status == "published"))
+    if last_published is not None:
+        cutoff = max(cutoff, last_published.replace(tzinfo=None) if last_published.tzinfo else last_published)
+    q = Article.query.filter(*published_article_filters(Article),
+                             Article.published_at.is_not(None), Article.published_at >= cutoff,
+                             Article.impact_score >= min_impact)
     if profile_key != "main":
         q = q.filter(Article.category == profile_key)
     prior: list[int | None] = list(db.session.scalars(select(NewsletterEditionItem.article_id).join(NewsletterEdition)
@@ -59,13 +71,14 @@ def select_articles(profile_key: str, *, limit: int = MAX_EDITION_ITEMS, now: da
                NewsletterEditionItem.article_id.is_not(None))).all())
     if prior:
         q = q.filter(~Article.id.in_(prior))
-    candidates = q.order_by(Article.impact_score.desc(), Article.published_at.desc(), Article.id.desc()).limit(200).all()
+    candidates = q.order_by(Article.impact_score.desc(), Article.published_at.desc(), Article.public_id.asc()).limit(200).all()
     # Greedy MMR-style reranking: impact remains dominant, while similar titles
     # and repeated categories are softly penalized. Every input and tie-break is stable.
     unique: list[Article] = []
     seen_urls: set[str] = set()
     for article in candidates:
-        url = (article.original_url or "").split("#", 1)[0].rstrip("/").lower()
+        from utils.url import normalize_url
+        url = normalize_url(article.original_url or "") or ""
         if url and url in seen_urls:
             continue
         if url:
@@ -76,11 +89,14 @@ def select_articles(profile_key: str, *, limit: int = MAX_EDITION_ITEMS, now: da
     category_counts: Counter[str] = Counter()
     while unique and len(selected) < min(max(limit, 1), MAX_EDITION_ITEMS):
         ranked = []
+        impact_values = sorted({float(article.impact_score or 0) for article in unique})
+        impact_rank = {value: index / max(len(impact_values) - 1, 1) for index, value in enumerate(impact_values)}
         for article in unique:
             title = set(re.findall(r"[a-z0-9]+", (article.original_title or "").lower()))
             similarity = max((len(title & old) / max(len(title | old), 1) for old in title_sets), default=0.0)
-            category_penalty = 0.12 if profile_key == "main" and category_counts[article.category or ""] >= max(1, len(selected) // 3) else 0.0
-            score = float(article.impact_score or 0) - similarity * 20 - category_penalty
+            category = article.category or ""
+            category_penalty = 0.25 if profile_key == "main" and category_counts[category] >= max(1, len(selected) // 3) else 0.0
+            score = impact_rank[float(article.impact_score or 0)] - similarity * 0.35 - category_penalty
             ranked.append((score, article.id, article, title))
         _, _, winner, words = max(ranked, key=lambda item: (item[0], item[1]))
         selected.append(winner)
@@ -91,7 +107,8 @@ def select_articles(profile_key: str, *, limit: int = MAX_EDITION_ITEMS, now: da
 
 
 def create_edition(profile_key: str, articles: list[Article] | None = None, *, occurrence_key: str | None = None,
-                   subject: str | None = None, summary: str = "", publish: bool = True) -> NewsletterEdition | None:
+                   subject: str | None = None, summary: str = "", publish: bool = True,
+                   send_email: bool = False) -> NewsletterEdition | None:
     """Persist exactly the selected ordered set. Unique occurrence makes retries safe."""
     profile = ensure_profile(profile_key)
     occurrence_key = occurrence_key or f"manual:{secrets.token_urlsafe(18)}"
@@ -105,6 +122,7 @@ def create_edition(profile_key: str, articles: list[Article] | None = None, *, o
         return None  # deterministic no-edition result for empty windows
     edition = NewsletterEdition(profile_id=profile.id, profile_key=profile_key, occurrence_key=occurrence_key,
         profile_title=profile.title, policy_revision=profile.policy_revision,
+        email_requested=send_email,
         status="published" if publish else "ready", subject=(subject or f"{profile.title}: edition")[:256],
         summary=summary, published_at=datetime.now(timezone.utc).replace(tzinfo=None) if publish else None)
     db.session.add(edition)

@@ -251,7 +251,7 @@ memory:
   max_shared_records_per_context: 3
   max_query_topics: 20
   memory_v2_writes_enabled: false
-  memory_v2_enabled: false
+  memory_v2_enabled: true
   memory_tools_enabled: false
   memory_tool_max_tokens_per_stage: 800
   memory_tool_max_records_per_stage: 16

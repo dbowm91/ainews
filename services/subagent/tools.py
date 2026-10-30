@@ -83,16 +83,17 @@ def _context_tool_get_related_articles(
 
 def _context_tool_get_trend_memory(
     topics: list[str], min_importance: int = 1, max_age_days: int | None = None,
+    limit: int = 8,
 ) -> str:
     from services.trend_memory import get_memory_for_topics
 
     try:
-        entries = get_memory_for_topics(topics, min_importance, max_age_days)
+        entries = get_memory_for_topics(topics, min_importance, max_age_days, limit)
         if not entries:
             return "No trend memory found for these topics."
-        return "\n".join(
-            f"[importance={e.importance}] [{e.topic}] {e.signal}" for e in entries
-        )
+        from services.trend_memory import _format_memory_for_prompt
+
+        return _format_memory_for_prompt(entries, token_budget=400, stage="tool") or "No relevant trend memory found."
     except (SQLAlchemyError, KeyError, AttributeError) as e:
         logger.error("Tool get_trend_memory failed: %s", e)
         return f"Error retrieving trend memory: {type(e).__name__}"
@@ -390,7 +391,11 @@ def _build_context_tools() -> list[ToolDefinition]:
                     },
                     "max_age_days": {
                         "type": "integer",
-                        "description": "Only return entries younger than this many days. Default all.",
+                        "description": "Only return entries younger than this many days; bounded to 3650.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum records to return (1-8).",
                     },
                 },
                 "required": ["topics"],

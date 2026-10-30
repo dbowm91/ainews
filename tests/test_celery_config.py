@@ -23,7 +23,7 @@ class TestCeleryBeatSchedule:
 
     def test_all_tasks_present(self):
         schedule = Config.get_beat_schedule()
-        assert len(schedule) == 15
+        assert len(schedule) == 16
 
     def test_auto_approve_review_articles_is_scheduled(self):
         schedule = Config.get_beat_schedule()
@@ -102,6 +102,15 @@ class TestCeleryBeatSchedule:
         )
         assert schedule["consolidate-trend-memory"]["schedule"] == crontab(
             hour=3, minute=30
+        )
+
+    def test_editorial_memory_maintenance_has_a_separate_scheduled_task(self):
+        schedule = Config.get_beat_schedule()
+        assert schedule["maintain-editorial-memory"]["task"] == (
+            "tasks.cleanup.maintain_editorial_memory"
+        )
+        assert schedule["maintain-editorial-memory"]["schedule"] == crontab(
+            hour=3, minute=35
         )
 
     def test_cleanup_old_article_versions_task(self):

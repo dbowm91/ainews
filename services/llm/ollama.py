@@ -182,6 +182,7 @@ class OllamaProvider(BaseLLMProvider):
         max_tokens: int,
         schema: dict,
         model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         return cast(str, self._retry_with_backoff(
             self._do_chat_with_schema, model,

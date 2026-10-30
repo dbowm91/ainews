@@ -51,6 +51,8 @@ class ToolDefinition:
 | `context_notes` | `context_notes` | Get topic notes for multiple topics |
 | `related_articles` | `related_articles` | Find related articles by topics |
 | `get_trend_memory` | `get_trend_memory` | Retrieve trend memory entries |
+| `memory_search` | `memory_search` | Search active V2 memory, bound to the current article category |
+| `memory_get` | `memory_get` | Read evidence and lineage for bounded IDs in the current category or shared scope |
 | `get_article_by_id` | `get_article_by_id` | Fetch article by ID |
 | `search_articles` | `search_articles` | Search articles by query |
 | `get_source_health` | `get_source_health` | Get source status summary |
@@ -61,6 +63,8 @@ class ToolDefinition:
 | `estimate_stage_cost` | `estimate_stage_cost` | Estimate LLM cost for a stage |
 | `web_search` | `web_search` | External web search |
 | `get_search_provider` | `get_search_provider` | Get configured search provider |
+
+The V2 `memory_search` and `memory_get` definitions are added per invocation and close over a trusted category supplied by the task; category is not accepted as a model argument. V2 automatic context and memory tools are not injected together into the same edit contextualization prompt. Subagent configuration uses the canonical stage keys `research` and `edit`; task role names `researcher` and `editor` are normalized at the runner boundary.
 
 ## Tool Implementations (`tools.py`)
 

@@ -1,5 +1,6 @@
 import threading
 import time
+import math
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
@@ -89,34 +90,101 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     related_articles = get_related_articles_for_edit(
         article.topics, article.id, limit=5,
     )
-    from services.trend_memory import (
-        _format_memory_for_prompt,
-        get_memory_for_topics,
-    )
+    from schemas.pipeline import load_pipeline_config
 
-    trend_memory = _format_memory_for_prompt(
-        get_memory_for_topics(article.topics, min_importance=1),
+    memory_config = load_pipeline_config().memory
+    optimization_config = load_pipeline_config().optimizations
+    from services.memory.context_builder import fit_context_text
+
+    formatted_topic_notes = fit_context_text(
+        _format_topic_notes(topic_notes), memory_config.editor_token_budget
     )
-    if not topic_notes and not related_articles and not trend_memory:
+    remaining_memory_budget = max(
+        0,
+        memory_config.editor_token_budget - math.ceil(len(formatted_topic_notes) / 3),
+    )
+    if memory_config.memory_v2_enabled:
+        from services.memory import memory_context
+        from services.memory.preflight import ensure_memory_schema
+
+        ensure_memory_schema()
+
+        trend_memory = memory_context(
+            article.category or "uncategorized",
+            article.id,
+            remaining_memory_budget,
+            "edit",
+            query=f"{article.original_title or ''} {article.summary or ''}",
+        ).rendered
+    else:
+        from services.trend_memory import _format_memory_for_prompt, get_memory_for_topics
+
+        trend_memory = _format_memory_for_prompt(
+            get_memory_for_topics(article.topics, min_importance=1),
+            token_budget=remaining_memory_budget,
+            stage="edit",
+        )
+    has_memory = bool(trend_memory and trend_memory.strip() and "No prior trend memory" not in trend_memory)
+    if not topic_notes and not related_articles and not has_memory:
         return ""
+
+    from services.pipeline_optimizations import should_contextualize_editor
+
+    def direct_evidence_pack() -> str:
+        blocks = []
+        if topic_notes:
+            blocks.append("Editorial notes:\n" + _format_topic_notes(topic_notes))
+        if related_articles:
+            blocks.append("Related published coverage:\n" + _format_related_articles(related_articles))
+        if has_memory:
+            blocks.append("Historical editorial memory (not independent verification):\n" + trend_memory)
+        return fit_context_text("\n".join(blocks), memory_config.editor_token_budget)
+
+    if optimization_config.conditional_edit_contextualization_enabled and not should_contextualize_editor(
+        article, related_articles, topic_notes, trend_memory,
+    ):
+        from services.metrics import get_metrics
+
+        get_metrics().counter_inc("pipeline.optional_subagent", labels={"stage": "edit", "decision": "skipped", "reason": "no_detected_gap"})
+        return direct_evidence_pack()
 
     # Check for tool-calling config
     stage_config = resolve_subagent_config("edit", default_role="editor")
+    from services.memory.repository import normalize_category
+
+    trusted_category = normalize_category(article.category)
+    memory_is_tool_backed = memory_config.memory_tools_enabled and trusted_category != "uncategorized" and bool(
+        {"memory_search", "memory_get"} & set(stage_config.tools)
+    )
+    prompt_memory = "" if memory_is_tool_backed else trend_memory
+    from services.optional_llm_budget import reserve_optional_llm_call
+    if not reserve_optional_llm_call(article.id, "edit_contextualization"):
+        from services.metrics import get_metrics
+
+        get_metrics().counter_inc("pipeline.optional_subagent", labels={"stage": "edit", "decision": "skipped", "reason": "call_cap"})
+        return direct_evidence_pack()
     if stage_config.tools:
         from services.subagent import initialize_tool_registry
         from services.tool_selection import StageAwareToolSelector
 
         selector = StageAwareToolSelector(stage_config.tools)
-        tools = initialize_tool_registry(selector=selector)
+        tools = initialize_tool_registry(
+            selector=selector,
+            context={
+                "category_id": article.category,
+                "stage": "edit",
+                "memory_tool_max_tokens": remaining_memory_budget,
+            },
+        )
         context_result = run_subagent_with_tools(
             task_type="edit_contextualization",
-            stage="editor",
+            stage="edit",
             prompt_data={
                 "draft": article.draft_article or "",
                 "brief": article.research_brief or "",
-                "topic_notes": _format_topic_notes(topic_notes),
+                "topic_notes": formatted_topic_notes,
                 "related_articles": _format_related_articles(related_articles),
-                "trend_memory": trend_memory,
+                "trend_memory": prompt_memory,
             },
             response_model=EditContextualizationResponse,
             tools=tools,
@@ -125,13 +193,13 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
     else:
         context_result = run_subagent(
             task_type="edit_contextualization",
-            stage="editor",
+            stage="edit",
             prompt_data={
                 "draft": article.draft_article or "",
                 "brief": article.research_brief or "",
-                "topic_notes": _format_topic_notes(topic_notes),
+                "topic_notes": formatted_topic_notes,
                 "related_articles": _format_related_articles(related_articles),
-                "trend_memory": trend_memory,
+                "trend_memory": prompt_memory,
             },
             response_model=EditContextualizationResponse,
             article_id=article.id,
@@ -141,6 +209,9 @@ def _gather_editor_context(article, existing_tags: list[str]) -> str:
             "Edit contextualization subagent failed, proceeding without context",
             extra={"article_id": article.id},
         )
+    from services.metrics import get_metrics
+
+    get_metrics().counter_inc("pipeline.optional_subagent", labels={"stage": "edit", "decision": "called", "reason": "detected_gap" if optimization_config.conditional_edit_contextualization_enabled else "legacy_policy"})
     return context_result.synthesis
 
 

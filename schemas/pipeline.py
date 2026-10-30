@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, cast
+from string import Formatter
+from typing import Literal, Optional, cast
 
 from pydantic import BaseModel, Field
 
@@ -154,6 +155,44 @@ class MemoryConfig(BaseModel):
     truncation_llm_threshold: int = 2000
     truncation_llm_max_tokens: int = 512
     truncation_llm_temperature: float = 0.0
+    research_token_budget: int = Field(default=900, ge=0, le=1600)
+    editor_token_budget: int = Field(default=640, ge=0, le=1600)
+    deep_token_budget: int = Field(default=1600, ge=0, le=2400)
+    max_records_per_context: int = Field(default=8, ge=0, le=50)
+    max_shared_records_per_context: int = Field(default=3, ge=0, le=20)
+    max_query_topics: int = Field(default=20, ge=1, le=100)
+    # These gates have independent rollback semantics: writes may be dual-written
+    # before V2 reads/tools, maintenance, or synthesis are activated.
+    memory_v2_writes_enabled: bool = False
+    memory_v2_enabled: bool = False
+    memory_tools_enabled: bool = False
+    memory_tool_max_tokens_per_stage: int = Field(default=800, ge=0, le=2400)
+    memory_tool_max_records_per_stage: int = Field(default=16, ge=0, le=100)
+    memory_tool_max_chars_per_stage: int = Field(default=6000, ge=0, le=20000)
+    memory_maintenance_enabled: bool = False
+    memory_maintenance_max_items: int = Field(default=500, ge=1, le=5000)
+    memory_maintenance_max_categories: int = Field(default=20, ge=1, le=200)
+    memory_max_syntheses_per_day: int = Field(default=0, ge=0, le=1000)
+    memory_synthesis_enabled: bool = False
+    memory_synthesis_provider: Optional[str] = None
+    memory_synthesis_model: Optional[str] = None
+    memory_synthesis_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    memory_synthesis_max_tokens: int = Field(default=768, ge=128, le=2048)
+    memory_synthesis_retry_max_tokens: int = Field(default=2048, ge=128, le=4096)
+    max_high_age_days: int = Field(default=90, ge=1, le=3650)
+    high_review_grace_days: int = Field(default=30, ge=0, le=365)
+
+
+class PipelineOptimizationConfig(BaseModel):
+    """Independent rollback switches for optional pipeline inference work."""
+
+    selector_prefilter_enabled: bool = False
+    conditional_research_synthesis_enabled: bool = False
+    conditional_edit_contextualization_enabled: bool = False
+    memory_candidate_reuse_enabled: bool = False
+    optional_llm_call_caps_enabled: bool = False
+    max_optional_llm_calls_per_article_per_day: int = Field(default=3, ge=0, le=100)
+    max_optional_llm_calls_per_day: int = Field(default=200, ge=0, le=10000)
 
 
 class StageConfig(BaseModel):
@@ -173,9 +212,47 @@ class PipelineRootConfig(BaseModel):
     )
     subagent: SubagentConfig = Field(default_factory=SubagentConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    optimizations: PipelineOptimizationConfig = Field(default_factory=PipelineOptimizationConfig)
     experiments: dict = Field(default_factory=dict)
     stages: dict[str, StageConfig] = Field(default_factory=dict)
     schedule: dict = Field(default_factory=dict)
+
+
+_KNOWN_SUBAGENT_TOOLS = frozenset({
+    "get_topic_note", "context_notes", "related_articles", "get_trend_memory",
+    "get_article_by_id", "search_articles", "get_source_health", "get_topic_gap_report",
+    "get_source_performance", "get_quality_report", "find_dedupe_candidates",
+    "estimate_stage_cost", "web_search", "get_search_provider", "memory_search", "memory_get",
+})
+
+
+def _validate_subagent_templates(config: PipelineRootConfig) -> None:
+    expected = {
+        "research": {"research_synthesis": {"title", "body", "web_results"}},
+        "edit": {"edit_contextualization": {"draft", "brief", "topic_notes", "related_articles", "trend_memory"}},
+    }
+    for stage_name in ("research", "edit"):
+        stage = getattr(config.subagent, stage_name)
+        unknown = sorted(set(stage.tools) - _KNOWN_SUBAGENT_TOOLS)
+        if unknown:
+            raise ValueError(f"Unknown configured subagent tools for {stage_name}: {', '.join(unknown)}")
+        task_template = stage.task_template
+        required = expected[stage_name]
+        if not task_template:
+            continue
+        path = Path(task_template)
+        if not path.is_absolute():
+            path = BASE_DIR / path
+        if not path.is_file():
+            raise ValueError(f"Configured {stage_name} subagent template does not exist: {task_template}")
+        template = path.read_text()
+        fields = {field for _, field, _, _ in Formatter().parse(template) if field}
+        expected_fields = next(iter(required.values()))
+        missing = sorted(expected_fields - fields)
+        if missing:
+            raise ValueError(
+                f"Configured {stage_name} subagent template is missing placeholders: {', '.join(missing)}"
+            )
 
 
 def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:
@@ -186,7 +263,9 @@ def _load_pipeline_config_from_file(path: str | Path) -> PipelineRootConfig:
     from schemas.common import resolve_env_vars
 
     raw = resolve_env_vars(raw)
-    return PipelineRootConfig(**raw)
+    config = PipelineRootConfig(**raw)
+    _validate_subagent_templates(config)
+    return config
 
 
 def load_pipeline_config(
@@ -213,6 +292,10 @@ def resolve_subagent_config(
     stage: str, default_role: Optional[str] = None
 ) -> SubagentStageConfig:
     config = load_pipeline_config()
+    # Pipeline roles (researcher/editor) are intentionally distinct from the
+    # subagent configuration keys (research/edit). Accept both at this public
+    # boundary, but resolve through one canonical mapping.
+    stage = {"researcher": "research", "editor": "edit"}.get(stage, stage)
     stage_config = getattr(config.subagent, stage, None)
     if default_role is None:
         default_role = "editor"

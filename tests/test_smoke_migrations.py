@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 
+import pytest
 from werkzeug.security import generate_password_hash
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -80,6 +81,14 @@ class TestFlaskDbUpgrade:
                 "api_tokens",
                 "pipeline_runs",
                 "newsletters",
+                "memory_items",
+                "memory_evidence",
+                "memory_scopes",
+                "memory_lineage",
+                "memory_category_summaries",
+                "memory_synthesis_runs",
+                "memory_synthesis_attempts",
+                "memory_synthesis_cursors",
                 "tags",
                 "alembic_version",
             ]:
@@ -95,6 +104,9 @@ class TestFlaskDbUpgrade:
             columns = {col[1] for col in cursor.fetchall()}
             assert "token_hash" in columns, "api_tokens missing token_hash column"
             assert "revoked_at" in columns, "api_tokens missing revoked_at column"
+
+            trend_columns = {col[1] for col in conn.execute("PRAGMA table_info(trend_memory)").fetchall()}
+            assert {"last_accessed_at", "proposal_key"}.issubset(trend_columns)
         finally:
             conn.close()
 
@@ -112,6 +124,112 @@ class TestFlaskDbUpgrade:
                 timeout=120,
             )
             assert result.returncode == 0, f"flask db upgrade (run {i + 1}) failed:\n{result.stderr}"
+
+    def test_corrective_upgrade_repairs_current_synthesis_and_high_review_dates(self, tmp_path):
+        env = _make_prod_env(tmp_path, _OLLAMA_PROVIDERS)
+        db_path = tmp_path / "smoke.db"
+        upgrade_041 = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "upgrade", "041_memory_synthesis_attempts"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert upgrade_041.returncode == 0, upgrade_041.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute(
+                "INSERT INTO memory_synthesis_runs(category_id,evidence_digest,run_date,daily_slot,status,created_at) "
+                "VALUES ('ai','reserved-old','2026-10-29',1,'reserved','2026-10-29')"
+            )
+            conn.execute(
+                "INSERT INTO memory_synthesis_runs(category_id,evidence_digest,run_date,daily_slot,status,created_at) "
+                "VALUES ('ai','reserved-new','2026-10-29',2,'reserved','2026-10-29')"
+            )
+            for index, status in ((1, "active"), (2, "active")):
+                conn.execute(
+                    "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
+                    "VALUES ('ai','synthesis',?,2,?,'2026-10-01','synthesis-{}','2026-10-01','2026-10-01')".format(index),
+                    (f"Synthesis revision {index}", status),
+                )
+            conn.execute(
+                "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
+                "VALUES ('ai','observation','legacy high item',3,'active','2025-01-01','legacy-high','2025-01-01','2025-01-01')"
+            )
+            conn.execute(
+                "INSERT INTO memory_category_summaries(category_id,content,evidence_ids,revision,evidence_digest,updated_at) "
+                "VALUES ('ai','stale projection','[]',2,'old-digest','2026-10-01')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        upgrade = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "upgrade"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert upgrade.returncode == 0, upgrade.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            syntheses = conn.execute(
+                "SELECT id,status FROM memory_items WHERE item_type='synthesis' ORDER BY id"
+            ).fetchall()
+            assert syntheses == [(1, "superseded"), (2, "active")]
+            pointer, = conn.execute(
+                "SELECT current_memory_id FROM memory_category_summaries WHERE category_id='ai'"
+            ).fetchone()
+            assert pointer == 2
+            review_due, = conn.execute(
+                "SELECT review_due_at FROM memory_items WHERE fingerprint='legacy-high'"
+            ).fetchone()
+            assert review_due is not None
+            reserved = conn.execute(
+                "SELECT COUNT(*) FROM memory_synthesis_runs WHERE category_id='ai' AND status='reserved'"
+            ).fetchone()[0]
+            assert reserved == 1
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO memory_synthesis_runs(category_id,evidence_digest,run_date,daily_slot,status,created_at) "
+                    "VALUES ('ai','reserved-race','2026-10-29',99,'reserved','2026-10-29')"
+                )
+            assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+        finally:
+            conn.close()
+
+    def test_populated_editor_memory_blocks_destructive_downgrade(self, tmp_path):
+        env = _make_prod_env(tmp_path, _OLLAMA_PROVIDERS)
+        db_path = tmp_path / "smoke.db"
+        upgrade = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "upgrade"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert upgrade.returncode == 0, upgrade.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute(
+                "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
+                "VALUES ('ai','observation','retained memory',3,'active','2026-10-29','test-fingerprint','2026-10-29','2026-10-29')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        downgrade = subprocess.run(
+            [sys.executable, "-m", "flask", "db", "downgrade", "037_trend_memory_proposal_idempotency"],
+            cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+        )
+        assert downgrade.returncode != 0
+        assert "Refusing to downgrade populated editor memory" in downgrade.stdout + downgrade.stderr
+        conn = sqlite3.connect(str(db_path))
+        try:
+            assert conn.execute("SELECT COUNT(*) FROM memory_items").fetchone()[0] == 1
+            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "043_memory_synthesis_fairness_cursor"
+            item_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_items)")}
+            summary_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_category_summaries)")}
+            cursor_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_synthesis_cursors)")}
+            assert {"review_status", "review_reason", "review_count", "decision_metadata"} <= item_columns
+            assert "current_memory_id" in summary_columns
+            assert {"category_id", "last_memory_id", "updated_at"} <= cursor_columns
+        finally:
+            conn.close()
 
 
 class TestMigrationDirectory:

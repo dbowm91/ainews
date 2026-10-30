@@ -79,6 +79,25 @@ class TestOpenAIProvider:
             if saved_openai is not None:
                 sys.modules["openai"] = saved_openai
 
+    def test_client_uses_configured_timeout_and_retry_attempts(self):
+        provider = self._make_provider(timeout_seconds=47, retry_attempts=2)
+
+        assert provider.timeout_seconds == 47
+        assert provider.retry_attempts == 2
+        assert provider._client_kwargs["timeout"] == 47
+
+    def test_chat_forwards_configured_reasoning_effort(self):
+        provider = self._make_provider(reasoning_effort="none")
+        mock_resp = MagicMock()
+        mock_resp.choices = [MagicMock(message=MagicMock(content="answer"), finish_reason="stop")]
+        mock_resp.usage = None
+        provider._client = MagicMock()
+        provider._client.chat.completions.create.return_value = mock_resp
+
+        provider._do_chat([{"role": "user", "content": "hi"}])
+
+        assert provider._client.chat.completions.create.call_args.kwargs["reasoning_effort"] == "none"
+
     def test_client_caching(self):
         provider = self._make_provider()
         mock_client = MagicMock()
@@ -121,12 +140,12 @@ class TestOpenAIProvider:
         assert call_args.kwargs["temperature"] == 0.5
         assert call_args.kwargs["max_tokens"] == 100
 
-    def test_empty_chat_content_is_retryable_server_error(self):
-        from services.llm.errors import ProviderServerError
+    def test_empty_chat_content_is_incomplete_response(self):
+        from services.llm.errors import ProviderResponseIncompleteError
 
         provider = self._make_provider()
         provider.provider_id = "openai-empty-content-test"
-        provider.RETRY_MAX_ATTEMPTS = 1
+        provider.retry_attempts = 1
         provider._client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.choices = [MagicMock(message=MagicMock(content=" "))]
@@ -134,7 +153,7 @@ class TestOpenAIProvider:
         mock_resp.usage.completion_tokens = 2
         provider._client.chat.completions.create.return_value = mock_resp
 
-        with pytest.raises(ProviderServerError, match="returned empty content"):
+        with pytest.raises(ProviderResponseIncompleteError, match="returned empty content"):
             provider.chat([{"role": "user", "content": "hi"}])
 
     def test_chat_error_converted(self):
@@ -176,6 +195,27 @@ class TestOpenAIProvider:
         assert schema["additionalProperties"] is False
         assert set(schema["required"]) == set(schema["properties"])
 
+    def test_structured_call_forwards_reasoning_effort(self):
+        provider = self._make_provider()
+        provider._client = MagicMock()
+        provider._client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(
+                message=MagicMock(content='{"name":"test","value":1}'),
+                finish_reason="stop",
+            )]
+        )
+
+        class TestModel(BaseModel):
+            name: str
+            value: int
+
+        provider.chat_structured(
+            [{"role": "user", "content": "give me data"}],
+            response_model=TestModel,
+            reasoning_effort="none",
+        )
+        assert provider._client.chat.completions.create.call_args.kwargs["reasoning_effort"] == "none"
+
     def test_chat_with_schema_makes_nested_optional_fields_strict(self):
         provider = self._make_provider()
         mock_resp = MagicMock()
@@ -202,8 +242,8 @@ class TestOpenAIProvider:
         assert nested["required"] == ["note"]
         assert "default" not in nested["properties"]["note"]
 
-    def test_structured_empty_completion_is_retryable_error(self):
-        from services.llm.errors import ProviderServerError
+    def test_structured_truncation_is_incomplete_response(self):
+        from services.llm.errors import ProviderResponseIncompleteError
 
         provider = self._make_provider()
         provider._client = MagicMock()
@@ -214,7 +254,7 @@ class TestOpenAIProvider:
         class TestModel(BaseModel):
             name: str
 
-        with pytest.raises(ProviderServerError, match="empty structured content"):
+        with pytest.raises(ProviderResponseIncompleteError, match="structured output limit"):
             provider._do_chat_with_schema(
                 [{"role": "user", "content": "give me data"}],
                 TestModel,
@@ -223,6 +263,26 @@ class TestOpenAIProvider:
                 max_tokens=512,
                 schema=TestModel.model_json_schema(),
             )
+
+    def test_structured_truncation_is_not_retried_with_identical_settings(self):
+        from services.llm.errors import ProviderResponseIncompleteError
+
+        provider = self._make_provider(retry_attempts=3)
+        provider._client = MagicMock()
+        provider._client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=""), finish_reason="length")]
+        )
+
+        class TestModel(BaseModel):
+            name: str
+
+        with pytest.raises(ProviderResponseIncompleteError):
+            provider.chat_structured(
+                [{"role": "user", "content": "give me data"}],
+                response_model=TestModel,
+                max_tokens=256,
+            )
+        provider._client.chat.completions.create.assert_called_once()
 
     def test_health_check_ok(self):
         provider = self._make_provider()

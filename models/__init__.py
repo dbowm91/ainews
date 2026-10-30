@@ -6,7 +6,19 @@ from .article import Article, Citation
 from .newsletter import Newsletter, Subscriber, ArticleMetric
 from .pipeline import PipelineRun, PipelineLog, ArticleVersion
 from .share import ShareConfig
-from .context import TopicNote, TrendMemory
+from .context import (
+    MemoryCategorySummary,
+    MemoryEvidence,
+    MemoryItem,
+    MemoryLineage,
+    MemoryMaintenanceState,
+    MemorySynthesisAttempt,
+    MemorySynthesisCursor,
+    MemoryScope,
+    MemorySynthesisRun,
+    TopicNote,
+    TrendMemory,
+)
 from .webhook import Webhook, WebhookEvent
 from .audit import AuditLog
 from .search import SearchQuery
@@ -30,6 +42,15 @@ __all__ = [
     "ShareConfig",
     "TopicNote",
     "TrendMemory",
+    "MemoryItem",
+    "MemoryEvidence",
+    "MemoryScope",
+    "MemoryLineage",
+    "MemoryCategorySummary",
+    "MemorySynthesisRun",
+    "MemorySynthesisAttempt",
+    "MemorySynthesisCursor",
+    "MemoryMaintenanceState",
     "Webhook",
     "WebhookEvent",
     "AuditLog",

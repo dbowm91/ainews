@@ -321,6 +321,9 @@ class TestBuiltInToolsExtended:
                 mock_entry.topic = "AI"
                 mock_entry.importance = 2
                 mock_entry.signal = "AI is hot"
+                from datetime import datetime, timezone
+                mock_entry.expires_at = None
+                mock_entry.created_at = datetime.now(timezone.utc)
                 mock_get.return_value = [mock_entry]
                 result = tool.fn(topics=["AI"], min_importance=1)
                 assert "AI is hot" in result

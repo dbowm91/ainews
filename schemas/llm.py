@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -33,6 +34,9 @@ class OpenAIConfig(BaseModel):
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
     headers: dict[str, str] = Field(default_factory=dict)
+    reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    timeout_seconds: int = Field(default=120, ge=1, le=600)
+    retry_attempts: int = Field(default=3, ge=1, le=5)
     # An endpoint that needs no credential and may live on loopback or a
     # private network: a local inference server such as LM Studio or
     # llama.cpp. Declaring it is an explicit operator statement, and it is

@@ -142,6 +142,13 @@ def consolidate_trend_memory(self):
         logger.error("Invalid signature for consolidate_trend_memory")
         raise ValueError("Invalid task signature")
 
+    from schemas.pipeline import load_pipeline_config
+
+    memory_config = load_pipeline_config().memory
+    if memory_config.memory_maintenance_enabled or memory_config.memory_v2_writes_enabled:
+        logger.info("Legacy consolidation skipped while V2 writes or lifecycle maintenance is enabled")
+        return {"merged": 0, "topics": {}, "skipped": "v2_owns_memory_lifecycle"}
+
     from extensions import db
     from services.trend_memory import consolidate_all_topics
 
@@ -161,6 +168,63 @@ def consolidate_trend_memory(self):
     except Exception as e:
         logger.error("Trend memory consolidation failed: %s", e)
         raise
+
+
+@shared_task(
+    bind=True,
+    acks_late=True,
+    task_reject_on_worker_lost=True,
+    soft_time_limit=300,
+    time_limit=360,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def maintain_editorial_memory(self):
+    """Run additive-store lifecycle and capped synthesis maintenance."""
+    if not verify_task("maintain_editorial_memory", (), {}):
+        logger.error("Invalid signature for maintain_editorial_memory")
+        raise ValueError("Invalid task signature")
+
+    from sqlalchemy import func, select
+
+    from extensions import db
+    from models import MemoryItem, MemoryMaintenanceState
+    from schemas.pipeline import load_pipeline_config
+    from services.memory.lifecycle import maintain_memory
+    from services.memory.preflight import ensure_memory_schema
+
+    memory_config = load_pipeline_config().memory
+    if not memory_config.memory_maintenance_enabled:
+        return {"status": "disabled", "llm_calls": 0}
+
+    ensure_memory_schema()
+
+    result = maintain_memory(limit=memory_config.memory_maintenance_max_items)
+    if memory_config.memory_synthesis_enabled and memory_config.memory_max_syntheses_per_day:
+        from services.memory.synthesis import synthesize_category
+
+        categories = db.session.execute(
+            select(MemoryItem.owner_category)
+            .where(MemoryItem.item_type == "observation", MemoryItem.status.in_(("active", "synthesized")))
+            .group_by(MemoryItem.owner_category)
+            .having(func.count(MemoryItem.id) >= 2)
+            .order_by(MemoryItem.owner_category)
+            .limit(memory_config.memory_maintenance_max_categories)
+        ).scalars().all()
+        synthesis_results = [synthesize_category(category) for category in categories]
+        result["synthesis"] = synthesis_results
+        result["llm_calls"] = sum(int(entry.get("llm_calls", 0)) for entry in synthesis_results)
+        state = db.session.get(MemoryMaintenanceState, 1)
+        if state is not None:
+            state.stats = {**(state.stats or {}), "synthesis": synthesis_results, "llm_calls": result["llm_calls"]}
+            db.session.commit()
+    logger.info(
+        "Editorial memory maintenance completed: archived=%s high_review_due=%s high_retired=%s llm_calls=%s",
+        result["archived_expired"], result["high_review_due"], result["high_retired"], result["llm_calls"],
+    )
+    return result
 
 
 @shared_task(bind=True, acks_late=True, task_reject_on_worker_lost=True, soft_time_limit=300, time_limit=360,
@@ -245,6 +309,19 @@ def purge_trend_memory(self):
         raise ValueError("Invalid task signature")
 
     from extensions import db
+    from schemas.pipeline import load_pipeline_config
+
+    memory_config = load_pipeline_config().memory
+    if any((
+        memory_config.memory_v2_enabled,
+        memory_config.memory_v2_writes_enabled,
+        memory_config.memory_tools_enabled,
+        memory_config.memory_maintenance_enabled,
+        memory_config.memory_synthesis_enabled,
+    )):
+        logger.info("Legacy trend memory retained for rollback; expired rows are excluded by retrieval")
+        return {"purged": 0, "retained_for_rollback": True}
+
     from services.trend_memory import purge_expired
 
     try:

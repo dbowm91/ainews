@@ -39,6 +39,7 @@ def published_article(app, create_article):
         pipeline_status="editing",
         topics=["ai"],
         draft_article="A draft about local inference.",
+        final_article="A published article about local inference.",
     )
     article.pipeline_status = "done"
     article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)

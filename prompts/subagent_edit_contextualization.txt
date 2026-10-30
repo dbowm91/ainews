@@ -14,6 +14,10 @@
 {related_articles}
 </related_articles>
 
+<trend_memory>
+{trend_memory}
+</trend_memory>
+
 Review the draft in light of the research brief, topic notes, related articles, and trend memory.
 Identify gaps in context, missing attribution, or claims that need additional support.
 Return a concise contextualization that addresses what the editor should know.

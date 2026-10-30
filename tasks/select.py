@@ -56,7 +56,7 @@ def _assign_experiment_group(article_id: int, salt: str = "") -> str:
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def select_article(self, article_id: int, run_id=None, _signature=None, task_name=None):
+def select_article(self, article_id: int, run_id=None, _signature=None, task_name=None):  # noqa: C901 - conservative prefilter shares the stage failure boundary
     try:
         from schemas.tasks import SelectArticleTask
         validated = SelectArticleTask(article_id=article_id, run_id=run_id)
@@ -73,6 +73,53 @@ def select_article(self, article_id: int, run_id=None, _signature=None, task_nam
 
     article_id = validated.article_id
     run_id = validated.run_id
+
+    from schemas.pipeline import load_pipeline_config
+
+    if load_pipeline_config().optimizations.selector_prefilter_enabled:
+        from extensions import db
+        from models import Article
+        from services.metrics import get_metrics
+        from tasks.pipeline import _log_pipeline, _transition_article_status
+
+        preflight_article = db.session.get(Article, article_id)
+        if preflight_article is not None and preflight_article.pipeline_status == PipelineStatus.PENDING:
+            from services.dedup_service import find_dedupe_candidates
+            from services.pipeline_optimizations import selector_prefilter_reason
+
+            duplicates = find_dedupe_candidates(
+                preflight_article.original_title or "",
+                preflight_article.original_url,
+                limit=10,
+            )
+            reason = selector_prefilter_reason(preflight_article, duplicates)
+            if reason:
+                preflight_article.selector_result = {
+                    "selected": False,
+                    "decision": "deterministic_reject",
+                    "reason": reason,
+                    "confidence": "high",
+                }
+                _transition_article_status(preflight_article, PipelineStatus.SKIPPED)
+                db.session.commit()
+                get_metrics().counter_inc(
+                    "pipeline.selector_prefilter",
+                    labels={"decision": "reject", "reason": reason},
+                )
+                if run_id:
+                    _log_pipeline(
+                        run_id,
+                        "select",
+                        "info",
+                        "Deterministic selector prefilter: %s",
+                        reason,
+                        article_id=article_id,
+                    )
+                return {"article_id": article_id, "decision": "deterministic_reject", "reason": reason}
+            get_metrics().counter_inc(
+                "pipeline.selector_prefilter",
+                labels={"decision": "defer", "reason": "selector_required"},
+            )
 
     def work(article, provider, model, max_tokens):
         from extensions import db

@@ -1,6 +1,11 @@
 topics:
   ai:
     display_name: AI & Machine Learning
+    aliases:
+      - AI
+      - artificial intelligence
+      - machine learning
+      - machine-learning
     description: Large language models, neural networks, AI safety, machine learning research, generative
       AI, AI infrastructure and tooling
     color: purple

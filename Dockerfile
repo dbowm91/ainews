@@ -15,12 +15,14 @@ WORKDIR /app
 COPY uv.lock pyproject.toml ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Install the ASGI server into the project venv (not --system) so the
-# runtime stage can run everything from a single PATH entry.
-RUN uv pip install --python /app/.venv/bin/python "granian>=1.0.0,<2"
-
 COPY . .
 RUN uv sync --frozen --no-dev
+
+# Install the ASGI server into the project venv (not --system) so the
+# runtime stage can run everything from a single PATH entry. This must run
+# AFTER the final `uv sync`: an exact sync prunes packages that are not in
+# the lockfile, which would remove granian again.
+RUN uv pip install --python /app/.venv/bin/python "granian>=1.0.0,<2"
 
 # Stage 2: Runtime - minimal image without build tools
 FROM python:3.12-slim AS runtime

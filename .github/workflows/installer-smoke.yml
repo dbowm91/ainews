@@ -722,7 +722,12 @@ jobs:
 
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-          HASHED_ADMIN_PW=$(python3 "${INSTALL_DIR}/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+          HASHED_ADMIN_PW=$("${INSTALL_DIR}/app/.venv/bin/python" "${INSTALL_DIR}/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+
+          if [ -z "$HASHED_ADMIN_PW" ]; then
+            echo "ERROR: Failed to hash admin password"
+            exit 1
+          fi
 
           cat > "${INSTALL_DIR}/.env" <<EOF
           FLASK_CONFIG=production
@@ -735,6 +740,11 @@ jobs:
           OLLAMA_MODEL=llama3.1
           OLLAMA_HOST=http://ollama:11434
           LOG_FORMAT=text
+          # Dummy creds so the shipped providers.yaml (opencode, enabled)
+          # passes fail-closed shape validation. The smoke test never calls
+          # a provider: db-migrate runs migrations, web only serves /health.
+          OPENCODE_API_KEY=ci-dummy-key-not-a-secret
+          OPENCODE_SESSION_ID=ci-dummy-session
           EOF
           chmod 600 "${INSTALL_DIR}/.env"
           echo ".env written"

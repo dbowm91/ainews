@@ -1,6 +1,6 @@
 # LLM-native publication, newsletter editions, and distribution roadmap
 
-**Status:** VERIFIED in this worktree — M1–M5 implementation and local regression evidence are recorded below and in each milestone plan. Live-instance and hardware performance qualification remain deployment gates.
+**Status:** M1–M5 implementation and local regression evidence recorded; corrective C01–C05 OPEN as of 2026-10-30. Merge/combined-migration and target-instance qualification remain pending. See [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Date:** 2026-10-29
 **Baseline:** main at 60fd18eda3a5e8852943e70bf32d4f957dbb3ff5. Recheck on merge and against ongoing PRs #18 (Eggsearch retrieval) and #19 (editorial memory).
 **Operating intent:** personal/local or privately operated AInews, with *optional* exposure to external agents or an optional public instance. Not a public-launch or broad packaging-readiness program.
@@ -72,3 +72,18 @@ Each milestone owns tests and migrations; no milestone is complete based only on
 - **Final local verification:** `rtk proxy .venv/bin/python -m pytest -q --tb=long` → 5,004 passed, 6 skipped; `rtk proxy .venv/bin/mypy . --exclude .venv` → 510 source files clean; scoped Ruff on changed files passed; `rtk proxy uv lock --check` and `rtk proxy git diff --check` passed. Repository-wide Ruff still reports five existing findings in unrelated CLI/trend/safe-fetch files.
 - **Implementation patch SHA-256:** `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`. Reproduce with SHA-256 over `git diff --binary origin/main` excluding `plans/**`, followed by sorted untracked non-plan file paths and contents.
 - **Limitations:** no production/target installation was changed; there was no live SMTP or inbox test. Multi-process Redis contention, realistic high-volume FTS/SQLite load, p95/memory measurements, and hardware-specific qualification remain outstanding. Existing newsletters with personalized legacy HTML remain admin-only. Do not enable scheduled email in an installation until its operators have reviewed the new default-off profile/global delivery switches and local configuration.
+
+
+## Corrective-pass registration — 2026-10-30
+
+**Status:** OPEN — the previous M1–M5 branch-local VERIFIED statements describe the original implementation and tests, **not closure of the follow-up findings**. Original evidence above is preserved. See [corrective pass overview](llm_native_corrective_pass_overview_20261030.md).
+
+| Corrective | Priority | Plan | Focus and activation dependency |
+| --- | --- | --- | --- |
+| C01 | P0 | [Migration/visibility](llm_native_corrective_01_migration_visibility_20261030.md) | PR #19 also introduces 037–043 after 036, while this branch introduces independent 037; converge Alembic history and cross-surface publication eligibility before combined merge |
+| C02 | P0 access / P1 performance | [Agent read contract](llm_native_corrective_02_agent_read_contract_20261030.md) | Remove internal IDs from decodable cursors, prevent protected JSON shared-cache bypass, unify REST/MCP queries, use bounded FTS5 and qualify Redis admission before enabling external readers |
+| C03 | P0 email | [Email delivery](llm_native_corrective_03_email_delivery_20261030.md) | Correct RFC 8058 one-click header, recover durable send planning, test opt-out/retry/unknown outcomes before live fanout |
+| C04 | P1 | [Scheduling/editorial](llm_native_corrective_04_schedule_editorial_20261030.md) | Prevent omitted schedules from being cleared; preserve profile update identity, test DST/recovery, calibrate published-at selection and diversity/paragraph quality |
+| C05 | P0 operational | [Integration qualification](llm_native_corrective_05_integration_qualification_20261030.md) | Classify CI baseline failures against main, run combined migration and real Celery/Redis/MCP/mail-sink on restored target data before optional activation |
+
+**Execution:** C01 first, C02/C03 independently after the shared baseline, C04 in parallel but no scheduled fanout before C03, C05 final. Existing API, anonymous, MCP, newsletter archive, and global/profile email switches remain opt-in/default-off where configured. No public release is sought. Mark each corrective VERIFIED only with implementation SHAs, fixed regression tests and relevant runtime/migration evidence, not with this plan registration.

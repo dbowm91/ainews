@@ -166,3 +166,20 @@ def test_reader_policy_matrix_runs_through_asgi_transport(app, monkeypatch):
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         executor.submit(asyncio.run, check_revoked_and_redis_failure()).result()
+
+
+def test_reader_api_routes_use_the_shared_fail_closed_quota_only(app):
+    from extensions import limiter
+
+    endpoint_names = {
+        rule.endpoint for rule in app.url_map.iter_rules()
+        if rule.rule.startswith("/api/public/v1/")
+    }
+    assert endpoint_names
+    for endpoint in endpoint_names:
+        application_limits, decorated_limits = limiter.limit_manager.resolve_limits(
+            app, endpoint=endpoint, blueprint="public", in_middleware=True,
+            marked_for_limiting=True,
+        )
+        assert application_limits == []
+        assert decorated_limits == []

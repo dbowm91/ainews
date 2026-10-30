@@ -5,6 +5,7 @@ import hashlib
 
 from flask import current_app, jsonify, request
 
+from extensions import limiter
 from routes.public import public_bp
 from services.agent_access import admit_request, get_policy
 from services.public_read import (
@@ -72,6 +73,7 @@ def _public_error(exc: PublicReadError):
 
 
 @public_bp.route("/api/public/v1/articles")
+@limiter.exempt
 def api_articles():
     try:
         limit, category, tag, sort = _params()
@@ -85,6 +87,7 @@ def api_articles():
 
 
 @public_bp.route("/api/public/v1/articles/<public_id>")
+@limiter.exempt
 def api_article(public_id: str):
     article = get_article(public_id)
     if article is None:
@@ -93,6 +96,7 @@ def api_article(public_id: str):
 
 
 @public_bp.route("/api/public/v1/search")
+@limiter.exempt
 def api_search():
     try:
         limit, category, tag, sort = _params()
@@ -106,16 +110,19 @@ def api_search():
 
 
 @public_bp.route("/api/public/v1/categories")
+@limiter.exempt
 def api_categories():
     return _json_response({"items": get_categories()})
 
 
 @public_bp.route("/api/public/v1/tags")
+@limiter.exempt
 def api_tags():
     return _json_response({"items": get_tags()})
 
 
 @public_bp.route("/api/public/v1/newsletters")
+@limiter.exempt
 def api_newsletters():
     try:
         filters = EditionFilters(
@@ -133,6 +140,7 @@ def api_newsletters():
 
 
 @public_bp.route("/api/public/v1/newsletters/<public_id>")
+@limiter.exempt
 def api_newsletter(public_id: str):
     edition = get_edition(public_id)
     if edition is None:

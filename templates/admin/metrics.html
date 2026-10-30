@@ -81,7 +81,7 @@
             {% for article, views in top_by_views %}
               <tr>
                 <td>{{ loop.index }}</td>
-                <td><a href="/article/{{ article.id }}" target="_blank" class="article-link" title="{{ article.original_title|e }}">{{ (article.original_title if article.original_title else '')|e }}</a></td>
+                <td><a href="/article/{{ article.public_id }}" target="_blank" class="article-link" title="{{ article.original_title|e }}">{{ (article.original_title if article.original_title else '')|e }}</a></td>
                 <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                 <td><strong>{{ views }}</strong></td>
               </tr>
@@ -107,7 +107,7 @@
             {% for article, clicks in top_by_shares %}
               <tr>
                 <td>{{ loop.index }}</td>
-                <td><a href="/article/{{ article.id }}" target="_blank" class="article-link" title="{{ article.original_title|e }}">{{ (article.original_title if article.original_title else '')|e }}</a></td>
+                <td><a href="/article/{{ article.public_id }}" target="_blank" class="article-link" title="{{ article.original_title|e }}">{{ (article.original_title if article.original_title else '')|e }}</a></td>
                 <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                 <td><strong>{{ clicks }}</strong></td>
               </tr>
@@ -133,7 +133,7 @@
             {% for article, link_views in top_by_link_views %}
               <tr>
                 <td>{{ loop.index }}</td>
-                <td><a href="/article/{{ article.id }}" target="_blank" class="article-link" title="{{ article.original_title|e }}">{{ (article.original_title if article.original_title else '')|e }}</a></td>
+                <td><a href="/article/{{ article.public_id }}" target="_blank" class="article-link" title="{{ article.original_title|e }}">{{ (article.original_title if article.original_title else '')|e }}</a></td>
                 <td><span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span></td>
                 <td><strong>{{ link_views }}</strong></td>
               </tr>

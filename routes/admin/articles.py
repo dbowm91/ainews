@@ -327,6 +327,8 @@ def _process_edit_form(article, form_data, original_fa):
     ).strip()
     if new_status in VALID_PIPELINE_STATUSES:
         article.pipeline_status = new_status
+        if new_status != "done":
+            article.publicly_visible = False
 
     # Validate impact_score
     impact_raw = form_data.get("impact_score", "")
@@ -408,6 +410,8 @@ def edit_article(article_id):
         fa, new_category, new_status = _process_edit_form(article, request.form, original_fa or {})
 
         article.final_article = json.dumps(fa)
+        from services.publication import apply_publication_state
+        apply_publication_state(article)
 
         success, error_response = _save_article_edit(article, fa, new_category, new_status)
         if not success:
@@ -556,6 +560,7 @@ def reprocess_article(article_id):
     article = db.get_or_404(Article, article_id)
 
     article.pipeline_status = cfg["status"]
+    article.publicly_visible = False
     article.pipeline_started_at = datetime.now(timezone.utc)
     for field in cfg["fields"]:
         setattr(article, field, None)

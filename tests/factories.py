@@ -124,6 +124,7 @@ def create_article(
     article = Article(
         source_id=source_id,
         pipeline_status=pipeline_status,
+        publicly_visible=(pipeline_status == "done"),
         category=category,
         impact_score=impact_score,
         original_title=original_title,

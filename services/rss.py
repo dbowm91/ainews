@@ -29,7 +29,7 @@ def generate_rss_feed(
         title_text = html.escape(headline or article.original_title or "Untitled")
         SubElement(item, "title").text = title_text
 
-        link = f"{site_url}/article/{article.id}"
+        link = f"{site_url}/article/{article.public_id}"
         SubElement(item, "link").text = link
         SubElement(item, "guid").text = link
 
@@ -76,7 +76,7 @@ def generate_sitemap(articles: list, site_url: str = "") -> str:
     # Articles
     for article in articles:
         url_el = SubElement(urlset, "url")
-        SubElement(url_el, "loc").text = f"{site_url}/article/{article.id}"
+        SubElement(url_el, "loc").text = f"{site_url}/article/{article.public_id}"
         if article.created_at:
             SubElement(url_el, "lastmod").text = article.created_at.strftime("%Y-%m-%d")
         SubElement(url_el, "changefreq").text = "weekly"

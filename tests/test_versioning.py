@@ -102,6 +102,7 @@ class TestFindRelatedArticles:
                     external_id=f"rel_{i}",
                     original_title=f"AI Article {i}",
                     pipeline_status="done",
+                    publicly_visible=True,
                     category="ai",
                     final_article=json.dumps(
                         {"headline": f"AI Article {i}", "tldr": "TLDR"}
@@ -114,6 +115,7 @@ class TestFindRelatedArticles:
                 external_id="rel_sec",
                 original_title="Security Article",
                 pipeline_status="done",
+                publicly_visible=True,
                 category="security",
                 final_article=json.dumps({"headline": "Security", "tldr": "TLDR"}),
             )
@@ -148,6 +150,7 @@ class TestFindRelatedArticles:
                 external_id=f"ex_{i}",
                 original_title=f"AI Article {i}",
                 pipeline_status="done",
+                publicly_visible=True,
                 category="ai",
                 final_article=json.dumps(
                     {"headline": f"AI Article {i}", "tldr": "TLDR"}
@@ -184,6 +187,7 @@ class TestFindRelatedArticles:
                     external_id=f"lim_{i}",
                     original_title=f"AI Article {i}",
                     pipeline_status="done",
+                    publicly_visible=True,
                     category="ai",
                     final_article=json.dumps(
                         {"headline": f"AI Article {i}", "tldr": "TLDR"}

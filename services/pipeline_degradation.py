@@ -90,6 +90,8 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
     config["set_fields"](article)
     article.degradation_count = (article.degradation_count or 0) + 1
     article.pipeline_status = config["next_status"]
+    if config["next_status"] != PipelineStatus.DONE:
+        article.publicly_visible = False
 
     get_metrics().counter_inc(
         "pipeline.degradation",
@@ -99,6 +101,9 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
         get_metrics().counter_inc("pipeline.multi_stage_degradation")
     article.retry_count = 0
     article.last_error = None
+
+    from services.publication import apply_publication_state
+    apply_publication_state(article)
 
     if article.degradation_count >= 2:
         from services.auto_review import route_to_review
@@ -171,6 +176,8 @@ def _degrade_edit_stage(article, run_id):
         return
 
     article.pipeline_status = PipelineStatus.DONE
+    from services.publication import apply_publication_state
+    apply_publication_state(article)
     try:
         db.session.commit()
     except SQLAlchemyError:
@@ -351,6 +358,8 @@ def _finalize(article_id: int):
                 return
 
             article.pipeline_status = PipelineStatus.DONE
+            from services.publication import apply_publication_state
+            apply_publication_state(article)
 
             create_article_version(
                 article,

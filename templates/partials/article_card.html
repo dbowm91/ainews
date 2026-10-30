@@ -1,6 +1,6 @@
 {% from "partials/share_macro.html" import share_button %}
 {% from "partials/topic_icon.html" import topic_icon %}
-<article class="article-card" data-article-id="{{ article.id }}">
+<article class="article-card" data-article-id="{{ article.public_id }}">
   <div class="card-header">
     {% if topic_icons and article.category in topic_icons %}
       {{ topic_icon(article.category) }}
@@ -8,8 +8,8 @@
     <span class="category-badge cat-{{ article.category | e }}">{{ article.category | e }}</span>
   </div>
   <h2 class="card-title">
-    <a href="{{ url_for('public.article_detail', article_id=article.id) }}"
-       hx-get="{{ url_for('public.article_detail', article_id=article.id) }}"
+    <a href="{{ url_for('public.article_detail', public_id=article.public_id) }}"
+       hx-get="{{ url_for('public.article_detail', public_id=article.public_id) }}"
        hx-target="#content"
        hx-swap="innerHTML"
        hx-push-url="true"
@@ -62,7 +62,7 @@
   </div>
   {% endif %}
   <div class="card-footer">
-    <button type="button" class="bookmark-btn" data-article-id="{{ article.id }}" aria-label="Bookmark article">
+    <button type="button" class="bookmark-btn" data-article-id="{{ article.public_id }}" aria-label="Bookmark article">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
       </svg>
@@ -77,6 +77,6 @@
         <span>view original</span>
       </a>
     {% endif %}
-    {{ share_button(article, share_configs, request, 'card-' ~ article.id) }}
+    {{ share_button(article, share_configs, request, 'card-' ~ article.public_id) }}
   </div>
 </article>

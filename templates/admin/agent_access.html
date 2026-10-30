@@ -1,0 +1,22 @@
+{% extends "base_admin.html" %}
+{% block title %}Agent access settings{% endblock %}
+{% block content %}
+<section class="admin-section"><h1>Read-only agent access</h1>
+  <p>Reader keys cannot authenticate to admin APIs. Quotas use fixed UTC-hour windows and ignore untrusted forwarded IP headers.</p>
+  <label><input id="api-enabled" type="checkbox"> Public REST API enabled</label>
+  <label><input id="mcp-enabled" type="checkbox"> MCP enabled (requires the optional deployment extra)</label>
+  <label><input id="anonymous-enabled" type="checkbox"> Allow anonymous REST access</label>
+  <label>Requests per key/hour <input id="key-quota" type="number" min="1" max="100000"></label>
+  <label>Anonymous requests/IP/hour <input id="ip-quota" type="number" min="1" max="10000"></label>
+  <button id="save-policy" type="button">Save policy</button><output id="policy-result" aria-live="polite"></output>
+  <h2>Reader credentials</h2><ul id="credentials"></ul>
+  <form id="create-key"><label>Label <input id="key-label" maxlength="120" required></label><button>Create key</button></form>
+  <pre id="new-token" aria-live="polite"></pre>
+</section>
+<script>
+(()=>{const csrf={{ csrf_token()|tojson }},$=id=>document.getElementById(id);
+async function load(){const p=await fetch('/api/v1/agent-access').then(r=>r.json());$('api-enabled').checked=p.api_enabled;$('mcp-enabled').checked=p.mcp_enabled;$('anonymous-enabled').checked=p.anonymous_enabled;$('key-quota').value=p.requests_per_hour;$('ip-quota').value=p.anonymous_requests_per_hour;const keys=await fetch('/api/v1/agent-credentials').then(r=>r.json());$('credentials').replaceChildren(...keys.map(k=>{const li=document.createElement('li'),b=document.createElement('button');li.textContent=k.label+' · '+k.public_id+' · '+(k.revoked?'revoked':(k.last_used_at||'unused'))+' ';b.textContent='Revoke';b.disabled=k.revoked;b.onclick=async()=>{await fetch('/api/v1/agent-credentials/'+k.public_id,{method:'DELETE',headers:{'X-CSRFToken':csrf}});load()};li.appendChild(b);return li;}));}
+$('save-policy').onclick=async()=>{const body={public_api_enabled:$('api-enabled').checked,public_mcp_enabled:$('mcp-enabled').checked,anonymous_enabled:$('anonymous-enabled').checked,requests_per_hour:Number($('key-quota').value),anonymous_requests_per_hour:Number($('ip-quota').value)};const r=await fetch('/api/v1/agent-access',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify(body)});$('policy-result').textContent=r.ok?'Saved':'Save failed';};
+$('create-key').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/v1/agent-credentials',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({label:$('key-label').value})});const data=await r.json();$('new-token').textContent=data.token?'Copy this key now; it is shown once: '+data.token:(data.error||'Creation failed');if(r.ok)load();};load();})();
+</script>
+{% endblock %}

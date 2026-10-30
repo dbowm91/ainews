@@ -85,6 +85,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
 
     if article.total_retries >= max_total:
         article.pipeline_status = PipelineStatus.FAILED
+        article.publicly_visible = False
         try:
             db.session.commit()
         except SQLAlchemyError as commit_exc:
@@ -108,6 +109,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
 
     if stage_failures >= _get_max_stage_failures():
         article.pipeline_status = PipelineStatus.FAILED
+        article.publicly_visible = False
         article.last_error = f"{stage}: exceeded per-stage failure limit ({stage_failures} failures)"
         try:
             db.session.commit()
@@ -151,6 +153,7 @@ def _handle_stage_failure(article, stage: str, exc, run_id: int | None = None) -
                 commit_exc,
             )
             article.pipeline_status = PipelineStatus.FAILED
+            article.publicly_visible = False
             try:
                 db.session.commit()
             except SQLAlchemyError:

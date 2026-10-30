@@ -22,8 +22,11 @@ from tasks.edit import edit_article
 from tasks.extract import process_item
 from tasks.newsletter import (
     generate_daily_newsletters,
+    generate_edition,
+    newsletter_slot_tick,
     retry_failed_newsletter_deliveries,
 )
+from tasks.distribution import deliver_newsletter_intent, reconcile_newsletter_deliveries
 from tasks.pipeline import (
     _assign_tags,
     _finalize,
@@ -68,6 +71,10 @@ __all__ = [
     "recalculate_impact_scores",
     "cleanup_old_article_versions",
     "generate_daily_newsletters",
+    "generate_edition",
+    "newsletter_slot_tick",
+    "deliver_newsletter_intent",
+    "reconcile_newsletter_deliveries",
     "retry_failed_newsletter_deliveries",
     "cleanup_inactive_subscribers",
     "MAX_STAGE_RETRIES",

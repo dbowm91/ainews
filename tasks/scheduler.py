@@ -76,6 +76,8 @@ def publish_scheduled_articles(self):
                 if article is None:
                     continue
                 article.pipeline_status = PipelineStatus.DONE
+                from services.publication import apply_publication_state
+                apply_publication_state(article, published_at=now)
                 article.scheduled_publish_at = None
                 db.session.commit()
                 published += 1

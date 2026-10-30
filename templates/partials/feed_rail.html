@@ -47,7 +47,7 @@
   <ol class="rail-list">
     {% for leader in feed_stats.impact_leaders %}
     <li>
-      <a href="/article/{{ leader.article_id }}" class="rail-link">{{ leader.title }}</a>
+      <a href="/article/{{ leader.public_id }}" class="rail-link">{{ leader.title }}</a>
       <span class="rail-count">impact {{ leader.impact_score }}</span>
     </li>
     {% endfor %}

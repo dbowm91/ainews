@@ -8,7 +8,7 @@ Fourteen scheduled tasks run via Celery Beat:
 |------|----------|--------|
 | run-all-sources | Every 30 min | Crawl all active RSS/API sources |
 | retry-stuck | Every 60 min | Retry articles stuck in pipeline |
-| generate-newsletters | Daily 8:00 AM | Generate newsletter emails |
+| newsletter-slot-tick | Every minute | Plan durable local-time profile occurrences |
 | cleanup-old-logs | Daily 3:00 AM | Purge old pipeline logs |
 | cleanup-expired-verifications | Every 15 min | Clean expired subscriber tokens |
 | cleanup-stale-limiter-slots | Every 5 min | Release stale limiter slots |
@@ -17,11 +17,19 @@ Fourteen scheduled tasks run via Celery Beat:
 | cleanup-old-versions | Daily 3:45 AM | Purge old article versions |
 | publish-scheduled-articles | Every 5 min | Publish time-scheduled articles |
 | backfill-embeddings | Daily 2:00 AM | Backfill article embeddings |
-| retry-failed-newsletter-deliveries | Every 2 hours | Retry failed newsletter sends |
+| retry-failed-newsletter-deliveries | Every 5 minutes | Reconcile explicit send requests and queue due outbox intents |
 | recalculate-impact-scores | Daily 4:00 AM | Recalculate article impact scores |
 | cleanup-inactive-subscribers | Daily 1:00 AM | Remove inactive subscribers |
 
 All schedules are configurable via `pipeline.yaml` `schedule:` section.
+
+## Web, worker and Beat process lifetime
+
+The web process owns the lifecycle of its Celery worker and Beat scheduler. On bare-metal systemd installs, `ainews-web.service` starts both units with `Wants=`; each worker unit uses `BindsTo=ainews-web.service` and starts after the web unit. Stopping or losing the web service therefore stops both worker services. Start or stop the stack through the installed service commands so systemd can apply these dependencies.
+
+For local development, use `bash scripts/dev.sh start|stop|status`. The script runs one supervisor that owns the web, worker and Beat process groups. It stops every child when the web process exits, when another managed child exits, or when the supervisor receives shutdown. The supervisor lock prevents a second managed stack from starting, and stop targets only its owned process groups.
+
+Worker and Beat use the standard `python -m celery -A celery_app:celery_app ...` entrypoint. `CELERY_IMPORTS` loads `tasks` so beat-dispatched task names, including scheduled edition tasks, are registered in the worker. The supported Docker Compose lifecycle starts and stops the complete project stack; do not manage the web container separately from its worker/Beat siblings.
 
 ## Dead Letter Queue
 
@@ -211,6 +219,16 @@ python scripts/verify_backup.sh
 **Recovery:** Tasks have 300s soft limit. If pipeline stages regularly timeout, increase `timeout_seconds` in pipeline.yaml for that stage.
 
 ## Recovery Procedures
+
+### Newsletter edition and delivery recovery
+
+Newsletter generation is driven by durable profile schedules and the `newsletter-slot-tick` task. Slots stuck in `queued` or `dispatched` are requeued for up to 60 minutes; the occurrence key makes duplicate workers safe. `retry-newsletter-deliveries` runs every five minutes and queues only due per-recipient outbox intents. Review intent counts at `/api/v1/newsletter-editions/<public_id>/deliveries`; never retry an `unknown` SMTP result automatically. Use the explicit `retry_unknown` action only after operator review and with `confirm_unknown_retry: true`. A claimed message may already have been accepted by SMTP.
+
+Global and per-profile email switches both default off. An edition can be published and read from the archive without either switch. A durable email request is captured only for explicit manual send or a scheduled slot whose profile and global switches were enabled at planning time. Configure HTTPS `NEWSLETTER_SITE_URL` (or HTTPS `SITE_URL`) for one-click unsubscribe; inbound `Host` is never trusted for subscription links. RFC 8058 headers must be covered by the relay's DKIM signing policy. Do not enable scheduled mail until delivery configuration, SMTP credentials and intended recipient policy have been checked in the local deployment.
+
+### LLM-native migration history
+
+Apply database migrations before starting the web, worker or Beat processes. The converged publication/editorial-memory history ends at `046_newsletter_distribution_intent`; `045_merge_publication_and_memory` joins the independently deployable publication and memory parents. For the LLM-native publication roadmap's qualification, restoring an operator database to rehearse this migration is not required: C01 is closed by fresh, idempotent, and both-parent SQLite migration tests. Operators may still follow their normal backup and recovery procedures for an actual upgrade. Never stamp an Alembic revision to bypass a failed migration.
 
 ### Recovering from Stuck Locks
 

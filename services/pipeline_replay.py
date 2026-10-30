@@ -124,6 +124,9 @@ def replay_article_stage(
     # Set pre-stage status
     from constants import PipelineStatus
     article.pipeline_status = getattr(PipelineStatus, PRE_STAGE_STATUS[stage].upper())
+    article.publicly_visible = False
+    from services.publication import invalidate_publication_cache
+    invalidate_publication_cache()
 
     # Clear last_error since we're re-running
     article.last_error = None
@@ -208,6 +211,7 @@ def restore_article_version(
     # Reset pipeline status to review for re-editing
     from constants import PipelineStatus
     article.pipeline_status = PipelineStatus.REVIEW
+    article.publicly_visible = False
 
     db.session.commit()
 

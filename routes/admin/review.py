@@ -100,6 +100,7 @@ def reject_article(article_id):
         return jsonify({"error": "Article is not in review"}), 400
 
     article.pipeline_status = PipelineStatus.SKIPPED
+    article.publicly_visible = False
     try:
         db.session.commit()
     except SQLAlchemyError:

@@ -158,6 +158,8 @@ def get_articles_paginated(
     Returns:
         Tuple of (articles, has_next, next_page)
     """
+    from services.publication import published_article_filters
+
     # Use search for text search when query is provided
     if query:
         try:
@@ -183,7 +185,7 @@ def get_articles_paginated(
                             joinedload(Article.tags),  # type: ignore[arg-type]
                             joinedload(Article.metrics),  # type: ignore[arg-type]
                         )
-                        .where(Article.id.in_(article_ids))
+                        .where(Article.id.in_(article_ids), *published_article_filters(Article))
                     )
                     .unique()
                     .scalars()
@@ -206,7 +208,7 @@ def get_articles_paginated(
             joinedload(Article.tags),  # type: ignore[arg-type]
             joinedload(Article.metrics),  # type: ignore[arg-type]
         )
-        .where(Article.pipeline_status.in_(["done", "skipped"]))
+        .where(*published_article_filters(Article))
         .order_by(_get_sort_order(sort))
     )
 
@@ -393,7 +395,7 @@ def find_duplicate_titles(
         .all()
     )
     for article_id, other_title in rows:
-        other_words = _title_word_set(other_title)
+        other_words = _title_word_set(other_title if isinstance(other_title, str) else None)
         if jaccard_similarity(candidate_words, other_words) >= threshold:
             matched_ids.append(article_id)
             break

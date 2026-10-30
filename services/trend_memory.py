@@ -825,7 +825,7 @@ def consolidate_topic(topic: str) -> int:
 
 def consolidate_all_topics() -> dict[str, int]:
     """Run consolidation across all topics with high-importance entries."""
-    topics = (
+    topics: list[str] = list(
         db.session.execute(
             select(TrendMemory.topic)
             .where(TrendMemory.importance == MemoryImportance.HIGH)

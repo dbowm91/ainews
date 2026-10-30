@@ -8,7 +8,8 @@ during extraction - it does NOT mutate or create any records.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from datetime import datetime
+from typing import Optional, cast
 
 from extensions import db
 from models import Article
@@ -59,14 +60,18 @@ def find_dedupe_candidates(
                     .all()
                 )
                 for row in rows:
-                    article_id, orig_title, _, status, created_at = row
+                    article_id = cast(int, row[0])
+                    orig_title = cast(str | None, row[1])
+                    row_url = cast(str | None, row[2])
+                    status = cast(str, row[3])
+                    created_at = cast(datetime | None, row[4])
                     if article_id in seen_ids:
                         continue
-                    if normalize_url(row[2] or "") == normalized:
+                    if normalize_url(row_url or "") == normalized:
                         candidates.append({
                             "id": article_id,
                             "title": orig_title,
-                            "url": row[2],
+                            "url": row_url,
                             "pipeline_status": status,
                             "created_at": created_at.isoformat() if created_at else None,
                         })
@@ -90,10 +95,14 @@ def find_dedupe_candidates(
                 .all()
             )
             for row in rows:
-                article_id, orig_title, orig_url, status, created_at = row
+                article_id = cast(int, row[0])
+                orig_title = cast(str | None, row[1])
+                orig_url = cast(str | None, row[2])
+                status = cast(str, row[3])
+                created_at = cast(datetime | None, row[4])
                 if article_id in seen_ids:
                     continue
-                if normalize_title(orig_title) == normalized_title:
+                if orig_title and normalize_title(orig_title) == normalized_title:
                     candidates.append({
                         "id": article_id,
                         "title": orig_title,

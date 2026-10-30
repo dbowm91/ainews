@@ -5,6 +5,8 @@ from routes.admin import require_auth as require_auth
 
 from routes.admin.api import (
     alerts as alerts,
+    agent_access as agent_access,
+    newsletter_profiles as newsletter_profiles,
     articles as articles,
     audit as audit,
     config as config,

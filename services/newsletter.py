@@ -54,7 +54,7 @@ def generate_newsletter_html(
     items_parts = []
     for i, article in enumerate(articles, 1):
         headline, tldr = parse_article_headline(article, fallback_headline="Untitled")
-        trackable_link = f"{site_url}/track/newsletter-click/{article.id}"
+        trackable_link = f"{site_url}/track/newsletter-click/{article.public_id}"
         category = article.category or ""
         safe_headline = escape(headline)
         safe_category = escape(category)
@@ -147,12 +147,12 @@ def _generate_newsletter(
     Returns:
         Tuple of (html, subject, article_count)
     """
-    from constants import PipelineStatus
     from models import Article
+    from services.publication import published_article_filters
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     base_query = Article.query.filter(
-        Article.pipeline_status == PipelineStatus.DONE,
+        *published_article_filters(Article),
         Article.created_at >= cutoff,
     ).options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
     query = articles_filter(base_query)

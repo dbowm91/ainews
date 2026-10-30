@@ -61,7 +61,7 @@
           {% for article in dead_letter_articles %}
             <tr data-article-id="{{ article.id }}">
               <td>
-                <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
+                <a href="/article/{{ article.public_id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
                   {{ (article.original_title if article.original_title else '(no title)')|e }}
                 </a>
               </td>
@@ -103,7 +103,7 @@
           {% for article in stuck_articles %}
             <tr>
               <td>
-                <a href="/article/{{ article.id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
+                <a href="/article/{{ article.public_id }}" class="article-link" target="_blank" title="{{ article.original_title|e }}">
                   {{ (article.original_title if article.original_title else '(no title)')|e }}
                 </a>
               </td>

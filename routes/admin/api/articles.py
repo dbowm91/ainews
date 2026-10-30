@@ -415,9 +415,7 @@ def _bulk_delete(articles, article_ids, db) -> tuple[Response, int] | Response:
 
 
 def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, int] | Response:
-    from models import Article
-    from sqlalchemy import update
-
+    from services.publication import apply_publication_state
     new_status = validated.status or ""
     if new_status not in VALID_PIPELINE_STATUSES:
         return api_response(
@@ -435,8 +433,9 @@ def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, in
                 status=400,
             )
     try:
-        stmt = update(Article).where(Article.id.in_(article_ids)).values(pipeline_status=new_status)
-        db.session.execute(stmt)
+        for article in articles:
+            article.pipeline_status = new_status
+            apply_publication_state(article)
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
@@ -665,6 +664,8 @@ def update_article(article_id: int) -> tuple[Response, int] | Response:
         new_status = data["pipeline_status"]
         if new_status in VALID_PIPELINE_STATUSES:
             article.pipeline_status = new_status
+            from services.publication import apply_publication_state
+            apply_publication_state(article)
 
     try:
         db.session.commit()

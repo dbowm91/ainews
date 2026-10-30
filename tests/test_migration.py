@@ -44,11 +44,26 @@ class TestMigrationChain:
             revisions = list(script.walk_revisions())
             revision_ids = {r.revision for r in revisions}
             for rev in revisions:
-                if rev.down_revision is not None:
-                    assert rev.down_revision in revision_ids, (
+                parents = rev.down_revision if isinstance(rev.down_revision, tuple) else (rev.down_revision,)
+                for parent in filter(None, parents):
+                    assert parent in revision_ids, (
                         f"Revision {rev.revision} references missing "
-                        f"down_revision {rev.down_revision}"
+                        f"down_revision {parent}"
                     )
+
+    def test_publication_and_memory_histories_merge_to_one_head(self, app):
+        with app.app_context():
+            from alembic.script import ScriptDirectory
+            from flask_migrate import Migrate
+
+            if app.extensions.get("migrate") is None:
+                Migrate(app, db)
+            script = ScriptDirectory.from_config(app.extensions["migrate"].migrate.get_config())
+            merge = script.get_revision("045_merge_publication_and_memory")
+            assert set(merge.down_revision) == {
+                "044_llm_native_publication", "043_memory_synthesis_fairness_cursor"
+            }
+            assert script.get_heads() == ["046_newsletter_distribution_intent"]
 
     def test_all_revisions_loadable(self, app):
         """Each revision file should import without errors."""

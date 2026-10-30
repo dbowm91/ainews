@@ -20,6 +20,11 @@ def _systemd_bool(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _append_directives(lines: list[str], key: str, values: list[str]) -> None:
+    if values:
+        lines.append(f"{key}={' '.join(values)}")
+
+
 def render_unit(spec: ServiceUnitSpec) -> RenderedUnit:
     """Render a ServiceUnitSpec into a systemd unit file content string."""
     sections: list[str] = []
@@ -29,10 +34,10 @@ def render_unit(spec: ServiceUnitSpec) -> RenderedUnit:
     unit_lines.append(f"Description={spec.description}")
     if spec.documentation:
         unit_lines.append(f"Documentation={spec.documentation}")
-    if spec.after:
-        unit_lines.append(f"After={' '.join(spec.after)}")
-    if spec.requires:
-        unit_lines.append(f"Requires={' '.join(spec.requires)}")
+    _append_directives(unit_lines, "After", spec.after)
+    _append_directives(unit_lines, "Requires", spec.requires)
+    _append_directives(unit_lines, "Wants", spec.wants)
+    _append_directives(unit_lines, "BindsTo", spec.binds_to)
     sections.append("[Unit]\n" + "\n".join(unit_lines))
 
     # [Service] section
@@ -139,6 +144,7 @@ def build_web_unit(
 ) -> ServiceUnitSpec:
     """Build a ServiceUnitSpec for the ainews web process."""
     config = resolved_paths
+    import sys
     cli_exec = _find_cli_executable()
 
     return ServiceUnitSpec(
@@ -146,8 +152,7 @@ def build_web_unit(
         description="AI News web application",
         scope=scope,
         profile=profile,
-        exec_start=f"{cli_exec} start --no-wait",
-        exec_stop=f"{cli_exec} stop",
+        exec_start=f"{sys.executable} run.py",
         exec_reload=f"{cli_exec} config check",
         working_directory=config.app_dir.path if hasattr(config, "app_dir") else None,
         environment_file=env_file,
@@ -157,6 +162,7 @@ def build_web_unit(
         timeout_stop_sec=30,
         user=None,
         after=["network.target", "redis.service"],
+        wants=["ainews-celery-worker.service", "ainews-celery-beat.service"],
         requires=[],
         syslog_identifier="ainews-web",
     )
@@ -170,15 +176,14 @@ def build_celery_worker_unit(
 ) -> ServiceUnitSpec:
     """Build a ServiceUnitSpec for the Celery worker."""
     config = resolved_paths
-    cli_exec = _find_cli_executable()
+    import sys
 
     return ServiceUnitSpec(
         name="ainews-celery-worker",
         description="AI News Celery worker",
         scope=scope,
         profile=profile,
-        exec_start=f"{cli_exec} start --no-wait --component celery-worker",
-        exec_stop=f"{cli_exec} stop",
+        exec_start=f"{sys.executable} -m celery -A celery_app:celery_app worker -l info --concurrency=2",
         working_directory=config.app_dir.path if hasattr(config, "app_dir") else None,
         environment_file=env_file,
         restart_policy=RestartPolicy.ON_FAILURE,
@@ -187,6 +192,7 @@ def build_celery_worker_unit(
         timeout_stop_sec=60,
         user=None,
         after=["network.target", "redis.service", "ainews-web.service"],
+        binds_to=["ainews-web.service"],
         syslog_identifier="ainews-celery-worker",
     )
 
@@ -199,15 +205,20 @@ def build_celery_beat_unit(
 ) -> ServiceUnitSpec:
     """Build a ServiceUnitSpec for the Celery beat scheduler."""
     config = resolved_paths
-    cli_exec = _find_cli_executable()
+    import sys
+    from pathlib import Path
+
+    state_dir = getattr(config, "state_dir", None)
+    state_path = getattr(state_dir, "path", None)
+    schedule_dir = Path(state_path) if isinstance(state_path, (str, Path)) else Path(config.app_dir.path) / "instance"
 
     return ServiceUnitSpec(
         name="ainews-celery-beat",
         description="AI News Celery beat scheduler",
         scope=scope,
         profile=profile,
-        exec_start=f"{cli_exec} start --no-wait --component celery-beat",
-        exec_stop=f"{cli_exec} stop",
+        exec_start=(f"{sys.executable} -m celery -A celery_app:celery_app beat -l info "
+                    f"--schedule={schedule_dir / 'celerybeat-schedule'}"),
         working_directory=config.app_dir.path if hasattr(config, "app_dir") else None,
         environment_file=env_file,
         restart_policy=RestartPolicy.ON_FAILURE,
@@ -216,6 +227,7 @@ def build_celery_beat_unit(
         timeout_stop_sec=30,
         user=None,
         after=["network.target", "redis.service", "ainews-web.service"],
+        binds_to=["ainews-web.service"],
         syslog_identifier="ainews-celery-beat",
     )
 

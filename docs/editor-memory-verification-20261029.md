@@ -50,6 +50,7 @@ This report records local implementation evidence for the [editor memory roadmap
 - The revised regression runs four actual synthesis passes over eight older HIGH observations and one newer lower-priority observation. The second bounded snapshot contains the newer item; later replayed snapshots make no additional model calls.
 - Review conclusion: C01 retrieval/tool scoping and separate gates remain coherent; C02's starvation and concurrent-run gaps are fixed; C03 candidate reuse remains MEDIUM-capped and opt-in. No code blocker remains to merging with V2 and optimization flags disabled. Limited real-article comparisons remain required before enabling optional inference-saving features.
 - Post-correction verification: **63 focused memory, trend-memory, pipeline-optimization, admin and migration tests passed**; mypy clean across 508 source files; Ruff clean on changed code; `git diff --check` passes. The intended database has not been restored, so no target-database migration/rollback or staged activation was attempted; all gates remain off.
+- Staged-read follow-up: the general read preflight no longer requires the synthesis-only cursor table; synthesis has its own cursor preflight. The configured development DB is still at Alembic revision 031 and lacks required review columns, so `memory_v2_enabled` remains off. No database was migrated or modified.
 
 ## Verification commands
 

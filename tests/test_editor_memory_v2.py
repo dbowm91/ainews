@@ -533,6 +533,42 @@ def test_enabled_memory_path_reports_missing_schema(app):
             ensure_memory_schema()
 
 
+def test_scoped_read_preflight_does_not_require_synthesis_cursor(app):
+    from unittest.mock import Mock, patch
+
+    from services.memory.preflight import REQUIRED_MEMORY_TABLES, ensure_memory_schema
+
+    inspector = Mock()
+    inspector.get_table_names.return_value = sorted(REQUIRED_MEMORY_TABLES)
+    inspector.get_columns.side_effect = lambda table: [
+        {"name": name} for name in (
+            {"memory_items": {"review_status", "review_reason", "review_attempted_at", "review_count", "decision_metadata"},
+             "memory_category_summaries": {"current_memory_id"}}.get(table, set())
+        )
+    ]
+    with app.app_context(), patch("services.memory.preflight.inspect", return_value=inspector):
+        ensure_memory_schema()
+
+
+def test_synthesis_preflight_requires_its_cursor_table(app):
+    import pytest
+    from unittest.mock import Mock, patch
+
+    from services.memory.preflight import REQUIRED_MEMORY_TABLES, ensure_synthesis_schema
+
+    inspector = Mock()
+    inspector.get_table_names.return_value = sorted(REQUIRED_MEMORY_TABLES)
+    inspector.get_columns.side_effect = lambda table: [
+        {"name": name} for name in (
+            {"memory_items": {"review_status", "review_reason", "review_attempted_at", "review_count", "decision_metadata"},
+             "memory_category_summaries": {"current_memory_id"}}.get(table, set())
+        )
+    ]
+    with app.app_context(), patch("services.memory.preflight.inspect", return_value=inspector):
+        with pytest.raises(RuntimeError, match="Apply the current synthesis migration"):
+            ensure_synthesis_schema()
+
+
 def test_memory_tool_responses_share_a_stage_budget(app):
     import json
     from unittest.mock import patch

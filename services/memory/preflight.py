@@ -14,8 +14,8 @@ REQUIRED_MEMORY_TABLES = frozenset({
     "memory_maintenance_state",
     "memory_synthesis_runs",
     "memory_synthesis_attempts",
-    "memory_synthesis_cursors",
 })
+REQUIRED_SYNTHESIS_TABLES = frozenset({"memory_synthesis_cursors"})
 REQUIRED_MEMORY_COLUMNS = {
     "memory_items": frozenset({"review_status", "review_reason", "review_attempted_at", "review_count", "decision_metadata"}),
     "memory_category_summaries": frozenset({"current_memory_id"}),
@@ -39,4 +39,16 @@ def ensure_memory_schema() -> None:
             f"(missing: {', '.join(details)}). Apply Alembic migrations through "
             "the current editor-memory revision before enabling V2 reads, tools, "
             "writes, maintenance, or synthesis."
+        )
+
+
+def ensure_synthesis_schema() -> None:
+    """Require synthesis-only state without coupling retrieval to its cursor."""
+    ensure_memory_schema()
+    present = set(inspect(db.engine).get_table_names())
+    missing = sorted(REQUIRED_SYNTHESIS_TABLES - present)
+    if missing:
+        raise RuntimeError(
+            "Editor-memory synthesis is enabled but its schema is not installed "
+            f"(missing: {', '.join(missing)}). Apply the current synthesis migration."
         )

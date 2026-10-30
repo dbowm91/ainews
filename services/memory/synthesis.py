@@ -373,9 +373,9 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
     category = normalize_category(category_id)
     if not config.memory_synthesis_enabled or not config.memory_synthesis_provider or not config.memory_synthesis_model:
         return {"category": category, "status": "disabled", "llm_calls": 0}
-    from services.memory.preflight import ensure_memory_schema
+    from services.memory.preflight import ensure_synthesis_schema
 
-    ensure_memory_schema()
+    ensure_synthesis_schema()
     if config.memory_max_syntheses_per_day == 0:
         return {"category": category, "status": "daily_cap_zero", "llm_calls": 0}
 

@@ -22,15 +22,28 @@ REQUIRED_MEMORY_COLUMNS = {
 }
 
 
+def _inspector():
+    """Reflect schema through the caller's session connection.
+
+    ``inspect(db.engine)`` checks out a pooled connection whose close rolls
+    back the caller's uncommitted transaction on StaticPool-backed SQLite
+    databases — silently discarding pending writes (in tests this surfaces
+    as ``StaleDataError`` on the next flush; in workers it would drop real
+    stage output). Reflecting through the session's own connection keeps the
+    inspection inside the caller's transaction.
+    """
+    return inspect(db.session.connection())
+
+
 def ensure_memory_schema() -> None:
     """Raise an actionable error when an enabled V2 path lacks its migration."""
-    present = set(inspect(db.engine).get_table_names())
+    present = set(_inspector().get_table_names())
     missing = sorted(REQUIRED_MEMORY_TABLES - present)
     missing_columns: list[str] = []
     for table, required in REQUIRED_MEMORY_COLUMNS.items():
         if table not in present:
             continue
-        available = {column["name"] for column in inspect(db.engine).get_columns(table)}
+        available = {column["name"] for column in _inspector().get_columns(table)}
         missing_columns.extend(f"{table}.{column}" for column in sorted(required - available))
     if missing or missing_columns:
         details = [*missing, *missing_columns]
@@ -45,7 +58,7 @@ def ensure_memory_schema() -> None:
 def ensure_synthesis_schema() -> None:
     """Require synthesis-only state without coupling retrieval to its cursor."""
     ensure_memory_schema()
-    present = set(inspect(db.engine).get_table_names())
+    present = set(_inspector().get_table_names())
     missing = sorted(REQUIRED_SYNTHESIS_TABLES - present)
     if missing:
         raise RuntimeError(

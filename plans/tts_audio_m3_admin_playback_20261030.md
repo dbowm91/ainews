@@ -1,6 +1,6 @@
 # TTS M3 — Operator settings, ready-only public playback and media lifecycle
 
-**Status:** PLANNED.
+**Status:** IMPLEMENTED — software acceptance targeted; code commit `d4bc9c0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P1 UX and permission controls.
 **Dependencies:** M1 state/read model; M2 encoder/worker interface (use fake worker in CI).
@@ -36,3 +36,9 @@ Give an administrator a complete, bounded and default-OFF TTS control plane. A r
 ## Repository touchpoints
 
 routes/admin/settings.py, services/admin_settings.py, templates/admin/settings.html, ainews_config/{fields,validation,transaction}.py, routes/public/links.py, templates/partials/article_detail.html and new audio partial, routes/public audio endpoint, services/cache.py, static/css/articles.css and optional minimal JS, services/tts/storage.py, models job/asset, app.py/blueprint wiring, CSP/media-src rules, docs/configuration.md and docs/operations.md.
+
+## Implementation evidence — 2026-10-30
+
+- **Code:** `d4bc9c0`. Default-off database settings, Breeze license acknowledgment, profile revisioning, bounded backfill, worker-token issue/revoke, job cancel/retry/regenerate, online/queue diagnostics, fixed-sample private voice preview, ready-only article/edition controls and DTO fields, digest-addressed audio, authenticated admin preview playback, range/HEAD/ETag media serving, storage verification/retention, and cache invalidation are implemented.
+- **Tests:** `uv run pytest -q tests/test_tts_text.py tests/test_tts_fake_backend.py tests/test_tts_media_protocol.py` — **11 passed**, including default-off absence, authenticated fake upload, Opus verification, range/HEAD/ETag, stale-content 404, idempotent preview queue/claim, and frozen-edition jobs. Changed modules pass Ruff and mypy.
+- **Qualification boundary:** no browser automation for the new player/admin surface was run; no live browser seek test was recorded. Endpoint tests exercise GET/HEAD/range/conditional semantics.

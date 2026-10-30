@@ -1,6 +1,6 @@
 # TTS M2 — Native Apple Silicon MLX worker, Breeze 4-bit and Opus
 
-**Status:** PLANNED.
+**Status:** IMPLEMENTED — software complete; Apple Silicon qualification **OPEN**. Code commit `d4bc9c0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P1 first functional inference backend.
 **Dependencies:** M1 authenticated job protocol and script contract.
@@ -36,3 +36,10 @@ Add isolated package/entrypoint under tts_worker/ or services/tts_worker/ with s
 - 4-bit checkpoint: https://huggingface.co/mlx-community/Breeze-TTS-2-mlx-4bit
 - MLX-Audio Breeze generate / instruction / CFG documentation: https://github.com/Blaizzy/mlx-audio/blob/main/docs/models/tts/breeze-tts.md
 - Upstream research/non-commercial license: https://huggingface.co/BreezeBlue/Breeze-TTS-2/blob/main/LICENSE
+
+## Implementation evidence — 2026-10-30
+
+- **Code:** `d4bc9c0`. Added a separate native worker with lazy MLX import, pinned Breeze model revision and mlx-audio/MLX dependency lock, bounded sentence chunks, heartbeat throughout model loading and inference, a hard per-job process timeout, FFmpeg Ogg Opus encoding, authenticated transfer, and a CPU fake backend. No MLX package was added to the web/Celery dependencies.
+- **Pinned API check:** inspected `mlx-audio` tag `v0.6.3`'s Breeze implementation; `generate()` exposes `text`, `instruct`, `cfg_scale` and yields result objects. The arm64 lock resolved 56 packages for Python 3.12/macOS 14+ with `mlx==0.32.4`, `mlx-audio==0.6.3`, and `huggingface-hub==1.5.0`.
+- **Tests:** the 11-test TTS command in M1 passed, including deterministic fake WAV -> FFmpeg Opus -> ffprobe and authenticated upload -> READY. Ruff and mypy checks passed for changed worker modules.
+- **Hardware:** **OPEN**. This workspace is Intel Mac; no MLX/Metal inference, memory/RTF benchmark, listening review, Mac sleep/wake test, or intended-host qualification is claimed. The 3.01 GB figure is checkpoint size only.

@@ -1,6 +1,6 @@
 # Optional local narration — article and edition TTS roadmap
 
-**Status:** PLANNED; implementation not started.
+**Status:** SOFTWARE IMPLEMENTATION COMPLETE at code commit `d4bc9c0`; intended Apple Silicon/Metal qualification remains **OPEN**.
 **Date:** 2026-10-30
 **Priority:** Optional private-instance feature; all switches default OFF.
 **Handoff:** plan/optional-tts-mlx-audio-20261030.
@@ -49,3 +49,7 @@ The no-TTS baseline behaves as before. All publication paths (editor finalizatio
 ## Registration and implementation handoff
 
 Registered by entry in plans/plan.md. When implementing, update individual milestone status with exact commit SHA, test command/output, and hardware-specific observations; annotate this roadmap rather than retroactively rewriting historical evidence in other workstreams. Coordinate rebase/merge against PR #20 before implementing M4. Avoid changing its in-flight feature branch solely to carry these plans.
+
+## Implementation closure — 2026-10-30
+
+M1–M4 software integration is recorded against `d4bc9c0`; see the per-milestone implementation evidence in the linked plans. The TTS-focused suite passed 11 tests, and migrations plus Celery/Beat registration passed 17 tests. Changed TTS modules passed Ruff and mypy. The full repository Ruff run reports five pre-existing findings in unrelated files. No Apple Silicon device is available in this workspace, so MLX/Metal inference, measured performance, listening review, and the intended-host reliability matrix remain **OPEN**. This software closure does not claim the feature has been qualified to run on the operator's Mac.

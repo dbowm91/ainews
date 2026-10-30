@@ -1,6 +1,6 @@
 # TTS M1 — Durable post-publication jobs and deterministic script
 
-**Status:** PLANNED.
+**Status:** IMPLEMENTED — software acceptance targeted; code commit `d4bc9c0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P0 publication correctness and worker trust boundary.
 **Dependencies:** Existing article model; PR #20's publication guard/public IDs for final integration.
@@ -30,3 +30,11 @@ models/article.py and/or models/newsletter.py, models/__init__.py, migrations/ve
 - Script snapshots are deterministic for same revision; mixed HTML/Markdown, URL/citation removal, numbering, edge-case whitespace, Unicode, punctuation and long structured input have golden tests; no publisher source text injected.
 - Fresh/idempotent migrations and model indexes tested in disposable SQLite; no real database restoration rehearsal required. All tests run without Mac/MLX dependencies and default-off.
 - Progress evidence: actual implementation SHA, concise test command, state transitions and crash/recovery results. No claim of full article publication unification without inspecting final PR #20 integration.
+
+## Implementation evidence — 2026-10-30
+
+- **Code:** `d4bc9c0` (`feat(tts): implement optional narration pipeline`). The job ledger, deterministic renderer, publication hooks, bounded reconciler, scoped hashed worker credentials, atomic claim/lease handling, streaming result validation, stale target/script/recipe rejection, and default-off read model are implemented. PR #20's immutable edition schema is merged into the branch.
+- **Tests:** `uv run pytest -q tests/test_tts_text.py tests/test_tts_fake_backend.py tests/test_tts_media_protocol.py` — **11 passed**. `uv run pytest -q tests/test_migration.py tests/test_smoke_migrations.py tests/test_celery_beat_task_registration.py` with test-only `SECRET_KEY`, `CELERY_TASK_SECRET`, and `FLASK_CONFIG=testing` — **17 passed**.
+- The exact migration/Beat invocation was `rtk proxy env SECRET_KEY=01234567890123456789012345678901 CELERY_TASK_SECRET=test-secret-key-at-least-32-characters-long FLASK_CONFIG=testing ADMIN_PASSWORD= uv run pytest -q tests/test_migration.py tests/test_smoke_migrations.py tests/test_celery_beat_task_registration.py`.
+- **Static checks:** changed TTS and integration modules pass Ruff; `uv run mypy services/tts routes/tts.py routes/admin/settings.py tasks/tts.py tts_worker/worker.py` — **11 source files clean**.
+- **Qualification boundary:** not every publication path has a dedicated parameterized failure-injection test, nor was multi-process database contention exercised. Focused idempotency, claim ownership, stale-content rejection, migration, and task registration tests pass.

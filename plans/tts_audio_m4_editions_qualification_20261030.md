@@ -1,6 +1,6 @@
 # TTS M4 — Frozen newsletter editions, email independence and private-host qualification
 
-**Status:** PLANNED.
+**Status:** IMPLEMENTED — edition software integration complete; Apple Silicon qualification **OPEN**. Code commit `d4bc9c0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P1 integration and operational closure.
 **Dependencies:** M1–M3, plus PR #20 newsletter edition work merged/reconciled into the implementation branch.
@@ -34,3 +34,9 @@ Update docs/newsletter-pipeline.md with immutable audio snapshot behavior and em
 ## Non-goals
 
 No podcast publishing feed in this milestone, no independent user-uploaded text-to-audio service, no real-time speech streaming or cross-article playback playlist, no external arbitrary URLs, no subscriber-personalized voice, no automatic archive backfill by enabling a toggle, and no assumption that a Breeze-generated output may be commercially distributed.
+
+## Implementation evidence — 2026-10-30
+
+- **Code:** `d4bc9c0`. Integration targets the merged PR #20 `NewsletterEdition`/`NewsletterEditionItem` schema. Jobs use ordered frozen edition content; job creation happens only after edition commit and does not inspect or wait for email delivery. Public archive, REST and MCP DTOs expose audio metadata only for a current READY asset. Edition audio remains gated by the archive switch and TTS policy.
+- **Tests:** the 11-test TTS command in M1 passed; the edition case verifies frozen ordered content, source URL exclusion, idempotency, and that an email-requested edition creates narration work without changing email state. Migration/Beat checks passed (17 tests).
+- **Qualification:** **OPEN** for Apple Silicon/Metal smoke, representative short/long article and edition listening, measured model load/RTF/memory/swap, and intended Mac-to-Docker sleep/restart topology. No subscriber send or external publication was performed.

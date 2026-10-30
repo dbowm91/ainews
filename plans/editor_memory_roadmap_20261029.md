@@ -1,6 +1,6 @@
 # Editorial Memory, Shared Blackboard, and Deterministic Pipeline Roadmap
 
-**Status:** C01–C03 implementation reviewed and verified on the implementation branch; ready to merge with all V2 gates off. Target-database exploration is out of scope because there are no active deployed databases. Local staged behavior validation remains separate from database-upgrade readiness.
+**Status:** C01–C03 implemented with local evidence; C05 merge-readiness corrective OPEN on draft PR #19. No active deployed DB requires migration evidence; all V2 flags remain off and later activation is separate.
 **Created:** 2026-10-29  
 **Baseline:** `main` at `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5` (revalidate against the implementation branch before coding)  
 **Owner:** AInews editorial pipeline / memory services  
@@ -46,7 +46,7 @@ These are code-inspection findings, **not** claims about a running deployment or
 | M2 | [Namespaces and retrieval](editor_memory_m2_scoped_retrieval_20261029.md) | Backward-compatible schema, per-category memory, shared read API, ranked lexical FTS5 and bounded SQLite fallback | M1 |
 | M3 | [Synthesis, lifecycle, blackboard](editor_memory_m3_synthesis_blackboard_20261029.md) | Real synthesis, archival, review of HIGH, cross-category promotion, evidence lineage | M2 |
 | M4 | [Deterministic pipeline offload](editor_memory_m4_deterministic_pipeline_20261029.md) | Reuse structured research; conditional LLM work; deterministic gates and tag/citation handling | M2; M3 for synthesis reuse |
-| M5 | [Local verification and activation](editor_memory_m5_verification_20261029.md) | Target SQLite backup/migration rehearsal, limited shadow comparison and private-instance operations evidence | M1–M4 |
+| M5 | [Optional local behavior validation](editor_memory_m5_verification_20261029.md) | Limited real-article comparisons and staged enablement *after merge*, not deployed-database migration evidence | M1–M4 code; separate activation |
 
 M1 should land first as a focused corrective PR. M2/M3 should be independently gated and feature-flagged. M4 changes publication behavior and must be measured independently of the memory migration. M5 closes private-instance implementation/activation checks; performance claims require measured baselines, not a public release process.
 
@@ -70,18 +70,19 @@ Milestones require failing regression tests first for verified bugs, migration u
 
 ## Corrective pass registration — 2026-10-29
 
-The first implementation underwent static/runtime-evidence review and requires **focused follow-up** before M1–M5 local activation closure. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). These are *implementation plans, not completed fixes*.
+The implementation has undergone code and local-evidence review. One focused **C05 merge-readiness corrective** remains; later M5 staged feature activation is independent of the merge. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). These are *implementation plans, not completed fixes*.
 
 | Corrective | Priority | Plan | Focus |
 | --- | --- | --- | --- |
 | C01 | P0 | [Relevance-first retrieval, feature gates and tool budgets](editor_memory_corrective_01_retrieval_gates_20261029.md) | Prevent importance-first truncation of relevant FTS matches; scope reads; cumulative context/tool bounds; coherent current synthesis |
 | C02 | P0 | [HIGH lifecycle, synthesis succession and shared currentness](editor_memory_corrective_02_lifecycle_synthesis_20261029.md) | FINITE active HIGH review/retirement, single current synthesized view, fair dirty-evidence selection and shared-state cleanup |
 | C03 | P1 | [Memory candidate provenance and importance](editor_memory_corrective_03_candidate_quality_20261029.md) | Decouple evidence confidence from editorial significance; validate final-article evidence and dedup |
-| C04 | P0 operational | [Private-instance CI, database and activation checks](editor_memory_corrective_04_release_verification_20261029.md) | Triage relevant checks vs unrelated CI/installer debt; rehearse migration and rollback on real target copy; verify representative memory behavior |
+| C04 | P0 operational | [CI baseline attribution and scoped checks](editor_memory_corrective_04_release_verification_20261029.md) | CI baseline and disposable checks documented; **no target deployed DB or migration evidence required for merge** | 
+| C05 | P0 merge | [Merge-readiness final corrective](editor_memory_c05_merge_readiness_20261030.md) | Suppress stale category summaries, final-HEAD tests/static checks, docs/registry cleanup and PR review handoff |
 
 **Execution order:** C01 first; C02 and C03 separately. CI baseline and disposable migration checks are recorded under C04. Keep V2 read, maintenance, synthesis and optional optimizations **disabled until their staged local behavior checks pass**. Maintain original M1–M5 plans; this corrective pass supplements them.
 
-**Private/dev activation order:** enable scoped retrieval first, then maintenance and synthesis, then optional inference-saving features only after limited real-article comparisons. All these gates currently default off. No active database needs migration exploration; schema compatibility is covered by disposable automated migration tests.
+**Merge vs later activation:** C05 gates **merging disabled code**; it does not require a restored, migrated or benchmarked database. If features are later enabled, stage scoped retrieval first, maintenance/synthesis second, and optional inference-saving features only after limited real-article comparisons. All these gates currently default off.
 
 **Current CI:** GitHub Actions implementation SHA `f3aa498e`, runs `40928360912` (CI) and `40928361243` (Installer Smoke), failed. Logs indicate baseline Ruff findings, missing CI test secrets/`.env`, unavailable Redis in theme tests, Gitleaks API permission error, Werkzeug audit advisory, installer runner disk exhaustion, and a broken aarch64 launcher path. Root causes must be classified against `main` before attribution to the memory branch. The local 5,074-passing test claim requires relevant CI/reproduction checks; classify inherited/unrelated CI jobs independently rather than blocking private memory work on the entire installer matrix. See C04.
 

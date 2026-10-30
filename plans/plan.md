@@ -1,7 +1,7 @@
 # Master Implementation Plan (Consolidated)
 
-**Status:** Legacy waves 1–9 COMPLETED; editorial-memory C01–C03 implemented, C04 baseline triaged; C05 merge-readiness corrective OPEN on draft PR #19
-**Last Updated:** 2026-10-31 (optional local TTS/MLX and EggFetch 0.3.0 adoption qualification registered; historical waves unchanged)
+**Status:** Evidence-first article synthesis E01–E06 registered; legacy waves 1–9 completed; editorial-memory C05 merge-readiness corrective remains tracked below
+**Last Updated:** 2026-11-02 (origin/main and evidence-first plan registry reconciled; historical workstreams retained)
 **Goal:** Track active workstreams for the personal/local or privately operated AInews instance while preserving historical completed security, quality and operational work. No public-release program is implied.
 
 ---
@@ -38,6 +38,28 @@ The work is tracked in four implementation handoffs. E1–E3 are closed upstream
 4. **E4 (P1, complete):** [AInews conformance and ASGI requalification](eggfetch_e4_ainews_requalification_20261030.md) — provider contracts, Python 3.12 target matrix, ASGI/local-inference checks, and Adopt decision.
 
 E1–E3 were upstream EggFetch implementation work and are now closed by the published 0.3.0 release; E4's AInews integration and application qualification are complete. The release workflow resolved the previously intermittent benchmark proxy fixture and built/smoke-tested the supported artifacts. The user accepts v0.3.0 provenance for adoption; tag-signing cleanup is later manual work. AInews was qualified through direct ASGI; proxy testing is out of scope.
+
+## Active Plan Registry — Evidence-First Article Synthesis and Independent Verification (2026-10-30)
+
+**Status:** E01–E06 **OPEN**; these are implementation plans only, not completed code.
+**Baseline:** `main` at `8fdfc61f9c7f450f686064a5cdb65fce020b9c04`.
+**Planning branch:** `plan/evidence-first-article-synthesis-20261030`.
+**Scope:** Personal/local or privately operated AInews, not a public-release initiative. Preserve `CondensedArticle` and Smart Brevity-inspired output.
+
+[Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md) registers independently executable handoffs:
+
+1. **E01 (P0):** [Mandatory publication eligibility, auto-review bypass and degraded-finalize closure](evidence_first_e01_publication_integrity_20261030.md) — **first**.
+2. **E02 (P1):** [Diverse research queries, safe full-text evidence retrieval and independent source families](evidence_first_e02_research_sources_20261030.md) — after E01 interface.
+3. **E03 (P1):** [Atomic claim evidence ledger, corroboration, contradictions and bounded follow-up search](evidence_first_e03_claim_verification_20261030.md) — after E02.
+4. **E04 (P1):** [Evidence-only original writing, final-claim audit, anti-copying gates and unchanged output schema](evidence_first_e04_original_synthesis_20261030.md) — after E03.
+5. **E05 (P2):** [Cross-feed story clustering, deduplication and evidence reuse](evidence_first_e05_story_clustering_20261030.md) — optional after E02; not a verification prerequisite.
+6. **E06 (P1 across phases):** [Regression corpus, real-head verification, runtime budgets and local activation](evidence_first_e06_verification_rollout_20261030.md) — starts with E01, continues through E05.
+
+**Critical existing behavior to fix first:** `pipeline.yaml` has `review.auto_approve: true` and `review.enabled: false`; `route_to_review` can publish failed research/write/edit quality gates. Some degradation/disabled-stage finalization paths bypass post-edit quality verification. **Do not** merely add prompts; establish one mandatory, non-bypassable final-article eligibility decision. Source snippets, cloned/syndicated publications and editorial memory do not constitute independent fact verification.
+
+Keep prior editorial-memory registry and historical wave descriptions below unchanged. This planning branch contains no implementation, no tests executed, and no source configuration/runtime feature activation.
+
+---
 
 ## Active Plan Registry — Editorial Memory, Shared Blackboard, and Pipeline Offload (2026-10-29)
 

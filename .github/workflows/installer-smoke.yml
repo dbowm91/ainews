@@ -788,8 +788,8 @@ jobs:
           docker compose up -d redis db-migrate
           echo "Waiting for db-migrate..."
 
-          # Wait for db-migrate to complete
-          TIMEOUT=120
+          # Wait for db-migrate to complete (40+ migrations need headroom)
+          TIMEOUT=300
           ELAPSED=0
           while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
             STATUS=$(docker compose ps db-migrate --format '{{.State}}' 2>/dev/null || echo "unknown")

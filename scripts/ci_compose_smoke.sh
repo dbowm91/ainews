@@ -174,7 +174,7 @@ $DC up -d redis db-migrate
 
 echo "  Waiting for db-migrate to complete..."
 DB_MIGRATE_CONTAINER=$($DC ps -q db-migrate)
-DB_MIGRATE_TIMEOUT=120
+DB_MIGRATE_TIMEOUT=300
 DB_MIGRATE_ELAPSED=0
 
 while [ "$DB_MIGRATE_ELAPSED" -lt "$DB_MIGRATE_TIMEOUT" ]; do

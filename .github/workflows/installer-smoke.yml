@@ -788,14 +788,21 @@ jobs:
           docker compose up -d redis db-migrate
           echo "Waiting for db-migrate..."
 
-          # Wait for db-migrate to complete (40+ migrations need headroom)
+          # Wait for db-migrate to complete (40+ migrations need headroom).
+          # NOTE: `docker compose ps` only lists running containers, so a
+          # finished one-shot container is invisible to it. Poll via
+          # `docker inspect` like scripts/ci_compose_smoke.sh does.
           TIMEOUT=300
           ELAPSED=0
+          DB_MIGRATE_CONTAINER=""
           while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-            STATUS=$(docker compose ps db-migrate --format '{{.State}}' 2>/dev/null || echo "unknown")
-            if [[ "$STATUS" == "exited" ]]; then
-              EXIT_CODE=$(docker compose ps db-migrate --format '{{.ExitCode}}' 2>/dev/null || echo "1")
-              if [[ "$EXIT_CODE" == "0" ]]; then
+            if [ -z "$DB_MIGRATE_CONTAINER" ]; then
+              DB_MIGRATE_CONTAINER=$(docker compose ps -q db-migrate 2>/dev/null || true)
+            fi
+            STATUS=$(docker inspect --format='{{.State.Status}}' "$DB_MIGRATE_CONTAINER" 2>/dev/null || echo "unknown")
+            if [ "$STATUS" = "exited" ]; then
+              EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$DB_MIGRATE_CONTAINER" 2>/dev/null || echo "1")
+              if [ "$EXIT_CODE" = "0" ]; then
                 echo "db-migrate completed (${ELAPSED}s)"
                 break
               else

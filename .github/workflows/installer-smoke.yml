@@ -28,7 +28,7 @@ jobs:
   # ── Build test artifact (shared by all installer jobs) ──────────────
   build-artifact:
     name: Build test artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       artifact_name: ${{ steps.build.outputs.artifact_name }}
       checksum: ${{ steps.build.outputs.checksum }}
@@ -106,7 +106,7 @@ jobs:
   clean-host-linux-x86_64:
     name: "Clean host Linux x86_64"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Download test artifact
@@ -293,7 +293,7 @@ jobs:
   deferred-prerequisite:
     name: "Deferred prerequisite"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Download test artifact
@@ -546,7 +546,7 @@ jobs:
   docker-unavailable:
     name: "Docker unavailable"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Download test artifact
@@ -587,7 +587,7 @@ jobs:
   full-lifecycle:
     name: "Full lifecycle"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Download test artifact

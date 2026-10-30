@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
         run: .venv/bin/mypy . --exclude .venv
 
   pip-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
         run: .venv/bin/pip-audit
 
   trivy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +107,7 @@ jobs:
           format: "table"
 
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -151,7 +151,7 @@ jobs:
             python -c "from app import create_app; create_app('production'); print('Production app factory OK')"
 
   smoke-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -180,7 +180,7 @@ jobs:
         run: .venv/bin/python -m pytest tests/test_docs_env_consistency.py -v
 
   theme-validation:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +218,7 @@ jobs:
         run: .venv/bin/python -m pytest tests/test_theme_package_validation.py -v
 
   theme-browser-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -254,7 +254,7 @@ jobs:
           retention-days: 7
 
   compose-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -263,7 +263,7 @@ jobs:
         run: bash scripts/ci_compose_smoke.sh
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4

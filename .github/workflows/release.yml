@@ -28,7 +28,7 @@ jobs:
   # ── Gate: run the full test suite before building anything ──────────
   test:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -342,7 +342,7 @@ jobs:
   checksums:
     name: Collect checksums
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Download all checksum files
         uses: actions/download-artifact@v4
@@ -369,7 +369,7 @@ jobs:
     name: Create release
     needs: [build, checksums]
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

@@ -2,8 +2,69 @@
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+import hashlib
+import json
 
 import pytest
+
+
+def _make_eligible_for_scheduling(article, db):
+    from models import EditorialDossier, QualityReport
+
+    final_article = json.dumps({
+        "headline": "Verified scheduled headline",
+        "tldr": "A short verified scheduled summary.",
+        "why_it_matters": "The official notice confirms a release.",
+        "body": "The official notice confirms version 3.2 is available.",
+        "key_points": ["Version 3.2 is available."],
+        "what_to_watch": "The next update is pending.",
+        "citations": [{"title": "Official notice", "url": "https://source.example/notice"}],
+        "original_attribution": {"source": "feed", "url": "https://feed.example/item"},
+        "tags": ["ai"],
+    })
+    article.final_article = final_article
+    article.raw_metadata = {"editorial_audit": {"passed": True, "findings": []}}
+    article.degradation_count = 0
+    digest = hashlib.sha256(final_article.encode("utf-8")).hexdigest()
+    db.session.add(EditorialDossier(
+        article_id=article.id,
+        revision=1,
+        policy_version="evidence-first-v1",
+        status="verified",
+        content_digest=digest,
+        payload={
+            "claims": [{
+                "claim": "Version 3.2 is available.",
+                "status": "primary_supported",
+                "publish_allowed": True,
+                "supports": [{"evidence_source_id": "ev_1", "span": "Version 3.2 is available."}],
+                "contradicts": [],
+                "independent_origin_count": 0,
+            }],
+            "sources": [{
+                "evidence_source_id": "ev_1",
+                "retrieval_status": "retrieved",
+                "source_type": "primary_document",
+                "url": "https://source.example/notice",
+                "excerpt": "The official notice confirms version 3.2 is available.",
+            }],
+        },
+    ))
+    db.session.add(QualityReport(
+        article_id=article.id,
+        stage="edit",
+        overall_score=0.9,
+        groundedness=0.9,
+        coherence=0.9,
+        completeness=0.9,
+        safety=1.0,
+        citation_score=1.0,
+        claim_score=1.0,
+        passed=True,
+        needs_review=False,
+        findings=[],
+        meta={"content_digest": digest},
+    ))
 
 
 class TestPublishScheduledArticles:
@@ -40,6 +101,7 @@ class TestPublishScheduledArticles:
 
         with app.app_context():
             article = create_article(pipeline_status="review")
+            _make_eligible_for_scheduling(article, db)
             article.scheduled_publish_at = datetime.now(timezone.utc) - timedelta(
                 hours=1
             )
@@ -174,6 +236,7 @@ class TestPublishScheduledArticles:
                     pipeline_status="review",
                     external_id=f"test-article-{i}",
                 )
+                _make_eligible_for_scheduling(article, db)
                 article.scheduled_publish_at = datetime.now(timezone.utc) - timedelta(
                     hours=1
                 )

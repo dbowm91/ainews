@@ -50,7 +50,7 @@ def write_article(self, article_id: int, run_id=None, _signature=None, task_name
     from schemas.llm_responses import CondensedArticle
     from schemas.pipeline import get_role_config
     from services.writer import (
-        build_writer_prompt,
+        build_verified_writer_prompt,
         get_writer_system_prompt,
     )
     from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status, run_stage
@@ -58,29 +58,12 @@ def write_article(self, article_id: int, run_id=None, _signature=None, task_name
     def work(article, provider, model, max_tokens):
         rc = get_role_config("writer")
 
-        # Fetch trend memory if topics available
-        trend_memory = ""
-        if article.topics:
-            from services.trend_memory import (
-                _format_memory_for_prompt,
-                get_memory_for_topics,
-            )
-            trend_memory = _format_memory_for_prompt(
-                get_memory_for_topics(article.topics, min_importance=1),
-            )
+        from services.editorial_evidence import build_verified_packet
 
-        # Truncate research_brief to prevent token overflow
-        from services.prompts import sliding_window_truncate
-        research_brief = sliding_window_truncate(
-            article.research_brief or "", max_chars=8000, model=model,
-        )
-
-        prompt = build_writer_prompt(
-            title=article.original_title or "",
-            topics=article.topics or [],
-            research_brief=research_brief,
+        packet = build_verified_packet(article)
+        prompt = build_verified_writer_prompt(
+            packet=packet,
             max_key_points=rc.max_key_points or 5,
-            trend_memory=trend_memory,
         )
 
         from services.logging_utils import traced_llm_call
@@ -99,6 +82,28 @@ def write_article(self, article_id: int, run_id=None, _signature=None, task_name
                     max_tokens=max_tokens,
                     stage="writer",
                 )
+
+        allowed_urls = {source["url"] for source in packet["sources"]}
+        invalid_citations = [
+            citation.url for citation in result.citations if citation.url not in allowed_urls
+        ]
+        if invalid_citations:
+            article.last_error = "Editorial hold: writer proposed citations outside the verified dossier"
+            from services.auto_review import route_to_review
+
+            route_to_review(article)
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+            return {"article_id": article.id, "status": "review", "reason": "unverified_citation"}
+
+        credit = packet["discovery_credit"]
+        result.original_attribution.source = credit["source"] or "Original discovery source"
+        result.original_attribution.url = credit["url"]
+        result.original_attribution.author = credit["author"]
+        result.original_attribution.published_at = credit["published_at"]
 
         article.draft_article = result.model_dump_json()
         article.writer_model = model

@@ -1,6 +1,6 @@
 # Evidence-First Research, Independent Synthesis, and Publication Integrity Roadmap
 
-**Status:** OPEN — planning only; implementation and validation outstanding
+**Status:** IMPLEMENTED — E01–E05 complete; E06 local verification recorded, provider-backed comparison pending
 **Date:** 2026-10-30
 **Baseline:** `main` at `8fdfc61f9c7f450f686064a5cdb65fce020b9c04`
 **Handoff branch:** `plan/evidence-first-article-synthesis-20261030`
@@ -80,4 +80,4 @@ The editorial-memory M1–M4 work is already merged on the baseline main commit;
 - Site/newsletter readers and article JSON/rendering remain compatible; the Smart Brevity-inspired concise shape is preserved.
 - Replayed fixture corpus, performance budgets, security checks, and actual head SHA are recorded without fabricated test claims.
 
-**Handoff:** Start E01 on a fresh implementation branch from the chosen integration baseline; keep this planning branch documentation-only. The plans define work, they do not assert the work is implemented.
+**Implementation:** Completed on `plan/evidence-first-article-synthesis-20261030` after rebasing from `origin/main`. E01–E05 and local E06 implementation are in this worktree; validation evidence and limitations are recorded in [evidence-first-validation-20261030.md](../docs/evidence-first-validation-20261030.md). Provider-backed representative-article measurements remain pending because this environment has no configured provider credentials or local production corpus.

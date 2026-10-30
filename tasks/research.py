@@ -41,8 +41,10 @@ def _format_web_results(web_results: list[dict]) -> str:
     for wr in web_results:
         parts.append(f"Source: {esc_xml_text(wr.get('title', 'Unknown'))}")
         parts.append(f"URL: {esc_xml_text(wr.get('url', ''))}")
-        parts.append("Source type: search snippet (lead only; not independently verified)")
-        parts.append(f"Snippet: {esc_xml_text(wr.get('snippet', '')[:300])}")
+        parts.append(f"Retrieval state: {esc_xml_text(wr.get('source_kind', 'lead_only'))}")
+        if wr.get("evidence_source_id"):
+            parts.append(f"Trusted evidence handle: {esc_xml_text(wr['evidence_source_id'])}")
+        parts.append(f"Retrieved excerpt: {esc_xml_text(wr.get('snippet', '')[:1800])}")
         parts.append("")
     return "\n".join(parts)
 
@@ -52,27 +54,61 @@ def _perform_web_search_and_synthesis(article, rc):
     web_synthesis = ""
     if not rc.web_search:
         return web_results, web_synthesis
-    search_query = f"{article.original_title} {' '.join(article.topics or [])}"
+    from services.editorial_evidence import (
+        build_research_queries,
+        persist_dossier,
+        retrieve_search_candidates,
+        source_prompt_records,
+    )
+    from services.pipeline_optimizations import prepare_web_evidence
+
+    max_results = min(5, max(1, rc.web_search_max_results or 5))
+    queries = build_research_queries(article.original_title or "", article.topics or [])
+    search_results = []
     if rc.web_search_provider:
         from services.search import get_search_provider
+
         search_prov = get_search_provider(rc.web_search_provider)
-        search_results = search_prov.search(
-            search_query, max_results=rc.web_search_max_results or 5,
-        )
+        for query in queries:
+            search_results.extend(search_prov.search(query, max_results=max_results))
     else:
         from services.search import search_web
-        search_results = search_web(
-            search_query, max_results=rc.web_search_max_results or 5,
-        )
-    from schemas.pipeline import load_pipeline_config
-    from services.pipeline_optimizations import prepare_web_evidence, should_synthesize_web_results
 
-    web_results = prepare_web_evidence(
+        for query in queries:
+            search_results.extend(search_web(query, max_results=max_results))
+
+    # Clustered feed entries are discovery candidates only; retrieve their
+    # pages again through the safe evidence path before using any content.
+    cluster = getattr(article, "story_cluster", None)
+    if cluster is not None:
+        from services.search.base import SearchResult
+
+        search_results.extend(
+            SearchResult(title=lead.title, url=lead.url or "", snippet="", source="discovery_lead")
+            for lead in cluster.leads
+            if lead.url
+        )
+
+    leads = prepare_web_evidence(
         [{"title": s.title, "url": s.url, "snippet": s.snippet} for s in search_results],
-        limit=rc.web_search_max_results or 5,
+        limit=6,
+        per_domain=2,
     )
+    # Resolve the bounded leads back to provider result records before fetching.
+    by_url = {s.url: s for s in search_results}
+    normalized_candidates = []
+    for lead in leads:
+        candidate = by_url.get(lead["url"])
+        if candidate:
+            normalized_candidates.append(candidate)
+    sources = retrieve_search_candidates(normalized_candidates, limit=6)
+    web_results = source_prompt_records(sources)
+    if article.id:
+        persist_dossier(article, sources, status="collecting")
     if not web_results:
         return web_results, web_synthesis
+    from schemas.pipeline import load_pipeline_config
+    from services.pipeline_optimizations import should_synthesize_web_results
     optimization_config = load_pipeline_config().optimizations
     if (
         optimization_config.conditional_research_synthesis_enabled
@@ -347,11 +383,51 @@ def research_article(self, article_id: int, run_id=None, _signature=None, task_n
             max_tokens=max_tokens,
         )
 
+        from services.editorial_evidence import verify_claims
+
+        ledger = verify_claims(
+            article,
+            [claim.claim for claim in brief.key_claims],
+            provider,
+            model,
+            max_tokens=min(max_tokens, 1800),
+        )
+        if ledger["status"] != "verified":
+            from services.editorial_evidence import follow_up_research
+
+            follow_up_research(
+                article,
+                [claim.claim for claim in brief.key_claims],
+                provider_id=rc.web_search_provider,
+            )
+            ledger = verify_claims(
+                article,
+                [claim.claim for claim in brief.key_claims],
+                provider,
+                model,
+                max_tokens=min(max_tokens, 1800),
+            )
+
         article.research_brief = brief.model_dump_json()
         article.impact_score = brief.impact_score
 
         # Quality assessment
         _perform_quality_assessment(article, brief)
+
+        if ledger["status"] != "verified":
+            from tasks.pipeline import _dispatch_next, _log_pipeline
+
+            article.last_error = "Editorial hold: research evidence is insufficient"
+            _transition_article_status(article, PipelineStatus.REVIEW)
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+            if run_id:
+                _log_pipeline(run_id, "research", "warning", "Research evidence held article %s", article.id, article_id=article.id)
+            _dispatch_next(article_id, run_id=run_id, next_status=PipelineStatus.REVIEW)
+            return {"article_id": article_id, "quality_gate": "hold", "evidence_status": ledger["status"]}
 
         # Quality gate and transition
         return _handle_quality_gate_and_transition(

@@ -30,7 +30,8 @@ class TestGetWriterSystemPrompt:
             "services.prompts": mock_prompts,
         }):
             result = get_writer_system_prompt()
-        assert result == "default-prompt"
+        assert result.startswith("default-prompt")
+        assert "NON-OVERRIDABLE EDITORIAL POLICY" in result
         mock_prompts.get_system_prompt.assert_called_once_with("writer", "yaml-prompt")
 
     def test_returns_variant_when_experiment_enabled(self):
@@ -45,7 +46,8 @@ class TestGetWriterSystemPrompt:
             "services.prompts": mock_prompts,
         }):
             result = get_writer_system_prompt(article)
-        assert result == "variant-prompt"
+        assert result.startswith("variant-prompt")
+        assert "NON-OVERRIDABLE EDITORIAL POLICY" in result
         mock_prompts.get_system_prompt.assert_called_once_with("writer", "variant-prompt")
 
     def test_returns_default_when_experiments_disabled(self):
@@ -60,7 +62,8 @@ class TestGetWriterSystemPrompt:
             "services.prompts": mock_prompts,
         }):
             result = get_writer_system_prompt(article)
-        assert result == "default-prompt"
+        assert result.startswith("default-prompt")
+        assert "NON-OVERRIDABLE EDITORIAL POLICY" in result
         mock_prompts.get_system_prompt.assert_called_once_with("writer", "yaml-prompt")
 
     def test_returns_default_when_article_has_no_experiment_group(self):
@@ -75,7 +78,8 @@ class TestGetWriterSystemPrompt:
             "services.prompts": mock_prompts,
         }):
             result = get_writer_system_prompt(article)
-        assert result == "default-prompt"
+        assert result.startswith("default-prompt")
+        assert "NON-OVERRIDABLE EDITORIAL POLICY" in result
         mock_prompts.get_system_prompt.assert_called_once_with("writer", "yaml-prompt")
 
     def test_returns_variant_when_experiment_group_not_in_variants(self):
@@ -90,7 +94,8 @@ class TestGetWriterSystemPrompt:
             "services.prompts": mock_prompts,
         }):
             result = get_writer_system_prompt(article)
-        assert result == "default-prompt"
+        assert result.startswith("default-prompt")
+        assert "NON-OVERRIDABLE EDITORIAL POLICY" in result
         mock_prompts.get_system_prompt.assert_called_once_with("writer", "yaml-prompt")
 
     def test_returns_default_when_article_lacks_experiment_group_attr(self):
@@ -101,7 +106,8 @@ class TestGetWriterSystemPrompt:
             "services.prompts": mock_prompts,
         }):
             result = get_writer_system_prompt(article="not-an-article")
-        assert result == "default-prompt"
+        assert result.startswith("default-prompt")
+        assert "NON-OVERRIDABLE EDITORIAL POLICY" in result
 
 
 class TestBuildWriterPrompt:

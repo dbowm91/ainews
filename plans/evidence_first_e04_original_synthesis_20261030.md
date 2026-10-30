@@ -1,6 +1,6 @@
 # E04 — Evidence-Only Writing, Independent Editing, and Textual Originality Gates
 
-**Status:** OPEN — P1
+**Status:** COMPLETE — P1 (implemented and locally verified 2026-10-30)
 **Parent:** [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md)
 **Dependencies:** E03 claim fact sheet and E01 hard eligibility gate.
 **Objective:** Draft original high-signal, compact coverage from independently assembled facts and verify the final artifact, while keeping public schema and rendering unchanged.

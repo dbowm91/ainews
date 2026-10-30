@@ -5,6 +5,26 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _retrieved_source():
+    from services.editorial_evidence import EvidenceSource
+
+    return EvidenceSource(
+        evidence_source_id="ev_test",
+        canonical_url="https://example.test/report",
+        url="https://example.test/report",
+        title="Result",
+        publisher="example.test",
+        source_family="newsroom:example_test",
+        source_family_confidence="registry",
+        source_type="secondary_reporting",
+        retrieval_status="retrieved",
+        acquired_at="2026-10-30T00:00:00+00:00",
+        published_at=None,
+        content_digest="a" * 64,
+        excerpt="A retrieved synthetic report excerpt.",
+    )
+
+
 def _make_brief(claims=None, impact_score=50):
     """Helper to build a ResearchBrief with mock claims that have .claim attr.
 
@@ -92,7 +112,7 @@ class TestFormatWebResults:
 
         assert "Source: Title" in output
         assert "URL: https://example.com" in output
-        assert "Snippet: Snippet text" in output
+        assert "Retrieved excerpt: Snippet text" in output
 
     def test_formats_multiple_results(self):
         """Formats multiple web results separated by blank lines."""
@@ -111,11 +131,11 @@ class TestFormatWebResults:
         """Snippet is truncated to 300 characters."""
         from tasks.research import _format_web_results
 
-        results = [{"title": "T", "url": "u", "snippet": "X" * 500}]
+        results = [{"title": "T", "url": "u", "snippet": "X" * 2500}]
         output = _format_web_results(results)
 
-        assert "X" * 300 in output
-        assert "X" * 301 not in output
+        assert "X" * 1800 in output
+        assert "X" * 1801 not in output
 
     def test_handles_missing_fields(self):
         """Defaults for missing title, url, snippet."""
@@ -126,7 +146,7 @@ class TestFormatWebResults:
 
         assert "Source: Unknown" in output
         assert "URL: " in output
-        assert "Snippet: " in output
+        assert "Retrieved excerpt: " in output
 
 
 class TestPerformWebSearchAndSynthesis:
@@ -145,7 +165,7 @@ class TestPerformWebSearchAndSynthesis:
         assert results == []
         assert synthesis == ""
 
-    def test_uses_configured_search_provider(self):
+    def test_uses_configured_search_provider(self, app):
         """Uses specified search provider when rc.web_search_provider is set."""
         from tasks.research import _perform_web_search_and_synthesis
 
@@ -176,7 +196,11 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "synthesized"
 
         with (
+            app.app_context(),
             patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
+            patch("services.editorial_evidence.persist_dossier"),
+            patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.run_subagent", return_value=mock_synthesis),
         ):
@@ -185,11 +209,11 @@ class TestPerformWebSearchAndSynthesis:
         assert len(results) == 1
         assert results[0]["title"] == "Result"
         assert synthesis == "synthesized"
-        mock_provider.search.assert_called_once_with(
-            "Test Title ai", max_results=3,
-        )
+        assert mock_provider.search.call_count == 4
+        assert all(call.kwargs["max_results"] == 3 for call in mock_provider.search.call_args_list)
+        assert any("Test Title" in call.args[0] for call in mock_provider.search.call_args_list)
 
-    def test_uses_default_search_when_no_provider(self):
+    def test_uses_default_search_when_no_provider(self, app):
         """Falls back to search_web when no provider configured."""
         from tasks.research import _perform_web_search_and_synthesis
 
@@ -217,7 +241,11 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "syn"
 
         with (
+            app.app_context(),
             patch("services.search.search_web", return_value=[mock_search_result]),
+            patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
+            patch("services.editorial_evidence.persist_dossier"),
+            patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.run_subagent", return_value=mock_synthesis),
         ):
@@ -225,7 +253,7 @@ class TestPerformWebSearchAndSynthesis:
 
         assert len(results) == 1
 
-    def test_returns_empty_when_no_search_results(self):
+    def test_returns_empty_when_no_search_results(self, app):
         """Returns empty when search returns no results."""
         from tasks.research import _perform_web_search_and_synthesis
 
@@ -241,13 +269,17 @@ class TestPerformWebSearchAndSynthesis:
         mock_provider = MagicMock()
         mock_provider.search.return_value = []
 
-        with patch("services.search.get_search_provider", return_value=mock_provider):
+        with (
+            app.app_context(),
+            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.editorial_evidence.persist_dossier"),
+        ):
             results, synthesis = _perform_web_search_and_synthesis(article, rc)
 
         assert results == []
         assert synthesis == ""
 
-    def test_uses_tools_when_configured(self):
+    def test_uses_tools_when_configured(self, app):
         """Uses run_subagent_with_tools when stage_config.tools is set."""
         from tasks.research import _perform_web_search_and_synthesis
 
@@ -278,7 +310,11 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "tools synthesis"
 
         with (
+            app.app_context(),
             patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
+            patch("services.editorial_evidence.persist_dossier"),
+            patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.initialize_tool_registry", return_value=["tools"]),
             patch("services.subagent.run_subagent_with_tools", return_value=mock_synthesis),
@@ -287,7 +323,7 @@ class TestPerformWebSearchAndSynthesis:
 
         assert synthesis == "tools synthesis"
 
-    def test_warns_on_fallback(self):
+    def test_warns_on_fallback(self, app):
         """Logs warning when subagent used_fallback."""
         from tasks.research import _perform_web_search_and_synthesis
 
@@ -318,7 +354,11 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis.synthesis = "fallback"
 
         with (
+            app.app_context(),
             patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
+            patch("services.editorial_evidence.persist_dossier"),
+            patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
             patch("services.subagent.run_subagent", return_value=mock_synthesis),
         ):
@@ -330,7 +370,7 @@ class TestPerformWebSearchAndSynthesis:
 class TestGetRelatedAndContext:
     """Tests for _get_related_and_context function."""
 
-    def test_returns_related_and_empty_context_when_no_topics(self):
+    def test_returns_related_and_empty_context_when_no_topics(self, app):
         """Returns related articles but empty context when no topics."""
         from tasks.research import _get_related_and_context
 
@@ -343,14 +383,14 @@ class TestGetRelatedAndContext:
 
         mock_related = [{"title": "Related"}]
 
-        with patch("services.related.find_related_articles_dicts", return_value=mock_related):
+        with app.app_context(), patch("services.related.find_related_articles_dicts", return_value=mock_related):
             related, topic_notes, trend_memory = _get_related_and_context(article, rc)
 
         assert related == mock_related
         assert topic_notes == ""
         assert trend_memory == ""
 
-    def test_populates_context_when_topics_exist(self, monkeypatch):
+    def test_populates_context_when_topics_exist(self, app, monkeypatch):
         """Fetches topic_notes and trend_memory when topics exist."""
         from tasks.research import _get_related_and_context
         from schemas.pipeline import load_pipeline_config
@@ -371,7 +411,12 @@ class TestGetRelatedAndContext:
         mock_memory_context = MagicMock()
         mock_memory_context.rendered = "trend memory text"
 
+        pipeline_config = MagicMock()
+        pipeline_config.memory.research_token_budget = 100
+        pipeline_config.memory.memory_v2_enabled = False
         with (
+            app.app_context(),
+            patch("schemas.pipeline.load_pipeline_config", return_value=pipeline_config),
             patch("services.related.find_related_articles_dicts", return_value=[]),
             patch("services.context_service.get_topic_notes_for_topics", return_value=mock_topic_notes),
             patch("services.trend_memory.get_memory_for_topics", return_value=[]),
@@ -384,7 +429,7 @@ class TestGetRelatedAndContext:
         assert topic_notes == "- note1\n- note2"
         assert trend_memory == "trend memory text"
 
-    def test_handles_empty_topic_notes(self, monkeypatch):
+    def test_handles_empty_topic_notes(self, app, monkeypatch):
         """Handles empty topic_notes dict gracefully."""
         from tasks.research import _get_related_and_context
         from schemas.pipeline import load_pipeline_config
@@ -403,7 +448,12 @@ class TestGetRelatedAndContext:
         mock_memory_context = MagicMock()
         mock_memory_context.rendered = ""
 
+        pipeline_config = MagicMock()
+        pipeline_config.memory.research_token_budget = 100
+        pipeline_config.memory.memory_v2_enabled = False
         with (
+            app.app_context(),
+            patch("schemas.pipeline.load_pipeline_config", return_value=pipeline_config),
             patch("services.related.find_related_articles_dicts", return_value=[]),
             patch("services.context_service.get_topic_notes_for_topics", return_value={}),
             patch("services.trend_memory.get_memory_for_topics", return_value=[]),
@@ -705,6 +755,7 @@ class TestResearchArticleTask:
                 patch("tasks.research._get_related_and_context", return_value=([], "", "")),
                 patch("tasks.research._generate_research_brief", return_value=brief),
                 patch("tasks.research._perform_quality_assessment"),
+                patch("services.editorial_evidence.verify_claims", return_value={"status": "verified", "claims": []}),
                 patch("tasks.research._handle_quality_gate_and_transition", return_value={"article_id": article.id}),
             ):
                 result = research_article.run(article.id)

@@ -30,6 +30,35 @@ class TestSanitizeField:
         assert result == "short"
 
 
+def test_admin_form_cannot_mark_unpublished_article_done(monkeypatch):
+    from types import SimpleNamespace
+
+    import routes.admin.articles as route
+
+    monkeypatch.setattr(route, "_admin_categories", lambda: ["ai"])
+    article = SimpleNamespace(
+        category="ai",
+        pipeline_status="review",
+        last_error=None,
+        impact_score=40,
+    )
+
+    _fa, _category, status = route._process_edit_form(
+        article,
+        {
+            "headline": "Test", "tldr": "Summary", "why_it_matters": "Why",
+            "body": "Body", "what_to_watch": "Watch", "key_points": "Point",
+            "tags": "ai", "category": "ai", "pipeline_status": "done",
+            "impact_score": "40",
+        },
+        {"headline": "Test"},
+    )
+
+    assert status == "review"
+    assert article.pipeline_status == "review"
+    assert article.last_error.startswith("Editorial hold:")
+
+
 class TestQueryLooksLikeUrl:
     """Tests for _query_looks_like_url helper function."""
 

@@ -170,6 +170,17 @@ def _transition_article_status(article, new_status: str) -> None:
         route_to_review(article)
         return
 
+    if new_status == PipelineStatus.DONE:
+        from services.editorial_eligibility import require_eligible
+
+        verdict = require_eligible(article)
+        if not verdict.eligible:
+            from services.auto_review import route_to_review
+
+            article.last_error = "Editorial hold: " + ", ".join(verdict.reason_codes)
+            route_to_review(article)
+            return
+
     current = article.pipeline_status
     if not is_valid_transition(current, new_status):
         raise InvalidStateTransitionError(article.id, current, new_status)

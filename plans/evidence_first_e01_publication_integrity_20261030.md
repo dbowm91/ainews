@@ -1,6 +1,6 @@
 # E01 — Mandatory Editorial Eligibility and Publication Bypass Closure
 
-**Status:** OPEN — P0
+**Status:** COMPLETE — P0 (implemented and locally verified 2026-10-30)
 **Parent:** [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md)
 **Dependencies:** None. Must land before mandatory source corroboration is activated.
 **Objective:** Make an editorial quality failure a true publication blocker even in autonomous mode, with no accidental loss of good-story throughput.

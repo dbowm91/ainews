@@ -279,16 +279,24 @@ def _handle_validation_and_routing(
     return None
 
 
-def _post_finalize_article(article, run_id: int | None = None) -> None:
+def _post_finalize_article(article, run_id: int | None = None) -> bool:
     """Post-finalize article: trend memory, webhooks, SLA metrics."""
     from services.pipeline_degradation import post_finalize_article
     from tasks.pipeline import _transition_article_status
 
     _transition_article_status(article, PipelineStatus.DONE)
-    post_finalize_article(article, run_id=run_id)
+    if article.pipeline_status != PipelineStatus.DONE:
+        return False
+    published = post_finalize_article(article, run_id=run_id)
+    if not published:
+        from extensions import db
+
+        db.session.refresh(article)
+        return article.pipeline_status == PipelineStatus.DONE and article.published_at is not None
+    return True
 
 
-def _execute_editor_work(article, provider, model, max_tokens, article_id: int, run_id: int | None = None):
+def _execute_editor_work(article, provider, model, max_tokens, article_id: int, run_id: int | None = None):  # noqa: C901
     """Execute the editor LLM work.
 
     Returns dict with article_id and status.
@@ -307,7 +315,9 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
     from tasks.pipeline import _assign_tags
 
     existing_tags = _get_cached_tag_names()
-    contextualization = _gather_editor_context(article, existing_tags)
+    # Historical memory and related coverage may aid search, but are not
+    # corroborating evidence for this article's factual claims.
+    contextualization = ""
 
     # Truncate draft to prevent token overflow
     from services.prompts import sliding_window_truncate
@@ -315,10 +325,14 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
         article.draft_article or "", max_chars=8000, model=model,
     )
 
+    from services.editorial_evidence import build_verified_packet
+    import json
+
+    packet = build_verified_packet(article)
     rc = get_role_config("editor")
     prompt = build_editor_prompt_with_context(
         draft_json=draft_truncated,
-        research_brief=article.research_brief or "",
+        research_brief=json.dumps({"verified_editorial_packet": packet}, ensure_ascii=False),
         existing_tags=existing_tags,
         max_tags=rc.max_tags or 3,
         contextualization=contextualization,
@@ -347,6 +361,37 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
 
     article.final_article = sanitize_final_article(result_json)
     article.original_ai_article = result_json
+
+    from services.editorial_audit import audit_final_artifact
+    from services.editorial_evidence import audit_final_claims
+
+    claim_audit = audit_final_claims(article, provider, model, max_tokens=min(max_tokens, 2400))
+    audit = audit_final_artifact(article)
+    if claim_audit.get("status") != "verified":
+        audit["passed"] = False
+        audit.setdefault("findings", []).append({
+            "code": "FINAL_CLAIM_UNVERIFIED",
+            "reason": claim_audit.get("reason", "one or more final statements lack verified support"),
+        })
+    metadata = dict(article.raw_metadata or {}) if isinstance(article.raw_metadata, dict) else {}
+    metadata["editorial_audit"] = audit
+    metadata["final_claim_audit"] = claim_audit
+    article.raw_metadata = metadata
+    if not audit["passed"]:
+        article.last_error = "Editorial hold: final artifact failed evidence/originality audit"
+        from services.auto_review import route_to_review
+
+        route_to_review(article)
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+        if run_id:
+            from tasks.pipeline import _log_pipeline
+
+            _log_pipeline(run_id, "edit", "warning", "Final artifact held by audit: %s", str(audit["findings"][:3]), article_id=article.id)
+        return {"article_id": article.id, "status": "review", "reason": "editorial_audit"}
 
     # Shadow mode quality assessment (non-blocking)
     try:
@@ -447,7 +492,13 @@ def _execute_editor_work(article, provider, model, max_tokens, article_id: int, 
         _dispatch_next(article.id, run_id=run_id, next_status=PipelineStatus.REVIEW)
         return {"article_id": article.id, "status": "review"}
 
-    _post_finalize_article(article, run_id)
+    if not _post_finalize_article(article, run_id):
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+        return {"article_id": article_id, "status": "review"}
 
     try:
         db.session.commit()

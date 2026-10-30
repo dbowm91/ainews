@@ -31,8 +31,6 @@ stages cannot disagree about it.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-
 logger = logging.getLogger(__name__)
 
 
@@ -92,11 +90,10 @@ def approve_article(article, *, reason: str = "manual", published_at=None) -> bo
     if article.pipeline_status != PipelineStatus.REVIEW:
         return False
 
-    publish_article(article, reason=reason, published_at=published_at)
-    return True
+    return publish_article(article, reason=reason, published_at=published_at)
 
 
-def publish_article(article, *, reason: str = "manual", published_at=None) -> None:
+def publish_article(article, *, reason: str = "manual", published_at=None) -> bool:
     """Mark an article done and make it publicly visible.
 
     The caller decides whether the article *should* go out; this function only
@@ -110,15 +107,35 @@ def publish_article(article, *, reason: str = "manual", published_at=None) -> No
     """
     from constants import PipelineStatus
 
+    from services.editorial_eligibility import require_eligible
+
+    verdict = require_eligible(article)
+    if not verdict.eligible:
+        article.last_error = "Editorial hold: " + ", ".join(verdict.reason_codes)
+        logger.warning(
+            "Article %s held from publication: %s",
+            getattr(article, "id", "?"),
+            ", ".join(verdict.reason_codes),
+        )
+        return False
+
     article.pipeline_status = PipelineStatus.DONE
     article.publicly_visible = True
     article.retry_count = 0
     article.last_error = None
     article.scheduled_publish_at = None
-    article.published_at = published_at or datetime.now(timezone.utc).replace(tzinfo=None)
+    # post_finalize_article claims the publication timestamp atomically and
+    # dispatches irreversible effects only for the winning transition.
 
     _invalidate_public_cache(article)
-    _post_finalize(article)
+    if not _post_finalize(article):
+        try:
+            from extensions import db
+
+            db.session.refresh(article)
+        except Exception:  # noqa: BLE001 - a concurrent winner may detach the row
+            return False
+        return article.pipeline_status == PipelineStatus.DONE and article.published_at is not None
 
     try:
         from services.audit import log_admin_action
@@ -142,9 +159,10 @@ def publish_article(article, *, reason: str = "manual", published_at=None) -> No
         reason,
         (getattr(article, "original_title", "") or "")[:50],
     )
+    return True
 
 
-def _post_finalize(article) -> None:
+def _post_finalize(article) -> bool:
     """Run the work that follows a publication.
 
     Trend memory, the webhooks and the embedding are what a published
@@ -158,13 +176,14 @@ def _post_finalize(article) -> None:
     try:
         from services.pipeline_degradation import post_finalize_article
 
-        post_finalize_article(article)
+        return bool(post_finalize_article(article))
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "Post-finalize work failed for article %s, continuing: %s",
             getattr(article, "id", "?"),
             e,
         )
+        return False
 
 
 def route_to_review(article) -> bool:
@@ -191,9 +210,19 @@ def route_to_review(article) -> bool:
         )
         return False
 
+    from services.editorial_eligibility import require_eligible
+
+    verdict = require_eligible(article)
+    if not verdict.eligible:
+        article.last_error = "Editorial hold: " + ", ".join(verdict.reason_codes)
+        article.pipeline_status = PipelineStatus.REVIEW
+        return True
+
     if is_auto_approve_enabled():
-        publish_article(article, reason="auto_review")
-        return False
+        if publish_article(article, reason="auto_review"):
+            return False
+        article.pipeline_status = PipelineStatus.REVIEW
+        return True
 
     article.pipeline_status = PipelineStatus.REVIEW
     article.publicly_visible = False
@@ -232,8 +261,9 @@ def auto_approve_queued(limit: int = 100) -> int:
 
     for article in queued:
         try:
-            if approve_article(article, reason="auto_review"):
-                db.session.commit()
+            did_approve = approve_article(article, reason="auto_review")
+            db.session.commit()
+            if did_approve:
                 approved += 1
         except SQLAlchemyError:
             db.session.rollback()

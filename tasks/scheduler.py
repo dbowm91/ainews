@@ -70,6 +70,8 @@ def publish_scheduled_articles(self):
         ]
 
         published = 0
+        from services.auto_review import approve_article
+
         for article_id in due_ids:
             try:
                 article = db.session.get(Article, article_id)

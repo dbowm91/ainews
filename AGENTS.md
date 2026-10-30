@@ -256,6 +256,13 @@ Not the documented `run_subagent(task, context, tools, model)`.
 ### Editorial Memory V2
 `TopicNote` remains human-authored editorial guidance. AI memory uses `services/memory/`: normalize ownership from `Article.category` through `schemas.topic.normalize_topic()` and map unknown categories to `uncategorized`; shared visibility is a `MemoryScope` reference, never a copied row. V2 writes, automatic reads, model tools, maintenance and synthesis are separate opt-in gates; enabled paths preflight the additive schema. Model-facing tools bind category from trusted task context and share cumulative response budgets. HIGH rows have a finite review grace and remain historically available after archival. Legacy `TrendMemory` rows remain available for rollback. See `docs/trend-memory.md` for current rollout gates.
 
+### Evidence-first Editorial Publication
+`services/editorial_eligibility.py` is the single publication policy. Never publish or dispatch post-publication effects without a current eligible verdict for the exact `final_article` digest, quality-report digest, evidence dossier revision, final audit, and degradation state. Review/auto-approval/admin/scheduled paths all call this policy; no ordinary override exists.
+
+`models/editorial.py` owns private `EditorialDossier`, `EvidenceDocumentCache`, `StoryCluster`, and `StoryLead` records. Dossier excerpts are capped at 2,000 characters and are never added to public article JSON. Search results remain lead-only until safe-fetched. Claim support must reference server-minted evidence IDs and exact retrieved spans; unknown source family, snippets, related AInews coverage, and editorial memory do not count as independent corroboration. The writer/editor receive only a verified fact packet, not discovery article prose.
+
+The shared admin inspection route is `GET /api/v1/admin/articles/<id>/editorial-status`. Holds use `review` workflow status plus stable `raw_metadata.editorial_eligibility.reason_codes`. Any content or evidence revision invalidates the former verdict. See `docs/evidence-first-operations.md` for reprocessing and correction handling.
+
 ### Pipeline Stage Status Values
 Pipeline stages use these statuses in `_STAGE_TASKS`: `pending`, `selecting`, `selected`, `researching`, `writing`, `written`, `editing`, `review`. The `review` status is handled by `tasks/edit.py`.
 

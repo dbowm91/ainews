@@ -198,6 +198,7 @@ ADMIN_API_ROUTES = {
     "admin_api.resend_webhook_event",
     "admin_api.get_article_quality_report",
     "admin_api.get_recent_quality_reports",
+"admin_api.get_editorial_status",
     "admin_api.get_pipeline_history",
     "admin_api.replay_article_stage",
     "admin_api.restore_article_version",

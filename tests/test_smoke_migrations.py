@@ -89,6 +89,10 @@ class TestFlaskDbUpgrade:
                 "memory_synthesis_runs",
                 "memory_synthesis_attempts",
                 "memory_synthesis_cursors",
+                "editorial_dossiers",
+                "story_clusters",
+                "story_leads",
+                "evidence_document_cache",
                 "tags",
                 "alembic_version",
             ]:

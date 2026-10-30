@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -376,24 +377,58 @@ def process_item(
         url=validated.url or "",
     )
 
+    from services.story_clustering import (
+        acquire_admission_guard,
+        attach_matching_lead,
+        register_canonical_lead,
+        release_admission_guard,
+    )
+
+    guard = acquire_admission_guard()
     try:
-        article = _create_article_record(
-            validated,
-            source,
-            extracted_text,
-            extraction,
-            run_id,
-        )
-    except SoftTimeLimitExceeded:
-        db.session.rollback()
-        logger.error("process_item exceeded soft time limit for %s", validated.external_id)
-        raise
-    except Exception as exc:
-        db.session.rollback()
-        logger.error("DB operation failed for %s: %s", validated.external_id, exc)
-        if run_id:
-            _log_pipeline(run_id, "extract", "error", "%s: %s", validated.external_id, exc)
-        raise
+        if guard[0] is not None:
+            try:
+                lead_date = datetime.fromisoformat(validated.published_at) if validated.published_at else None
+            except (ValueError, TypeError):
+                lead_date = None
+            canonical_id = attach_matching_lead(
+                title=validated.title,
+                source_id=source.id,
+                external_id=validated.external_id,
+                url=validated.url,
+                published_at=lead_date,
+            )
+            if canonical_id is not None:
+                return {"article_id": canonical_id, "duplicate": True, "story_clustered": True}
+
+        try:
+            article = _create_article_record(
+                validated,
+                source,
+                extracted_text,
+                extraction,
+                run_id,
+            )
+            if guard[0] is not None:
+                register_canonical_lead(
+                    article,
+                    source.id,
+                    validated.external_id,
+                    validated.url,
+                    article.original_published_at,
+                )
+        except SoftTimeLimitExceeded:
+            db.session.rollback()
+            logger.error("process_item exceeded soft time limit for %s", validated.external_id)
+            raise
+        except Exception as exc:
+            db.session.rollback()
+            logger.error("DB operation failed for %s: %s", validated.external_id, exc)
+            if run_id:
+                _log_pipeline(run_id, "extract", "error", "%s: %s", validated.external_id, exc)
+            raise
+    finally:
+        release_admission_guard(guard)
 
     _dispatch_after_extraction(article.id, run_id)
 

@@ -65,7 +65,7 @@ class TestDegradeAndAdvance:
         assert draft["headline"] == "Test Article"
         mock_dispatch.assert_called_once_with(1, run_id=None, next_status="editing")
 
-    def test_edit_degrades_to_done(self, app):
+    def test_edit_degrades_to_review_hold(self, app):
         from models import Article
         from services.pipeline_degradation import degrade_stage as _degrade_and_advance
 
@@ -78,8 +78,9 @@ class TestDegradeAndAdvance:
         with app.app_context():
             _degrade_and_advance(article, "edit")
 
-        assert article.pipeline_status == "done"
+        assert article.pipeline_status == "review"
         assert article.final_article == article.draft_article
+        assert "PIPELINE_DEGRADED" in article.last_error
 
     def test_normalizes_status_name_researching(self, app):
         """retry_stuck passes 'researching' but _degrade_and_advance checks 'research'."""
@@ -135,7 +136,7 @@ class TestDegradeAndAdvance:
         with app.app_context():
             _degrade_and_advance(article, "editing")
 
-        assert article.pipeline_status == "done"
+        assert article.pipeline_status == "review"
 
     def test_resets_retry_state_on_degrade(self, app):
         from models import Article
@@ -152,7 +153,7 @@ class TestDegradeAndAdvance:
             _degrade_and_advance(article, "edit")
 
         assert article.retry_count == 0
-        assert article.last_error is None
+        assert "PIPELINE_DEGRADED" in article.last_error
 
 
 class TestFinalize:

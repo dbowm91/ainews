@@ -136,11 +136,15 @@ class TestBuiltInTools:
             with patch("services.search.search_web") as mock_search:
                 mock_result = MagicMock()
                 mock_result.title = "Test Result"
+                mock_result.url = "https://example.test/result"
                 mock_result.snippet = "Test snippet content"
                 mock_search.return_value = [mock_result]
 
                 result = tool.fn(query="test query", max_results=1)
-                assert "Test Result: Test snippet content..." in result
+                assert "Test Result" in result
+                assert "https://example.test/result" in result
+                assert "Test snippet content" in result
+                assert "unverified" in result
 
     def test_search_web_no_results(self, app):
         with app.app_context():

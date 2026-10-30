@@ -1,6 +1,6 @@
 # E03 — Atomic Claim Ledger, Corroboration Policy, and Dispute Resolution
 
-**Status:** OPEN — P1
+**Status:** COMPLETE — P1 (implemented and locally verified 2026-10-30)
 **Parent:** [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md)
 **Dependency:** E02 typed retrieved evidence and trusted IDs.
 **Outcome:** A research dossier whose factual assertions can be traced to evidence and qualified before writing, with bounded iterative search for gaps.

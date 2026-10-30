@@ -111,17 +111,19 @@ Builds research context:
 
 ### Writer (`writer.txt`)
 
-Creates condensed article:
-- Input: Research brief, source article
+Creates an original condensed article:
+- Input: Verified editorial packet built from claim ledger and retrieved evidence handles
+- Does not receive the discovery source headline/body or editorial memory as evidence
 - Output: Smart Brevity format (hook → context → key points → implications)
 - Target: 3-5 tight paragraphs (Smart Brevity format)
+- A non-overridable policy is appended in code to YAML, file-fallback, and A/B system prompts
 
 ### Editor (`editor.txt`)
 
 Polishes and contextualizes:
-- Input: Draft article, research brief, contextualization (from subagent), topic notes, trend memory
+- Input: Draft article and the same verified editorial packet; memory and related articles are excluded as proof
 - Output: Final edited article with proper attribution
-- Validates: schema validation + quality checks
+- Validates: schema validation + final claim, citation, numeric, quote, and originality audits
 
 ### Newsletter Reader (`newsletter_reader.txt`)
 

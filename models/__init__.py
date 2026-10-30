@@ -24,6 +24,7 @@ from .audit import AuditLog
 from .search import SearchQuery
 from .auth import ApiToken, AdminUser
 from .quality import QualityReport
+from .editorial import EditorialDossier, StoryCluster, StoryLead, EvidenceDocumentCache
 
 from .utils import slugify, encode_short_url, decode_short_url
 
@@ -64,6 +65,10 @@ __all__ = [
     "ApiToken",
     "AdminUser",
     "QualityReport",
+    "EditorialDossier",
+    "StoryCluster",
+    "StoryLead",
+    "EvidenceDocumentCache",
     "slugify",
     "encode_short_url",
     "decode_short_url",

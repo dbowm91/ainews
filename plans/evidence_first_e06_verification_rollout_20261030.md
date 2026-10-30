@@ -1,6 +1,6 @@
 # E06 — Editorial Evidence Evaluation, Bounded Rollout, and Operational Handoff
 
-**Status:** OPEN — P1 cross-cutting validation
+**Status:** IMPLEMENTED — local verification complete; provider-backed comparison pending
 **Parent:** [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md)
 **Dependencies:** Starts with E01; final acceptance E01–E04, then repeat relevant cases after E05.
 **Objective:** Prove that stronger gates improve evidence reliability and copying resistance without excessive cost, blocking normal article publication or changing external output contracts.

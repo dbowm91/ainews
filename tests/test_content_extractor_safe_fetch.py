@@ -77,7 +77,7 @@ class TestSafeFetchIntegration:
 
 
 class TestExceptionMapping:
-    """Each SafeFetch exception subclass must map to FETCH_ERROR."""
+    """Safe-fetch status remains distinguishable to evidence collection."""
 
     @patch("services.safe_fetch.safe_fetch_url")
     def test_safe_fetch_error(self, mock_safe):
@@ -90,7 +90,7 @@ class TestExceptionMapping:
     def test_unsafe_fetch_error(self, mock_safe):
         mock_safe.side_effect = UnsafeFetchError("SSRF blocked")
         result = extract_article("https://example.com/fail")
-        assert result.status == ExtractionStatus.FETCH_ERROR
+        assert result.status == ExtractionStatus.UNSAFE_URL
         assert result.text is None
 
     @patch("services.safe_fetch.safe_fetch_url")
@@ -111,7 +111,7 @@ class TestExceptionMapping:
     def test_content_type_error(self, mock_safe):
         mock_safe.side_effect = SafeFetchContentTypeError("bad content-type")
         result = extract_article("https://example.com/fail")
-        assert result.status == ExtractionStatus.FETCH_ERROR
+        assert result.status == ExtractionStatus.UNSUPPORTED_CONTENT_TYPE
         assert result.text is None
 
 

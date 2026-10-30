@@ -1,7 +1,7 @@
 # Master Implementation Plan (Consolidated)
 
-**Status:** Evidence-first article synthesis E01–E06 registered; legacy waves 1–9 completed; editorial-memory C05 merge-readiness corrective remains tracked below
-**Last Updated:** 2026-11-02 (origin/main and evidence-first plan registry reconciled; historical workstreams retained)
+**Status:** Evidence-first article synthesis E01–E05 complete; E06 local implementation and validation complete; provider-backed comparison pending. Existing historical workstream statuses are retained below.
+**Last Updated:** 2026-11-02 (reconciled with origin/main; historical workstreams retained)
 **Goal:** Track active workstreams for the personal/local or privately operated AInews instance while preserving historical completed security, quality and operational work. No public-release program is implied.
 
 ---
@@ -41,9 +41,9 @@ E1–E3 were upstream EggFetch implementation work and are now closed by the pub
 
 ## Active Plan Registry — Evidence-First Article Synthesis and Independent Verification (2026-10-30)
 
-**Status:** E01–E06 **OPEN**; these are implementation plans only, not completed code.
+**Status:** E01–E05 **COMPLETE**; E06 implementation and local verification **COMPLETE**, provider-backed comparison pending.
 **Baseline:** `main` at `8fdfc61f9c7f450f686064a5cdb65fce020b9c04`.
-**Planning branch:** `plan/evidence-first-article-synthesis-20261030`.
+**Implementation branch:** `plan/evidence-first-article-synthesis-20261030` (rebased from `origin/main`).
 **Scope:** Personal/local or privately operated AInews, not a public-release initiative. Preserve `CondensedArticle` and Smart Brevity-inspired output.
 
 [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md) registers independently executable handoffs:

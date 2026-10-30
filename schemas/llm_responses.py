@@ -81,6 +81,17 @@ class ResearchBrief(BaseModel):
     )
 
 
+class ClaimEvidenceAssessment(BaseModel):
+    claim_index: int = Field(ge=0)
+    decision: str = Field(pattern="^(supported|contradicted|unclear)$")
+    evidence: list[dict[str, str]] = Field(default_factory=list)
+    rationale: str = Field(default="")
+
+
+class ClaimEvidenceAssessmentSet(BaseModel):
+    assessments: list[ClaimEvidenceAssessment] = Field(default_factory=list)
+
+
 # ── Writer stage ────────────────────────────────────────────────────────────
 
 

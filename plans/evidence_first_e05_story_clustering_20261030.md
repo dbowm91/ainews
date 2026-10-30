@@ -1,6 +1,6 @@
 # E05 — Cross-Feed Story Clustering, Duplicate Prevention, and Research Reuse
 
-**Status:** OPEN — P2; optional after verified research path works
+**Status:** COMPLETE — P2 (implemented and locally verified 2026-10-30)
 **Parent:** [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md)
 **Dependencies:** E02 source provenance, E01 publication eligibility; integrate with E03 ledger revisions where useful.
 **Outcome:** Many RSS/API entries about the same event contribute to **one editorial story** without accidentally erasing materially distinct events or spawning duplicate articles.

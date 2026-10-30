@@ -1,8 +1,12 @@
 # M5 — Private-Instance Verification, Migration Enablement, and Closure Evidence
 
-**Status:** OPEN for staged local behavior evidence; deployment-database backup/migration exploration is out of scope because no active deployed DB requires this capability.
+**Status:** Deferred/optional staged local behavior checks after merge. No active deployed DB needs this change; database migration evidence is not required. **C05**, not M5, is the focused merge-readiness gate.
 **Requires:** M1–M4 implementation where applicable  
 **Parent:** [Editorial memory roadmap](editor_memory_roadmap_20261029.md)
+
+## Scope precedence — 2026-10-30
+
+The owner's explicit decision is that **no database migration evidence is needed** for merging this work: there is no active deployed AInews database requiring upgrade. Historical M5 text below describes a possible future implementation/enablement workflow, **not** merge acceptance criteria. Do not restore a missing DB, perform backup/upgrade/downgrade rehearsals or request corresponding evidence. See [C05 merge readiness](editor_memory_c05_merge_readiness_20261030.md) for the only outstanding corrective. Preserve ordinary automated tests; optional provider/quality comparisons apply only to later enabled optimizations.
 
 ## Outcome
 

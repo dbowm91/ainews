@@ -31,6 +31,23 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-24.04
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: test-ci-secret-key-00000000000000000000000000000000
+      CELERY_TASK_SECRET: test-ci-celery-secret-0000000000000000000000
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+
     steps:
       - uses: actions/checkout@v4
 
@@ -112,6 +129,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Generate throwaway .env for compose
+        run: |
+          SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+          CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+          cat > .env <<EOF
+          FLASK_CONFIG=production
+          SECRET_KEY=${SECRET_KEY}
+          ADMIN_PASSWORD=""
+          CELERY_TASK_SECRET=${CELERY_TASK_SECRET}
+          DATABASE_URL=sqlite:///app/instance/prod.db
+          CELERY_BROKER_URL=redis://redis:6379/0
+          CELERY_RESULT_BACKEND=redis://redis:6379/1
+          EOF
+          chmod 600 .env
+
       - name: Validate Compose config
         run: docker compose config --quiet
 
@@ -153,6 +185,23 @@ jobs:
   smoke-tests:
     runs-on: ubuntu-24.04
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: test-ci-secret-key-00000000000000000000000000000000
+      CELERY_TASK_SECRET: test-ci-celery-secret-0000000000000000000000
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+
     steps:
       - uses: actions/checkout@v4
 
@@ -181,6 +230,23 @@ jobs:
 
   theme-validation:
     runs-on: ubuntu-24.04
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: test-ci-secret-key-00000000000000000000000000000000
+      CELERY_TASK_SECRET: test-ci-celery-secret-0000000000000000000000
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
 
     steps:
       - uses: actions/checkout@v4

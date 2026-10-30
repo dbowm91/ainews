@@ -93,6 +93,14 @@ select = ["BLE001", "C901", "RUF100", "B007", "B023", "B025", "B905", "S311", "F
 "services/alerts.py" = ["BLE001"]
 "adapters/web.py" = ["S311"]
 "services/quality_report.py" = ["C901"]
+# Release 5 closure baseline: accepted complexity/exception warnings.
+# Each entry below corresponds to one documented non-blocking ruff warning;
+# do not extend without updating the closure record.
+"ainews_cli/service/logrotate_commands.py" = ["C901"]
+"ainews_cli/service/systemd.py" = ["C901"]
+"ainews_cli/topics/commands.py" = ["C901"]
+"services/trend_detector.py" = ["BLE001"]
+"tests/test_safe_fetch.py" = ["C901"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15

@@ -8,12 +8,19 @@ ENV_FILE=".env.ci"
 SKIP_BUILD=false
 COMPOSE_FILE="docker-compose.yml"
 HEALTH_TIMEOUT=90
+# The compose file sets per-service `env_file: .env`, which must exist even
+# when interpolation uses --env-file .env.ci. Track whether this script
+# created .env so cleanup only removes what it created (never a real .env).
+CREATED_DOTENV=false
 
 cleanup() {
     echo ""
     echo "=== Cleaning up ==="
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down -v --remove-orphans 2>/dev/null || true
     rm -f "$ENV_FILE"
+    if [ "$CREATED_DOTENV" = true ]; then
+        rm -f .env
+    fi
 }
 trap cleanup EXIT
 
@@ -88,6 +95,14 @@ EOF
     chmod 600 "$ENV_FILE"
 else
     echo "=== Step 0: Using existing $ENV_FILE ==="
+fi
+
+if [ ! -f .env ]; then
+    echo "=== Step 0b: Providing .env for compose env_file ==="
+    cp "$ENV_FILE" .env
+    chmod 600 .env
+    CREATED_DOTENV=true
+    echo "  Created throwaway .env (removed on exit)"
 fi
 
 echo ""

@@ -722,7 +722,7 @@ jobs:
 
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-          HASHED_ADMIN_PW=$("${INSTALL_DIR}/app/.venv/bin/python" "${INSTALL_DIR}/app/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+          HASHED_ADMIN_PW=$("${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
 
           if [ -z "$HASHED_ADMIN_PW" ]; then
             echo "ERROR: Failed to hash admin password"

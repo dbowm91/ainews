@@ -12,11 +12,24 @@ HEALTH_TIMEOUT=90
 # when interpolation uses --env-file .env.ci. Track whether this script
 # created .env so cleanup only removes what it created (never a real .env).
 CREATED_DOTENV=false
+# Bind-mount override (created at Step 0c) gives the non-root app user a
+# writable data dir regardless of named-volume ownership.
+SMOKE_DATA_DIR="$PROJECT_DIR/.compose-smoke-data"
+SMOKE_OVERRIDE="$PROJECT_DIR/.compose-smoke-override.yml"
+# DC (the base compose command) is composed after argument parsing so a
+# user-supplied --env-file is honoured. Cleanup guards on ${DC:-} because
+# an early exit may precede its definition under `set -u`.
 
 cleanup() {
     echo ""
     echo "=== Cleaning up ==="
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down -v --remove-orphans 2>/dev/null || true
+    if [ -n "${DC:-}" ] && [ -f "$SMOKE_OVERRIDE" ]; then
+        $DC down -v --remove-orphans 2>/dev/null || true
+        rm -f "$SMOKE_OVERRIDE"
+        rm -rf "$SMOKE_DATA_DIR"
+    else
+        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down -v --remove-orphans 2>/dev/null || true
+    fi
     rm -f "$ENV_FILE"
     if [ "$CREATED_DOTENV" = true ]; then
         rm -f .env
@@ -48,6 +61,8 @@ echo "Env file: $ENV_FILE"
 echo ""
 
 cd "$PROJECT_DIR"
+
+DC="docker compose -f $COMPOSE_FILE -f $SMOKE_OVERRIDE --env-file $ENV_FILE"
 
 if ! command -v docker &>/dev/null; then
     echo "ERROR: docker not found"
@@ -117,15 +132,36 @@ if [ ! -f .env ]; then
     echo "  Created throwaway .env (removed on exit)"
 fi
 
+# The production compose file mounts a named volume at /app/instance whose
+# ownership the smoke container cannot rely on for the non-root app user.
+# Bind-mount a world-writable scratch dir instead (CI throwaway only).
+# Bind-mount override (paths declared at top) gives the non-root app user a
+# writable data dir regardless of named-volume ownership.
+mkdir -p "$SMOKE_DATA_DIR"
+chmod 777 "$SMOKE_DATA_DIR"
+cat > "$SMOKE_OVERRIDE" <<EOF
+services:
+  db-migrate:
+    volumes:
+      - "${SMOKE_DATA_DIR}:/app/instance"
+  web:
+    volumes:
+      - "${SMOKE_DATA_DIR}:/app/instance"
+      - ./static:/app/static:ro
+EOF
+echo "=== Step 0c: Using bind-mounted scratch data dir ==="
+
+echo ""
+
 echo ""
 echo "=== Step 1: Validating compose config ==="
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config --quiet
+$DC config --quiet
 echo "  Compose config OK"
 
 if [ "$SKIP_BUILD" = false ]; then
     echo ""
     echo "=== Step 2: Building image ==="
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build --quiet
+    $DC build --quiet
     echo "  Build complete"
 else
     echo ""
@@ -134,10 +170,10 @@ fi
 
 echo ""
 echo "=== Step 3: Starting redis and db-migrate ==="
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d redis db-migrate
+$DC up -d redis db-migrate
 
 echo "  Waiting for db-migrate to complete..."
-DB_MIGRATE_CONTAINER=$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q db-migrate)
+DB_MIGRATE_CONTAINER=$($DC ps -q db-migrate)
 DB_MIGRATE_TIMEOUT=120
 DB_MIGRATE_ELAPSED=0
 
@@ -152,9 +188,9 @@ while [ "$DB_MIGRATE_ELAPSED" -lt "$DB_MIGRATE_TIMEOUT" ]; do
             echo "  db-migrate failed with exit code $EXIT_CODE"
             echo ""
             echo "=== db-migrate logs ==="
-            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs db-migrate
+            $DC logs db-migrate
             echo "=== web logs ==="
-            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs web
+            $DC logs web
             exit 1
         fi
     fi
@@ -166,17 +202,17 @@ if [ "$DB_MIGRATE_ELAPSED" -ge "$DB_MIGRATE_TIMEOUT" ]; then
     echo "  db-migrate did not complete within ${DB_MIGRATE_TIMEOUT}s"
     echo ""
     echo "=== db-migrate logs ==="
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs db-migrate
+    $DC logs db-migrate
     echo "=== web logs ==="
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs web
+    $DC logs web
     exit 1
 fi
 
 echo ""
 echo "=== Step 4: Starting web service ==="
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d web
+$DC up -d web
 
-WEB_PORT=$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" port web 5000 2>/dev/null | head -1 || echo "localhost:5000")
+WEB_PORT=$($DC port web 5000 2>/dev/null | head -1 || echo "localhost:5000")
 HEALTH_URL="http://${WEB_PORT}/health"
 
 echo ""
@@ -184,7 +220,7 @@ echo "=== Step 5: Waiting for /health (${HEALTH_TIMEOUT}s timeout) ==="
 if ! bash "$SCRIPT_DIR/wait_for_health.sh" "$HEALTH_URL" "$HEALTH_TIMEOUT"; then
     echo ""
     echo "=== Web logs on health failure ==="
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs web
+    $DC logs web
     exit 1
 fi
 

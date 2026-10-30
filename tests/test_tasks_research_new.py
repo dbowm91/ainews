@@ -363,11 +363,16 @@ class TestGetRelatedAndContext:
 
         mock_topic_notes = {"ai": ["note1"], "ml": ["note2"]}
 
+        mock_memory_context = MagicMock()
+        mock_memory_context.rendered = "trend memory text"
+
         with (
             patch("services.related.find_related_articles_dicts", return_value=[]),
             patch("services.context_service.get_topic_notes_for_topics", return_value=mock_topic_notes),
             patch("services.trend_memory.get_memory_for_topics", return_value=[]),
             patch("services.trend_memory._format_memory_for_prompt", return_value="trend memory text"),
+            patch("services.memory.preflight.ensure_memory_schema"),
+            patch("services.memory.memory_context", return_value=mock_memory_context),
         ):
             related, topic_notes, trend_memory = _get_related_and_context(article, rc)
 
@@ -385,11 +390,16 @@ class TestGetRelatedAndContext:
         rc = MagicMock()
         rc.db_related_max = 5
 
+        mock_memory_context = MagicMock()
+        mock_memory_context.rendered = ""
+
         with (
             patch("services.related.find_related_articles_dicts", return_value=[]),
             patch("services.context_service.get_topic_notes_for_topics", return_value={}),
             patch("services.trend_memory.get_memory_for_topics", return_value=[]),
             patch("services.trend_memory._format_memory_for_prompt", return_value=""),
+            patch("services.memory.preflight.ensure_memory_schema"),
+            patch("services.memory.memory_context", return_value=mock_memory_context),
         ):
             related, topic_notes, trend_memory = _get_related_and_context(article, rc)
 

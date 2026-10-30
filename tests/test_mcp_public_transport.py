@@ -38,7 +38,16 @@ def test_streamable_http_exposes_seven_read_only_tools_and_public_dto(app, monke
             headers=headers, timeout=timeout, auth=auth)
 
     async def exercise():
-        async with client_factory(headers={"Authorization": f"Bearer {token}"}) as http_client:
+        headers = {"Authorization": f"Bearer {token}"}
+        async with client_factory(headers=headers) as http_client:
+            response = await http_client.get("/api/public/v1/articles?limit=1")
+            assert response.status_code == 200
+            assert response.headers["Cache-Control"] == "private, no-store"
+            assert "Authorization" in response.headers.get("Vary", "")
+            api_payload = response.json()
+            assert api_payload["items"][0]["public_id"] == public_id
+            assert "pipeline_status" not in api_payload["items"][0]
+
             async with streamable_http_client("http://localhost:5000/mcp", http_client=http_client) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()

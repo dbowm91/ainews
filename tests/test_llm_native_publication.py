@@ -16,7 +16,7 @@ def _article(title="Published story", *, visible=True):
     db.session.flush()
     article = Article(source_id=source.id, original_title=title, pipeline_status="done",
         final_article=json.dumps({"headline": title, "tldr": "Stored summary", "why_it_matters": "Concrete impact.", "body": "A factual sentence. A second sentence."}),
-        category="ai", publicly_visible=visible, published_at=datetime(2026, 10, 29, tzinfo=timezone.utc).replace(tzinfo=None))
+        category="ai", publicly_visible=visible, published_at=datetime.now(timezone.utc).replace(tzinfo=None))
     db.session.add(article)
     db.session.commit()
     return article

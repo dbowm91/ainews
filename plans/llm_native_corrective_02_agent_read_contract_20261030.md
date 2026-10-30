@@ -1,6 +1,6 @@
 # C02 — Shared REST/MCP read layer, opaque cursors, cache safety and bounded search
 
-**Status:** IMPLEMENTED; local REST/MCP contract tests pass. Proxy and target-runtime qualification remains under C05.
+**Status:** IMPLEMENTED; local REST/MCP contract tests pass. Direct ASGI-server runtime qualification remains under C05; reverse-proxy/cache deployment testing is handled separately.
 **Parent:** [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Dependency:** C01 shared publication predicate and migration graph. Can develop isolated read-service code in parallel.
 **Activation gate:** before enabling API/MCP for external agents or putting authenticated routes behind a caching proxy.
@@ -8,7 +8,7 @@
 ## Verified implementation findings
 
 - routes/public/api.py constructs signed keyset cursors containing a numeric Article.id or NewsletterEdition.id. itsdangerous URLSafeSerializer signs and detects tampering but does **not encrypt** payload data. services/mcp_public.py repeats this and imports private cursor helpers from routes.public.api, reversing service-to-route layering. Random external public IDs were specifically introduced to avoid enumerated public identities.
-- routes/public/api.py marks responses Cache-Control: public, max-age=60, including credential-protected responses, and emits X-RateLimit-Remaining. A shared HTTP cache can serve responses without application reauthentication if configured to cache the marked representation; a signed cursor is not a credential boundary. Test conditional 304 and cache behavior with an actual reverse proxy or representative cache.
+- Baseline finding: routes/public/api.py marked credential-protected responses `Cache-Control: public, max-age=60` and emitted `X-RateLimit-Remaining`, which could let a shared cache bypass application reauthentication. The implementation now uses private/no-store for API responses. Reverse-proxy/shared-cache behavior is an independent deployment concern handled separately; C05 verifies the application response directly through ASGI.
 - services/mcp_public.py duplicates public article, category/tag, search and newsletter list queries instead of invoking a common services/public_read.py; filters, counters and status semantics can diverge between REST and MCP.
 - The new public JSON article search uses chained ILIKE on Article.original_title and Article.final_article, while the project already has SQLite FTS5 and a bounded hybrid index. This makes long, high-volume scans possible under small request counts and can increase load on SQLite/SBC installations.
 - categories/tags routes check publicly_visible and final_article, but not the full published_article_query predicate. Some date/sort validation differs between MCP and REST. Reader-key authentication must never be promoted to admin auth.
@@ -35,10 +35,10 @@ Keep privacy/pagination policy under this service, and pass the same read DTO to
 
 - **Visible-set parity:** REST, MCP, HTML and feeds show exactly published rows under identical filters. Count aggregations only reflect visible records; unpublished and reprocessing rows never leak via search snippets.
 - **Opaque identity:** decode public cursors and assert no internal ID, raw SQL ID, access token or private content. 2 pages with tied timestamps/impact, new insert between pages and late edit do not duplicate/miss rows beyond documented snapshot semantics; tampered cursor is rejected.
-- **HTTP cache probe:** two reader keys and one anonymous caller through a representative shared cache cannot reuse an authenticated response to bypass auth/quota. Revocation cannot be defeated by previously cached responses. ETag requests always enforce admission or documented safe anonymous policy.
+- **HTTP response policy:** two reader keys and one anonymous caller cannot reuse an authenticated response through the ASGI-served API to bypass auth/quota. Revocation cannot be defeated by stale application responses. ETag requests always enforce admission or documented safe anonymous policy. Reverse-proxy/shared-cache deployment behavior is handled separately, outside this roadmap gate.
 - **Search:** deterministic fixed corpus with title/JSON content, special-character escaping, 50-item cap, hidden/withdrawn FTS candidates, no FTS fallback and invalid date/sort. Compare query plans and p95 on representative SQLite content; no unbounded LIKE over final_article on main public search path.
 - **MCP SDK:** call real Streamable HTTP tools with a client, compare exact DTO and pagination against REST; confirm auth/quotas/disabled behavior including multiple tool calls within one MCP session. Exclude write/send/admin tools.
-- **Quota:** repeated and concurrent REST+MCP calls on same token hit one shared budget, global cap and burst cap; Redis outage fails closed. Test proxy/NAT boundary deliberately, with safe no-trust forwarded headers by default.
+- **Quota:** repeated and concurrent REST+MCP calls on same token hit one shared budget, global cap and burst cap; Redis outage fails closed. Exercise the ASGI server directly. Forwarded-header and proxy/NAT behavior belongs to the separate proxy deployment test.
 
 ## Files
 
@@ -46,11 +46,11 @@ routes/public/api.py; services/mcp_public.py; services/publication.py; services/
 
 ## Stop/closure
 
-Keep REST, anonymous and MCP default-off until the source parity, cache boundary and quota tests pass on branch and target proxy configuration. Record exact curl/httpx/MCP conformance commands, request outcomes and realistic SQLite query latency, plus implementation SHA. C05 determines integration-ready status; C02 alone does not establish public-product readiness.
+Keep REST, anonymous and MCP default-off until source parity, private/no-store response, auth and quota tests pass on branch and through the target ASGI server. Reverse-proxy/shared-cache deployment qualification is separate and not required by this roadmap. Record exact curl/httpx/MCP conformance commands, request outcomes and realistic SQLite query latency, plus implementation SHA. C05 determines integration-ready status; C02 alone does not establish public-product readiness.
 
 ## Implementation evidence — 2026-10-30
 
 - REST and MCP delegate to `services/public_read.py`; MCP no longer imports Flask route helpers or owns parallel SQL. Cursor payloads bind public IDs, filter digest, sort, version and expiry.
 - API responses are `private, no-store`, vary on Authorization, and conditional handling follows the auth/quota gate. Unknown/malformed Authorization fails closed. Search uses FTS5 with a 500-candidate cap and bounded title-only fallback.
 - OpenAPI documents bounded query parameter schemas; invalid limit/sort/date values return structured errors. Feature flags remain default-off.
-- Local tests exercise cursor ordering, ETags/auth gating, reader API and MCP parity. Real MCP SDK/client, shared-cache/proxy, concurrent Redis quota and target p95 remain C05 gates.
+- Local tests exercise cursor ordering, ETags/auth gating, reader API and MCP parity. A workspace-local Granian ASGI smoke on implementation SHA `70710e0` passed REST privacy headers, a live Redis-backed 5-call quota/429 boundary, and real MCP SDK article reads over Streamable HTTP. Intended-host runtime/load qualification remains C05; reverse-proxy/shared-cache testing is handled separately.

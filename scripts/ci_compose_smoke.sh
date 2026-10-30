@@ -93,6 +93,11 @@ CELERY_RESULT_BACKEND=redis://redis:6379/1
 OLLAMA_MODEL=llama3.1
 OLLAMA_HOST=http://ollama:11434
 LOG_FORMAT=text
+# Dummy creds so the shipped providers.yaml (opencode, enabled) passes
+# fail-closed shape validation. The smoke test never calls a provider:
+# db-migrate runs migrations, web only serves /health.
+OPENCODE_API_KEY=ci-dummy-key-not-a-secret
+OPENCODE_SESSION_ID=ci-dummy-session
 EOF
     if [ -z "$HASHED_ADMIN_PW" ]; then
         echo "ERROR: Failed to hash admin password"

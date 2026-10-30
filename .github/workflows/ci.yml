@@ -65,6 +65,9 @@ jobs:
       - name: Run ruff
         run: .venv/bin/ruff check . --exclude .venv
 
+      - name: Ensure instance directory exists
+        run: mkdir -p instance
+
       - name: Run tests with coverage
         run: .venv/bin/python -m pytest tests/ -x -q --cov --cov-report=html --cov-report=xml
 
@@ -182,6 +185,7 @@ jobs:
           HASHED_PW=$(.venv/bin/python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('ci-test-password-123'))")
           CELERY_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           docker run --rm \
+            -v "$PWD/tests/fixtures:/fixtures:ro" \
             -e FLASK_CONFIG=production \
             -e SECRET_KEY="$SECRET_KEY" \
             -e ADMIN_PASSWORD="$HASHED_PW" \
@@ -189,7 +193,7 @@ jobs:
             -e DATABASE_URL=sqlite:////tmp/prod-smoke.db \
             -e CELERY_BROKER_URL=redis://localhost:6379/0 \
             -e CELERY_RESULT_BACKEND=redis://localhost:6379/1 \
-            -e LLM_PROVIDERS_FILE=/app/tests/fixtures/providers.ci.yaml \
+            -e LLM_PROVIDERS_FILE=/fixtures/providers.ci.yaml \
             ainews-ci \
             python -c "from app import create_app; create_app('production'); print('Production app factory OK')"
 

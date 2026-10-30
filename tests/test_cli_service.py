@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from ainews_cli import exit_codes
 from ainews_cli.service.commands import app
+from tests.cli_json import strip_ansi
 
 runner = CliRunner()
 
@@ -472,27 +473,27 @@ class TestServiceHelp:
     def test_render_help(self):
         result = runner.invoke(app, ["render", "--help"])
         assert result.exit_code == 0
-        assert "--systemd" in result.output
+        assert "--systemd" in strip_ansi(result.output)
 
     def test_validate_help(self):
         result = runner.invoke(app, ["validate", "--help"])
         assert result.exit_code == 0
-        assert "--systemd" in result.output
+        assert "--systemd" in strip_ansi(result.output)
 
     def test_status_help(self):
         result = runner.invoke(app, ["status", "--help"])
         assert result.exit_code == 0
-        assert "--scope" in result.output
+        assert "--scope" in strip_ansi(result.output)
 
     def test_restart_help(self):
         result = runner.invoke(app, ["restart", "--help"])
         assert result.exit_code == 0
-        assert "--scope" in result.output
+        assert "--scope" in strip_ansi(result.output)
 
     def test_remove_help(self):
         result = runner.invoke(app, ["remove", "--help"])
         assert result.exit_code == 0
-        assert "--force" in result.output
+        assert "--force" in strip_ansi(result.output)
 
 
 class TestValidateUnitSpec:

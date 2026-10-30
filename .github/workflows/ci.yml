@@ -129,6 +129,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
       - name: Generate throwaway .env for compose
         run: |
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
@@ -168,7 +179,7 @@ jobs:
       - name: Production mode image smoke
         run: |
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-          HASHED_PW=$(python3 -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('ci-test-password-123'))")
+          HASHED_PW=$(.venv/bin/python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('ci-test-password-123'))")
           CELERY_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           docker run --rm \
             -e FLASK_CONFIG=production \

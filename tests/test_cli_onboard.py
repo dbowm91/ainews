@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
-
-from tests.cli_json import parse_cli_json
+from tests.cli_json import parse_cli_json, strip_ansi
 
 
 from typer.testing import CliRunner
@@ -13,18 +11,6 @@ from ainews_cli import exit_codes
 from ainews_cli.main import app
 
 runner = CliRunner()
-
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def _plain(output: str) -> str:
-    """Strip ANSI styling so assertions don't depend on terminal styling.
-
-    Rich interleaves style codes inside words when a terminal is detected
-    (GitHub Actions runners always set GITHUB_ACTIONS/FORCE_COLOR), which
-    breaks plain substring assertions on the raw output.
-    """
-    return _ANSI_ESCAPE.sub("", output)
 
 
 class TestOnboardHelp:
@@ -35,7 +21,7 @@ class TestOnboardHelp:
 
     def test_help_shows_options(self):
         result = runner.invoke(app, ["onboard", "--help"])
-        output = _plain(result.output)
+        output = strip_ansi(result.output)
         assert "--config-file" in output
         assert "--non-interactive" in output
         assert "--dry-run" in output

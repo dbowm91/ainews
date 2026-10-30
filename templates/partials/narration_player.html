@@ -1,0 +1,6 @@
+{% if narration_audio_url %}
+<section class="narration-player" aria-label="AI-generated narration">
+  <p>AI-generated narration</p>
+  <audio controls preload="none" src="{{ narration_audio_url }}">Your browser does not support audio playback.</audio>
+</section>
+{% endif %}

@@ -417,6 +417,9 @@ def edit_article(article_id):
         if not success:
             return error_response
 
+        from services.tts.jobs import ensure_after_publication
+        ensure_after_publication(article, kind="article")
+
         _invalidate_article_caches(article.id)
 
         return redirect(url_for("admin.articles"))
@@ -504,6 +507,9 @@ def rollback_article(article_id, version_id):
             "Failed to rollback article %s to version %s", article_id, version_id,
         )
         return jsonify({"error": "Rollback failed"}), 500
+
+    from services.tts.jobs import ensure_after_publication
+    ensure_after_publication(article, kind="article")
 
     logger.info(
         "Rolled back article %s to version %s", article_id, version.version_number,

@@ -1,0 +1,10 @@
+{% extends "base_admin.html" %}
+{% block title %}ainews// TTS worker credential{% endblock %}
+{% block content %}
+<main class="container">
+  <h1>Copy this worker token now</h1>
+  <p>This is the only time the secret is displayed. Store it in the native worker's private environment file.</p>
+  <pre><code>{{ secret }}</code></pre>
+  <p><a href="{{ url_for('admin.settings', _anchor='tts') }}">Return to settings</a></p>
+</main>
+{% endblock %}

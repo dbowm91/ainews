@@ -126,6 +126,7 @@ def _apply_degrade_config(article, config: dict, run_id, stage="unknown"):
     except SQLAlchemyError:
         db.session.rollback()
         raise
+
     if run_id:
         _log_pipeline(
             run_id,
@@ -249,6 +250,14 @@ def post_finalize_article(article, run_id=None):
     except SQLAlchemyError:
         db.session.rollback()
         raise
+
+    # Durable narration is a post-publication side effect; never let its
+    # unavailable storage/database path reverse a successful publication.
+    try:
+        from services.tts.jobs import ensure_narration_job_for_published
+        ensure_narration_job_for_published(article, kind="article")
+    except Exception:  # noqa: BLE001 - optional TTS must not block article publication
+        logger.warning("Could not create narration job for published article %s", article.id, exc_info=True)
 
     if article.crawled_at:
         sla_duration = (article.published_at - article.crawled_at).total_seconds()

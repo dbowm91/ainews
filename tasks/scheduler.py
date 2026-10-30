@@ -80,6 +80,11 @@ def publish_scheduled_articles(self):
                 apply_publication_state(article, published_at=now)
                 article.scheduled_publish_at = None
                 db.session.commit()
+                try:
+                    from services.tts.jobs import ensure_narration_job_for_published
+                    ensure_narration_job_for_published(article, kind="article")
+                except Exception:  # noqa: BLE001 - optional TTS must not block scheduled publication
+                    logger.warning("Could not create narration job for scheduled article %s", article.id, exc_info=True)
                 published += 1
                 logger.info(
                     "Published scheduled article %s: %s",

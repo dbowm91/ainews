@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
 from sqlalchemy import event
@@ -187,6 +188,9 @@ def _setup_database(app, config_name):
 
     with app.app_context():
         if db.engine.url.drivername == "sqlite":
+            database_path = db.engine.url.database
+            if database_path and database_path != ":memory:":
+                Path(database_path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
             @event.listens_for(db.engine, "connect")
             def set_sqlite_pragma(dbapi_conn, _):
@@ -219,6 +223,7 @@ def _register_blueprints(app):
     from routes.admin.api_tokens import api_tokens_bp
     from routes.public import public_bp
     from routes.themes import themes_bp
+    from routes.tts import tts_bp
 
     # Exempt API blueprints from global Flask-WTF CSRF protection.
     # These blueprints use auth-aware decorators (csrf_for_session_auth,
@@ -229,6 +234,7 @@ def _register_blueprints(app):
 
     app.register_blueprint(themes_bp)
     app.register_blueprint(public_bp)
+    app.register_blueprint(tts_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_api_bp)
     app.register_blueprint(api_tokens_bp)

@@ -10,6 +10,8 @@ Selection is deterministic and bounded: it considers completed, explicitly publi
 
 Each edition stores its profile title and policy revision plus an ordered snapshot of headline, why-it-matters text, paragraph, public article ID, canonical URL, category, source attribution, and citations. Later article edits do not rewrite that snapshot. Old `Newsletter` HTML records remain in the admin interface; the migration does not expose old personalized or tracked HTML in the public archive.
 
+Optional narration is generated from the edition's frozen ordered text after edition publication. Later article edits cannot alter the edition script. Audio is omitted until a verified current Opus asset is ready. Email links, unsubscribe URLs, recipient-specific HTML and tracking URLs are not narration inputs; email dispatch never waits for or retries because of TTS. See [docs/tts.md](tts.md) for worker setup and license limits.
+
 ## Scheduling
 
 Celery Beat runs `tasks.newsletter.newsletter_slot_tick` once per minute. Due work is represented by one database occurrence key per profile, local date, and local time. Repeated fall-back DST times run once at the first fold; nonexistent spring-forward times are skipped. A dispatched occurrence is recovered only after its dispatch timestamp is at least ten minutes stale, with catch-up bounded to the prior hour. Duplicate task delivery is safe because edition occurrence keys are unique.

@@ -1,5 +1,9 @@
 .env
 instance/
+tts_worker/.venv/
+tts_worker/model-cache/
+tts_worker/tmp/
+reference-audio/
 backups/
 *.db
 __pycache__/

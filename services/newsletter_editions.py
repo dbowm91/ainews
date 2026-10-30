@@ -143,12 +143,19 @@ def create_edition(profile_key: str, articles: list[Article] | None = None, *, o
         if existing:
             return existing
         raise
+    if publish:
+        try:
+            from services.tts.jobs import ensure_narration_job_for_published
+            ensure_narration_job_for_published(edition, kind="edition")
+        except Exception:  # noqa: BLE001 - optional TTS must not block edition publication
+            import logging
+            logging.getLogger(__name__).warning("Could not create narration job for edition %s", edition.id, exc_info=True)
     return edition
 
 
 def serialize_edition(edition: NewsletterEdition) -> dict[str, Any]:
     site_url = str(current_app.config.get("SITE_URL") or "http://localhost:5000").rstrip("/")
-    return {"public_id": edition.public_id, "profile": edition.profile_key, "profile_title": edition.profile_title,
+    payload = {"public_id": edition.public_id, "profile": edition.profile_key, "profile_title": edition.profile_title,
         "policy_revision": edition.policy_revision, "status": edition.status,
         "subject": edition.subject, "summary": edition.summary or "", "published_at": edition.published_at.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z") if edition.published_at else None,
         "canonical_url": f"{site_url}/newsletters/{edition.public_id}", "items": [
@@ -156,6 +163,14 @@ def serialize_edition(edition: NewsletterEdition) -> dict[str, Any]:
              "why_it_matters": item.why_it_matters, "paragraph": item.paragraph, "canonical_url": item.canonical_url,
              "category": item.category, "source": {"name": item.source_name, "url": item.source_url} if item.source_name or item.source_url else None,
              "citations": item.citations} for item in cast(list[NewsletterEditionItem], edition.items)]}
+    try:
+        from services.tts.jobs import ready_audio_url
+        audio_url = ready_audio_url(edition, kind="edition")
+        if audio_url:
+            payload["audio"] = {"url": audio_url, "codec": "opus"}
+    except Exception:  # noqa: BLE001 - optional audio metadata must not break edition reads
+        pass
+    return payload
 
 
 def get_public_edition(public_id: str) -> NewsletterEdition | None:

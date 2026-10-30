@@ -226,9 +226,13 @@ Newsletter generation is driven by durable profile schedules and the `newsletter
 
 Global and per-profile email switches both default off. An edition can be published and read from the archive without either switch. A durable email request is captured only for explicit manual send or a scheduled slot whose profile and global switches were enabled at planning time. Configure HTTPS `NEWSLETTER_SITE_URL` (or HTTPS `SITE_URL`) for one-click unsubscribe; inbound `Host` is never trusted for subscription links. RFC 8058 headers must be covered by the relay's DKIM signing policy. Do not enable scheduled mail until delivery configuration, SMTP credentials and intended recipient policy have been checked in the local deployment.
 
+### Narration worker
+
+Optional article and frozen-edition narration uses a native macOS pull worker. Setup, private connectivity, credential rotation, model licensing, storage, and the hardware qualification checklist are in [docs/tts.md](tts.md). Do not expose Redis to the Mac. Keep `/internal/tts/*` behind HTTPS/private access for non-loopback workers; the separate TTS credential is not a reader API token. The worker can be stopped indefinitely without affecting article publication or newsletter email delivery.
+
 ### LLM-native migration history
 
-Apply database migrations before starting the web, worker or Beat processes. The converged publication/editorial-memory history ends at `046_newsletter_distribution_intent`; `045_merge_publication_and_memory` joins the independently deployable publication and memory parents. For the LLM-native publication roadmap's qualification, restoring an operator database to rehearse this migration is not required: C01 is closed by fresh, idempotent, and both-parent SQLite migration tests. Operators may still follow their normal backup and recovery procedures for an actual upgrade. Never stamp an Alembic revision to bypass a failed migration.
+Apply database migrations before starting the web, worker or Beat processes. The converged publication/editorial-memory history reaches `047_narration_jobs`; `045_merge_publication_and_memory` joins the independently deployable publication and memory parents. For the LLM-native publication roadmap's qualification, restoring an operator database to rehearse this migration is not required: C01 is closed by fresh, idempotent, and both-parent SQLite migration tests. Operators may still follow their normal backup and recovery procedures for an actual upgrade. Never stamp an Alembic revision to bypass a failed migration.
 
 ### Recovering from Stuck Locks
 

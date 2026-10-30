@@ -107,6 +107,21 @@ def _is_strong_secret_key(key: str) -> bool:
 
 
 class Config:
+    # Optional local narration is disabled unless an operator explicitly opts in.
+    TTS_ENABLED = os.environ.get("TTS_ENABLED", "false").lower() == "true"
+    TTS_ARTICLES_ENABLED = os.environ.get("TTS_ARTICLES_ENABLED", "false").lower() == "true"
+    TTS_EDITIONS_ENABLED = os.environ.get("TTS_EDITIONS_ENABLED", "false").lower() == "true"
+    TTS_BACKFILL_ENABLED = os.environ.get("TTS_BACKFILL_ENABLED", "false").lower() == "true"
+    TTS_BACKEND = os.environ.get("TTS_BACKEND", "mlx-breeze")
+    TTS_MODEL = os.environ.get("TTS_MODEL", "mlx-community/Breeze-TTS-2-mlx-4bit")
+    TTS_CHECKPOINT_REVISION = os.environ.get("TTS_CHECKPOINT_REVISION", "3a06d26b172ea4ae1da2f42d708383e9c79d5526")
+    TTS_INSTRUCTION = os.environ.get("TTS_INSTRUCTION", "Speak clearly and naturally.")
+    TTS_CFG_SCALE = float(os.environ.get("TTS_CFG_SCALE", "4"))
+    TTS_LICENSE_ACCEPTED = os.environ.get("TTS_LICENSE_ACCEPTED", "false").lower() == "true"
+    TTS_ALLOWED_WORKER_CIDRS = os.environ.get("TTS_ALLOWED_WORKER_CIDRS", "")
+    TTS_STORAGE_ROOT = os.environ.get("TTS_STORAGE_ROOT", "tts")
+    TTS_MAX_UPLOAD_BYTES = int(os.environ.get("TTS_MAX_UPLOAD_BYTES", str(24 * 1024 * 1024)))
+    TTS_MAX_DURATION_SECONDS = int(os.environ.get("TTS_MAX_DURATION_SECONDS", "1800"))
     # Reader APIs and MCP are opt-in on existing privately operated installs.
     PUBLIC_API_ENABLED = os.environ.get("PUBLIC_API_ENABLED", "false").lower() == "true"
     PUBLIC_MCP_ENABLED = os.environ.get("PUBLIC_MCP_ENABLED", "false").lower() == "true"
@@ -333,6 +348,14 @@ class Config:
             "cleanup-inactive-subscribers": {
                 "task": "tasks.subscribers.cleanup_inactive_subscribers",
                 "schedule": crontab(hour=cleanup_subscribers_hour, minute=cleanup_subscribers_minute),
+            },
+            "reconcile-narration-jobs": {
+                "task": "tasks.tts.reconcile_narration_jobs",
+                "schedule": timedelta(minutes=5),
+            },
+            "cleanup-tts-storage": {
+                "task": "tasks.tts.cleanup_tts_storage",
+                "schedule": crontab(hour=3, minute=55),
             },
             "backfill-embeddings": {
                 "task": "tasks.embeddings.backfill_embeddings",

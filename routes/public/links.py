@@ -91,6 +91,11 @@ def article_detail(public_id: str) -> Response:
         "show_rail": True,
         "feed_stats": _rail_stats(),
     }
+    try:
+        from services.tts.jobs import ready_audio_url
+        ctx["narration_audio_url"] = ready_audio_url(article, kind="article")
+    except Exception:  # noqa: BLE001 - optional audio must not break article rendering
+        ctx["narration_audio_url"] = None
     if request.headers.get("HX-Request"):
         response = render_template("partials/article_detail.html", **ctx)
     else:

@@ -4,6 +4,7 @@
 <main class="container newsletter-edition">
   <p><a href="{{ url_for('public.newsletter_archive') }}">Newsletter archive</a> · {{ edition.profile_key }}</p>
   <h1>{{ edition.subject }}</h1>
+  {% include "partials/narration_player.html" %}
   <time datetime="{{ edition.published_at.isoformat() }}">{{ edition.published_at.strftime('%Y-%m-%d %H:%M UTC') }}</time>
   {% if edition.summary %}<p>{{ edition.summary }}</p>{% endif %}
   <ol>{% for item in edition.items %}

@@ -19,8 +19,16 @@ the test button uses it without revealing it.
 from __future__ import annotations
 
 import logging
+import json
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, send_file, url_for
+from datetime import datetime, timezone
+import hashlib
+import secrets
+import re
+from sqlalchemy import func
+from extensions import db
+from models import NarrationJob, TTSWorkerCredential
 
 from routes.admin import admin_bp, require_auth
 
@@ -44,6 +52,12 @@ def settings() -> str:
     topics = admin_settings.read_topics()
     schedule = admin_settings.read_schedule()
     review = admin_settings.read_review()
+    from services.tts.settings import get_settings
+    tts_settings = get_settings()
+    tts_counts = dict(db.session.query(NarrationJob.state, func.count(NarrationJob.id)).group_by(NarrationJob.state).all())
+    worker_last_seen = db.session.query(func.max(TTSWorkerCredential.last_used_at)).filter_by(enabled=True, revoked_at=None).scalar()
+    tts_credentials = TTSWorkerCredential.query.order_by(TTSWorkerCredential.created_at.desc()).all()
+    tts_recent_jobs = NarrationJob.query.order_by(NarrationJob.updated_at.desc()).limit(25).all()
 
     return render_template(
         "admin/settings.html",
@@ -56,7 +70,213 @@ def settings() -> str:
         schedule_fields=admin_settings.SCHEDULE_FIELDS,
         topic_colors=admin_settings.TOPIC_COLORS,
         provider_ids=[p.id for p in providers],
+        tts_settings=tts_settings, tts_counts=tts_counts, tts_credentials=tts_credentials, tts_recent_jobs=tts_recent_jobs,
+        tts_worker_online=bool(worker_last_seen and (datetime.now(timezone.utc).replace(tzinfo=None) - worker_last_seen).total_seconds() < 180),
     )
+
+
+@admin_bp.route("/settings/tts", methods=["POST"])
+@require_auth
+def update_tts_settings():
+    from services.tts.settings import save_settings
+    instruction = request.form.get("instruction", "").strip()
+    backend = request.form.get("backend", "mlx-breeze").strip()
+    try:
+        cfg_scale = float(request.form.get("cfg_scale", "4"))
+        bitrate = int(request.form.get("opus_bitrate", "40"))
+        max_minutes = int(request.form.get("max_minutes", "30"))
+        max_chars = int(request.form.get("max_chars", "16000"))
+        max_pending = int(request.form.get("max_pending_jobs", "500"))
+        retries = int(request.form.get("retry_budget", "5"))
+        retention = int(request.form.get("retention_days", "30"))
+        if backend != "mlx-breeze" or not 0 <= cfg_scale <= 20 or not 24 <= bitrate <= 96 or not 1 <= max_minutes <= 30:
+            raise ValueError("Unsupported backend or out-of-range speech settings.")
+        model_id = request.form.get("model", "").strip()
+        if model_id != "mlx-community/Breeze-TTS-2-mlx-4bit":
+            raise ValueError("Only the operator-approved Breeze 4-bit checkpoint is currently supported.")
+        accepted = bool(request.form.get("license_accepted"))
+        if request.form.get("enabled") and not accepted:
+            raise ValueError("Confirm the Breeze research/non-commercial license before enabling TTS.")
+        checkpoint_revision = request.form.get("checkpoint_revision", "").strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", checkpoint_revision):
+            raise ValueError("Checkpoint revision must be a full 40-character commit hash.")
+        if not 500 <= max_chars <= 16000 or not 1 <= max_pending <= 10000 or not 1 <= retries <= 10 or not 1 <= retention <= 365:
+            raise ValueError("One or more TTS limits are outside the allowed range.")
+        if not instruction or len(instruction) > 1000 or any(ord(c) < 32 and c not in "\t" for c in instruction):
+            raise ValueError("Voice instruction must be plain text up to 1000 characters.")
+        aliases_raw = request.form.get("pronunciation_aliases", "")
+        aliases = json.loads(aliases_raw) if aliases_raw.strip() else {"AI": "A I", "LLM": "L L M", "GPU": "G P U", "API": "A P I"}
+        if not isinstance(aliases, dict) or len(aliases) > 50:
+            raise ValueError("Pronunciation aliases must be a JSON object with at most 50 entries.")
+        for source, spoken in aliases.items():
+            if not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+-]{0,31}", source):
+                raise ValueError("Pronunciation alias keys must be short alphanumeric tokens.")
+            if not isinstance(spoken, str) or not re.fullmatch(r"[A-Za-z0-9 .,'-]{1,64}", spoken):
+                raise ValueError("Pronunciation alias values must contain plain spoken text only.")
+        saved = save_settings({"enabled": bool(request.form.get("enabled")), "articles_enabled": bool(request.form.get("articles_enabled")),
+            "editions_enabled": bool(request.form.get("editions_enabled")), "backfill_enabled": bool(request.form.get("backfill_enabled")),
+            "backend": backend, "model": model_id,
+            "checkpoint_revision": checkpoint_revision, "instruction": instruction,
+            "pronunciation_aliases": aliases,
+            "cfg_scale": cfg_scale, "opus_bitrate": bitrate, "max_minutes": max_minutes, "max_chars": max_chars,
+            "max_pending_jobs": max_pending, "retry_budget": retries, "retention_days": retention, "license_accepted": accepted})
+        try:
+            from services.audit import log_admin_action
+            log_admin_action("tts_settings_update", target_type="tts_settings", target_id=1,
+                details={"enabled": saved.enabled, "articles_enabled": saved.articles_enabled,
+                         "editions_enabled": saved.editions_enabled, "profile_revision": saved.profile_revision}, category="config")
+        except Exception:  # noqa: BLE001 - audit write failures must not undo operator changes
+            logger.warning("Failed to audit TTS settings update", exc_info=True)
+        flash("TTS settings saved. Existing jobs retain their recipe snapshot.", "success")
+    except (TypeError, ValueError) as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+    return redirect(url_for("admin.settings", _anchor="tts"))
+
+
+@admin_bp.route("/settings/tts/worker-token", methods=["POST"])
+@require_auth
+def issue_tts_worker_token():
+    secret = secrets.token_urlsafe(40)
+    db.session.add(TTSWorkerCredential(label=(request.form.get("label") or "native worker")[:120],
+        secret_hash=hashlib.sha256(secret.encode()).hexdigest()))
+    db.session.commit()
+    try:
+        from services.audit import log_admin_action
+        log_admin_action("tts_worker_credential_issue", target_type="tts_worker", target_id=None, category="config")
+    except Exception:  # noqa: BLE001 - audit write failures must not undo credential issuance
+        logger.warning("Failed to audit TTS credential issuance", exc_info=True)
+    flash("Worker credential created. Copy it now; its value will not be shown again.", "success")
+    return render_template("admin/tts_token.html", secret=secret)
+
+
+@admin_bp.route("/settings/tts/worker-token/<int:credential_id>/revoke", methods=["POST"])
+@require_auth
+def revoke_tts_worker_token(credential_id: int):
+    credential = db.session.get(TTSWorkerCredential, credential_id)
+    if credential:
+        credential.enabled = False
+        credential.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.session.commit()
+        try:
+            from services.audit import log_admin_action
+            log_admin_action("tts_worker_credential_revoke", target_type="tts_worker", target_id=credential_id, category="config")
+        except Exception:  # noqa: BLE001 - audit write failures must not undo revocation
+            logger.warning("Failed to audit TTS credential revocation", exc_info=True)
+    return redirect(url_for("admin.settings", _anchor="tts"))
+
+
+@admin_bp.route("/settings/tts/jobs/<int:job_id>/action", methods=["POST"])
+@require_auth
+def tts_job_action(job_id: int):
+    from services.tts.worker_protocol import recipe_still_current, target_still_current
+    job = db.session.get(NarrationJob, job_id)
+    action = request.form.get("action", "")
+    if job is None:
+        flash("Narration job not found.", "error")
+    elif action == "cancel" and job.state in {"pending", "claimed", "encoding"}:
+        job.state = "cancelled"; job.claim_token_hash = None; job.claim_deadline = None
+        db.session.commit(); _audit_tts_action("tts_job_cancel", job.id); flash("Narration job cancelled.", "success")
+    elif action == "retry" and job.state in {"failed", "cancelled"}:
+        job.state = "pending"; job.error_code = None; job.claim_token_hash = None; job.claim_deadline = None; job.attempt_count = 0
+        db.session.commit(); _audit_tts_action("tts_job_retry", job.id); flash("Narration job queued for retry.", "success")
+    elif action == "regenerate" and job.state == "ready" and recipe_still_current(job) and target_still_current(job):
+        old_key = job.storage_key
+        job.state = "pending"; job.claim_token_hash = None; job.claim_deadline = None; job.error_code = None
+        job.storage_key = None; job.audio_sha256 = None; job.duration_seconds = None; job.channels = None
+        job.sample_rate = None; job.codec = None; job.byte_size = None; job.ready_at = None
+        db.session.commit()
+        if old_key:
+            from services.tts.storage import get_audio_path
+            old_path = get_audio_path(old_key)
+            if old_path:
+                old_path.unlink(missing_ok=True)
+        _audit_tts_action("tts_job_regenerate", job.id)
+        try:
+            from services.publication import invalidate_publication_cache
+            invalidate_publication_cache()
+        except Exception:  # noqa: BLE001 - public player caches expire if Redis is unavailable
+            logger.warning("Could not invalidate public cache after narration regeneration", exc_info=True)
+        flash("Narration regeneration queued.", "success")
+    else:
+        flash("That action is not valid for the job's current state.", "error")
+    return redirect(url_for("admin.settings", _anchor="tts"))
+
+
+def _audit_tts_action(action: str, target_id: int) -> None:
+    try:
+        from services.audit import log_admin_action
+        log_admin_action(action, target_type="narration_job", target_id=target_id, category="config")
+    except Exception:  # noqa: BLE001 - audit failures must not block admin actions
+        logger.warning("Failed to audit narration job action", exc_info=True)
+
+
+@admin_bp.route("/settings/tts/backfill", methods=["POST"])
+@require_auth
+def tts_backfill():
+    from services.tts.settings import value
+    from services.tts.jobs import ensure_narration_job_for_published
+    from models import Article, NewsletterEdition
+    from sqlalchemy import select
+    kind = request.form.get("kind", "article")
+    limit = request.form.get("limit", type=int) or 0
+    offset = request.form.get("offset", type=int) or 0
+    cap = int(value("max_pending_jobs", 500))
+    if not value("backfill_enabled", False) or kind not in {"article", "edition"} or not 1 <= limit <= min(cap, 100) or not 0 <= offset <= 1_000_000:
+        flash("Backfill is disabled or the requested batch exceeds the allowed limit.", "error")
+        return redirect(url_for("admin.settings", _anchor="tts"))
+    model = Article if kind == "article" else NewsletterEdition
+    if kind == "article":
+        q = select(model).where(model.publicly_visible.is_(True), model.pipeline_status == "done", model.final_article.is_not(None))
+    else:
+        q = select(model).where(model.status == "published", model.published_at.is_not(None))
+    rows = db.session.scalars(q.order_by(model.id.asc()).offset(offset).limit(limit)).all()
+    created = 0
+    for target in rows:
+        try:
+            job = ensure_narration_job_for_published(target, kind=kind)
+            created += int(job is not None)
+        except Exception:  # noqa: BLE001 - backfill proceeds for later bounded rows
+            db.session.rollback(); logger.warning("TTS backfill failed for target %s", target.id, exc_info=True)
+    _audit_tts_action("tts_backfill", 0)
+    flash(f"Processed a bounded {kind} batch; {created} eligible narration jobs exist.", "success")
+    return redirect(url_for("admin.settings", _anchor="tts"))
+
+
+@admin_bp.route("/settings/tts/preview", methods=["POST"])
+@require_auth
+def queue_tts_preview():
+    from models import Article
+    from services.tts.jobs import queue_voice_preview
+    article = Article.query.filter(Article.publicly_visible.is_(True), Article.pipeline_status == "done",
+        Article.final_article.is_not(None)).order_by(Article.published_at.desc()).first()
+    job = queue_voice_preview(article) if article is not None else None
+    if job is None:
+        flash("Enable article narration and select a published article before requesting a voice preview.", "error")
+    else:
+        _audit_tts_action("tts_voice_preview", job.id)
+        flash(f"Private voice preview queued as job #{job.id}.", "success")
+    return redirect(url_for("admin.settings", _anchor="tts"))
+
+
+@admin_bp.route("/settings/tts/preview/<int:job_id>")
+@require_auth
+def tts_preview_audio(job_id: int):
+    from services.tts.storage import verify_stored_asset
+    from services.tts.worker_protocol import recipe_still_current, target_still_current
+    job = db.session.get(NarrationJob, job_id)
+    if (job is None or not job.recipe.get("admin_preview") or job.state != "ready" or
+            not recipe_still_current(job) or not target_still_current(job)):
+        abort(404)
+    path = verify_stored_asset(job)
+    if path is None:
+        abort(404)
+    response = send_file(path, mimetype="audio/ogg", conditional=True, etag=job.audio_sha256,
+        max_age=0, download_name="ainews-voice-preview.ogg")
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Disposition"] = 'inline; filename="ainews-voice-preview.ogg"'
+    return response
 
 
 @admin_bp.route("/settings/roles", methods=["POST"])

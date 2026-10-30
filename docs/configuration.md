@@ -537,6 +537,8 @@ Config.get_beat_schedule()  # reads from pipeline.yaml schedule: section
 | `retry-failed-newsletter-deliveries` | Every 2 hours | Retry permanently failed newsletter emails |
 | `recalculate-impact-scores` | Daily 4:00 AM | Recalculate article impact scores |
 | `cleanup-inactive-subscribers` | Daily 1:00 AM | Remove inactive subscribers |
+| `reconcile-narration-jobs` | Every 5 min | Recover recent missed publication hooks and expired TTS claims |
+| `cleanup-tts-storage` | Daily 3:55 AM | Retain current audio and remove expired private files |
 
 ### Reloading Schedule
 
@@ -556,6 +558,10 @@ curl -X POST http://localhost:5000/admin/api/config/reload \
 ```
 
 All schedules are configurable via the `schedule:` section in `pipeline.yaml`.
+
+### Optional TTS
+
+Local narration is default-off and is configured in **Admin → Settings → Audio / TTS**. Its settings are database-backed and versioned; an operator can separately enable articles, immutable newsletter editions and bounded manual backfill. The native Apple Silicon worker runs in its own virtual environment and uses a hashed, revocable worker credential. Model licensing and setup are documented in [Optional narration](tts.md). No TTS setting installs MLX into the web or normal Celery environments.
 
 ### Schedule Configuration
 

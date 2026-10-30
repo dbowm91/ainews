@@ -352,14 +352,17 @@ def test_high_review_can_be_explicitly_renewed_with_audit_reason(app):
         assert renewed_due > datetime.now(timezone.utc)
 
 
-def test_synthesis_candidate_selection_fairly_visits_lower_importance_active_items(app):
+def test_synthesis_round_robin_reaches_new_low_priority_evidence_after_no_change(app, create_article):
+    from unittest.mock import MagicMock, patch
+
     from extensions import db
-    from models import MemoryItem
-    from services.memory.synthesis import _snapshot
+    from models import MemoryEvidence, MemoryItem, MemorySynthesisCursor
+    from schemas.pipeline import MemoryConfig, PipelineRootConfig
+    from services.memory.synthesis import SynthesisProposal, synthesize_category
 
     with app.app_context():
         now = datetime.now(timezone.utc)
-        older = []
+        article = create_article(category="ai")
         for index in range(8):
             item = _item(
                 MemoryItem, "ai", f"AI policy older high evidence item {index}", f"fp-fair-high-{index}",
@@ -367,23 +370,61 @@ def test_synthesis_candidate_selection_fairly_visits_lower_importance_active_ite
             )
             item.last_evidence_at = now - timedelta(days=10 - index)
             db.session.add(item)
-            older.append(item)
+            db.session.flush()
+            db.session.add(MemoryEvidence(
+                memory_id=item.id,
+                source_article_id=article.id,
+                source_article_version="v1",
+                evidence_text=item.text,
+                relation="supports",
+                first_seen_at=now,
+                last_seen_at=now,
+            ))
         lower = _item(
             MemoryItem, "ai", "AI policy new lower tier evidence item", "fp-fair-low",
             importance=1, review_due_at=now + timedelta(days=5),
         )
         lower.last_evidence_at = now
         db.session.add(lower)
+        db.session.flush()
+        db.session.add(MemoryEvidence(
+            memory_id=lower.id,
+            source_article_id=article.id,
+            source_article_version="v1",
+            evidence_text=lower.text,
+            relation="supports",
+            first_seen_at=now,
+            last_seen_at=now,
+        ))
         db.session.commit()
 
-        first, _, _ = _snapshot("ai")
-        assert lower.id not in {item.id for item in first}
-        for item in first:
-            item.status = "synthesized"
-        db.session.commit()
-        second, _, _ = _snapshot("ai")
+        config = PipelineRootConfig.model_construct(memory=MemoryConfig(
+            memory_synthesis_enabled=True,
+            memory_synthesis_provider="test-provider",
+            memory_synthesis_model="test-model",
+            memory_max_syntheses_per_day=5,
+        ))
+        provider = MagicMock()
+        provider.chat_structured.return_value = SynthesisProposal(category_id="ai", no_change=True)
+        with patch("services.memory.synthesis.load_pipeline_config", return_value=config), patch(
+            "services.llm.get_provider_by_id", return_value=provider,
+        ):
+            first = synthesize_category("ai")
+            second = synthesize_category("ai")
+            third = synthesize_category("ai")
+            fourth = synthesize_category("ai")
 
-        assert lower.id in {item.id for item in second}
+        assert first["status"] == "no_change"
+        assert second["status"] == "no_change"
+        assert provider.chat_structured.call_count == 2
+        second_prompt = provider.chat_structured.call_args_list[1].kwargs["messages"][0]["content"]
+        assert lower.text in second_prompt
+        assert third["llm_calls"] == 0
+        assert fourth["llm_calls"] == 0
+        assert provider.chat_structured.call_count == 2
+        cursor = db.session.get(MemorySynthesisCursor, "ai")
+        assert cursor is not None
+        assert cursor.last_memory_id <= lower.id
 
 
 def test_new_synthesis_supersedes_old_projection_and_revokes_old_share(app, create_article):

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
@@ -18,6 +18,7 @@ from models import (
     MemoryItem,
     MemoryLineage,
     MemorySynthesisAttempt,
+    MemorySynthesisCursor,
     MemorySynthesisRun,
     MemoryScope,
 )
@@ -55,6 +56,15 @@ class SynthesisCallResult:
     provider_calls: int
 
 
+@dataclass(frozen=True)
+class SynthesisSnapshot:
+    items: list[MemoryItem]
+    evidence: list[MemoryEvidence]
+    digest: str
+    cursor_before: int
+    cursor_after: int
+
+
 class SynthesisRetryError(Exception):
     """A bounded larger-budget retry failed after the initial incomplete call."""
 
@@ -63,16 +73,31 @@ class SynthesisRetryError(Exception):
         self.provider_calls = provider_calls
 
 
-def _snapshot(category_id: str) -> tuple[list[MemoryItem], list[MemoryEvidence], str]:
-    items = db.session.execute(select(MemoryItem).where(
+def _snapshot(
+    category_id: str,
+    *,
+    cursor_id: int | None = None,
+    use_persisted_cursor: bool = True,
+) -> SynthesisSnapshot:
+    if use_persisted_cursor:
+        cursor = db.session.get(MemorySynthesisCursor, category_id)
+        cursor_before = cursor.last_memory_id if cursor is not None else 0
+    else:
+        cursor_before = int(cursor_id or 0)
+    eligible = select(MemoryItem).where(
         MemoryItem.owner_category == category_id,
         MemoryItem.item_type == "observation",
         MemoryItem.status.in_(("active", "synthesized")),
-    ).order_by(
-        case((MemoryItem.status == "active", 0), else_=1),
-        func.coalesce(MemoryItem.last_evidence_at, MemoryItem.created_at),
-        MemoryItem.id,
-    ).limit(8)).scalars().all()
+    )
+    items_after_cursor = list(db.session.execute(
+        eligible.where(MemoryItem.id > cursor_before).order_by(MemoryItem.id).limit(8)
+    ).scalars().all())
+    items = list(items_after_cursor)
+    if len(items_after_cursor) < 8 and cursor_before:
+        wrapped = db.session.execute(
+            eligible.where(MemoryItem.id <= cursor_before).order_by(MemoryItem.id).limit(8 - len(items_after_cursor))
+        ).scalars().all()
+        items.extend(wrapped)
     item_ids = [item.id for item in items]
     if item_ids:
         ranked_evidence = select(
@@ -115,18 +140,59 @@ def _snapshot(category_id: str) -> tuple[list[MemoryItem], list[MemoryEvidence],
         ],
     }
     digest = hashlib.sha256(json.dumps(source_data, sort_keys=True).encode()).hexdigest()
-    return list(items), list(evidence), digest
+    # When the batch wraps, retain the high-water ID from the tail portion.
+    # This keeps page boundaries stable across nightly runs instead of
+    # sliding the cursor backward through overlapping windows.
+    cursor_after = (
+        items_after_cursor[-1].id if items_after_cursor
+        else items[-1].id if items
+        else cursor_before
+    )
+    return SynthesisSnapshot(list(items), list(evidence), digest, cursor_before, cursor_after)
 
 
-def _reserve(category_id: str, digest: str, daily_cap: int) -> SynthesisReservation | None:
+def _advance_cursor(category_id: str, cursor_id: int) -> None:
+    cursor = db.session.get(MemorySynthesisCursor, category_id)
+    if cursor is None:
+        db.session.add(MemorySynthesisCursor(category_id=category_id, last_memory_id=cursor_id))
+    else:
+        cursor.last_memory_id = cursor_id
+        cursor.updated_at = datetime.now(timezone.utc)
+
+
+def _reserve(
+    category_id: str,
+    digest: str,
+    daily_cap: int,
+    cursor_after: int | None = None,
+) -> SynthesisReservation | None:
     today = datetime.now(timezone.utc).date().isoformat()
     for _attempt in range(3):
         now = datetime.now(timezone.utc)
+        inflight = db.session.execute(select(MemorySynthesisRun).where(
+            MemorySynthesisRun.category_id == category_id,
+            MemorySynthesisRun.status == "reserved",
+        ).order_by(MemorySynthesisRun.id.desc()).limit(1)).scalar_one_or_none()
+        if inflight is not None:
+            latest_attempt = db.session.execute(select(MemorySynthesisAttempt).where(
+                MemorySynthesisAttempt.run_id == inflight.id,
+            ).order_by(MemorySynthesisAttempt.id.desc()).limit(1)).scalar_one_or_none()
+            created_at = latest_attempt.created_at if latest_attempt is not None else None
+            if created_at is not None and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            if created_at is not None and now - created_at < timedelta(minutes=45):
+                db.session.rollback()
+                return None
+            inflight.status = "failed"
+            inflight.completed_at = now
         run = db.session.execute(select(MemorySynthesisRun).where(
             MemorySynthesisRun.category_id == category_id,
             MemorySynthesisRun.evidence_digest == digest,
         )).scalar_one_or_none()
         if run is not None and run.status in {"completed", "no_change"}:
+            if cursor_after is not None:
+                _advance_cursor(category_id, cursor_after)
+                db.session.commit()
             return None
         latest_attempt = None
         if run is not None:
@@ -171,11 +237,14 @@ def _reserve(category_id: str, digest: str, daily_cap: int) -> SynthesisReservat
             status="reserved",
         )
         db.session.add(attempt)
+        if cursor_after is not None:
+            _advance_cursor(category_id, cursor_after)
         try:
             db.session.commit()
             return SynthesisReservation(run=run, attempt=attempt)
         except IntegrityError:
             db.session.rollback()
+            return None
     return None
 
 
@@ -310,13 +379,25 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
     if config.memory_max_syntheses_per_day == 0:
         return {"category": category, "status": "daily_cap_zero", "llm_calls": 0}
 
-    items, evidence, digest = _snapshot(category)
+    snapshot = _snapshot(category)
+    items, evidence, digest = snapshot.items, snapshot.evidence, snapshot.digest
+    if not items:
+        return {"category": category, "status": "empty", "llm_calls": 0}
     if len(items) < 2 or not evidence:
+        _advance_cursor(category, snapshot.cursor_after)
+        db.session.commit()
         return {"category": category, "status": "insufficient_evidence", "llm_calls": 0}
     previous = db.session.get(MemoryCategorySummary, category)
     if previous and previous.evidence_digest == digest:
+        _advance_cursor(category, snapshot.cursor_after)
+        db.session.commit()
         return {"category": category, "status": "unchanged", "llm_calls": 0}
-    reservation = _reserve(category, digest, config.memory_max_syntheses_per_day)
+    reservation = _reserve(
+        category,
+        digest,
+        config.memory_max_syntheses_per_day,
+        snapshot.cursor_after,
+    )
     if reservation is None:
         return {"category": category, "status": "duplicate_or_daily_cap", "llm_calls": 0}
 
@@ -380,8 +461,12 @@ def synthesize_category(category_id: str) -> dict[str, object]:  # noqa: C901 - 
 
     # Optimistic freshness check prevents a stale provider response replacing
     # a newer category projection.
-    _, _, current_digest = _snapshot(category)
-    if current_digest != digest:
+    current_snapshot = _snapshot(
+        category,
+        cursor_id=snapshot.cursor_before,
+        use_persisted_cursor=False,
+    )
+    if current_snapshot.digest != digest:
         _finish(reservation, "failed")
         return {"category": category, "status": "stale_snapshot", "llm_calls": provider_calls}
 

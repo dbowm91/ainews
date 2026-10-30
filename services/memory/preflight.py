@@ -14,6 +14,7 @@ REQUIRED_MEMORY_TABLES = frozenset({
     "memory_maintenance_state",
     "memory_synthesis_runs",
     "memory_synthesis_attempts",
+    "memory_synthesis_cursors",
 })
 REQUIRED_MEMORY_COLUMNS = {
     "memory_items": frozenset({"review_status", "review_reason", "review_attempted_at", "review_count", "decision_metadata"}),

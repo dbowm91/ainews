@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 
+import pytest
 from werkzeug.security import generate_password_hash
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -87,6 +88,7 @@ class TestFlaskDbUpgrade:
                 "memory_category_summaries",
                 "memory_synthesis_runs",
                 "memory_synthesis_attempts",
+                "memory_synthesis_cursors",
                 "tags",
                 "alembic_version",
             ]:
@@ -133,6 +135,14 @@ class TestFlaskDbUpgrade:
         assert upgrade_041.returncode == 0, upgrade_041.stderr
         conn = sqlite3.connect(str(db_path))
         try:
+            conn.execute(
+                "INSERT INTO memory_synthesis_runs(category_id,evidence_digest,run_date,daily_slot,status,created_at) "
+                "VALUES ('ai','reserved-old','2026-10-29',1,'reserved','2026-10-29')"
+            )
+            conn.execute(
+                "INSERT INTO memory_synthesis_runs(category_id,evidence_digest,run_date,daily_slot,status,created_at) "
+                "VALUES ('ai','reserved-new','2026-10-29',2,'reserved','2026-10-29')"
+            )
             for index, status in ((1, "active"), (2, "active")):
                 conn.execute(
                     "INSERT INTO memory_items(owner_category,item_type,text,importance,status,first_seen_at,fingerprint,created_at,updated_at) "
@@ -170,6 +180,15 @@ class TestFlaskDbUpgrade:
                 "SELECT review_due_at FROM memory_items WHERE fingerprint='legacy-high'"
             ).fetchone()
             assert review_due is not None
+            reserved = conn.execute(
+                "SELECT COUNT(*) FROM memory_synthesis_runs WHERE category_id='ai' AND status='reserved'"
+            ).fetchone()[0]
+            assert reserved == 1
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO memory_synthesis_runs(category_id,evidence_digest,run_date,daily_slot,status,created_at) "
+                    "VALUES ('ai','reserved-race','2026-10-29',99,'reserved','2026-10-29')"
+                )
             assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
             assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         finally:
@@ -202,11 +221,13 @@ class TestFlaskDbUpgrade:
         conn = sqlite3.connect(str(db_path))
         try:
             assert conn.execute("SELECT COUNT(*) FROM memory_items").fetchone()[0] == 1
-            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "042_editor_memory_corrective_state"
+            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "043_memory_synthesis_fairness_cursor"
             item_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_items)")}
             summary_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_category_summaries)")}
+            cursor_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_synthesis_cursors)")}
             assert {"review_status", "review_reason", "review_count", "decision_metadata"} <= item_columns
             assert "current_memory_id" in summary_columns
+            assert {"category_id", "last_memory_id", "updated_at"} <= cursor_columns
         finally:
             conn.close()
 

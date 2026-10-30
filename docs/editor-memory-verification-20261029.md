@@ -43,6 +43,14 @@ This report records local implementation evidence for the [editor memory roadmap
 - A live adapter call to `prism-ml/bonsai-27b` using the `SynthesisProposal` JSON schema and `reasoning_effort=none` returned a validated proposal in 8.5 seconds. It cited both supplied observation IDs. This verifies the configured adapter path on the local model; it is not an editorial-quality benchmark.
 - Final verification: **5,094 passed, 6 skipped, 157 warnings** across the full pytest suite; mypy clean across 508 source files; Ruff clean on changed files; `git diff --check` passes. The three newsletter tests that failed before preserving normal-stop reasoning compatibility passed in the final full run.
 
+## C01–C03 review and eight-item fairness correction
+
+- Focused review found the old fairness regression overstated production behavior: it manually changed the first eight rows to `synthesized`. In production, a `no_change` proposal left them active, so the same oldest eight could mask newer evidence indefinitely. This is corrected with a persisted per-category round-robin cursor, stable wrap boundaries, no-call advancement for completed snapshots, and a partial unique index limiting in-flight synthesis to one run per category.
+- Migration `043_memory_synthesis_fairness_cursor` reconciles duplicate reservations, creates cursor state, and guards concurrent reservations. Disposable migration tests verify cursor schema, duplicate-reservation cleanup, uniqueness guard, integrity, and populated downgrade protection.
+- The revised regression runs four actual synthesis passes over eight older HIGH observations and one newer lower-priority observation. The second bounded snapshot contains the newer item; later replayed snapshots make no additional model calls.
+- Review conclusion: C01 retrieval/tool scoping and separate gates remain coherent; C02's starvation and concurrent-run gaps are fixed; C03 candidate reuse remains MEDIUM-capped and opt-in. No code blocker remains to merging with V2 and optimization flags disabled. Limited real-article comparisons remain required before enabling optional inference-saving features.
+- Post-correction verification: **63 focused memory, trend-memory, pipeline-optimization, admin and migration tests passed**; mypy clean across 508 source files; Ruff clean on changed code; `git diff --check` passes. The intended database has not been restored, so no target-database migration/rollback or staged activation was attempted; all gates remain off.
+
 ## Verification commands
 
 - `.venv/bin/pytest --cache-clear -q --tb=no`: **5,094 passed, 6 skipped, 157 warnings** in 405.64 seconds. This includes all corrective and synthesis-reliability tests, migration smoke, Celery Beat registration and the synthetic FTS query-plan assertion.

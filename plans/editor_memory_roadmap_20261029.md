@@ -1,6 +1,6 @@
 # Editorial Memory, Shared Blackboard, and Deterministic Pipeline Roadmap
 
-**Status:** IMPLEMENTATION IN PR #19 (unmerged), corrective pass C01–C04 OPEN; private-instance activation checks remain open
+**Status:** C01–C03 implementation reviewed and verified on the implementation branch; ready to merge with all V2 gates off. C04 target-database rehearsal and staged activation remain open.
 **Created:** 2026-10-29  
 **Baseline:** `main` at `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5` (revalidate against the implementation branch before coding)  
 **Owner:** AInews editorial pipeline / memory services  
@@ -80,6 +80,8 @@ The first implementation underwent static/runtime-evidence review and requires *
 | C04 | P0 operational | [Private-instance CI, database and activation checks](editor_memory_corrective_04_release_verification_20261029.md) | Triage relevant checks vs unrelated CI/installer debt; rehearse migration and rollback on real target copy; verify representative memory behavior |
 
 **Execution order:** C01 first; C02 and C03 separately; CI baseline work under C04 may proceed concurrently, but C04 closure follows tested C01–C03. Keep V2 read, maintenance, synthesis and optional optimizations **disabled until their specific target-instance activation checks pass**. Maintain original M1–M5 plans; this corrective pass supplements them, and the roadmap is **not COMPLETED**.
+
+**Private/dev activation order:** after the intended database is restored and a verified copy is available, rehearse upgrade and rollback on that copy; enable scoped retrieval first, then maintenance and synthesis, then optional inference-saving features only after limited real-article comparisons. All these gates currently default off.
 
 **Current CI:** GitHub Actions implementation SHA `f3aa498e`, runs `40928360912` (CI) and `40928361243` (Installer Smoke), failed. Logs indicate baseline Ruff findings, missing CI test secrets/`.env`, unavailable Redis in theme tests, Gitleaks API permission error, Werkzeug audit advisory, installer runner disk exhaustion, and a broken aarch64 launcher path. Root causes must be classified against `main` before attribution to the memory branch. The local 5,074-passing test claim requires relevant CI/reproduction checks; classify inherited/unrelated CI jobs independently rather than blocking private memory work on the entire installer matrix. See C04.
 

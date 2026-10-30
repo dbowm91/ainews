@@ -190,6 +190,16 @@ class MemorySynthesisRun(db.Model):  # type: ignore[name-defined]
     )
 
 
+class MemorySynthesisCursor(db.Model):  # type: ignore[name-defined]
+    """Persistent round-robin position for bounded category synthesis snapshots."""
+
+    __tablename__ = "memory_synthesis_cursors"
+
+    category_id = db.Column(db.String(64), primary_key=True)
+    last_memory_id = db.Column(db.Integer, nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class MemorySynthesisAttempt(db.Model):  # type: ignore[name-defined]
     __tablename__ = "memory_synthesis_attempts"
 

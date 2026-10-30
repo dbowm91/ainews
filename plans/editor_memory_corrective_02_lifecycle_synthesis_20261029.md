@@ -1,6 +1,6 @@
 # C02 — HIGH-Memory Retirement, Synthesis Supersession, and Blackboard Currentness
 
-**Status:** IMPLEMENTED and verified in the full local suite. Target-instance maintenance/synthesis trial remains under C04 until the owner's database is restored. **Priority:** P0. **Baseline:** PR #19 `f3aa498e4d0d`.
+**Status:** IMPLEMENTED with a persistent fair-snapshot cursor and per-category in-flight guard; focused tests pass. Target-instance maintenance/synthesis trial remains under C04 until the intended database is restored. **Priority:** P0. **Baseline:** PR #19 `f3aa498e4d0d`.
 **Parent:** [Corrective Overview](editor_memory_corrective_pass_overview_20261029.md).
 **Related milestones:** M3, M5. **Prerequisite:** C01 read-side context/synthesis eligibility design.
 
@@ -8,7 +8,7 @@
 
 - `services/memory/lifecycle.py:maintain_memory()` archives expired LOW/MEDIUM observations, but merely **counts** active HIGH rows where `review_due_at <= now`. HIGH has no expiration in `add_observation()`, so high-priority active state can accumulate forever. Existing tests explicitly assert a due HIGH remains active; this should only hold during a bounded review grace period.
 - `services/memory/synthesis.py:synthesize_category()` creates a new active synthesis and materialized category summary, while marking supporting observations `synthesized`. It does not retire/supersede the prior active synthesis revision in the same transaction. Summaries and historical synthesis rows can diverge.
-- `synthesize_category():_snapshot()` considers just eight priority/recency-selected observations and 32 evidence rows. Changed evidence outside that window can be overlooked, yielding a false `unchanged` result; candidate selection should follow dirty/novelty markers and coverage quotas, not perpetually starve lower-ranked changes.
+- `synthesize_category():_snapshot()` considers just eight observations and 32 evidence rows. Changed evidence outside that window can be overlooked, yielding a false `unchanged` result; candidate selection should follow dirty/novelty markers and coverage quotas, not perpetually starve lower-ranked changes.
 - Shared visibility is attached to a single memory ID. When a synthesis is replaced, its old shared scope is not automatically reconciled with the current revision; stale shared content can remain `active`.
 - The current status model provides `active/synthesized/superseded/archived`; it needs an explicit **review decision** mechanism and bounded retry/backpressure without deleting evidence.
 
@@ -29,6 +29,7 @@
 ## Work package C02.3 — Fair incremental synthesis and compaction
 
 - Replace the snapshot-only top-eight selection with a deterministic **dirty cluster index** or persisted latest-processed/last-evidence cursor. Small new/corrected facts need fair consideration even when existing HIGH content fills the top window.
+- The focused review reproduced the eight-item case: a `no_change` result left the same observations active, so the oldest eight could be selected indefinitely. Revision `043_memory_synthesis_fairness_cursor` now persists a per-category round-robin position, keeps wrap page boundaries stable, advances completed snapshots without another model call, and enforces one in-flight synthesis per category. Migration reconciliation closes duplicate old reservations.
 - Separate exact dedup/compaction, no-change checks and orphan cleanup (**zero LLM calls**) from conditional semantic synthesis. Preserve independent sources, support/conflict edges and article version provenance. Avoid merging merely similar contradictory claims.
 - Cap candidate set, source diversity, token budget, jobs/day, optional model calls and retries. No SQLite write lock across inference. Prefer clear chunks per category and stable ordering; conflicts caused by optimistic version changes should reschedule, not silently lose updates.
 - Ensure syntheses themselves do not become unlimited candidates in subsequent syntheses; use the underlying atomic evidence and current summary, not recursively reducing summary text without source truth.
@@ -45,6 +46,7 @@
 - Successful second synthesis supersedes the first, creates lineage, changes summary ID/revision atomically; failed/cancelled/invalid second synthesis leaves first intact; old shared visibility cannot leak as current.
 - Old records with identical source headlines but different claims are not collapsed; corrections/retractions and contradictory evidence preserve the disagreement and valid-as-of dates.
 - After 8+ HIGH observations fill the old snapshot, a new lower-priority but material observation must eventually trigger consideration/synthesis; unchanged runs cost zero LLM calls.
+- The regression uses eight older HIGH observations and one newer lower-priority observation across four actual synthesis passes. The second `no_change` snapshot reaches the new item; subsequent replayed pages make zero additional model calls.
 - Simulate Celery crash and concurrent same-category synthesis, optimistic conflict, no LLM provider, and daily cap exhaustion. Archive/renewal must not hold writer locks during network inference.
 - Admin overview shows overdue/retired/renewed HIGH rows and version history; historical searches still reach archived/superseded items via explicit operator filter.
 

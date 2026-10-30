@@ -722,12 +722,30 @@ jobs:
 
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-          HASHED_ADMIN_PW=$("${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+
+          # Diagnose a missing interpreter or script before hashing (the
+          # tarball venv must survive relocation for this to work).
+          if [[ ! -x "${INSTALL_DIR}/.venv/bin/python" ]]; then
+            echo "ERROR: venv python missing at ${INSTALL_DIR}/.venv/bin/python"
+            ls -la "${INSTALL_DIR}/" "${INSTALL_DIR}/.venv/bin/" 2>&1 | head -20
+            exit 1
+          fi
+          if [[ ! -f "${INSTALL_DIR}/scripts/hash_password.py" ]]; then
+            echo "ERROR: hash_password.py missing under ${INSTALL_DIR}/scripts"
+            ls -la "${INSTALL_DIR}/" 2>&1 | head -20
+            exit 1
+          fi
+
+          HASH_ERR="$(mktemp)"
+          HASHED_ADMIN_PW=$("${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>"$HASH_ERR" | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
 
           if [ -z "$HASHED_ADMIN_PW" ]; then
             echo "ERROR: Failed to hash admin password"
+            cat "$HASH_ERR"
+            rm -f "$HASH_ERR"
             exit 1
           fi
+          rm -f "$HASH_ERR"
 
           cat > "${INSTALL_DIR}/.env" <<EOF
           FLASK_CONFIG=production

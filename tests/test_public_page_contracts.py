@@ -117,7 +117,7 @@ class TestFragmentAndPageAreDistinct:
         }))
         db.session.commit()
 
-        response = client.get(f"/article/{article.id}", headers={"HX-Request": "true"})
+        response = client.get(f"/article/{article.public_id}", headers={"HX-Request": "true"})
         assert response.status_code == 200
         body = response.get_data(as_text=True)
         assert "<html" not in body.lower()
@@ -137,7 +137,7 @@ class TestFragmentAndPageAreDistinct:
         }))
         db.session.commit()
 
-        response = client.get(f"/article/{article.id}")
+        response = client.get(f"/article/{article.public_id}")
         assert response.status_code == 200
         body = response.get_data(as_text=True)
         assert "<html" in body.lower()
@@ -159,7 +159,7 @@ class TestFragmentAndPageAreDistinct:
         }))
         db.session.commit()
 
-        response = client.get(f"/article/{article.id}")
+        response = client.get(f"/article/{article.public_id}")
         vary = response.headers.get("Vary", "")
         assert "HX-Request" in vary, (
             "the article response must vary on HX-Request, otherwise the "
@@ -184,7 +184,7 @@ class TestMarkdownIsRendered:
         }))
         db.session.commit()
 
-        body = client.get(f"/article/{article.id}").get_data(as_text=True)
+        body = client.get(f"/article/{article.public_id}").get_data(as_text=True)
         assert "<h3>The news</h3>" in body
         assert "<strong>Google has released Gemini 4 Carbon</strong>" in body
         # The raw markdown markers must not survive into the page.
@@ -204,7 +204,7 @@ class TestMarkdownIsRendered:
         }))
         db.session.commit()
 
-        body = client.get(f"/article/{article.id}").get_data(as_text=True)
+        body = client.get(f"/article/{article.public_id}").get_data(as_text=True)
         assert "<p>" in body
 
 

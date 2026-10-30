@@ -1,6 +1,6 @@
 # M1 — Public article identity, publication visibility and safe read model
 
-**Status:** PLANNED
+**Status:** VERIFIED in this worktree; target-install deployment qualification is pending.
 **Parent:** [LLM-native roadmap](llm_native_publication_roadmap_20261029.md)
 **Priority:** P0 safety prerequisite to agent read access. Can run parallel with M3.
 
@@ -47,3 +47,14 @@ Avoid leaking canonical numeric IDs in response bodies, redirect Location header
 ## Deliverable
 
 A migration-backed read model with consistent publication semantics and random external identifiers, independent of REST/MCP transport. Add an implementation evidence section and change status only after tests and intended-instance migration rehearsal.
+
+## Implementation evidence
+
+- Added `Article.public_id` with 128-bit `secrets.token_urlsafe(16)` generation, collision retry and a unique constraint. Revision `037_llm_native_publication` backfills in batches, keeps relational IDs/FKs, makes public IDs non-null, and only marks completed rows with final content visible.
+- `services/publication.py` is the allowlisted DTO and shared visibility boundary. Public page/detail, search, related article, tag/category counts, RSS, sitemap, REST, MCP and newsletter selection use explicit visibility. Reprocessing/failure transitions withdraw visibility and invalidate public caches.
+- Normal pipeline completion, scheduled release, degraded finalization and admin status changes now use one publication-state helper. A `done` status is public only when final content exists; first publication records `published_at` and later edits preserve the original timestamp.
+- Public links now use public IDs. Numeric article detail lookup is an explicit config option and defaults off. Historical short links still resolve only for visible articles.
+- Regression coverage: `tests/test_llm_native_publication.py`, `tests/test_public_page_contracts.py`, `tests/test_public_layout_contracts.py`, plus route/RSS/related-page coverage. The new identity test generates 100,000 IDs and exercises a forced collision.
+- Migration rehearsal: fresh disposable SQLite upgrade from base to 037 passed; separate populated SQLite rehearsal from 036 preserved the article row/body and backfilled a public ID and visibility. No live database or backup was modified.
+- Final local suite: 5,004 passed, 6 skipped; MyPy passed across 510 source files; changed-file Ruff and diff checks passed. Worktree implementation patch SHA-256 (code/docs/tests, plan files excluded): `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`.
+- Limitations: this worktree has no configured production `.env` or target database, so backup/restore and WAL rollback were not exercised against an operator instance. Cache invalidation and throughput have contract coverage but no realistic-volume benchmark.

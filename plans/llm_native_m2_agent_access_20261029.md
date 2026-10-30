@@ -1,6 +1,6 @@
 # M2 — Read-only agent API, MCP interface, discoverability, and quotas
 
-**Status:** PLANNED
+**Status:** VERIFIED in this worktree; Redis contention and production resource qualification are pending.
 **Parent:** [LLM-native roadmap](llm_native_publication_roadmap_20261029.md)
 **Dependency:** M1; newsletter list/get endpoints depend on M5 edition service.
 **Priority:** P1, with security gates before enabling external exposure.
@@ -59,3 +59,12 @@ New routes/public/api.py or routes/public/api/ (not admin_api_bp); service publi
 ## Stop conditions
 
 Do not enable external agent access if M1 visibility leakage remains; if a reader token inherits admin privileges; if MCP bypasses quotas; if private articles appear in search; or if rate counters fail open under credentialed requests. Independent API and MCP enable flags remain off by default for inherited private deployments.
+
+## Implementation evidence
+
+- Added `/api/public/v1` article/catalog/search/newsletter read routes and OpenAPI JSON; stable signed keyset cursors bind filters, sorting and key IDs. Discovery is at `/agents`, `/llms.txt` and `/SKILL.md`; the public footer advertises the agent page only when access policy is enabled.
+- Added independent hashed `agent_` reader credentials and admin controls. Reader keys carry only `public.read`; tests verify they cannot authorize admin API routes. REST and MCP share the same quota identity, fixed UTC-hour budget and minute burst budget; Redis errors fail closed. Anonymous identity ignores forwarded IP headers.
+- Added optional MCP Python SDK extra and actual seven-tool Streamable HTTP ASGI façade. `tests/test_mcp_public_transport.py` uses an SDK client through the ASGI app and checks tool names and the public DTO. API coverage checks hidden-row exclusion, cursor ordering, ETag/304, disabled behavior and Redis failure behavior.
+- Commands: focused agent/public tests and full local suite; `.venv/bin/mypy . --exclude .venv`; scoped Ruff; `uv lock --check` (see parent evidence for final counts).
+- Final local suite: 5,004 passed, 6 skipped; MyPy passed across 510 source files; changed-file Ruff and diff checks passed. Worktree implementation patch SHA-256 (code/docs/tests, plan files excluded): `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`.
+- Limitations: no concurrent multi-process Redis benchmark, large-corpus FTS stress run, p95 latency/memory measurement, reverse-proxy deployment test or external client launch was performed. Both public API/MCP and anonymous access remain off by default.

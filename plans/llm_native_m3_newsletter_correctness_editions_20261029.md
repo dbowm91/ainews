@@ -1,6 +1,6 @@
 # M3 — Newsletter correctness, immutable edition model, and publication lifecycle
 
-**Status:** PLANNED
+**Status:** VERIFIED in this worktree; live broker/target-instance qualification is pending.
 **Parent:** [LLM-native roadmap](llm_native_publication_roadmap_20261029.md)
 **Priority:** P0 correctness before more schedules or email rollout.
 **Dependencies:** None for reproduction; coordinate external identity/URLs with M1. Precedes M4 and M5.
@@ -56,3 +56,12 @@ tasks/newsletter.py, services/newsletter.py, services/newsletter_pipeline.py, ce
 - Tests cover race/Redis failure, unauthorized preview/send routes, stable idempotency and bounded article selection.
 
 **Gate:** No live schedule rollout before M4 delivery isolation and M5 slot tests pass. Record implementation SHAs, commands, migration revisions, unresolved historical-data exceptions and local-instance verification before marking VERIFIED.
+
+## Implementation evidence
+
+- Replaced the former group/lock/SMTP orchestration with a profile/occurrence task and immutable `NewsletterEdition` plus ordered `NewsletterEditionItem` snapshots. Selection filters explicit public visibility and DONE status, applies freshness/impact/category, prior-edition and URL duplicate filters, deterministic ranking, and the profile article cap.
+- Preview uses the selector but creates no edition, occurrence or outbox intent. The compatibility daily task no longer sends mail. Edition and occurrence keys make replay idempotent; failed publication is not marked completed. Per-minute Beat scheduling queues primitive IDs/keys.
+- Replaced obsolete tests that asserted the old lock/fanout behavior with task contracts for no-write preview, idempotent task publication, and due per-recipient retry. Snapshot immutability, profile item cap, and duplicate scheduling are covered in `tests/test_llm_native_publication.py`.
+- Migration `037_llm_native_publication` was rehearsed on a disposable fresh SQLite database and a populated pre-037 article database. Existing `Newsletter` HTML is retained for admin viewing and is not backfilled into the public archive because it may contain personalized/tracked links.
+- Limitations: the broker/Celery task was exercised with Celery's in-process `.apply()` and database fixtures, not a live broker worker. Historical newsletter HTML was intentionally not publicly migrated; rollback was not run against an operator database.
+- Final local suite: 5,004 passed, 6 skipped; MyPy passed across 510 source files; changed-file Ruff and diff checks passed. Worktree implementation patch SHA-256 (code/docs/tests, plan files excluded): `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`.

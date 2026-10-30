@@ -21,6 +21,7 @@ class TestGenerateRSSFeed:
 
         article = MockArticle()
         article.id = 1
+        article.public_id = "public-story-1"
         article.original_title = title
         article.final_article = json.dumps({"headline": title, "tldr": tldr})
         article.category = category
@@ -88,7 +89,7 @@ class TestGenerateRSSFeed:
             site_url="https://example.com",
         )
 
-        assert "https://example.com/article/1" in feed
+        assert "https://example.com/article/public-story-1" in feed
         assert "<guid>" in feed
 
     def test_description_from_tldr(self):
@@ -170,6 +171,7 @@ class TestGenerateSitemap:
 
         article = MockArticle()
         article.id = 1
+        article.public_id = "public-story-1"
         article.created_at = created_at or datetime(2024, 1, 15)
         return article
 
@@ -209,7 +211,7 @@ class TestGenerateSitemap:
         articles = [self._mock_article()]
         sitemap = generate_sitemap(articles, site_url="https://example.com")
 
-        assert "https://example.com/article/1" in sitemap
+        assert "https://example.com/article/public-story-1" in sitemap
 
     def test_article_lastmod(self):
         from services.rss import generate_sitemap

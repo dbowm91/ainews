@@ -5,11 +5,13 @@ import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from flask import Response, current_app, redirect, render_template, request
+from flask import Response, current_app, jsonify, redirect, render_template, request
+from wtforms.validators import ValidationError
+from flask_wtf.csrf import validate_csrf
 from werkzeug.wrappers.response import Response as WerkzeugResponse
 from sqlalchemy.exc import SQLAlchemyError
 
-from extensions import db
+from extensions import csrf, db
 from models import Subscriber
 from routes import limit_content_length
 from routes.public import (
@@ -54,6 +56,12 @@ def subscribe() -> str | Response | WerkzeugResponse:
                 subscribe_error="Please enter a valid email.",
                 newsletter_type=newsletter_type,
             )
+        return redirect("/")
+
+    from services.distribution.dispatch import email_channel_enabled
+    if not email_channel_enabled(newsletter_type):
+        if request.headers.get("HX-Request"):
+            return render_template("partials/subscribe_box.html", subscribe_info="Email delivery for this newsletter is currently disabled.", newsletter_type=newsletter_type)
         return redirect("/")
 
     existing = (
@@ -152,8 +160,14 @@ def unsubscribe(token: str) -> str:
 
 
 @public_bp.route("/unsubscribe/<token>", methods=["POST"])
-def unsubscribe_confirm(token: str) -> str:
+def unsubscribe_confirm(token: str) -> str | Response:
     """Process unsubscribe request (POST with CSRF protection)."""
+    one_click = request.mimetype == "application/x-www-form-urlencoded" and request.form.get("List-Unsubscribe") == "One-Click"
+    if not one_click:
+        try:
+            validate_csrf(request.form.get("csrf_token") or request.headers.get("X-CSRFToken"))
+        except (ValidationError, TypeError, ValueError):
+            return "Invalid CSRF token"
     if not _validate_token(token):
         return render_template("unsubscribe.html", token=token, found=False)
     subscriber = (
@@ -172,6 +186,8 @@ def unsubscribe_confirm(token: str) -> str:
             logger.exception("Failed to unsubscribe token %s...", token[:8] if token else "")
             commit_failed = True
 
+    if one_click:
+        return jsonify({"unsubscribed": bool(subscriber and not commit_failed)})
     return render_template(
         "unsubscribe.html",
         token=token,
@@ -179,6 +195,10 @@ def unsubscribe_confirm(token: str) -> str:
         confirmed=subscriber is not None and not commit_failed,
         error=commit_failed,
     )
+
+
+# The route validates browser CSRF itself and supports the RFC 8058 token POST.
+csrf.exempt(unsubscribe_confirm)
 
 
 @public_bp.route("/verify/<token>")

@@ -87,7 +87,7 @@ class TestPublicRoutes:
 
         response = client.get("/")
 
-        assert f'data-article-id="{article.id}"'.encode() in response.data
+        assert f'data-article-id="{article.public_id}"'.encode() in response.data
 
     def test_article_detail_caches_rendered_html_without_error(self, app, client, create_article):
         """Rendered response bytes are converted to a cache-safe text value."""
@@ -101,15 +101,15 @@ class TestPublicRoutes:
         app.config["RESPONSE_CACHE_ENABLED"] = True
         reset_response_cache()
         cache = get_response_cache()
-        cache.invalidate(f"pub:article_detail:view:page:{article.id}")
+        cache.invalidate(f"pub:article_detail:view:page:{article.public_id}")
 
-        first = client.get(f"/article/{article.id}")
-        second = client.get(f"/article/{article.id}")
+        first = client.get(f"/article/{article.public_id}")
+        second = client.get(f"/article/{article.public_id}")
 
         assert first.status_code == 200
         assert second.status_code == 200
         assert second.data == first.data
-        cached_html = cache.get(f"pub:article_detail:view:page:{article.id}")
+        cached_html = cache.get(f"pub:article_detail:view:page:{article.public_id}")
         assert isinstance(cached_html, str)
         assert cached_html.encode() == first.data
         reset_response_cache()
@@ -169,7 +169,15 @@ class TestPublicRoutes:
     def test_subscribe_sends_verification_email(self, client, app, create_subscriber):
         """New subscription should send a verification email, not activate immediately."""
         from unittest.mock import patch
+        from extensions import db
+        from models import NewsletterDeliveryConfig, NewsletterProfile
 
+        with app.app_context():
+            db.session.add_all([
+                NewsletterProfile(key="main", scope="unified", title="AInews", enabled=True, email_enabled=True),
+                NewsletterDeliveryConfig(id=1, email_enabled=True),
+            ])
+            db.session.commit()
         with patch("services.email.send_verification_email") as mock_send:
             resp = client.post(
                 "/subscribe",
@@ -184,6 +192,14 @@ class TestPublicRoutes:
         self, client, app, create_subscriber
     ):
         """Subscribing with an already-verified email should show confirmation (no leak)."""
+        from extensions import db
+        from models import NewsletterDeliveryConfig, NewsletterProfile
+        with app.app_context():
+            db.session.add_all([
+                NewsletterProfile(key="main", scope="unified", title="AInews", enabled=True, email_enabled=True),
+                NewsletterDeliveryConfig(id=1, email_enabled=True),
+            ])
+            db.session.commit()
         create_subscriber(email="done@example.com", newsletter_type="main")
         resp = client.post(
             "/subscribe",

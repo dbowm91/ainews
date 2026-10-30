@@ -1,6 +1,6 @@
 # M5 — Independent newsletter profiles, diversity-aware editions, public archive and admin UX
 
-**Status:** PLANNED
+**Status:** VERIFIED in this worktree; intended-install schedule/volume qualification is pending.
 **Parent:** [LLM-native roadmap](llm_native_publication_roadmap_20261029.md)
 **Dependencies:** M3 edition model and fixed editorial orchestration; M4 safe email channel for live sends; M1 for public article identifiers; M2 newsletter API exposure once ready.
 **Priority:** P1 capability, with P0 scheduling safety gates.
@@ -73,3 +73,12 @@ models/newsletter.py and related Alembic revisions, services/newsletter_editoria
 ## Handoff and stop conditions
 
 Register migration dependency order, finished route contracts and operator-facing docs. Do not enable production scheduled mail until M3 and M4 gates pass. Public archive can be enabled independently of email after M1 publication and M3 snapshot safety pass. Feature toggles should default conservatively for existing private instances. Close with local-instance validation rather than public-release/packaging certification.
+
+## Implementation evidence
+
+- Added independent unified/category profiles with per-profile title, max article count, impact floor, enablement, timezone, weekday mask, email switch, and multiple schedule rows. Configuration updates validate IANA zones/times, increment policy revisions and are audited. Existing legacy schedule settings are documented as inactive; new profiles/schedules start disabled/empty.
+- The slot planner uses local civil date/time, catches up a missed slot for up to 60 minutes, recovers a stale dispatched task after 10 minutes, deduplicates profile/date/time keys, skips nonexistent spring times, and schedules the first fall-back fold once. The scheduler regression tests cover DST fold, stale recovery, idempotency and bounded catch-up.
+- Added deterministic impact/title/category diversity selection, immutable public edition archive pages and REST/MCP access over the same snapshot DTO. Archive access is independently default-off. Admin controls cover safe preview, publish, explicit publish+send, status counts, cancel and selected retry/reconcile. Subscription UI reflects email availability.
+- `docs/newsletter-pipeline.md` now describes the profile, edition, archive and delivery lifecycle and the default-off controls.
+- Limitations: no production Beat/worker restart, target timezone hardware run, large subscriber batch/p95 measurement, or multi-process scheduling race test was performed. Scheduled email remains gated by global and profile switches, both off by default.
+- Final local suite: 5,004 passed, 6 skipped; MyPy passed across 510 source files; changed-file Ruff and diff checks passed. Worktree implementation patch SHA-256 (code/docs/tests, plan files excluded): `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`.

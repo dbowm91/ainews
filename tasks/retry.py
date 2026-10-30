@@ -247,6 +247,7 @@ def _dead_letter(article):
 
     _apply_fallback(article)
     article.pipeline_status = PipelineStatus.FAILED
+    article.publicly_visible = False
     article.retry_count = 0
     article.last_error = (
         f"Dead-lettered: stuck in '{original_status}' "

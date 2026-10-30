@@ -55,12 +55,14 @@ class TestCeleryBeatSchedule:
 
     def test_generate_newsletters_task(self):
         schedule = Config.get_beat_schedule()
-        assert "generate-newsletters" in schedule
+        assert "newsletter-slot-tick" in schedule
         assert (
-            schedule["generate-newsletters"]["task"]
-            == "tasks.newsletter.generate_daily_newsletters"
+            schedule["newsletter-slot-tick"]["task"]
+            == "tasks.newsletter.newsletter_slot_tick"
         )
-        assert schedule["generate-newsletters"]["schedule"] == crontab(hour=8, minute=0)
+        assert schedule["newsletter-slot-tick"]["schedule"] == crontab(minute="*")
+        assert schedule["retry-newsletter-deliveries"]["task"] == "tasks.newsletter.retry_failed_newsletter_deliveries"
+        assert schedule["retry-newsletter-deliveries"]["schedule"] == timedelta(minutes=5)
 
     def test_cleanup_old_logs_task(self):
         schedule = Config.get_beat_schedule()

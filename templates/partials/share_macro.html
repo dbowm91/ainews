@@ -1,5 +1,5 @@
 {% macro share_button(article, share_configs, request, btn_id) %}
-<details class="share-details" data-share-id="{{ btn_id }}" data-article-id="{{ article.id }}">
+<details class="share-details" data-share-id="{{ btn_id }}" data-article-id="{{ article.public_id }}">
   <summary class="share-btn" title="Share this article"
           aria-label="Share this article"
           aria-expanded="false">
@@ -11,7 +11,7 @@
   <div class="share-dropdown" data-share-id="{{ btn_id }}">
     <div class="share-dropdown-header">share</div>
     <div class="share-url-row">
-      {% set short_url = request.host_url.rstrip('/') ~ '/s/' ~ (article.short_id if article.short_id else article.id) %}
+      {% set short_url = config.SITE_URL.rstrip('/') ~ '/article/' ~ article.public_id %}
       <input type="text" value="{{ short_url }}" readonly class="share-url-input">
       <button class="share-copy-btn" type="button">copy</button>
     </div>

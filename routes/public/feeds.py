@@ -10,7 +10,7 @@ from flask import Response, make_response, render_template, request
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from constants import PER_PAGE_PUBLIC, PipelineStatus
+from constants import PER_PAGE_PUBLIC
 from extensions import db
 from models import Article, Tag
 from routes.public import (
@@ -101,7 +101,8 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         articles = (
             Article.query
             .options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
-            .filter(Article.id.in_(cached_ids))
+            .filter(Article.id.in_(cached_ids), Article.publicly_visible.is_(True),
+                    Article.final_article.is_not(None), Article.final_article != "")
             .all()
         )
         return sorted(articles, key=lambda a: cached_ids.index(a.id)) if articles else []
@@ -112,7 +113,8 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
         Article.query
         .options(joinedload(Article.source))
         .filter(
-            Article.pipeline_status == PipelineStatus.DONE,
+            Article.publicly_visible.is_(True),
+            Article.final_article.is_not(None),
             Article.impact_score > 0,
             or_(
                 Article.original_published_at >= cutoff,
@@ -263,7 +265,7 @@ def tag_feed(slug: str) -> str:
         Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
         .filter(
             Article.tags.any(Tag.id == tag.id),
-            Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
+            Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
         )
         .order_by(Article.created_at.desc())
     )
@@ -302,7 +304,8 @@ def feed_all() -> Response:
     from services.rss import generate_rss_feed
 
     cache = get_response_cache()
-    site_url = request.host_url.rstrip("/")
+    from flask import current_app
+    site_url = str(current_app.config.get("SITE_URL") or "http://localhost:5000").rstrip("/")
     cache_key = f"pub:rss_feed:all:{site_url}"
 
     xml = cache.get(cache_key)
@@ -310,9 +313,7 @@ def feed_all() -> Response:
         articles = (
             Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(
-                Article.pipeline_status.in_(
-                    [PipelineStatus.DONE, PipelineStatus.SKIPPED],
-                ),
+                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
             )
             .order_by(Article.created_at.desc())
             .limit(50)
@@ -346,7 +347,8 @@ def feed_topic(category: str) -> Response:
         abort(404)
 
     cache = get_response_cache()
-    site_url = request.host_url.rstrip("/")
+    from flask import current_app
+    site_url = str(current_app.config.get("SITE_URL") or "http://localhost:5000").rstrip("/")
     cache_key = f"pub:rss_feed:{category}:{site_url}"
 
     xml = cache.get(cache_key)
@@ -358,9 +360,7 @@ def feed_topic(category: str) -> Response:
             Article.query.options(joinedload(Article.source), joinedload(Article.tags))  # type: ignore[arg-type]
             .filter(
                 Article.category == category,
-                Article.pipeline_status.in_(
-                    [PipelineStatus.DONE, PipelineStatus.SKIPPED],
-                ),
+                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
             )
             .order_by(Article.created_at.desc())
             .limit(50)
@@ -397,18 +397,19 @@ def sitemap() -> Response:
 
         rows = (
             Article.query.filter(
-                Article.pipeline_status.in_([PipelineStatus.DONE, PipelineStatus.SKIPPED]),
+                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
             )
-            .with_entities(Article.id, Article.created_at)
+            .with_entities(Article.public_id, Article.created_at)
             .order_by(Article.created_at.desc())
             .limit(limit)
             .all()
         )
 
-        _SitemapEntry = namedtuple("_SitemapEntry", ["id", "created_at"])
-        articles = [_SitemapEntry(id=r.id, created_at=r.created_at) for r in rows]
+        _SitemapEntry = namedtuple("_SitemapEntry", ["public_id", "created_at"])
+        articles = [_SitemapEntry(public_id=r.public_id, created_at=r.created_at) for r in rows]
 
-        site_url = request.host_url.rstrip("/")
+        from flask import current_app
+        site_url = str(current_app.config.get("SITE_URL") or "http://localhost:5000").rstrip("/")
         xml = generate_sitemap(articles, site_url=site_url)
         cache.set(cache_key, xml, ttl=300)
 

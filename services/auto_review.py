@@ -111,6 +111,7 @@ def publish_article(article, *, reason: str = "manual", published_at=None) -> No
     from constants import PipelineStatus
 
     article.pipeline_status = PipelineStatus.DONE
+    article.publicly_visible = True
     article.retry_count = 0
     article.last_error = None
     article.scheduled_publish_at = None
@@ -195,6 +196,8 @@ def route_to_review(article) -> bool:
         return False
 
     article.pipeline_status = PipelineStatus.REVIEW
+    article.publicly_visible = False
+    _invalidate_public_cache(article)
     return True
 
 

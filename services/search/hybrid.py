@@ -167,7 +167,7 @@ class HybridSearchProvider(SearchProvider):
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.pipeline_status IN ('done', 'skipped')
+                  AND a.publicly_visible = 1 AND a.final_article IS NOT NULL AND a.final_article != ''
                   AND a.category = :category
                 ORDER BY rank
                 LIMIT :limit
@@ -179,7 +179,7 @@ class HybridSearchProvider(SearchProvider):
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.pipeline_status IN ('done', 'skipped')
+                  AND a.publicly_visible = 1 AND a.final_article IS NOT NULL AND a.final_article != ''
                 ORDER BY rank
                 LIMIT :limit
             """)
@@ -209,7 +209,7 @@ class HybridSearchProvider(SearchProvider):
             sql = text("""
                 SELECT id, embedding, category
                 FROM articles
-                WHERE pipeline_status IN ('done', 'skipped')
+                WHERE publicly_visible = 1 AND final_article IS NOT NULL AND final_article != ''
                   AND category = :category
                   AND embedding IS NOT NULL
                   AND embedding != ''
@@ -221,7 +221,7 @@ class HybridSearchProvider(SearchProvider):
             sql = text("""
                 SELECT id, embedding, category
                 FROM articles
-                WHERE pipeline_status IN ('done', 'skipped')
+                WHERE publicly_visible = 1 AND final_article IS NOT NULL AND final_article != ''
                   AND embedding IS NOT NULL
                   AND embedding != ''
                 ORDER BY id DESC

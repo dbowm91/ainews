@@ -80,7 +80,7 @@ class SQLiteFTSProvider(SearchProvider):
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.pipeline_status IN ('done', 'skipped')
+                  AND a.publicly_visible = 1 AND a.final_article IS NOT NULL AND a.final_article != ''
                   AND a.category = :category
                 ORDER BY rank
                 LIMIT :limit OFFSET :offset
@@ -97,7 +97,7 @@ class SQLiteFTSProvider(SearchProvider):
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.pipeline_status IN ('done', 'skipped')
+                  AND a.publicly_visible = 1 AND a.final_article IS NOT NULL AND a.final_article != ''
                 ORDER BY rank
                 LIMIT :limit OFFSET :offset
             """)

@@ -1,6 +1,6 @@
 # LLM-native publication, newsletter editions, and distribution roadmap
 
-**Status:** PLANNED — implementation not begun; implementation evidence must be added as work lands.
+**Status:** VERIFIED in this worktree — M1–M5 implementation and local regression evidence are recorded below and in each milestone plan. Live-instance and hardware performance qualification remain deployment gates.
 **Date:** 2026-10-29
 **Baseline:** main at 60fd18eda3a5e8852943e70bf32d4f957dbb3ff5. Recheck on merge and against ongoing PRs #18 (Eggsearch retrieval) and #19 (editorial memory).
 **Operating intent:** personal/local or privately operated AInews, with *optional* exposure to external agents or an optional public instance. Not a public-launch or broad packaging-readiness program.
@@ -59,3 +59,16 @@ These are **static source findings**, not evidence of current live behavior. The
 Each milestone owns tests and migrations; no milestone is complete based only on docs. Use GitHub PRs against main; preserve this index and annotate each row PLANNED -> IN PROGRESS -> VERIFIED with implementation SHA, tests, migration rehearsal, limitations, and target-instance proof. First fixes to newsletter defects require failing regression tests. Use stubbed SMTP and local Celery worker tests in ordinary CI, with optional manual mailbox/target-host smoke. Inspect the explicit dependency and regression matrices in M1–M5. No real subscriber delivery in tests. Completion means correct behavior on the intended installation, not public product launch.
 
 **Excluded:** outbound syndication of full publisher content; general-purpose autonomous agent tools; mutable MCP tools; marketing/deliverability infrastructure; new channels beyond email; paid email-provider integration; multi-tenant user accounts; public-release certification. Any such expansion requires a separate plan.
+
+## Implementation evidence
+
+- **Branch/rebase:** `plan/llm-native-editions-delivery-20261029`; `origin/main` is an ancestor of `HEAD` (the rebase was already up to date). Work is left uncommitted for review.
+- **M1:** cryptographically random article public IDs, explicit visibility/read DTO, URL and search/feed/RSS/sitemap filters, withdrawal on reprocessing, hardened numeric-route default, additive migration `037_llm_native_publication`.
+- **M2:** separately hashed read-only agent keys, REST and seven-tool Streamable HTTP MCP surfaces, signed keyset cursors, ETags/OpenAPI/discovery docs, fail-closed Redis fixed-hour plus burst quotas, admin credential controls. MCP uses the optional `agent` dependency extra.
+- **M3:** deterministic frozen edition snapshots, occurrence-key idempotency, safe preview, scheduled task registration, persistent profile/local-time planning, catch-up and DST handling.
+- **M4:** per-recipient transactional outbox, explicit email gates, bounded retries, unknown-outcome reconciliation, authenticated/audited admin controls, and one-click unsubscribe.
+- **M5:** independent unified/category profiles, multi-time schedules, bounded diversity selection, public archive/API/MCP editions, and settings/archive templates.
+- **Migration evidence:** fresh disposable SQLite upgrade completed through revision 037 and included `newsletter_occurrences.dispatched_at`; a populated historical article migration rehearsal preserved the row/content and assigned a random public ID. No user database was migrated.
+- **Final local verification:** `rtk proxy .venv/bin/python -m pytest -q --tb=long` → 5,004 passed, 6 skipped; `rtk proxy .venv/bin/mypy . --exclude .venv` → 510 source files clean; scoped Ruff on changed files passed; `rtk proxy uv lock --check` and `rtk proxy git diff --check` passed. Repository-wide Ruff still reports five existing findings in unrelated CLI/trend/safe-fetch files.
+- **Implementation patch SHA-256:** `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`. Reproduce with SHA-256 over `git diff --binary origin/main` excluding `plans/**`, followed by sorted untracked non-plan file paths and contents.
+- **Limitations:** no production/target installation was changed; there was no live SMTP or inbox test. Multi-process Redis contention, realistic high-volume FTS/SQLite load, p95/memory measurements, and hardware-specific qualification remain outstanding. Existing newsletters with personalized legacy HTML remain admin-only. Do not enable scheduled email in an installation until its operators have reviewed the new default-off profile/global delivery switches and local configuration.

@@ -104,7 +104,7 @@
           </td>
           <td>
             {% if memory.source_article_id %}
-            <a href="{{ url_for('public.article_detail', article_id=memory.source_article_id) }}">
+            <a href="/article/{{ memory.source_article_id }}">
               #{{ memory.source_article_id }}
             </a>
             {% else %}

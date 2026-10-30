@@ -183,7 +183,7 @@ def get_articles_paginated(
                             joinedload(Article.tags),  # type: ignore[arg-type]
                             joinedload(Article.metrics),  # type: ignore[arg-type]
                         )
-                        .where(Article.id.in_(article_ids))
+                        .where(Article.id.in_(article_ids), Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
                     )
                     .unique()
                     .scalars()
@@ -206,7 +206,7 @@ def get_articles_paginated(
             joinedload(Article.tags),  # type: ignore[arg-type]
             joinedload(Article.metrics),  # type: ignore[arg-type]
         )
-        .where(Article.pipeline_status.in_(["done", "skipped"]))
+        .where(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
         .order_by(_get_sort_order(sort))
     )
 
@@ -393,7 +393,7 @@ def find_duplicate_titles(
         .all()
     )
     for article_id, other_title in rows:
-        other_words = _title_word_set(other_title)
+        other_words = _title_word_set(other_title if isinstance(other_title, str) else None)
         if jaccard_similarity(candidate_words, other_words) >= threshold:
             matched_ids.append(article_id)
             break

@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from constants import PipelineStatus
 from services.cache import get_response_cache
 from sqlalchemy import select
 
@@ -75,7 +74,7 @@ def find_related_articles(article, limit: int = 5):
             .filter(
                 article_tags.c.tag_id.in_(article_tag_ids),
                 Article.id != article.id,
-                Article.pipeline_status == PipelineStatus.DONE,
+                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
                 Article.final_article.isnot(None),
             )
             .group_by(Article.id)
@@ -92,7 +91,7 @@ def find_related_articles(article, limit: int = 5):
                 )
                 .where(
                     Article.id != article.id,
-                    Article.pipeline_status == PipelineStatus.DONE,
+                    Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
                     Article.final_article.isnot(None),
                     Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
                 )
@@ -113,7 +112,7 @@ def find_related_articles(article, limit: int = 5):
                 .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
                 .where(
                     Article.id != article.id,
-                    Article.pipeline_status == PipelineStatus.DONE,
+                    Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
                     Article.final_article.isnot(None),
                     Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
                 )
@@ -178,7 +177,7 @@ def find_related_articles_dicts(
             .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
             .where(
                 Article.id != exclude_id,
-                Article.pipeline_status == PipelineStatus.DONE,
+                Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "",
                 Article.final_article.isnot(None),
                 Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
             )

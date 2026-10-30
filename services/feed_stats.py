@@ -23,6 +23,7 @@ database extension, never the framework and never an adapter.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import select
 
@@ -51,7 +52,7 @@ class TopicCount:
 class ImpactLeader:
     """A highly ranked article, as shown in the rail."""
 
-    article_id: int
+    public_id: str
     title: str
     impact_score: int
     category: str | None
@@ -67,10 +68,10 @@ class FeedStats:
 
 def _recent_article_ids(limit: int = RECENT_WINDOW) -> list[int]:
     """Return the ids of the most recently created articles."""
-    rows = db.session.execute(
-        select(Article.id).order_by(Article.created_at.desc()).limit(limit)
-    ).scalars()
-    return list(rows)
+    rows: list[int] = list(db.session.execute(
+        select(Article.id).where(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "").order_by(Article.created_at.desc()).limit(limit)
+    ).scalars().all())
+    return rows
 
 
 def get_topic_counts(limit: int = RECENT_WINDOW) -> tuple[TopicCount, ...]:
@@ -84,9 +85,9 @@ def get_topic_counts(limit: int = RECENT_WINDOW) -> tuple[TopicCount, ...]:
     if not article_ids:
         return ()
 
-    rows = db.session.execute(
+    rows: list[Any] = list(db.session.execute(
         select(Article.topics).where(Article.id.in_(article_ids))
-    ).scalars()
+    ).scalars().all())
 
     counts: dict[str, int] = {}
     for topics in rows:
@@ -109,15 +110,15 @@ def get_topic_counts(limit: int = RECENT_WINDOW) -> tuple[TopicCount, ...]:
 
 def get_impact_leaders(limit: int = IMPACT_LEADER_LIMIT) -> tuple[ImpactLeader, ...]:
     """Return the highest ranked articles."""
-    rows = db.session.execute(
-        select(Article.id, Article.original_title, Article.impact_score, Article.category)
-        .where(Article.pipeline_status.in_(TERMINAL_STATUSES))
+    rows: list[tuple[Any, Any, Any, Any]] = list(db.session.execute(
+        select(Article.public_id, Article.original_title, Article.impact_score, Article.category)
+        .where(Article.publicly_visible.is_(True), Article.final_article.is_not(None), Article.final_article != "")
         .order_by(Article.impact_score.desc(), Article.id.desc())
         .limit(limit)
-    ).all()
+    ).all())
     return tuple(
         ImpactLeader(
-            article_id=int(row_id),
+            public_id=str(row_id),
             title=title or "",
             impact_score=int(score or 0),
             category=category,
@@ -142,11 +143,11 @@ def annotate_quality_scores(articles) -> None:
     if not article_ids:
         return
 
-    rows = db.session.execute(
+    rows: list[tuple[Any, Any]] = list(db.session.execute(
         select(QualityReport.article_id, QualityReport.overall_score)
         .where(QualityReport.article_id.in_(article_ids))
         .order_by(QualityReport.created_at.desc())
-    ).all()
+    ).all())
 
     latest: dict[int, float] = {}
     for article_id, score in rows:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from .source import Source
 from .tag import Tag, article_tags
 from .article import Article, Citation
-from .newsletter import Newsletter, Subscriber, ArticleMetric
+from .newsletter import (Newsletter, Subscriber, ArticleMetric, NewsletterProfile, NewsletterSchedule, ScheduledOccurrence, NewsletterDeliveryConfig, NewsletterEdition, NewsletterEditionItem, AgentCredential, AgentAccessConfig, DeliveryIntent, DeliveryAttempt)
 from .pipeline import PipelineRun, PipelineLog, ArticleVersion
 from .share import ShareConfig
 from .context import (
@@ -36,6 +36,11 @@ __all__ = [
     "Newsletter",
     "Subscriber",
     "ArticleMetric",
+    "NewsletterProfile", "NewsletterEdition", "NewsletterEditionItem",
+    "NewsletterSchedule", "ScheduledOccurrence",
+    "NewsletterDeliveryConfig",
+    "AgentCredential", "DeliveryIntent", "DeliveryAttempt",
+    "AgentAccessConfig",
     "PipelineRun",
     "PipelineLog",
     "ArticleVersion",

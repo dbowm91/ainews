@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import secrets
+
+from sqlalchemy import select
 
 from extensions import db
 
 from .tag import article_tags
 
 
+def new_public_id() -> str:
+    """Return a 128-bit cryptographically random external article identity."""
+    return secrets.token_urlsafe(16)
+
+
 class Article(db.Model):  # type: ignore[name-defined]
     __tablename__ = "articles"
 
     id = db.Column(db.Integer, primary_key=True)
+    # External identity is deliberately independent of the relational key.
+    public_id = db.Column(db.String(32), unique=True, index=True, nullable=False, default=new_public_id)
+    publicly_visible = db.Column(db.Boolean, nullable=False, default=False, index=True)
     short_id = db.Column(db.String(12), unique=True, index=True)
     source_id = db.Column(
         db.Integer, db.ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
@@ -81,6 +92,19 @@ class Article(db.Model):  # type: ignore[name-defined]
 @db.event.listens_for(Article, "before_update")
 def _article_before_update(mapper, connection, target):
     target.updated_at = datetime.now(timezone.utc)
+
+
+@db.event.listens_for(Article, "before_insert")
+def _article_assign_unique_public_id(mapper, connection, target):
+    """Retry a detected public-ID collision before the unique index is reached."""
+    candidate = target.public_id or new_public_id()
+    for _ in range(5):
+        collision = connection.execute(select(Article.id).where(Article.public_id == candidate).limit(1)).first()
+        if collision is None:
+            target.public_id = candidate
+            return
+        candidate = new_public_id()
+    raise RuntimeError("Could not allocate a unique public article identifier")
 
 
 class Citation(db.Model):  # type: ignore[name-defined]

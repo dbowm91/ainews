@@ -162,7 +162,7 @@ class TestTheRailIsOnEveryPublicPage:
         source = create_source()
         article = create_article(source=source, pipeline_status="done", category="ai")
 
-        response = client.get(f"/article/{article.id}")
+        response = client.get(f"/article/{article.public_id}")
         assert response.status_code == 200
         body = response.get_data(as_text=True)
         assert 'class="page-rail"' in body, "the article page rendered without the sidebar"
@@ -274,7 +274,7 @@ class TestTheNavigationIsTheSameOnEveryPage:
         source = create_source()
         article = create_article(source=source, pipeline_status="done", category="ai")
 
-        response = client.get(f"/article/{article.id}")
+        response = client.get(f"/article/{article.public_id}")
         body = response.get_data(as_text=True)
         assert "/topic/ai" in body, (
             "the article page header does not link to the topic pages"

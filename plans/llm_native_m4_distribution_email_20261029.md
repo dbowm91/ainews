@@ -1,6 +1,6 @@
 # M4 — Distribution-channel abstraction, email adapter and per-recipient outbox
 
-**Status:** PLANNED
+**Status:** VERIFIED in this worktree; live SMTP/worker rehearsal is pending.
 **Parent:** [LLM-native roadmap](llm_native_publication_roadmap_20261029.md)
 **Dependency:** M3 published-edition contract. Required before live scheduled email in M5.
 **Priority:** P0 delivery safety and separation of concerns.
@@ -72,3 +72,12 @@ New services/distribution/{base,email,dispatch}.py and tasks/distribution.py; re
 **Non-goals:** webhook publishing as a new channel, social media, push, Slack, Mailchimp, marketing optimization, personalized editorial LLMs, multi-tenant mailing lists, new SMTP-provider contracts. Future channels can implement the protocol later without changing the edition model.
 
 **Stop:** Do not permit live scheduled fanout until outbox isolation, unsubscribe, per-recipient retries, cancellation and ambiguous-outcome policies pass test and target-instance rehearsal.
+
+## Implementation evidence
+
+- Added typed email outcome/protocol, durable unique per-edition/channel/subscriber intents, atomic claims, attempt history, recipient-state recheck immediately before send, explicit global/profile delivery switches, a 5,000-recipient default cap (50,000 hard cap), and bounded five-attempt exponential retry.
+- Stale claims become `unknown` and are never automatically replayed. Admin retry of an unknown result requires explicit acknowledgement; cancellation/retry/change actions are authenticated, CSRF-protected for sessions and audited.
+- Email renders escaped frozen edition content and uses configured site URLs with subscriber-specific unsubscribe links and RFC 8058 headers. The new fake SMTP sink test checks the serialized message/headers without contacting an SMTP server. Tests cover idempotent planning, unconfirmed recipient exclusion, SMTP acceptance, temporary failure and retry cap, ambiguous outcome and unsubscribe.
+- Preview and publish-without-send never create subscriber deliveries. The explicit publish+send route requires both delivery switches. Historical global SMTP configuration is preserved but new delivery switches default off.
+- Limitations: no SMTP server, inbox, live worker or actual subscriber was contacted. Operator target-instance send and post-send reconciliation checks remain required before scheduled email is enabled.
+- Final local suite: 5,004 passed, 6 skipped; MyPy passed across 510 source files; changed-file Ruff and diff checks passed. Worktree implementation patch SHA-256 (code/docs/tests, plan files excluded): `f5980a4416d736fce98b78d06ad8de6de5de4563212b042a04724761991567ff`.

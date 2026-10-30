@@ -1,5 +1,20 @@
 # API Documentation
 
+## Public read API (opt-in)
+
+The public read interface is separate from `/api/v1` administration. It is disabled by default. Enable it with `PUBLIC_API_ENABLED=true` or from Admin → Agent access. If anonymous access is off, callers must use a separately issued `agent_<id>.<secret>` reader key as a Bearer token. Reader keys have only `public.read` scope and cannot authenticate to admin routes.
+
+- `GET /api/public/v1/articles` supports `category`, `tag`, `sort=recent|published|impact`, `from`, `to`, `limit` (1–50), and an opaque signed `cursor`.
+- `GET /api/public/v1/articles/<public_id>` returns a published article or 404.
+- `GET /api/public/v1/search?q=...` is bounded to 256 characters and 12 terms, with the same filters and cursor.
+- `GET /api/public/v1/categories` and `/tags` count only visible articles.
+- `GET /api/public/v1/newsletters` and `/newsletters/<public_id>` return immutable published edition snapshots when the archive is enabled.
+- `GET /api/public/openapi.json`, `/agents`, `/llms.txt`, and `/SKILL.md` describe the consumer interface when public API access is enabled.
+
+Responses use UTC ISO 8601 timestamps, include `ETag` and short public cache lifetimes, and do not include relational IDs, pipeline state, drafts, extraction text, subscriber data or delivery instrumentation. Reader quotas use fixed UTC-hour windows. Credentialed requests fail closed if Redis quota storage is unavailable. See [agent access operations](agent-access.md) for key issuance, quota behavior and MCP setup.
+
+Canonical article URLs use `/article/<public_id>`. Legacy numeric article routes are disabled unless `PUBLIC_LEGACY_NUMERIC_ARTICLE_URLS=true`; this intentionally ends numeric legacy resolution on hardened installs. Legacy `/s` and `/a` short IDs redirect to the public ID route when the article is visible.
+
 ## Public Endpoints
 
 ### Health Check

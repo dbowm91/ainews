@@ -212,6 +212,12 @@ python scripts/verify_backup.sh
 
 ## Recovery Procedures
 
+### Newsletter edition and delivery recovery
+
+Newsletter generation is driven by durable profile schedules and the `newsletter-slot-tick` task. Slots stuck in `queued` or `dispatched` are requeued for up to 60 minutes; the occurrence key makes duplicate workers safe. `retry-newsletter-deliveries` runs every five minutes and queues only due per-recipient outbox intents. Review intent counts at `/api/v1/newsletter-editions/<public_id>/deliveries`; never retry an `unknown` SMTP result automatically. Use the explicit `retry_unknown` action only after operator review and with `confirm_unknown_retry: true`. A claimed message may already have been accepted by SMTP.
+
+Global and per-profile email switches both default off. An edition can be published and read from the archive without either switch. Do not enable scheduled mail until delivery configuration, unsubscribe URLs, SMTP credentials and the intended recipient policy have been checked in the local deployment.
+
 ### Recovering from Stuck Locks
 
 ```bash

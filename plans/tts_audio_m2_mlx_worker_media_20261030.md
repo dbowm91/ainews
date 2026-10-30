@@ -1,6 +1,6 @@
 # TTS M2 — Native Apple Silicon MLX worker, Breeze 4-bit and Opus
 
-**Status:** IMPLEMENTED — software complete; Apple Silicon qualification **OPEN**. Code commit `d4bc9c0`.
+**Status:** IMPLEMENTED — software complete; Apple Silicon runtime smoke **VERIFIED** on M4 Pro; subjective listening and Docker-host topology **OPEN**. Code commits `d4bc9c0` and `8f977d0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P1 first functional inference backend.
 **Dependencies:** M1 authenticated job protocol and script contract.
@@ -37,9 +37,13 @@ Add isolated package/entrypoint under tts_worker/ or services/tts_worker/ with s
 - MLX-Audio Breeze generate / instruction / CFG documentation: https://github.com/Blaizzy/mlx-audio/blob/main/docs/models/tts/breeze-tts.md
 - Upstream research/non-commercial license: https://huggingface.co/BreezeBlue/Breeze-TTS-2/blob/main/LICENSE
 
-## Implementation evidence — 2026-10-30
+## Implementation and hardware evidence — 2026-10-30
 
 - **Code:** `d4bc9c0`. Added a separate native worker with lazy MLX import, pinned Breeze model revision and mlx-audio/MLX dependency lock, bounded sentence chunks, heartbeat throughout model loading and inference, a hard per-job process timeout, FFmpeg Ogg Opus encoding, authenticated transfer, and a CPU fake backend. No MLX package was added to the web/Celery dependencies.
 - **Pinned API check:** inspected `mlx-audio` tag `v0.6.3`'s Breeze implementation; `generate()` exposes `text`, `instruct`, `cfg_scale` and yields result objects. The arm64 lock resolved 56 packages for Python 3.12/macOS 14+ with `mlx==0.32.4`, `mlx-audio==0.6.3`, and `huggingface-hub==1.5.0`.
-- **Tests:** the 11-test TTS command in M1 passed, including deterministic fake WAV -> FFmpeg Opus -> ffprobe and authenticated upload -> READY. Ruff and mypy checks passed for changed worker modules.
-- **Hardware:** **OPEN**. This workspace is Intel Mac; no MLX/Metal inference, memory/RTF benchmark, listening review, Mac sleep/wake test, or intended-host qualification is claimed. The 3.01 GB figure is checkpoint size only.
+- **Regression fix:** the first live upload exposed a duplicate `timeout` keyword when the longer upload timeout was passed through the worker request helper. `_request()` now applies the default with `setdefault`, and a regression test checks both default and caller-supplied timeouts.
+- **Tests:** all 12 TTS tests passed, including deterministic fake WAV -> FFmpeg Opus -> ffprobe and authenticated upload -> READY. Ruff and mypy passed for the worker and changed regression test.
+- **Host:** Apple M4 Pro, 24 GiB unified memory, macOS 26.6.2. The default shell is x86_64 under Rosetta; qualification used native arm64 Python 3.12.16 and `/opt/homebrew/bin/ffmpeg` 9.0.2 with libopus. MLX 0.32.4, mlx-audio 0.6.3, and the lockfile's Python 3.12 runtime were used; Metal was available.
+- **Checkpoint:** `mlx-community/Breeze-TTS-2-mlx-4bit`, pinned revision `3a06d26b172ea4ae1da2f42d708383e9c79d5526`. Cold model load took 135.7 s including an uncached 2.8 GiB download. A standalone short sample generated 5.12 s of audio in 13.76 s (first-run RTF 2.69); the process peaked at 1.36 GiB RSS and 6.92 GiB peak footprint in that run.
+- **End-to-end:** a 631-character article script produced 43.61 s of Opus in 57.1 s across one chunk; a representative 5,003-character article produced 354.37 s in 410.9 s across five chunks (RTF 1.16); a 1,996-character frozen edition produced 149.06 s in 179.2 s across two chunks (RTF 1.20). Output sizes were 206,689, 1,712,163 and 717,703 bytes respectively. Article and edition endpoints returned HEAD 200 and Range 206 with valid Ogg Opus metadata. The edition remained `email_requested=True` and `published`.
+- **Qualification still open:** no subjective listening review was performed; Docker CLI is absent, so the actual Mac-worker-to-Docker-host topology, host sleep/reconnect, and restart recovery were not exercised. System-wide swap readings were observed during other running workloads and cannot be attributed to this worker; do not treat them as TTS-specific evidence. The 3.01 GB figure is checkpoint size only.

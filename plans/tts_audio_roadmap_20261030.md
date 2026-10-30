@@ -1,6 +1,6 @@
 # Optional local narration — article and edition TTS roadmap
 
-**Status:** SOFTWARE IMPLEMENTATION COMPLETE at code commit `d4bc9c0`; intended Apple Silicon/Metal qualification remains **OPEN**.
+**Status:** SOFTWARE IMPLEMENTATION COMPLETE at `d4bc9c0` and `8f977d0`; native Apple Silicon/Metal smoke is **VERIFIED** on M4 Pro. Human listening and actual Docker-host topology/recovery remain **OPEN**.
 **Date:** 2026-10-30
 **Priority:** Optional private-instance feature; all switches default OFF.
 **Handoff:** plan/optional-tts-mlx-audio-20261030.
@@ -50,6 +50,6 @@ The no-TTS baseline behaves as before. All publication paths (editor finalizatio
 
 Registered by entry in plans/plan.md. When implementing, update individual milestone status with exact commit SHA, test command/output, and hardware-specific observations; annotate this roadmap rather than retroactively rewriting historical evidence in other workstreams. Coordinate rebase/merge against PR #20 before implementing M4. Avoid changing its in-flight feature branch solely to carry these plans.
 
-## Implementation closure — 2026-10-30
+## Implementation and runtime closure — 2026-10-30
 
-M1–M4 software integration is recorded against `d4bc9c0`; see the per-milestone implementation evidence in the linked plans. The TTS-focused suite passed 11 tests, and migrations plus Celery/Beat registration passed 17 tests. Changed TTS modules passed Ruff and mypy. The full repository Ruff run reports five pre-existing findings in unrelated files. No Apple Silicon device is available in this workspace, so MLX/Metal inference, measured performance, listening review, and the intended-host reliability matrix remain **OPEN**. This software closure does not claim the feature has been qualified to run on the operator's Mac.
+M1–M4 software integration is recorded against `d4bc9c0` and `8f977d0`. The TTS-focused suite passed 12 tests, and migrations plus Celery/Beat registration passed 17 tests. Changed TTS modules passed Ruff and mypy. Native M4 Pro inference and article/edition HTTP media delivery were exercised with the pinned MLX/Breeze runtime; exact host and timing data are in M2 and M4. The default shell is x86_64 under Rosetta, so the qualification worker was explicitly run with native arm64 Python and Homebrew FFmpeg. Sample outputs are available under `/tmp/ainews-tts-qualification-samples/` for human listening review. Actual Mac-to-Docker networking/sleep/restart qualification remains **OPEN** because Docker CLI is unavailable. The full repository Ruff run reports five pre-existing findings in unrelated files. No public release or subscriber send was performed.

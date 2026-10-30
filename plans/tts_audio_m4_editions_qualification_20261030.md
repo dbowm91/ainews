@@ -1,6 +1,6 @@
 # TTS M4 — Frozen newsletter editions, email independence and private-host qualification
 
-**Status:** IMPLEMENTED — edition software integration complete; Apple Silicon qualification **OPEN**. Code commit `d4bc9c0`.
+**Status:** IMPLEMENTED — edition software integration and native M4 Pro runtime smoke **VERIFIED**; listening review and Docker-host topology **OPEN**. Code commits `d4bc9c0` and `8f977d0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P1 integration and operational closure.
 **Dependencies:** M1–M3, plus PR #20 newsletter edition work merged/reconciled into the implementation branch.
@@ -38,5 +38,6 @@ No podcast publishing feed in this milestone, no independent user-uploaded text-
 ## Implementation evidence — 2026-10-30
 
 - **Code:** `d4bc9c0`. Integration targets the merged PR #20 `NewsletterEdition`/`NewsletterEditionItem` schema. Jobs use ordered frozen edition content; job creation happens only after edition commit and does not inspect or wait for email delivery. Public archive, REST and MCP DTOs expose audio metadata only for a current READY asset. Edition audio remains gated by the archive switch and TTS policy.
-- **Tests:** the 11-test TTS command in M1 passed; the edition case verifies frozen ordered content, source URL exclusion, idempotency, and that an email-requested edition creates narration work without changing email state. Migration/Beat checks passed (17 tests).
-- **Qualification:** **OPEN** for Apple Silicon/Metal smoke, representative short/long article and edition listening, measured model load/RTF/memory/swap, and intended Mac-to-Docker sleep/restart topology. No subscriber send or external publication was performed.
+- **Tests:** all 12 TTS tests passed; the edition case verifies frozen ordered content, source URL exclusion, idempotency, and that an email-requested edition creates narration work without changing email state. Migration/Beat checks passed (17 tests).
+- **Native runtime:** On Apple M4 Pro / macOS 26.6.2, native arm64 Python 3.12.16, MLX 0.32.4, mlx-audio 0.6.3 and pinned Breeze revision `3a06d26b172ea4ae1da2f42d708383e9c79d5526`, a published frozen edition with `email_requested=True` completed two chunks in 179.2 s, yielding 149.06 s of mono Ogg Opus (717,703 bytes). The public edition media route returned HEAD 200 and Range 206. See M2 for short and long article measurements and cold-load data.
+- **Still open:** human listening review (clipping, pronunciation, pacing, seams) and actual native-Mac-to-Docker-host networking, sleep/reconnect and restart recovery. Docker CLI is not installed here. No subscriber send or external publication was performed.

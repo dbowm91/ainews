@@ -14,6 +14,8 @@ Article and immutable newsletter edition narration is off by default. Enabling i
    ~/ainews-tts-venv/bin/pip install -r tts_worker/requirements-macos-arm64.lock
    ```
 
+   Ensure the worker's `PATH` selects Apple Silicon Homebrew tools, normally `/opt/homebrew/bin` before `/usr/local/bin`. This matters when the interactive shell itself is running under Rosetta: an x86_64 FFmpeg can otherwise be selected even though Python and MLX are native arm64.
+
 The lock pins mlx-audio 0.6.3 and MLX 0.32.4 along with their dependencies. The upstream API returns generation-result objects with audio and sample-rate fields; the worker checks the installed `generate()` signature at runtime before using instruction and CFG controls. See the [pinned Breeze implementation](https://github.com/Blaizzy/mlx-audio/blob/v0.6.3/mlx_audio/tts/models/breeze_tts/breeze_tts.py) and [MLX-Audio API reference](https://github.com/Blaizzy/mlx-audio/blob/main/docs/api-reference/tts.md).
 4. Run the worker in the foreground first, with a private service URL and token supplied through its environment:
 
@@ -33,7 +35,7 @@ The server stores verified Ogg Opus under `instance/tts` (the Docker `app-data` 
 
 Breeze weights and self-hosted outputs follow the BreezeBlue research/non-commercial license, independently of the MIT license on mlx-audio. Commercial use requires separate authorization. The admin enable switch requires an explicit license confirmation. Do not add publisher source text, personalized email HTML, citations, or arbitrary reader prompts to a job. Reference voice upload is not exposed.
 
-The 4-bit checkpoint is reported at about 3.01 GB on disk. That is not a peak RAM requirement. A real qualification still needs the target Mac: cold and warm generation, peak memory pressure and swap, real-time factor, long-article chunk seams, pacing, clipping, repeated voice direction, sleep/restart recovery, and listening review. The current workspace is Intel Mac, so no MLX/Metal hardware result is claimed here. Use the CPU fake backend for integration tests.
+The 4-bit checkpoint is reported at about 3.01 GB on disk. That is not a peak RAM requirement. Native runtime evidence on an Apple M4 Pro (24 GiB, macOS 26.6.2) used arm64 Python 3.12.16, MLX 0.32.4, mlx-audio 0.6.3 and the pinned model revision above. A cold model load including download took 135.7 seconds; a representative 5,003-character article generated 354.37 seconds of Opus in 410.9 seconds (RTF 1.16), and a frozen newsletter edition generated 149.06 seconds in 179.2 seconds (RTF 1.20). This confirms a native inference and media-transfer smoke, not a human quality review. Listening for pronunciation, clipping and chunk seams, plus Docker-host network/sleep/restart qualification, remains open. Use the CPU fake backend for repeatable integration tests.
 
 ## Private protocol
 

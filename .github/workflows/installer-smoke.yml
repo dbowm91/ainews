@@ -28,7 +28,7 @@ jobs:
   # ── Build test artifact (shared by all installer jobs) ──────────────
   build-artifact:
     name: Build test artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       artifact_name: ${{ steps.build.outputs.artifact_name }}
       checksum: ${{ steps.build.outputs.checksum }}
@@ -51,8 +51,18 @@ jobs:
           cat > ainews <<'WRAPPER'
           #!/bin/bash
           set -euo pipefail
-          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-          exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
+          # Resolve symlinks (the entry point is symlinked into ~/.local/bin).
+          SOURCE="${BASH_SOURCE[0]}"
+          while [ -L "$SOURCE" ]; do
+            SOURCE="$(readlink "$SOURCE")"
+          done
+          SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+          # Run from the install root so `python -m` resolves the shipped
+          # source tree. The .venv console-script shebangs carry absolute
+          # build-time paths and break when the venv is relocated, so the
+          # venv's own python with `-m` is the relocation-proof entry point.
+          cd "$SCRIPT_DIR" || exit 1
+          exec "${SCRIPT_DIR}/.venv/bin/python" -m ainews_cli "$@"
           WRAPPER
           chmod +x ainews
 
@@ -88,7 +98,7 @@ jobs:
           CHECKSUM=$(sha256sum "${ARTIFACT_NAME}" | awk '{print $1}')
           sha256sum "${ARTIFACT_NAME}" > SHA256SUMS
 
-          echo "name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
           echo "checksum=${CHECKSUM}" >> "$GITHUB_OUTPUT"
 
           echo "Artifact: ${ARTIFACT_NAME} (${CHECKSUM})"
@@ -106,7 +116,7 @@ jobs:
   clean-host-linux-x86_64:
     name: "Clean host Linux x86_64"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Download test artifact
@@ -293,7 +303,7 @@ jobs:
   deferred-prerequisite:
     name: "Deferred prerequisite"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Download test artifact
@@ -403,8 +413,18 @@ jobs:
           cat > ainews <<'WRAPPER'
           #!/bin/bash
           set -euo pipefail
-          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-          exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
+          # Resolve symlinks (the entry point is symlinked into ~/.local/bin).
+          SOURCE="${BASH_SOURCE[0]}"
+          while [ -L "$SOURCE" ]; do
+            SOURCE="$(readlink "$SOURCE")"
+          done
+          SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+          # Run from the install root so `python -m` resolves the shipped
+          # source tree. The .venv console-script shebangs carry absolute
+          # build-time paths and break when the venv is relocated, so the
+          # venv's own python with `-m` is the relocation-proof entry point.
+          cd "$SCRIPT_DIR" || exit 1
+          exec "${SCRIPT_DIR}/.venv/bin/python" -m ainews_cli "$@"
           WRAPPER
           chmod +x ainews
 
@@ -447,8 +467,10 @@ jobs:
         run: |
           INSTALL_DIR="${HOME}/.local/share/ainews"
           CONFIG_DIR="${HOME}/.config/ainews"
+          DATA_DIR="${HOME}/.local/share/ainews/data"
+          STATE_DIR="${HOME}/.local/state/ainews"
 
-          mkdir -p "${INSTALL_DIR}/app" "${CONFIG_DIR}"
+          mkdir -p "${INSTALL_DIR}/app" "${CONFIG_DIR}" "${DATA_DIR}" "${STATE_DIR}"
           tar -xzf "$ARTIFACT" -C "${INSTALL_DIR}/app" --strip-components=1
 
           if [[ ! -f "${INSTALL_DIR}/app/ainews" ]]; then
@@ -546,7 +568,7 @@ jobs:
   docker-unavailable:
     name: "Docker unavailable"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Download test artifact
@@ -587,7 +609,7 @@ jobs:
   full-lifecycle:
     name: "Full lifecycle"
     needs: build-artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Download test artifact
@@ -671,11 +693,11 @@ jobs:
           BOOTSTRAP
 
           # Set admin password for bootstrap
-          export AINEWS_ADMIN_PASSWORD="ci-lifecycle-password-123"
+          export AINEWS_ADMIN_PASSWORD="Ci-Lifecycle-123-Validate!"
 
           # Run onboarding (validates bootstrap, executes stages, writes metadata)
-          echo "=== Running ainews onboard --bootstrap ==="
-          ainews onboard --non-interactive --bootstrap /tmp/bootstrap.yaml
+          echo "=== Running ainews onboard --non-interactive --config-file ==="
+          ainews onboard --non-interactive --config-file /tmp/bootstrap.yaml
           ONBOARD_EXIT=$?
           echo "Onboarding exit code: $ONBOARD_EXIT"
 
@@ -700,19 +722,47 @@ jobs:
 
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-          HASHED_ADMIN_PW=$(python3 "${INSTALL_DIR}/scripts/hash_password.py" ci-lifecycle-password-123 2>/dev/null | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+
+          # Diagnose a missing interpreter or script before hashing (the
+          # tarball venv must survive relocation for this to work).
+          if [[ ! -x "${INSTALL_DIR}/.venv/bin/python" ]]; then
+            echo "ERROR: venv python missing at ${INSTALL_DIR}/.venv/bin/python"
+            ls -la "${INSTALL_DIR}/" "${INSTALL_DIR}/.venv/bin/" 2>&1 | head -20
+            exit 1
+          fi
+          if [[ ! -f "${INSTALL_DIR}/scripts/hash_password.py" ]]; then
+            echo "ERROR: hash_password.py missing under ${INSTALL_DIR}/scripts"
+            ls -la "${INSTALL_DIR}/" 2>&1 | head -20
+            exit 1
+          fi
+
+          HASH_ERR="$(mktemp)"
+          HASHED_ADMIN_PW=$("${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/scripts/hash_password.py" "Ci-Lifecycle-123-Validate!" 2>"$HASH_ERR" | grep "ADMIN_PASSWORD=" | tail -1 | cut -d= -f2-)
+
+          if [ -z "$HASHED_ADMIN_PW" ]; then
+            echo "ERROR: Failed to hash admin password"
+            cat "$HASH_ERR"
+            rm -f "$HASH_ERR"
+            exit 1
+          fi
+          rm -f "$HASH_ERR"
 
           cat > "${INSTALL_DIR}/.env" <<EOF
           FLASK_CONFIG=production
           SECRET_KEY=${SECRET_KEY}
           ADMIN_PASSWORD=${HASHED_ADMIN_PW}
           CELERY_TASK_SECRET=${CELERY_TASK_SECRET}
-          DATABASE_URL=sqlite:///app/instance/prod.db
+          DATABASE_URL=sqlite:////app/instance/prod.db
           CELERY_BROKER_URL=redis://redis:6379/0
           CELERY_RESULT_BACKEND=redis://redis:6379/1
           OLLAMA_MODEL=llama3.1
           OLLAMA_HOST=http://ollama:11434
           LOG_FORMAT=text
+          # Dummy creds so the shipped providers.yaml (opencode, enabled)
+          # passes fail-closed shape validation. The smoke test never calls
+          # a provider: db-migrate runs migrations, web only serves /health.
+          OPENCODE_API_KEY=ci-dummy-key-not-a-secret
+          OPENCODE_SESSION_ID=ci-dummy-session
           EOF
           chmod 600 "${INSTALL_DIR}/.env"
           echo ".env written"
@@ -738,14 +788,21 @@ jobs:
           docker compose up -d redis db-migrate
           echo "Waiting for db-migrate..."
 
-          # Wait for db-migrate to complete
-          TIMEOUT=120
+          # Wait for db-migrate to complete (40+ migrations need headroom).
+          # NOTE: `docker compose ps` only lists running containers, so a
+          # finished one-shot container is invisible to it. Poll via
+          # `docker inspect` like scripts/ci_compose_smoke.sh does.
+          TIMEOUT=300
           ELAPSED=0
+          DB_MIGRATE_CONTAINER=""
           while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-            STATUS=$(docker compose ps db-migrate --format '{{.State}}' 2>/dev/null || echo "unknown")
-            if [[ "$STATUS" == "exited" ]]; then
-              EXIT_CODE=$(docker compose ps db-migrate --format '{{.ExitCode}}' 2>/dev/null || echo "1")
-              if [[ "$EXIT_CODE" == "0" ]]; then
+            if [ -z "$DB_MIGRATE_CONTAINER" ]; then
+              DB_MIGRATE_CONTAINER=$(docker compose ps -q db-migrate 2>/dev/null || true)
+            fi
+            STATUS=$(docker inspect --format='{{.State.Status}}' "$DB_MIGRATE_CONTAINER" 2>/dev/null || echo "unknown")
+            if [ "$STATUS" = "exited" ]; then
+              EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$DB_MIGRATE_CONTAINER" 2>/dev/null || echo "1")
+              if [ "$EXIT_CODE" = "0" ]; then
                 echo "db-migrate completed (${ELAPSED}s)"
                 break
               else
@@ -848,37 +905,133 @@ jobs:
           fi
 
   # ── Workstream 1: macOS arm64 ──────────────────────────────────────
+  # NOTE: macOS builds its own artifact natively. The shared
+  # build-artifact job produces a Linux venv whose binaries cannot execute
+  # on macOS, so downloading it here would only prove that tar works.
   clean-host-macos:
     name: "Clean host macOS arm64"
-    needs: build-artifact
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - name: Download test artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: installer-test-artifact
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Write wrapper script
+        run: |
+          cat > ainews <<'WRAPPER'
+          #!/bin/bash
+          set -euo pipefail
+          # Resolve symlinks (the entry point is symlinked into ~/.local/bin).
+          SOURCE="${BASH_SOURCE[0]}"
+          while [ -L "$SOURCE" ]; do
+            SOURCE="$(readlink "$SOURCE")"
+          done
+          SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+          # Run from the install root so `python -m` resolves the shipped
+          # source tree. The .venv console-script shebangs carry absolute
+          # build-time paths and break when the venv is relocated, so the
+          # venv's own python with `-m` is the relocation-proof entry point.
+          cd "$SCRIPT_DIR" || exit 1
+          exec "${SCRIPT_DIR}/.venv/bin/python" -m ainews_cli "$@"
+          WRAPPER
+          chmod +x ainews
+
+      - name: Build macOS artifact
+        run: |
+          VERSION="0.0.0-ci"
+          PLATFORM="macos-aarch64"
+          ARTIFACT_NAME="ainews-${VERSION}-${PLATFORM}.tar.gz"
+
+          STAGING="staging/ainews"
+          mkdir -p "${STAGING}"
+
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='staging' \
+            --exclude='htmlcov' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            --exclude='.mypy_cache' \
+            --exclude='.ruff_cache' \
+            --exclude='instance' \
+            --exclude='*.egg-info' \
+            --exclude='dist' \
+            --exclude='build' \
+            . "${STAGING}/"
+
+          mv .venv "${STAGING}/.venv"
+          mv ainews "${STAGING}/ainews"
+
+          tar -czf "${ARTIFACT_NAME}" -C staging ainews
+          CHECKSUM=$(shasum -a 256 "${ARTIFACT_NAME}" | awk '{print $1}')
+          echo "Artifact: ${ARTIFACT_NAME} (${CHECKSUM})"
+          echo "${CHECKSUM}  ${ARTIFACT_NAME}" > SHA256SUMS
+
+          # Store for install step
+          echo "ARTIFACT=${ARTIFACT_NAME}" >> "$GITHUB_ENV"
+
       - name: Install to canonical macOS paths
         run: |
           INSTALL_DIR="${HOME}/.local/share/ainews"
           CONFIG_DIR="${HOME}/.config/ainews"
+          DATA_DIR="${HOME}/.local/share/ainews/data"
+          STATE_DIR="${HOME}/.local/state/ainews"
 
-          mkdir -p "${INSTALL_DIR}/app" "${CONFIG_DIR}"
-          tar -xzf "${{ needs.build-artifact.outputs.artifact_name }}" \
-            -C "${INSTALL_DIR}/app" --strip-components=1
+          mkdir -p "${INSTALL_DIR}/app" "${CONFIG_DIR}" "${DATA_DIR}" "${STATE_DIR}"
+          tar -xzf "$ARTIFACT" -C "${INSTALL_DIR}/app" --strip-components=1
 
-          chmod 755 "${INSTALL_DIR}/app/ainews" 2>/dev/null || true
+          if [[ ! -f "${INSTALL_DIR}/app/ainews" ]]; then
+            echo "FAIL: ainews entry point not found"
+            ls -la "${INSTALL_DIR}/app/"
+            exit 1
+          fi
+          chmod 755 "${INSTALL_DIR}/app/ainews"
+
           mkdir -p "${HOME}/.local/bin"
           ln -sf "${INSTALL_DIR}/app/ainews" "${HOME}/.local/bin/ainews"
 
-          export PATH="${HOME}/.local/bin:$PATH"
+          echo "Installation complete"
 
+      - name: Write install metadata
+        run: |
+          CONFIG_DIR="${HOME}/.config/ainews"
+          CHECKSUM=$(shasum -a 256 "$ARTIFACT" | awk '{print $1}')
+
+          python3 -c "
+          import json, datetime
+          meta = {
+              'schema_version': 1,
+              'install_type': 'main',
+              'version': '0.0.0-ci',
+              'commit': '${GITHUB_SHA::8}',
+              'artifact': '${ARTIFACT}',
+              'artifact_sha256': '${CHECKSUM}',
+              'installed_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'install_root': '${HOME}/.local/share/ainews',
+              'config_dir': '${CONFIG_DIR}',
+              'data_dir': '${HOME}/.local/share/ainews/data',
+              'state_dir': '${HOME}/.local/state/ainews',
+              'installer_version': '3.0.0'
+          }
+          with open('${CONFIG_DIR}/install-metadata.json', 'w') as f:
+              json.dump(meta, f, indent=2)
+          print('Metadata written')
+          "
+
+      - name: Verify ainews version
+        run: |
+          export PATH="${HOME}/.local/bin:$PATH"
           echo "=== ainews version (macOS) ==="
           ainews version
           echo "  macOS install: OK"

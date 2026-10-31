@@ -117,53 +117,59 @@ def _candidate_ids(  # noqa: C901 - bounded candidate generation keeps scope and
     if query_tokens:
         quoted_tokens = [f'"{token.replace(chr(34), "")}"' for token in query_tokens[:12]]
         fts_queries = list(dict.fromkeys((" AND ".join(quoted_tokens), " OR ".join(quoted_tokens))))
+        scope_terms: list[str] = []
+        params: dict[str, object] = {
+            "category": category_id,
+            "now": now,
+            "high_cutoff": high_review_cutoff,
+        }
+        if exclude_article_id is not None:
+            params["exclude_article_id"] = exclude_article_id
+        if scope in ("own", "combined"):
+            scope_terms.append("m.owner_category = :category")
+        if scope in ("shared", "combined"):
+            scope_terms.append(
+                "EXISTS (SELECT 1 FROM memory_scopes s "
+                "WHERE s.memory_id = m.id AND s.scope_type = 'shared' "
+                "AND s.scope_id = 'global')"
+            )
+        status_clause = "m.status IN ('active')"
+        review_clause = " AND (m.importance < 3 OR (m.review_due_at IS NOT NULL AND m.review_due_at > :high_cutoff))"
+        if historical:
+            status_clause = "m.status IN ('active','synthesized','superseded','archived')"
+            review_clause = ""
+        expiry_clause = "" if historical else " AND (m.expires_at IS NULL OR m.expires_at > :now)"
+        scoped_sql = " OR ".join(scope_terms) or "0"
+        ranked_matches: dict[int, float] = {}
         try:
-            scope_terms: list[str] = []
-            params: dict[str, object] = {
-                "category": category_id,
-                "now": now,
-                "high_cutoff": high_review_cutoff,
-            }
-            if exclude_article_id is not None:
-                params["exclude_article_id"] = exclude_article_id
-            if scope in ("own", "combined"):
-                scope_terms.append("m.owner_category = :category")
-            if scope in ("shared", "combined"):
-                scope_terms.append(
-                    "EXISTS (SELECT 1 FROM memory_scopes s "
-                    "WHERE s.memory_id = m.id AND s.scope_type = 'shared' "
-                    "AND s.scope_id = 'global')"
-                )
-            status_clause = "m.status IN ('active')"
-            review_clause = " AND (m.importance < 3 OR (m.review_due_at IS NOT NULL AND m.review_due_at > :high_cutoff))"
-            if historical:
-                status_clause = "m.status IN ('active','synthesized','superseded','archived')"
-                review_clause = ""
-            expiry_clause = "" if historical else " AND (m.expires_at IS NULL OR m.expires_at > :now)"
-            scoped_sql = " OR ".join(scope_terms) or "0"
-            ranked_matches: dict[int, float] = {}
-            for fts_query in fts_queries:
-                remaining = candidate_cap - len(ranked_matches)
-                if remaining <= 0:
-                    break
-                params["query"] = fts_query
-                params["limit"] = remaining
-                matches = db.session.execute(
-                    db.text(
-                        "SELECT f.rowid, rank FROM memory_items_fts AS f "
-                        "JOIN memory_items AS m ON m.id = f.rowid "
-                        "WHERE memory_items_fts MATCH :query "
-                        f"AND ({scoped_sql}) AND {status_clause}{expiry_clause}{review_clause} "
-                        f"{source_exclusion} ORDER BY rank LIMIT :limit"
-                    ),
-                    params,
-                ).all()
-                for value in matches:
-                    ranked_matches.setdefault(int(value[0]), float(value[1]))
-            fts_matches = ranked_matches
+            # SAVEPOINT (not a full rollback): the FTS virtual table may
+            # not exist, and recovering must not discard the caller's
+            # uncommitted work (e.g. an in-flight article on the edit
+            # path). Rolling back only to the savepoint keeps the outer
+            # transaction — and its pending writes — intact.
+            with db.session.begin_nested():
+                for fts_query in fts_queries:
+                    remaining = candidate_cap - len(ranked_matches)
+                    if remaining <= 0:
+                        break
+                    params["query"] = fts_query
+                    params["limit"] = remaining
+                    matches = db.session.execute(
+                        db.text(
+                            "SELECT f.rowid, rank FROM memory_items_fts AS f "
+                            "JOIN memory_items AS m ON m.id = f.rowid "
+                            "WHERE memory_items_fts MATCH :query "
+                            f"AND ({scoped_sql}) AND {status_clause}{expiry_clause}{review_clause} "
+                            f"{source_exclusion} ORDER BY rank LIMIT :limit"
+                        ),
+                        params,
+                    ).all()
+                    for value in matches:
+                        ranked_matches.setdefault(int(value[0]), float(value[1]))
         except SQLAlchemyError as exc:
-            db.session.rollback()
             logger.info("Memory FTS5 unavailable; using bounded SQLite lexical fallback: %s", type(exc).__name__)
+        else:
+            fts_matches = ranked_matches
 
     pairs: list[MemoryCandidate] = []
     excluded_source = None

@@ -134,10 +134,10 @@ if [[ -n "$CLI_CONTENT" ]]; then
         warn "CLI may not have bash shebang"
     fi
 
-    if echo "$CLI_CONTENT" | grep -q '\.venv/bin/ainews'; then
-        pass "CLI references .venv/bin/ainews"
+    if echo "$CLI_CONTENT" | grep -q '\.venv/bin/python.*-m ainews_cli'; then
+        pass "CLI uses relocation-proof python -m entry point"
     else
-        warn "CLI may not reference .venv/bin/ainews"
+        warn "CLI may not use the relocation-proof entry point"
     fi
 else
     fail "CLI entry point not found"

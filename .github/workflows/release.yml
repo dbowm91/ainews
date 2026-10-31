@@ -28,7 +28,7 @@ jobs:
   # ── Gate: run the full test suite before building anything ──────────
   test:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -131,8 +131,18 @@ jobs:
           cat > ainews <<'WRAPPER'
           #!/bin/bash
           set -euo pipefail
-          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-          exec "${SCRIPT_DIR}/.venv/bin/ainews" "$@"
+          # Resolve symlinks (the entry point is symlinked into ~/.local/bin).
+          SOURCE="${BASH_SOURCE[0]}"
+          while [ -L "$SOURCE" ]; do
+            SOURCE="$(readlink "$SOURCE")"
+          done
+          SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+          # Run from the install root so `python -m` resolves the shipped
+          # source tree. The .venv console-script shebangs carry absolute
+          # build-time paths and break when the venv is relocated, so the
+          # venv's own python with `-m` is the relocation-proof entry point.
+          cd "$SCRIPT_DIR" || exit 1
+          exec "${SCRIPT_DIR}/.venv/bin/python" -m ainews_cli "$@"
           WRAPPER
           chmod +x ainews
 
@@ -342,7 +352,7 @@ jobs:
   checksums:
     name: Collect checksums
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Download all checksum files
         uses: actions/download-artifact@v4
@@ -369,7 +379,7 @@ jobs:
     name: Create release
     needs: [build, checksums]
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

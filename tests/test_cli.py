@@ -438,3 +438,16 @@ class TestOutputFormatter:
         data = json.loads(captured.out)
         assert len(data["diagnostics"]) == 1
         assert data["diagnostics"][0]["code"] == "E1"
+
+
+class TestDunderMain:
+    """The ``python -m ainews_cli`` entry point used by install wrappers."""
+
+    def test_main_module_invokes_app(self):
+        """__main__ delegates to the Typer app (relocation-proof entry)."""
+        import runpy
+        from unittest.mock import patch
+
+        with patch("ainews_cli.main.app") as mock_app:
+            runpy.run_module("ainews_cli", run_name="__main__")
+            mock_app.assert_called_once_with()

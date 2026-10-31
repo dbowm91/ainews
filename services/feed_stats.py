@@ -111,12 +111,12 @@ def get_topic_counts(limit: int = RECENT_WINDOW) -> tuple[TopicCount, ...]:
 
 def get_impact_leaders(limit: int = IMPACT_LEADER_LIMIT) -> tuple[ImpactLeader, ...]:
     """Return the highest ranked articles."""
-    rows: list[tuple[Any, Any, Any, Any]] = list(db.session.execute(
+    rows = db.session.execute(
         select(Article.public_id, Article.original_title, Article.impact_score, Article.category)
         .where(*published_article_filters(Article))
         .order_by(Article.impact_score.desc(), Article.id.desc())
         .limit(limit)
-    ).all())
+    ).all()
     return tuple(
         ImpactLeader(
             public_id=str(row_id),
@@ -144,11 +144,11 @@ def annotate_quality_scores(articles) -> None:
     if not article_ids:
         return
 
-    rows: list[tuple[Any, Any]] = list(db.session.execute(
+    rows = db.session.execute(
         select(QualityReport.article_id, QualityReport.overall_score)
         .where(QualityReport.article_id.in_(article_ids))
         .order_by(QualityReport.created_at.desc())
-    ).all())
+    ).all()
 
     latest: dict[int, float] = {}
     for article_id, score in rows:

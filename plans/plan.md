@@ -25,19 +25,19 @@
 
 ## Active Plan Registry — EggFetch HTTP Transport Pilot (2026-10-30)
 
-**Status:** UPSTREAM E1–E3 GATES CLOSED by EggFetch 0.3.0; AInews E4 integration is implemented locally. User-approved scope excludes full provider parity, proxy checks, fixed five-minute prefill threshold, Intel macOS, and unsigned-tag cleanup. Slow-prefill, long response, structured output, streaming/disconnect, concurrency-cap, and cancellation-route checks pass. The full non-browser suite passes 5,044 tests (plus 2 targeted cancellation tests pass). Remaining: native Linux x86_64/aarch64 install/build checks.
+**Status:** E1–E4 ADOPTION QUALIFICATION COMPLETE; EggFetch 0.3.0 is qualified for AInews. User-approved scope excludes full provider parity, proxy checks, a fixed five-minute prefill threshold, Intel macOS, and unsigned-tag cleanup. Direct ASGI slow-prefill/long-response, structured output, streaming/disconnect, concurrency-cap, and cancellation-route checks pass. All 5,050 GitHub CI tests pass with no test failures; the Linux full suite passes 5,048 tests. Clean-host installation/lifecycle checks pass on Linux x86_64, Linux aarch64, and macOS arm64. Existing repository-wide CI gates remain red: 73.60% coverage vs. the 80% threshold and 122 audit findings across dependencies unchanged by EggFetch. These are tracked as baseline maintenance, not EggFetch adoption blockers.
 **Master workstream:** [EggFetch HTTP transport pilot](eggfetch_transport_pilot_20261030.md).
 
-The pilot evaluates EggFetch as an owned, provider-neutral transport for AInews's LLM adapters. The local worktree contains the integration; it has not been merged or applied to the running development instance. Upstream compatibility and packaging work is closed in EggFetch 0.3.0. Remaining qualification is limited to relevant AInews paths, direct ASGI behavior, full-suite completion, and Linux checks. Proxy testing is out of scope. The pilot concludes with adoption only after the open gates in E4 pass, or records a defer/no-go decision.
+The pilot evaluates EggFetch as an owned, provider-neutral transport for AInews's LLM adapters. The integration is pushed on the adoption branch/PR and has not been merged or applied to the running development instance. Upstream compatibility and packaging work is closed in EggFetch 0.3.0. Relevant AInews paths, direct ASGI behavior, full suites, and target-platform checks are qualified. Proxy testing is out of scope. E4 records the Adopt decision and HTTPX rollback path.
 
 The work is tracked in four implementation handoffs. E1–E3 are closed upstream; E4 governs the local implementation and final adoption decision:
 
 1. **E1 (P0, closed upstream):** [SDK-compatible EggFetch transport bridge](eggfetch_e1_sdk_transport_bridge_20261030.md) — HTTPX transport integration and supported provider injection points.
 2. **E2 (P0, closed upstream):** [Phase-correct response-header read timeout](eggfetch_e2_read_timeout_semantics_20261030.md) — timeout semantics, regression matrix, and HTTPX exception mapping.
 3. **E3 (P1, closed upstream):** [Linux aarch64 packaging and release qualification](eggfetch_e3_platform_release_qualification_20261030.md) — platform artifact, exact-SHA checks, URL compatibility, and stable required upstream suite.
-4. **E4 (P1, active):** [AInews conformance and ASGI requalification](eggfetch_e4_ainews_requalification_20261030.md) — provider contracts, Python 3.12 target matrix, ASGI/local-inference checks, and final adopt/defer decision.
+4. **E4 (P1, complete):** [AInews conformance and ASGI requalification](eggfetch_e4_ainews_requalification_20261030.md) — provider contracts, Python 3.12 target matrix, ASGI/local-inference checks, and Adopt decision.
 
-E1–E3 were upstream EggFetch implementation work and are now closed by the published 0.3.0 release; E4 owns AInews integration and application qualification. The release workflow resolved the previously intermittent benchmark proxy fixture and built/smoke-tested the supported artifacts. The user accepts v0.3.0 provenance for adoption; tag-signing cleanup is later manual work. AInews's direct ASGI qualification is required; proxy testing is out of scope.
+E1–E3 were upstream EggFetch implementation work and are now closed by the published 0.3.0 release; E4's AInews integration and application qualification are complete. The release workflow resolved the previously intermittent benchmark proxy fixture and built/smoke-tested the supported artifacts. The user accepts v0.3.0 provenance for adoption; tag-signing cleanup is later manual work. AInews was qualified through direct ASGI; proxy testing is out of scope.
 
 ## Active Plan Registry — Editorial Memory, Shared Blackboard, and Pipeline Offload (2026-10-29)
 

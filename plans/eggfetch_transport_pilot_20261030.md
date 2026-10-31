@@ -1,6 +1,6 @@
 # EggFetch HTTP Transport Pilot
 
-**Status:** AInews INTEGRATION IMPLEMENTED LOCALLY; ADOPTION QUALIFICATION NEAR COMPLETE — upstream E1–E3 gates are closed by EggFetch 0.3.0. User-approved qualification excludes broad provider parity, proxy tests, fixed five-minute prefill duration, Intel macOS, and tag-signing cleanup. Slow-prefill, long-response, structured-output, streaming/disconnect, limiter-cap, and full non-browser suite evidence is recorded. Linux target qualification is the remaining environment-dependent item. See [E4 qualification results](eggfetch_e4_ainews_requalification_20261030.md#qualification-results--2026-10-31).
+**Status:** ADOPTION QUALIFIED — EggFetch 0.3.0 is integrated and passes direct ASGI inference, transport contracts, full test runs, and clean-host qualification on Linux x86_64, Linux aarch64, and macOS arm64. User-approved scope excludes broad provider parity, proxy tests, a fixed five-minute prefill duration, Intel macOS, and tag-signing cleanup. The PR's remaining red checks are inherited repository-wide gates: total coverage below 80% and 122 audit findings in existing dependencies. See [E4 qualification results](eggfetch_e4_ainews_requalification_20261030.md#qualification-results--2026-10-31).
 **Date:** 2026-10-30
 **Owner:** AInews maintainers, with upstream EggFetch collaboration for compatibility findings.
 **Registry:** [Master implementation plan](plan.md#active-plan-registry--eggfetch-http-transport-pilot-2026-10-30).
@@ -242,39 +242,45 @@ The user-directed 2026-10-31 scope supersedes the original broad matrix and
 unsigned-tag gate: qualify AInews paths in use, accept EggFetch 0.3.0
 provenance, exclude Intel macOS, and do not require proxy testing or a fixed
 five-minute prefill duration. The successful 95,223-token ASGI request and
-629.9-second response qualify large-prompt and long-read behavior. Adoption is
-still open only for Linux x86_64/aarch64 install/build checks through remote CI
-or native Linux. Direct ASGI checks now cover structured output,
-stream completion and disconnect cleanup, and two concurrent requests under a
-model/global concurrency cap of one. The full non-browser suite passed 5,044
-tests; two additional focused cancellation tests pass. Detailed evidence and rollback steps are in
+629.9-second response qualify large-prompt and long-read behavior. Remote CI
+has passed clean-host install/lifecycle checks for Linux x86_64, Linux
+aarch64, and macOS arm64. Direct ASGI checks cover structured output, stream
+completion and disconnect cleanup, and concurrent requests under a
+model/global concurrency cap of one. The full Linux non-browser suite passed
+5,048 tests, and full GitHub CI passed all 5,050 tests. Detailed evidence and
+the HTTPX rollback steps are in
 [E4](eggfetch_e4_ainews_requalification_20261030.md).
 
 ### Original research gates (superseded by E1–E4)
 
 This list records the gates identified by the original pilot research. E1–E3
-have since closed in EggFetch 0.3.0; the AInews-specific open work is tracked in
-the current qualification above and in E4.
+have since closed in EggFetch 0.3.0, and E4 has completed AInews-specific
+qualification.
 
 1. **Closed in E2/EggFetch 0.3.0:** HTTPX-compatible H1/H2 response-header read timeout with regression coverage.
 2. **Closed in E1/EggFetch 0.3.0:** the SDK-compatible transport bridge and OpenAI SDK compatibility fixture.
-3. **Upstream release gate closed in E3/EggFetch 0.3.0:** Python 3.12 Linux aarch64 wheel publication and release smoke. AInews's native install/build qualification on Linux x86_64 and Linux aarch64 remains open.
-4. **Still open in E4:** complete direct ASGI qualification, including high-prefill local inference, concurrency, streaming/tool use, and cancellation/cleanup. The active development server remains untouched.
+3. **Closed in E3/E4:** Python 3.12 Linux aarch64 wheel publication and clean-host install/lifecycle qualification on Linux x86_64, Linux aarch64, and macOS arm64.
+4. **Closed in E4:** direct ASGI qualification for high-prefill inference, long generation, concurrency, streaming, structured output, and admin cancellation control-path behavior. The active development server remained untouched.
 5. **Closed in E4 implementation:** Ollama 0.6.1 transport construction was corrected to use its documented `transport=` argument and is covered by the focused provider suite.
 
-Until these AInews-specific gates close, keep this as a local pilot change and
-do not merge/release the EggFetch runtime switch. If qualification fails, use
-the documented HTTPX rollback path. The release-provenance caveat is accepted
-by the user for this adoption; unsigned-tag cleanup is deferred manual work.
+AInews-specific qualification is complete and the decision is **Adopt EggFetch
+0.3.0**. Keep the documented HTTPX rollback path available. Two repository-wide
+CI gates remain red on both `main` and this branch: total test coverage remains
+below the configured 80% floor, and `pip-audit` reports vulnerabilities in
+existing locked packages. The adoption branch has no test failures, raises
+aggregate coverage from the latest `main` run's 66.18% to 73.60%, and adds no
+dependency version changes other than EggFetch itself. These baseline gates
+should be tracked as repository maintenance rather than treated as EggFetch
+qualification failures. Release provenance is accepted; unsigned-tag cleanup
+is deferred manual work.
 
 ### Blocker closure research — 2026-10-30
 
-This section turns the open gates into ordered work packages, with a recommended
-technical path and objective evidence required to reopen the adoption decision.
-It is research and does not authorize changing AInews's runtime dependency or
-the running development instance.
+This historical section records the research that preceded implementation. Its
+gate status and defer recommendation are superseded by the completed E1–E4
+qualification above. It does not describe remaining adoption work.
 
-The registered implementation handoffs are listed in [plans/plan.md](plan.md#active-plan-registry--eggfetch-http-transport-pilot-2026-10-30): E1 (SDK transport bridge), E2 (read timeout), E3 (platform and upstream release qualification), and E4 (AInews requalification). This pilot remains **Defer** until E1–E4 close.
+The registered implementation handoffs are listed in [plans/plan.md](plan.md#active-plan-registry--eggfetch-http-transport-pilot-2026-10-30): E1 (SDK transport bridge), E2 (read timeout), E3 (platform and upstream release qualification), and E4 (AInews requalification). All four plans are now closed for adoption qualification.
 
 #### B1 — Provide a supported SDK-compatible transport integration
 

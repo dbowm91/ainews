@@ -1,6 +1,6 @@
 # E4 — AInews Transport Conformance and ASGI Requalification
 
-**Status:** IMPLEMENTED LOCALLY; ADOPTION QUALIFICATION OPEN — EggFetch 0.3.0 closes the upstream E1–E3 release gate and the AInews integration is in the worktree. Native Apple Silicon frozen install and focused contracts pass. Full-suite regressions are diagnosed and being corrected; Linux target checks and some ASGI scenarios remain.
+**Status:** IMPLEMENTED AND QUALIFIED FOR ADOPTION — EggFetch 0.3.0 closes upstream E1–E3. Direct ASGI inference, transport behavior, full suites, and clean-host installs/builds on Linux x86_64, Linux aarch64, and macOS arm64 have passed. The PR's only failing jobs are the repository-wide coverage threshold and dependency audit; both also fail on `main` and are recorded below.
 **Priority:** P1 adoption decision gate.
 **Parent:** [EggFetch HTTP transport pilot](eggfetch_transport_pilot_20261030.md).
 **Dependencies:** [E1 transport bridge](eggfetch_e1_sdk_transport_bridge_20261030.md), [E2 timeout semantics](eggfetch_e2_read_timeout_semantics_20261030.md), [E3 platform/release qualification](eggfetch_e3_platform_release_qualification_20261030.md).
@@ -79,7 +79,7 @@ Any unexplained contract regression, unqualified supported platform, or timeout/
 - Provider cache clearing and replacement retire clients without interrupting in-flight long requests; current and retired SDK clients close at process exit.
 - Removed Intel macOS from uv's required environments and release artifacts. Installer rejects Intel macOS; README and artifact documentation now match the Apple Silicon target.
 - No proxy testing is required. Proxy qualification remains a separate testing activity.
-- Latest execution evidence and the precise remaining gates are recorded below. Do not treat this locally implemented pilot as an approved release switch until the open gates are closed.
+- Latest execution evidence and repository-wide CI limitations are recorded below. The AInews EggFetch adoption itself is qualified; the existing global coverage and dependency-audit gates remain separate repository maintenance work.
 - EggFetch 0.3.0's unsigned tag is accepted for this adoption. Repository release-signing cleanup is tracked as later manual maintenance.
 
 ## Qualification results — 2026-10-31
@@ -99,7 +99,7 @@ Any unexplained contract regression, unqualified supported platform, or timeout/
 - The final long-generation request completed successfully in **629.9 seconds** (112 input tokens, 26,049 output tokens; 145,519 response characters), with the ASGI request and provider timeout configured for 1,800 seconds. EggFetch/HTTPX logged one 200 response from LM Studio and the app returned a successful response; no retry occurred. This proves the long read/request path remains open for over ten minutes.
 - A subsequent 444 KB synthetic prompt completed in **146.3 seconds** with **95,223 input tokens** and 4 output tokens through direct ASGI, providing successful slow-prefill evidence. Earlier 37 KB/110.3-second and 82 KB/634 KB failures are historical attempts and are superseded by this successful request.
 - A request exceeding the development app's 64 KB body limit was rejected before inference and was discarded from transport conclusions.
-- Still required: live pipeline-task cancellation and worker cleanup evidence, full-suite completion, and Linux install/build qualification. The 95,223-token prefill, 629.9-second long-generation, ASGI concurrency, streaming, and structured-output checks are complete. Full parity comparisons across every adapter are not required.
+- The cancellation route contract verifies persisted cancelled state, task-index lookup, Celery task revocation with SIGTERM, and index cleanup. This is control-path evidence rather than a live in-flight Celery termination rehearsal. The 95,223-token prefill, 629.9-second long-generation, ASGI concurrency, streaming, and structured-output checks are complete. Full parity comparisons across every adapter are not required.
 
 ### ASGI follow-up — 2026-10-31
 
@@ -114,19 +114,22 @@ Any unexplained contract regression, unqualified supported platform, or timeout/
 - The previous non-browser suite stall came from stale limiter tests selecting a Lua script based on `INCR` even though the lease implementation uses sorted-set operations. The tests now map and verify the scripts registered by `ModelLimiter`; the stage test expects the configured two-hour limiter wait.
 - The first complete run exposed eight failures: four editor-context and two research-context tests assumed legacy trend-memory reads despite `memory_v2_enabled: true`; those tests now explicitly select the legacy branch they exercise. One provider failure test performed the real cancellation DB check without an app context; it now isolates that check. Alembic rollback can leave both branch revisions at the merge boundary, so its test checks both revisions and retained schema.
 - `pytest -q -m 'not browser' --timeout=120` on native macOS arm64 CPython 3.12.13: **5,044 passed, 2 skipped, 41 deselected in 401.57 seconds**. The new focused cancellation test module adds **2 passed** after this full run.
-- `uv lock --check` passed. Targeted Ruff passed for changed tests; repository-wide Ruff still reports five existing findings in unrelated modules. `mypy . --exclude .venv` reports two existing tuple-typing errors in unchanged `services/feed_stats.py`; `mypy tests/test_pipeline_cancellation.py` passes.
+- `uv lock --check` passed. The GitHub Ruff job passed. The full Mypy check initially exposed two SQLAlchemy row annotation errors in `services/feed_stats.py`; the inaccurate tuple annotations were removed, and `mypy . --exclude .venv` then passed locally across 531 source files. The focused cancellation module also passes Mypy.
 - A new admin cancellation test verifies persisted cancelled state, indexed/active/root task revocation with SIGTERM, and task-index cleanup. This is control-path coverage, not a live Celery worker termination rehearsal.
 
 ### Platform and release provenance
 
 - The initial behavior environment was CPython 3.12.13, macOS 26.6.2, x86_64 under Rosetta. It is not a target build. `uv sync --frozen` correctly cannot install the target lock on Intel macOS; the source-built local EggFetch package was used only for the x86 behavior run.
 - Native Apple Silicon CPython 3.12.13 completed `uv sync --frozen --extra dev --no-install-project` into a separate temporary environment, downloading the published EggFetch 0.3.0 macOS arm64 wheel and resolving the full lock (142 runtime packages plus 22 dev packages). The final focused command listed above passed **108 tests in 27.22s** on native arm64 with `--timeout=120`. The provider subset also passed separately (**64 tests in 12.71s**). An initial combined run used the default 30-second test timeout and hit a cold SciPy import timeout; the warmed, longer-timeout rerun passed.
-- Linux x86_64 and Linux aarch64 frozen install/import/request checks and supported Linux container builds remain unverified in this environment. Run them in target-native CI before adoption.
+- Remote CI clean-host qualification passed for Linux x86_64, Linux aarch64, and native macOS arm64. The Linux x86_64, Linux aarch64, and macOS arm64 artifact install/lifecycle checks all passed; Docker build, smoke tests, Compose smoke, theme tests, Trivy, Gitleaks, and GitGuardian also passed.
+- On the pushed AInews revision `c52e941`, the authorized Linux x86_64 host ran `pytest -q -m 'not browser' --timeout=120`: **5,048 passed, 41 deselected in 531.35 seconds**. GitHub CI ran the complete test set: **5,050 passed, 41 skipped**, with no test failures.
+- GitHub CI's `lint-and-test` job is red because the repository-wide 80% coverage threshold reports **73.60%**. The same gate failed on `main` at SHA `a5f50075ce52dc231bf83b270a61e18fe72c8332` with **66.18%** coverage and one test failure; this adoption branch has no test failures and raises aggregate coverage by 7.42 percentage points. Ruff passed. Mypy initially exposed two SQLAlchemy row annotation errors in `services/feed_stats.py`; after removing the inaccurate tuple annotations, `mypy . --exclude .venv` passes (531 source files). The full-project coverage floor remains below 80% and needs a separate coverage improvement effort rather than lowering the threshold for this integration.
+- `pip-audit` reports **122 known vulnerabilities across 18 packages**; EggFetch is not among them. Comparing the pre-adoption and adoption lockfiles shows no existing package version changes; EggFetch 0.3.0 is the only new package. The same `pip-audit` job failed on `main`. Record this as inherited dependency maintenance, not an EggFetch-specific regression.
 - EggFetch 0.3.0 was published through the recorded upstream release workflow, with 24 wheels and an sdist; native Apple Silicon and Linux aarch64 wheel smoke was recorded upstream. The user accepts its provenance for this adoption; signing cleanup is not a blocker.
 
 ### Current decision
 
-**Adopt after qualification; not yet approved for merge/release.** Slow-prefill, long-generation, structured output, stream completion/disconnect, limiter concurrency, and full non-browser suite checks have passed. The focused admin cancellation/revoke test also passes. Remaining: Linux install/build qualification in remote CI or native Linux. Keep the documented HTTPX rollback path available. EggFetch provenance and proxy qualification are closed for this decision.
+**Adopt EggFetch 0.3.0.** Slow-prefill, long-generation, structured output, stream completion/disconnect, limiter concurrency, full test suites, and all three target platform installation/build checks passed. The focused admin cancellation/revoke test also passes. The only open items are the repository-wide coverage-floor shortfall and inherited dependency audit findings; neither is specific to EggFetch. Keep the documented HTTPX rollback path available. EggFetch provenance and proxy qualification are closed for this decision.
 
 ## Original research snapshot — 2026-10-30 (historical; superseded by current qualification)
 

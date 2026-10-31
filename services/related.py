@@ -2,8 +2,8 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from constants import PipelineStatus
 from services.cache import get_response_cache
+from services.publication import published_article_filters
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def find_related_articles_cached(article, limit: int = 5) -> list:
             db.session.execute(
                 select(Article)
                 .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
-                .where(Article.id.in_(article_ids))
+                .where(Article.id.in_(article_ids), *published_article_filters(Article))
             )
             .unique()
             .scalars()
@@ -75,8 +75,7 @@ def find_related_articles(article, limit: int = 5):
             .filter(
                 article_tags.c.tag_id.in_(article_tag_ids),
                 Article.id != article.id,
-                Article.pipeline_status == PipelineStatus.DONE,
-                Article.final_article.isnot(None),
+                *published_article_filters(Article),
             )
             .group_by(Article.id)
             .subquery()
@@ -92,8 +91,7 @@ def find_related_articles(article, limit: int = 5):
                 )
                 .where(
                     Article.id != article.id,
-                    Article.pipeline_status == PipelineStatus.DONE,
-                    Article.final_article.isnot(None),
+                    *published_article_filters(Article),
                     Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
                 )
                 .order_by(
@@ -113,8 +111,7 @@ def find_related_articles(article, limit: int = 5):
                 .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
                 .where(
                     Article.id != article.id,
-                    Article.pipeline_status == PipelineStatus.DONE,
-                    Article.final_article.isnot(None),
+                    *published_article_filters(Article),
                     Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
                 )
                 .order_by(Article.created_at.desc())
@@ -178,8 +175,7 @@ def find_related_articles_dicts(
             .options(joinedload(Article.tags), joinedload(Article.source))  # type: ignore[arg-type]
             .where(
                 Article.id != exclude_id,
-                Article.pipeline_status == PipelineStatus.DONE,
-                Article.final_article.isnot(None),
+                *published_article_filters(Article),
                 Article.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
             )
             .order_by(Article.created_at.desc())

@@ -7,6 +7,8 @@
     <span class="subscribe-success" role="status">{{ subscribe_warning }}</span>
   {% elif subscribe_error %}
     <span class="subscribe-error" role="alert">{{ subscribe_error }}</span>
+  {% elif not newsletter_email_enabled %}
+    <span class="subscribe-info" role="status">Email subscriptions are currently disabled. Published editions remain available in the archive when enabled.</span>
   {% else %}
     <label for="subscribe-email" class="subscribe-label">
       {% if newsletter_type and newsletter_type != 'main' %}

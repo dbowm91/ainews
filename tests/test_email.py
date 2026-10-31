@@ -252,6 +252,7 @@ class TestSendSMTP:
         mock_smtp_class.return_value.starttls.assert_called_once()
         mock_smtp_class.return_value.sendmail.assert_called_once()
 
+
     @patch("services.email.smtplib.SMTP")
     @patch("services.email.get_smtp_config")
     def test_send_smtp_with_auth(self, mock_get_config, mock_smtp_class):
@@ -367,6 +368,7 @@ class TestEmailHtmlEscaping:
         assert "<script" not in html
         assert "&lt;script&gt;" in html
 
+
     @patch("services.email._send_smtp")
     def test_verification_escapes_script_in_newsletter_type(self, mock_send):
         from services.email import send_verification_email
@@ -380,6 +382,7 @@ class TestEmailHtmlEscaping:
         html = mock_send.call_args[0][2]
         assert "<script" not in html
         assert "&lt;script&gt;" in html
+
 
     @patch("services.email._send_smtp")
     def test_welcome_escapes_script_in_site_name(self, mock_send):
@@ -395,6 +398,7 @@ class TestEmailHtmlEscaping:
         assert "<script" not in html
         assert "&lt;script&gt;" in html
 
+
     @patch("services.email._send_smtp")
     def test_welcome_escapes_script_in_newsletter_type(self, mock_send):
         from services.email import send_welcome_email
@@ -407,3 +411,41 @@ class TestEmailHtmlEscaping:
         html = mock_send.call_args[0][2]
         assert "<script" not in html
         assert "&lt;script&gt;" in html
+
+
+def test_serialized_newsletter_message_has_rfc8058_headers(monkeypatch):
+    from email import message_from_string
+    from services.email import send_newsletter_email
+
+    captured = {}
+
+    class FakeSMTP:
+        def sendmail(self, sender, recipient, message):
+            captured.update(sender=sender, recipient=recipient, message=message)
+
+        def noop(self):
+            return 250, b"ok"
+
+    class FakePool:
+        def get_connection(self):
+            return FakeSMTP()
+
+        def return_connection(self, _server):
+            return None
+
+    monkeypatch.setattr("services.email.get_smtp_config", lambda: {
+        "host": "smtp.example.test", "port": 587, "user": "", "password": "",
+        "from_addr": "news@example.test", "use_tls": True,
+    })
+    monkeypatch.setattr("services.email._get_smtp_pool", lambda: FakePool())
+    send_newsletter_email(
+        "reader@example.test", "A safe edition", "<p>Edition content.</p>",
+        "https://news.example.test/unsubscribe/opaque-token",
+    )
+
+    message = message_from_string(captured["message"])
+    assert captured["recipient"] == "reader@example.test"
+    assert message["To"] == "reader@example.test"
+    assert message["Subject"] == "A safe edition"
+    assert message["List-Unsubscribe"] == "<https://news.example.test/unsubscribe/opaque-token>"
+    assert message["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"

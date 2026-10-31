@@ -36,6 +36,7 @@ def dead_letter_article(
     from extensions import db
 
     article.pipeline_status = PipelineStatus.FAILED
+    article.publicly_visible = False
     article.retry_count = 0
     article.total_retries = 0
     article.last_error = _build_error_message(reason, stage, error_detail)
@@ -126,6 +127,7 @@ def retry_dead_letter(article) -> bool:
     from extensions import db
 
     article.pipeline_status = PipelineStatus.PENDING
+    article.publicly_visible = False
     article.retry_count = 0
     article.total_retries = 0
     article.last_error = None

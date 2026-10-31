@@ -16,6 +16,7 @@ class TestGenerateNewsletterHTML:
 
             article = MagicMock()
             article.id = 1
+            article.public_id = "random-public-id"
             article.category = "ai"
             article.final_article = (
                 '{"headline": "Test Article", "tldr": "Test summary"}'
@@ -31,7 +32,7 @@ class TestGenerateNewsletterHTML:
             assert "<!DOCTYPE html>" in html
             assert "Test Newsletter" in html
             assert "Mar 24, 2026" in html
-            assert "https://example.com/track/newsletter-click/1" in html
+            assert "https://example.com/track/newsletter-click/random-public-id" in html
 
     def test_includes_executive_summary(self, app):
         """Test that executive summary is included when provided."""
@@ -84,6 +85,7 @@ class TestGenerateNewsletterHTML:
 
             article = MagicMock()
             article.id = 1
+            article.public_id = "random-public-id"
             article.category = None
             article.final_article = '{"headline": "Test", "tldr": "Summary"}'
 
@@ -130,6 +132,7 @@ class TestGenerateMainNewsletter:
             article = Article(
                 source_id=source.id,
                 pipeline_status="done",
+                publicly_visible=True,
                 impact_score=50,
                 original_title="Test Article",
                 final_article='{"headline": "Test", "tldr": "Summary"}',
@@ -165,6 +168,7 @@ class TestGenerateMainNewsletter:
                 article = Article(
                     source_id=source.id,
                     pipeline_status="done",
+                publicly_visible=True,
                     impact_score=50 - i,
                     original_title=f"Article {i}",
                     final_article=f'{{"headline": "Article {i}", "tldr": "Summary"}}',
@@ -196,6 +200,7 @@ class TestGenerateTopicNewsletter:
                 article = Article(
                     source_id=source.id,
                     pipeline_status="done",
+                publicly_visible=True,
                     impact_score=50,
                     category=category,
                     original_title=f"{category} Article",
@@ -428,19 +433,8 @@ class TestNewsletterHtmlWellFormed:
 class TestGenerateDailyNewsletters:
     """Tests for generate_daily_newsletters task."""
 
-    def test_raises_on_redis_error(self, app, monkeypatch):
-        """When Redis is unavailable, newsletter generation raises instead of proceeding."""
-        import redis.exceptions
-
-        monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
-
+    def test_generation_no_longer_depends_on_redis_lock(self, app):
+        """Publication uses database occurrence identity rather than a global Redis day lock."""
         with app.app_context():
-            from unittest.mock import patch
-
-            with patch("tasks.newsletter._check_newsletter_lock") as mock_check_lock:
-                mock_check_lock.side_effect = redis.exceptions.RedisError("connection refused")
-
-                from tasks.newsletter import _generate_daily_newsletters_core
-
-                with pytest.raises(redis.exceptions.RedisError):
-                    _generate_daily_newsletters_core("test-run-id", dry_run_email=None, run_id=None)
+            from tasks.newsletter import _generate_daily_newsletters_core
+            assert _generate_daily_newsletters_core("test-run-id", dry_run_email=None, run_id=None) == []

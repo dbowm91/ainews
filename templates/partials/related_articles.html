@@ -3,8 +3,8 @@
     <h2 class="section-heading">related articles</h2>
     <div class="related-grid">
       {% for rel in related_articles %}
-        <a href="/article/{{ rel.id }}" class="related-card"
-           hx-get="{{ url_for('public.article_detail', article_id=rel.id) }}"
+        <a href="/article/{{ rel.public_id }}" class="related-card"
+           hx-get="{{ url_for('public.article_detail', public_id=rel.public_id) }}"
            hx-target="#content" hx-swap="innerHTML" hx-push-url="true">
           <span class="related-category cat-{{ rel.category }}">{{ rel.category }}</span>
           <span class="related-title">{{ rel.original_title|e }}</span>

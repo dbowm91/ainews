@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from services.search.base import SearchProvider, register_db_search_provider
+from services.publication import published_sql_predicate
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +76,12 @@ class SQLiteFTSProvider(SearchProvider):
         offset = (page - 1) * per_page
 
         if category:
-            sql = text("""
+            sql = text(f"""
                 SELECT a.id, rank
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.pipeline_status IN ('done', 'skipped')
+                  AND {published_sql_predicate('a')}
                   AND a.category = :category
                 ORDER BY rank
                 LIMIT :limit OFFSET :offset
@@ -92,12 +93,12 @@ class SQLiteFTSProvider(SearchProvider):
                 "offset": offset,
             }
         else:
-            sql = text("""
+            sql = text(f"""
                 SELECT a.id, rank
                 FROM articles_fts fts
                 JOIN articles a ON a.id = fts.rowid
                 WHERE articles_fts MATCH :query
-                  AND a.pipeline_status IN ('done', 'skipped')
+                  AND {published_sql_predicate('a')}
                 ORDER BY rank
                 LIMIT :limit OFFSET :offset
             """)

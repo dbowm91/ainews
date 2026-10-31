@@ -1,0 +1,59 @@
+{% extends "base_admin.html" %}
+{% block title %}Newsletter settings{% endblock %}
+{% block content %}
+<section class="admin-section">
+  <h1>Newsletter profiles</h1>
+  <p>Publication and email delivery are separate. Scheduled times use the selected timezone. Fall-back repeats run once at the first occurrence; spring-forward missing times are skipped.</p>
+  <label><input id="global-email-enabled" type="checkbox"> Enable email delivery globally</label>
+  <button id="save-global-email" type="button">Save delivery setting</button>
+  <output id="global-result" aria-live="polite"></output>
+  {% if not profiles %}<p>No profiles yet. Publishing or saving a profile creates it.</p>{% endif %}
+  <label for="profile">Profile</label><select id="profile">{% for p in profiles %}<option value="{{ p.key }}">{{ p.title }} ({{ p.key }})</option>{% endfor %}</select>
+  <div id="settings-form" hidden>
+    <label><input id="enabled" type="checkbox"> Publication enabled</label>
+    <label><input id="email-enabled" type="checkbox"> Email delivery enabled</label>
+    <label>Timezone <input id="timezone" value="UTC" maxlength="64"></label>
+    <label>Maximum stories <input id="max-articles" type="number" min="1" max="20"></label>
+    <label>Minimum impact <input id="min-impact" type="number" min="0"></label>
+    <label>Daily times (HH:MM, one per line) <textarea id="times" rows="4"></textarea></label>
+    <fieldset><legend>Run on</legend>
+      {% for day, name in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri'),(5,'Sat'),(6,'Sun')] %}<label><input class="weekday" type="checkbox" value="{{ day }}" checked>{{ name }}</label>{% endfor %}
+    </fieldset>
+    <p>Next scheduled slots: <output id="next-slots">Not scheduled</output></p>
+    <button id="save" type="button">Save profile</button><output id="result" aria-live="polite"></output>
+    <button id="preview" type="button">Preview</button>
+    <label><input id="send-now" type="checkbox"> Send this edition to eligible subscribers after publication</label>
+    <button id="publish" type="button">Publish edition</button>
+    <pre id="preview-result" aria-live="polite"></pre>
+    <section id="delivery-section" hidden><h2>Latest edition delivery</h2>
+      <button id="refresh-deliveries" type="button">Refresh delivery status</button>
+      <p id="delivery-counts" aria-live="polite"></p><div id="delivery-intents"></div>
+      <button id="retry-failed" type="button">Retry selected failed</button>
+      <button id="retry-unknown" type="button">Retry selected unknown (operator reviewed)</button>
+      <button id="cancel-pending" type="button">Cancel selected pending</button>
+    </section>
+  </div>
+</section>
+<script>
+(() => {
+ const selector=document.getElementById('profile'), form=document.getElementById('settings-form');
+ const csrf={{ csrf_token()|tojson }};
+ let editionId=null, policyRevision=null;
+ fetch('/api/v1/newsletter-delivery',{credentials:'same-origin'}).then(r=>r.json()).then(v=>document.getElementById('global-email-enabled').checked=v.email_enabled);
+ document.getElementById('save-global-email').addEventListener('click',async()=>{const r=await fetch('/api/v1/newsletter-delivery',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({email_enabled:document.getElementById('global-email-enabled').checked})});document.getElementById('global-result').textContent=r.ok?'Delivery setting saved':'Save failed';});
+ async function load(){ if(!selector.value){form.hidden=true;return;} const rows=await fetch('/api/v1/newsletter-profiles',{credentials:'same-origin'}).then(r=>r.json()); const p=rows.find(x=>x.key===selector.value); if(!p){form.hidden=true;return;} form.hidden=false;
+ policyRevision=p.policy_revision; document.getElementById('enabled').checked=p.enabled; document.getElementById('email-enabled').checked=p.email_enabled; document.getElementById('timezone').value=p.timezone;
+ document.getElementById('max-articles').value=p.max_articles; document.getElementById('min-impact').value=p.min_impact; document.getElementById('times').value=p.schedules.map(s=>s.time).join('\n');
+ editionId=p.last_edition; document.getElementById('delivery-section').hidden=!editionId;
+ const days=[...new Set(p.schedules.flatMap(s=>s.weekdays))]; document.querySelectorAll('.weekday').forEach(box=>box.checked=days.length===0||days.includes(Number(box.value)));
+ document.getElementById('next-slots').textContent=p.next_slots?.length?p.next_slots.join(' · '):'No upcoming slots'; }
+ selector.addEventListener('change',load);
+ document.getElementById('preview').addEventListener('click',async()=>{const r=await fetch('/api/v1/newsletter-profiles/'+encodeURIComponent(selector.value)+'/preview',{method:'POST',credentials:'same-origin',headers:{'X-CSRFToken':csrf}});document.getElementById('preview-result').textContent=JSON.stringify(await r.json(),null,2);});
+ document.getElementById('publish').addEventListener('click',async()=>{const send=document.getElementById('send-now').checked;if(send&&!window.confirm('Publish this immutable edition and send it to eligible subscribers?'))return;const r=await fetch('/api/v1/newsletter-profiles/'+encodeURIComponent(selector.value)+'/publish',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({send})});const data=await r.json();document.getElementById('preview-result').textContent=JSON.stringify(data,null,2);if(r.ok){editionId=data.public_id;document.getElementById('delivery-section').hidden=false;refreshDeliveries();}});
+ async function refreshDeliveries(){if(!editionId)return;const r=await fetch('/api/v1/newsletter-editions/'+encodeURIComponent(editionId)+'/deliveries',{credentials:'same-origin'});const data=await r.json();document.getElementById('delivery-counts').textContent='Edition '+editionId+' · '+JSON.stringify(data.counts||{});const list=document.getElementById('delivery-intents');list.replaceChildren();for(const intent of data.intents||[]){const row=document.createElement('label'),check=document.createElement('input'),text=document.createElement('span');check.type='checkbox';check.className='delivery-intent';check.value=String(intent.id);check.dataset.state=intent.state;text.textContent=' Intent '+intent.id+' · '+intent.state+' · attempts '+intent.attempt_count+(intent.error_code?' · '+intent.error_code:'');row.append(check,text);list.append(row,document.createElement('br'));}}
+ async function manageDeliveries(action){const ids=[...document.querySelectorAll('.delivery-intent:checked')].filter(x=>action==='retry_unknown'?x.dataset.state==='unknown':action==='retry'?x.dataset.state==='failed':x.dataset.state==='pending').map(x=>Number(x.value));if(!ids.length){document.getElementById('delivery-counts').textContent='Select matching delivery intents first.';return;}const unknown=action==='retry_unknown';if(unknown&&!window.confirm('SMTP may already have accepted these messages. Retry can send duplicates. Continue?'))return;const r=await fetch('/api/v1/newsletter-editions/'+encodeURIComponent(editionId)+'/deliveries',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({action, intent_ids:ids, confirm_unknown_retry:unknown})});const data=await r.json();document.getElementById('delivery-counts').textContent=r.ok?'Updated '+data.updated+' intents':data.error||'Update failed';if(r.ok)refreshDeliveries();}
+ document.getElementById('refresh-deliveries').addEventListener('click',refreshDeliveries);document.getElementById('retry-failed').addEventListener('click',()=>manageDeliveries('retry'));document.getElementById('retry-unknown').addEventListener('click',()=>manageDeliveries('retry_unknown'));document.getElementById('cancel-pending').addEventListener('click',()=>manageDeliveries('cancel'));
+ document.getElementById('save').addEventListener('click',async()=>{const weekdays=[...document.querySelectorAll('.weekday:checked')].map(box=>Number(box.value));const schedules=document.getElementById('times').value.split(/\s+/).filter(Boolean).map(time=>({time,weekdays,enabled:true})); const body={policy_revision:policyRevision,enabled:document.getElementById('enabled').checked,email_enabled:document.getElementById('email-enabled').checked,timezone:document.getElementById('timezone').value,max_articles:Number(document.getElementById('max-articles').value),min_impact:Number(document.getElementById('min-impact').value),schedules}; const r=await fetch('/api/v1/newsletter-profiles/'+encodeURIComponent(selector.value),{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify(body)}); document.getElementById('result').textContent=r.ok?'Saved':(await r.json()).error||'Save failed'; if(r.ok)load();}); load();
+})();
+</script>
+{% endblock %}

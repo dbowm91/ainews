@@ -47,6 +47,8 @@ class ServiceUnitSpec:
     wanted_by: str = "multi-user.target"
     after: list[str] = field(default_factory=list)
     requires: list[str] = field(default_factory=list)
+    wants: list[str] = field(default_factory=list)
+    binds_to: list[str] = field(default_factory=list)
     documentation: str | None = None
     # Hardening
     no_new_privileges: bool = True

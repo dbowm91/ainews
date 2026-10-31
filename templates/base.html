@@ -109,7 +109,7 @@
       {% include "partials/subscribe_box.html" %}
     </div>
     {% endblock %}
-    <p class="footer-meta">ainews// &middot; autonomous news condensation &middot; <a href="/feed" hx-boost="false">feed</a> &middot; <a href="/admin/">admin</a></p>
+    <p class="footer-meta">ainews// &middot; autonomous news condensation &middot; <a href="/feed" hx-boost="false">feed</a> &middot; {% if config.NEWSLETTER_ARCHIVE_ENABLED %}<a href="{{ url_for('public.newsletter_archive') }}">Newsletters</a> &middot; {% endif %}{% if agent_access_enabled %}<a href="{{ url_for('public.agents_landing') }}">For AI agents</a> &middot; {% endif %}<a href="/admin/">admin</a></p>
   </footer>
 </body>
 </html>

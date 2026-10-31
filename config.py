@@ -107,6 +107,17 @@ def _is_strong_secret_key(key: str) -> bool:
 
 
 class Config:
+    # Reader APIs and MCP are opt-in on existing privately operated installs.
+    PUBLIC_API_ENABLED = os.environ.get("PUBLIC_API_ENABLED", "false").lower() == "true"
+    PUBLIC_MCP_ENABLED = os.environ.get("PUBLIC_MCP_ENABLED", "false").lower() == "true"
+    NEWSLETTER_ARCHIVE_ENABLED = os.environ.get("NEWSLETTER_ARCHIVE_ENABLED", "false").lower() == "true"
+    NEWSLETTER_MAX_RECIPIENTS_PER_EDITION = int(os.environ.get("NEWSLETTER_MAX_RECIPIENTS_PER_EDITION", "5000"))
+    SITE_URL = os.environ.get("SITE_URL", "http://localhost:5000").rstrip("/")
+    PUBLIC_ANONYMOUS_ENABLED = os.environ.get("PUBLIC_ANONYMOUS_ENABLED", "false").lower() == "true"
+    PUBLIC_LEGACY_NUMERIC_ARTICLE_URLS = os.environ.get("PUBLIC_LEGACY_NUMERIC_ARTICLE_URLS", "false").lower() == "true"
+    PUBLIC_AGENT_REQUESTS_PER_HOUR = int(os.environ.get("PUBLIC_AGENT_REQUESTS_PER_HOUR", "600"))
+    PUBLIC_ANONYMOUS_REQUESTS_PER_HOUR = int(os.environ.get("PUBLIC_ANONYMOUS_REQUESTS_PER_HOUR", "120"))
+    PUBLIC_GLOBAL_REQUESTS_PER_HOUR = int(os.environ.get("PUBLIC_GLOBAL_REQUESTS_PER_HOUR", "60000"))
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     SECRET_KEY_FALLBACKS = [
         os.environ.get("SECRET_KEY_PREVIOUS_1", ""),
@@ -219,6 +230,9 @@ class Config:
     CELERY_TASK_TRACK_STARTED = True
     CELERY_TASK_ACKS_LATE = True
     CELERY_TASK_REJECT_ON_WORKER_LOST = True
+    # Make worker/Beat startup through the standard Celery CLI load every
+    # registered task module without relying on an undocumented shell wrapper.
+    CELERY_IMPORTS = ("tasks",)
     CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
     CELERY_RESULT_EXPIRES = timedelta(hours=24)
     CELERY_TASK_SEND_SENT_EVENT = True
@@ -268,9 +282,13 @@ class Config:
                 "task": "tasks.retry.retry_stuck",
                 "schedule": timedelta(minutes=retry_interval),
             },
-            "generate-newsletters": {
-                "task": "tasks.newsletter.generate_daily_newsletters",
-                "schedule": crontab(hour=newsletters_hour, minute=0),
+            "newsletter-slot-tick": {
+                "task": "tasks.newsletter.newsletter_slot_tick",
+                "schedule": crontab(minute="*"),
+            },
+            "retry-newsletter-deliveries": {
+                "task": "tasks.newsletter.retry_failed_newsletter_deliveries",
+                "schedule": timedelta(minutes=5),
             },
             "cleanup-old-logs": {
                 "task": "tasks.cleanup.cleanup_old_pipeline_logs",
@@ -307,10 +325,6 @@ class Config:
             "cleanup-stale-limiter-slots": {
                 "task": "tasks.cleanup.cleanup_stale_limiter_slots",
                 "schedule": timedelta(minutes=cleanup_limiter_interval),
-            },
-            "retry-failed-newsletter-deliveries": {
-                "task": "tasks.newsletter.retry_failed_newsletter_deliveries",
-                "schedule": timedelta(hours=2),
             },
             "recalculate-impact-scores": {
                 "task": "tasks.cleanup.recalculate_impact_scores",
@@ -353,7 +367,9 @@ class DevelopmentConfig(Config):
         raise RuntimeError("SECRET_KEY must be changed from default value")
     SECRET_KEY: str = _secret_key_val
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-    SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'dev.db'}"
+    )
 
     # The rendered-page cache is a production concern. In development it
     # makes every template and CSS change look like it did not take effect:

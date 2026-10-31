@@ -64,69 +64,21 @@ check_deps() {
 start_services() {
     mkdir -p "$PID_DIR"
 
-    log_info "Starting development services..."
-
-    # Flask
-    log_info "Starting Flask dev server on http://localhost:5000"
-    (
-        cd "$PROJECT_DIR"
-        source .venv/bin/activate
-        flask run --reload --port 5000
-    ) > "$PID_DIR/flask.log" 2>&1 &
-    echo $! > "$PID_DIR/flask.pid"
-    log_info "  Flask PID: $(cat "$PID_DIR/flask.pid")"
-
-    # Celery Worker
-    log_info "Starting Celery worker"
-    (
-        cd "$PROJECT_DIR"
-        source .venv/bin/activate
-        celery -A celery_app:celery_app worker -l info --concurrency=2
-    ) > "$PID_DIR/celery-worker.log" 2>&1 &
-    echo $! > "$PID_DIR/celery-worker.pid"
-    log_info "  Celery worker PID: $(cat "$PID_DIR/celery-worker.pid")"
-
-    # Celery Beat
-    log_info "Starting Celery beat scheduler"
-    (
-        cd "$PROJECT_DIR"
-        source .venv/bin/activate
-        celery -A celery_app:celery_app beat -l info --schedule="$PID_DIR/celerybeat-schedule"
-    ) > "$PID_DIR/celery-beat.log" 2>&1 &
-    echo $! > "$PID_DIR/celery-beat.pid"
-    log_info "  Celery beat PID: $(cat "$PID_DIR/celery-beat.pid")"
-
+    log_info "Starting managed development services..."
+    "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" start
     sleep 2
-    log_info ""
-    log_info "All services started"
+    "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" status || true
     log_info ""
     log_info "  Flask:      http://localhost:5000"
     log_info "  Admin:      http://localhost:5000/admin/login"
     log_info "  Health:     http://localhost:5000/health"
     log_info ""
-    log_info "Logs:  tail -f $PID_DIR/flask.log"
+    log_info "Logs:  tail -f $PID_DIR/web.log"
     log_info "Stop:  bash scripts/dev.sh stop"
 }
 
 stop_services() {
-    log_info "Stopping development services..."
-
-    for svc in flask celery-worker celery-beat; do
-        pidfile="$PID_DIR/$svc.pid"
-        if [ -f "$pidfile" ]; then
-            pid=$(cat "$pidfile")
-            if kill -0 "$pid" 2>/dev/null; then
-                kill "$pid" 2>/dev/null
-                log_info "Stopped $svc (PID $pid)"
-            fi
-            rm -f "$pidfile"
-        fi
-    done
-
-    # Clean up any leftover celery processes
-    pkill -f "celery -A celery_app" 2>/dev/null || true
-
-    log_info "All services stopped"
+    "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" stop
 }
 
 show_status() {
@@ -134,19 +86,7 @@ show_status() {
     echo -e "${CYAN}Service Status${NC}"
     echo "=============================="
 
-    for svc in flask celery-worker celery-beat; do
-        pidfile="$PID_DIR/$svc.pid"
-        if [ -f "$pidfile" ]; then
-            pid=$(cat "$pidfile")
-            if kill -0 "$pid" 2>/dev/null; then
-                echo -e "  ${GREEN}running${NC}  $svc (PID $pid)"
-            else
-                echo -e "  ${RED}stopped${NC}  $svc (stale pidfile)"
-            fi
-        else
-            echo -e "  ${YELLOW}stopped${NC}  $svc"
-        fi
-    done
+    "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" status || true
     echo ""
 
     # Redis check

@@ -96,6 +96,20 @@ def newsletters():
     )
 
 
+@admin_bp.route("/newsletter-settings")
+@require_auth
+def newsletter_settings():
+    from models import NewsletterProfile
+    from schemas.topic import load_topics
+    from services.newsletter_editions import ensure_profile
+    ensure_profile("main", title="AInews")
+    for key, topic in load_topics().topics.items():
+        ensure_profile(key, title=topic.display_name)
+    db.session.commit()
+    profiles = NewsletterProfile.query.order_by(NewsletterProfile.scope, NewsletterProfile.key).all()
+    return render_template("admin/newsletter_settings.html", profiles=profiles)
+
+
 @admin_bp.route("/newsletters/<int:newsletter_id>")
 @require_auth
 def view_newsletter(newsletter_id):
@@ -240,8 +254,8 @@ def newsletter_preview():
     """Generate newsletter HTML preview without sending emails."""
     from datetime import datetime, timedelta, timezone
 
-    from constants import PipelineStatus
     from models import Article
+    from services.publication import published_article_filters
     from services.newsletter import generate_main_newsletter
     from services.newsletter_pipeline import generate_executive_summary
 
@@ -253,7 +267,7 @@ def newsletter_preview():
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     articles = (
         Article.query.filter(
-            Article.pipeline_status == PipelineStatus.DONE,
+            *published_article_filters(Article),
             Article.impact_score > 0,
             Article.created_at >= cutoff,
         )

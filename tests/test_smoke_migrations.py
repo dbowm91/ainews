@@ -230,6 +230,33 @@ class TestFlaskDbUpgrade:
             assert {"category_id", "last_memory_id", "updated_at"} <= cursor_columns
         finally:
             conn.close()
+    def test_publication_and_memory_parent_states_converge(self, tmp_path):
+        """Upgrade each independently deployable PR head through the merge."""
+        for parent in ("043_memory_synthesis_fairness_cursor", "044_llm_native_publication"):
+            db_path = tmp_path / f"{parent}.db"
+            env = _make_prod_env(tmp_path, _OLLAMA_PROVIDERS)
+            env["DATABASE_URL"] = f"sqlite:///{db_path}"
+            for revision in (parent, "head"):
+                result = subprocess.run(
+                    [sys.executable, "-m", "flask", "db", "upgrade", revision],
+                    cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
+                )
+                assert result.returncode == 0, (
+                    f"upgrade from {parent} to {revision} failed:\n"
+                    f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+                )
+            conn = sqlite3.connect(str(db_path))
+            try:
+                assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+                assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "046_newsletter_distribution_intent"
+                for table, column in (("newsletter_occurrences", "email_requested"),
+                                      ("newsletter_editions", "email_requested"),
+                                      ("newsletter_editions", "email_cancelled"),
+                                      ("delivery_intents", "claim_token")):
+                    assert column in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                assert conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_items'").fetchone()
+            finally:
+                conn.close()
 
 
 class TestMigrationDirectory:

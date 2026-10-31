@@ -26,6 +26,18 @@ logger = logging.getLogger(__name__)
 public_bp = Blueprint("public", __name__)
 
 
+@public_bp.context_processor
+def _agent_access_template_flags() -> dict[str, bool]:
+    try:
+        from services.agent_access import get_policy
+        from services.distribution.dispatch import email_channel_enabled
+        return {"agent_access_enabled": bool(get_policy()["api_enabled"]),
+            "newsletter_email_enabled": email_channel_enabled("main")}
+    except Exception:  # noqa: BLE001 - page rendering should survive a policy-store outage
+        logger.warning("Could not load public agent access policy for template navigation", exc_info=True)
+        return {"agent_access_enabled": False, "newsletter_email_enabled": False}
+
+
 def _render_feed_or_page(ctx: dict, full_template: str) -> str:
     """Render HTMX partial or full page based on request type."""
     if request.headers.get("HX-Request"):
@@ -73,7 +85,8 @@ def _get_tag_cloud() -> list[dict]:
         from sqlalchemy import func
 
         from extensions import db
-        from models import Tag, article_tags
+        from models import Article, Tag, article_tags
+        from services.publication import published_article_filters
 
         results = (
             db.session.query(
@@ -83,6 +96,8 @@ def _get_tag_cloud() -> list[dict]:
                 func.count(article_tags.c.article_id).label("count"),
             )
             .outerjoin(article_tags, Tag.id == article_tags.c.tag_id)
+            .outerjoin(Article, Article.id == article_tags.c.article_id)
+            .filter(*published_article_filters(Article))
             .group_by(Tag.id)
             .order_by(func.count(article_tags.c.article_id).desc())
             .all()
@@ -168,3 +183,5 @@ def health() -> tuple[Response, int]:
 from routes.public import feeds as feeds  # noqa: E402
 from routes.public import links as links  # noqa: E402
 from routes.public import subscribe as subscribe  # noqa: E402
+from routes.public import api as api  # noqa: E402
+from routes.public import newsletters as newsletters  # noqa: E402

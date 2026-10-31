@@ -6,8 +6,8 @@
   the lead renders first and the secondaries stack below it.
 #}
 {% macro top_impact_card(article, lead=False) %}
-  <a href="/article/{{ article.id }}"
-     hx-get="{{ url_for('public.article_detail', article_id=article.id) }}"
+  <a href="/article/{{ article.public_id }}"
+     hx-get="{{ url_for('public.article_detail', public_id=article.public_id) }}"
      hx-target="#content" hx-swap="innerHTML" hx-push-url="true"
      class="top-impact-card{% if lead %} top-impact-card--lead{% endif %}">
     <div class="top-impact-meta">

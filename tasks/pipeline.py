@@ -173,6 +173,10 @@ def _transition_article_status(article, new_status: str) -> None:
     if not is_valid_transition(current, new_status):
         raise InvalidStateTransitionError(article.id, current, new_status)
     article.pipeline_status = new_status
+    from services.publication import apply_publication_state
+    apply_publication_state(article)
+    from services.publication import invalidate_publication_cache
+    invalidate_publication_cache()
 
 
 def _check_stage_limiter(rc, task_self, retry_countdown, retry_max):

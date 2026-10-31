@@ -291,6 +291,13 @@ def send_newsletter_email(
     unsubscribe_url: str,
 ):
     """Send newsletter email with unsubscribe link injected into footer."""
+    from urllib.parse import urlsplit
+
+    parsed_unsubscribe = urlsplit(unsubscribe_url)
+    if parsed_unsubscribe.scheme != "https" or not parsed_unsubscribe.netloc:
+        raise ValueError("One-click unsubscribe URLs must use an HTTPS origin")
+    if any("\r" in value or "\n" in value for value in (email, subject, unsubscribe_url)):
+        raise ValueError("Email headers must not contain line breaks")
     safe_unsubscribe_url = html.escape(unsubscribe_url, quote=True)
     footer_html = f"""
         <tr>
@@ -321,7 +328,7 @@ def send_newsletter_email(
         html_content,
         extra_headers={
             "List-Unsubscribe": list_unsubscribe_url,
-            "List-Unsubscribe-Post": "One-Click",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
     )
 
@@ -370,11 +377,12 @@ def _send_smtp(to_email: str, subject: str, html_body: str, extra_headers: dict 
         logger.info("Email sent to %s: %s", to_email, subject)
         pool.return_connection(server)
         server = None
-    except smtplib.SMTPException as e:
-        logger.error("Failed to send email to %s: %s", to_email, e)
+    except BaseException as e:
+        if isinstance(e, smtplib.SMTPException):
+            logger.error("Failed to send email to %s: %s", to_email, e)
         if server is not None:
             try:
-                server.quit()
-            except smtplib.SMTPException:
+                server.close()
+            except Exception:  # noqa: BLE001 - preserve the transport exception
                 pass
         raise

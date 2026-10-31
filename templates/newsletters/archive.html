@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Newsletter archive · ainews//{% endblock %}
+{% block content %}
+<main class="container">
+  <h1>Newsletter archive</h1>
+  {% if not editions %}<p>No published editions yet.</p>{% endif %}
+  <ol class="newsletter-archive">
+    {% for edition in editions %}
+    <li><a href="{{ url_for('public.newsletter_detail', public_id=edition.public_id) }}">{{ edition.subject }}</a>
+      <time datetime="{{ edition.published_at.isoformat() }}">{{ edition.published_at.strftime('%Y-%m-%d %H:%M UTC') }}</time> · {{ edition.profile_key }} · {{ edition.items|length }} stories</li>
+    {% endfor %}
+  </ol>
+  {% if has_more %}<a href="?page={{ page + 1 }}{% if profile %}&profile={{ profile|urlencode }}{% endif %}">Older editions</a>{% endif %}
+</main>
+{% endblock %}

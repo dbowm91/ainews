@@ -33,6 +33,7 @@ def _make_article(
     """Create a mock article object with the attributes used by RSS functions."""
     art = MagicMock()
     art.id = id
+    art.public_id = f"public-story-{id}"
     art.original_title = original_title
     art.original_published_at = (
         original_published_at
@@ -110,8 +111,8 @@ class TestGenerateRssFeed:
         result = generate_rss_feed([art], title="T", description="D", site_url="http://s.com")
         assert "<item>" in result
         assert "<title>Parsed Headline</title>" in result
-        assert "<link>http://s.com/article/42</link>" in result
-        assert "<guid>http://s.com/article/42</guid>" in result
+        assert "<link>http://s.com/article/public-story-42</link>" in result
+        assert "<guid>http://s.com/article/public-story-42</guid>" in result
         assert "<description>Parsed TLDR</description>" in result
         assert "<category>AI</category>" in result
         assert "<author>Jane Doe</author>" in result
@@ -207,7 +208,7 @@ class TestGenerateSitemap:
             created_at=datetime(2025, 5, 1, 12, 0, 0, tzinfo=timezone.utc),
         )
         result = generate_sitemap([art], site_url="http://s.com")
-        assert "<loc>http://s.com/article/99</loc>" in result
+        assert "<loc>http://s.com/article/public-story-99</loc>" in result
         assert "<lastmod>2025-05-01</lastmod>" in result
         assert "<changefreq>weekly</changefreq>" in result
         assert "<priority>0.6</priority>" in result
@@ -218,7 +219,7 @@ class TestGenerateSitemap:
         mock_topics.return_value.topics = {}
         art = _make_article(id=100, created_at=None)
         result = generate_sitemap([art], site_url="http://s.com")
-        assert "<loc>http://s.com/article/100</loc>" in result
+        assert "<loc>http://s.com/article/public-story-100</loc>" in result
         assert "<lastmod>" not in result
 
     @patch("schemas.topic.load_topics")

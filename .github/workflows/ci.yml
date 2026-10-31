@@ -29,7 +29,24 @@ concurrency:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: test-ci-secret-key-00000000000000000000000000000000
+      CELERY_TASK_SECRET: test-ci-celery-secret-0000000000000000000000
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
 
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +64,9 @@ jobs:
 
       - name: Run ruff
         run: .venv/bin/ruff check . --exclude .venv
+
+      - name: Ensure instance directory exists
+        run: mkdir -p instance
 
       - name: Run tests with coverage
         run: .venv/bin/python -m pytest tests/ -x -q --cov --cov-report=html --cov-report=xml
@@ -71,7 +91,7 @@ jobs:
         run: .venv/bin/mypy . --exclude .venv
 
   pip-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +114,7 @@ jobs:
         run: .venv/bin/pip-audit
 
   trivy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -107,10 +127,36 @@ jobs:
           format: "table"
 
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Generate throwaway .env for compose
+        run: |
+          SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+          CELERY_TASK_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+          cat > .env <<EOF
+          FLASK_CONFIG=production
+          SECRET_KEY=${SECRET_KEY}
+          ADMIN_PASSWORD=""
+          CELERY_TASK_SECRET=${CELERY_TASK_SECRET}
+          DATABASE_URL=sqlite:////app/instance/prod.db
+          CELERY_BROKER_URL=redis://redis:6379/0
+          CELERY_RESULT_BACKEND=redis://redis:6379/1
+          EOF
+          chmod 600 .env
 
       - name: Validate Compose config
         run: docker compose config --quiet
@@ -136,9 +182,10 @@ jobs:
       - name: Production mode image smoke
         run: |
           SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-          HASHED_PW=$(python3 -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('ci-test-password-123'))")
+          HASHED_PW=$(.venv/bin/python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('ci-test-password-123'))")
           CELERY_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
           docker run --rm \
+            -v "$PWD/tests/fixtures:/fixtures:ro" \
             -e FLASK_CONFIG=production \
             -e SECRET_KEY="$SECRET_KEY" \
             -e ADMIN_PASSWORD="$HASHED_PW" \
@@ -146,12 +193,29 @@ jobs:
             -e DATABASE_URL=sqlite:////tmp/prod-smoke.db \
             -e CELERY_BROKER_URL=redis://localhost:6379/0 \
             -e CELERY_RESULT_BACKEND=redis://localhost:6379/1 \
-            -e LLM_PROVIDERS_FILE=/app/tests/fixtures/providers.ci.yaml \
+            -e LLM_PROVIDERS_FILE=/fixtures/providers.ci.yaml \
             ainews-ci \
             python -c "from app import create_app; create_app('production'); print('Production app factory OK')"
 
   smoke-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: test-ci-secret-key-00000000000000000000000000000000
+      CELERY_TASK_SECRET: test-ci-celery-secret-0000000000000000000000
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
 
     steps:
       - uses: actions/checkout@v4
@@ -180,7 +244,24 @@ jobs:
         run: .venv/bin/python -m pytest tests/test_docs_env_consistency.py -v
 
   theme-validation:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: test-ci-secret-key-00000000000000000000000000000000
+      CELERY_TASK_SECRET: test-ci-celery-secret-0000000000000000000000
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
 
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +299,7 @@ jobs:
         run: .venv/bin/python -m pytest tests/test_theme_package_validation.py -v
 
   theme-browser-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -254,16 +335,27 @@ jobs:
           retention-days: 7
 
   compose-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
 
       - name: Run Docker Compose boot smoke
         run: bash scripts/ci_compose_smoke.sh
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4

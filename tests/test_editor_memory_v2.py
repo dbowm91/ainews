@@ -904,3 +904,28 @@ def test_separate_editorial_maintenance_task_is_noop_while_disabled(app):
         result = maintain_editorial_memory.run()
 
     assert result == {"status": "disabled", "llm_calls": 0}
+
+
+def test_ensure_memory_schema_preserves_uncommitted_writes(app, create_article):
+    """Schema preflight must not roll back the caller's transaction.
+
+    ``inspect(db.engine)`` checks out a pooled connection whose close rolls
+    back uncommitted work on StaticPool-backed SQLite databases. The edit
+    stage calls ``ensure_memory_schema`` with a dirty article in flight;
+    the preflight must reflect through the session connection instead.
+    """
+    from extensions import db
+    from models import Article
+    from services.memory import memory_context
+    from services.memory.preflight import ensure_memory_schema
+
+    with app.app_context():
+        article = create_article(pipeline_status="editing")
+        article.topics = ["ai"]
+
+        ensure_memory_schema()
+
+        pack = memory_context("uncategorized", article.id, 200, "edit", query="Test Article")
+        assert pack is not None
+        assert article.id is not None
+        assert db.session.query(Article).count() == 1

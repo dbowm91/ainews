@@ -9,9 +9,9 @@
 ## Active Plan Registry — Optional Local TTS / Audio Narration (2026-10-30)
 
 **Status:** Software implementation complete at `d4bc9c0` and `8f977d0`; native M4 Pro runtime smoke, direct listening, and isolated restart/lease recovery verified; actual macOS sleep/wake remains OPEN for canonical non-Docker deployment; Docker topology deferred; TTS options default OFF.
-**Baseline:** main at 8fdfc61f9c7f450f686064a5cdb65fce020b9c04.  
-**Handoff branch:** plan/optional-tts-mlx-audio-20261030.  
-**Parent:** [Optional local narration roadmap](tts_audio_roadmap_20261030.md).  
+**Baseline:** main at 8fdfc61f9c7f450f686064a5cdb65fce020b9c04.
+**Handoff branch:** plan/optional-tts-mlx-audio-20261030.
+**Parent:** [Optional local narration roadmap](tts_audio_roadmap_20261030.md).
 **Integration dependency:** PR #20 (plan/llm-native-editions-delivery-20261029) for immutable NewsletterEdition and public publication/identity contracts; do not modify in-flight PR branch as part of planning.
 
 1. **M1 (P0):** [Durable post-publication jobs and deterministic narration scripts](tts_audio_m1_jobs_and_script_20261030.md) — IMPLEMENTED; post-publication and worker protocol tests recorded.

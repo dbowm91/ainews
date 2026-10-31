@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.cli_json import parse_cli_json
+from tests.cli_json import parse_cli_json, strip_ansi
 
 
 from typer.testing import CliRunner
@@ -21,11 +21,12 @@ class TestOnboardHelp:
 
     def test_help_shows_options(self):
         result = runner.invoke(app, ["onboard", "--help"])
-        assert "--config-file" in result.output
-        assert "--non-interactive" in result.output
-        assert "--dry-run" in result.output
-        assert "--reset" in result.output
-        assert "--start" in result.output
+        output = strip_ansi(result.output)
+        assert "--config-file" in output
+        assert "--non-interactive" in output
+        assert "--dry-run" in output
+        assert "--reset" in output
+        assert "--start" in output
 
 
 class TestOnboardNonInteractive:

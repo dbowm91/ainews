@@ -10,7 +10,21 @@ naive ``json.loads(result.output)``. These helpers read stdout only.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(output: str) -> str:
+    """Strip ANSI styling so assertions don't depend on terminal styling.
+
+    Rich interleaves style codes inside words when a terminal is detected
+    (GitHub Actions runners always set GITHUB_ACTIONS/FORCE_COLOR), which
+    breaks plain substring assertions on the raw ``--help`` output.
+    """
+    return _ANSI_ESCAPE.sub("", output)
 
 
 def cli_stdout(result: Any) -> str:

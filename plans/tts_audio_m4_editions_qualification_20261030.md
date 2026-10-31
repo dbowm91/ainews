@@ -1,6 +1,6 @@
 # TTS M4 — Frozen newsletter editions, email independence and private-host qualification
 
-**Status:** IMPLEMENTED — edition software integration and native M4 Pro runtime smoke **VERIFIED**; direct listening accepted overall with voice/accent drift observed; interruption/restart recovery **OPEN**. Docker topology is deferred. Code commits `d4bc9c0` and `8f977d0`.
+**Status:** IMPLEMENTED — edition software integration, native M4 Pro runtime smoke, and isolated worker/service restart recovery **VERIFIED**; direct listening accepted overall with voice/accent drift observed; actual Mac sleep/wake **OPEN**. Docker topology is deferred. Code commits `d4bc9c0` and `8f977d0`.
 **Parent:** [TTS roadmap](tts_audio_roadmap_20261030.md).
 **Priority:** P1 integration and operational closure.
 **Dependencies:** M1–M3, plus PR #20 newsletter edition work merged/reconciled into the implementation branch.
@@ -41,4 +41,5 @@ No podcast publishing feed in this milestone, no independent user-uploaded text-
 - **Tests:** all 12 TTS tests passed; the edition case verifies frozen ordered content, source URL exclusion, idempotency, and that an email-requested edition creates narration work without changing email state. Migration/Beat checks passed (17 tests).
 - **Native runtime:** On Apple M4 Pro / macOS 26.6.2, native arm64 Python 3.12.16, MLX 0.32.4, mlx-audio 0.6.3 and pinned Breeze revision `3a06d26b172ea4ae1da2f42d708383e9c79d5526`, a published frozen edition with `email_requested=True` completed two chunks in 179.2 s, yielding 149.06 s of mono Ogg Opus (717,703 bytes). The public edition media route returned HEAD 200 and Range 206. See M2 for short and long article measurements and cold-load data.
 - **Listening assessment:** direct listening found overall good quality, with an apparent unpredictable change in voice/accent. Chunk-to-chunk consistency remains a follow-up observation.
-- **Still open:** restart/recovery and Mac sleep/wake behavior for the canonical native worker and non-Docker service. Docker topology is deferred. No subscriber send or external publication was performed.
+- **Restart/recovery:** the isolated native worker reconnected after the local service restarted during inference. The first result upload failed while the service was down; the job remained leased until lease-expiry recovery returned it to pending. The worker reclaimed it on attempt 2, produced a single READY Opus asset, and the public media route returned HEAD 200 and Range 206. An idle worker stopped cleanly on SIGTERM, and the asset remained available after shutdown.
+- **Still open:** physical Mac sleep/wake and Metal runtime behavior across actual suspend/resume; long sleep was represented by expiring the isolated test lease. This recovery exercise used an isolated temporary SQLite instance and the canonical direct non-Docker topology. Docker topology is deferred. No subscriber send or external publication was performed.

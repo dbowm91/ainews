@@ -8,16 +8,16 @@
 
 ## Active Plan Registry — Optional Local TTS / Audio Narration (2026-10-30)
 
-**Status:** Software implementation complete at `d4bc9c0` and `8f977d0`; native M4 Pro runtime smoke and direct listening verified; restart/sleep recovery remains OPEN for canonical non-Docker deployment; Docker topology deferred; TTS options default OFF.
+**Status:** Software implementation complete at `d4bc9c0` and `8f977d0`; native M4 Pro runtime smoke, direct listening, and isolated restart/lease recovery verified; actual macOS sleep/wake remains OPEN for canonical non-Docker deployment; Docker topology deferred; TTS options default OFF.
 **Baseline:** main at 8fdfc61f9c7f450f686064a5cdb65fce020b9c04.  
 **Handoff branch:** plan/optional-tts-mlx-audio-20261030.  
 **Parent:** [Optional local narration roadmap](tts_audio_roadmap_20261030.md).  
 **Integration dependency:** PR #20 (plan/llm-native-editions-delivery-20261029) for immutable NewsletterEdition and public publication/identity contracts; do not modify in-flight PR branch as part of planning.
 
 1. **M1 (P0):** [Durable post-publication jobs and deterministic narration scripts](tts_audio_m1_jobs_and_script_20261030.md) — IMPLEMENTED; post-publication and worker protocol tests recorded.
-2. **M2 (P1):** [Native macOS MLX Breeze 4-bit, audio encoding and secure worker transfer](tts_audio_m2_mlx_worker_media_20261030.md) — SOFTWARE IMPLEMENTED; M4 Pro smoke and direct listening verified; restart/sleep recovery remains open.
+2. **M2 (P1):** [Native macOS MLX Breeze 4-bit, audio encoding and secure worker transfer](tts_audio_m2_mlx_worker_media_20261030.md) — SOFTWARE IMPLEMENTED; M4 Pro smoke and isolated restart/lease recovery verified; actual sleep/wake remains open.
 3. **M3 (P1):** [Admin settings, authenticated media serving and READY-only playback](tts_audio_m3_admin_playback_20261030.md) — IMPLEMENTED; ready-only playback and private admin preview are tested.
-4. **M4 (P1):** [Frozen newsletter narration and target-instance qualification](tts_audio_m4_editions_qualification_20261030.md) — EDITION SOFTWARE IMPLEMENTED; native runtime smoke and direct listening verified; restart/sleep recovery remains open.
+4. **M4 (P1):** [Frozen newsletter narration and target-instance qualification](tts_audio_m4_editions_qualification_20261030.md) — EDITION SOFTWARE IMPLEMENTED; native runtime smoke, direct listening, and isolated restart/lease recovery verified; actual sleep/wake remains open.
 
 **Policy:** Breeze TTS 2 self-hosted weights/quantizations/outputs are research/non-commercial only; enable only in a compliant private instance or obtain separate rights. No public release or restored-operator-database rehearsal is mandated. Implementation evidence and hardware qualification boundaries are recorded in the roadmap and M1–M4 plans. Code commits: `d4bc9c0`, `8f977d0`.
 

@@ -84,10 +84,16 @@ class TestRouteSecurityInventory:
             ADMIN_ROUTES,
             PUBLIC_AUTH_ROUTES,
             PUBLIC_ROUTES,
+            TTS_WORKER_ROUTES,
         )
 
         all_classified = (
-            PUBLIC_ROUTES | PUBLIC_AUTH_ROUTES | ADMIN_ROUTES | ADMIN_API_ROUTES | ADMIN_API_TOKEN_ROUTES
+            PUBLIC_ROUTES
+            | PUBLIC_AUTH_ROUTES
+            | ADMIN_ROUTES
+            | ADMIN_API_ROUTES
+            | ADMIN_API_TOKEN_ROUTES
+            | TTS_WORKER_ROUTES
         )
         unclassified = []
         for rule in app.url_map.iter_rules():

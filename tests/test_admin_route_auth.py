@@ -65,6 +65,7 @@ PUBLIC_ROUTES = {
     "public.newsletter_category_archive",
     "themes.serve_theme_css",
     "themes.theme_metadata",
+    "tts.audio",
 }
 
 # Routes that are intentionally public auth pages
@@ -95,6 +96,13 @@ ADMIN_ROUTES = {
     "admin.pipeline_audit",
     "admin.article_audit",
     "admin.settings",
+    "admin.update_tts_settings",
+    "admin.issue_tts_worker_token",
+    "admin.revoke_tts_worker_token",
+    "admin.tts_job_action",
+    "admin.tts_backfill",
+    "admin.queue_tts_preview",
+    "admin.tts_preview_audio",
     "admin.update_runtime",
     "admin.update_roles",
     "admin.update_providers",
@@ -218,6 +226,14 @@ ADMIN_API_TOKEN_ROUTES = {
     "api_tokens.delete_token",
 }
 
+# TTS worker protocol routes require a scoped worker bearer credential.
+TTS_WORKER_ROUTES = {
+    "tts.claim",
+    "tts.heartbeat",
+    "tts.fail",
+    "tts.result",
+}
+
 
 # ---------------------------------------------------------------------------
 # Route registration regression test
@@ -230,7 +246,14 @@ class TestRouteRegistration:
     def test_all_admin_routes_classified(self, app):
         """Fail if a new /admin, /api/v1, or /api-tokens route is added
         without being classified in the auth allowlists above."""
-        all_classified = PUBLIC_ROUTES | PUBLIC_AUTH_ROUTES | ADMIN_ROUTES | ADMIN_API_ROUTES | ADMIN_API_TOKEN_ROUTES
+        all_classified = (
+            PUBLIC_ROUTES
+            | PUBLIC_AUTH_ROUTES
+            | ADMIN_ROUTES
+            | ADMIN_API_ROUTES
+            | ADMIN_API_TOKEN_ROUTES
+            | TTS_WORKER_ROUTES
+        )
 
         unclassified = []
         for rule in app.url_map.iter_rules():

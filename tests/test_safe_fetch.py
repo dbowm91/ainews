@@ -88,15 +88,12 @@ def _patch_for_local_server(server_url: str, ips: list[str] | None = None):
     return _ctx()
 
 
-def _patch_for_redirect_test(server_url: str, ips: list[str] | None = None):
+def _patch_for_redirect_test(server_url: str):
     """Context manager for redirect tests.
 
     Bypasses _validate_and_resolve for the initial URL, but lets
     validate_url_safe (which calls _resolve_and_check) run for redirect targets.
     """
-    if ips is None:
-        ips = ["127.0.0.1"]
-
     def _patched_timeout(limits):
         return (limits.connect_timeout, limits.read_timeout)
 
@@ -110,10 +107,6 @@ def _patch_for_redirect_test(server_url: str, ips: list[str] | None = None):
             patch(
                 "services.safe_fetch._timeout_tuple",
                 side_effect=_patched_timeout,
-            ),
-            patch(
-                "services.url._resolve_and_check",
-                return_value=ips,
             ),
         ):
             yield

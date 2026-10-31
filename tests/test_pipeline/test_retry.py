@@ -105,7 +105,7 @@ class TestRetryStuck:
             yield MockArticle, mock_query
 
     def test_degrades_articles_over_max_retries(
-        self, mock_celery_tasks, mock_article_query
+        self, app, mock_celery_tasks, mock_article_query
     ):
         """Articles with retry_count >= MAX_STAGE_RETRIES should be degraded."""
         from services.pipeline_failure import _get_max_stage_retries
@@ -118,15 +118,16 @@ class TestRetryStuck:
             article
         ]
 
-        with patch("extensions.db"):
-            with patch("services.pipeline_degradation.degrade_stage") as mock_degrade:
-                result = retry_stuck()
+        with app.app_context():
+            with patch("extensions.db"):
+                with patch("services.pipeline_degradation.degrade_stage") as mock_degrade:
+                    result = retry_stuck()
 
         mock_degrade.assert_called_once()
         assert result["degraded"] == 1
         assert result["retried"] == 0
 
-    def test_retries_articles_under_max(self, mock_celery_tasks, mock_article_query):
+    def test_retries_articles_under_max(self, app, mock_celery_tasks, mock_article_query):
         """Articles with retry_count < MAX_STAGE_RETRIES should be retried."""
         from tasks.retry import retry_stuck
 
@@ -136,11 +137,12 @@ class TestRetryStuck:
             article
         ]
 
-        with patch("extensions.db"):
-            with patch("services.pipeline_degradation.degrade_stage") as mock_degrade:
-                with patch("tasks.retry._dead_letter") as mock_dead:
-                    with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
-                        result = retry_stuck()
+        with app.app_context():
+            with patch("extensions.db"):
+                with patch("services.pipeline_degradation.degrade_stage") as mock_degrade:
+                    with patch("tasks.retry._dead_letter") as mock_dead:
+                        with patch("services.pipeline_utils._dispatch_next") as mock_dispatch:
+                            result = retry_stuck()
 
         mock_dispatch.assert_called_once_with(article.id, article=article)
         mock_degrade.assert_not_called()
@@ -149,7 +151,7 @@ class TestRetryStuck:
         assert result["degraded"] == 0
         assert result["dead_lettered"] == 0
 
-    def test_sweep_survives_naive_timestamps(self, mock_celery_tasks, mock_article_query):
+    def test_sweep_survives_naive_timestamps(self, app, mock_celery_tasks, mock_article_query):
         """The whole sweep must complete when the DB returns naive timestamps.
 
         SQLite returns naive datetimes for timezone-less ``DateTime`` columns.
@@ -169,11 +171,12 @@ class TestRetryStuck:
             article
         ]
 
-        with patch("extensions.db"):
-            with patch("services.pipeline_degradation.degrade_stage"):
-                with patch("tasks.retry._dead_letter"):
-                    with patch("services.pipeline_utils._dispatch_next"):
-                        result = retry_stuck()
+        with app.app_context():
+            with patch("extensions.db"):
+                with patch("services.pipeline_degradation.degrade_stage"):
+                    with patch("tasks.retry._dead_letter"):
+                        with patch("services.pipeline_utils._dispatch_next"):
+                            result = retry_stuck()
 
         assert result["retried"] == 1
         assert result["degraded"] == 0

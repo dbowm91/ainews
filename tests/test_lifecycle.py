@@ -333,9 +333,15 @@ class TestBareMetalDriver:
         assert "stopped" in result.message.lower()
 
     def test_status_not_running(self, tmp_path):
+        from requests import ConnectionError as RequestsConnectionError
+
         paths = _make_resolved_paths(tmp_path)
         driver = BareMetalDriver(resolved_paths=paths)
-        result = driver.status()
+        with patch(
+            "ainews_cli.lifecycle.bare_metal.requests.get",
+            side_effect=RequestsConnectionError("no test server"),
+        ):
+            result = driver.status()
         assert result.success is False
         assert result.services[0].state == "stopped"
 

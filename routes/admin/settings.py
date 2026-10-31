@@ -58,6 +58,7 @@ def settings() -> str:
     worker_last_seen = db.session.query(func.max(TTSWorkerCredential.last_used_at)).filter_by(enabled=True, revoked_at=None).scalar()
     tts_credentials = TTSWorkerCredential.query.order_by(TTSWorkerCredential.created_at.desc()).all()
     tts_recent_jobs = NarrationJob.query.order_by(NarrationJob.updated_at.desc()).limit(25).all()
+    runtime = admin_settings.read_runtime()
 
     return render_template(
         "admin/settings.html",
@@ -67,6 +68,7 @@ def settings() -> str:
         topics=topics,
         schedule=schedule,
         review=review,
+        runtime=runtime,
         schedule_fields=admin_settings.SCHEDULE_FIELDS,
         topic_colors=admin_settings.TOPIC_COLORS,
         provider_ids=[p.id for p in providers],
@@ -329,6 +331,8 @@ def update_providers():
         fields: dict = {
             "enabled": bool(request.form.get(f"enabled_{provider.id}")),
             "model": request.form.get(f"model_{provider.id}", "").strip(),
+            "timeout_seconds": request.form.get(f"timeout_{provider.id}", str(provider.timeout_seconds)).strip(),
+            "retry_attempts": request.form.get(f"retry_attempts_{provider.id}", "1").strip(),
         }
         endpoint = request.form.get(f"endpoint_{provider.id}", "").strip()
         if endpoint:
@@ -351,6 +355,22 @@ def update_providers():
         return redirect(url_for("admin.settings"))
 
     flash(f"Updated {len(changed)} providers.", "success")
+    return redirect(url_for("admin.settings"))
+
+
+@admin_bp.route("/settings/runtime", methods=["POST"])
+@require_auth
+def update_runtime():
+    admin_settings = _services()
+    try:
+        changed = admin_settings.update_runtime(
+            request.form.get("max_concurrent_llm_requests", "").strip(),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Could not update inference settings: %s", e)
+        flash(f"Could not update inference settings: {e}", "error")
+        return redirect(url_for("admin.settings"))
+    flash(f"Updated inference settings: {', '.join(changed)}.", "success")
     return redirect(url_for("admin.settings"))
 
 

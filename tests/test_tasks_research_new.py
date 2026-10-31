@@ -350,9 +350,14 @@ class TestGetRelatedAndContext:
         assert topic_notes == ""
         assert trend_memory == ""
 
-    def test_populates_context_when_topics_exist(self):
+    def test_populates_context_when_topics_exist(self, monkeypatch):
         """Fetches topic_notes and trend_memory when topics exist."""
         from tasks.research import _get_related_and_context
+        from schemas.pipeline import load_pipeline_config
+
+        pipeline_config = load_pipeline_config()
+        pipeline_config.memory.memory_v2_enabled = False
+        monkeypatch.setattr("schemas.pipeline.load_pipeline_config", lambda: pipeline_config)
 
         article = MagicMock()
         article.topics = ["ai", "ml"]
@@ -379,9 +384,14 @@ class TestGetRelatedAndContext:
         assert topic_notes == "- note1\n- note2"
         assert trend_memory == "trend memory text"
 
-    def test_handles_empty_topic_notes(self):
+    def test_handles_empty_topic_notes(self, monkeypatch):
         """Handles empty topic_notes dict gracefully."""
         from tasks.research import _get_related_and_context
+        from schemas.pipeline import load_pipeline_config
+
+        pipeline_config = load_pipeline_config()
+        pipeline_config.memory.memory_v2_enabled = False
+        monkeypatch.setattr("schemas.pipeline.load_pipeline_config", lambda: pipeline_config)
 
         article = MagicMock()
         article.topics = ["ai"]
@@ -639,8 +649,8 @@ class TestResearchArticleTask:
         """Research must not be worker-killed before its bounded LLM calls finish."""
         from tasks.research import research_article
 
-        assert research_article.soft_time_limit == 1740
-        assert research_article.time_limit == 1800
+        assert research_article.soft_time_limit == 21600
+        assert research_article.time_limit == 21660
 
     def test_research_synthesis_budget_is_bounded(self):
         """Whole-subagent retries and excessive tool iterations stay disabled."""

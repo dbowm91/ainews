@@ -209,6 +209,11 @@ detect_platform() {
         *)               die "Unsupported CPU architecture: $(uname -m)" ;;
     esac
 
+    if [[ "$os" == "macos" && "$arch" == "x86_64" ]]; then
+        die "Intel macOS is not supported; use an Apple Silicon Mac or Linux host"
+        return 1
+    fi
+
     echo "${os}-${arch}"
 }
 

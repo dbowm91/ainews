@@ -2,9 +2,10 @@ import logging
 import time
 from typing import Any, Iterator, Optional, cast
 
-from constants import DEFAULT_LLM_TIMEOUT_SECONDS
+import httpx
 from schemas.common import resolve_env_vars
 from services.circuit_breaker import circuit_protected
+from services.llm.httpx_transport import create_eggfetch_transport
 from services.llm.base import (
     BaseLLMProvider,
     LLMResponse,
@@ -39,13 +40,26 @@ class GeminiProvider(BaseLLMProvider):
         cfg = GeminiConfig(**self.config)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
+        self.timeout_seconds = cfg.timeout_seconds
+        self.retry_attempts = cfg.retry_attempts
 
     def _create_client(self):
         from google import genai
 
+        transport = create_eggfetch_transport(
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        )
+
         return genai.Client(
             api_key=self.config.get("api_key"),
-            http_options={"timeout": DEFAULT_LLM_TIMEOUT_SECONDS},
+            # The application config is in seconds; Google GenAI expects ms.
+            http_options={
+                "timeout": self.timeout_seconds * 1000,
+                "client_args": {
+                    "transport": transport,
+                    "limits": httpx.Limits(max_connections=100, max_keepalive_connections=20),
+                },
+            },
         )
 
     def _build_contents(

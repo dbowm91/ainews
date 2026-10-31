@@ -26,23 +26,6 @@ check_deps() {
         missing=1
     fi
 
-    if ! command -v redis-cli &>/dev/null; then
-        log_error "Redis not found. Install: brew install redis (macOS) or apt install redis-server (Linux)"
-        missing=1
-    elif ! redis-cli ping &>/dev/null; then
-        log_warn "Redis is not running. Starting it..."
-        if command -v brew &>/dev/null; then
-            brew services start redis
-        elif command -v systemctl &>/dev/null; then
-            sudo systemctl start redis-server 2>/dev/null || sudo systemctl start redis 2>/dev/null
-        fi
-        sleep 1
-        if ! redis-cli ping &>/dev/null; then
-            log_error "Could not start Redis. Start it manually and retry."
-            missing=1
-        fi
-    fi
-
     if [ ! -d "$PROJECT_DIR/.venv" ]; then
         log_warn "Virtual environment not found. Creating..."
         python3 -m venv "$PROJECT_DIR/.venv"
@@ -68,10 +51,11 @@ start_services() {
     "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" start
     sleep 2
     "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" status || true
+    local port="${DEV_WEB_PORT:-5000}"
     log_info ""
-    log_info "  Flask:      http://localhost:5000"
-    log_info "  Admin:      http://localhost:5000/admin/login"
-    log_info "  Health:     http://localhost:5000/health"
+    log_info "  Flask:      http://localhost:$port"
+    log_info "  Admin:      http://localhost:$port/admin/login"
+    log_info "  Health:     http://localhost:$port/health"
     log_info ""
     log_info "Logs:  tail -f $PID_DIR/web.log"
     log_info "Stop:  bash scripts/dev.sh stop"
@@ -89,12 +73,6 @@ show_status() {
     "$PROJECT_DIR/.venv/bin/python" "$SCRIPT_DIR/dev_supervisor.py" status || true
     echo ""
 
-    # Redis check
-    if redis-cli ping &>/dev/null; then
-        echo -e "  ${GREEN}running${NC}  redis"
-    else
-        echo -e "  ${RED}stopped${NC}  redis"
-    fi
     echo ""
 }
 

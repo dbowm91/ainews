@@ -306,8 +306,8 @@ def _handle_quality_gate_and_transition(brief, article, run_id, article_id, db):
     # Research includes optional multi-iteration synthesis and a structured
     # brief. Keep Celery's hard limit above the bounded provider retry budget
     # so a slow-but-progressing run is not killed and redelivered mid-call.
-    soft_time_limit=1740,
-    time_limit=1800,
+    soft_time_limit=21600,
+    time_limit=21660,
     autoretry_for=(ConnectionError, TimeoutError, ProviderServerError),
     retry_backoff=True,
     retry_backoff_max=300,

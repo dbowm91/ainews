@@ -21,14 +21,20 @@ class BaseProvider(ABC):
     def health_check(self) -> dict[str, Any]:
         return {"provider": self.provider_id, "status": "unknown"}
 
+    def close(self) -> None:
+        """Release provider-owned resources, if any."""
+
 
 class ProviderManager:
     """Generic provider registry with caching and fallback support."""
 
-    def __init__(self, category: str):
+    def __init__(self, category: str, *, retire_on_clear: bool = False):
         self.category = category
+        self.retire_on_clear = retire_on_clear
         self._registry: dict[str, Type[BaseProvider]] = {}
         self._cache: dict[str, BaseProvider] = {}
+        self._cache_signatures: dict[str, tuple[str, dict[str, Any]]] = {}
+        self._retired: list[BaseProvider] = []
 
     def register(self, provider_type: str):
         """Decorator to register a provider class."""
@@ -49,14 +55,20 @@ class ProviderManager:
             )
         return self._registry[provider_type]
 
+    def _close_provider(self, provider: BaseProvider) -> None:
+        try:
+            provider.close()
+        except Exception:
+            logger.exception("Failed to close %s provider %s", self.category, provider.provider_id)
+
     def get_cached(self, provider_id: str, config_loader: Callable) -> BaseProvider:
         """Get a provider by ID, using cache if available."""
-        if provider_id in self._cache:
-            return self._cache[provider_id]
-
         config = config_loader()
         for pdef in config.providers:
             if pdef.id == provider_id and pdef.enabled:
+                signature = (pdef.type, pdef.config)
+                if provider_id in self._cache and self._cache_signatures.get(provider_id) == signature:
+                    return self._cache[provider_id]
                 cls = self.get_class(pdef.type)
                 try:
                     provider = cls(pdef.id, pdef.config)
@@ -68,8 +80,17 @@ class ProviderManager:
                         e,
                     )
                     raise
+                previous = self._cache.get(provider_id)
+                if previous is not None:
+                    self._retire_provider(previous)
                 self._cache[provider_id] = provider
+                self._cache_signatures[provider_id] = signature
                 return provider
+            if pdef.id == provider_id:
+                previous = self._cache.pop(provider_id, None)
+                if previous is not None:
+                    self._retire_provider(previous)
+                self._cache_signatures.pop(provider_id, None)
 
         raise RuntimeError(
             f"{self.category.title()} provider '{provider_id}' not found or not enabled",
@@ -111,5 +132,31 @@ class ProviderManager:
         raise RuntimeError(f"No enabled {self.category} provider available")
 
     def clear_cache(self) -> None:
-        """Drop all cached provider instances."""
+        """Retire cached providers without disrupting in-flight requests."""
+        providers = list(self._cache.values())
         self._cache.clear()
+        self._cache_signatures.clear()
+        if self.retire_on_clear:
+            self._retired.extend(providers)
+        else:
+            for provider in providers:
+                self._close_provider(provider)
+
+    def _retire_provider(self, provider: BaseProvider) -> None:
+        if self.retire_on_clear:
+            self._retired.append(provider)
+        else:
+            self._close_provider(provider)
+
+    def close_all(self) -> None:
+        """Close current and retired providers when this process exits."""
+        providers = [*self._cache.values(), *self._retired]
+        self._cache.clear()
+        self._cache_signatures.clear()
+        self._retired.clear()
+        seen: set[int] = set()
+        for provider in providers:
+            if id(provider) in seen:
+                continue
+            seen.add(id(provider))
+            self._close_provider(provider)

@@ -46,14 +46,20 @@ class FlaskTask(Task):
 
 
 @before_task_publish.connect
-def inject_request_id(headers=None, **kwargs):
+def inject_request_id(headers=None, sender=None, body=None, **kwargs):
     """Inject request ID from Flask context into Celery task headers."""
-    if headers is None:
-        return
     # Get request ID from current logging context (set by RequestIDMiddleware)
     request_id = request_id_var.get()
-    if request_id and "X-Request-ID" not in headers:
+    if headers is not None and request_id and "X-Request-ID" not in headers:
         headers["X-Request-ID"] = request_id
+    try:
+        from services.pipeline_cancellation import track_published_task
+
+        track_published_task(sender, body, headers)
+    except (ImportError, AttributeError):
+        # Tracking is supplementary; pipeline execution must not fail to publish
+        # because its cancellation index could not be loaded.
+        pass
 
 
 def _init_celery():

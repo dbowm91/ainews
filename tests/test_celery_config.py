@@ -38,7 +38,9 @@ class TestCeleryBeatSchedule:
 
     def test_all_tasks_present(self):
         schedule = Config.get_beat_schedule()
-        assert len(schedule) == 16
+        assert len(schedule) == 18
+        assert schedule["reconcile-narration-jobs"]["task"] == "tasks.tts.reconcile_narration_jobs"
+        assert schedule["cleanup-tts-storage"]["task"] == "tasks.tts.cleanup_tts_storage"
 
     def test_auto_approve_review_articles_is_scheduled(self):
         schedule = Config.get_beat_schedule()

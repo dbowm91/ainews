@@ -38,6 +38,12 @@ class TestGeminiProvider:
             c = provider.client
             assert c is mock_client
             mock_genai.Client.assert_called_once()
+            from eggfetch.integrations.httpx import EggFetchTransport
+
+            http_options = mock_genai.Client.call_args.kwargs["http_options"]
+            assert http_options["timeout"] == 120_000
+            assert isinstance(http_options["client_args"]["transport"], EggFetchTransport)
+            http_options["client_args"]["transport"].close()
         finally:
             sys.modules.pop("google", None)
             sys.modules.pop("google.genai", None)

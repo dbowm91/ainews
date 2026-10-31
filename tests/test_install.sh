@@ -411,8 +411,7 @@ test_channel_missing_value() {
 
 test_detect_platform_current() {
     CURRENT_TEST="Platform detection: current platform detected"
-    local result
-    result=$(detect_platform)
+    local result rc out
     local expected_os expected_arch
     case "$(uname -s)" in
         Linux*)  expected_os="linux" ;;
@@ -422,6 +421,13 @@ test_detect_platform_current() {
         x86_64|amd64)   expected_arch="x86_64" ;;
         aarch64|arm64)   expected_arch="aarch64" ;;
     esac
+    if [[ "$expected_os" == "macos" && "$expected_arch" == "x86_64" ]]; then
+        out=$(detect_platform 2>&1) && rc=$? || rc=$?
+        assert_exit_code 1 "$rc" "$CURRENT_TEST"
+        assert_contains "$out" "Intel macOS is not supported" "$CURRENT_TEST"
+        return
+    fi
+    result=$(detect_platform)
     assert_eq "${expected_os}-${expected_arch}" "$result" "$CURRENT_TEST"
 }
 
@@ -431,13 +437,12 @@ test_detect_platform_amd64_alias() {
     result=$(
         uname() {
             if [[ "$1" == "-m" ]]; then echo "amd64"
+            elif [[ "$1" == "-s" ]]; then echo "Linux"
             else command uname "$@"; fi
         }
         detect_platform
     )
-    local os
-    case "$(uname -s)" in Linux*) os="linux" ;; Darwin*) os="macos" ;; esac
-    assert_eq "${os}-x86_64" "$result" "$CURRENT_TEST"
+    assert_eq "linux-x86_64" "$result" "$CURRENT_TEST"
 }
 
 test_detect_platform_arm64_alias() {
@@ -446,13 +451,12 @@ test_detect_platform_arm64_alias() {
     result=$(
         uname() {
             if [[ "$1" == "-m" ]]; then echo "arm64"
+            elif [[ "$1" == "-s" ]]; then echo "Darwin"
             else command uname "$@"; fi
         }
         detect_platform
     )
-    local os
-    case "$(uname -s)" in Linux*) os="linux" ;; Darwin*) os="macos" ;; esac
-    assert_eq "${os}-aarch64" "$result" "$CURRENT_TEST"
+    assert_eq "macos-aarch64" "$result" "$CURRENT_TEST"
 }
 
 test_detect_platform_unsupported_arch() {
@@ -682,7 +686,7 @@ test_write_metadata_atomic() {
     mkdir -p "$tmpdir/config"
     write_metadata "$tmpdir/config" "stable" "1.0.0" "" "a.tar.gz" "eee" "/opt" "/data" "/state"
     local tmp_count
-    tmp_count=$(find "$tmpdir/config" -name "*.tmp.*" 2>/dev/null | wc -l)
+    tmp_count=$(find "$tmpdir/config" -name "*.tmp.*" 2>/dev/null | awk 'END { print NR + 0 }')
     assert_eq "0" "$tmp_count" "$CURRENT_TEST"
     rm -rf "$tmpdir"
 }

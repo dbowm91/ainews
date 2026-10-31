@@ -298,7 +298,8 @@ class TestRunStageProviderResolution:
                 patch("tasks.pipeline._get_provider_for_stage") as mock_resolve, \
                 patch("tasks.pipeline._log_pipeline") as mock_log, \
                 patch("tasks.pipeline.get_metrics") as mock_metrics, \
-                patch("services.pipeline_monitor.record_stage_result"), \
+                patch("tasks.pipeline.record_stage_result"), \
+                patch("services.pipeline_cancellation.is_pipeline_run_cancelled", return_value=False), \
                 patch("tasks.pipeline._handle_stage_failure", return_value=False):
             mock_db.session.get.return_value = article
             mock_rc.return_value = MagicMock()

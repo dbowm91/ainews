@@ -1,5 +1,6 @@
 """Shared pipeline helpers used across stage modules."""
 
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -184,7 +185,9 @@ def _check_stage_limiter(rc, task_self, retry_countdown, retry_max):
     from services.limiter import get_limiter
 
     limiter = get_limiter()
-    if not limiter.acquire(rc.provider, rc.model, rc.concurrency, rc.timeout_seconds):
+    # A local model may legitimately need many minutes. Waiting for its global
+    # slot should not cause Celery to requeue the same article every 1-3 min.
+    if not limiter.acquire(rc.provider, rc.model, rc.concurrency, timeout=7200):
         raise task_self.retry(countdown=retry_countdown, max_retries=retry_max)
     return limiter
 
@@ -295,8 +298,24 @@ def _acquire_stage_resources(rc, task_self, retry_countdown, retry_max, lock_key
     limiter = _check_stage_limiter(rc, task_self, retry_countdown, retry_max)
     from extensions import get_redis
     redis_client = get_redis()
-    lock_acquired = _acquire_stage_lock(redis_client, lock_key, task_id, rc.timeout_seconds + 120)
+    lock_acquired = _acquire_stage_lock(redis_client, lock_key, task_id, 120)
     return limiter, redis_client, lock_acquired
+
+
+def _start_stage_lock_heartbeat(redis_client, lock_key: str, task_id: str):
+    """Keep a live stage lock during long local inference calls."""
+    from services.redis_utils import refresh_lock
+
+    stopped = threading.Event()
+
+    def refresh() -> None:
+        while not stopped.wait(30):
+            if not refresh_lock(redis_client, lock_key, task_id, 120):
+                logger.warning("Lost stage lock lease for %s", lock_key)
+                return
+
+    threading.Thread(target=refresh, daemon=True, name="pipeline-stage-lease").start()
+    return stopped
 
 
 def _handle_soft_timeout_module(stage, run_id, t0, article_id):
@@ -391,7 +410,7 @@ def _run_stage_core(stage, article_id, work_fn, rc, t0, run_id):
     return result, provider_id, model
 
 
-def run_stage(
+def run_stage(  # noqa: C901 - cancellation and long-running lease handling share the stage lifecycle
     stage: str,
     article_id: int,
     work_fn,
@@ -403,9 +422,13 @@ def run_stage(
 ):
     """Execute a pipeline stage with standard lifecycle management."""
     from schemas.pipeline import get_role_config
+    from services.pipeline_cancellation import is_pipeline_run_cancelled
     _setup_request_id(task_self)
     trace_id = generate_trace_id()
     rc = get_role_config(stage)
+
+    if is_pipeline_run_cancelled(run_id):
+        return {"article_id": article_id, "cancelled": True}
     
     if _handle_disabled(rc, skip_next, run_id, stage, article_id):
         logger.info("TraceID=%s: Stage %s disabled for article %s, skipping", trace_id, stage, article_id)
@@ -436,6 +459,15 @@ def run_stage(
             limiter.release(rc.provider, rc.model, rc.timeout_seconds)
         logger.info("TraceID=%s: Stage %s already running for article %s, skipping", trace_id, stage, article_id)
         return {"article_id": article_id, "skipped": True, "reason": "stage_locked"}
+
+    if is_pipeline_run_cancelled(run_id):
+        from services.redis_utils import release_lock
+        release_lock(redis_client, lock_key, task_id)
+        if limiter is not None:
+            limiter.release(rc.provider, rc.model)
+        return {"article_id": article_id, "cancelled": True}
+
+    lock_heartbeat = _start_stage_lock_heartbeat(redis_client, lock_key, task_id)
     
     model = None
     provider_id = None
@@ -452,8 +484,9 @@ def run_stage(
     except Exception as e:  # noqa: BLE001 - stage exceptions are handled by _handle_stage_exception which logs and returns error dict
         return _handle_stage_exception(e, stage, article_id, run_id, t0, provider_id, model)
     finally:
+        lock_heartbeat.set()
         if limiter is not None:
-            limiter.release(provider_id or rc.provider, model or rc.model, rc.timeout_seconds)
+            limiter.release(provider_id or rc.provider, model or rc.model)
         if redis_client is not None:
             try:
                 from services.redis_utils import release_lock

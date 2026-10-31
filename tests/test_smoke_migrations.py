@@ -221,7 +221,13 @@ class TestFlaskDbUpgrade:
         conn = sqlite3.connect(str(db_path))
         try:
             assert conn.execute("SELECT COUNT(*) FROM memory_items").fetchone()[0] == 1
-            assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "043_memory_synthesis_fairness_cursor"
+            current_revisions = {
+                row[0] for row in conn.execute("SELECT version_num FROM alembic_version")
+            }
+            assert current_revisions == {
+                "043_memory_synthesis_fairness_cursor",
+                "044_llm_native_publication",
+            }
             item_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_items)")}
             summary_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_category_summaries)")}
             cursor_columns = {row[1] for row in conn.execute("PRAGMA table_info(memory_synthesis_cursors)")}

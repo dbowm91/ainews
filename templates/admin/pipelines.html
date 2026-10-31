@@ -30,7 +30,7 @@
     <div class="table-responsive">
       <table class="dash-table">
         <thead>
-          <tr><th>id</th><th>type</th><th>triggered</th><th>started</th><th>fetched</th><th>processed</th><th>selected</th><th>logs</th></tr>
+          <tr><th>id</th><th>type</th><th>triggered</th><th>started</th><th>fetched</th><th>processed</th><th>selected</th><th>logs</th><th>action</th></tr>
         </thead>
         <tbody>
           {% for run in running %}
@@ -44,6 +44,13 @@
               <td>{{ run.articles_selected or 0 }}</td>
               <td>
                 <a href="/admin/pipelines/{{ run.id }}/logs" class="newsletter-preview-link">view logs</a>
+              </td>
+              <td>
+                <form method="post" action="/admin/pipelines/{{ run.id }}/cancel"
+                      onsubmit="return confirm('Stop pipeline run #{{ run.id }} and its queued tasks?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-secondary">stop run</button>
+                </form>
               </td>
             </tr>
           {% endfor %}

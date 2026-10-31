@@ -22,8 +22,8 @@ logger = get_task_logger(__name__)
 # A local model reasoning over a whole article is not fast. The budget here
 # is generous on purpose: it is better to wait for the answer than to lose
 # the memory because the model took its time.
-TREND_MEMORY_SOFT_TIME_LIMIT = 900
-TREND_MEMORY_TIME_LIMIT = 960
+TREND_MEMORY_SOFT_TIME_LIMIT = 21600
+TREND_MEMORY_TIME_LIMIT = 21660
 
 
 @shared_task(

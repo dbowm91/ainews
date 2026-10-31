@@ -210,7 +210,7 @@ def _generate_subject_line(articles, topic_context: str = "") -> str:
             "newsletter_pipeline.writer",
         )
         limiter = get_limiter()
-        if limiter.acquire(provider_id, model, 1, 120):
+        if limiter.acquire(provider_id, model, 1, timeout=7200):
             try:
                 result = provider.chat_structured(
                     messages=[{"role": "user", "content": prompt}],
@@ -222,7 +222,7 @@ def _generate_subject_line(articles, topic_context: str = "") -> str:
                 )
                 return result.subject
             finally:
-                limiter.release(provider_id, model, 120)
+                limiter.release(provider_id, model)
     except (ImportError, redis.exceptions.RedisError,
             AuthError, ProviderServerError, ProviderTimeoutError,
             ConnectionError, ValueError) as e:

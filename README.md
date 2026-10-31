@@ -98,15 +98,16 @@ AINEWS_BOOTSTRAP_ADMIN_PASSWORD_FILE=/run/secrets/ainews-admin \
 
 ### Bare Metal / Development
 
-Requires Python 3.12+, Redis, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Requires Python 3.12+, [uv](https://docs.astral.sh/uv/getting-started/installation/), and either a reachable Redis endpoint or a local `redis-server` executable.
 
 ```bash
 git clone https://github.com/dbowm91/ainews.git && cd ainews
 uv sync
 cp .env.example .env          # Edit .env (see steps 3-6 above)
-redis-server &                # Start Redis
-bash scripts/dev.sh           # Start Flask + Celery
+bash scripts/dev.sh           # Start web, Celery worker, Beat, and Redis lifecycle
 ```
+
+`scripts/dev_supervisor.py` is the canonical local lifecycle manager. It reuses configured reachable Redis, starts a local Redis server when needed and available, and stops only a Redis process it started itself. Use `bash scripts/dev.sh stop` to stop the managed stack.
 
 For local LLM inference, install [Ollama](https://ollama.ai) and pull a model:
 ```bash
@@ -492,7 +493,7 @@ Clean-host CI (`.github/workflows/installer-smoke.yml`) validates:
 - Deferred prerequisite (no Docker)
 - Docker unavailable graceful degradation
 
-Release artifacts are built by `.github/workflows/release.yml` on `v*` tag pushes. The workflow produces platform-specific tarballs (`linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-aarch64`) with SHA256SUMS checksums and creates a GitHub Release.
+Release artifacts are built by `.github/workflows/release.yml` on `v*` tag pushes. The workflow produces platform-specific tarballs (`linux-x86_64`, `linux-aarch64`, `macos-aarch64`) with SHA256SUMS checksums and creates a GitHub Release. Intel macOS is not supported.
 
 Or via Make:
 

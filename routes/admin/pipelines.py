@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from flask import current_app, flash, g, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -81,12 +83,42 @@ def pipeline_logs(run_id):
     )
 
 
+def _enqueue_failure_response(run_id: int, exc: Exception):
+    """Close a run that was created but could not be published to Celery."""
+    from models import PipelineRun
+
+    current_app.logger.error(
+        "Failed to enqueue crawl for pipeline run %s",
+        run_id,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    db.session.rollback()
+    run = db.session.get(PipelineRun, run_id)
+    if run is not None and run.status == "running" and not run.task_id:
+        run.status = "failed"
+        run.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        run.error_message = f"Could not queue crawl task: {str(exc)[:500]}"
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.exception("Failed to mark undispatched pipeline run %s failed", run_id)
+
+    if request.headers.get("HX-Request"):
+        return '<div class="dash-action"><span class="health-dot red"></span> Failed to queue crawl. Check server logs.</div>', 503
+    if wants_html():
+        flash(f"Failed to queue crawl for run #{run_id}. Check server logs.", "error")
+        return redirect(url_for("admin.pipelines"))
+    return jsonify({"error": "Failed to queue crawl", "run_id": run_id}), 503
+
+
 @admin_bp.route("/trigger-crawl", methods=["POST"])
 @require_auth
 @validate_csrf_token
 def trigger_crawl():
     from extensions import db
     from models import PipelineRun
+    from celery_app import celery_app
     from tasks import run_all_sources
 
     try:
@@ -106,7 +138,14 @@ def trigger_crawl():
         headers = {"request_id": request_id} if request_id else None
         kwargs = {"run_id": run.id}
         signed_kwargs = get_signed_kwargs("run_all_sources", (), kwargs)
-        result = run_all_sources.apply_async(kwargs=signed_kwargs, headers=headers)
+        try:
+            result = celery_app.send_task(
+                run_all_sources.name,
+                kwargs=signed_kwargs,
+                headers=headers,
+            )
+        except Exception as exc:  # noqa: BLE001 - publish failures must close the run instead of stranding it
+            return _enqueue_failure_response(run.id, exc)
         run.task_id = result.id
         try:
             db.session.commit()
@@ -145,3 +184,78 @@ def trigger_crawl():
             flash(message, "error")
             return redirect(url_for("admin.pipelines"))
         return jsonify({"error": message}), 503
+
+
+@admin_bp.route("/pipelines/<int:run_id>/cancel", methods=["POST"])
+@require_auth
+@validate_csrf_token
+def cancel_pipeline(run_id: int):
+    """Stop queued and active Celery work associated with one pipeline run."""
+    from models import PipelineRun
+    from services.pipeline_cancellation import (
+        get_pipeline_task_ids,
+        inspect_pipeline_task_ids,
+        mark_pipeline_cancelled,
+        task_set_key,
+    )
+
+    run = db.session.get(PipelineRun, run_id)
+    if run is None:
+        return jsonify({"error": "Pipeline run not found."}), 404
+    if run.status != "running":
+        message = f"Run #{run.id} is already {run.status}."
+        if wants_html():
+            flash(message, "warning")
+            return redirect(url_for("admin.pipelines"))
+        return jsonify({"message": message, "status": run.status}), 200
+
+    run.status = "cancelled"
+    run.finished_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    run.error_message = "Cancelled by administrator."
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception("Failed to mark pipeline run %s cancelled", run_id)
+        return jsonify({"error": "Could not cancel pipeline run."}), 503
+
+    try:
+        mark_pipeline_cancelled(run_id)
+    except Exception:  # noqa: BLE001 - task revocation below remains a second stop mechanism
+        current_app.logger.warning("Could not persist cancellation flag for run %s", run_id, exc_info=True)
+
+    task_ids = get_pipeline_task_ids(run_id)
+    if run.task_id:
+        task_ids.add(run.task_id)
+    revoke_error = None
+    try:
+        from celery_app import celery_app
+
+        task_ids.update(inspect_pipeline_task_ids(celery_app, run_id))
+        if task_ids:
+            celery_app.control.revoke(sorted(task_ids), terminate=True, signal="SIGTERM")
+    except Exception as exc:  # noqa: BLE001 - persisted cancellation still blocks new stages
+        revoke_error = str(exc)[:200]
+        current_app.logger.warning("Could not revoke every task for run %s: %s", run_id, exc)
+
+    try:
+        from extensions import get_redis
+
+        get_redis().delete(task_set_key(run_id))
+    except Exception:  # noqa: BLE001 - the task index expires on its own
+        current_app.logger.debug("Could not clear task index for run %s", run_id, exc_info=True)
+
+    log_admin_action(
+        "pipeline_cancel",
+        target_type="pipeline",
+        target_id=run.id,
+        details={"revoked_task_count": len(task_ids)},
+        category="pipeline",
+    )
+    message = f"Cancellation requested for run #{run.id}."
+    if revoke_error:
+        message += " The run is marked cancelled; some workers may take up to two minutes to release their active request."
+    if wants_html():
+        flash(message, "success")
+        return redirect(url_for("admin.pipelines"))
+    return jsonify({"message": message, "status": "cancelled", "revoked_task_count": len(task_ids)}), 202

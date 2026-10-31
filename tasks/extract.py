@@ -325,6 +325,11 @@ def process_item(
     else:
         min_content_length = validated.min_content_length
 
+    from services.pipeline_cancellation import is_pipeline_run_cancelled
+
+    if is_pipeline_run_cancelled(run_id):
+        return {"cancelled": True, "run_id": run_id}
+
     extracted_text, extraction = _extract_content_if_needed(
         validated.url,
         validated.text_content or validated.title,

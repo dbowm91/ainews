@@ -1,12 +1,27 @@
 """Development services must share the web process lifetime."""
 from __future__ import annotations
 
+import os
 import signal
-import sys
 import subprocess
+import sys
 import time
 
 from scripts import dev_supervisor
+
+
+def test_supervisor_pid_dir_can_be_isolated_in_environment(tmp_path):
+    env = os.environ.copy()
+    env["AINEWS_DEV_PID_DIR"] = str(tmp_path / "isolated-pids")
+    result = subprocess.run(
+        [sys.executable, "-c", "from scripts.dev_supervisor import PID_DIR; print(PID_DIR)"],
+        cwd=dev_supervisor.ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.strip() == str(tmp_path / "isolated-pids")
 
 
 def test_web_exit_stops_worker_and_beat_process_groups(tmp_path, monkeypatch):

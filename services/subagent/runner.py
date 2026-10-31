@@ -102,44 +102,34 @@ def _run_subagent_core(
             labels={"stage": stage, "task_type": task_type},
         ):
             future = _subagent_executor.submit(call_fn)
-            try:
-                resp = future.result(timeout=stage_config.timeout_seconds)
+            # A thread future cannot stop its running synchronous HTTP call.
+            # An outer, shorter timeout followed by a retry leaves the old
+            # inference running and starts a duplicate request. Let the
+            # provider's HTTP deadline own request timeouts instead.
+            resp = future.result()
 
-                if self_correct and messages is not None:
-                    try:
-                        return response_model.model_validate(
-                            {"synthesis": resp.text},
-                        )
-                    except (json.JSONDecodeError, ValidationError) as validation_err:
-                        if corrected:
-                            raise validation_err
-                        error_msg = (
-                            f"Your previous response was not valid JSON or did not match "
-                            f"the expected schema: {validation_err}. Please correct and "
-                            f"return valid JSON in the same format."
-                        )
-                        logger.info(
-                            "Subagent %s/%s self-correcting after validation error: %s",
-                            stage,
-                            task_type,
-                            validation_err,
-                        )
-                        messages.append({"role": "user", "content": error_msg})
-                        corrected = True
-                        raise  # Trigger retry
+            if self_correct and messages is not None:
+                try:
+                    return response_model.model_validate({"synthesis": resp.text})
+                except (json.JSONDecodeError, ValidationError) as validation_err:
+                    if corrected:
+                        raise validation_err
+                    error_msg = (
+                        f"Your previous response was not valid JSON or did not match "
+                        f"the expected schema: {validation_err}. Please correct and "
+                        f"return valid JSON in the same format."
+                    )
+                    logger.info(
+                        "Subagent %s/%s self-correcting after validation error: %s",
+                        stage,
+                        task_type,
+                        validation_err,
+                    )
+                    messages.append({"role": "user", "content": error_msg})
+                    corrected = True
+                    raise
 
-                return resp
-            except TimeoutError as e:
-                future.cancel()
-                logger.warning(
-                    "Subagent %s/%s timed out after %ss",
-                    stage,
-                    task_type,
-                    stage_config.timeout_seconds,
-                )
-                raise ProviderTimeoutError(
-                    f"Subagent timed out after {stage_config.timeout_seconds}s",
-                ) from e
+            return resp
 
     try:
         result = _retry_with_backoff(

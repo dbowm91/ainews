@@ -15,7 +15,7 @@ ainews-{version}-{platform}.tar.gz
 | Component | Values | Notes |
 |-----------|--------|-------|
 | `{version}` | Semver string (e.g. `1.2.0`) | Stripped from `v` tag prefix; matches `pyproject.toml` `[project].version` |
-| `{platform}` | `linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-aarch64` | Derived from `uname -s` + `uname -m` at build time |
+| `{platform}` | `linux-x86_64`, `linux-aarch64`, `macos-aarch64` | Derived from `uname -s` + `uname -m` at build time; macOS Intel is not supported |
 
 **Main channel例外:** `ainews-main-{commit:0:8}-{platform}.tar.gz` — uses the first 8 hex chars of the commit SHA instead of a semver version. Not for production use.
 

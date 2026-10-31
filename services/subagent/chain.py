@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError
 
 from .conditions import _evaluate_condition
-from .config import _get_subagent_provider_and_config, _subagent_executor
+from .config import _get_subagent_provider_and_config
 from .utils import _retry_with_backoff
 
 logger = logging.getLogger(__name__)
@@ -137,9 +137,7 @@ def run_subagent_chain(
         step_succeeded = False
         try:
             resp = _retry_with_backoff(
-                lambda sc=stage_config: _subagent_executor.submit(_chain_call).result(
-                    timeout=sc.timeout_seconds
-                ),
+                _chain_call,
                 max_retries=stage_config.max_retries + 1,
                 base_delay=1.0,
                 max_delay=stage_config.retry_delay,

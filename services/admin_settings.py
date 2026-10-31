@@ -59,6 +59,8 @@ class ProviderView:
     api_key_ref: str
     has_api_key: bool
     local: bool
+    timeout_seconds: int
+    retry_attempts: int
     # Custom request headers the provider declares. They are resolved from the
     # environment when the provider is tested, because a gateway may require
     # a routing header and reject a request without it. The values are never
@@ -141,6 +143,11 @@ class ReviewView:
     auto_publish_threshold: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class RuntimeView:
+    max_concurrent_llm_requests: int = 2
+
+
 # The schedule settings the admin panel exposes, with the bounds each one
 # accepts. The bounds match the configuration validator, so a value the panel
 # accepts is a value the validator accepts.
@@ -205,6 +212,26 @@ def _write_yaml(data: dict[str, Any]) -> bytes:
         allow_unicode=True,
         width=100,
     ).encode("utf-8")
+
+
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(maximum, max(minimum, number))
+
+
+def _require_int(value: Any, label: str, minimum: int, maximum: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise SettingsError(f"{label} must be a whole number") from exc
+    if isinstance(value, bool) or not minimum <= number <= maximum:
+        raise SettingsError(f"{label} must be between {minimum} and {maximum}")
+    return number
 
 
 def _transaction_paths():
@@ -273,6 +300,12 @@ def read_providers() -> list[ProviderView]:
                 api_key_ref=api_key_ref,
                 has_api_key=bool(api_key_ref),
                 local=bool(config.get("local", False)),
+                timeout_seconds=_bounded_int(
+                    config.get("timeout_seconds"), 900 if config.get("local") else 120, 1, 1800,
+                ),
+                retry_attempts=_bounded_int(
+                    config.get("retry_attempts"), 1 if config.get("local") else 3, 1, 5,
+                ),
                 headers=headers,
             )
         )
@@ -364,6 +397,14 @@ def update_providers(changes: dict[str, dict[str, Any]]) -> list[str]:
                     config[key] = endpoint
             if "local" in fields:
                 config["local"] = bool(fields["local"])
+            if "timeout_seconds" in fields:
+                config["timeout_seconds"] = _require_int(
+                    fields["timeout_seconds"], f"{provider_id} request timeout", 1, 1800,
+                )
+            if "retry_attempts" in fields:
+                config["retry_attempts"] = _require_int(
+                    fields["retry_attempts"], f"{provider_id} request attempts", 1, 5,
+                )
             entry["config"] = config
             changed.append(provider_id)
             break
@@ -381,6 +422,35 @@ def update_providers(changes: dict[str, dict[str, Any]]) -> list[str]:
     with transaction(_transaction_paths()) as txn:
         txn.modify_file(path, _write_yaml(raw))
     return changed
+
+
+def read_runtime() -> RuntimeView:
+    raw = _read_yaml(_pipeline_path())
+    runtime = raw.get("runtime")
+    if not isinstance(runtime, dict):
+        runtime = {}
+    return RuntimeView(
+        max_concurrent_llm_requests=_bounded_int(
+            runtime.get("max_concurrent_llm_requests"), 2, 1, 32,
+        ),
+    )
+
+
+def update_runtime(max_concurrent_llm_requests: Any) -> list[str]:
+    number = _require_int(max_concurrent_llm_requests, "maximum parallel LLM requests", 1, 32)
+
+    path = _pipeline_path()
+    raw = _read_yaml(path)
+    runtime = raw.get("runtime")
+    if not isinstance(runtime, dict):
+        runtime = {}
+    runtime["max_concurrent_llm_requests"] = number
+    raw["runtime"] = runtime
+    from ainews_config.transaction import transaction
+
+    with transaction(_transaction_paths()) as txn:
+        txn.modify_file(path, _write_yaml(raw))
+    return ["max_concurrent_llm_requests"]
 
 
 def update_roles(updates: dict[str, dict[str, Any]]) -> list[str]:

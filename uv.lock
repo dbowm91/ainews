@@ -4,21 +4,16 @@ requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
     "python_full_version == '3.14.*' and sys_platform == 'win32'",
-    "(python_full_version >= '3.15' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version >= '3.15' and sys_platform != 'darwin' and sys_platform != 'win32')",
-    "python_full_version >= '3.15' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
-    "(python_full_version == '3.14.*' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version == '3.14.*' and sys_platform != 'darwin' and sys_platform != 'win32')",
-    "python_full_version == '3.14.*' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
+    "python_full_version >= '3.15' and sys_platform != 'win32'",
+    "python_full_version == '3.14.*' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "(python_full_version == '3.13.*' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'win32')",
-    "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
-    "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')",
-    "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
+    "python_full_version == '3.13.*' and sys_platform != 'win32'",
+    "python_full_version < '3.13'",
 ]
 required-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
     "platform_machine == 'aarch64' and sys_platform == 'linux'",
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "platform_machine == 'x86_64' and sys_platform == 'darwin'",
 ]
 
 [[package]]
@@ -33,6 +28,7 @@ dependencies = [
     { name = "celery", extra = ["redis"] },
     { name = "defusedxml" },
     { name = "duckduckgo-search" },
+    { name = "eggfetch", extra = ["httpx-transport"] },
     { name = "feedparser" },
     { name = "flask" },
     { name = "flask-compress" },
@@ -89,6 +85,7 @@ requires-dist = [
     { name = "celery", extras = ["redis"], specifier = "==5.6.2" },
     { name = "defusedxml", specifier = "==0.7.1" },
     { name = "duckduckgo-search", specifier = "==8.1.1" },
+    { name = "eggfetch", extras = ["httpx-transport"], specifier = "==0.3.0" },
     { name = "feedparser", specifier = "==6.0.12" },
     { name = "flask", specifier = "==3.1.3" },
     { name = "flask-compress", specifier = "==1.23" },
@@ -801,7 +798,7 @@ name = "cuda-bindings"
 version = "13.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
+    { name = "cuda-pathfinder", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/e0/4b3fdba08ff177e9451f376a4ba2df18d76f9158e6a16cdc062bd83db9fa/cuda_bindings-13.3.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f72f67f5790e7fa51e3f893e007e49567573ccdf4ed1ca988fbbbd36cd77847c", size = 6020531, upload-time = "2026-05-27T03:59:07.942Z" },
@@ -928,6 +925,35 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/10/ef/07791a05751e6cc9de1dd49fb12730259ee109b18e6d097e25e6c32d5617/duckduckgo_search-8.1.1.tar.gz", hash = "sha256:9da91c9eb26a17e016ea1da26235d40404b46b0565ea86d75a9f78cc9441f935", size = 22868, upload-time = "2025-07-06T15:30:59.73Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/72/c027b3b488b1010cf71670032fcf7e681d44b81829d484bb04e31a949a8d/duckduckgo_search-8.1.1-py3-none-any.whl", hash = "sha256:f48adbb06626ee05918f7e0cef3a45639e9939805c4fc179e68c48a12f1b5062", size = 18932, upload-time = "2025-07-06T15:30:58.339Z" },
+]
+
+[[package]]
+name = "eggfetch"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/02/c8b62c3b8f4c81d72536b6c8b0b71dc5052df3ee0f7a4df12c1a35ced841/eggfetch-0.3.0.tar.gz", hash = "sha256:2c6dc07abee210e809cb43a29ff0b5d521d0eb61ce288518b30742b9c79f7529", size = 916811, upload-time = "2026-10-31T08:40:53.475Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/41/f7/3de4f5d6791a0642fa005c0f1c1eedc75af06734e2db4be2a028349b9146/eggfetch-0.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:5054f9f701c9b914b5cc002bc4df823c5275b4b61e0fc382eb6fd07923b7ac50", size = 4087113, upload-time = "2026-10-31T08:40:24.261Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/70/12e3177fd5fa466a3c68c27f6ee833ee9787886017f8a974b85e3c315381/eggfetch-0.3.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:803cf4e110723ade4c69b8108309c278c1c43b91fa22d28e226840267916a1af", size = 4446386, upload-time = "2026-10-31T08:40:26.227Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/6b/a398e2a024615a4c69ef772146aacdeed016a6b67e6318363328fb016b84/eggfetch-0.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fd7f27758efe7f43f5773bc2feb570fbf9f2ed3a0e0750d7a1fcd07a514d223d", size = 4473027, upload-time = "2026-10-31T08:40:27.924Z" },
+    { url = "https://files.pythonhosted.org/packages/df/a3/0874a634290b073bf16e0b7d749a9660bedcbbefb8de3ea876336293aa24/eggfetch-0.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:dd96c1cbe54c28897ed586d23bb41adb297547bf463260345021daf7358530cd", size = 4210844, upload-time = "2026-10-31T08:40:29.522Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/25/e40f04e28d879b3f3f89143cf4bfeaf5468764b5d29bd3b9629048371cc3/eggfetch-0.3.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:de0102e3f5dc38fba575ee8a62813b3a87acaed9107475d94b87d8f0a753c30d", size = 4088973, upload-time = "2026-10-31T08:40:31.541Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/be/53a2f1057a50dde649097e23bc4f2592593eec15a451d0ced1a7e49f413f/eggfetch-0.3.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e3ced9cabcb9d185a3c53686178072abe238246e6f176fe74dc837b2eb5ffdd3", size = 4446746, upload-time = "2026-10-31T08:40:33.286Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/71/b7d3d4f31f7a8853931ff591c5060f19b984887377a65ec98ce271bc7589/eggfetch-0.3.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:39847e536dcae5949fbc28ce2a503982ad0879ea0b5c1c5eb8272eba6db3eaad", size = 4476318, upload-time = "2026-10-31T08:40:34.885Z" },
+    { url = "https://files.pythonhosted.org/packages/15/1f/afd9c641d1d749121891b5621fd402c713cac7a8417a0c33d499b49e0030/eggfetch-0.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:d4c56c730a34381be1b4cfd5fbec0b76ff960823f58863e07ec7fbedd888129f", size = 4213865, upload-time = "2026-10-31T08:40:36.836Z" },
+    { url = "https://files.pythonhosted.org/packages/50/e5/3981f6f4de5a30f555b31f081fb73c4b83b12b53739d0fa9387916159198/eggfetch-0.3.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:42a371d6e64ef00fb8c05bb46afa0102237618257bf86e2c66ca583f115b3406", size = 4085976, upload-time = "2026-10-31T08:40:38.705Z" },
+    { url = "https://files.pythonhosted.org/packages/75/6a/c502d293fba47f7dc1c7cfd6d15b6d7264fc18015d07bf0c69580ddbc370/eggfetch-0.3.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d4142b46ef72f2f2918b01805471edf2783b054be11824ab4d09f80f49354273", size = 4445434, upload-time = "2026-10-31T08:40:40.519Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/93/f8188f994e5e074ef09f3d0b92e67cdc8eba7d9b7f33d27192722e023049/eggfetch-0.3.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4074a211858acd7b8d151bd6f4fb5fd5dc5c0ccd860b0c39fa591d6c556d4a7a", size = 4475145, upload-time = "2026-10-31T08:40:42.473Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/61/1bbff4e081ef8623374e59c39f2d439731427df067318d2b44925f05efc2/eggfetch-0.3.0-cp314-cp314-win_amd64.whl", hash = "sha256:2c4298985da85105f33bdb478eb04cc03a39b4b3407262464d050fab7859e43b", size = 4210204, upload-time = "2026-10-31T08:40:44.111Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/d6/5878334c73ab5ac2c7654023fecf6d8bb81c51e4547540ac70e47289ffc7/eggfetch-0.3.0-cp315-cp315-macosx_11_0_arm64.whl", hash = "sha256:b1d970bbe5886d03966549a2567d09fa1b25f8480789ff8b2a7a3266d488d57c", size = 4086067, upload-time = "2026-10-31T08:40:45.94Z" },
+    { url = "https://files.pythonhosted.org/packages/08/b1/c997de8c94016a5a97fd4a9850f66863ed85fd877ca0ab0335846798d1ab/eggfetch-0.3.0-cp315-cp315-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:758d71ebf5549c72544b480aa65580a143b39b23ec72c0745f57cc0c186577ad", size = 4445945, upload-time = "2026-10-31T08:40:48.08Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/2a/4ae68f4938982b2a4b463da42417d4e27630c54faf3d6d5c371db99701c8/eggfetch-0.3.0-cp315-cp315-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:770d0aa2db11cd1f31ee2e804483c001271270bb94c3b7537fdf52cb2b8e88f7", size = 4474583, upload-time = "2026-10-31T08:40:49.769Z" },
+    { url = "https://files.pythonhosted.org/packages/70/77/cc6639d05cfbcfea7323e999bc813cf60dd0d19916c1d92fe0316ee0b6e9/eggfetch-0.3.0-cp315-cp315-win_amd64.whl", hash = "sha256:4975787d0a990cdb30ca2fcbf6a5f24ef84aeec9f62a320fca659667fa03064c", size = 4210225, upload-time = "2026-10-31T08:40:51.797Z" },
+]
+
+[package.optional-dependencies]
+httpx-transport = [
+    { name = "httpx" },
 ]
 
 [[package]]
@@ -2000,7 +2026,7 @@ name = "nvidia-cublas"
 version = "13.1.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-nvrtc", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
+    { name = "nvidia-cuda-nvrtc", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/a1/0bd24ee8c8d03adac032fd2909426a00c88f8c57961b1277ded97f91119f/nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:b7a210458267ac818974c53038fbec2e969d5c99f305ab15c72522fa9f001dd5", size = 542848918, upload-time = "2026-04-08T18:46:22.985Z" },
@@ -2039,7 +2065,7 @@ name = "nvidia-cudnn-cu13"
 version = "9.20.0.48"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
+    { name = "nvidia-cublas", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/56/c5/83384d846b2fd17c44bd499b36c75a45ed4f095fbbb2252294e89cea5c5c/nvidia_cudnn_cu13-9.20.0.48-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:e31454ae00094b0c55319d9d15b6fa2fc50a9e1c0f5c8c80fb75258234e731e1", size = 444574296, upload-time = "2026-03-09T19:28:27.751Z" },
@@ -2051,7 +2077,7 @@ name = "nvidia-cufft"
 version = "12.0.0.61"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/ae/f417a75c0259e85c1d2f83ca4e960289a5f814ed0cea74d18c353d3e989d/nvidia_cufft-12.0.0.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2708c852ef8cd89d1d2068bdbece0aa188813a0c934db3779b9b1faa8442e5f5", size = 214053554, upload-time = "2025-09-04T08:31:38.196Z" },
@@ -2081,9 +2107,9 @@ name = "nvidia-cusolver"
 version = "12.0.4.66"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
-    { name = "nvidia-cusparse", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
-    { name = "nvidia-nvjitlink", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
+    { name = "nvidia-cublas", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
+    { name = "nvidia-cusparse", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/c3/b30c9e935fc01e3da443ec0116ed1b2a009bb867f5324d3f2d7e533e776b/nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:02c2457eaa9e39de20f880f4bd8820e6a1cfb9f9a34f820eb12a155aa5bc92d2", size = 223467760, upload-time = "2025-09-04T08:33:04.222Z" },
@@ -2095,7 +2121,7 @@ name = "nvidia-cusparse"
 version = "12.6.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "(python_full_version < '3.13' and sys_platform == 'win32') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'win32')" },
+    { name = "nvidia-nvjitlink", marker = "python_full_version < '3.13' or sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/94/5c26f33738ae35276672f12615a64bd008ed5be6d1ebcb23579285d960a9/nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:80bcc4662f23f1054ee334a15c72b8940402975e0eab63178fc7e670aa59472c", size = 162155568, upload-time = "2025-09-04T08:33:42.864Z" },
@@ -3294,8 +3320,7 @@ dependencies = [
     { name = "pillow" },
     { name = "scikit-learn" },
     { name = "scipy" },
-    { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "torch", version = "2.12.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
     { name = "typing-extensions" },
@@ -3505,55 +3530,24 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.2.2"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.15' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
-    "python_full_version == '3.14.*' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
-    "python_full_version == '3.13.*' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
-    "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
-]
-dependencies = [
-    { name = "filelock", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "fsspec", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "jinja2", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "networkx", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "sympy", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/78/29dcab24a344ffd9ee9549ec0ab2c7885c13df61cde4c65836ee275efaeb/torch-2.2.2-cp312-none-macosx_10_9_x86_64.whl", hash = "sha256:eb4d6e9d3663e26cd27dc3ad266b34445a16b54908e74725adb241aa56987533", size = 150797270, upload-time = "2024-03-27T21:08:29.623Z" },
-]
-
-[[package]]
-name = "torch"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version == '3.14.*' and sys_platform == 'win32'",
-    "(python_full_version >= '3.15' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version >= '3.15' and sys_platform != 'darwin' and sys_platform != 'win32')",
-    "(python_full_version == '3.14.*' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version == '3.14.*' and sys_platform != 'darwin' and sys_platform != 'win32')",
-    "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "(python_full_version == '3.13.*' and platform_machine != 'x86_64' and sys_platform == 'darwin') or (python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'win32')",
-    "(python_full_version < '3.13' and platform_machine != 'x86_64') or (python_full_version < '3.13' and sys_platform != 'darwin')",
-]
 dependencies = [
     { name = "cuda-bindings", marker = "sys_platform == 'linux'" },
     { name = "cuda-toolkit", extra = ["cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "sys_platform == 'linux'" },
-    { name = "filelock", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "fsspec", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "jinja2", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "networkx", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
     { name = "nvidia-cublas", marker = "sys_platform == 'linux'" },
     { name = "nvidia-cudnn-cu13", marker = "sys_platform == 'linux'" },
     { name = "nvidia-cusparselt-cu13", marker = "sys_platform == 'linux'" },
     { name = "nvidia-nccl-cu13", marker = "sys_platform == 'linux'" },
     { name = "nvidia-nvshmem-cu13", marker = "sys_platform == 'linux'" },
-    { name = "setuptools", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "sympy", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "setuptools" },
+    { name = "sympy" },
     { name = "triton", marker = "sys_platform == 'linux'" },
-    { name = "typing-extensions", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "typing-extensions" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/bb/285d643f254731294c9b595a007eac39db4600a98682d7bca688f42ca164/torch-2.12.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:b41339df93d491435e790ff8bcbae1c0ce777175889bfd1281d119862793e6a2", size = 88010197, upload-time = "2026-05-13T14:55:35.414Z" },

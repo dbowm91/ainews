@@ -254,6 +254,10 @@ class Config:
     CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
     CELERY_BROKER_CONNECTION_RETRY = True
     CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
+    # Late-acknowledged local inference tasks can run for hours. Keep Redis
+    # from redelivering them while the original worker still owns the request.
+    CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 7 * 60 * 60}
+    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"visibility_timeout": 7 * 60 * 60}
 
     # DEPRECATED: Use get_beat_schedule() instead. Actual schedule is loaded from pipeline.yaml.
     CELERY_BEAT_SCHEDULE: dict[str, Any] = {}

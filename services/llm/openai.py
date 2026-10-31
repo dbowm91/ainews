@@ -21,6 +21,7 @@ from services.llm.errors import (
     RateLimitError as CustomRateLimitError,
     make_error_handler,
 )
+from services.llm.httpx_transport import create_httpx_client
 from services.url import validate_url_safe
 
 from schemas.llm import OpenAIConfig
@@ -140,7 +141,10 @@ class OpenAIProvider(BaseLLMProvider):
     def _create_client(self):
         from openai import OpenAI
 
-        http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=self._client_kwargs.get("timeout", DEFAULT_LLM_TIMEOUT_SECONDS))
+        http_client = create_httpx_client(
+            limits=_HTTPX_LIMITS,
+            timeout=self._client_kwargs.get("timeout", DEFAULT_LLM_TIMEOUT_SECONDS),
+        )
         return OpenAI(**self._client_kwargs, http_client=http_client)
 
     @circuit_protected("llm_openai")

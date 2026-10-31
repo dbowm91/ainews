@@ -51,6 +51,12 @@ def _dispatch_next(
     """
     from services.logging_utils import get_task_request_id
 
+    from services.pipeline_cancellation import is_pipeline_run_cancelled
+
+    if is_pipeline_run_cancelled(run_id):
+        logger.info("Not dispatching article %s: pipeline run %s was cancelled", article_id, run_id)
+        return
+
     if request_id is None:
         request_id = get_task_request_id()
 

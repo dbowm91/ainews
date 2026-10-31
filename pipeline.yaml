@@ -2,7 +2,7 @@ pipeline:
   selector:
     enabled: true
     provider: local
-    model: prism-ml/bonsai-27b
+    model: google/gemma-4-e2b
     max_tokens: 4096
     temperature: 0.2
     concurrency: 4
@@ -22,7 +22,7 @@ pipeline:
   researcher:
     enabled: true
     provider: local
-    model: prism-ml/bonsai-27b
+    model: google/gemma-4-e2b
     max_tokens: 8192
     temperature: 0.0
     concurrency: 2
@@ -45,7 +45,7 @@ pipeline:
   writer:
     enabled: true
     provider: local
-    model: prism-ml/bonsai-27b
+    model: google/gemma-4-e2b
     max_tokens: 8192
     temperature: 0.3
     concurrency: 2
@@ -68,7 +68,7 @@ pipeline:
   editor:
     enabled: true
     provider: local
-    model: prism-ml/bonsai-27b
+    model: google/gemma-4-e2b
     max_tokens: 8192
     temperature: 0.0
     concurrency: 2
@@ -345,3 +345,5 @@ schedule:
   cleanup_inactive_subscribers_minute: 0
   cleanup_old_versions_days_to_keep: 90
   auto_approve_interval_minutes: 1
+runtime:
+  max_concurrent_llm_requests: 2

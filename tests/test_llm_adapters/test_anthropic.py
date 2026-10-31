@@ -43,6 +43,7 @@ class TestAnthropicProvider:
             call_kwargs = mock_anthropic.Anthropic.call_args.kwargs
             assert call_kwargs["api_key"] == "sk-ant-test"
             assert call_kwargs["timeout"] == 120.0
+            assert call_kwargs["max_retries"] == 0
             assert "http_client" in call_kwargs
         finally:
             sys.modules.pop("anthropic", None)

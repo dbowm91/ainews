@@ -51,7 +51,7 @@ class TestRunStage:
         result = run_stage("selector", 1, work_fn, task_self)
 
         assert result == work_result
-        limiter.acquire.assert_called_once_with("ollama", "qwen3:8b", 4, 300)
+        limiter.acquire.assert_called_once_with("ollama", "qwen3:8b", 4, timeout=7200)
         assert article.retry_count == 0
         assert article.last_error is None
         limiter.release.assert_called_once()

@@ -411,6 +411,10 @@ class TestGatherEditorContextAdditional:
     def test_runs_subagent_with_tools_when_configured(self, app, create_article, monkeypatch):
         """When stage_config.tools is set, uses run_subagent_with_tools."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+        from schemas.pipeline import load_pipeline_config
+        pipeline_config = load_pipeline_config()
+        pipeline_config.memory.memory_v2_enabled = False
+        monkeypatch.setattr("schemas.pipeline.load_pipeline_config", lambda: pipeline_config)
         with app.app_context():
             from tasks.edit import _gather_editor_context
 
@@ -440,6 +444,10 @@ class TestGatherEditorContextAdditional:
     def test_runs_plain_subagent_when_no_tools(self, app, create_article, monkeypatch):
         """When stage_config.tools is empty, uses plain run_subagent."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+        from schemas.pipeline import load_pipeline_config
+        pipeline_config = load_pipeline_config()
+        pipeline_config.memory.memory_v2_enabled = False
+        monkeypatch.setattr("schemas.pipeline.load_pipeline_config", lambda: pipeline_config)
         with app.app_context():
             from tasks.edit import _gather_editor_context
 
@@ -468,6 +476,10 @@ class TestGatherEditorContextAdditional:
     def test_returns_empty_when_all_context_empty(self, app, create_article, monkeypatch):
         """Returns empty string when topic_notes, related_articles, and trend_memory are all empty."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+        from schemas.pipeline import load_pipeline_config
+        pipeline_config = load_pipeline_config()
+        pipeline_config.memory.memory_v2_enabled = False
+        monkeypatch.setattr("schemas.pipeline.load_pipeline_config", lambda: pipeline_config)
         with app.app_context():
             from tasks.edit import _gather_editor_context
 
@@ -487,6 +499,10 @@ class TestGatherEditorContextAdditional:
     def test_warns_on_fallback(self, app, create_article, monkeypatch):
         """Logs warning when subagent used_fallback is True."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
+        from schemas.pipeline import load_pipeline_config
+        pipeline_config = load_pipeline_config()
+        pipeline_config.memory.memory_v2_enabled = False
+        monkeypatch.setattr("schemas.pipeline.load_pipeline_config", lambda: pipeline_config)
         with app.app_context():
             from tasks.edit import _gather_editor_context
 

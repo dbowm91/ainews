@@ -15,16 +15,16 @@ Get ainews running locally for development in under 10 minutes.
 **macOS:**
 ```bash
 brew install redis
-brew services start redis
 ```
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt update && sudo apt install redis-server
-sudo systemctl enable --now redis-server
 ```
 
-**Verify:**
+The development supervisor starts a local Redis process when no configured Redis endpoint is reachable, then stops that process with the rest of the stack. If you run Redis as a separate system service, it will reuse that service instead.
+
+**Optional verification for an already running Redis service:**
 ```bash
 redis-cli ping   # Should return PONG
 ```
@@ -199,7 +199,9 @@ bash scripts/test.sh --pattern test_routes
 
 ## Manual Service Management
 
-If you prefer running services in separate terminals instead of `dev.sh`:
+Run the development stack through the supervisor so the web server, worker, Beat and any locally started Redis share one lifecycle. Starting services in separate terminals can leave them out of sync.
+
+For debugging only, the individual process commands are:
 
 **Terminal 1 — Flask:**
 ```bash

@@ -46,7 +46,8 @@ class TestOllamaProvider:
             call_kwargs = mock_ollama_module.Client.call_args.kwargs
             assert call_kwargs["host"] == "http://localhost:11434"
             assert call_kwargs["timeout"] == 120
-            assert "client" in call_kwargs
+            assert "transport" in call_kwargs
+            assert "client" not in call_kwargs
         finally:
             sys.modules.pop("ollama", None)
             if saved is not None:

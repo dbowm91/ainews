@@ -195,6 +195,12 @@ class PipelineOptimizationConfig(BaseModel):
     max_optional_llm_calls_per_day: int = Field(default=200, ge=0, le=10000)
 
 
+class RuntimeConfig(BaseModel):
+    """Process-wide limits for LLM work."""
+
+    max_concurrent_llm_requests: int = Field(default=2, ge=1, le=32)
+
+
 class StageConfig(BaseModel):
     """Pipeline stage configuration stub.
 
@@ -213,6 +219,7 @@ class PipelineRootConfig(BaseModel):
     subagent: SubagentConfig = Field(default_factory=SubagentConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     optimizations: PipelineOptimizationConfig = Field(default_factory=PipelineOptimizationConfig)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     experiments: dict = Field(default_factory=dict)
     stages: dict[str, StageConfig] = Field(default_factory=dict)
     schedule: dict = Field(default_factory=dict)

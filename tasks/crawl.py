@@ -29,7 +29,7 @@ logger = get_task_logger(__name__)
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def crawl_source(self, source_config: dict, run_id: int, _signature: str | None = None, task_name: str | None = None) -> dict:
+def crawl_source(self, source_config: dict, run_id: int, _signature: str | None = None, task_name: str | None = None) -> dict:  # noqa: C901
     """Crawl a single source. Called by run_all_sources for parallel execution."""
     from adapters.base import get_adapter_class
     from extensions import db, get_redis
@@ -43,6 +43,10 @@ def crawl_source(self, source_config: dict, run_id: int, _signature: str | None 
         update_source_crawl_time,
     )
     from tasks.pipeline import _log_pipeline
+    from services.pipeline_cancellation import is_pipeline_run_cancelled
+
+    if is_pipeline_run_cancelled(run_id):
+        return {"source_id": source_config.get("id"), "cancelled": True}
 
     cfg = SourceConfig(**source_config)
     source_id = cfg.id
@@ -109,6 +113,9 @@ def crawl_source(self, source_config: dict, run_id: int, _signature: str | None 
         existing_ids = get_existing_external_ids(source) if source else set()
         new_items = filter_new_items(filtered, existing_ids)
 
+        if is_pipeline_run_cancelled(run_id):
+            return {"source_id": source_id, "cancelled": True}
+
         from services.config_unified import MIN_CONTENT_LENGTH
 
         min_content = (
@@ -136,6 +143,8 @@ def crawl_source(self, source_config: dict, run_id: int, _signature: str | None 
         from tasks.extract import process_item
 
         for item in deduplicated_items:
+            if is_pipeline_run_cancelled(run_id):
+                break
             process_item.s(
                 source_key=source_id,
                 source_name=cfg.name,
@@ -224,6 +233,10 @@ def aggregate_crawl_results(self, results: list, run_id: int) -> dict:
     from extensions import db
     from models import PipelineRun
     from services.crawling import update_pipeline_run_stats
+    from services.pipeline_cancellation import is_pipeline_run_cancelled
+
+    if is_pipeline_run_cancelled(run_id):
+        return {"cancelled": True, "run_id": run_id}
 
     total_fetched = 0
     total_new = 0
@@ -287,10 +300,14 @@ def run_all_sources(self, run_id=None, _signature=None, task_name=None):
         update_pipeline_run_stats,
     )
     from tasks.pipeline import _log_pipeline
+    from services.pipeline_cancellation import is_pipeline_run_cancelled
 
     if run_id is None:
         run = create_pipeline_run(self.request.id, triggered_by="scheduled")
         run_id = run.id
+
+    if is_pipeline_run_cancelled(run_id):
+        return {"cancelled": True, "run_id": run_id}
 
     try:
         configs = load_sources()
@@ -314,6 +331,8 @@ def run_all_sources(self, run_id=None, _signature=None, task_name=None):
         return []
 
     source_configs = [cfg.model_dump() for cfg in configs]
+    if is_pipeline_run_cancelled(run_id):
+        return {"cancelled": True, "run_id": run_id}
     crawl_group = group(
         crawl_source.s(source_config=cfg, run_id=run_id) for cfg in source_configs
     )

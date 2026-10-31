@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 from typing import Any, Tuple, cast
@@ -15,19 +16,16 @@ from services.llm.base import BaseLLMProvider, _manager
 from services.llm.errors import ProviderServerError, ProviderTimeoutError
 
 logger = logging.getLogger(__name__)
+atexit.register(_manager.close_all)
 
 # Circuit breaker defaults for LLM providers
 _LLM_FAILURE_THRESHOLD = int(os.environ.get("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5"))
 _LLM_RECOVERY_TIMEOUT = 60.0
 
-_providers_config_cache = None
-
-
 def _get_providers_config_cached():
-    global _providers_config_cache
-    if _providers_config_cache is None:
-        _providers_config_cache = load_providers_config()
-    return _providers_config_cache
+    # The schema cache checks source mtimes, so provider settings can take
+    # effect in already-running worker processes without a restart.
+    return load_providers_config()
 
 
 def clear_provider_cache() -> None:

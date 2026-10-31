@@ -165,8 +165,8 @@ def _generate_daily_newsletters_core(task_id, dry_run_email, run_id):
     bind=True,
     acks_late=True,
     task_reject_on_worker_lost=True,
-    soft_time_limit=300,
-    time_limit=360,
+    soft_time_limit=21600,
+    time_limit=21660,
 )
 def generate_daily_newsletters(self, dry_run_email=None, run_id=None, _signature=None, task_name=None):
     try:

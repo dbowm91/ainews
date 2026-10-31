@@ -17,6 +17,7 @@ from services.llm.base import (
     register_provider,
 )
 from services.llm.errors import make_error_handler
+from services.llm.httpx_transport import create_eggfetch_transport
 from services.url import validate_url_safe
 
 from schemas.llm import OllamaConfig
@@ -50,12 +51,17 @@ class OllamaProvider(BaseLLMProvider):
         validate_url_safe(self.host, allow_private=cfg.local)
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
+        self.timeout_seconds = cfg.timeout_seconds
+        self.retry_attempts = cfg.retry_attempts
 
     def _create_client(self):
         import ollama
 
-        http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=DEFAULT_LLM_TIMEOUT_SECONDS)
-        return ollama.Client(host=self.host, timeout=DEFAULT_LLM_TIMEOUT_SECONDS, client=http_client)
+        timeout = getattr(self, "timeout_seconds", DEFAULT_LLM_TIMEOUT_SECONDS)
+        transport = create_eggfetch_transport(limits=_HTTPX_LIMITS)
+        # The Ollama SDK forwards keyword arguments to httpx.Client; its
+        # documented extension point is the transport constructor argument.
+        return ollama.Client(host=self.host, timeout=timeout, transport=transport)
 
     def _extract_text(self, resp, return_thinking: bool = False) -> str:
         message: dict[str, Any] = resp.get("message", {})

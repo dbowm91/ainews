@@ -1,7 +1,7 @@
 # Master Implementation Plan (Consolidated)
 
 **Status:** Legacy waves 1–9 COMPLETED; editorial-memory C01–C03 implemented, C04 baseline triaged; C05 merge-readiness corrective OPEN on draft PR #19
-**Last Updated:** 2026-10-30 (optional local TTS/MLX planning registered; historical waves unchanged)
+**Last Updated:** 2026-10-31 (optional local TTS/MLX and EggFetch 0.3.0 adoption qualification registered; historical waves unchanged)
 **Goal:** Track active workstreams for the personal/local or privately operated AInews instance while preserving historical completed security, quality and operational work. No public-release program is implied.
 
 ---
@@ -22,6 +22,22 @@
 **Policy:** Breeze TTS 2 self-hosted weights/quantizations/outputs are research/non-commercial only; enable only in a compliant private instance or obtain separate rights. No public release or restored-operator-database rehearsal is mandated. Implementation evidence and hardware qualification boundaries are recorded in the roadmap and M1–M4 plans. Code commits: `d4bc9c0`, `8f977d0`.
 
 ---
+
+## Active Plan Registry — EggFetch HTTP Transport Pilot (2026-10-30)
+
+**Status:** UPSTREAM E1–E3 GATES CLOSED by EggFetch 0.3.0; AInews E4 integration is implemented locally. User-approved scope excludes full provider parity, proxy checks, fixed five-minute prefill threshold, Intel macOS, and unsigned-tag cleanup. Slow-prefill, long response, structured output, streaming/disconnect, concurrency-cap, and cancellation-route checks pass. The full non-browser suite passes 5,044 tests (plus 2 targeted cancellation tests pass). Remaining: native Linux x86_64/aarch64 install/build checks.
+**Master workstream:** [EggFetch HTTP transport pilot](eggfetch_transport_pilot_20261030.md).
+
+The pilot evaluates EggFetch as an owned, provider-neutral transport for AInews's LLM adapters. The local worktree contains the integration; it has not been merged or applied to the running development instance. Upstream compatibility and packaging work is closed in EggFetch 0.3.0. Remaining qualification is limited to relevant AInews paths, direct ASGI behavior, full-suite completion, and Linux checks. Proxy testing is out of scope. The pilot concludes with adoption only after the open gates in E4 pass, or records a defer/no-go decision.
+
+The work is tracked in four implementation handoffs. E1–E3 are closed upstream; E4 governs the local implementation and final adoption decision:
+
+1. **E1 (P0, closed upstream):** [SDK-compatible EggFetch transport bridge](eggfetch_e1_sdk_transport_bridge_20261030.md) — HTTPX transport integration and supported provider injection points.
+2. **E2 (P0, closed upstream):** [Phase-correct response-header read timeout](eggfetch_e2_read_timeout_semantics_20261030.md) — timeout semantics, regression matrix, and HTTPX exception mapping.
+3. **E3 (P1, closed upstream):** [Linux aarch64 packaging and release qualification](eggfetch_e3_platform_release_qualification_20261030.md) — platform artifact, exact-SHA checks, URL compatibility, and stable required upstream suite.
+4. **E4 (P1, active):** [AInews conformance and ASGI requalification](eggfetch_e4_ainews_requalification_20261030.md) — provider contracts, Python 3.12 target matrix, ASGI/local-inference checks, and final adopt/defer decision.
+
+E1–E3 were upstream EggFetch implementation work and are now closed by the published 0.3.0 release; E4 owns AInews integration and application qualification. The release workflow resolved the previously intermittent benchmark proxy fixture and built/smoke-tested the supported artifacts. The user accepts v0.3.0 provenance for adoption; tag-signing cleanup is later manual work. AInews's direct ASGI qualification is required; proxy testing is out of scope.
 
 ## Active Plan Registry — Editorial Memory, Shared Blackboard, and Pipeline Offload (2026-10-29)
 

@@ -832,7 +832,7 @@ The service management subsystem at `ainews_cli/service/` provides systemd unit 
 The release workflow at `.github/workflows/release.yml` builds platform-specific release artifacts and creates GitHub Releases:
 - **Trigger:** Tag pushes matching `v*` (also supports `workflow_dispatch` for dry runs)
 - **Gate:** Full test suite (lint, typecheck, pytest) must pass before builds start
-- **Build matrix:** `linux-x86_64` (ubuntu-22.04 for glibc 2.35), `linux-aarch64`, `macos-x86_64`, `macos-aarch64`
+- **Build matrix:** `linux-x86_64` (ubuntu-22.04 for glibc 2.35), `linux-aarch64`, `macos-aarch64`; Intel macOS is unsupported
 - **Artifact contents:** Application source + `.venv/` + Docker Compose manifests + migrations + themes + wrapper `ainews` script
 - **Safety validation:** Rejects absolute paths and `..` traversal entries in tarballs
 - **Checksums:** Per-platform `SHA256SUMS` merged into a single file
@@ -1202,4 +1202,4 @@ MultiFernet key rotation, HMAC signing with timestamps, SSRF protection on all w
 - `MAX_STAGE_FAILURES`: `constants.py:10` (value: 3)
 - `MAX_TOTAL_RETRIES`: `constants.py:11` (value: 10)
 - `PIPELINE_TIMEOUT_SECONDS`: `constants.py:14` (value: 3600)
-- `DEFAULT_LLM_TIMEOUT_SECONDS`: `constants.py:17` (value: 120.0)
+- `DEFAULT_LLM_TIMEOUT_SECONDS`: `constants.py:17` (value: 120.0; local providers default to 900)

@@ -23,7 +23,15 @@ class OllamaConfig(BaseModel):
     host: str = "http://localhost:11434"
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
+    timeout_seconds: int = Field(default=120, ge=1, le=1800)
+    retry_attempts: int = Field(default=1, ge=1, le=5)
     local: bool = False
+
+    @model_validator(mode="after")
+    def local_timeout_default(self) -> "OllamaConfig":
+        if self.local and "timeout_seconds" not in self.model_fields_set:
+            self.timeout_seconds = 900
+        return self
 
 
 class OpenAIConfig(BaseModel):
@@ -35,7 +43,7 @@ class OpenAIConfig(BaseModel):
     max_tokens: int = MAX_TOKENS_FIELD
     headers: dict[str, str] = Field(default_factory=dict)
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
-    timeout_seconds: int = Field(default=120, ge=1, le=600)
+    timeout_seconds: int = Field(default=120, ge=1, le=1800)
     retry_attempts: int = Field(default=3, ge=1, le=5)
     # An endpoint that needs no credential and may live on loopback or a
     # private network: a local inference server such as LM Studio or
@@ -45,6 +53,10 @@ class OpenAIConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_api_key(self) -> "OpenAIConfig":
+        if self.local and "retry_attempts" not in self.model_fields_set:
+            self.retry_attempts = 1
+        if self.local and "timeout_seconds" not in self.model_fields_set:
+            self.timeout_seconds = 900
         resolved = resolve_env_var(self.api_key, required=True) if self.api_key else ""
         if not resolved and not self.local:
             raise ValueError("api_key must not be empty")
@@ -58,6 +70,8 @@ class AnthropicConfig(BaseModel):
     api_key: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
+    timeout_seconds: int = Field(default=120, ge=1, le=1800)
+    retry_attempts: int = Field(default=3, ge=1, le=5)
 
     @field_validator("api_key")
     @classmethod
@@ -74,6 +88,8 @@ class GeminiConfig(BaseModel):
     api_key: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
+    timeout_seconds: int = Field(default=120, ge=1, le=1800)
+    retry_attempts: int = Field(default=3, ge=1, le=5)
 
     @field_validator("api_key")
     @classmethod

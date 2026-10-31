@@ -113,14 +113,14 @@ def _run_pipeline_stage(
             provider_id,
             model,
             stage_config.concurrency,
-            stage_config.timeout_seconds,
+            timeout=7200,
         ):
             try:
                 result = llm_call(provider, model, max_tokens)
                 return result, True
             finally:
                 limiter.release(
-                    provider_id, model, stage_config.timeout_seconds,
+                    provider_id, model,
                 )
         else:
             metrics.counter_inc("newsletter.pipeline_fallback", labels={"stage": role})

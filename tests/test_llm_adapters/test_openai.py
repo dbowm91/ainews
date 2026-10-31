@@ -47,6 +47,9 @@ class TestOpenAIProvider:
             assert call_kwargs["timeout"] == 120.0
             assert call_kwargs["max_retries"] == 0
             assert "http_client" in call_kwargs
+            from eggfetch.integrations.httpx import EggFetchTransport
+
+            assert isinstance(call_kwargs["http_client"]._transport, EggFetchTransport)
         finally:
             sys.modules.pop("openai", None)
             if saved_openai is not None:

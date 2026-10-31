@@ -6,7 +6,7 @@ import logging
 import random
 import threading
 import time
-from concurrent.futures import CancelledError, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import CancelledError, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional, Type, TypeVar
 
@@ -191,6 +191,24 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
         """Create and return the provider-specific client instance."""
         ...
 
+    def close(self) -> None:
+        """Close the cached SDK client and its HTTP transport, if created."""
+        with self._client_lock:
+            client = self._client
+            self._client = None
+        if client is None:
+            return
+        close = getattr(client, "close", None)
+        if callable(close):
+            close()
+            return
+        # Ollama's wrapper does not expose close(), but its documented
+        # ``_client`` member is the HTTPX client it created.
+        underlying_client = getattr(client, "_client", None)
+        underlying_close = getattr(underlying_client, "close", None)
+        if callable(underlying_close):
+            underlying_close()
+
     @abc.abstractmethod
     def chat(
         self,
@@ -371,7 +389,9 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             max_validation_retries: Validation retries per call
             stage: Tracing stage name
             max_workers: ThreadPoolExecutor max workers (bounded pool)
-            timeout: Per-call timeout in seconds
+            timeout: Deprecated compatibility argument. HTTP provider timeout is
+                authoritative because a Python future cannot cancel a running
+                synchronous model request.
 
         Returns:
             List of validated Pydantic model instances
@@ -409,14 +429,12 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             ]
             for i, future in enumerate(futures):
                 try:
-                    future.result(timeout=timeout)
-                except FutureTimeoutError:
-                    errors[i] = TimeoutError(f"LLM call {i} timed out after {timeout}s")
+                    future.result()
                 except (CancelledError, RuntimeError) as e:
                     if errors[i] is None:
                         errors[i] = e
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            executor.shutdown(wait=True, cancel_futures=True)
 
         if any(e is not None for e in errors):
             raise BatchError(errors, results)
@@ -613,7 +631,7 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
 
 
 # Shared provider manager for LLM providers
-_manager = ProviderManager("llm")
+_manager = ProviderManager("llm", retire_on_clear=True)
 
 # Backward-compatible module-level exports
 _PROVIDER_REGISTRY = _manager._registry

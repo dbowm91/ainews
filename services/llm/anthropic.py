@@ -3,7 +3,6 @@ import time
 from typing import Any, Iterator, Optional, cast
 
 import httpx
-from constants import DEFAULT_LLM_TIMEOUT_SECONDS
 from schemas.common import resolve_env_vars
 from services.circuit_breaker import circuit_protected
 from services.llm.base import (
@@ -15,6 +14,7 @@ from services.llm.base import (
     register_provider,
 )
 from services.llm.errors import RateLimitError as CustomRateLimitError, make_error_handler
+from services.llm.httpx_transport import create_httpx_client
 
 from schemas.llm import AnthropicConfig
 
@@ -56,13 +56,19 @@ class AnthropicProvider(BaseLLMProvider):
         self.default_model = cfg.model
         self.max_tokens = cfg.max_tokens
         self._api_key = cfg.api_key
-        self._timeout = DEFAULT_LLM_TIMEOUT_SECONDS
+        self._timeout = cfg.timeout_seconds
+        self.retry_attempts = cfg.retry_attempts
 
     def _create_client(self):
         from anthropic import Anthropic
 
-        http_client = httpx.Client(limits=_HTTPX_LIMITS, timeout=self._timeout)
-        return Anthropic(api_key=self._api_key, timeout=self._timeout, http_client=http_client)
+        http_client = create_httpx_client(limits=_HTTPX_LIMITS, timeout=self._timeout)
+        return Anthropic(
+            api_key=self._api_key,
+            timeout=self._timeout,
+            max_retries=0,
+            http_client=http_client,
+        )
 
     @circuit_protected("llm_anthropic")
     def _do_chat(

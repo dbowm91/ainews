@@ -6,6 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _pipeline_run_not_cancelled(monkeypatch):
+    """Keep crawl behavior tests focused on source locking and crawling."""
+    monkeypatch.setattr("services.pipeline_cancellation.is_pipeline_run_cancelled", lambda _run_id: False)
+
+
 def _make_task_self(task_id="task-123"):
     """Create a mock Celery task self."""
     task = MagicMock()

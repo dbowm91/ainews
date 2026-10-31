@@ -110,13 +110,35 @@
     </form>
   </section>
 
+  {# ── Inference runtime ── #}
+  <section class="dash-card dash-card-full">
+    <h2 class="dash-card-title">inference limits</h2>
+    <div class="form-hint">
+      The parallel request cap applies across all providers and models. Lower it
+      for local inference servers with limited compute.
+    </div>
+    <form method="post" action="/admin/settings/runtime">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label class="form-label" for="max-concurrent-llm-requests">maximum parallel LLM requests</label>
+        <input class="form-input" id="max-concurrent-llm-requests" type="number"
+               name="max_concurrent_llm_requests" min="1" max="32" required
+               value="{{ runtime.max_concurrent_llm_requests }}">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">save inference limits</button>
+      </div>
+    </form>
+  </section>
+
   {# ── Providers ── #}
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">providers</h2>
     <div class="form-hint">
       The credentials themselves are never shown here. A provider marked
       <strong>local</strong> may run on this machine without a credential and
-      may point at a private address.
+      may point at a private address. Timeout is per model request; attempts
+      are provider retries before the pipeline applies its own retry policy.
     </div>
 
     <form method="post" action="/admin/settings/providers" id="providers-form">
@@ -128,6 +150,8 @@
             <th>provider</th>
             <th>endpoint</th>
             <th>model</th>
+            <th>timeout (seconds)</th>
+            <th>request attempts</th>
             <th class="settings-col-enabled">on</th>
             <th class="settings-col-enabled">local</th>
             <th class="settings-col-default">default</th>
@@ -156,6 +180,18 @@
                      name="model_{{ provider.id }}"
                      value="{{ provider.model }}"
                      aria-label="Model for {{ provider.id }}">
+            </td>
+            <td>
+              <input type="number" class="form-input settings-model-input"
+                     name="timeout_{{ provider.id }}" value="{{ provider.timeout_seconds }}"
+                     min="1" max="1800" required
+                     aria-label="Request timeout in seconds for {{ provider.id }}">
+            </td>
+            <td>
+              <input type="number" class="form-input settings-model-input"
+                     name="retry_attempts_{{ provider.id }}" value="{{ provider.retry_attempts }}"
+                     min="1" max="5" required
+                     aria-label="Request attempts for {{ provider.id }}">
             </td>
             <td class="settings-col-enabled">
               <input type="checkbox" name="enabled_{{ provider.id }}"

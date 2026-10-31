@@ -12,6 +12,7 @@ services/llm/
 ├── anthropic.py      # Anthropic Claude (native API)
 ├── gemini.py         # Google Gemini (native API)
 ├── ollama.py         # Local Ollama models
+├── httpx_transport.py # Shared EggFetch-backed HTTPX client/transport
 ├── errors.py         # Error classification (AuthError, RateLimitError, etc.)
 └── json_utils.py     # JSON parsing for structured LLM output
 ```
@@ -268,14 +269,51 @@ def chat_structured(self, messages, response_model, ...):
 
 ## Timeouts
 
-All LLM providers use `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from `constants.py`:
+LLM provider request timeouts default to `DEFAULT_LLM_TIMEOUT_SECONDS = 120.0` from `constants.py`. Local providers default to 900 seconds, and provider settings can override the timeout up to 1800 seconds. Local providers default to one request attempt so a slow local response is not duplicated by nested client retries. The admin settings page exposes provider timeout and retry attempts, plus a global maximum for parallel LLM requests.
+
+For local inference, the HTTP read timeout also covers time spent waiting for
+the model to finish prompt prefill and return its first response bytes. The
+629.9-second ASGI qualification recorded so far measured long generation from a
+short prompt; it does not qualify a slow-prefill request. E4 tracks a separate
+large-prompt run with a modest output cap before adoption.
 
 ```python
 # constants.py
 DEFAULT_LLM_TIMEOUT_SECONDS = 120.0
 ```
 
-Provider files should import and use this constant rather than hardcoding values.
+Provider files should import and use this constant rather than hardcoding values. LLM pipeline tasks allow up to six hours for the provider retry budget; Redis broker visibility is set beyond that limit to avoid redelivering a live, late-acknowledged task. The subagent runner relies on provider HTTP deadlines and does not impose a shorter future timeout, because a Python future cannot cancel an already-running synchronous inference request.
+
+## HTTP transport
+
+OpenAI, Anthropic, Ollama, and the synchronous Google GenAI client use the
+locked `eggfetch[httpx-transport]==0.3.0` integration behind genuine HTTPX
+clients. This preserves each SDK's HTTPX identity and SDK request behavior;
+EggFetch handles synchronous HTTP/1.1 and HTTP/2 I/O. Async SDK calls and
+HTTP/3 are outside this integration's support claim. The public safe-fetch
+path for untrusted web URLs remains separate and is not routed through this
+LLM transport.
+
+Connection limits are set on the EggFetch transport. The admin concurrency
+setting remains the application-level request ceiling; the transport does not
+add a second parallelism policy. EggFetch retries are disabled. OpenAI and
+Anthropic SDK retries are also disabled so the application provider retry
+policy is the only retry owner. Google GenAI retains its current single-attempt
+default.
+
+Provider cache invalidation retires clients without closing them immediately,
+so a live synchronous inference request is not interrupted by a settings
+change. Current and retired provider clients are closed when the process exits.
+See [the EggFetch E4 qualification plan](../plans/eggfetch_e4_ainews_requalification_20261030.md)
+for the remaining local-inference and platform qualification evidence.
+
+## ASGI entry point
+
+`asgi.py` exposes the Flask app through `asgiref.wsgi.WsgiToAsgi` as
+`asgi:application`. This lets the synchronous application run behind an ASGI
+server for direct ASGI qualification; it does not make Flask routes or LLM
+provider calls asynchronous. Uvicorn is a development/test server and is not
+added to the production dependency set.
 
 ## LLM Stage Metrics
 

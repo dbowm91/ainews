@@ -6,15 +6,19 @@ providers:
     host: http://localhost:11434
     model: qwen3:8b
     max_tokens: 4096
+    timeout_seconds: 900
     local: true
+    retry_attempts: 1
 - id: local
   type: openai
   enabled: true
   config:
     api_key: ''
     base_url: http://127.0.0.1:1234/v1
-    model: prism-ml/bonsai-27b
+    model: google/gemma-4-e2b
     max_tokens: 4096
+    timeout_seconds: 1800
+    retry_attempts: 2
     local: true
 - id: openai
   type: openai
@@ -24,6 +28,8 @@ providers:
     base_url: https://api.openai.com/v1
     model: gpt-4o-mini
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: anthropic
   type: anthropic
   enabled: false
@@ -31,6 +37,8 @@ providers:
     api_key: ${ANTHROPIC_API_KEY}
     model: claude-sonnet-4-5-20250929
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: gemini
   type: gemini
   enabled: false
@@ -38,6 +46,8 @@ providers:
     api_key: ${GEMINI_API_KEY}
     model: gemini-2.0-flash
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: deepseek
   type: openai
   enabled: false
@@ -46,6 +56,8 @@ providers:
     base_url: https://api.deepseek.com/v1
     model: deepseek-chat
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: groq
   type: openai
   enabled: false
@@ -54,6 +66,8 @@ providers:
     base_url: https://api.groq.com/openai/v1
     model: llama-3.3-70b-versatile
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: openrouter
   type: openai
   enabled: false
@@ -62,6 +76,8 @@ providers:
     base_url: https://openrouter.ai/api/v1
     model: anthropic/claude-3.5-sonnet
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: xai
   type: openai
   enabled: false
@@ -70,6 +86,8 @@ providers:
     base_url: https://api.x.ai/v1
     model: grok-2-1212
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: togetherai
   type: openai
   enabled: false
@@ -78,6 +96,8 @@ providers:
     base_url: https://api.togetherai.com/v1
     model: meta-llama/Llama-3-70b-chat-hf
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: fireworks
   type: openai
   enabled: false
@@ -86,6 +106,8 @@ providers:
     base_url: https://api.fireworks.ai/inference/v1
     model: accounts/fireworks/models/llama-v3-70b-instruct
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: cerebras
   type: openai
   enabled: false
@@ -94,6 +116,8 @@ providers:
     base_url: https://api.cerebras.ai/v1
     model: llama-3.3-70b
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: zai
   type: openai
   enabled: false
@@ -102,6 +126,8 @@ providers:
     base_url: https://open.bigmodel.cn/api/paas/v4
     model: glm-4
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: minimax
   type: openai
   enabled: false
@@ -110,6 +136,8 @@ providers:
     base_url: https://api.minimax.io/v1
     model: MiniMax-M2.5
     max_tokens: 4096
+    timeout_seconds: 120
+    retry_attempts: 3
 - id: opencode
   type: openai
   enabled: true
@@ -121,6 +149,8 @@ providers:
     headers:
       User-Agent: ainews-local/1.0
       x-opencode-session: ${OPENCODE_SESSION_ID}
+    timeout_seconds: 120
+    retry_attempts: 3
 default_provider: local
 search_providers:
 - id: duckduckgo

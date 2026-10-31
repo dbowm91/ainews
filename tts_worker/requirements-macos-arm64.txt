@@ -1,0 +1,7 @@
+# Optional native worker only. Keep these out of the web and Celery environments.
+mlx-audio[tts]==0.6.3
+mlx==0.32.4
+numpy==2.2.6
+scipy==1.15.3
+requests==2.33.0
+huggingface-hub==1.5.0

@@ -440,6 +440,9 @@ def _bulk_set_status(articles, validated, article_ids, db) -> tuple[Response, in
     except SQLAlchemyError:
         db.session.rollback()
         return api_response(error="Failed to update articles", status=500)
+    from services.tts.jobs import ensure_after_publication
+    for article in articles:
+        ensure_after_publication(article, kind="article")
     try:
         from services.audit import log_admin_action
         from services.cache import get_response_cache
@@ -672,6 +675,9 @@ def update_article(article_id: int) -> tuple[Response, int] | Response:
     except SQLAlchemyError as e:
         db.session.rollback()
         return api_response(error=str(e), status=500)
+
+    from services.tts.jobs import ensure_after_publication
+    ensure_after_publication(article, kind="article")
 
     try:
         from services.audit import log_admin_action

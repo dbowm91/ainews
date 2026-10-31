@@ -64,7 +64,7 @@ def invalidate_publication_cache() -> None:
     try:
         from services.cache import get_response_cache
         cache = get_response_cache()
-        for prefix in ("pub:index", "pub:topic", "pub:tag", "pub:article_detail", "pub:top_impact", "pub:rss_feed", "pub:sitemap"):
+        for prefix in ("pub:index", "pub:topic", "pub:tag", "pub:article_detail", "pub:top_impact", "pub:rss_feed", "pub:sitemap", "pub:newsletter", "pub:edition"):
             cache.invalidate_prefix(prefix)
     except Exception:  # cache invalidation must not break publication
         import logging
@@ -99,7 +99,7 @@ def serialize_public_article(article: Article) -> dict[str, Any]:
         if c.url and c.url.startswith(("http://", "https://"))
     ][:25]
     source = getattr(article, "source", None)
-    return {
+    result = {
         "public_id": article.public_id,
         "headline": str(content.get("headline") or article.original_title or "Untitled")[:512],
         "tldr": str(content.get("tldr") or article.summary or "")[:4000],
@@ -113,6 +113,14 @@ def serialize_public_article(article: Article) -> dict[str, Any]:
         "source": ({"name": getattr(source, "name", None), "url": (source.url[:2048] if source.url else None)} if source else None),
         "citations": citations,
     }
+    try:
+        from services.tts.jobs import ready_audio_url
+        audio_url = ready_audio_url(article, kind="article")
+        if audio_url:
+            result["audio"] = {"url": audio_url, "codec": "opus"}
+    except Exception:  # noqa: BLE001 - optional audio metadata must not break public reads
+        pass
+    return result
 
 
 def get_public_article(public_id: str) -> Article | None:

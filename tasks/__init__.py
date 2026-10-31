@@ -40,6 +40,7 @@ from tasks.scheduler import auto_approve_review_articles, publish_scheduled_arti
 from tasks.select import select_article
 from tasks.subscribers import cleanup_inactive_subscribers
 from tasks.trend_memory import propose_trend_memory_for_article
+from tasks.tts import cleanup_tts_storage, reconcile_narration_jobs
 from tasks.webhook import dispatch_webhook_task
 from tasks.write import write_article
 from tasks.embeddings import backfill_embeddings
@@ -77,5 +78,7 @@ __all__ = [
     "reconcile_newsletter_deliveries",
     "retry_failed_newsletter_deliveries",
     "cleanup_inactive_subscribers",
+    "reconcile_narration_jobs",
+    "cleanup_tts_storage",
     "MAX_STAGE_RETRIES",
 ]

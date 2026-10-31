@@ -63,7 +63,7 @@ class TestMigrationChain:
             assert set(merge.down_revision) == {
                 "044_llm_native_publication", "043_memory_synthesis_fairness_cursor"
             }
-            assert script.get_heads() == ["046_newsletter_distribution_intent"]
+            assert script.get_heads() == ["047_narration_jobs"]
 
     def test_all_revisions_loadable(self, app):
         """Each revision file should import without errors."""

@@ -14,6 +14,47 @@
 <div class="dashboard">
   <h1 class="dashboard-title">settings</h1>
 
+  <section class="dash-card dash-card-full" id="tts">
+    <h2 class="dash-card-title">Audio / TTS</h2>
+    <p>Optional private narration. Every switch defaults off. Breeze TTS is licensed for research and non-commercial use; confirm your authorization before enabling it.</p>
+    <p>Native worker: <strong>{{ 'online' if tts_worker_online else 'offline' }}</strong> · jobs: {% for state, count in tts_counts.items() %}{{ state }} {{ count }}{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}</p>
+    <form method="post" action="{{ url_for('admin.update_tts_settings') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% set tts = tts_settings %}
+      <label><input type="checkbox" name="enabled" {% if tts and tts.enabled %}checked{% endif %}> Enable TTS</label>
+      <label><input type="checkbox" name="articles_enabled" {% if tts and tts.articles_enabled %}checked{% endif %}> Articles</label>
+      <label><input type="checkbox" name="editions_enabled" {% if tts and tts.editions_enabled %}checked{% endif %}> Newsletter editions</label>
+      <label><input type="checkbox" name="backfill_enabled" {% if tts and tts.backfill_enabled %}checked{% endif %}> Allow bounded backfill</label>
+      <label><input type="checkbox" name="license_accepted" {% if tts and tts.license_accepted %}checked{% endif %}> I confirm Breeze use and outputs are limited to research/non-commercial use</label>
+      <label>Backend <select name="backend"><option value="mlx-breeze">Apple MLX · Breeze TTS 2 4-bit</option></select></label>
+      <label>Model <input name="model" maxlength="256" value="{{ tts.model if tts else 'mlx-community/Breeze-TTS-2-mlx-4bit' }}"></label>
+      <label>Checkpoint revision <input name="checkpoint_revision" maxlength="128" value="{{ tts.checkpoint_revision if tts else '3a06d26b172ea4ae1da2f42d708383e9c79d5526' }}"></label>
+      <label>Voice instruction <textarea name="instruction" maxlength="1000" required>{{ tts.instruction if tts else 'Speak clearly and naturally.' }}</textarea></label>
+      <label>Pronunciation aliases (JSON) <textarea name="pronunciation_aliases" maxlength="5000">{{ (tts.pronunciation_aliases if tts and tts.pronunciation_aliases else {'AI':'A I','LLM':'L L M','GPU':'G P U','API':'A P I'})|tojson(indent=2) }}</textarea></label>
+      <label>CFG scale <input type="number" name="cfg_scale" min="0" max="20" step="0.1" value="{{ tts.cfg_scale if tts else 4 }}"></label>
+      <label>Opus bitrate (kb/s) <input type="number" name="opus_bitrate" min="24" max="96" value="{{ tts.opus_bitrate if tts else 40 }}"></label>
+      <label>Max minutes <input type="number" name="max_minutes" min="1" max="30" value="{{ tts.max_minutes if tts else 30 }}"></label>
+      <label>Max chars <input type="number" name="max_chars" min="500" max="16000" value="{{ tts.max_chars if tts else 16000 }}"></label>
+      <label>Pending-job cap <input type="number" name="max_pending_jobs" min="1" max="10000" value="{{ tts.max_pending_jobs if tts else 500 }}"></label>
+      <label>Retry budget <input type="number" name="retry_budget" min="1" max="10" value="{{ tts.retry_budget if tts else 5 }}"></label>
+      <label>Retention days <input type="number" name="retention_days" min="1" max="365" value="{{ tts.retention_days if tts else 30 }}"></label>
+      <button class="btn btn-primary" type="submit">Save TTS settings</button>
+    </form>
+    <h3>Native worker credentials</h3>
+    <form method="post" action="{{ url_for('admin.issue_tts_worker_token') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Label <input name="label" maxlength="120" value="native macOS worker"></label>
+      <button class="btn" type="submit">Issue worker token</button>
+    </form>
+    <ul>{% for credential in tts_credentials %}<li>{{ credential.label }} · {{ 'revoked' if credential.revoked_at else ('enabled' if credential.enabled else 'disabled') }} · last seen {{ credential.last_used_at or 'never' }}
+      {% if credential.enabled and not credential.revoked_at %}<form method="post" action="{{ url_for('admin.revoke_tts_worker_token', credential_id=credential.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit">Revoke</button></form>{% endif %}</li>{% endfor %}</ul>
+    <form method="post" action="{{ url_for('admin.queue_tts_preview') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit">Queue private voice preview</button><span>Uses a fixed server sample and the latest published article only as a freshness anchor.</span></form>
+    {% for job in tts_recent_jobs if job.recipe.get('admin_preview') and job.state == 'ready' %}<p>Private voice preview #{{ job.id }}: <audio controls preload="none" src="{{ url_for('admin.tts_preview_audio', job_id=job.id) }}">Listen to the private narration preview.</audio></p>{% endfor %}
+    <form method="post" action="{{ url_for('admin.tts_backfill') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Backfill kind <select name="kind"><option value="article">articles</option><option value="edition">editions</option></select></label><label>Batch size <input type="number" min="1" max="100" name="limit" value="20"></label><label>Starting offset <input type="number" min="0" max="1000000" name="offset" value="0"></label><button type="submit">Queue bounded backfill batch</button></form>
+    <h3>Recent narration jobs</h3>
+    <ul>{% for job in tts_recent_jobs %}<li>#{{ job.id }} {{ job.target_kind }} {{ job.target_public_id }} · {{ job.state }}{% if job.error_code %} · {{ job.error_code }}{% endif %}
+      {% if job.state in ['pending', 'claimed', 'encoding'] %}<form method="post" action="{{ url_for('admin.tts_job_action', job_id=job.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="cancel"><button type="submit">Cancel</button></form>{% elif job.state in ['failed', 'cancelled'] %}<form method="post" action="{{ url_for('admin.tts_job_action', job_id=job.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="retry"><button type="submit">Retry</button></form>{% elif job.state == 'ready' %}<form method="post" action="{{ url_for('admin.tts_job_action', job_id=job.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="regenerate"><button type="submit">Regenerate</button></form>{% endif %}</li>{% else %}<li>No jobs recorded.</li>{% endfor %}</ul>
+  </section>
+
   {# ── Pipeline roles ── #}
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">pipeline stages</h2>

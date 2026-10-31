@@ -44,4 +44,9 @@ def newsletter_detail(public_id: str):
     edition = get_public_edition(public_id)
     if edition is None:
         abort(404)
-    return render_template("newsletters/detail.html", edition=edition, dto=serialize_edition(edition))
+    try:
+        from services.tts.jobs import ready_audio_url
+        audio_url = ready_audio_url(edition, kind="edition")
+    except Exception:  # noqa: BLE001 - optional audio must not break archive rendering
+        audio_url = None
+    return render_template("newsletters/detail.html", edition=edition, dto=serialize_edition(edition), narration_audio_url=audio_url)

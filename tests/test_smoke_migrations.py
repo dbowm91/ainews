@@ -248,11 +248,14 @@ class TestFlaskDbUpgrade:
             conn = sqlite3.connect(str(db_path))
             try:
                 assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-                assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "046_newsletter_distribution_intent"
+                assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "047_narration_jobs"
                 for table, column in (("newsletter_occurrences", "email_requested"),
                                       ("newsletter_editions", "email_requested"),
                                       ("newsletter_editions", "email_cancelled"),
-                                      ("delivery_intents", "claim_token")):
+                                      ("delivery_intents", "claim_token"),
+                                      ("narration_jobs", "recipe_sha256"),
+                                      ("tts_worker_credentials", "secret_hash"),
+                                      ("tts_settings", "license_accepted")):
                     assert column in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
                 assert conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_items'").fetchone()
             finally:

@@ -190,6 +190,77 @@ class DeliveryAttempt(db.Model):  # type: ignore[name-defined]
     transport_reference = db.Column(db.String(128), nullable=True)
 
 
+class NarrationJob(db.Model):  # type: ignore[name-defined]
+    """Durable, publication-independent narration work item."""
+    __tablename__ = "narration_jobs"
+    id = db.Column(db.Integer, primary_key=True)
+    target_kind = db.Column(db.String(16), nullable=False)
+    target_id = db.Column(db.Integer, nullable=False)
+    target_public_id = db.Column(db.String(32), nullable=False)
+    source_revision = db.Column(db.String(64), nullable=False)
+    script = db.Column(db.Text, nullable=False)
+    script_sha256 = db.Column(db.String(64), nullable=False)
+    renderer_version = db.Column(db.String(32), nullable=False)
+    recipe = db.Column(db.JSON, nullable=False)
+    recipe_sha256 = db.Column(db.String(64), nullable=False)
+    state = db.Column(db.String(16), nullable=False, default="pending", index=True)
+    attempt_count = db.Column(db.Integer, nullable=False, default=0)
+    eligible_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    claim_token_hash = db.Column(db.String(64), nullable=True)
+    claim_deadline = db.Column(db.DateTime, nullable=True, index=True)
+    heartbeat_at = db.Column(db.DateTime, nullable=True)
+    error_code = db.Column(db.String(64), nullable=True)
+    storage_key = db.Column(db.String(96), nullable=True)
+    audio_sha256 = db.Column(db.String(64), nullable=True)
+    duration_seconds = db.Column(db.Float, nullable=True)
+    channels = db.Column(db.Integer, nullable=True)
+    sample_rate = db.Column(db.Integer, nullable=True)
+    codec = db.Column(db.String(16), nullable=True)
+    byte_size = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    ready_at = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (
+        db.UniqueConstraint("target_kind", "target_id", "source_revision", "recipe_sha256", name="uq_narration_target_recipe"),
+        db.Index("ix_narration_claim", "state", "eligible_at", "id"),
+    )
+
+
+class TTSWorkerCredential(db.Model):  # type: ignore[name-defined]
+    __tablename__ = "tts_worker_credentials"
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(120), nullable=False)
+    secret_hash = db.Column(db.String(64), nullable=False, unique=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+
+
+class TTSSettings(db.Model):  # type: ignore[name-defined]
+    __tablename__ = "tts_settings"
+    id = db.Column(db.Integer, primary_key=True, default=1)
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+    articles_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    editions_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    backfill_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    backend = db.Column(db.String(32), nullable=False, default="mlx-breeze")
+    model = db.Column(db.String(256), nullable=False, default="mlx-community/Breeze-TTS-2-mlx-4bit")
+    checkpoint_revision = db.Column(db.String(128), nullable=False, default="3a06d26b172ea4ae1da2f42d708383e9c79d5526")
+    instruction = db.Column(db.String(1000), nullable=False, default="Speak clearly and naturally.")
+    pronunciation_aliases = db.Column(db.JSON, nullable=False, default=dict)
+    cfg_scale = db.Column(db.Float, nullable=False, default=4.0)
+    opus_bitrate = db.Column(db.Integer, nullable=False, default=40)
+    max_minutes = db.Column(db.Integer, nullable=False, default=30)
+    max_chars = db.Column(db.Integer, nullable=False, default=16000)
+    max_pending_jobs = db.Column(db.Integer, nullable=False, default=500)
+    retry_budget = db.Column(db.Integer, nullable=False, default=5)
+    retention_days = db.Column(db.Integer, nullable=False, default=30)
+    license_accepted = db.Column(db.Boolean, nullable=False, default=False)
+    profile_revision = db.Column(db.Integer, nullable=False, default=1)
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class Subscriber(db.Model):  # type: ignore[name-defined]
     __tablename__ = "subscribers"
 

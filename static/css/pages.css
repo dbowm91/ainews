@@ -124,27 +124,6 @@
 
 .admin-body .admin-header {
   border-bottom: 1px solid var(--accent-dim);
-  /* Two rows: the primary sections on the first, the remaining admin
-     sections on the second. They used to share one row, which left the
-     primary nav so narrow that its last links scrolled out of sight
-     behind a scrollbar nobody could see. */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "nav     logout"
-    "subnav  subnav";
-  align-items: center;
-  column-gap: 1rem;
-  padding-right: 1rem;
-}
-
-.admin-header .nav {
-  grid-area: nav;
-  min-width: 0;
-}
-
-.admin-header .nav-logout {
-  grid-area: logout;
 }
 
 .breadcrumbs {
@@ -841,58 +820,12 @@
   max-width: 300px;
 }
 
-.admin-header .nav-links {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  gap: 0.3rem;
-  padding-bottom: 0.25rem;
-  position: relative;
-}
-
-/* On a wide screen the primary nav has a row to itself, so it can wrap
-   rather than scroll: every section stays visible. Below the breakpoint
-   it becomes a dropdown, which has its own rules. */
-@media (min-width: 769px) {
-  .admin-header .nav-links {
-    flex-wrap: wrap;
-    overflow-x: visible;
-    row-gap: 0.2rem;
-  }
-
-  .admin-header .nav-links::after {
-    display: none;
-  }
-}
-
-.admin-header .nav-links::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 2rem;
-  pointer-events: none;
-  background: linear-gradient(to right, transparent, var(--bg-secondary));
-  mask-image: linear-gradient(to right, transparent, black);
-  -webkit-mask-image: linear-gradient(to right, transparent, black);
-}
-
-.admin-header .nav-links::-webkit-scrollbar {
-  display: none;
-}
-
-.admin-header .nav-links a {
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
-/* Second row of admin sections. The primary nav scrolls horizontally with a
-   hidden scrollbar, so the remaining sections get their own visible row
-   rather than being pushed off the end of a scroller nobody can see. */
+/* The public nav remains the primary header row; admin sections occupy a
+   distinct second row that wraps instead of hiding links in a scroller. */
 .admin-subnav {
-  grid-area: subnav;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0.35rem 1.25rem;
   display: flex;
   /* Wrap rather than scroll. A second row that scrolls sideways hides the
      admin sections past its edge behind a scrollbar nobody can see, which
@@ -902,8 +835,11 @@
   align-items: center;
   gap: 0.75rem;
   row-gap: 0.2rem;
-  padding: 0.35rem 0;
   border-top: 1px solid var(--border);
+}
+
+.admin-subnav form {
+  margin-left: auto;
 }
 
 .admin-subnav::-webkit-scrollbar {

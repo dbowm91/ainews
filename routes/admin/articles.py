@@ -63,6 +63,13 @@ _REPROCESS_STAGES = {
     },
 }
 
+_RETRY_RESET_FIELDS = {
+    PipelineStatus.PENDING: _REPROCESS_STAGES["select"]["fields"],
+    PipelineStatus.RESEARCHING: _REPROCESS_STAGES["research"]["fields"],
+    PipelineStatus.WRITING: _REPROCESS_STAGES["write"]["fields"],
+    PipelineStatus.EDITING: ["final_article", "original_ai_article"],
+}
+
 
 def _query_looks_like_url(query: str) -> bool:
     """Check if the query string looks like a URL."""
@@ -673,6 +680,8 @@ def retry_article(article_id):
     article.pipeline_status = next_status
     article.publicly_visible = False
     article.pipeline_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    for field in _RETRY_RESET_FIELDS[next_status]:
+        setattr(article, field, None)
     article.retry_count = 0
     article.last_error = None
     metadata = dict(article.raw_metadata or {}) if isinstance(article.raw_metadata, dict) else {}

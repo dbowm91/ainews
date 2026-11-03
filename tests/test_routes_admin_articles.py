@@ -513,7 +513,7 @@ class TestManualRetry:
         assert article.final_article is None
         assert article.total_retries == 1
         assert len(queued) == 1
-        assert queued[0]["args"] == (article_id,)
+        assert tuple(queued[0]["args"]) == (article_id,)
 
     def test_failed_articles_are_marked_retryable_in_the_table(self, auth_client, create_article):
         article = create_article(pipeline_status="failed")

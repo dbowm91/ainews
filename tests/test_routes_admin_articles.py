@@ -474,29 +474,26 @@ class TestReprocessStages:
 
 
 class TestManualRetry:
-    def test_failed_article_retries_from_latest_failed_stage(
+    def test_verified_research_without_draft_resumes_at_write_stage(
         self, auth_client, app, create_article, monkeypatch,
     ):
         from extensions import db
-        from models import PipelineLog, PipelineRun
+        from models import EditorialDossier
         from tasks import write_article
 
         article = create_article(
             pipeline_status="failed",
             research_brief="Existing research brief",
-            draft_article="Existing draft",
-            final_article="Invalid final",
         )
         article.last_error = "writer provider error"
-        run = PipelineRun(run_type="crawl", status="completed")
-        db.session.add(run)
         db.session.flush()
-        db.session.add(PipelineLog(
-            run_id=run.id,
+        db.session.add(EditorialDossier(
             article_id=article.id,
-            stage="writer",
-            level="error",
-            message="writer request failed",
+            revision=1,
+            policy_version="evidence-first-v1",
+            status="verified",
+            content_digest="a" * 64,
+            payload={},
         ))
         db.session.commit()
         article_id = article.id

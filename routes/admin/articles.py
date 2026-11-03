@@ -451,6 +451,10 @@ def edit_article(article_id):
         fa, new_category, new_status = _process_edit_form(article, request.form, original_fa or {})
 
         article.final_article = json.dumps(fa)
+        # Human edits change the material being qualified. A submitted status
+        # must not carry the old evidence review forward or publish the edit.
+        article.pipeline_status = "review"
+        article.publicly_visible = False
         from services.publication import apply_publication_state
         apply_publication_state(article)
 

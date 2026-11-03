@@ -914,6 +914,10 @@ jobs:
     name: "Clean host macOS arm64"
     runs-on: macos-latest
     timeout-minutes: 20
+    # This job builds and consumes its venv on the same host, so use the
+    # latest available 3.12 patch for the current macOS arm64 image.
+    env:
+      PYTHON_VERSION: "3.12"
     steps:
       - uses: actions/checkout@v4
 

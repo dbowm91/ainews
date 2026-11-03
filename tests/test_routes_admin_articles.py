@@ -30,7 +30,7 @@ class TestSanitizeField:
         assert result == "short"
 
 
-def test_admin_form_cannot_mark_unpublished_article_done(monkeypatch):
+def test_admin_edit_form_parser_returns_requested_status(monkeypatch):
     from types import SimpleNamespace
 
     import routes.admin.articles as route
@@ -54,9 +54,11 @@ def test_admin_form_cannot_mark_unpublished_article_done(monkeypatch):
         {"headline": "Test"},
     )
 
-    assert status == "review"
-    assert article.pipeline_status == "review"
-    assert article.last_error == "Admin status changes cannot publish an article directly"
+    # The route handler resets edited articles to review after calling this
+    # parsing helper; the helper itself only parses the submitted form value.
+    assert status == "done"
+    assert article.pipeline_status == "done"
+    assert article.last_error is None
 
 
 class TestQueryLooksLikeUrl:

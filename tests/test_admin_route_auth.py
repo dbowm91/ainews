@@ -86,6 +86,7 @@ ADMIN_ROUTES = {
     "admin.rollback_article",
     "admin.delete_article",
     "admin.reprocess_article",
+    "admin.retry_article",
     "admin.sources",
     "admin.add_source",
     "admin.enable_source",

@@ -19,6 +19,7 @@ plain:
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -149,7 +150,10 @@ class TestTheRailIsOnEveryPublicPage:
         from tests.factories import create_source
 
         source = create_source()
-        create_article(source=source, pipeline_status="done", category="ai")
+        create_article(
+            source=source, pipeline_status="done", category="ai",
+            published_at=datetime.now(timezone.utc),
+        )
 
         response = client.get(path)
         assert response.status_code == 200
@@ -160,7 +164,10 @@ class TestTheRailIsOnEveryPublicPage:
         from tests.factories import create_source
 
         source = create_source()
-        article = create_article(source=source, pipeline_status="done", category="ai")
+        article = create_article(
+            source=source, pipeline_status="done", category="ai",
+            published_at=datetime.now(timezone.utc),
+        )
 
         response = client.get(f"/article/{article.public_id}")
         assert response.status_code == 200
@@ -171,7 +178,10 @@ class TestTheRailIsOnEveryPublicPage:
         from tests.factories import create_source
 
         source = create_source()
-        article = create_article(source=source, pipeline_status="done", category="ai")
+        article = create_article(
+            source=source, pipeline_status="done", category="ai",
+            published_at=datetime.now(timezone.utc),
+        )
         tag = create_tag(name="layout-tag", slug="layout-tag")
         article.tags.append(tag)
 
@@ -258,6 +268,25 @@ class TestWhatToWatchIsNotADisclosure:
         assert "article-what-to-watch > summary" not in css
 
 
+class TestArticleSummaryPresentation:
+    def test_tldr_is_plain_italic_text_directly_after_the_title(self):
+        html = _read(TEMPLATES_DIR / "partials" / "condensed_article.html")
+        assert '<div class="article-tldr">' not in html
+        assert '<p class="article-tldr"><span class="tldr-label">tl;dr</span> <em>' in html
+        assert html.index('class="article-title"') < html.index('class="article-tldr"')
+
+    def test_summary_boxes_match_and_reference_label_spans_the_box(self):
+        css = _strip_css_comments(_css("articles.css"))
+        assert ".article-why-matters,\n.article-what-to-watch {" in css
+        assert "border-left: 3px solid var(--accent)" not in css
+        assert "width: 100%" in css[css.index(".reference-label {"):]
+
+    def test_body_heading_identifies_ai_authorship(self):
+        html = _read(TEMPLATES_DIR / "partials" / "condensed_article.html")
+        assert ">AI summary</h2>" in html
+        assert "condensed article</h2>" not in html
+
+
 class TestTheNavigationIsTheSameOnEveryPage:
     """The header lists the topic taxonomy everywhere."""
 
@@ -272,7 +301,10 @@ class TestTheNavigationIsTheSameOnEveryPage:
         from tests.factories import create_source
 
         source = create_source()
-        article = create_article(source=source, pipeline_status="done", category="ai")
+        article = create_article(
+            source=source, pipeline_status="done", category="ai",
+            published_at=datetime.now(timezone.utc),
+        )
 
         response = client.get(f"/article/{article.public_id}")
         body = response.get_data(as_text=True)

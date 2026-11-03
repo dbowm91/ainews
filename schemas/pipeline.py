@@ -41,13 +41,27 @@ class ReviewConfig(BaseModel):
     auto_approve: bool = Field(
         default=False,
         description=(
-            "Approve and publish every article that reaches the review queue "
-            "without waiting for a human. Default: False (a human decides)."
+            "Approve and publish eligible articles without waiting for a human. "
+            "Editorial eligibility holds still block publication. "
+            "Default: False (a human decides)."
         ),
     )
     auto_publish_threshold: Optional[int] = Field(
         default=None,
         description="Auto-publish articles with impact_score >= this value, bypassing review. Default: None (disabled).",
+    )
+
+
+class EditorialEvidenceConfig(BaseModel):
+    """Evidence policy for a personal, source-attributed news pipeline."""
+
+    allow_single_source_attributed: bool = Field(
+        default=False,
+        description=(
+            "Allow publication when every material claim has a validated verbatim "
+            "span from one retrieved source and the output attributes that source. "
+            "Disabled by default."
+        ),
     )
 
 
@@ -212,6 +226,7 @@ class StageConfig(BaseModel):
 
 class PipelineRootConfig(BaseModel):
     pipeline: PipelineConfig
+    evidence: EditorialEvidenceConfig = Field(default_factory=EditorialEvidenceConfig)
     newsletter: NewsletterConfig = Field(default_factory=NewsletterConfig)
     newsletter_pipeline: NewsletterPipelineConfig = Field(
         default_factory=NewsletterPipelineConfig

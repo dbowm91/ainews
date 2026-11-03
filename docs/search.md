@@ -83,3 +83,9 @@ Runs daily at 2 AM via Celery Beat schedule.
 | 0 | Celery broker |
 | 1 | Config cache |
 | 15 | Flask-Limiter storage |
+
+## Editorial evidence retrieval
+
+`tasks.research` uses the configured external search provider behind `services.search`, with four bounded event-oriented queries and at most eight retrieved candidates. Search results are lead-only until fetched through `services/content_extractor`, which delegates untrusted URLs to `services/safe_fetch.py` and preserves SSRF, redirect, byte, timeout, and content-type controls. Retrieved excerpts are capped at 2,000 characters and cached for 30 minutes; the private dossier stores digests and excerpts, not unrestricted publisher text.
+
+Source family is independent of hostname. Known newsroom families use a small registry, recognized wire/syndication markers and near-identical content collapse to one family, and unknown lineage does not count toward the two-origin threshold. Primary documents can support narrowly attributed statements. `services.editorial_evidence.verify_claims()` accepts only server-minted source IDs and exact excerpt spans; model-reported confidence and URLs do not establish evidence. One gap-directed follow-up round is capped at two pages.

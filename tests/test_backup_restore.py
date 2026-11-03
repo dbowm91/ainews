@@ -1478,7 +1478,7 @@ class TestUtilities:
         monkeypatch.setattr(
             "importlib.metadata.version",
             lambda x: (_ for _ in ()).throw(
-                importlib.metadata.PackageNotFoundError
+                _im.PackageNotFoundError
             ),
         )
         # The patched version is only for the outer call; need to patch

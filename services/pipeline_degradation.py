@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from celery.utils.log import get_task_logger
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 
 from constants import STAGE_STATUS_MAP, PipelineStatus, truncate_for_log
@@ -177,22 +178,22 @@ def _degrade_edit_stage(article, run_id):
         return
 
     article.pipeline_status = PipelineStatus.DONE
-    from services.publication import apply_publication_state
-    apply_publication_state(article)
+    article.publicly_visible = False
     try:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         raise
+    post_finalize_article(article, run_id=run_id)
     if run_id:
         _log_pipeline(
             run_id,
             "edit",
             "warning",
-            "Degraded: used draft as final for %s",
+            "Degraded draft held for editorial review: %s",
             article_id=article.id,
         )
-    logger.warning("Article %s finalized with degraded content", article.id)
+    logger.warning("Article %s held with degraded content", article.id)
 
 
 def _degrade_and_advance(article, failed_stage: str, run_id=None):
@@ -221,7 +222,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
     _apply_degrade_config(article, stage_config, run_id, stage=failed_stage)
 
 
-def post_finalize_article(article, run_id=None):
+def post_finalize_article(article, run_id=None, published_at=None):
     """Post-finalize article: published_at, trend memory, webhooks, SLA metrics, embeddings.
 
     The publication is committed **before** any of the slow work starts.
@@ -238,11 +239,40 @@ def post_finalize_article(article, run_id=None):
     it can hold the database, and none of it can unpublish the article.
     """
     from extensions import db
+    from models import Article
     from services.metrics import get_metrics
     from services.webhooks import trigger_event
     from tasks.embeddings import generate_article_embedding
 
-    article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    from services.editorial_eligibility import require_eligible
+
+    verdict = require_eligible(article)
+    if not verdict.eligible:
+        logger.warning(
+            "Post-finalize blocked for article %s: %s",
+            getattr(article, "id", "?"),
+            ", ".join(verdict.reason_codes),
+        )
+        return False
+
+    claimed_at = published_at or datetime.now(timezone.utc)
+    if claimed_at.tzinfo is not None:
+        claimed_at = claimed_at.astimezone(timezone.utc).replace(tzinfo=None)
+    claimed = db.session.execute(
+        update(Article)
+        .where(
+            Article.id == article.id,
+            Article.pipeline_status == PipelineStatus.DONE,
+            Article.published_at.is_(None),
+        )
+        .values(published_at=claimed_at, publicly_visible=True)
+    )
+    if claimed.rowcount != 1:
+        db.session.rollback()
+        logger.info("Publication effects already claimed for article %s", article.id)
+        return False
+    article.published_at = claimed_at
+    article.publicly_visible = True
 
     # Release the write lock before anything slow happens.
     try:
@@ -307,6 +337,7 @@ def post_finalize_article(article, run_id=None):
         generate_article_embedding.delay(article.id)
     except Exception:  # noqa: BLE001 - embedding generation is non-critical
         logger.debug("Failed to enqueue embedding generation for article %s", article.id)
+    return True
 
 
 def _dispatch_trend_memory(article) -> None:
@@ -367,8 +398,7 @@ def _finalize(article_id: int):
                 return
 
             article.pipeline_status = PipelineStatus.DONE
-            from services.publication import apply_publication_state
-            apply_publication_state(article)
+            article.publicly_visible = False
 
             create_article_version(
                 article,

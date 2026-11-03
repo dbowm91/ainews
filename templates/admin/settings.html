@@ -135,10 +135,14 @@
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">providers</h2>
     <div class="form-hint">
-      The credentials themselves are never shown here. A provider marked
-      <strong>local</strong> may run on this machine without a credential and
-      may point at a private address. Timeout is per model request; attempts
-      are provider retries before the pipeline applies its own retry policy.
+      Credentials are never displayed after saving. Enter a value to add or
+      replace a credential; leave it blank to keep the current value. Select
+      <strong>no key</strong> to clear it. A provider marked <strong>local</strong>
+      may run without a credential and may point at a private address. Concurrent
+      calls are capped across all models and stages using that provider. Transient
+      failures retry with exponential backoff, starting at the base delay and
+      capped at the maximum delay. The attempt count includes the first request;
+      3 attempts allows 2 retries.
     </div>
 
     <form method="post" action="/admin/settings/providers" id="providers-form">
@@ -151,7 +155,11 @@
             <th>endpoint</th>
             <th>model</th>
             <th>timeout (seconds)</th>
-            <th>request attempts</th>
+            <th>max concurrent calls</th>
+            <th>retry attempts</th>
+            <th>retry base delay (seconds)</th>
+            <th>retry max delay (seconds)</th>
+            <th>credential</th>
             <th class="settings-col-enabled">on</th>
             <th class="settings-col-enabled">local</th>
             <th class="settings-col-default">default</th>
@@ -189,9 +197,42 @@
             </td>
             <td>
               <input type="number" class="form-input settings-model-input"
-                     name="retry_attempts_{{ provider.id }}" value="{{ provider.retry_attempts }}"
-                     min="1" max="5" required
-                     aria-label="Request attempts for {{ provider.id }}">
+                     name="max_concurrent_{{ provider.id }}"
+                     value="{{ provider.max_concurrent }}" min="1" max="64" step="1"
+                     aria-label="Maximum concurrent calls for {{ provider.id }}">
+            </td>
+            <td>
+              <input type="number" class="form-input settings-model-input"
+                     name="retry_attempts_{{ provider.id }}"
+                     value="{{ provider.retry_attempts }}" min="1" max="8" step="1"
+                     aria-label="Retry attempts for {{ provider.id }}">
+            </td>
+            <td>
+              <input type="number" class="form-input settings-model-input"
+                     name="retry_base_delay_seconds_{{ provider.id }}"
+                     value="{{ provider.retry_base_delay_seconds }}" min="1" max="60" step="1"
+                     aria-label="Retry base delay in seconds for {{ provider.id }}">
+            </td>
+            <td>
+              <input type="number" class="form-input settings-model-input"
+                     name="retry_max_delay_seconds_{{ provider.id }}"
+                     value="{{ provider.retry_max_delay_seconds }}" min="5" max="600" step="1"
+                     aria-label="Retry maximum delay in seconds for {{ provider.id }}">
+            </td>
+            <td>
+              <label class="form-hint" for="api-key-{{ provider.id }}">
+                {% if provider.has_api_key %}configured{% else %}none{% endif %}
+              </label>
+              <input type="password" class="form-input settings-model-input"
+                     id="api-key-{{ provider.id }}"
+                     name="api_key_{{ provider.id }}"
+                     value="" autocomplete="new-password"
+                     placeholder="leave blank to keep"
+                     aria-label="New credential for {{ provider.id }}">
+              <label class="form-hint">
+                <input type="checkbox" name="clear_api_key_{{ provider.id }}">
+                no key
+              </label>
             </td>
             <td class="settings-col-enabled">
               <input type="checkbox" name="enabled_{{ provider.id }}"
@@ -440,16 +481,17 @@
   <section class="dash-card dash-card-full">
     <h2 class="dash-card-title">review</h2>
     <div class="form-hint">
-      <strong>Auto-review mode</strong> publishes every article the pipeline
-      routes to review, without waiting for a person. Turn it on for a site
-      that generates on its own. With it off, the articles wait in the
-      <a href="/admin/review">review queue</a>.
+      <strong>Auto-review mode</strong> publishes eligible articles without
+      waiting for a person. Articles held by evidence, quality, or originality
+      checks remain in the <a href="/admin/review">review queue</a> until
+      those issues are resolved. Turn it on to skip human review for articles
+      that pass the publication checks.
     </div>
 
     {% if review.auto_approve %}
     <div class="dash-action">
       <span class="health-dot green"></span>
-      auto-review mode is on — articles publish without a human
+      auto-review mode is on — eligible articles publish without a human
     </div>
     {% else %}
     <div class="dash-action">
@@ -464,7 +506,7 @@
         <label class="form-check">
           <input type="checkbox" name="auto_approve"
                  {% if review.auto_approve %}checked{% endif %}>
-          <span>auto-review mode — publish without a human</span>
+          <span>auto-review eligible articles without a human</span>
         </label>
       </div>
       <div class="form-group">

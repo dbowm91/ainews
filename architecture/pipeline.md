@@ -82,12 +82,15 @@ Valid transitions:
 **Purpose**: Build comprehensive research brief
 
 **Process**:
-- LLM analyzes article content
-- Subagent performs web search for context
+- Bounded deterministic queries treat the feed article as a discovery lead
+- Candidate pages are retrieved through the safe-fetch content extractor; snippets remain lead-only
+- A private evidence dossier records canonical URLs, source families, digests, bounded excerpts, and validated claim-to-span links
+- One capped follow-up round targets unresolved material claims
+- Related articles and editorial memory provide context but never count as corroboration
 - Fetches related trend memory entries
 - Produces `{source_summary, key_claims, direct_quotes, external_sources, related_articles, context_notes, newsworthiness, impact_score}`
 
-**Degradation**: If disabled, skips to `review`
+**Degradation**: Missing or unverified evidence routes to a hold in `review`; source-only fallback cannot reach publication
 
 ### 3. Write
 
@@ -112,6 +115,10 @@ Valid transitions:
 - Post-finalize: trend memory update, webhook dispatch
 
 **Degradation**: If disabled, marks for `review`
+
+### Mandatory publication gate
+
+`services/editorial_eligibility.py` checks the exact final-content digest, matching passing quality report, verified dossier revision, final artifact audit, and degradation state. `services.auto_review.publish_article`, `tasks.pipeline._transition_article_status`, disabled-stage finalization, scheduled approval, and post-finalize side effects all enforce this policy. A hold uses the existing `review` status for operator workflow and stores stable reason codes; auto-approval cannot override it.
 
 ### 5. Finalize
 

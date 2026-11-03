@@ -29,14 +29,7 @@ _HTTPX_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=20)
 
 def _handle_ollama_error(e: Exception) -> Exception:
     """Convert ollama SDK exceptions to our custom exceptions."""
-    from ollama import ResponseError
-
-    return make_error_handler(
-        "Ollama",
-        rate_limit_exc=(ResponseError,),
-        auth_exc=type(None),
-        timeout_exc=(ConnectionError, TimeoutError),
-    )(e)
+    return make_error_handler("Ollama")(e)
 
 
 @register_provider("ollama")
@@ -93,8 +86,7 @@ class OllamaProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (httpx.HTTPError, ImportError, ConnectionError,
-                TimeoutError, ValueError) as e:
+        except Exception as e:
             raise _handle_ollama_error(e) from e
         latency_ms = (time.monotonic() - t0) * 1000
         prompt_tokens = resp.get("prompt_eval_count", 0)
@@ -123,8 +115,26 @@ class OllamaProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         ))
 
-    @circuit_protected("llm_ollama")
     def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        stream_model = model or self.default_model
+        return self._dispatch_stream(
+            lambda: self._do_chat_streaming(
+                messages, model=model, system=system, temperature=temperature,
+                max_tokens=max_tokens, **kwargs,
+            ),
+            stream_model,
+        )
+
+    @circuit_protected("llm_ollama")
+    def _do_chat_streaming(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -148,8 +158,7 @@ class OllamaProvider(BaseLLMProvider):
                     yield content
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (httpx.HTTPError, ImportError, ConnectionError,
-                TimeoutError, ValueError) as e:
+        except Exception as e:
             raise _handle_ollama_error(e) from e
 
     @circuit_protected("llm_ollama")
@@ -174,8 +183,7 @@ class OllamaProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (httpx.HTTPError, ImportError, ConnectionError,
-                TimeoutError, ValueError) as e:
+        except Exception as e:
             raise _handle_ollama_error(e) from e
         return self._extract_text(resp)
 
@@ -227,8 +235,7 @@ class OllamaProvider(BaseLLMProvider):
             resp = self.client.chat(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (httpx.HTTPError, ImportError, ConnectionError,
-                TimeoutError, ValueError) as e:
+        except Exception as e:
             raise _handle_ollama_error(e) from e
         return resp, resp
 
@@ -242,7 +249,7 @@ class OllamaProvider(BaseLLMProvider):
         max_tokens: int,
     ) -> tuple[Any, Any]:
         return cast(tuple[Any, Any], self._retry_with_backoff(
-            self._do_call_api_with_tools, model,
+            self._do_call_api_with_tools, model, model,
             messages=messages, tools=tools, tool_choice=tool_choice,
             temperature=temperature, max_tokens=max_tokens,
         ))
@@ -303,8 +310,7 @@ class OllamaProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (httpx.HTTPError, ImportError, ConnectionError,
-                TimeoutError, ValueError) as e:
+        except Exception as e:  # noqa: BLE001 - SDK error types vary across API versions
             converted = _handle_ollama_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

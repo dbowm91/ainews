@@ -67,24 +67,38 @@ Note: `selecting` and `selected` statuses exist but are handled within the resea
 
 ## Degradation System
 
-When a pipeline stage fails persistently, the article degrades gracefully instead of failing entirely.
+When a pipeline stage fails persistently, the pipeline records a degraded draft for diagnosis. Degraded output is held and cannot be published.
 
 ### Stage Degradation
 
 Each stage has a degradation handler that attempts partial completion:
 
 - **Select failure**: Auto-select with score 6, advance to research
-- **Research failure**: Uses source text only, sets impact_score to 30, advance to write
+- **Research failure**: May retain source-only research for diagnosis, but the article is held; source-only text is not verified evidence
 - **Write failure**: Generates minimal draft from extracted text, advance to edit
-- **Edit failure**: Routes to review status for manual intervention
+- **Edit failure**: Retains the fallback draft and routes it to review; fallback output cannot publish
 
 ### Degradation Tracking
 
-Articles track degradation count via `degradation_count`. Articles with 2+ degradations are routed to manual review.
+Articles track degradation count via `degradation_count`. Any degraded article is ineligible for publication; articles with 2+ degradations are routed to review.
 
 ## Retry Budget
 
 Articles have a total retry budget (`total_retries`) that increments on every stage failure.
+
+## Evidence-first editorial flow
+
+Research runs four deterministic query variants and retrieves at most eight candidate pages through `services/content_extractor` and the SSRF-safe fetch client. Search snippets remain leads. Retrieved source excerpts are capped at 2,000 characters and stored in a private `EditorialDossier`; successful documents use a 30-minute cache. Primary documents and a small registry of known newsroom families are distinguished from unknown source lineage.
+
+The research verifier may run one gap-directed search round (at most two pages). It validates each server-minted evidence handle and exact excerpt span, then computes evidence-family counts. A material claim is publishable only when corroborated by two recognized independent origins or supported by a narrowly attributable primary document. Provider failure, unknown lineage, contradiction, or incomplete retrieval leaves the dossier held.
+
+The writer and editor receive a verified claim packet. They do not receive the discovery article's headline or body as source material, and editorial memory does not count as corroboration. The final `CondensedArticle` is checked across every public text field for claim support, citation provenance, unsupported numbers, quote accuracy, and long exact phrase overlap. The public schema and article rendering remain unchanged.
+
+## Publication eligibility and holds
+
+`services/editorial_eligibility.py` is the common publication policy used by pipeline completion, review approval, auto-approval, scheduled publication, admin approval, degraded finalization, and post-finalize side effects. It checks the exact final-content digest, the latest matching passing quality report, a verified dossier revision, the final artifact audit, and degradation state. Holds are recorded in `Article.raw_metadata.editorial_eligibility` and `last_error`; the existing `review` status is the operator queue, while eligibility metadata identifies the hold reason. Auto-approval only publishes an eligible article. Admin approval cannot override a hold.
+
+Inspect the evidence and hold summary at `GET /api/v1/admin/articles/<id>/editorial-status`. Reprocess an article after source material or dossier corrections; any content or dossier revision invalidates the previous pass. Admin edits to unpublished content mark the audit stale. Edits to already-published content are rejected and require a separate reviewed correction candidate.
 
 | Total Retries | Behavior |
 |-------------|---------|

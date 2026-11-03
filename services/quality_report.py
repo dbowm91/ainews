@@ -7,6 +7,7 @@ and direct quote validation against research briefs and sources.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import re
 from dataclasses import dataclass, field as dc_field
@@ -582,7 +583,12 @@ def persist_quality_report(
         passed=result.passed,
         needs_review=result.needsreview,
         findings=findings_dicts,
-        meta=result.meta,
+        meta={
+            **(result.meta or {}),
+            "content_digest": hashlib.sha256(
+                (article.final_article or "").encode("utf-8")
+            ).hexdigest(),
+        },
     )
 
     db.session.add(report)

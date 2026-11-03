@@ -23,14 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _handle_gemini_error(e: Exception) -> Exception:
     """Convert Google Gemini SDK exceptions to our custom exceptions."""
-    from google.genai.errors import ClientError
-
-    return make_error_handler(
-        "Gemini",
-        rate_limit_exc=(ClientError,),
-        auth_exc=type(None),
-        timeout_exc=(ConnectionError, TimeoutError),
-    )(e)
+    return make_error_handler("Gemini")(e)
 
 
 @register_provider("gemini")
@@ -105,8 +98,7 @@ class GeminiProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (ImportError, ConnectionError, TimeoutError,
-                ValueError, AttributeError) as e:
+        except Exception as e:
             raise _handle_gemini_error(e) from e
         latency_ms = (time.monotonic() - t0) * 1000
         usage = resp.usage_metadata
@@ -142,8 +134,26 @@ class GeminiProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         ))
 
-    @circuit_protected("llm_gemini")
     def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        stream_model = model or self.default_model
+        return self._dispatch_stream(
+            lambda: self._do_chat_streaming(
+                messages, model=model, system=system, temperature=temperature,
+                max_tokens=max_tokens, **kwargs,
+            ),
+            stream_model,
+        )
+
+    @circuit_protected("llm_gemini")
+    def _do_chat_streaming(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -170,8 +180,7 @@ class GeminiProvider(BaseLLMProvider):
                     yield chunk.text
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (ImportError, ConnectionError, TimeoutError,
-                ValueError, AttributeError) as e:
+        except Exception as e:
             raise _handle_gemini_error(e) from e
 
     @circuit_protected("llm_gemini")
@@ -201,8 +210,7 @@ class GeminiProvider(BaseLLMProvider):
             )
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (ImportError, ConnectionError, TimeoutError,
-                ValueError, AttributeError) as e:
+        except Exception as e:
             raise _handle_gemini_error(e) from e
         return resp.text or "{}"
 
@@ -262,8 +270,7 @@ class GeminiProvider(BaseLLMProvider):
             resp = self.client.models.generate_content(**call_kwargs)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (ImportError, ConnectionError, TimeoutError,
-                ValueError, AttributeError) as e:
+        except Exception as e:
             raise _handle_gemini_error(e) from e
         if not resp.candidates:
             raise RuntimeError(f"Gemini returned no candidates for model {model}")
@@ -279,7 +286,7 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: int,
     ) -> tuple[Any, Any]:
         return cast(tuple[Any, Any], self._retry_with_backoff(
-            self._do_call_api_with_tools, model,
+            self._do_call_api_with_tools, model, model,
             messages=messages, tools=tools, tool_choice=tool_choice,
             temperature=temperature, max_tokens=max_tokens,
         ))
@@ -348,8 +355,7 @@ class GeminiProvider(BaseLLMProvider):
             }
         except (KeyboardInterrupt, SystemExit):
             raise
-        except (ImportError, ConnectionError, TimeoutError,
-                ValueError, AttributeError) as e:
+        except Exception as e:  # noqa: BLE001 - SDK error types vary across API versions
             converted = _handle_gemini_error(e)
             return {"provider": self.provider_id, "status": f"error: {converted}"}
 

@@ -170,12 +170,28 @@ def _transition_article_status(article, new_status: str) -> None:
         route_to_review(article)
         return
 
+    if new_status == PipelineStatus.DONE:
+        from services.editorial_eligibility import require_eligible
+
+        verdict = require_eligible(article)
+        if not verdict.eligible:
+            from services.auto_review import route_to_review
+
+            article.last_error = "Cannot publish final content: " + ", ".join(verdict.reason_codes)
+            route_to_review(article)
+            return
+
     current = article.pipeline_status
     if not is_valid_transition(current, new_status):
         raise InvalidStateTransitionError(article.id, current, new_status)
     article.pipeline_status = new_status
-    from services.publication import apply_publication_state
-    apply_publication_state(article)
+    if new_status == PipelineStatus.DONE:
+        # post_finalize_article owns the atomic publication claim and assigns
+        # published_at. Setting it here makes that claim look already taken.
+        article.publicly_visible = False
+    else:
+        from services.publication import apply_publication_state
+        apply_publication_state(article)
     from services.publication import invalidate_publication_cache
     invalidate_publication_cache()
 
@@ -355,17 +371,20 @@ def _run_stage_core(stage, article_id, work_fn, rc, t0, run_id):
         logger.warning("TraceID=%s: Article %s not found", generate_trace_id(), article_id)
         return {"article_id": article_id, "error": "not found"}, None, None
     
-    if article.pipeline_started_at is not None:
+    activity_at = article.updated_at
+    if not isinstance(activity_at, datetime):
+        activity_at = article.pipeline_started_at
+    if activity_at is not None:
         now_utc = datetime.now(timezone.utc)
-        started_at = article.pipeline_started_at
+        started_at = activity_at
         if started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
         else:
             started_at = started_at.astimezone(timezone.utc)
 
-        # Extraction can precede pipeline dispatch by hours or days. A pending
-        # article has not entered an active stage yet, so start its timeout at
-        # this first stage execution rather than dead-lettering it as stale.
+        # `updated_at` measures inactivity in the current stage. The original
+        # pipeline start can be much older after a long queue or several slow
+        # local inference stages, so it must not expire healthy work.
         if article.pipeline_status == PipelineStatus.PENDING:
             article.pipeline_started_at = now_utc.replace(tzinfo=None)
             try:
@@ -398,7 +417,8 @@ def _run_stage_core(stage, article_id, work_fn, rc, t0, run_id):
             result, provider_id, model = _try_stage_work(stage, work_fn, article)
     
     article.retry_count = 0
-    article.last_error = None
+    if article.pipeline_status not in (PipelineStatus.REVIEW, PipelineStatus.FAILED):
+        article.last_error = None
     try:
         db.session.commit()
     except SQLAlchemyError:

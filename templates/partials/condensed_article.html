@@ -27,10 +27,7 @@
 
 {# Summary #}
 {% if fa.tldr %}
-  <div class="article-tldr">
-    <span class="tldr-label">tl;dr</span>
-    {{ fa.tldr|inline_html }}
-  </div>
+  <p class="article-tldr"><span class="tldr-label">tl;dr</span> <em>{{ fa.tldr|inline_html }}</em></p>
 {% endif %}
 
 {# Why It Matters #}
@@ -59,7 +56,7 @@
 {# Condensed Body #}
 {% if fa.body %}
   <section class="article-body-section">
-    <h2 class="section-heading">condensed article</h2>
+    <h2 class="section-heading">AI summary</h2>
     <div class="article-body">{{ fa.body|body_html }}</div>
   </section>
 {% endif %}

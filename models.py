@@ -29,8 +29,6 @@ from models import (  # noqa: E402
     Webhook,
     WebhookEvent,
     article_tags,
-    decode_short_url,
-    encode_short_url,
     slugify,
 )
 
@@ -55,7 +53,5 @@ __all__ = [
     "Webhook",
     "WebhookEvent",
     "article_tags",
-    "decode_short_url",
-    "encode_short_url",
     "slugify",
 ]

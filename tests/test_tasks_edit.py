@@ -227,10 +227,10 @@ class TestPostFinalizeArticle:
                     with patch("services.webhooks.trigger_event"):
                         _post_finalize_article(article, run_id=None)
 
-                        assert article.pipeline_status == PipelineStatus.DONE
+                        assert article.pipeline_status == PipelineStatus.REVIEW
 
     def test_records_sla_duration_if_crawled(self, app, create_article, monkeypatch):
-        """Records E2E duration if article was crawled."""
+        """Unverified content is held before publication duration is recorded."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
 
         with app.app_context():
@@ -248,7 +248,8 @@ class TestPostFinalizeArticle:
                     with patch("services.webhooks.trigger_event"):
                         _post_finalize_article(article, run_id=None)
 
-                        mock_instance.histogram_observe.assert_called()
+                        assert article.pipeline_status == "review"
+                        mock_instance.histogram_observe.assert_not_called()
 
 
 class TestClearTagCache:

@@ -71,6 +71,39 @@ class TestHandleStageFailure:
 class TestRetryStuck:
     """Test retry_stuck prevents infinite loops."""
 
+    def test_selected_and_written_are_recoverable_stages(self):
+        from tasks.retry import _STUCK_STATUSES
+
+        assert "selected" in _STUCK_STATUSES
+        assert "written" in _STUCK_STATUSES
+
+    def test_pipeline_timeout_failure_is_requeued_from_existing_artifacts(
+        self, app, create_article, monkeypatch,
+    ):
+        from extensions import db
+        from tasks.retry import _resume_pipeline_timeout_failure
+
+        article = create_article(
+            pipeline_status="failed",
+            research_brief='{"key_claims": []}',
+            draft_article='{"body":"draft"}',
+            final_article='{"body":"final"}',
+        )
+        article.last_error = "pipeline timeout exceeded (5400s)"
+        article.raw_metadata = {}
+        db.session.commit()
+        article_id = article.id
+        dispatched = []
+        monkeypatch.setattr("tasks.retry._dispatch_stage", lambda row: dispatched.append(row.pipeline_status))
+
+        assert _resume_pipeline_timeout_failure(article) is True
+        db.session.expire_all()
+        stored = db.session.get(type(article), article_id)
+        assert stored.pipeline_status == "editing"
+        assert stored.publicly_visible is False
+        assert stored.raw_metadata["pipeline_timeout_retries"] == 1
+        assert dispatched == ["editing"]
+
     @staticmethod
     def _create_mock_article(article_id=1, pipeline_status="writing", retry_count=1):
         """Create a mock article with proper updated_at value for retry_stuck tests."""
@@ -114,8 +147,8 @@ class TestRetryStuck:
         max_retries = _get_max_stage_retries()
         MockArticle, mock_query = mock_article_query
         article = self._create_mock_article(retry_count=max_retries)
-        mock_query.filter.return_value.yield_per.return_value.all.return_value = [
-            article
+        mock_query.filter.return_value.yield_per.return_value.all.side_effect = [
+            [article], [],
         ]
 
         with app.app_context():
@@ -133,8 +166,8 @@ class TestRetryStuck:
 
         MockArticle, mock_query = mock_article_query
         article = self._create_mock_article(retry_count=1)
-        mock_query.filter.return_value.yield_per.return_value.all.return_value = [
-            article
+        mock_query.filter.return_value.yield_per.return_value.all.side_effect = [
+            [article], [],
         ]
 
         with app.app_context():

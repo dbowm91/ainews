@@ -20,6 +20,30 @@ def _passing_quality_report():
 class TestExecuteEditorWork:
     """Tests for _execute_editor_work function."""
 
+    @pytest.fixture(autouse=True)
+    def _editorial_dependencies(self, monkeypatch):
+        """Keep these stage unit tests focused on orchestration with a verified packet."""
+        monkeypatch.setattr(
+            "services.editorial_evidence.build_verified_packet",
+            lambda _article: {
+                "claims": [],
+                "sources": [{"url": "https://evidence.example/source"}],
+                "discovery_credit": {"source": "test", "url": "https://feed.example/item"},
+            },
+        )
+        monkeypatch.setattr(
+            "services.editorial_audit.audit_final_artifact",
+            lambda _article: {"passed": True, "findings": []},
+        )
+        monkeypatch.setattr(
+            "services.editorial_evidence.audit_final_claims",
+            lambda *_args, **_kwargs: {"status": "verified", "claims": []},
+        )
+        monkeypatch.setattr(
+            "services.editorial_evidence.audit_final_claims",
+            lambda *_args, **_kwargs: {"status": "verified", "claims": []},
+        )
+
     def test_executes_full_editor_pipeline(self, app, create_article, monkeypatch):
         """Full happy path: builds prompt, calls LLM, assigns tags, finalizes."""
         monkeypatch.setenv("CELERY_TASK_SECRET", "test-secret-key-at-least-32-characters-long")
@@ -53,7 +77,7 @@ class TestExecuteEditorWork:
                 patch("tasks.edit._handle_validation_and_routing", return_value=None),
                 patch("services.quality_report.build_quality_report", return_value=_passing_quality_report()),
                 patch("services.quality_report.persist_quality_report"),
-                patch("tasks.edit._post_finalize_article"),
+                patch("tasks.edit._post_finalize_article", return_value=True),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
             ):
@@ -252,7 +276,7 @@ class TestExecuteEditorWork:
                 patch("services.quality.lightweight_quality_signals", return_value=quality_score),
                 patch("services.quality_report.build_quality_report", return_value=_passing_quality_report()),
                 patch("services.quality_report.persist_quality_report"),
-                patch("tasks.edit._post_finalize_article"),
+                patch("tasks.edit._post_finalize_article", return_value=True),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
             ):
@@ -298,7 +322,7 @@ class TestExecuteEditorWork:
                 patch("services.quality.lightweight_quality_signals", side_effect=RuntimeError("quality boom")),
                 patch("services.quality_report.build_quality_report", return_value=_passing_quality_report()),
                 patch("services.quality_report.persist_quality_report"),
-                patch("tasks.edit._post_finalize_article"),
+                patch("tasks.edit._post_finalize_article", return_value=True),
                 patch("tasks.pipeline._assign_tags"),
                 patch("extensions.db") as mock_db,
             ):
@@ -433,6 +457,7 @@ class TestGatherEditorContextAdditional:
                 patch("services.context_service.get_related_articles_for_edit", return_value=[{"title": "Related"}]),
                 patch("services.trend_memory.get_memory_for_topics", return_value=[]),
                 patch("services.trend_memory._format_memory_for_prompt", return_value="trend mem"),
+                patch("services.memory.memory_context", return_value=MagicMock(rendered="trend mem")),
                 patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
                 patch("services.subagent.initialize_tool_registry", return_value=["tools"]),
                 patch("services.subagent.run_subagent_with_tools", return_value=mock_ctx_result),
@@ -466,6 +491,7 @@ class TestGatherEditorContextAdditional:
                 patch("services.context_service.get_related_articles_for_edit", return_value=[]),
                 patch("services.trend_memory.get_memory_for_topics", return_value=[]),
                 patch("services.trend_memory._format_memory_for_prompt", return_value="trend mem"),
+                patch("services.memory.memory_context", return_value=MagicMock(rendered="")),
                 patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
                 patch("services.subagent.run_subagent", return_value=mock_ctx_result),
             ):
@@ -491,6 +517,7 @@ class TestGatherEditorContextAdditional:
                 patch("services.context_service.get_related_articles_for_edit", return_value=[]),
                 patch("services.trend_memory.get_memory_for_topics", return_value=[]),
                 patch("services.trend_memory._format_memory_for_prompt", return_value=""),
+                patch("services.memory.memory_context", return_value=MagicMock(rendered="")),
             ):
                 result = _gather_editor_context(article, [])
 
@@ -521,6 +548,7 @@ class TestGatherEditorContextAdditional:
                 patch("services.context_service.get_related_articles_for_edit", return_value=[]),
                 patch("services.trend_memory.get_memory_for_topics", return_value=[]),
                 patch("services.trend_memory._format_memory_for_prompt", return_value="mem"),
+                patch("services.memory.memory_context", return_value=MagicMock(rendered="mem")),
                 patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
                 patch("services.subagent.run_subagent", return_value=mock_ctx_result),
             ):

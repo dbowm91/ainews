@@ -49,7 +49,11 @@ class APIAdapter(BaseSourceAdapter):
             for item in items:
                 if len(all_items) >= cfg.max_items:
                     break
-                if self._passes_filters(item, cfg.filters):
+                # When a list endpoint returns IDs and item_url fetches
+                # records separately, the configured filters describe the
+                # detail records, not the ID values. Defer those filters
+                # until after each record has been fetched below.
+                if cfg.item_url or self._passes_filters(item, cfg.filters):
                     all_items.append(item)
 
             if len(all_items) >= cfg.max_items:
@@ -69,16 +73,25 @@ class APIAdapter(BaseSourceAdapter):
                 )
 
         if cfg.item_url and all_items:
-            fetched = []
-            for item in all_items[: cfg.max_items]:
-                item_id = self._resolve_path(item, cfg.fields.get("external_id", "$.id"))
-                if item_id:
-                    fetched_item = self._fetch_item(item_id)
-                    if fetched_item:
-                        fetched.append(fetched_item)
-            return fetched
+            return self._fetch_item_records(all_items, cfg)
 
         return all_items
+
+    def _fetch_item_records(self, items: list[Any], cfg: APIConfig) -> list[dict[str, Any]]:
+        """Fetch detail records and apply filters to the fields they contain."""
+        fetched = []
+        external_id_path = cfg.fields.get("external_id", "$.id")
+        for item in items[: cfg.max_items]:
+            if isinstance(item, (str, int)) and not isinstance(item, bool):
+                item_id = item
+            else:
+                item_id = self._resolve_path(item, external_id_path)
+            if not item_id:
+                continue
+            fetched_item = self._fetch_item(item_id)
+            if fetched_item and self._passes_filters(fetched_item, cfg.filters):
+                fetched.append(fetched_item)
+        return fetched
 
     def _get_next_url(self, data: Any, pagination: Any, current_page: int) -> Optional[str]:
         if pagination.type == "next_link" and pagination.next_link_selector:

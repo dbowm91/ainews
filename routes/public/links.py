@@ -37,7 +37,7 @@ def article_detail(public_id: str) -> Response:
     if article is None:
         abort(404)
     article_id = article.id
-    cache_key = f"pub:article_detail:view:{_request_variant()}:{public_id}"
+    cache_key = f"pub:article_detail:v2:view:{_request_variant()}:{public_id}"
     cached = cache.get(cache_key)
     if cached is not None:
         resp = make_response(cached)

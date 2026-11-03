@@ -17,14 +17,29 @@ from schemas.common import (
 )
 
 
-class OllamaConfig(BaseModel):
+class ProviderRuntimeSettings(BaseModel):
+    """Shared limits and retry policy for every provider implementation."""
+
+    max_concurrent: int = Field(default=1, ge=1, le=64)
+    retry_attempts: int = Field(default=3, ge=1, le=8)
+    retry_base_delay_seconds: float = Field(default=5.0, ge=1.0, le=60.0)
+    retry_max_delay_seconds: float = Field(default=180.0, ge=5.0, le=600.0)
+
+    @model_validator(mode="after")
+    def validate_retry_window(self) -> "ProviderRuntimeSettings":
+        if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
+            raise ValueError("retry_max_delay_seconds must be at least retry_base_delay_seconds")
+        return self
+
+
+class OllamaConfig(ProviderRuntimeSettings):
     model_config = ConfigDict(extra="allow")
 
     host: str = "http://localhost:11434"
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
     timeout_seconds: int = Field(default=120, ge=1, le=1800)
-    retry_attempts: int = Field(default=1, ge=1, le=5)
+    retry_attempts: int = Field(default=1, ge=1, le=8)
     local: bool = False
 
     @model_validator(mode="after")
@@ -34,7 +49,7 @@ class OllamaConfig(BaseModel):
         return self
 
 
-class OpenAIConfig(BaseModel):
+class OpenAIConfig(ProviderRuntimeSettings):
     model_config = ConfigDict(extra="allow")
 
     api_key: str = Field(default="")
@@ -44,7 +59,7 @@ class OpenAIConfig(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
     timeout_seconds: int = Field(default=120, ge=1, le=1800)
-    retry_attempts: int = Field(default=3, ge=1, le=5)
+    retry_attempts: int = Field(default=3, ge=1, le=8)
     # An endpoint that needs no credential and may live on loopback or a
     # private network: a local inference server such as LM Studio or
     # llama.cpp. Declaring it is an explicit operator statement, and it is
@@ -64,14 +79,14 @@ class OpenAIConfig(BaseModel):
         return self
 
 
-class AnthropicConfig(BaseModel):
+class AnthropicConfig(ProviderRuntimeSettings):
     model_config = ConfigDict(extra="allow")
 
     api_key: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
     timeout_seconds: int = Field(default=120, ge=1, le=1800)
-    retry_attempts: int = Field(default=3, ge=1, le=5)
+    retry_attempts: int = Field(default=3, ge=1, le=8)
 
     @field_validator("api_key")
     @classmethod
@@ -82,14 +97,14 @@ class AnthropicConfig(BaseModel):
         return resolved
 
 
-class GeminiConfig(BaseModel):
+class GeminiConfig(ProviderRuntimeSettings):
     model_config = ConfigDict(extra="allow")
 
     api_key: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     max_tokens: int = MAX_TOKENS_FIELD
     timeout_seconds: int = Field(default=120, ge=1, le=1800)
-    retry_attempts: int = Field(default=3, ge=1, le=5)
+    retry_attempts: int = Field(default=3, ge=1, le=8)
 
     @field_validator("api_key")
     @classmethod

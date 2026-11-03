@@ -100,6 +100,83 @@ class TestRunStage:
         assert article.pipeline_started_at != original_started_at
         assert article.pipeline_status == "pending"
 
+    def test_old_pipeline_start_does_not_expire_a_recently_updated_stage(
+        self, mock_run_stage_deps,
+    ):
+        from datetime import datetime, timedelta, timezone
+
+        from tasks.pipeline import run_stage
+
+        mocks = mock_run_stage_deps
+        rc = MagicMock()
+        rc.enabled = True
+        rc.provider = "ollama"
+        rc.concurrency = 4
+        rc.timeout_seconds = 300
+        mocks["get_role_config"].return_value = rc
+
+        article = MagicMock()
+        article.pipeline_status = "editing"
+        article.retry_count = 0
+        article.pipeline_started_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        article.updated_at = datetime.now(timezone.utc)
+        mocks["db"].session.get.return_value = article
+
+        limiter = MagicMock()
+        limiter.acquire.return_value = True
+        mocks["get_limiter"].return_value = limiter
+        redis_mock = MagicMock()
+        redis_mock.set.return_value = True
+        redis_mock.get.return_value = b"task-123"
+        redis_mock.register_script.return_value = MagicMock(return_value=1)
+        mocks["get_redis"].return_value = redis_mock
+        task_self = MagicMock()
+        task_self.request.id = "task-123"
+        work_fn = MagicMock(return_value={"article_id": 1, "status": "done"})
+
+        result = run_stage("editor", 1, work_fn, task_self)
+
+        assert result == {"article_id": 1, "status": "done"}
+        work_fn.assert_called_once()
+
+    def test_stage_routing_to_review_preserves_the_reason(self, mock_run_stage_deps):
+        from tasks.pipeline import run_stage
+
+        mocks = mock_run_stage_deps
+        rc = MagicMock()
+        rc.enabled = True
+        rc.provider = "ollama"
+        rc.concurrency = 4
+        rc.timeout_seconds = 300
+        mocks["get_role_config"].return_value = rc
+
+        article = MagicMock()
+        article.pipeline_status = "writing"
+        article.retry_count = 1
+        article.pipeline_started_at = None
+        article.updated_at = None
+        mocks["db"].session.get.return_value = article
+        limiter = MagicMock()
+        limiter.acquire.return_value = True
+        mocks["get_limiter"].return_value = limiter
+        redis_mock = MagicMock()
+        redis_mock.set.return_value = True
+        redis_mock.get.return_value = b"task-123"
+        redis_mock.register_script.return_value = MagicMock(return_value=1)
+        mocks["get_redis"].return_value = redis_mock
+        task_self = MagicMock()
+        task_self.request.id = "task-123"
+
+        def route_to_review(_article, *_args, **_kwargs):
+            article.pipeline_status = "review"
+            article.last_error = "Cannot publish final content: FINAL_ARTICLE_MISSING"
+            return {"article_id": 1, "status": "review"}
+
+        result = run_stage("writer", 1, route_to_review, task_self)
+
+        assert result == {"article_id": 1, "status": "review"}
+        assert article.last_error == "Cannot publish final content: FINAL_ARTICLE_MISSING"
+
     def test_returns_degraded_when_handler_succeeds(self, mock_run_stage_deps):
         """When work raises but _handle_stage_failure returns True, run_stage returns degraded dict."""
         from tasks.pipeline import run_stage

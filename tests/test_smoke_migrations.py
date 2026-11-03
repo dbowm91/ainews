@@ -89,6 +89,10 @@ class TestFlaskDbUpgrade:
                 "memory_synthesis_runs",
                 "memory_synthesis_attempts",
                 "memory_synthesis_cursors",
+                "editorial_dossiers",
+                "story_clusters",
+                "story_leads",
+                "evidence_document_cache",
                 "tags",
                 "alembic_version",
             ]:
@@ -254,7 +258,10 @@ class TestFlaskDbUpgrade:
             conn = sqlite3.connect(str(db_path))
             try:
                 assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-                assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "047_narration_jobs"
+                assert (
+                    conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+                    == "048_merge_editorial_and_narration_heads"
+                )
                 for table, column in (("newsletter_occurrences", "email_requested"),
                                       ("newsletter_editions", "email_requested"),
                                       ("newsletter_editions", "email_cancelled"),

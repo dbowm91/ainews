@@ -1,6 +1,7 @@
 import atexit
 import logging
 import os
+import threading
 from typing import Any, Tuple, cast
 
 import redis.exceptions
@@ -22,15 +23,32 @@ atexit.register(_manager.close_all)
 _LLM_FAILURE_THRESHOLD = int(os.environ.get("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5"))
 _LLM_RECOVERY_TIMEOUT = 60.0
 
+_providers_config_mtime: int | None = None
+_providers_config_lock = threading.Lock()
+
+
 def _get_providers_config_cached():
-    # The schema cache checks source mtimes, so provider settings can take
-    # effect in already-running worker processes without a restart.
-    return load_providers_config()
+    global _providers_config_mtime
+    from schemas.llm import default_providers_path
+
+    config = load_providers_config()
+    try:
+        mtime = default_providers_path().stat().st_mtime_ns
+    except OSError:
+        mtime = None
+    with _providers_config_lock:
+        if _providers_config_mtime != mtime:
+            if _providers_config_mtime is not None:
+                _manager.clear_cache()
+            _providers_config_mtime = mtime
+    return config
 
 
 def clear_provider_cache() -> None:
     """Drop all cached LLM provider instances."""
+    global _providers_config_mtime
     _manager.clear_cache()
+    _providers_config_mtime = None
     from services.config_cache import get_config_cache
 
     get_config_cache().invalidate_all()

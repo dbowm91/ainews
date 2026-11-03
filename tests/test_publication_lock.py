@@ -19,7 +19,6 @@ transaction once it is complete.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -34,15 +33,60 @@ def _in_transaction(obj) -> bool:
 
 @pytest.fixture
 def published_article(app, create_article):
-    """An article that is on its way to being published."""
+    """A verified candidate whose publication effects have not yet been claimed."""
+    import hashlib
+    import json
+
+    from extensions import db
+    from models import EditorialDossier, QualityReport
+
+    final_article = json.dumps({
+        "headline": "Verified test article",
+        "tldr": "A concise verified test summary.",
+        "why_it_matters": "A bounded test fixture.",
+        "body": "The release notes state the version is 3.2.",
+        "key_points": ["Version 3.2 is stated in the release notes."],
+        "what_to_watch": "The next release is pending.",
+        "citations": [{"title": "Official release notes", "url": "https://source.example/release"}],
+        "original_attribution": {"source": "feed", "url": "https://feed.example/item"},
+        "tags": ["ai"],
+    })
     article = create_article(
         pipeline_status="editing",
         topics=["ai"],
         draft_article="A draft about local inference.",
-        final_article="A published article about local inference.",
+        final_article=final_article,
     )
     article.pipeline_status = "done"
-    article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    article.raw_metadata = {"editorial_audit": {"passed": True, "findings": []}}
+    db.session.add(EditorialDossier(
+        article_id=article.id,
+        revision=1,
+        policy_version="evidence-first-v1",
+        status="verified",
+        content_digest="e" * 64,
+        payload={
+            "sources": [{"evidence_source_id": "ev_1", "retrieval_status": "retrieved", "url": "https://source.example/release", "excerpt": "The release notes state the version is 3.2."}],
+            "claims": [{"claim_id": "c1", "claim": "Version 3.2 is stated in the release notes.", "status": "primary_supported", "publish_allowed": True, "independent_origin_count": 0, "supports": [{"evidence_source_id": "ev_1", "span": "The release notes state the version is 3.2."}], "contradicts": []}],
+        },
+    ))
+    digest = hashlib.sha256(final_article.encode("utf-8")).hexdigest()
+    db.session.add(QualityReport(
+        article_id=article.id,
+        stage="edit",
+        overall_score=0.9,
+        groundedness=0.9,
+        coherence=0.9,
+        completeness=0.9,
+        safety=1.0,
+        citation_score=1.0,
+        claim_score=1.0,
+        passed=True,
+        needs_review=False,
+        findings=[],
+        meta={"content_digest": digest},
+    ))
+    article.published_at = None
     return article
 
 
@@ -86,6 +130,11 @@ class TestTheModelCallNeverHoldsTheLock:
         from extensions import db
         from models import Article
         from services import trend_memory
+        from datetime import datetime, timezone
+
+        # This test exercises the already-published memory path directly.
+        published_article.published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.session.commit()
 
         observed = {}
 
@@ -216,6 +265,34 @@ class TestPublicationCommitsBeforeTheSlowWork:
         stored = db.session.get(Article, published_article.id)
         assert stored.pipeline_status == "done"
 
+    def test_editor_finalize_does_not_claim_publication_before_post_finalize(
+        self, app, published_article, monkeypatch,
+    ):
+        from constants import PipelineStatus
+        from extensions import db
+        from models import Article
+        from services import pipeline_degradation
+        from tasks.pipeline import _transition_article_status
+
+        published_article.pipeline_status = PipelineStatus.EDITING
+        published_article.publicly_visible = False
+        published_article.published_at = None
+        monkeypatch.setattr(pipeline_degradation, "_dispatch_trend_memory", lambda _article: None)
+        monkeypatch.setattr("services.webhooks.trigger_event", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("tasks.embeddings.generate_article_embedding.delay", lambda *_args: None)
+
+        _transition_article_status(published_article, PipelineStatus.DONE)
+        assert published_article.published_at is None
+        assert published_article.publicly_visible is False
+
+        assert pipeline_degradation.post_finalize_article(published_article) is True
+        db.session.expire_all()
+        stored = db.session.get(Article, published_article.id)
+        assert stored is not None
+        assert stored.pipeline_status == PipelineStatus.DONE
+        assert stored.published_at is not None
+        assert stored.publicly_visible is True
+
 
 class TestTheProposalHasItsOwnTask:
     """The slow work runs out of band, with room for a slow local model."""
@@ -320,12 +397,12 @@ class TestTheBeatTaskDoesNotWaitForAModel:
 
         approved = auto_review.auto_approve_queued()
 
-        assert approved == 1
+        assert approved == 0
 
-    def test_the_published_article_is_durable_when_the_drain_returns(
+    def test_missing_final_content_stays_in_review_when_the_drain_returns(
         self, app, create_source, monkeypatch
     ):
-        """The drain commits each article before it moves on."""
+        """The drain persists a structural block instead of publishing empty content."""
         from constants import PipelineStatus
         from extensions import db
         from models import Article
@@ -354,5 +431,47 @@ class TestTheBeatTaskDoesNotWaitForAModel:
         stored = db.session.get(Article, article_id)
 
         assert stored is not None
-        assert stored.pipeline_status == "done"
-        assert stored.published_at is not None
+        assert stored.pipeline_status == "review"
+        assert stored.published_at is None
+        assert "FINAL_ARTICLE_MISSING" in stored.raw_metadata["editorial_eligibility"]["reason_codes"]
+        assert "EVIDENCE_DOSSIER_MISSING" in stored.raw_metadata["editorial_eligibility"]["diagnostic_codes"]
+
+    def test_incomplete_review_article_resumes_at_last_available_stage(
+        self, app, create_source, monkeypatch,
+    ):
+        from constants import PipelineStatus
+        from extensions import db
+        from models import Article
+        from services import auto_review, pipeline_utils
+
+        monkeypatch.setattr(auto_review, "is_auto_approve_enabled", lambda: True)
+        dispatched = []
+        monkeypatch.setattr(
+            pipeline_utils,
+            "_dispatch_next",
+            lambda article_id, **kwargs: dispatched.append((article_id, kwargs["next_status"])),
+        )
+        source = create_source()
+        article = Article(
+            source_id=source.id,
+            original_title="Recoverable review article",
+            pipeline_status=PipelineStatus.REVIEW,
+            research_brief='{"key_claims": []}',
+        )
+        db.session.add(article)
+        db.session.commit()
+        article_id = article.id
+
+        assert auto_review.auto_approve_queued() == 0
+        db.session.expire_all()
+        stored = db.session.get(Article, article_id)
+        assert stored is not None
+        assert stored.pipeline_status == PipelineStatus.WRITING
+        assert stored.raw_metadata["incomplete_review_retries"] == 1
+        assert dispatched == [(article_id, PipelineStatus.WRITING)]
+
+    def test_editor_task_has_room_for_multiple_slow_local_calls(self):
+        from tasks.edit import edit_article
+
+        assert edit_article.soft_time_limit == 900
+        assert edit_article.time_limit == 960

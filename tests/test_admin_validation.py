@@ -64,10 +64,11 @@ class TestAdminArticleEditValidation:
 
         with app.app_context():
             article = db.session.get(Article, admin_article)
-            # Status should remain unchanged
-            assert article.pipeline_status == "done"
+            # Admin content changes require a fresh evidence review, even
+            # when the submitted status value is invalid.
+            assert article.pipeline_status == "review"
 
-    def test_valid_pipeline_status_accepted(
+    def test_valid_pipeline_status_cannot_bypass_editorial_review(
         self, client, app, admin_article, hashed_password
     ):
         app.config["ADMIN_PASSWORD"] = hashed_password
@@ -86,7 +87,7 @@ class TestAdminArticleEditValidation:
 
         with app.app_context():
             article = db.session.get(Article, admin_article)
-            assert article.pipeline_status == "editing"
+            assert article.pipeline_status == "review"
 
     def test_invalid_category_rejected(
         self, client, app, admin_article, hashed_password

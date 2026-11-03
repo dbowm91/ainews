@@ -72,7 +72,7 @@ class TestArticleVersioning:
         fresh = db.session.get(Article, article.id)
         assert fresh.final_article == draft
         assert fresh.original_ai_article == draft
-        assert fresh.pipeline_status == "done"
+        assert fresh.pipeline_status == "review"
 
 
 class TestFindRelatedArticles:

@@ -83,8 +83,11 @@ def build_research_prompt(
         parts.append("")
 
     parts.append(
-        "Compile a comprehensive research brief using all available information. "
-        "Include external context where relevant. Attribute all claims to their sources.",
+        "Compile a concise research brief using the strongest available information. "
+        "Return at most 8 atomic, consequential factual claims and at most 3 short direct quotes. "
+        "Keep each claim to one sentence and under 40 words. Keep the source summary and context "
+        "notes concise. Attribute each claim to the source that supports it. Do not repeat claims "
+        "or reproduce long source passages.",
     )
 
     return "\n".join(parts)

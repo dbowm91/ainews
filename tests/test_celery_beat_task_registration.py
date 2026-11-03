@@ -11,6 +11,9 @@ beat schedule resolves to a registered task.
 """
 
 import importlib
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -18,6 +21,8 @@ import pytest
 @pytest.fixture(scope="module")
 def registered_task_names() -> set[str]:
     """Mirror the worker bootstrap order, then list registered task names."""
+    os.environ.setdefault("FLASK_CONFIG", "testing")
+    os.environ.setdefault("SECRET_KEY", "test-celery-bootstrap-secret")
     celery_module = importlib.import_module("celery_app")
     importlib.import_module("tasks")
     return set(celery_module.celery_app.tasks.keys())
@@ -62,3 +67,23 @@ def test_previously_unregistered_task_modules_are_imported() -> None:
         "cleanup_inactive_subscribers",
     ):
         assert hasattr(tasks, name), f"tasks.{name} is not exported"
+
+
+def test_celery_cli_app_import_registers_tasks_without_manual_import() -> None:
+    """The actual ``celery -A celery_app:celery_app worker`` bootstrap must register tasks."""
+    code = (
+        "from celery_app import celery_app; "
+        "assert 'tasks.crawl.run_all_sources' in celery_app.tasks; "
+        "assert 'tasks.scheduler.auto_approve_review_articles' in celery_app.tasks"
+    )
+    env = os.environ.copy()
+    env.update({"FLASK_CONFIG": "testing", "SECRET_KEY": "a" * 64})
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr

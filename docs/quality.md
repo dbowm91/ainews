@@ -1,6 +1,6 @@
 # Quality Reports
 
-Quality reports (`QualityReport` model, `services/quality_report.py`) provide deterministic editorial quality verification for articles.
+Quality reports (`QualityReport` model, `services/quality_report.py`) provide structural and heuristic editorial checks. They are not proof of factual truth. Publication is controlled separately by `services/editorial_eligibility.py` and the private evidence dossier.
 
 ## Quality Report Model
 
@@ -105,3 +105,11 @@ API endpoints:
 - `GET /api/v1/articles/<id>/quality-reports` — List reports for article
 - `GET /api/v1/quality-reports?passed=false` — All failed reports
 - `GET /api/v1/quality-reports?needs_review=true` — All articles needing review
+
+### Evidence-first eligibility
+
+The final publication gate additionally requires a valid final `CondensedArticle`, a passing quality report whose content digest matches the exact current JSON, a verified internal dossier with every material claim marked `corroborated` or `primary_supported`, validated source handles and spans, a passing final artifact audit, and no degraded pipeline stage.
+
+The report still provides its existing heuristic scores. URL membership and lexical overlap do not substitute for source retrieval or claim verification. A failed or unavailable evidence pass is an editorial hold; review, auto-review, scheduled publication, and admin approval all use the same gate. Manual approval cannot force-publish a held item.
+
+Use `GET /api/v1/admin/articles/<id>/editorial-status` for the current policy version, reason codes, dossier revision, claim statuses, source counts, audit findings, and cross-feed lead ancestry. The response omits stored source excerpts.

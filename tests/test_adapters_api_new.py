@@ -528,6 +528,28 @@ class TestFetchItemUrl:
         assert len(items) == 2
         assert items[0] == {"id": 10, "name": "Item10"}
 
+    def test_filters_are_applied_to_fetched_detail_records(self, mock_validate):
+        """ID-list APIs must defer record filters until item details are loaded."""
+        cfg = {
+            "item_url": "https://api.example.com/items/{id}",
+            "fields": {"external_id": "$.id"},
+            "filters": [
+                {"field": "$.type", "equals": "story"},
+                {"field": "$.score", "min": 20},
+            ],
+        }
+        adapter = _make_adapter(**cfg)
+        adapter._session.get.side_effect = [
+            _mock_response(json_data=[101, 202]),
+            _mock_response(json_data={"id": 101, "type": "story", "score": 30}),
+            _mock_response(json_data={"id": 202, "type": "comment", "score": 50}),
+        ]
+
+        items = adapter.fetch()
+
+        assert items == [{"id": 101, "type": "story", "score": 30}]
+        assert adapter._session.get.call_count == 3
+
     def test_item_url_logs_warning_when_no_explicit_external_id(self, mock_validate):
         """When item_url is set but external_id defaults to $.id, a warning is logged."""
         cfg = {"item_url": "https://api.example.com/items/{id}"}

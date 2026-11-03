@@ -26,6 +26,9 @@ class ExtractionStatus(Enum):
     PAYWALL = "paywall"
     EMPTY = "empty"
     FETCH_ERROR = "fetch_error"
+    UNSAFE_URL = "unsafe_url"
+    RATE_LIMITED = "rate_limited"
+    UNSUPPORTED_CONTENT_TYPE = "unsupported_content_type"
 
 
 @dataclass
@@ -36,6 +39,8 @@ class ExtractionResult:
     author: Optional[str]
     status: ExtractionStatus
     content_length: int = 0
+    published_at: Optional[str] = None
+    final_url: Optional[str] = None
 
 
 PAYWALL_INDICATORS = [
@@ -53,40 +58,53 @@ def _detect_paywall(html: str) -> bool:
     return any(ind in lower for ind in PAYWALL_INDICATORS)
 
 
-def _fetch_with_timeout(url: str, timeout: int = 30) -> str | None:
+def _fetch_with_timeout(url: str, timeout: int = 30) -> tuple[str, str]:
     """Fetch URL content using the safe fetch client.
 
-    Returns the raw HTML string on success, ``None`` on failure.
+    Returns raw HTML on success and preserves typed safe-fetch failures.
     """
-    from services.safe_fetch import (
-        SafeFetchError,
-        SafeFetchLimits,
-        safe_fetch_url,
-    )
+    from services.safe_fetch import SafeFetchLimits, safe_fetch_url
 
     limits = SafeFetchLimits(
         connect_timeout=min(timeout / 3, 10.0),
         read_timeout=min(timeout, 30.0),
         total_timeout=timeout + 5.0,
     )
-    try:
-        result = safe_fetch_url(url, limits=limits)
-        return result.text
-    except SafeFetchError as e:
-        logger.warning("Content fetch failed for %s: %s", url, e)
-        return None
+    result = safe_fetch_url(url, limits=limits)
+    return result.text, result.final_url
 
 
 def extract_article(url: str) -> ExtractionResult:
     from services.config_unified import MIN_CONTENT_LENGTH
+    from services.safe_fetch import (
+        SafeFetchContentTypeError,
+        SafeFetchError,
+        SafeFetchTimeoutError,
+        UnsafeFetchError,
+    )
 
     timeout = int(os.environ.get("CONTENT_EXTRACTOR_TIMEOUT", "30"))
     try:
         future = _CONTENT_EXTRACTOR.submit(_fetch_with_timeout, url, timeout)
-        downloaded = future.result(timeout=timeout + 5)
+        fetched = future.result(timeout=timeout + 5)
+        if isinstance(fetched, tuple):
+            downloaded, final_url = fetched
+        else:  # compatibility with tests and wrappers around the extractor
+            downloaded, final_url = fetched, url
     except (concurrent.futures.TimeoutError, TimeoutError):
         future.cancel()
         logger.warning("Content extraction timeout for %s", url)
+        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
+    except SafeFetchContentTypeError:
+        return ExtractionResult(url, None, None, None, ExtractionStatus.UNSUPPORTED_CONTENT_TYPE)
+    except UnsafeFetchError:
+        return ExtractionResult(url, None, None, None, ExtractionStatus.UNSAFE_URL)
+    except SafeFetchTimeoutError:
+        return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
+    except SafeFetchError as e:
+        if "HTTP 429" in str(e):
+            return ExtractionResult(url, None, None, None, ExtractionStatus.RATE_LIMITED)
+        logger.warning("Fetch failed for %s: %s", url, e)
         return ExtractionResult(url, None, None, None, ExtractionStatus.FETCH_ERROR)
     except (ImportError, ConnectionError, ValueError, AttributeError) as e:
         logger.warning("Fetch failed for %s: %s", url, e)
@@ -107,6 +125,8 @@ def extract_article(url: str) -> ExtractionResult:
             author=result.get("author"),
             status=(ExtractionStatus.PAYWALL if paywall else ExtractionStatus.SUCCESS),
             content_length=len(text_val),
+            published_at=result.get("date"),
+            final_url=final_url,
         )
 
     try:
@@ -121,6 +141,7 @@ def extract_article(url: str) -> ExtractionResult:
                 author=None,
                 status=ExtractionStatus.SUCCESS,
                 content_length=len(text),
+                final_url=final_url,
             )
     except (ImportError, ConnectionError, TimeoutError,
             ValueError, AttributeError) as e:

@@ -44,10 +44,10 @@ class SettingsError(Exception):
 class ProviderView:
     """A provider as the admin panel shows it.
 
-    The credential is never carried in this view. ``api_key_ref`` holds the
-    reference as written in the file -- ``${OPENAI_API_KEY}`` or empty --
-    and ``has_api_key`` says whether a credential is configured. The value
-    itself is never read out of the environment and never rendered.
+    The credential is never carried in this view. ``api_key_ref`` contains
+    only an environment-variable reference such as ``${OPENAI_API_KEY}``;
+    literal credentials are omitted. ``has_api_key`` reports whether one is
+    configured without exposing it.
     """
 
     id: str
@@ -60,7 +60,10 @@ class ProviderView:
     has_api_key: bool
     local: bool
     timeout_seconds: int
+    max_concurrent: int
     retry_attempts: int
+    retry_base_delay_seconds: float
+    retry_max_delay_seconds: float
     # Custom request headers the provider declares. They are resolved from the
     # environment when the provider is tested, because a gateway may require
     # a routing header and reject a request without it. The values are never
@@ -263,6 +266,22 @@ def _endpoint_of(provider: dict[str, Any]) -> str:
     return ""
 
 
+def _provider_int(config: dict[str, Any], key: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(config.get(key, default))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _provider_float(config: dict[str, Any], key: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(config.get(key, default))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, minimum), maximum)
+
+
 def read_providers() -> list[ProviderView]:
     """Return every configured provider, in the order the file lists them."""
     raw = _read_yaml(_providers_path())
@@ -279,8 +298,9 @@ def read_providers() -> list[ProviderView]:
         config = entry.get("config") or {}
         if not isinstance(config, dict):
             config = {}
-        api_key_ref = config.get("api_key")
-        api_key_ref = api_key_ref if isinstance(api_key_ref, str) else ""
+        raw_api_key = config.get("api_key")
+        raw_api_key = raw_api_key if isinstance(raw_api_key, str) else ""
+        api_key_ref = raw_api_key if raw_api_key.startswith("${") and raw_api_key.endswith("}") else ""
         raw_headers = config.get("headers") or {}
         headers: tuple[tuple[str, str], ...] = ()
         if isinstance(raw_headers, dict):
@@ -298,13 +318,18 @@ def read_providers() -> list[ProviderView]:
                 model=str(config.get("model") or ""),
                 endpoint=_endpoint_of(entry),
                 api_key_ref=api_key_ref,
-                has_api_key=bool(api_key_ref),
+                has_api_key=bool(raw_api_key),
                 local=bool(config.get("local", False)),
                 timeout_seconds=_bounded_int(
                     config.get("timeout_seconds"), 900 if config.get("local") else 120, 1, 1800,
                 ),
-                retry_attempts=_bounded_int(
-                    config.get("retry_attempts"), 1 if config.get("local") else 3, 1, 5,
+                max_concurrent=_provider_int(config, "max_concurrent", 1, 1, 64),
+                retry_attempts=_provider_int(config, "retry_attempts", 3, 1, 8),
+                retry_base_delay_seconds=_provider_float(
+                    config, "retry_base_delay_seconds", 5.0, 1.0, 60.0,
+                ),
+                retry_max_delay_seconds=_provider_float(
+                    config, "retry_max_delay_seconds", 180.0, 5.0, 600.0,
                 ),
                 headers=headers,
             )
@@ -365,7 +390,10 @@ def update_providers(changes: dict[str, dict[str, Any]]) -> list[str]:
     """Apply changes to the provider list and return the ids that changed.
 
     ``changes`` maps a provider id to the fields to change: ``enabled``,
-    ``model``, ``endpoint``, ``local`` and ``make_default``. The endpoint is
+    ``model``, ``endpoint``, ``local``, ``api_key`` and ``make_default``. A
+    credential is written only when explicitly supplied; an empty value clears
+    it, while omitting the field preserves the existing credential. The
+    endpoint is
     written to ``base_url`` for an API provider and to ``host`` for Ollama,
     so the file keeps the shape that provider type expects.
     """
@@ -401,10 +429,9 @@ def update_providers(changes: dict[str, dict[str, Any]]) -> list[str]:
                 config["timeout_seconds"] = _require_int(
                     fields["timeout_seconds"], f"{provider_id} request timeout", 1, 1800,
                 )
-            if "retry_attempts" in fields:
-                config["retry_attempts"] = _require_int(
-                    fields["retry_attempts"], f"{provider_id} request attempts", 1, 5,
-                )
+            if "api_key" in fields:
+                config["api_key"] = str(fields["api_key"] or "")
+            _apply_provider_runtime_settings(provider_id, fields, config)
             entry["config"] = config
             changed.append(provider_id)
             break
@@ -451,6 +478,35 @@ def update_runtime(max_concurrent_llm_requests: Any) -> list[str]:
     with transaction(_transaction_paths()) as txn:
         txn.modify_file(path, _write_yaml(raw))
     return ["max_concurrent_llm_requests"]
+
+def _apply_provider_runtime_settings(
+    provider_id: str, fields: dict[str, Any], config: dict[str, Any],
+) -> None:
+    """Validate and apply dispatcher limits from one provider settings form."""
+    for key, minimum, maximum, caster in (
+        ("max_concurrent", 1, 64, int),
+        ("retry_attempts", 1, 8, int),
+        ("retry_base_delay_seconds", 1.0, 60.0, float),
+        ("retry_max_delay_seconds", 5.0, 600.0, float),
+    ):
+        if key not in fields:
+            continue
+        try:
+            value = caster(fields[key])
+        except (TypeError, ValueError) as e:
+            raise SettingsError(f"{provider_id}: {key} must be numeric") from e
+        if not minimum <= value <= maximum:
+            raise SettingsError(
+                f"{provider_id}: {key} must be between {minimum} and {maximum}",
+            )
+        config[key] = value
+
+    base_delay = float(config.get("retry_base_delay_seconds", 5.0))
+    max_delay = float(config.get("retry_max_delay_seconds", 180.0))
+    if max_delay < base_delay:
+        raise SettingsError(
+            f"{provider_id}: maximum retry delay must be at least the base delay",
+        )
 
 
 def update_roles(updates: dict[str, dict[str, Any]]) -> list[str]:
@@ -867,9 +923,8 @@ def _probe_values(provider: ProviderView) -> dict[str, Any]:
     The adapter is the CLI's, because it already knows how to talk to each
     provider type and how to reach its model list.
 
-    The credential is resolved from the environment here and handed
-    straight to the adapter. It is never stored on the view, never logged
-    and never rendered: only whether one is configured reaches the page.
+    The credential is read from the provider file here and handed straight
+    to the adapter. It is never stored on the view, logged or rendered.
     """
     values: dict[str, Any] = {
         "id": provider.id,
@@ -880,7 +935,8 @@ def _probe_values(provider: ProviderView) -> dict[str, Any]:
         values["host"] = provider.endpoint
     else:
         values["base_url"] = provider.endpoint
-        values["api_key"] = _resolve_credential(provider.api_key_ref)
+        credential_ref = provider.api_key_ref or _configured_api_key(provider.id)
+        values["api_key"] = _resolve_credential(credential_ref)
         values["model"] = provider.model
         # A gateway may require a routing header of its own. The header
         # values can reference the environment, exactly like a credential.
@@ -907,6 +963,19 @@ def _resolve_credential(ref: str) -> str:
 
         return os.environ.get(ref[2:-1], "")
     return ref
+
+
+def _configured_api_key(provider_id: str) -> str:
+    """Read one provider credential without placing literals on its view."""
+    raw = _read_yaml(_providers_path())
+    entries = raw.get("providers") or []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("id") != provider_id:
+            continue
+        config = entry.get("config")
+        if isinstance(config, dict) and isinstance(config.get("api_key"), str):
+            return str(config["api_key"])
+    return ""
 
 
 def probe_provider(provider_id: str, *, timeout: float = 10.0) -> ProviderProbe:

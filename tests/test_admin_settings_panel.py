@@ -289,7 +289,7 @@ class TestAutoReviewMode:
         assert queued is True
         assert article.pipeline_status == "review"
 
-    def test_routing_to_review_publishes_the_article_when_the_switch_is_on(self, monkeypatch):
+    def test_routing_to_review_still_holds_an_ineligible_article_when_on(self, monkeypatch):
         from services import auto_review
 
         monkeypatch.setattr(auto_review, "is_auto_approve_enabled", lambda: True)
@@ -297,12 +297,12 @@ class TestAutoReviewMode:
 
         queued = auto_review.route_to_review(article)
 
-        assert queued is False
-        assert article.pipeline_status == "done"
-        assert article.published_at is not None
+        assert queued is True
+        assert article.pipeline_status == "review"
+        assert article.published_at is None
 
     def test_the_pipeline_transition_to_review_honours_the_switch(self, monkeypatch):
-        """The stage that routes an article to review must respect it."""
+        """Auto-approval remains subordinate to the evidence gate."""
         from services import auto_review
         from tasks.pipeline import _transition_article_status
 
@@ -311,7 +311,7 @@ class TestAutoReviewMode:
 
         _transition_article_status(article, "review")
 
-        assert article.pipeline_status == "done"
+        assert article.pipeline_status == "review"
 
     def test_the_pipeline_transition_to_review_queues_when_off(self, monkeypatch):
         from services import auto_review
@@ -401,7 +401,7 @@ class TestAutoReviewMode:
 
         assert "auto_approve_review_articles" in tasks.__all__
 
-    def test_the_queue_is_drained_when_the_switch_is_on(self, app, create_source, monkeypatch):
+    def test_the_queue_keeps_ineligible_articles_when_the_switch_is_on(self, app, create_source, monkeypatch):
         from constants import PipelineStatus
         from extensions import db
         from models import Article
@@ -422,9 +422,9 @@ class TestAutoReviewMode:
 
         approved = auto_review.auto_approve_queued()
 
-        assert approved == 1
+        assert approved == 0
         db.session.expire_all()
-        assert db.session.get(Article, article_id).pipeline_status == PipelineStatus.DONE
+        assert db.session.get(Article, article_id).pipeline_status == PipelineStatus.REVIEW
 
     def test_the_queue_is_left_alone_when_the_switch_is_off(self, app, create_source, monkeypatch):
         from constants import PipelineStatus
@@ -459,13 +459,13 @@ class TestAutoReviewMode:
         assert approve_article(article) is False
         assert article.pipeline_status == "done"
 
-    def test_an_approved_article_gets_the_post_finalize_work(self, monkeypatch):
-        """An approved article is still a published article.
+    def test_an_ineligible_article_does_not_run_post_finalize_work(self, monkeypatch):
+        """A review action cannot publish or run publish side effects without evidence.
 
         Trend memory, the webhooks and the embedding are what a published
         article is for. An article that went through the review queue has to
-        get the same treatment as one that passed the editor on the first
-        try, or the site learns from a fraction of what it publishes.
+        get those side effects only after it passes the same eligibility gate
+        as one that passed the editor on the first try.
         """
         from services import pipeline_degradation
 
@@ -479,11 +479,12 @@ class TestAutoReviewMode:
         article = self._article(status="review")
         from services.auto_review import approve_article
 
-        assert approve_article(article) is True
-        assert called == [article.id]
+        assert approve_article(article) is False
+        assert called == []
+        assert article.pipeline_status == "review"
 
-    def test_a_failed_post_finalize_does_not_unpublish_the_article(self, monkeypatch):
-        """The article is published whatever the post-finalize work does."""
+    def test_an_ineligible_article_is_not_published_when_finalize_is_unavailable(self, monkeypatch):
+        """Missing eligibility blocks publication before post-finalize work."""
         from services import pipeline_degradation
 
         def _boom(article, run_id=None):
@@ -494,8 +495,8 @@ class TestAutoReviewMode:
         article = self._article(status="review")
         from services.auto_review import approve_article
 
-        assert approve_article(article) is True
-        assert article.pipeline_status == "done"
+        assert approve_article(article) is False
+        assert article.pipeline_status == "review"
 
     def test_the_human_and_the_auto_approver_agree(self, monkeypatch):
         """One primitive, so the two cannot drift apart."""
@@ -512,7 +513,7 @@ class TestAutoReviewMode:
 
         monkeypatch.setattr(auto_review, "is_auto_approve_enabled", lambda: False)
         auto_review.route_to_review(by_hand)
-        auto_review.approve_article(by_hand, reason="admin")
+        assert auto_review.approve_article(by_hand, reason="admin") is False
 
         monkeypatch.setattr(auto_review, "is_auto_approve_enabled", lambda: True)
         auto_review.route_to_review(by_machine)
@@ -521,8 +522,8 @@ class TestAutoReviewMode:
         assert by_hand.retry_count == by_machine.retry_count
         assert by_hand.last_error == by_machine.last_error
         assert by_hand.scheduled_publish_at == by_machine.scheduled_publish_at
-        assert by_hand.published_at is not None
-        assert by_machine.published_at is not None
+        assert by_hand.published_at is None
+        assert by_machine.published_at is None
 
 
 # ---------------------------------------------------------------------------

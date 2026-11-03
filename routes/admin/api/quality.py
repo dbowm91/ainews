@@ -7,6 +7,59 @@ from routes.admin import admin_api_bp, require_auth
 from routes.admin.api.utils import api_response
 
 
+@admin_api_bp.route("/articles/<int:article_id>/editorial-status", methods=["GET"])
+@require_auth
+def get_editorial_status(article_id: int) -> tuple[Response, int] | Response:
+    """Expose publication readiness, diagnostics, and provenance without article text."""
+    from models import Article
+
+    article = db.get_or_404(Article, article_id)
+    metadata = article.raw_metadata if isinstance(article.raw_metadata, dict) else {}
+    eligibility = metadata.get("editorial_eligibility", {})
+    audit = metadata.get("editorial_audit", {})
+    dossier = getattr(article, "editorial_dossier", None)
+    cluster = getattr(article, "story_cluster", None)
+    dossier_summary = None
+    if dossier:
+        claims = (dossier.payload or {}).get("claims", [])
+        sources = (dossier.payload or {}).get("sources", [])
+        dossier_summary = {
+            "revision": dossier.revision,
+            "policy_version": dossier.policy_version,
+            "status": dossier.status,
+            "source_count": len(sources),
+            "claims": [
+                {
+                    "claim_id": claim.get("claim_id"),
+                    "status": claim.get("status"),
+                    "publish_allowed": claim.get("publish_allowed", False),
+                    "independent_origin_count": claim.get("independent_origin_count", 0),
+                    "support_count": len(claim.get("supports", [])),
+                    "contradiction_count": len(claim.get("contradicts", [])),
+                }
+                for claim in claims
+            ],
+        }
+    return api_response(data={
+        "article_id": article.id,
+        "pipeline_status": article.pipeline_status,
+        "last_error": article.last_error,
+        "eligibility": eligibility,
+        "final_audit": audit,
+        "dossier": dossier_summary,
+        "story_cluster": ({
+            "id": cluster.id,
+            "event_type": cluster.event_type,
+            "status": cluster.status,
+            "leads": [
+                {"title": lead.title, "url": lead.url, "source_id": lead.source_id,
+                 "match_score": lead.match_score, "decision_reason": lead.decision_reason}
+                for lead in cluster.leads
+            ],
+        } if cluster else None),
+    })
+
+
 @admin_api_bp.route("/articles/<int:article_id>/quality", methods=["GET"])
 @require_auth
 def get_article_quality_report(article_id: int) -> tuple[Response, int] | Response:

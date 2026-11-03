@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ── Selector stage ──────────────────────────────────────────────────────────
 
@@ -16,10 +16,8 @@ from pydantic import BaseModel, Field
 class SelectionResult(BaseModel):
     selected: bool
     score: int = Field(ge=1, le=10)
-    reason: str
+    reason: str = Field(max_length=160)
     confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
-    key_topics: list[str] = Field(default_factory=list, description="Identified topics from the article")
-    impact_summary: Optional[str] = Field(default=None, description="Brief summary of why this article matters")
 
 
 # ── Researcher stage ────────────────────────────────────────────────────────
@@ -32,7 +30,7 @@ class ExternalSource(BaseModel):
 
 
 class KeyClaim(BaseModel):
-    claim: str
+    claim: str = Field(max_length=500)
     source: str  # "source_article" or URL
     confidence: str  # high/medium/low
 
@@ -51,12 +49,13 @@ class RelatedArticle(BaseModel):
 
 
 class ResearchBrief(BaseModel):
-    source_summary: str = Field(description="TL;DR of the source article")
+    source_summary: str = Field(max_length=1200, description="Concise TL;DR of the source article")
     key_claims: list[KeyClaim] = Field(
-        description="Factual claims with source attribution"
+        max_length=8,
+        description="Up to eight consequential factual claims with source attribution",
     )
     direct_quotes: list[DirectQuote] = Field(
-        default=[], description="Verbatim quotes from the article"
+        default=[], max_length=3, description="Up to three short verbatim quotes from the article",
     )
     external_sources: list[ExternalSource] = Field(
         default=[], description="Additional web sources found during research"
@@ -66,9 +65,10 @@ class ResearchBrief(BaseModel):
     )
     context_notes: str = Field(
         default="",
+        max_length=1200,
         description="Additional context, background, or significance",
     )
-    newsworthiness: str = Field(description="Why this matters to a tech audience")
+    newsworthiness: str = Field(max_length=500, description="Why this matters to a tech audience")
     impact_score: int = Field(
         ge=0,
         le=100,
@@ -79,6 +79,28 @@ class ResearchBrief(BaseModel):
             "0-25: niche/minor. 26-50: notable. 51-75: significant. 76-100: major/breaking."
         ),
     )
+
+
+class EvidenceSpan(BaseModel):
+    evidence_source_id: str = Field(min_length=1)
+    span: str = Field(min_length=1)
+
+
+class ClaimEvidenceAssessment(BaseModel):
+    claim_index: int = Field(ge=0)
+    decision: str = Field(pattern="^(supported|contradicted|unclear)$")
+    evidence: list[EvidenceSpan] = Field(default_factory=list)
+    rationale: str = Field(default="")
+
+    @model_validator(mode="after")
+    def require_evidence_for_decided_claims(self) -> "ClaimEvidenceAssessment":
+        if self.decision in {"supported", "contradicted"} and not self.evidence:
+            raise ValueError("supported or contradicted claims require evidence spans")
+        return self
+
+
+class ClaimEvidenceAssessmentSet(BaseModel):
+    assessments: list[ClaimEvidenceAssessment] = Field(default_factory=list)
 
 
 # ── Writer stage ────────────────────────────────────────────────────────────

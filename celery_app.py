@@ -82,3 +82,9 @@ def _init_celery():
 # Initialize on import so Celery CLI (`celery -A celery_app:celery_app`) works
 _init_celery()
 celery_app = _celery
+
+# The Celery CLI only imports the app module; beat-scheduled and queued task
+# modules must also be imported here so worker strategies are registered
+# before the first message is consumed. Keep this after ``celery_app`` is
+# initialized so ``@shared_task`` binds to the configured application.
+import tasks  # noqa: E402,F401  (register every task module on the worker app)

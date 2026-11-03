@@ -66,14 +66,19 @@ class TestReviewQueue:
             article_id = article.id
 
         resp = client.post(f"/admin/review/{article_id}/approve")
-        assert resp.status_code == 302
+        assert resp.status_code == 409
 
         with app.app_context():
             from extensions import db
             from models import Article
 
             article = db.session.get(Article, article_id)
-            assert article.pipeline_status == "done"
+            assert article.pipeline_status == "review"
+            reasons = article.raw_metadata["editorial_eligibility"]["reason_codes"]
+            assert "FINAL_ARTICLE_INVALID" in reasons
+            diagnostics = article.raw_metadata["editorial_eligibility"]["diagnostic_codes"]
+            assert "EVIDENCE_DOSSIER_MISSING" in diagnostics
+            assert "QUALITY_REPORT_MISSING" not in reasons
 
     def test_reject_article(
         self, client, app, hashed_password, create_source, create_article

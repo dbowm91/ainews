@@ -16,7 +16,7 @@ from models import Article
 def test_pipeline_completion_budgets_support_structured_output():
     from schemas.pipeline import get_role_config
 
-    assert get_role_config("selector").max_tokens >= 4096
+    assert get_role_config("selector").max_tokens == 512
     assert get_role_config("researcher").max_tokens >= 8192
     assert get_role_config("writer").max_tokens >= 8192
     assert get_role_config("editor").max_tokens >= 8192

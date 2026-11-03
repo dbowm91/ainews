@@ -101,7 +101,7 @@ class TestPublicRoutes:
         app.config["RESPONSE_CACHE_ENABLED"] = True
         reset_response_cache()
         cache = get_response_cache()
-        cache.invalidate(f"pub:article_detail:view:page:{article.public_id}")
+        cache.invalidate(f"pub:article_detail:v2:view:page:{article.public_id}")
 
         first = client.get(f"/article/{article.public_id}")
         second = client.get(f"/article/{article.public_id}")
@@ -109,7 +109,7 @@ class TestPublicRoutes:
         assert first.status_code == 200
         assert second.status_code == 200
         assert second.data == first.data
-        cached_html = cache.get(f"pub:article_detail:view:page:{article.public_id}")
+        cached_html = cache.get(f"pub:article_detail:v2:view:page:{article.public_id}")
         assert isinstance(cached_html, str)
         assert cached_html.encode() == first.data
         reset_response_cache()

@@ -18,6 +18,16 @@ from services.pipeline_failure import _get_max_stage_retries
 
 logger = get_task_logger(__name__)
 
+_STUCK_STATUSES = (
+    PipelineStatus.PENDING,
+    PipelineStatus.SELECTING,
+    PipelineStatus.SELECTED,
+    PipelineStatus.RESEARCHING,
+    PipelineStatus.WRITING,
+    PipelineStatus.WRITTEN,
+    PipelineStatus.EDITING,
+)
+
 
 def _as_utc_aware(value):
     """Normalize a datetime to timezone-aware UTC.
@@ -84,6 +94,68 @@ def _process_retry_batch(articles):
         _dispatch_stage(article)
 
 
+def _resume_pipeline_timeout_failure(article) -> bool:
+    """Requeue an article failed only by the old whole-pipeline deadline."""
+    from constants import PipelineStatus
+    from extensions import db
+    from services.pipeline_failure import _get_max_stage_retries
+
+    metadata = dict(article.raw_metadata or {}) if isinstance(article.raw_metadata, dict) else {}
+    attempts = int(metadata.get("pipeline_timeout_retries", 0) or 0)
+    maximum = _get_max_stage_retries()
+    if attempts >= maximum:
+        return False
+
+    if (article.final_article or "").strip() or (article.draft_article or "").strip():
+        next_status = PipelineStatus.EDITING
+    elif (article.research_brief or "").strip():
+        next_status = PipelineStatus.WRITING
+    elif (article.extracted_text or "").strip():
+        next_status = PipelineStatus.RESEARCHING
+    else:
+        next_status = PipelineStatus.PENDING
+
+    attempts += 1
+    metadata["pipeline_timeout_retries"] = attempts
+    article.raw_metadata = metadata
+    article.pipeline_status = next_status
+    article.publicly_visible = False
+    article.retry_count = 0
+    article.total_retries = (article.total_retries or 0) + 1
+    article.pipeline_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    article.last_error = (
+        f"Resuming after pipeline timeout at {next_status} "
+        f"(attempt {attempts}/{maximum})"
+    )
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+    _dispatch_stage(article)
+    return True
+
+
+def _recover_pipeline_timeout_failures(soft_cutoff) -> int:
+    """Resume old deadline failures without disturbing other failed articles."""
+    pipeline_timeouts = (
+        Article.query.filter(
+            Article.pipeline_status == PipelineStatus.FAILED,
+            Article.last_error.like("pipeline timeout exceeded%"),
+            Article.updated_at < soft_cutoff,
+        )
+        .yield_per(100)
+        .all()
+    )
+    recovered = 0
+    for article in pipeline_timeouts:
+        try:
+            recovered += int(_resume_pipeline_timeout_failure(article))
+        except Exception:
+            logger.exception("Failed to resume timed-out article %s", article.id)
+    return recovered
+
+
 @shared_task(
     bind=True,
     acks_late=True,
@@ -137,20 +209,13 @@ def retry_stuck(self):
 
         stuck = (
             Article.query.filter(
-                Article.pipeline_status.in_(
-                    [
-                        PipelineStatus.PENDING,
-                        PipelineStatus.SELECTING,
-                        PipelineStatus.RESEARCHING,
-                        PipelineStatus.WRITING,
-                        PipelineStatus.EDITING,
-                    ],
-                ),
+                Article.pipeline_status.in_(_STUCK_STATUSES),
                 Article.updated_at < soft_cutoff,
             )
             .yield_per(100)
             .all()
         )
+        recovered_timeouts = _recover_pipeline_timeout_failures(soft_cutoff)
 
         articles_to_retry = []
         articles_to_degrade = []
@@ -168,7 +233,6 @@ def retry_stuck(self):
         retried = 0
         degraded = 0
         dead_lettered = 0
-
         for article in articles_to_dead_letter:
             if _process_dead_letter(article):
                 dead_lettered += 1
@@ -182,10 +246,11 @@ def retry_stuck(self):
             _process_retry_batch(batch)
             retried += len(batch)
 
-        if retried or degraded or dead_lettered:
+        if retried or recovered_timeouts or degraded or dead_lettered:
             logger.info(
-                "Retry sweep: %s retried, %s degraded, %s dead-lettered",
+                "Retry sweep: %s retried, %s timeout failures resumed, %s degraded, %s dead-lettered",
                 retried,
+                recovered_timeouts,
                 degraded,
                 dead_lettered,
             )
@@ -204,6 +269,7 @@ def retry_stuck(self):
 
         return {
             "retried": retried,
+            "recovered_timeouts": recovered_timeouts,
             "degraded": degraded,
             "dead_lettered": dead_lettered,
         }

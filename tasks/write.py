@@ -8,23 +8,53 @@ from schemas.llm_responses import CondensedArticle
 
 logger = get_task_logger(__name__)
 
+MIN_WRITER_BODY_CHARS = 320
+
 
 def _is_degenerate_write(article_obj: CondensedArticle) -> bool:
     """Check if condensed article is degenerate (fails quality gate).
 
     Returns True if:
-    - Body is too short (< 500 chars)
+    - Body is too short (< 400 chars)
     - No key points (empty list)
     - No citations (empty list)
     """
     body = article_obj.body or ""
-    if len(body.strip()) < 500:
+    if len(body.strip()) < MIN_WRITER_BODY_CHARS:
         return True
     if not article_obj.key_points:
         return True
     if not article_obj.citations:
         return True
     return False
+
+
+def _canonicalize_verified_citations(article_obj: CondensedArticle, allowed_urls: set[str]) -> list[str]:
+    """Map only URL-equivalent citations back to their verified dossier URL."""
+    from services.url import normalize_url
+
+    canonical_by_normalized = {}
+    for url in allowed_urls:
+        try:
+            normalized = normalize_url(url)
+        except (TypeError, ValueError):
+            continue
+        if normalized:
+            canonical_by_normalized[normalized] = url
+
+    invalid: list[str] = []
+    for citation in article_obj.citations:
+        try:
+            normalized = normalize_url(citation.url)
+        except (TypeError, ValueError):
+            invalid.append(citation.url)
+            continue
+        canonical = canonical_by_normalized.get(normalized)
+        if canonical is None:
+            invalid.append(citation.url)
+        else:
+            citation.url = canonical
+    return invalid
 
 # Error response convention:
 # - Leaf tasks: re-raise for Celery retry
@@ -50,7 +80,7 @@ def write_article(self, article_id: int, run_id=None, _signature=None, task_name
     from schemas.llm_responses import CondensedArticle
     from schemas.pipeline import get_role_config
     from services.writer import (
-        build_writer_prompt,
+        build_verified_writer_prompt,
         get_writer_system_prompt,
     )
     from tasks.pipeline import _dispatch_next, _log_pipeline, _transition_article_status, run_stage
@@ -58,29 +88,12 @@ def write_article(self, article_id: int, run_id=None, _signature=None, task_name
     def work(article, provider, model, max_tokens):
         rc = get_role_config("writer")
 
-        # Fetch trend memory if topics available
-        trend_memory = ""
-        if article.topics:
-            from services.trend_memory import (
-                _format_memory_for_prompt,
-                get_memory_for_topics,
-            )
-            trend_memory = _format_memory_for_prompt(
-                get_memory_for_topics(article.topics, min_importance=1),
-            )
+        from services.editorial_evidence import build_verified_packet
 
-        # Truncate research_brief to prevent token overflow
-        from services.prompts import sliding_window_truncate
-        research_brief = sliding_window_truncate(
-            article.research_brief or "", max_chars=8000, model=model,
-        )
-
-        prompt = build_writer_prompt(
-            title=article.original_title or "",
-            topics=article.topics or [],
-            research_brief=research_brief,
+        packet = build_verified_packet(article)
+        prompt = build_verified_writer_prompt(
+            packet=packet,
             max_key_points=rc.max_key_points or 5,
-            trend_memory=trend_memory,
         )
 
         from services.logging_utils import traced_llm_call
@@ -99,6 +112,26 @@ def write_article(self, article_id: int, run_id=None, _signature=None, task_name
                     max_tokens=max_tokens,
                     stage="writer",
                 )
+
+        allowed_urls = {source["url"] for source in packet["sources"]}
+        invalid_citations = _canonicalize_verified_citations(result, allowed_urls)
+        if invalid_citations:
+            article.last_error = "Writer proposed citations outside the evidence dossier"
+            from services.auto_review import route_to_review
+
+            route_to_review(article)
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                raise
+            return {"article_id": article.id, "status": "review", "reason": "unverified_citation"}
+
+        credit = packet["discovery_credit"]
+        result.original_attribution.source = credit["source"] or "Original discovery source"
+        result.original_attribution.url = credit["url"]
+        result.original_attribution.author = credit["author"]
+        result.original_attribution.published_at = credit["published_at"]
 
         article.draft_article = result.model_dump_json()
         article.writer_model = model

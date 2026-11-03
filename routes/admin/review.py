@@ -76,12 +76,18 @@ def approve_article(article_id):
     try:
         # The same primitive the auto-approver uses, so a human-approved
         # article and an auto-approved one end up in the same state.
-        publish(article, reason="admin")
+        approved = publish(article, reason="admin")
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Failed to approve article %s", article_id)
         return jsonify({"error": "Failed to approve article"}), 500
+
+    if not approved:
+        return jsonify({
+            "error": "Article has no complete, valid final content to publish",
+            "eligibility": (article.raw_metadata or {}).get("editorial_eligibility", {}),
+        }), 409
 
     if request.headers.get("HX-Request"):
         return "", 200

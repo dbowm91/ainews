@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -100,7 +101,7 @@ def _create_article_record(
     from datetime import datetime, timezone
 
     from extensions import db
-    from models import Article, Citation, encode_short_url
+    from models import Article, Citation
 
     try:
         pub_date = (
@@ -134,9 +135,6 @@ def _create_article_record(
         ),
     )
     db.session.add(article)
-    db.session.flush()
-
-    article.short_id = encode_short_url(article.id)
     db.session.flush()
 
     if validated.url:
@@ -345,16 +343,7 @@ def process_item(
             validated.title[:60],
         )
 
-    duplicate = None
-    try:
-        duplicate = _find_duplicate_article(validated.url, validated.title)
-    except SQLAlchemyError as exc:
-        logger.warning("Dedup check failed for %s: %s", truncate_for_log(validated.title), exc)
-        try:
-            from services.metrics import get_metrics
-            get_metrics().increment("pipeline.dedup_check_failed", tags={"source": source_key})
-        except Exception as e:  # noqa: BLE001 - metrics failure is non-critical
-            logger.debug("Failed to increment dedup_check_failed metric: %s", e)
+    duplicate = _find_duplicate_for_item(validated, truncate_for_log)
 
     if duplicate:
         result = _handle_duplicate(
@@ -376,25 +365,81 @@ def process_item(
         url=validated.url or "",
     )
 
+    from services.story_clustering import (
+        acquire_admission_guard,
+        attach_matching_lead,
+        register_canonical_lead,
+        release_admission_guard,
+    )
+
+    guard = acquire_admission_guard()
     try:
-        article = _create_article_record(
-            validated,
-            source,
-            extracted_text,
-            extraction,
-            run_id,
-        )
-    except SoftTimeLimitExceeded:
-        db.session.rollback()
-        logger.error("process_item exceeded soft time limit for %s", validated.external_id)
-        raise
-    except Exception as exc:
-        db.session.rollback()
-        logger.error("DB operation failed for %s: %s", validated.external_id, exc)
-        if run_id:
-            _log_pipeline(run_id, "extract", "error", "%s: %s", validated.external_id, exc)
-        raise
+        if guard[0] is not None:
+            try:
+                lead_date = datetime.fromisoformat(validated.published_at) if validated.published_at else None
+            except (ValueError, TypeError):
+                lead_date = None
+            canonical_id = attach_matching_lead(
+                title=validated.title,
+                source_id=source.id,
+                external_id=validated.external_id,
+                url=validated.url,
+                published_at=lead_date,
+            )
+            if canonical_id is not None:
+                return {"article_id": canonical_id, "duplicate": True, "story_clustered": True}
+
+        try:
+            article = _create_article_record(
+                validated,
+                source,
+                extracted_text,
+                extraction,
+                run_id,
+            )
+            if guard[0] is not None:
+                register_canonical_lead(
+                    article,
+                    source.id,
+                    validated.external_id,
+                    validated.url,
+                    article.original_published_at,
+                )
+        except SoftTimeLimitExceeded:
+            db.session.rollback()
+            logger.error("process_item exceeded soft time limit for %s", validated.external_id)
+            raise
+        except Exception as exc:
+            db.session.rollback()
+            logger.error("DB operation failed for %s: %s", validated.external_id, exc)
+            if run_id:
+                _log_pipeline(run_id, "extract", "error", "%s: %s", validated.external_id, exc)
+            raise
+    finally:
+        release_admission_guard(guard)
 
     _dispatch_after_extraction(article.id, run_id)
 
     return {"article_id": article.id}
+
+
+def _find_duplicate_for_item(validated, truncate_for_log):
+    """Find duplicates while keeping metric reporting best-effort."""
+    try:
+        return _find_duplicate_article(validated.url, validated.title)
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Dedup check failed for %s: %s",
+            truncate_for_log(validated.title),
+            exc,
+        )
+        try:
+            from services.metrics import get_metrics
+
+            get_metrics().increment(
+                "pipeline.dedup_check_failed",
+                tags={"source": validated.source_key},
+            )
+        except Exception as metric_error:  # noqa: BLE001 - metrics failure is non-critical
+            logger.debug("Failed to increment dedup_check_failed metric: %s", metric_error)
+        return None

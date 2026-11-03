@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,10 @@ MARKDOWN_BODY = (
     "**Google has released Gemini 4 Carbon**, its latest frontier model.\n\n"
     "Carbon follows Argon from early October 2026."
 )
+
+
+def _create_published_article(create_article, **kwargs):
+    return create_article(published_at=datetime.now(timezone.utc), **kwargs)
 
 
 def _template_files() -> list[Path]:
@@ -106,7 +111,7 @@ class TestFragmentAndPageAreDistinct:
     def test_htmx_request_returns_a_fragment(self, app, client, create_article):
         from extensions import db
 
-        article = create_article(final_article=json.dumps({
+        article = _create_published_article(create_article, final_article=json.dumps({
             "headline": "Headline",
             "tldr": "A short summary.",
             "why_it_matters": "It matters.",
@@ -126,7 +131,7 @@ class TestFragmentAndPageAreDistinct:
     def test_plain_request_returns_a_full_page(self, app, client, create_article):
         from extensions import db
 
-        article = create_article(final_article=json.dumps({
+        article = _create_published_article(create_article, final_article=json.dumps({
             "headline": "Headline",
             "tldr": "A short summary.",
             "why_it_matters": "It matters.",
@@ -148,7 +153,7 @@ class TestFragmentAndPageAreDistinct:
         """Without this the browser cache serves the fragment to a page load."""
         from extensions import db
 
-        article = create_article(final_article=json.dumps({
+        article = _create_published_article(create_article, final_article=json.dumps({
             "headline": "Headline",
             "tldr": "A short summary.",
             "why_it_matters": "It matters.",
@@ -173,7 +178,7 @@ class TestMarkdownIsRendered:
     def test_markdown_becomes_html(self, app, client, create_article):
         from extensions import db
 
-        article = create_article(final_article=json.dumps({
+        article = _create_published_article(create_article, final_article=json.dumps({
             "headline": "Headline",
             "tldr": "A short summary.",
             "why_it_matters": "It matters.",
@@ -193,7 +198,7 @@ class TestMarkdownIsRendered:
     def test_body_has_paragraph_elements(self, app, client, create_article):
         from extensions import db
 
-        article = create_article(final_article=json.dumps({
+        article = _create_published_article(create_article, final_article=json.dumps({
             "headline": "Headline",
             "tldr": "A short summary.",
             "why_it_matters": "It matters.",

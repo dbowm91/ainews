@@ -10,10 +10,7 @@
 {% endif %}
 
 {% if sd and sd.tldr %}
-  <div class="article-tldr">
-    <span class="tldr-label">tl;dr</span>
-    {{ sd.tldr|inline_html }}
-  </div>
+  <p class="article-tldr"><span class="tldr-label">tl;dr</span> <em>{{ sd.tldr|inline_html }}</em></p>
 {% elif article.summary and not sd %}
   <div class="article-summary">{{ article.summary|e }}</div>
 {% endif %}

@@ -1,14 +1,13 @@
 """Auto-review mode: publish without waiting for a human.
 
 The pipeline routes an article to the ``review`` queue whenever a quality gate
-fails or an editor asks for a second look. That is the right default: a human
-decides whether a shaky article goes out. It is the wrong default for a site
-that wants fully autonomous generation, because the queue then fills up with
-articles nobody is going to read and the site goes quiet.
+fails or an editor asks for a second look. Eligible articles can be published
+without waiting for a person. Editorial eligibility holds remain in review
+until their evidence, audit, and quality requirements pass.
 
-Auto-review mode turns that around. When ``pipeline.review.auto_approve`` is
-on, an article that reaches the review queue is approved and published
-immediately, exactly as a human approver would have done.
+When ``pipeline.review.auto_approve`` is on, an eligible article is approved
+and published without waiting for a human. The setting never overrides an
+editorial eligibility hold.
 
 Three things happen here, and they are deliberately separated:
 
@@ -31,13 +30,11 @@ stages cannot disagree about it.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-
 logger = logging.getLogger(__name__)
 
 
 def is_auto_approve_enabled() -> bool:
-    """True when articles that reach the review queue are published on sight."""
+    """True when eligible articles can be published without human review."""
     try:
         from schemas.pipeline import load_pipeline_config
 
@@ -92,11 +89,10 @@ def approve_article(article, *, reason: str = "manual", published_at=None) -> bo
     if article.pipeline_status != PipelineStatus.REVIEW:
         return False
 
-    publish_article(article, reason=reason, published_at=published_at)
-    return True
+    return publish_article(article, reason=reason, published_at=published_at)
 
 
-def publish_article(article, *, reason: str = "manual", published_at=None) -> None:
+def publish_article(article, *, reason: str = "manual", published_at=None) -> bool:
     """Mark an article done and make it publicly visible.
 
     The caller decides whether the article *should* go out; this function only
@@ -110,15 +106,40 @@ def publish_article(article, *, reason: str = "manual", published_at=None) -> No
     """
     from constants import PipelineStatus
 
+    from services.editorial_eligibility import require_eligible
+
+    verdict = require_eligible(article)
+    if not verdict.eligible:
+        article.last_error = "Cannot publish final content: " + ", ".join(verdict.reason_codes)
+        logger.warning(
+            "Article %s has no publishable final content: %s",
+            getattr(article, "id", "?"),
+            ", ".join(verdict.reason_codes),
+        )
+        return False
+
     article.pipeline_status = PipelineStatus.DONE
     article.publicly_visible = True
     article.retry_count = 0
     article.last_error = None
     article.scheduled_publish_at = None
-    article.published_at = published_at or datetime.now(timezone.utc).replace(tzinfo=None)
+    # post_finalize_article claims the publication timestamp atomically and
+    # dispatches irreversible effects only for the winning transition.
 
     _invalidate_public_cache(article)
-    _post_finalize(article)
+    finalized = (
+        _post_finalize(article, published_at=published_at)
+        if published_at is not None
+        else _post_finalize(article)
+    )
+    if not finalized:
+        try:
+            from extensions import db
+
+            db.session.refresh(article)
+        except Exception:  # noqa: BLE001 - a concurrent winner may detach the row
+            return False
+        return article.pipeline_status == PipelineStatus.DONE and article.published_at is not None
 
     try:
         from services.audit import log_admin_action
@@ -142,9 +163,10 @@ def publish_article(article, *, reason: str = "manual", published_at=None) -> No
         reason,
         (getattr(article, "original_title", "") or "")[:50],
     )
+    return True
 
 
-def _post_finalize(article) -> None:
+def _post_finalize(article, *, published_at=None) -> bool:
     """Run the work that follows a publication.
 
     Trend memory, the webhooks and the embedding are what a published
@@ -158,17 +180,20 @@ def _post_finalize(article) -> None:
     try:
         from services.pipeline_degradation import post_finalize_article
 
-        post_finalize_article(article)
+        if published_at is None:
+            return bool(post_finalize_article(article))
+        return bool(post_finalize_article(article, published_at=published_at))
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "Post-finalize work failed for article %s, continuing: %s",
             getattr(article, "id", "?"),
             e,
         )
+        return False
 
 
 def route_to_review(article) -> bool:
-    """Route an article to the review queue, or publish it outright.
+    """Route an article to review, or publish it if eligible and auto-review is on.
 
     Returns True when the article is waiting in the queue for a human, and
     False when it is not in the queue -- because auto-review mode published it
@@ -191,9 +216,19 @@ def route_to_review(article) -> bool:
         )
         return False
 
+    from services.editorial_eligibility import require_eligible
+
+    verdict = require_eligible(article)
+    if not verdict.eligible:
+        article.last_error = "Cannot publish final content: " + ", ".join(verdict.reason_codes)
+        article.pipeline_status = PipelineStatus.REVIEW
+        return True
+
     if is_auto_approve_enabled():
-        publish_article(article, reason="auto_review")
-        return False
+        if publish_article(article, reason="auto_review"):
+            return False
+        article.pipeline_status = PipelineStatus.REVIEW
+        return True
 
     article.pipeline_status = PipelineStatus.REVIEW
     article.publicly_visible = False
@@ -202,12 +237,13 @@ def route_to_review(article) -> bool:
 
 
 def auto_approve_queued(limit: int = 100) -> int:
-    """Approve everything waiting in the review queue. Returns the count.
+    """Publish queued articles with complete final content. Returns the count.
 
-    This is the safety net. The pipeline normally approves an article the
+    This is the safety net. The pipeline normally publishes an article the
     moment it routes it to review, but an article that was already waiting
     when the switch was turned on -- or one that was queued by a path that
     does not go through the pipeline -- would otherwise sit there for ever.
+    Articles without a valid final artifact remain queued.
     """
     if not is_auto_approve_enabled():
         return 0
@@ -219,6 +255,7 @@ def auto_approve_queued(limit: int = 100) -> int:
     from models import Article
 
     approved = 0
+    recovered = 0
     try:
         queued = (
             Article.query.filter(Article.pipeline_status == PipelineStatus.REVIEW)
@@ -232,8 +269,16 @@ def auto_approve_queued(limit: int = 100) -> int:
 
     for article in queued:
         try:
-            if approve_article(article, reason="auto_review"):
-                db.session.commit()
+            if not (article.final_article or "").strip():
+                from services.editorial_eligibility import require_eligible
+
+                require_eligible(article)
+                if _resume_incomplete_review_article(article):
+                    recovered += 1
+                continue
+            did_approve = approve_article(article, reason="auto_review")
+            db.session.commit()
+            if did_approve:
                 approved += 1
         except SQLAlchemyError:
             db.session.rollback()
@@ -242,4 +287,79 @@ def auto_approve_queued(limit: int = 100) -> int:
 
     if approved:
         logger.info("Auto-review mode published %s article(s)", approved)
+    if recovered:
+        logger.info("Auto-review mode resumed %s incomplete article(s)", recovered)
     return approved
+
+
+def _resume_incomplete_review_article(article) -> bool:
+    """Resume recoverable pre-publication work instead of parking it in review."""
+    from constants import PipelineStatus
+    from extensions import db
+
+    metadata = dict(article.raw_metadata or {}) if isinstance(article.raw_metadata, dict) else {}
+    attempts = int(metadata.get("incomplete_review_retries", 0) or 0)
+    from services.pipeline_failure import _get_max_stage_retries
+
+    maximum = _get_max_stage_retries()
+    if attempts >= maximum:
+        article.last_error = (
+            f"Final article is still missing after {attempts} recovery attempts; "
+            "manual retry is required"
+        )
+        db.session.commit()
+        return False
+
+    dossier = getattr(article, "editorial_dossier", None)
+    dossier_verified = dossier is not None and dossier.status == "verified"
+    if not dossier_verified:
+        # A prior research attempt can leave a brief behind even when its
+        # evidence ledger is unverified. Sending that article straight to
+        # writing (or editing) only repeats the same missing-packet failure.
+        # Re-run research so it can refresh retrieval and verify the ledger.
+        if (article.extracted_text or "").strip():
+            next_status = PipelineStatus.RESEARCHING
+        else:
+            article.last_error = (
+                "Verified evidence dossier is unavailable and no extracted "
+                "article text remains; manual retry is required"
+            )
+            db.session.commit()
+            return False
+    elif not (article.research_brief or "").strip():
+        if (article.extracted_text or "").strip():
+            next_status = PipelineStatus.RESEARCHING
+        else:
+            article.last_error = (
+                "Final article is missing and no recoverable pipeline input remains"
+            )
+            db.session.commit()
+            return False
+    elif (article.draft_article or "").strip():
+        next_status = PipelineStatus.EDITING
+    else:
+        next_status = PipelineStatus.WRITING
+
+    attempts += 1
+    metadata["incomplete_review_retries"] = attempts
+    article.raw_metadata = metadata
+    article.pipeline_status = next_status
+    article.publicly_visible = False
+    article.retry_count = attempts
+    article.total_retries = (article.total_retries or 0) + 1
+    article.last_error = (
+        f"Retrying incomplete article at {next_status} (attempt {attempts}/{maximum})"
+    )
+    db.session.commit()
+
+    from services.pipeline_utils import _dispatch_next
+
+    _dispatch_next(article.id, next_status=next_status)
+    logger.info(
+        "Resuming incomplete article %s at %s (attempt %s/%s)",
+        article.id,
+        next_status,
+        attempts,
+        maximum,
+    )
+    return True

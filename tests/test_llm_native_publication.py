@@ -7,7 +7,7 @@ from models import (Article, DeliveryAttempt, DeliveryIntent, NewsletterDelivery
     NewsletterEditionItem, NewsletterProfile, NewsletterSchedule, ScheduledOccurrence, Source, Subscriber)
 from services.newsletter_editions import create_edition, get_public_edition, serialize_edition
 from services.publication import apply_publication_state, is_publicly_visible, published_article_query, serialize_public_article
-from models.article import new_public_id
+from models.article import new_public_id, new_short_id
 
 
 def _article(title="Published story", *, visible=True):
@@ -65,12 +65,26 @@ def test_random_public_ids_retry_detected_collision(app, monkeypatch):
         # The default first returns a collision; the event retries with the
         # deterministic replacement supplied by the patched generator.
         generated = iter((existing.public_id, "new-random-public-id"))
-        monkeypatch.setattr("models.article.secrets.token_urlsafe", lambda _size: next(generated))
+        monkeypatch.setattr("models.article.new_public_id", lambda: next(generated))
         candidate = Article(source_id=source.id, original_title="Retry identity", pipeline_status="done",
             final_article='{"headline":"Retry identity"}', publicly_visible=True)
         db.session.add(candidate)
         db.session.commit()
         assert candidate.public_id == "new-random-public-id"
+
+
+def test_short_ids_are_opaque_and_not_derived_from_row_ids(app):
+    with app.app_context():
+        ids = {new_short_id() for _ in range(10_000)}
+        assert len(ids) == 10_000
+        assert all(len(short_id) == 12 for short_id in ids)
+        assert all(short_id.isalnum() or "_" in short_id or "-" in short_id for short_id in ids)
+
+        first = _article("First opaque short link")
+        second = _article("Second opaque short link")
+        assert first.id + 1 == second.id
+        assert first.short_id != second.short_id
+        assert first.short_id != str(first.id)
 
 
 def test_public_ids_are_random_and_edition_snapshots_are_immutable(app):

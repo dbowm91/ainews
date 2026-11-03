@@ -102,6 +102,15 @@ class TestModelLimiterAcquire:
         assert second_keys[0] == "ainews:llm:ollama:model-b:leases"
         limiter.release("ollama", "model-b")
 
+    def test_provider_acquire_uses_shared_provider_key(self):
+        limiter, scripts = _make_limiter()
+
+        assert limiter.acquire_provider("local", max_concurrent=3, timeout=30)
+
+        call = scripts["acquire"].call_args
+        assert call.kwargs["keys"] == ["ainews:llm:provider:local"] * 2
+        assert call.kwargs["args"][:3] == [3, 3, ModelLimiter.SLOT_TTL_SECONDS]
+
 
 class TestModelLimiterRelease:
     def test_release_without_owned_lease_is_noop(self):
@@ -110,6 +119,17 @@ class TestModelLimiterRelease:
         limiter.release("ollama", "qwen3:8b")
 
         scripts["release"].assert_not_called()
+
+    def test_provider_release_uses_shared_provider_key(self):
+        limiter, scripts = _make_limiter()
+
+        assert limiter.acquire_provider("local", max_concurrent=2)
+        limiter.release_provider("local")
+
+        scripts["release"].assert_called_once_with(
+            keys=["ainews:llm:provider:local"] * 2,
+            args=[scripts["acquire"].call_args.kwargs["args"][3]],
+        )
 
     def test_release_handles_redis_error(self):
         redis = _fake_redis()

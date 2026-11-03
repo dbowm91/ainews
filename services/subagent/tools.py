@@ -193,7 +193,11 @@ def _search_web(query: str, max_results: int = 5) -> str:
         results = search_web(query, max_results)
         if not results:
             return "No search results found."
-        return "\n".join(f"- {r.title}: {r.snippet[:150]}..." for r in results)
+        return "\n".join(
+            f"- {r.title} | URL: {r.url} | retrieval_status: lead_only | "
+            f"snippet (unverified): {r.snippet[:150]}..."
+            for r in results
+        )
     except (ConnectionError, TimeoutError, ValueError) as e:
         logger.error("Tool search_web failed for '%s': %s", query, e)
         return f"Error performing web search: {type(e).__name__}"

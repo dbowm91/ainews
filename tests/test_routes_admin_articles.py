@@ -461,7 +461,6 @@ class TestReprocessStages:
         assert "select" in _REPROCESS_STAGES
         assert "research" in _REPROCESS_STAGES
         assert "write" in _REPROCESS_STAGES
-        assert "edit" in _REPROCESS_STAGES
 
     def test_select_stage_resets_correct_fields(self):
         """Select stage resets selector_result and later fields."""

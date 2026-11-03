@@ -683,6 +683,7 @@ def retry_article(article_id):
     for field in _RETRY_RESET_FIELDS[next_status]:
         setattr(article, field, None)
     article.retry_count = 0
+    article.total_retries = (article.total_retries or 0) + 1
     article.last_error = None
     metadata = dict(article.raw_metadata or {}) if isinstance(article.raw_metadata, dict) else {}
     for key in (

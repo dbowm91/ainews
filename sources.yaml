@@ -3,11 +3,11 @@ sources:
     name: "Hacker News"
     type: api
     enabled: true
-    schedule_minutes: 30
+    schedule_minutes: 25
     config:
       list_url: "https://hacker-news.firebaseio.com/v0/topstories.json"
       list_method: "json_array"
-      max_items: 30
+      max_items: 25
       item_url: "https://hacker-news.firebaseio.com/v0/item/{id}.json"
       item_method: "json_object"
       fields:
@@ -34,10 +34,10 @@ sources:
     name: "TechCrunch"
     type: rss
     enabled: true
-    schedule_minutes: 60
+    schedule_minutes: 25
     config:
       feed_url: "https://techcrunch.com/feed/"
-      max_items: 50
+      max_items: 15
       request_timeout: 15
     topics:
       match_mode: contextual
@@ -47,10 +47,10 @@ sources:
     name: "Ars Technica"
     type: rss
     enabled: true
-    schedule_minutes: 60
+    schedule_minutes: 25
     config:
       feed_url: "https://feeds.arstechnica.com/arstechnica/index"
-      max_items: 30
+      max_items: 15
       request_timeout: 15
     topics:
       match_mode: contextual
@@ -60,10 +60,10 @@ sources:
     name: "The Verge"
     type: rss
     enabled: true
-    schedule_minutes: 60
+    schedule_minutes: 25
     config:
       feed_url: "https://www.theverge.com/rss/index.xml"
-      max_items: 30
+      max_items: 15
       request_timeout: 15
     topics:
       match_mode: contextual

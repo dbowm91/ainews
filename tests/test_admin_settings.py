@@ -169,6 +169,10 @@ class TestReadingConfiguration:
         local = [p for p in read_providers() if p.id == "local"][0]
         assert local.local is True
         assert local.endpoint == "http://127.0.0.1:1234/v1"
+        assert local.max_concurrent == 1
+        assert local.retry_attempts == 3
+        assert local.retry_base_delay_seconds == 5.0
+        assert local.retry_max_delay_seconds == 180.0
 
     def test_never_carries_the_credential(self, config_dir):
         from services.admin_settings import read_providers
@@ -250,6 +254,47 @@ class TestWritingProviders:
         raw = yaml.safe_load((config_dir / "providers.yaml").read_text(encoding="utf-8"))
         local = [p for p in raw["providers"] if p["id"] == "local"][0]
         assert local["config"]["base_url"] == "http://127.0.0.1:4321/v1"
+
+    def test_writes_provider_concurrency_and_retry_settings(self, config_dir):
+        from services.admin_settings import read_providers, update_providers
+
+        update_providers({"local": {
+            "max_concurrent": 4,
+            "retry_attempts": 6,
+            "retry_base_delay_seconds": 7,
+            "retry_max_delay_seconds": 240,
+        }})
+
+        local = next(p for p in read_providers() if p.id == "local")
+        assert local.max_concurrent == 4
+        assert local.retry_attempts == 6
+        assert local.retry_base_delay_seconds == 7.0
+        assert local.retry_max_delay_seconds == 240.0
+
+    def test_rejects_max_retry_delay_below_base_delay(self, config_dir):
+        from services.admin_settings import SettingsError, update_providers
+
+        with pytest.raises(SettingsError, match="at least the base delay"):
+            update_providers({"local": {
+                "retry_base_delay_seconds": 20,
+                "retry_max_delay_seconds": 10,
+            }})
+
+    def test_adds_replaces_and_clears_credentials_without_exposing_them(self, config_dir):
+        from services.admin_settings import read_providers, update_providers
+
+        token = "synthetic-local-credential"
+        update_providers({"local": {"api_key": token}})
+        raw = yaml.safe_load((config_dir / "providers.yaml").read_text(encoding="utf-8"))
+        local = next(p for p in raw["providers"] if p["id"] == "local")
+        assert local["config"]["api_key"] == token
+        view = next(p for p in read_providers() if p.id == "local")
+        assert view.has_api_key is True
+        assert token not in repr(view)
+
+        update_providers({"local": {"api_key": ""}})
+        cleared = next(p for p in read_providers() if p.id == "local")
+        assert cleared.has_api_key is False
 
 
 class TestWritingPipelineRoles:
@@ -477,6 +522,8 @@ class TestSettingsRoutes:
         assert "local" in body
         assert "selector" in body
         assert "writer" in body
+        assert "max concurrent calls" in body
+        assert "retry attempts" in body
 
     def test_the_page_never_renders_a_credential(self, auth_client, config_dir, monkeypatch):
         monkeypatch.setenv("TEST_API_KEY", "super-secret-value")
@@ -491,6 +538,10 @@ class TestSettingsRoutes:
                 "provider_row": "local",
                 "enabled_local": "on",
                 "model_local": "google/gemma-4-e2b",
+                "max_concurrent_local": "4",
+                "retry_attempts_local": "5",
+                "retry_base_delay_seconds_local": "6",
+                "retry_max_delay_seconds_local": "180",
                 "default_provider": "local",
             },
             follow_redirects=True,
@@ -500,6 +551,45 @@ class TestSettingsRoutes:
         raw = yaml.safe_load((config_dir / "providers.yaml").read_text(encoding="utf-8"))
         assert isinstance(raw["providers"], list)
         assert raw["default_provider"] == "local"
+        local = next(p for p in raw["providers"] if p["id"] == "local")
+        assert local["config"]["max_concurrent"] == 4
+        assert local["config"]["retry_attempts"] == 5
+        assert local["config"]["retry_base_delay_seconds"] == 6.0
+        assert local["config"]["retry_max_delay_seconds"] == 180.0
+
+    def test_provider_route_saves_a_credential_without_echoing_it(self, auth_client, config_dir):
+        token = "synthetic-local-credential"
+        response = auth_client.post(
+            "/admin/settings/providers",
+            data={
+                "csrf_token": "test",
+                "provider_row": "local",
+                "enabled_local": "on",
+                "model_local": "local-model",
+                "api_key_local": token,
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert token not in response.get_data(as_text=True)
+        raw = yaml.safe_load((config_dir / "providers.yaml").read_text(encoding="utf-8"))
+        local = next(p for p in raw["providers"] if p["id"] == "local")
+        assert local["config"]["api_key"] == token
+
+        auth_client.post(
+            "/admin/settings/providers",
+            data={
+                "csrf_token": "test",
+                "provider_row": "local",
+                "enabled_local": "on",
+                "model_local": "local-model",
+                "clear_api_key_local": "on",
+            },
+            follow_redirects=True,
+        )
+        cleared = yaml.safe_load((config_dir / "providers.yaml").read_text(encoding="utf-8"))
+        local = next(p for p in cleared["providers"] if p["id"] == "local")
+        assert local["config"]["api_key"] == ""
 
     def test_a_row_that_was_not_submitted_is_left_alone(self, auth_client, config_dir):
         auth_client.post(

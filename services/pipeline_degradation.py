@@ -178,13 +178,13 @@ def _degrade_edit_stage(article, run_id):
         return
 
     article.pipeline_status = PipelineStatus.DONE
-    from services.publication import apply_publication_state
-    apply_publication_state(article)
+    article.publicly_visible = False
     try:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         raise
+    post_finalize_article(article, run_id=run_id)
     if run_id:
         _log_pipeline(
             run_id,
@@ -222,7 +222,7 @@ def _degrade_and_advance(article, failed_stage: str, run_id=None):
     _apply_degrade_config(article, stage_config, run_id, stage=failed_stage)
 
 
-def post_finalize_article(article, run_id=None):
+def post_finalize_article(article, run_id=None, published_at=None):
     """Post-finalize article: published_at, trend memory, webhooks, SLA metrics, embeddings.
 
     The publication is committed **before** any of the slow work starts.
@@ -255,7 +255,9 @@ def post_finalize_article(article, run_id=None):
         )
         return False
 
-    published_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    claimed_at = published_at or datetime.now(timezone.utc)
+    if claimed_at.tzinfo is not None:
+        claimed_at = claimed_at.astimezone(timezone.utc).replace(tzinfo=None)
     claimed = db.session.execute(
         update(Article)
         .where(
@@ -263,13 +265,14 @@ def post_finalize_article(article, run_id=None):
             Article.pipeline_status == PipelineStatus.DONE,
             Article.published_at.is_(None),
         )
-        .values(published_at=published_at)
+        .values(published_at=claimed_at, publicly_visible=True)
     )
     if claimed.rowcount != 1:
         db.session.rollback()
         logger.info("Publication effects already claimed for article %s", article.id)
         return False
-    article.published_at = published_at
+    article.published_at = claimed_at
+    article.publicly_visible = True
 
     # Release the write lock before anything slow happens.
     try:
@@ -395,8 +398,7 @@ def _finalize(article_id: int):
                 return
 
             article.pipeline_status = PipelineStatus.DONE
-            from services.publication import apply_publication_state
-            apply_publication_state(article)
+            article.publicly_visible = False
 
             create_article_version(
                 article,

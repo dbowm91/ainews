@@ -3,7 +3,6 @@ from __future__ import annotations
 import abc
 import json
 import logging
-import random
 import threading
 import time
 from concurrent.futures import CancelledError, ThreadPoolExecutor
@@ -13,8 +12,8 @@ from typing import Any, Callable, Iterator, Optional, Type, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from constants import DEFAULT_LLM_TIMEOUT_SECONDS
-from services.circuit_breaker import CircuitOpenError
-from services.llm.errors import AuthError, ProviderServerError, ProviderTimeoutError, RateLimitError
+from services.llm.errors import ProviderServerError, ProviderTimeoutError, RateLimitError
+from services.llm.dispatcher import ProviderDispatcher
 from services.llm.json_utils import extract_json
 from utils.text import esc_xml_text
 from services.provider_base import BaseProvider, ProviderManager
@@ -23,6 +22,22 @@ from services.tracing import get_current_trace_id
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, minimum), maximum)
+
+
+def _bounded_float(value: Any, default: float, minimum: float, maximum: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, minimum), maximum)
 
 
 class BatchError(Exception):
@@ -82,14 +97,31 @@ class ToolCallingResponse:
 class BaseLLMProvider(BaseProvider, abc.ABC):
     default_model: str = ""
 
-    RETRY_BASE_DELAY = 1.0
-    RETRY_MAX_DELAY = 30.0
+    RETRY_BASE_DELAY = 5.0
+    RETRY_MAX_DELAY = 180.0
     RETRY_MAX_ATTEMPTS = 3
 
     def __init__(self, provider_id: str, config: dict):
         super().__init__(provider_id, config)
         self._client = None
         self._client_lock = threading.Lock()
+        self.retry_attempts = _bounded_int(config.get("retry_attempts"), 3, 1, 8)
+        self.retry_base_delay_seconds = _bounded_float(
+            config.get("retry_base_delay_seconds"), self.RETRY_BASE_DELAY, 1.0, 60.0,
+        )
+        self.retry_max_delay_seconds = _bounded_float(
+            config.get("retry_max_delay_seconds"), self.RETRY_MAX_DELAY, 5.0, 600.0,
+        )
+        if self.retry_max_delay_seconds < self.retry_base_delay_seconds:
+            self.retry_max_delay_seconds = self.retry_base_delay_seconds
+        self.max_concurrent = _bounded_int(config.get("max_concurrent"), 1, 1, 64)
+        self.dispatcher_wait_timeout_seconds = _bounded_int(
+            config.get("dispatcher_wait_timeout_seconds"), 120, 1, 600,
+        )
+        self.dispatcher_slot_ttl_seconds = _bounded_int(
+            config.get("timeout_seconds"), 120, 1, 600,
+        ) + 60
+        self.dispatcher = ProviderDispatcher(self)
 
     @property
     def client(self):
@@ -124,39 +156,11 @@ class BaseLLMProvider(BaseProvider, abc.ABC):
             AuthError: On first attempt (no retry)
             CircuitOpenError: On first attempt (no retry)
         """
-        trace_id = get_current_trace_id()
-        last_exc: Optional[Exception] = None
-        max_attempts = max(1, min(int(getattr(self, "retry_attempts", self.RETRY_MAX_ATTEMPTS)), 5))
-        for attempt in range(max_attempts):
-            try:
-                return func(*args, **kwargs)
-            except (AuthError, CircuitOpenError):
-                raise
-            except (RateLimitError, ProviderTimeoutError, ProviderServerError) as e:
-                last_exc = e
-                if attempt == max_attempts - 1:
-                    self._record_failure(model or self.default_model or "unknown")
-                    break
-                if isinstance(e, RateLimitError) and e.retry_after is not None:
-                    delay = min(e.retry_after, self.RETRY_MAX_DELAY)
-                else:
-                    delay = min(
-                        random.uniform(0, self.RETRY_BASE_DELAY * (2 ** attempt)),  # noqa: S311
-                        self.RETRY_MAX_DELAY,
-                    )
-                logger.warning(
-                    "TraceID=%s: %s attempt %d/%d failed: %s. Retrying in %.1fs.",
-                    trace_id,
-                    self.provider_id,
-                    attempt + 1,
-                    max_attempts,
-                    e,
-                    delay,
-                )
-                time.sleep(delay)
-        if last_exc is not None:
-            raise last_exc
-        raise RuntimeError("Unexpected: no exception recorded after retries")
+        return self.dispatcher.call(func, model, *args, **kwargs)
+
+    def _dispatch_stream(self, operation: Callable[[], Iterator[str]], model: str | None) -> Iterator[str]:
+        """Route a provider stream through the shared concurrency dispatcher."""
+        return self.dispatcher.stream(operation, model)
 
     def _record_success(
         self,

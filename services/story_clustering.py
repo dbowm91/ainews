@@ -167,7 +167,7 @@ def attach_matching_lead(
         dossier = EditorialDossier.query.filter_by(article_id=article.id).one_or_none()
         if dossier:
             dossier.status = "stale"
-            article.last_error = "Editorial hold: a new discovery lead requires evidence re-evaluation"
+            article.last_error = "New discovery lead requires evidence re-evaluation"
     db.session.commit()
     _metric(get_metrics(), "story_cluster_lead_merged")
     _metric(get_metrics(), "story_cluster_duplicate_prevented")

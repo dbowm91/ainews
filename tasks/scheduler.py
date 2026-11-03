@@ -77,10 +77,8 @@ def publish_scheduled_articles(self):
                 article = db.session.get(Article, article_id)
                 if article is None:
                     continue
-                article.pipeline_status = PipelineStatus.DONE
-                from services.publication import apply_publication_state
-                apply_publication_state(article, published_at=now)
-                article.scheduled_publish_at = None
+                if not approve_article(article, reason="scheduled", published_at=now):
+                    continue
                 db.session.commit()
                 try:
                     from services.tts.jobs import ensure_narration_job_for_published

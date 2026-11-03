@@ -1,15 +1,15 @@
 # E06 — Editorial Evidence Evaluation, Bounded Rollout, and Operational Handoff
 
-**Status:** IMPLEMENTED — local verification complete; provider-backed comparison pending
+**Status:** IMPLEMENTED — local verification and five-lead ephemeral copyright-metric comparison complete; broader factual-quality conclusions are not claimed
 **Parent:** [Evidence-first editorial roadmap](evidence_first_editorial_roadmap_20261030.md)
 **Dependencies:** Starts with E01; final acceptance E01–E04, then repeat relevant cases after E05.
 **Objective:** Prove that stronger gates improve evidence reliability and copying resistance without excessive cost, blocking normal article publication or changing external output contracts.
 
 ## Baseline and corpus
 
-Before implementation, snapshot a **redacted, local fixture set** representing at least: routine release note; one-source scoop; two independent reports; three copies of one syndicated report; primary advisory only; scientific preprint with disputed interpretation; number/version mismatch; correction/retraction; contradictory chronology; quoted statement; source unavailable/paywalled; malicious prompt-injection source text; copied prose; synthetic hallucinated citation; search/provider timeout; degraded research/write/edit; stage disabled; and auto-review enabled.
+Before implementation, create a **redacted, local fixture set** representing at least: routine release note; one-source scoop; two independent reports; three copies of one syndicated report; primary advisory only; scientific preprint with disputed interpretation; number/version mismatch; correction/retraction; contradictory chronology; quoted statement; source unavailable/paywalled; malicious prompt-injection source text; copied prose; synthetic hallucinated citation; search/provider timeout; degraded research/write/edit; stage disabled; and auto-review enabled.
 
-For each case, record expected claim support, source-family count, publication decision and final article shape. Keep test documents licensed/public-domain/synthetic where possible; do not commit third-party article full text or secret provider data. Capture baseline outcome and provider-call cost/latency without claiming production performance from mocks.
+For each case, record expected claim support, source-family count, publication decision and final article shape. For any transient provider-backed comparison, source text and generated prose may be processed within the controlled internal evaluation; do not train on it, expose it, or retain it in the deliverable. Purge source text, excerpts, prompts and generated prose after the run, retaining only aggregate metrics. Do not commit third-party article text or secret provider data. This is a technical handling rule, not a legal conclusion. Capture baseline outcome and provider-call cost/latency without claiming production performance from mocks.
 
 ## Automated gates
 
@@ -42,7 +42,7 @@ Use low-cardinality metric labels; place article IDs, URLs, evidence hashes and 
 - Evidence sample with per-case final publication decision, source-family ancestry, unresolved claims and overlap findings; no unverifiable "passed" assertions.
 - Admin/operator explanation for `hold` vs `review`, manual override audit, source fetch failure, policy version, article reprocess, evidence invalidation, and corrections.
 - Update `docs/pipeline.md`, `docs/quality.md`, `architecture/pipeline.md`, `architecture/prompts.md`, `docs/search.md`, and operational documentation only when corresponding code actually changes. Update `plans/plan.md` and roadmap statuses after real milestones land.
-- Compare representative articles for factual error rate, direct copying/near-copy rate, independent-origin coverage, publication throughput and latency/token consumption. Calibrate source thresholds instead of asserting two URLs = two sources.
+- The 2026-10-31 ephemeral cohort paired five leads and retained aggregate copying, source-family, disposition, output-size and latency metrics only; it is documented in `docs/evidence-first-validation-20261030.md`. The requested copyright-focused measurement is complete. Evidence-first held every lead, so it generated no prose for direct overlap comparison; no factual-accuracy or evidence-first copying-rate conclusion is claimed. Any later quality-comparison study must use transient inputs and retain aggregate outcomes only. Calibrate source thresholds instead of asserting two URLs = two sources.
 
 ## Final exit gate
 

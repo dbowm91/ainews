@@ -13,7 +13,7 @@ from services.llm.base import (
     ToolDefinition,
     register_provider,
 )
-from services.llm.errors import RateLimitError as CustomRateLimitError, make_error_handler
+from services.llm.errors import make_error_handler
 from services.llm.httpx_transport import create_httpx_client
 
 from schemas.llm import AnthropicConfig
@@ -31,14 +31,6 @@ def _handle_anthropic_error(e: Exception) -> Exception:
         AuthenticationError,
         RateLimitError,
     )
-
-    if isinstance(e, RateLimitError):
-        retry_after = None
-        if hasattr(e, "headers") and e.headers:
-            retry_after = e.headers.get("retry-after")
-        elif hasattr(e, "response") and e.response and hasattr(e.response, "headers"):
-            retry_after = e.response.headers.get("retry-after")
-        return CustomRateLimitError(str(e), retry_after=retry_after)
 
     return make_error_handler(
         "Anthropic",
@@ -131,8 +123,26 @@ class AnthropicProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         ))
 
-    @circuit_protected("llm_anthropic")
     def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        stream_model = model or self.default_model
+        return self._dispatch_stream(
+            lambda: self._do_chat_streaming(
+                messages, model=model, system=system, temperature=temperature,
+                max_tokens=max_tokens, **kwargs,
+            ),
+            stream_model,
+        )
+
+    @circuit_protected("llm_anthropic")
+    def _do_chat_streaming(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -256,7 +266,7 @@ class AnthropicProvider(BaseLLMProvider):
         max_tokens: int,
     ) -> tuple[Any, Any]:
         return cast(tuple[Any, Any], self._retry_with_backoff(
-            self._do_call_api_with_tools, model,
+            self._do_call_api_with_tools, model, model,
             messages=messages, tools=tools, tool_choice=tool_choice,
             temperature=temperature, max_tokens=max_tokens,
         ))
@@ -308,9 +318,12 @@ class AnthropicProvider(BaseLLMProvider):
 
     def health_check(self) -> dict[str, Any]:
         try:
-            self.client.messages.create(
-                model=self.default_model,
+            # Anthropic has no lightweight model-list endpoint suitable for
+            # credential checks. Route the inference probe through the same
+            # provider dispatcher as pipeline calls.
+            self.chat(
                 messages=[{"role": "user", "content": "ping"}],
+                model=self.default_model,
                 max_tokens=10,
             )
             return {

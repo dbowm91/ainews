@@ -140,8 +140,8 @@ def select_article(self, article_id: int, run_id=None, _signature=None, task_nam
             f"</article>\n\n"
             "Should we write a condensed news article about this? "
             "Score 1-10 for newsworthiness to a tech audience. "
-            "Also rate your confidence in this selection as low, medium, or high. "
-            "Return JSON with selected (bool), score (1-10), reason (string), confidence (low|medium|high)."
+            "Return a concise reason of at most 20 words and confidence low, medium, or high. "
+            "Return only selected (bool), score (1-10), reason, and confidence."
         )
 
         from services.logging_utils import traced_llm_call

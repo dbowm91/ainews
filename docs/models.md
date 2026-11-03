@@ -436,8 +436,6 @@ This document describes all 19 models (plus 1 association table) defined in `mod
 ### `slugify(name: str) -> str`
 Converts a string to a URL-friendly slug (lowercase, hyphens, max 64 chars).
 
-### `encode_short_url(article_id: int) -> str`
-Encodes an article ID into a short URL code (min 6 chars, custom alphabet).
-
-### `decode_short_url(code: str) -> int | None`
-Decodes a short URL code back to an article ID.
+Article routes use cryptographically random public IDs. Short-link tokens are
+also random and independent of database row IDs; do not encode or expose
+integer primary keys in public URLs.

@@ -51,7 +51,7 @@ class TestEditStage:
             work_fn.assert_called_once()
 
     def test_edit_degrades_to_review_hold(self, app, create_article):
-        """A fallback draft without a successful evidence audit stays held."""
+        """A fallback draft without valid final structure remains in review."""
         with app.app_context():
             draft = json.dumps({"headline": "Draft Title", "body": "Draft body"})
             article = create_article(pipeline_status="editing")
@@ -80,7 +80,7 @@ class TestEditStage:
                 _degrade_and_advance(article, "edit")
 
             assert article.retry_count == 0
-            assert article.last_error.startswith("Editorial hold:")
+            assert article.last_error.startswith("Cannot publish final content:")
 
     def test_edit_degrade_accepts_status_name(self, app, create_article):
         """Degrade should accept 'editing' as well as 'edit'."""

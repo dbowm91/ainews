@@ -10,7 +10,7 @@ from routes.admin.api.utils import api_response
 @admin_api_bp.route("/articles/<int:article_id>/editorial-status", methods=["GET"])
 @require_auth
 def get_editorial_status(article_id: int) -> tuple[Response, int] | Response:
-    """Expose hold/review state and provenance metadata without publisher text."""
+    """Expose publication readiness, diagnostics, and provenance without article text."""
     from models import Article
 
     article = db.get_or_404(Article, article_id)

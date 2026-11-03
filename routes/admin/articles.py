@@ -165,6 +165,45 @@ def _parse_date_filter(date_str, field_name):
         return None, f"Invalid {field_name.replace('_', ' ')}: {date_str}"
 
 
+def _manual_retry_available(article) -> bool:
+    """Offer a retry for terminal holds or stale stages with a recorded error."""
+    from constants import PipelineStatus
+
+    if article.pipeline_status in (PipelineStatus.FAILED, PipelineStatus.REVIEW):
+        return True
+    if not article.last_error or article.updated_at is None:
+        return False
+    try:
+        from services.config_unified import get_retry_soft_cutoff_minutes
+
+        cutoff_minutes = get_retry_soft_cutoff_minutes()
+    except Exception:  # noqa: BLE001 - admin recovery must remain available
+        cutoff_minutes = 15
+    updated_at = article.updated_at
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - updated_at).total_seconds() >= cutoff_minutes * 60
+
+
+def _retry_resume_status(article):
+    """Choose the earliest recoverable stage without discarding saved work."""
+    from constants import PipelineStatus
+
+    dossier = getattr(article, "editorial_dossier", None)
+    dossier_verified = dossier is not None and dossier.status == "verified"
+    if not dossier_verified:
+        if (article.extracted_text or "").strip():
+            return PipelineStatus.RESEARCHING
+        return PipelineStatus.PENDING
+    if (article.draft_article or "").strip():
+        return PipelineStatus.EDITING
+    if (article.research_brief or "").strip():
+        return PipelineStatus.WRITING
+    if (article.extracted_text or "").strip():
+        return PipelineStatus.RESEARCHING
+    return PipelineStatus.PENDING
+
+
 def _render_articles_response(articles, has_next, next_page, page, total_count,
                                query, status, category, source_id, date_from, date_to,
                                impact_min, impact_max, tag_slug, sources, is_htmx=False):
@@ -248,6 +287,8 @@ def articles():
     from services.feed_stats import annotate_quality_scores
 
     annotate_quality_scores(articles)
+    for article in articles:
+        article.manual_retry_available = _manual_retry_available(article)
 
     # Get sources for filter dropdown
     sources = Source.query.order_by(Source.name).all()
@@ -608,4 +649,53 @@ def reprocess_article(article_id):
     signed_kwargs = get_signed_kwargs(task_name, (article.id,), {})
     _TASKS[task_name].apply_async(args=(article.id,), kwargs=signed_kwargs, headers=headers)
 
+    return redirect(url_for("admin.articles"))
+
+
+@admin_bp.route("/articles/<int:article_id>/retry", methods=["POST"])
+@require_auth
+@validate_csrf_token
+def retry_article(article_id):
+    """Resume an errored article from the earliest usable pipeline stage."""
+    from extensions import db
+    from models import Article
+
+    article = db.get_or_404(Article, article_id)
+    if not _manual_retry_available(article):
+        flash("This article is not currently eligible for a manual retry.", "warning")
+        return redirect(url_for("admin.articles"))
+
+    next_status = _retry_resume_status(article)
+    article.pipeline_status = next_status
+    article.publicly_visible = False
+    article.pipeline_started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    article.retry_count = 0
+    article.last_error = None
+    metadata = dict(article.raw_metadata or {}) if isinstance(article.raw_metadata, dict) else {}
+    for key in (
+        "pipeline_timeout_retries",
+        "incomplete_review_retries",
+        "writer_evidence_research_retries",
+    ):
+        metadata.pop(key, None)
+    article.raw_metadata = metadata
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.exception("Failed to queue manual retry for article %s", article_id)
+        flash("Could not queue the article retry. Please try again.", "error")
+        return redirect(url_for("admin.articles"))
+
+    from services.pipeline_utils import _dispatch_next
+
+    _dispatch_next(article.id, next_status=next_status)
+    log_admin_action(
+        "article_retry",
+        target_type="article",
+        target_id=article_id,
+        details={"stage": next_status},
+        category="pipeline",
+    )
+    flash(f"Article retry queued from {next_status}.", "success")
     return redirect(url_for("admin.articles"))

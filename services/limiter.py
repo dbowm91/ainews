@@ -131,6 +131,51 @@ class ModelLimiter:
         logger.warning("Limiter acquire timed out for %s/%s after %ss", provider_id, model, timeout)
         return False
 
+    def acquire_provider(
+        self,
+        provider_id: str,
+        max_concurrent: int,
+        timeout: int = 300,
+        slot_ttl: int | None = None,
+    ) -> bool:
+        """Acquire a renewable slot shared by all models for one provider."""
+        key = f"{self._prefix}:provider:{provider_id}"
+        channel = f"{self._prefix}:done:provider:{provider_id}"
+        ttl = slot_ttl or self.SLOT_TTL_SECONDS
+        deadline = time.monotonic() + timeout
+        poll_interval = 0.05
+        pubsub = None
+        try:
+            pubsub = self._redis.pubsub()
+            pubsub.subscribe(channel)
+            while time.monotonic() < deadline:
+                lease_id = uuid.uuid4().hex
+                try:
+                    acquired = self._acquire_script(
+                        keys=[key, key],
+                        args=[max_concurrent, max_concurrent, ttl, lease_id],
+                    )
+                except redis.exceptions.RedisError as exc:
+                    logger.error("Provider limiter acquire failed for %s: %s", provider_id, exc)
+                    return False
+                if acquired:
+                    self._start_heartbeat(provider_id, "__provider__", lease_id, key, key)
+                    return True
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                pubsub.get_message(timeout=min(remaining, poll_interval))
+                time.sleep(min(poll_interval, remaining))
+                poll_interval = min(poll_interval * 1.5, 0.5)
+        finally:
+            if pubsub:
+                try:
+                    pubsub.unsubscribe(channel)
+                finally:
+                    pubsub.close()
+        logger.warning("Provider limiter timed out for %s after %ss", provider_id, timeout)
+        return False
+
     def release(self, provider_id: str, model: str, timeout: int = 300) -> None:
         model_key, global_key = self._lease_keys(provider_id, model)
         model_channel = f"{self._prefix}:done:{provider_id}:{model}"
@@ -148,6 +193,33 @@ class ModelLimiter:
                 "Limiter release failed for %s/%s (lease expires after %ds)",
                 provider_id, model, self.SLOT_TTL_SECONDS, exc_info=True,
             )
+
+    def release_provider(self, provider_id: str, timeout: int = 300) -> None:
+        """Release the current thread's provider-wide lease."""
+        key = f"{self._prefix}:provider:{provider_id}"
+        channel = f"{self._prefix}:done:provider:{provider_id}"
+        lease_id = self._stop_heartbeat(provider_id, "__provider__")
+        if lease_id is None:
+            logger.warning("No provider limiter lease found for release of %s", provider_id)
+            return
+        try:
+            self._release_script(keys=[key, key], args=[lease_id])
+            self._redis.publish(channel, "1")
+        except redis.exceptions.RedisError:
+            logger.error(
+                "Provider limiter release failed for %s (lease expires after %ds)",
+                provider_id, self.SLOT_TTL_SECONDS, exc_info=True,
+            )
+
+    def get_active_provider(self, provider_id: str) -> int | None:
+        """Return the live number of leases for a provider."""
+        key = f"{self._prefix}:provider:{provider_id}"
+        try:
+            self._cleanup_script(keys=[key])
+            return int(self._redis.zcard(key))
+        except redis.exceptions.RedisError:
+            logger.warning("Redis error getting active provider slots for %s", provider_id)
+            return None
 
     def _heartbeat_key(self, provider_id: str, model: str) -> tuple[int, str, str]:
         return threading.get_ident(), provider_id, model
@@ -200,6 +272,8 @@ class ModelLimiter:
                 key_text = key.decode("utf-8") if isinstance(key, bytes) else str(key)
                 if key_text == f"{self._prefix}:global:leases":
                     continue
+                cleaned += int(self._cleanup_script(keys=[key]))
+            for key in self._redis.scan_iter(match=f"{self._prefix}:provider:*", count=1000):
                 cleaned += int(self._cleanup_script(keys=[key]))
             self._cleanup_script(keys=[f"{self._prefix}:global:leases"])
         except redis.exceptions.RedisError as exc:

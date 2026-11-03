@@ -105,6 +105,16 @@ def _perform_web_search_and_synthesis(article, rc):
     web_results = source_prompt_records(sources)
     if article.id:
         persist_dossier(article, sources, status="collecting")
+        # Retrieval/cache and dossier writes must not remain in an open
+        # SQLite transaction while optional synthesis or later verification
+        # makes provider calls. The dossier is durable before any LLM sees it.
+        from extensions import db
+
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
     if not web_results:
         return web_results, web_synthesis
     from schemas.pipeline import load_pipeline_config
@@ -264,7 +274,7 @@ def _perform_quality_assessment(article, brief):
     try:
         from services.quality import lightweight_quality_signals
         brief_text = " ".join(
-            claim.content for claim in (brief.key_claims or []) if claim.content
+            claim.claim for claim in (brief.key_claims or []) if claim.claim
         )
         if brief_text:
             quality_score = lightweight_quality_signals(brief_text)
@@ -391,6 +401,7 @@ def research_article(self, article_id: int, run_id=None, _signature=None, task_n
             provider,
             model,
             max_tokens=min(max_tokens, 1800),
+            allow_partial=True,
         )
         if ledger["status"] != "verified":
             from services.editorial_evidence import follow_up_research
@@ -406,6 +417,7 @@ def research_article(self, article_id: int, run_id=None, _signature=None, task_n
                 provider,
                 model,
                 max_tokens=min(max_tokens, 1800),
+                allow_partial=True,
             )
 
         article.research_brief = brief.model_dump_json()
@@ -417,7 +429,7 @@ def research_article(self, article_id: int, run_id=None, _signature=None, task_n
         if ledger["status"] != "verified":
             from tasks.pipeline import _dispatch_next, _log_pipeline
 
-            article.last_error = "Editorial hold: research evidence is insufficient"
+            article.last_error = "Research did not produce a publishable final article"
             _transition_article_status(article, PipelineStatus.REVIEW)
             try:
                 db.session.commit()

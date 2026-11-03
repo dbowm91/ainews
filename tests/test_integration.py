@@ -74,7 +74,11 @@ class TestReviewQueue:
 
             article = db.session.get(Article, article_id)
             assert article.pipeline_status == "review"
-            assert "QUALITY_REPORT_MISSING" in article.raw_metadata["editorial_eligibility"]["reason_codes"]
+            reasons = article.raw_metadata["editorial_eligibility"]["reason_codes"]
+            assert "FINAL_ARTICLE_INVALID" in reasons
+            diagnostics = article.raw_metadata["editorial_eligibility"]["diagnostic_codes"]
+            assert "EVIDENCE_DOSSIER_MISSING" in diagnostics
+            assert "QUALITY_REPORT_MISSING" not in reasons
 
     def test_reject_article(
         self, client, app, hashed_password, create_source, create_article

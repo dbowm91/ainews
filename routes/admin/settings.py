@@ -332,8 +332,22 @@ def update_providers():
             "enabled": bool(request.form.get(f"enabled_{provider.id}")),
             "model": request.form.get(f"model_{provider.id}", "").strip(),
             "timeout_seconds": request.form.get(f"timeout_{provider.id}", str(provider.timeout_seconds)).strip(),
-            "retry_attempts": request.form.get(f"retry_attempts_{provider.id}", "1").strip(),
+            "max_concurrent": request.form.get(f"max_concurrent_{provider.id}", "1"),
+            "retry_attempts": request.form.get(f"retry_attempts_{provider.id}", "3"),
+            "retry_base_delay_seconds": request.form.get(
+                f"retry_base_delay_seconds_{provider.id}", "5",
+            ),
+            "retry_max_delay_seconds": request.form.get(
+                f"retry_max_delay_seconds_{provider.id}", "180",
+            ),
         }
+        # Never prefill the password control. Blank means leave the current
+        # credential unchanged; the explicit clear control stores no key.
+        credential = request.form.get(f"api_key_{provider.id}", "")
+        if credential:
+            fields["api_key"] = credential
+        if request.form.get(f"clear_api_key_{provider.id}"):
+            fields["api_key"] = ""
         endpoint = request.form.get(f"endpoint_{provider.id}", "").strip()
         if endpoint:
             fields["endpoint"] = endpoint
@@ -349,6 +363,9 @@ def update_providers():
 
     try:
         changed = admin_settings.update_providers(changes)
+        from services.llm import clear_provider_cache
+
+        clear_provider_cache()
     except Exception as e:  # noqa: BLE001
         logger.warning("Could not update the providers: %s", e)
         flash(f"Could not update the providers: {e}", "error")

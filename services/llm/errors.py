@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 
 def make_error_handler(
     provider_name: str,
-    rate_limit_exc: tuple[type, ...],
-    auth_exc: type,
-    timeout_exc: tuple[type, ...],
+    rate_limit_exc: tuple[type, ...] = (),
+    auth_exc: type | tuple[type, ...] = (),
+    timeout_exc: tuple[type, ...] = (ConnectionError, TimeoutError),
 ) -> Callable[[Exception], Exception]:
     """Factory function that creates a provider-specific error handler.
 
@@ -72,31 +72,36 @@ class ProviderResponseIncompleteError(Exception):
 def handle_provider_error(
     e: Exception,
     provider_name: str,
-    rate_limit_exc: type | tuple[type, ...],
-    auth_exc: type,
-    timeout_exc: type | tuple[type, ...],
+    rate_limit_exc: type | tuple[type, ...] = (),
+    auth_exc: type | tuple[type, ...] = (),
+    timeout_exc: type | tuple[type, ...] = (ConnectionError, TimeoutError),
 ) -> Exception:
     """Convert SDK-specific exceptions to generic provider errors."""
-    if isinstance(e, rate_limit_exc):
+    if rate_limit_exc and isinstance(e, rate_limit_exc):
         logger.warning("%s rate limit hit: %s", provider_name, e)
         retry_after = _extract_retry_after(e)
         return RateLimitError(str(e), retry_after=retry_after)
-    elif isinstance(e, auth_exc):
+    elif auth_exc and isinstance(e, auth_exc):
         logger.error("%s authentication failed: %s", provider_name, e)
         return AuthError(str(e))
-    elif isinstance(e, timeout_exc):
+    elif timeout_exc and isinstance(e, timeout_exc):
         logger.warning("%s timeout/connection error: %s", provider_name, e)
         return ProviderTimeoutError(str(e))
-    elif hasattr(e, "status_code"):
-        status = e.status_code
-        if status == 429:
-            retry_after = _extract_retry_after(e)
-            return RateLimitError(str(e), retry_after=retry_after)
-        elif status in (401, 403):
-            return AuthError(str(e))
-        elif status >= 500:
-            logger.error("%s server error (%s): %s", provider_name, status, e)
-            return ProviderServerError(str(e))
+    else:
+        status = getattr(e, "status_code", None)
+        # SDKs commonly expose the HTTP response code as either status_code
+        # or code. Keep that SDK variation in this shared boundary helper.
+        if status is None:
+            status = getattr(e, "code", None)
+        if isinstance(status, int):
+            if status == 429:
+                retry_after = _extract_retry_after(e)
+                return RateLimitError(str(e), retry_after=retry_after)
+            elif status in (401, 403):
+                return AuthError(str(e))
+            elif status >= 500:
+                logger.error("%s server error (%s): %s", provider_name, status, e)
+                return ProviderServerError(str(e))
     msg_lower = str(e).lower()
     if any(
         ind in msg_lower

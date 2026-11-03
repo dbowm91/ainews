@@ -73,7 +73,7 @@ class TestCeleryBeatSchedule:
         schedule = Config.get_beat_schedule()
         assert "retry-stuck-articles" in schedule
         assert schedule["retry-stuck-articles"]["task"] == "tasks.retry.retry_stuck"
-        assert schedule["retry-stuck-articles"]["schedule"] == timedelta(minutes=60)
+        assert schedule["retry-stuck-articles"]["schedule"] == timedelta(minutes=5)
 
     def test_generate_newsletters_task(self):
         schedule = Config.get_beat_schedule()

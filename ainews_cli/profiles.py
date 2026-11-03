@@ -213,7 +213,7 @@ _PIPELINE_PROFILES["lightweight-local"] = PipelineProfileConfig(
     name="lightweight-local",
     description="Conservative concurrency, smaller token limits, bounded timeouts",
     role_overrides={
-        "selector": _role(max_tokens=2048, concurrency=1, timeout_seconds=60),
+        "selector": _role(max_tokens=512, concurrency=1, timeout_seconds=60),
         "researcher": _role(max_tokens=4096, concurrency=1, timeout_seconds=90),
         "writer": _role(max_tokens=4096, concurrency=1, timeout_seconds=90),
         "editor": _role(max_tokens=4096, concurrency=1, timeout_seconds=60),
@@ -236,7 +236,7 @@ _PIPELINE_PROFILES["balanced"] = PipelineProfileConfig(
     name="balanced",
     description="Production-like defaults, moderate concurrency and token limits",
     role_overrides={
-        "selector": _role(max_tokens=2048, concurrency=2, timeout_seconds=90),
+        "selector": _role(max_tokens=512, concurrency=2, timeout_seconds=90),
         "researcher": _role(max_tokens=8192, concurrency=2, timeout_seconds=120),
         "writer": _role(max_tokens=8192, concurrency=2, timeout_seconds=120),
         "editor": _role(max_tokens=4096, concurrency=2, timeout_seconds=90),
@@ -252,7 +252,7 @@ _PIPELINE_PROFILES["quality"] = PipelineProfileConfig(
     name="quality",
     description="Larger budgets, quality-oriented — increased latency and cost",
     role_overrides={
-        "selector": _role(max_tokens=4096, concurrency=2, timeout_seconds=120),
+        "selector": _role(max_tokens=512, concurrency=2, timeout_seconds=120),
         "researcher": _role(max_tokens=16384, concurrency=2, timeout_seconds=180),
         "writer": _role(max_tokens=16384, concurrency=1, timeout_seconds=180),
         "editor": _role(max_tokens=8192, concurrency=2, timeout_seconds=120),
@@ -275,7 +275,7 @@ _PIPELINE_PROFILES["low-cost"] = PipelineProfileConfig(
     name="low-cost",
     description="Smaller models, lower concurrency, reduced token ceilings",
     role_overrides={
-        "selector": _role(max_tokens=1024, concurrency=1, timeout_seconds=60),
+        "selector": _role(max_tokens=512, concurrency=1, timeout_seconds=60),
         "researcher": _role(max_tokens=2048, concurrency=1, timeout_seconds=90),
         "writer": _role(max_tokens=2048, concurrency=1, timeout_seconds=90),
         "editor": _role(max_tokens=2048, concurrency=1, timeout_seconds=60),

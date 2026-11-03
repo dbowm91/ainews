@@ -132,11 +132,154 @@ def test_claim_support_requires_valid_server_minted_handles_and_spans(app, creat
         assert rejected["claims"][0]["supports"] == []
 
 
+def test_claim_verification_batches_large_ledgers(app, create_article):
+    from extensions import db
+    from services.editorial_evidence import verify_claims
+
+    with app.app_context():
+        article = create_article(pipeline_status="researching")
+        _create_dossier(article, [{
+            "evidence_source_id": "ev_one",
+            "retrieval_status": "retrieved",
+            "source_type": "primary_document",
+            "source_family": "publisher:one.example",
+            "source_family_confidence": "registry",
+            "excerpt": "The notice says the release is available.",
+        }], db)
+        provider = MagicMock()
+
+        def assess_batch(**kwargs):
+            user_prompt = kwargs["messages"][0]["content"]
+            batch_size = user_prompt.count("<claim index=")
+            return SimpleNamespace(assessments=[SimpleNamespace(
+                claim_index=index,
+                decision="supported",
+                evidence=[{
+                    "evidence_source_id": "ev_one",
+                    "span": "The notice says the release is available.",
+                }],
+                rationale="Exact source span.",
+            ) for index in range(batch_size)])
+
+        provider.chat_structured.side_effect = assess_batch
+        result = verify_claims(
+            article,
+            [f"The release claim {index} is supported." for index in range(7)],
+            provider,
+            "test-model",
+        )
+
+        assert provider.chat_structured.call_count == 3
+        assert result["status"] == "verified"
+        assert len(result["claims"]) == 7
+
+
+def test_research_can_drop_unsupported_candidate_claims_but_strict_audit_cannot(
+    app, create_article, monkeypatch,
+):
+    from extensions import db
+    from services.editorial_evidence import verify_claims
+
+    monkeypatch.setattr(
+        "schemas.pipeline.load_pipeline_config",
+        lambda: SimpleNamespace(evidence=SimpleNamespace(allow_single_source_attributed=True)),
+    )
+    with app.app_context():
+        article = create_article(pipeline_status="researching")
+        _create_dossier(article, [{
+            "evidence_source_id": "ev_one",
+            "retrieval_status": "retrieved",
+            "source_type": "secondary_reporting",
+            "source_family": "newsroom:one",
+            "source_family_confidence": "registry",
+            "excerpt": "The notice states the release is available.",
+        }], db)
+        provider = MagicMock()
+        provider.chat_structured.return_value = SimpleNamespace(assessments=[
+            SimpleNamespace(
+                claim_index=0, decision="supported",
+                evidence=[{"evidence_source_id": "ev_one", "span": "The notice states the release is available."}],
+                rationale="Exact source span.",
+            ),
+            SimpleNamespace(claim_index=1, decision="unclear", evidence=[], rationale="No support."),
+        ])
+
+        candidates = ["The release is available.", "A second claim lacks support."]
+        partial = verify_claims(article, candidates, provider, "test-model", allow_partial=True)
+        assert partial["status"] == "verified"
+        assert partial["claims"][0]["is_material"] is True
+        assert partial["claims"][1]["is_material"] is False
+
+        strict = verify_claims(article, candidates, provider, "test-model")
+        assert strict["status"] == "unverified"
+        assert all(claim["is_material"] for claim in strict["claims"])
+
+
+def test_final_claim_audit_does_not_replace_research_ledger(app, create_article):
+    from extensions import db
+    from services.editorial_evidence import audit_final_claims
+
+    with app.app_context():
+        article = create_article(pipeline_status="editing")
+        dossier = _create_dossier(article, [{
+            "evidence_source_id": "ev_one",
+            "retrieval_status": "retrieved",
+            "source_type": "primary_document",
+            "source_family": "publisher:one.example",
+            "source_family_confidence": "registry",
+            "excerpt": "The notice confirms the release is available.",
+        }], db)
+        dossier.status = "verified"
+        research_claim = {
+            "claim_id": "research-claim",
+            "claim": "The release is available.",
+            "status": "primary_supported",
+            "supports": [{
+                "evidence_source_id": "ev_one",
+                "span": "The notice confirms the release is available.",
+            }],
+            "is_material": True,
+            "publish_allowed": True,
+        }
+        dossier.payload = {"sources": dossier.payload["sources"], "claims": [research_claim], "revision": 1}
+        article.final_article = (
+            '{"headline":"Release update","tldr":"It is available now.",'
+            '"why_it_matters":"","body":"It is available now.",'
+            '"key_points":[],"what_to_watch":"","citations":[],"original_attribution":'
+            '{"source":"Notice"},"tags":[]}'
+        )
+        provider = MagicMock()
+        provider.chat_structured.return_value = SimpleNamespace(assessments=[SimpleNamespace(
+            claim_index=0,
+            decision="supported",
+            evidence=[{
+                "evidence_source_id": "ev_one",
+                "span": "The notice confirms the release is available.",
+            }],
+            rationale="Exact span.",
+        )])
+
+        result = audit_final_claims(article, provider, "test-model")
+
+        assert result["status"] == "verified"
+        assert result["statement_count"] == 1
+        assert dossier.status == "verified"
+        assert dossier.payload["claims"][0]["claim_id"] == "research-claim"
+
+
 @pytest.mark.parametrize(
     "source_type,expected",
     [("primary_document", "primary_supported"), ("secondary_reporting", "single_source")],
 )
-def test_one_source_only_counts_as_primary_with_primary_document(app, create_article, source_type, expected):
+def test_one_source_only_counts_as_primary_with_primary_document(
+    app, create_article, source_type, expected, monkeypatch,
+):
+    monkeypatch.setattr(
+        "schemas.pipeline.load_pipeline_config",
+        lambda: SimpleNamespace(
+            evidence=SimpleNamespace(allow_single_source_attributed=False),
+        ),
+    )
     from extensions import db
     from services.editorial_evidence import verify_claims
 
@@ -158,3 +301,73 @@ def test_one_source_only_counts_as_primary_with_primary_document(app, create_art
 
         assert result["claims"][0]["status"] == expected
         assert (result["status"] == "verified") is (expected == "primary_supported")
+
+
+def test_single_secondary_source_is_publishable_only_with_explicit_personal_policy(
+    app, create_article, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from extensions import db
+    from services.editorial_evidence import build_verified_packet, verify_claims
+
+    with app.app_context():
+        article = create_article(pipeline_status="researching")
+        _create_dossier(article, [{
+            "evidence_source_id": "ev_one",
+            "retrieval_status": "retrieved",
+            "source_type": "secondary_reporting",
+            "source_family": "newsroom:one",
+            "source_family_confidence": "registry",
+            "title": "Test report",
+            "url": "https://news.example.test/report",
+            "publisher": "news.example.test",
+            "excerpt": "Acme announced Nova 3 on Tuesday.",
+        }], db)
+        monkeypatch.setattr(
+            "schemas.pipeline.load_pipeline_config",
+            lambda: SimpleNamespace(
+                evidence=SimpleNamespace(allow_single_source_attributed=True),
+            ),
+        )
+        provider = MagicMock()
+        provider.chat_structured.return_value = SimpleNamespace(assessments=[SimpleNamespace(
+            claim_index=0,
+            decision="supported",
+            evidence=[{
+                "evidence_source_id": "ev_one",
+                "span": "Acme announced Nova 3 on Tuesday.",
+            }],
+            rationale="The exact excerpt states the claim.",
+        )])
+
+        result = verify_claims(
+            article, ["Acme announced Nova 3 on Tuesday."], provider, "test-model",
+        )
+
+        assert result["status"] == "verified"
+        claim = result["claims"][0]
+        assert claim["status"] == "single_source_supported"
+        assert claim["publish_allowed"] is True
+        packet = build_verified_packet(article)
+        assert packet["claims"][0]["status"] == "single_source_supported"
+        assert packet["sources"][0]["url"] == "https://news.example.test/report"
+
+
+def test_supported_claim_requires_a_nonempty_typed_evidence_span():
+    from pydantic import ValidationError
+
+    from schemas.llm_responses import ClaimEvidenceAssessment
+
+    with pytest.raises(ValidationError):
+        ClaimEvidenceAssessment(
+            claim_index=0, decision="supported", evidence=[], rationale="",
+        )
+
+    with pytest.raises(ValidationError):
+        ClaimEvidenceAssessment(
+            claim_index=0,
+            decision="supported",
+            evidence=[{"source": "ev_1", "quote": "an unrecognized shape"}],
+            rationale="",
+        )

@@ -68,11 +68,11 @@ def _dispatch_next(
         from services.auto_review import is_auto_approve_enabled
 
         if is_auto_approve_enabled():
-            # Auto-review mode published the article instead of queueing it.
-            # Re-running the editor on a published article would edit it a
-            # second time for no reason.
+            # The auto-approval attempt already evaluated this article. A
+            # failed eligibility verdict leaves it in review; it was not
+            # published and must not be described as such in operational logs.
             logger.info(
-                "Skipping the review dispatch for article %s: auto-review mode published it",
+                "Skipping review re-dispatch for article %s: auto-approval eligibility was already evaluated",
                 article_id,
             )
             return

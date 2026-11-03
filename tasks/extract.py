@@ -101,7 +101,7 @@ def _create_article_record(
     from datetime import datetime, timezone
 
     from extensions import db
-    from models import Article, Citation, encode_short_url
+    from models import Article, Citation
 
     try:
         pub_date = (
@@ -135,9 +135,6 @@ def _create_article_record(
         ),
     )
     db.session.add(article)
-    db.session.flush()
-
-    article.short_id = encode_short_url(article.id)
     db.session.flush()
 
     if validated.url:

@@ -24,7 +24,7 @@ def find_related_articles_cached(article, limit: int = 5) -> list:
     from models import Article
 
     cache = get_response_cache()
-    cache_key = f"pub:related:{article.id}"
+    cache_key = f"pub:related:v2:{article.id}"
 
     cached = cache.get(cache_key)
     if cached is not None:

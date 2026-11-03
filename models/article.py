@@ -15,6 +15,11 @@ def new_public_id() -> str:
     return secrets.token_urlsafe(16)
 
 
+def new_short_id() -> str:
+    """Return a 72-bit random short-link token, independent of the row ID."""
+    return secrets.token_urlsafe(9)
+
+
 class Article(db.Model):  # type: ignore[name-defined]
     __tablename__ = "articles"
 
@@ -22,7 +27,7 @@ class Article(db.Model):  # type: ignore[name-defined]
     # External identity is deliberately independent of the relational key.
     public_id = db.Column(db.String(32), unique=True, index=True, nullable=False, default=new_public_id)
     publicly_visible = db.Column(db.Boolean, nullable=False, default=False, index=True)
-    short_id = db.Column(db.String(12), unique=True, index=True)
+    short_id = db.Column(db.String(12), unique=True, index=True, nullable=True, default=new_short_id)
     source_id = db.Column(
         db.Integer, db.ForeignKey("sources.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -105,6 +110,19 @@ def _article_assign_unique_public_id(mapper, connection, target):
             return
         candidate = new_public_id()
     raise RuntimeError("Could not allocate a unique public article identifier")
+
+
+@db.event.listens_for(Article, "before_insert")
+def _article_assign_unique_short_id(mapper, connection, target):
+    """Keep optional short links opaque and retry the extremely rare collision."""
+    candidate = target.short_id or new_short_id()
+    for _ in range(5):
+        collision = connection.execute(select(Article.id).where(Article.short_id == candidate).limit(1)).first()
+        if collision is None:
+            target.short_id = candidate
+            return
+        candidate = new_short_id()
+    raise RuntimeError("Could not allocate a unique short article identifier")
 
 
 class Citation(db.Model):  # type: ignore[name-defined]

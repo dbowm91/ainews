@@ -33,7 +33,6 @@ dependencies = [
     "httpx==0.28.1",
     "nh3==0.3.3",
     "bleach==6.2.0",
-    "short_url==1.2.2",
     "defusedxml==0.7.1",
     "opentelemetry-exporter-otlp==1.35.0",
     "sentence-transformers==5.1.0",

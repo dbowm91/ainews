@@ -93,6 +93,7 @@ class TestGeminiProvider:
         from services.llm.errors import ProviderTimeoutError
 
         provider = self._make_provider()
+        provider.retry_attempts = 1
         provider._client = MagicMock()
         provider._client.models.generate_content.side_effect = ConnectionError(
             "refused"
@@ -155,6 +156,26 @@ class TestGeminiConfig:
             api_key="AIza-test", model="gemini-2.0-flash", max_tokens=4096
         )
         assert cfg.model == "gemini-2.0-flash"
+
+
+class TestGeminiErrorHandling:
+    def test_client_error_429_maps_to_rate_limit(self):
+        from services.llm.errors import RateLimitError
+        from services.llm.gemini import _handle_gemini_error
+
+        class ClientError(Exception):
+            code = 429
+
+        assert isinstance(_handle_gemini_error(ClientError("limited")), RateLimitError)
+
+    def test_client_error_500_maps_to_server_error(self):
+        from services.llm.errors import ProviderServerError
+        from services.llm.gemini import _handle_gemini_error
+
+        class ClientError(Exception):
+            code = 500
+
+        assert isinstance(_handle_gemini_error(ClientError("upstream failure")), ProviderServerError)
 
 
 class TestGeminiRegistry:

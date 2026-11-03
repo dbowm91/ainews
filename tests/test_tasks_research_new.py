@@ -194,15 +194,17 @@ class TestPerformWebSearchAndSynthesis:
         mock_synthesis = MagicMock()
         mock_synthesis.used_fallback = False
         mock_synthesis.synthesis = "synthesized"
+        call_order = []
 
         with (
             app.app_context(),
             patch("services.search.get_search_provider", return_value=mock_provider),
             patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
             patch("services.editorial_evidence.persist_dossier"),
+            patch("extensions.db.session.commit", side_effect=lambda: call_order.append("commit")),
             patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
             patch("schemas.pipeline.resolve_subagent_config", return_value=mock_stage_config),
-            patch("services.subagent.run_subagent", return_value=mock_synthesis),
+            patch("services.subagent.run_subagent", side_effect=lambda **_: (call_order.append("synthesis"), mock_synthesis)[1]),
         ):
             results, synthesis = _perform_web_search_and_synthesis(article, rc)
 
@@ -212,6 +214,7 @@ class TestPerformWebSearchAndSynthesis:
         assert mock_provider.search.call_count == 4
         assert all(call.kwargs["max_results"] == 3 for call in mock_provider.search.call_args_list)
         assert any("Test Title" in call.args[0] for call in mock_provider.search.call_args_list)
+        assert call_order == ["commit", "synthesis"]
 
     def test_uses_default_search_when_no_provider(self, app):
         """Falls back to search_web when no provider configured."""
@@ -478,8 +481,8 @@ class TestPerformQualityAssessment:
 
         brief = MagicMock()
         brief.key_claims = [
-            MagicMock(content="Claim 1"),
-            MagicMock(content="Claim 2"),
+            MagicMock(claim="Claim 1"),
+            MagicMock(claim="Claim 2"),
         ]
 
         quality_score = MagicMock()
@@ -500,7 +503,7 @@ class TestPerformQualityAssessment:
         article.id = 1
 
         brief = MagicMock()
-        brief.key_claims = [MagicMock(content="Claim")]
+        brief.key_claims = [MagicMock(claim="Claim")]
 
         with patch("services.quality.lightweight_quality_signals", side_effect=RuntimeError("boom")):
             _perform_quality_assessment(article, brief)
@@ -513,7 +516,7 @@ class TestPerformQualityAssessment:
         article.id = 1
 
         brief = MagicMock()
-        brief.key_claims = [MagicMock(content=""), MagicMock(content="")]
+        brief.key_claims = [MagicMock(claim=""), MagicMock(claim="")]
 
         with patch("services.quality.lightweight_quality_signals") as mock_qs:
             _perform_quality_assessment(article, brief)

@@ -85,6 +85,13 @@
           <td class="actions-cell">
             <a href="/admin/articles/{{ article.id }}/edit" class="newsletter-preview-link">edit</a>
             <a href="/admin/articles/{{ article.id }}/audit" class="newsletter-preview-link">audit</a>
+            {% if article.manual_retry_available|default(false) %}
+            <form method="POST" action="/admin/articles/{{ article.id }}/retry" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="newsletter-preview-link"
+                      aria-label="Retry pipeline for article {{ article.id }}">retry</button>
+            </form>
+            {% endif %}
             <form method="POST" action="/admin/articles/{{ article.id }}/delete" class="inline"
                   hx-post="/admin/articles/{{ article.id }}/delete"
                   hx-confirm="Delete this article?"

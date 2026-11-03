@@ -92,7 +92,7 @@ def _get_top_impact(limit: int = 3) -> list[Article]:
     from services.cache import get_response_cache
 
     cache = get_response_cache()
-    cache_key = f"pub:top_impact:{limit}"
+    cache_key = f"pub:top_impact:v2:{limit}"
 
     cached_ids = cache.get(cache_key)
     if cached_ids is not None:
@@ -143,7 +143,7 @@ def index() -> str:
 
     cache = get_response_cache()
     cache_key = (
-        f"pub:index:view:{_request_variant()}:page:{page}:cat:{category}:"
+        f"pub:index:v2:view:{_request_variant()}:page:{page}:cat:{category}:"
         f"q:{query}:sort:{sort}:mode:{search_mode}"
     )
 
@@ -197,7 +197,7 @@ def topic_feed(category: str) -> str:
     sort = request.args.get("sort", "recent", type=str).strip()
 
     cache = get_response_cache()
-    cache_key = f"pub:topic:view:{_request_variant()}:{category}:page:{page}:sort:{sort}"
+    cache_key = f"pub:topic:v2:view:{_request_variant()}:{category}:page:{page}:sort:{sort}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -251,7 +251,7 @@ def tag_feed(slug: str) -> str:
     page = max(1, request.args.get("page", 1, type=int))
 
     cache = get_response_cache()
-    cache_key = f"pub:tag:view:{_request_variant()}:{slug}:page:{page}"
+    cache_key = f"pub:tag:v2:view:{_request_variant()}:{slug}:page:{page}"
 
     cached = cache.get(cache_key)
     if cached is not None:
@@ -305,7 +305,7 @@ def feed_all() -> Response:
     cache = get_response_cache()
     from flask import current_app
     site_url = str(current_app.config.get("SITE_URL") or "http://localhost:5000").rstrip("/")
-    cache_key = f"pub:rss_feed:all:{site_url}"
+    cache_key = f"pub:rss_feed:v2:all:{site_url}"
 
     xml = cache.get(cache_key)
     if xml is None:
@@ -348,7 +348,7 @@ def feed_topic(category: str) -> Response:
     cache = get_response_cache()
     from flask import current_app
     site_url = str(current_app.config.get("SITE_URL") or "http://localhost:5000").rstrip("/")
-    cache_key = f"pub:rss_feed:{category}:{site_url}"
+    cache_key = f"pub:rss_feed:v2:{category}:{site_url}"
 
     xml = cache.get(cache_key)
     if xml is None:
@@ -388,7 +388,7 @@ def sitemap() -> Response:
     from services.rss import generate_sitemap
 
     cache = get_response_cache()
-    cache_key = "pub:sitemap:xml"
+    cache_key = "pub:sitemap:v2:xml"
 
     xml = cache.get(cache_key)
     if xml is None:

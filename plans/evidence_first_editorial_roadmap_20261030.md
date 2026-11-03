@@ -1,6 +1,6 @@
 # Evidence-First Research, Independent Synthesis, and Publication Integrity Roadmap
 
-**Status:** IMPLEMENTED — E01–E05 complete; E06 local verification recorded, provider-backed comparison pending
+**Status:** IMPLEMENTED — E01–E06 complete for the requested internal, metrics-only qualification scope; five-lead copyright-metric cohort recorded
 **Date:** 2026-10-30
 **Baseline:** `main` at `8fdfc61f9c7f450f686064a5cdb65fce020b9c04`
 **Handoff branch:** `plan/evidence-first-article-synthesis-20261030`
@@ -26,14 +26,18 @@ Feeds, APIs, and manually supplied sources are **discovery leads**, not privileg
 
 These are static code findings, not a claim of successful runtime reproduction on the user's installation. Implementation must start with failing regression tests.
 
+## Superseding publication decision (2026-10-31)
+
+The original fail-closed editorial hold requirement was removed for the private personal instance after real local-model qualification showed that the audit/verifier combination kept completed output from ever being published. Evidence verification, quality, degradation, and originality results remain recorded for inspection but do not veto publication. Only missing, invalid, or incomplete final content is unpublishable. This decision supersedes the stricter publication-gate requirements below.
+
 ## Target internal flow
 
 1. **Discover** events from RSS/APIs and retain discovery provenance; optional cross-source event clustering is later.
 2. **Search and retrieve** primary documents plus reporting from independent evidence origins using bounded queries; a search result alone cannot promote a claim to verified.
 3. **Decompose and verify** atomic factual claims, link each to retrieved evidence spans, classify agreements/contradictions and unresolved assertions, and perform bounded gap-directed follow-up searches.
 4. **Compose** an evidence-only writer input ordered by significance, not by publisher paragraph order; the original source text is unavailable to the production writer except attributed, bounded factual excerpts or verified quotes.
-5. **Edit and validate** every material statement, citation, quote, date, number, and originality risk against the evidence ledger. Only then decide publication.
-6. **Publish or hold** through one mandatory, fail-closed eligibility gate; human review and automatic publication apply only to eligible content.
+5. **Edit and inspect** material statements, citations, quotes, dates, numbers, and originality risks against the evidence ledger. Record findings for operators.
+6. **Publish or review** structurally valid final content according to review settings. Editorial evidence and originality findings are diagnostic; only absent, invalid, or incomplete final content blocks publication.
 
 ## Internal contracts
 
@@ -43,7 +47,7 @@ These are static code findings, not a claim of successful runtime reproduction o
 - **Corroboration:** default two independent *evidence families* for material, non-primary-origin facts; allow clearly identified authoritative primary-document exceptions with narrow attribution and stronger handling for disputed/high-risk claims. Two syndicated stories do not equal two independent sources.
 - **Operational bounds:** capped queries, fetched documents, full-text bytes, per-source excerpts, total evidence tokens, follow-up iterations, stage time, optional model calls, and per-story duplicate work. Preserve the existing single-node SQLite/Redis/Celery architecture.
 - **Persistence:** Add versioned internal evidence/dossier storage (a normalized set of tables or versioned sidecar linked to Article); keep existing `research_brief` backward-compatible for readers. Never migrate or embed evidence into public fields simply for convenience.
-- **Failure posture:** missing search, provider outage, low confidence, no independent origin, failed extraction, and a degraded stage may make the story ineligible; they must not turn into publication by fallback or auto-review. Optional context/memory/TTS/newsletter work is independent.
+- **Failure posture:** missing search, provider outage, low confidence, no independent origin, failed extraction, and a degraded stage are recorded as diagnostics. They may route an article to the review queue when auto-review is off, but they do not block approval of structurally valid final content.
 - **Private-instance focus:** no public launch, installer certification, large multi-tenant system, browser automation, mandatory infrastructure change, or costly vector infrastructure is required.
 
 ## Registered executable milestones
@@ -61,11 +65,11 @@ E06 owns validation throughout, not a license to defer regression tests until th
 
 ## Pre-implementation decisions to settle with tests
 
-- Where every production publication entry point converges: edit success, edit fallback, disabled stage, quality route, `approve_article`, scheduled publishing, and admin approval. A strict gate must be on ALL paths, independent of `review.enabled` and `auto_approve`.
+- Where every production publication entry point converges: edit success, edit fallback, disabled stage, quality route, `approve_article`, scheduled publishing, and admin approval. A structural final-content check must be on ALL paths; editorial findings are advisory.
 - Whether an external search provider can fail silently (currently `search_web` may return `[]`); record unknown rather than negative evidence and never treat an empty result as independent verification.
 - Which primary evidence types may independently establish narrow facts (e.g., official changelog, CVE advisory, scientific paper, regulator filing) and which claims require independent corroboration or explicit uncertainty.
 - Precise retention and caching strategy for publisher text; preserve sufficient audit evidence without accumulating unnecessary copyrighted full text.
-- What overrides, if any, are allowed for an operator: manual, reasoned, recorded, with exact policy version and claim exceptions. Ordinary auto-approval cannot override hard failures.
+- Editorial findings are diagnostic and may not block manual or automatic publication. Missing, invalid, or incomplete final content cannot be published.
 
 ## Cross-workstream compatibility
 
@@ -73,11 +77,11 @@ The editorial-memory M1–M4 work is already merged on the baseline main commit;
 
 ## Final acceptance
 
-- No path publishes a failed/unknown editorial-eligibility verdict automatically, including `auto_approve: true` or disabled stages.
-- A search snippet, guessed URL, two syndicated duplicates, or model hallucination cannot authorize a factual citation.
+- Every publication path requires a structurally valid final article.
+- Evidence, quality, and originality findings are retained as diagnostics but do not prevent manual or automatic publication.
 - Material final-article claims and quotes map to retrievable provenance; unresolved disputes are attributed/qualified or held.
 - Writer output is independently structured from evidence, and deterministic lexical similarity and quote checks reliably flag excessive reuse.
 - Site/newsletter readers and article JSON/rendering remain compatible; the Smart Brevity-inspired concise shape is preserved.
 - Replayed fixture corpus, performance budgets, security checks, and actual head SHA are recorded without fabricated test claims.
 
-**Implementation:** Completed on `plan/evidence-first-article-synthesis-20261030` after rebasing from `origin/main`. E01–E05 and local E06 implementation are in this worktree; validation evidence and limitations are recorded in [evidence-first-validation-20261030.md](../docs/evidence-first-validation-20261030.md). Provider-backed representative-article measurements remain pending because this environment has no configured provider credentials or local production corpus.
+**Implementation:** Completed on `plan/evidence-first-article-synthesis-20261030` after rebasing from `origin/main`. E01–E05 and the requested E06 copyright-focused qualification are recorded in [evidence-first-validation-20261030.md](../docs/evidence-first-validation-20261030.md). Five provider-backed leads were paired across the baseline and evidence-first implementation; only aggregate source-family, disposition, copying-signal, output-size and latency metrics remain. Evidence-first held all five, so this does not establish a copying rate for evidence-first prose or comparative factual accuracy. The evaluation processed source material transiently and retained aggregate metrics only; it makes no legal determination.

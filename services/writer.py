@@ -13,7 +13,9 @@ NON-OVERRIDABLE EDITORIAL POLICY:
 - Do not use discovery-feed prose, its headline, or editorial memory as factual evidence.
 - Preserve uncertainty and source disagreement. Do not invent facts, numbers, dates, quotes, causality, or citations.
 - Cite only supplied verified source URLs. Quotes must be exact and attributed to the supplied source.
+- Attribute every single_source_supported claim to its supplied publisher; never imply that it is independently corroborated.
 - Write original, concise prose organized by public significance, not source paragraph order.
+- Do not copy source sentences or long phrases; recast supported facts with original wording and sentence structure.
 - Keep the existing CondensedArticle fields and Smart Brevity-inspired compact format.
 """
 
@@ -59,11 +61,15 @@ def build_verified_writer_prompt(packet: dict, max_key_points: int = 5) -> str:
         "</verified_editorial_packet>\n\n"
         "Write a concise original news synthesis from this packet. Lead with the most "
         "significant verified development. Distinguish what a primary source states "
-        "from independently corroborated facts. Do not add facts absent from claims. "
+        "from independently corroborated facts. Attribute single-source claims to the "
+        "supplied publisher and do not present them as independently corroborated. "
+        "Do not add facts absent from claims. "
         "Use the supplied URLs for citations; the citation title and publisher must match "
         "the packet. Keep the body to 3–5 compact paragraphs, each no more than three "
         "sentences. Include a clear TL;DR, why_it_matters, 3–5 key points and a cautious "
-        "what_to_watch. No HTML. Do not reproduce source wording or paragraph order. "
+        "what_to_watch. No HTML. Do not copy source sentences or long phrases; recast each supported fact "
+        "with original wording and sentence structure, and organize the story by significance rather than "
+        "source order. "
         f"Use no more than {max_key_points} key points. Return the unchanged CondensedArticle schema."
     )
 

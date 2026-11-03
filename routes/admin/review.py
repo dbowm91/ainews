@@ -85,7 +85,7 @@ def approve_article(article_id):
 
     if not approved:
         return jsonify({
-            "error": "Article is held by editorial eligibility",
+            "error": "Article has no complete, valid final content to publish",
             "eligibility": (article.raw_metadata or {}).get("editorial_eligibility", {}),
         }), 409
 

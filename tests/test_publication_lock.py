@@ -265,6 +265,34 @@ class TestPublicationCommitsBeforeTheSlowWork:
         stored = db.session.get(Article, published_article.id)
         assert stored.pipeline_status == "done"
 
+    def test_editor_finalize_does_not_claim_publication_before_post_finalize(
+        self, app, published_article, monkeypatch,
+    ):
+        from constants import PipelineStatus
+        from extensions import db
+        from models import Article
+        from services import pipeline_degradation
+        from tasks.pipeline import _transition_article_status
+
+        published_article.pipeline_status = PipelineStatus.EDITING
+        published_article.publicly_visible = False
+        published_article.published_at = None
+        monkeypatch.setattr(pipeline_degradation, "_dispatch_trend_memory", lambda _article: None)
+        monkeypatch.setattr("services.webhooks.trigger_event", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr("tasks.embeddings.generate_article_embedding.delay", lambda *_args: None)
+
+        _transition_article_status(published_article, PipelineStatus.DONE)
+        assert published_article.published_at is None
+        assert published_article.publicly_visible is False
+
+        assert pipeline_degradation.post_finalize_article(published_article) is True
+        db.session.expire_all()
+        stored = db.session.get(Article, published_article.id)
+        assert stored is not None
+        assert stored.pipeline_status == PipelineStatus.DONE
+        assert stored.published_at is not None
+        assert stored.publicly_visible is True
+
 
 class TestTheProposalHasItsOwnTask:
     """The slow work runs out of band, with room for a slow local model."""
@@ -371,10 +399,10 @@ class TestTheBeatTaskDoesNotWaitForAModel:
 
         assert approved == 0
 
-    def test_the_editorial_hold_is_durable_when_the_drain_returns(
+    def test_missing_final_content_stays_in_review_when_the_drain_returns(
         self, app, create_source, monkeypatch
     ):
-        """The drain persists a hold instead of publishing an unverified article."""
+        """The drain persists a structural block instead of publishing empty content."""
         from constants import PipelineStatus
         from extensions import db
         from models import Article
@@ -405,4 +433,45 @@ class TestTheBeatTaskDoesNotWaitForAModel:
         assert stored is not None
         assert stored.pipeline_status == "review"
         assert stored.published_at is None
-        assert "EVIDENCE_DOSSIER_MISSING" in stored.raw_metadata["editorial_eligibility"]["reason_codes"]
+        assert "FINAL_ARTICLE_MISSING" in stored.raw_metadata["editorial_eligibility"]["reason_codes"]
+        assert "EVIDENCE_DOSSIER_MISSING" in stored.raw_metadata["editorial_eligibility"]["diagnostic_codes"]
+
+    def test_incomplete_review_article_resumes_at_last_available_stage(
+        self, app, create_source, monkeypatch,
+    ):
+        from constants import PipelineStatus
+        from extensions import db
+        from models import Article
+        from services import auto_review, pipeline_utils
+
+        monkeypatch.setattr(auto_review, "is_auto_approve_enabled", lambda: True)
+        dispatched = []
+        monkeypatch.setattr(
+            pipeline_utils,
+            "_dispatch_next",
+            lambda article_id, **kwargs: dispatched.append((article_id, kwargs["next_status"])),
+        )
+        source = create_source()
+        article = Article(
+            source_id=source.id,
+            original_title="Recoverable review article",
+            pipeline_status=PipelineStatus.REVIEW,
+            research_brief='{"key_claims": []}',
+        )
+        db.session.add(article)
+        db.session.commit()
+        article_id = article.id
+
+        assert auto_review.auto_approve_queued() == 0
+        db.session.expire_all()
+        stored = db.session.get(Article, article_id)
+        assert stored is not None
+        assert stored.pipeline_status == PipelineStatus.WRITING
+        assert stored.raw_metadata["incomplete_review_retries"] == 1
+        assert dispatched == [(article_id, PipelineStatus.WRITING)]
+
+    def test_editor_task_has_room_for_multiple_slow_local_calls(self):
+        from tasks.edit import edit_article
+
+        assert edit_article.soft_time_limit == 900
+        assert edit_article.time_limit == 960

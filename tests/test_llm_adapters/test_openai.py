@@ -121,6 +121,31 @@ class TestOpenAIProvider:
         assert resp.model == "gpt-4o-mini"
         assert resp.tokens_used == 30
 
+    def test_tool_api_retry_passes_model_to_provider_method(self, monkeypatch):
+        provider = self._make_provider()
+        expected = (MagicMock(), MagicMock())
+        call = MagicMock(return_value=expected)
+        monkeypatch.setattr(provider, "_do_call_api_with_tools", call)
+
+        result = provider._call_api_with_tools(
+            model="selected-model",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            tool_choice=None,
+            temperature=0,
+            max_tokens=100,
+        )
+
+        assert result == expected
+        call.assert_called_once_with(
+            "selected-model",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            tool_choice=None,
+            temperature=0,
+            max_tokens=100,
+        )
+
     def test_chat_with_system(self):
         provider = self._make_provider()
         mock_resp = MagicMock()
@@ -165,6 +190,7 @@ class TestOpenAIProvider:
         from services.llm.errors import ProviderTimeoutError
 
         provider = self._make_provider()
+        provider.retry_attempts = 1
         provider._client = MagicMock()
         provider._client.chat.completions.create.side_effect = APITimeoutError(
             "timeout"

@@ -7,6 +7,20 @@ import pytest
 from constants import PipelineStatus
 
 
+def test_selection_result_bounds_reason_length():
+    from pydantic import ValidationError
+
+    from schemas.llm_responses import SelectionResult
+
+    with pytest.raises(ValidationError):
+        SelectionResult(
+            selected=True,
+            score=7,
+            reason="x" * 161,
+            confidence="high",
+        )
+
+
 class TestSelectArticle:
     """Tests for select_article task through run_stage."""
 

@@ -458,8 +458,8 @@ class TestBuildResearchPrompt:
             web_results=[],
             related_articles=[],
         )
-        assert "Compile a comprehensive research brief" in result
-        assert "Attribute all claims" in result
+        assert "Compile a concise research brief" in result
+        assert "Attribute each claim" in result
 
     def test_uses_newline_join(self):
         result = build_research_prompt(

@@ -96,6 +96,7 @@ class TestAnthropicProvider:
         from services.llm.errors import ProviderTimeoutError
 
         provider = self._make_provider()
+        provider.retry_attempts = 1
         provider._client = MagicMock()
         provider._client.messages.create.side_effect = APITimeoutError("timeout")
 

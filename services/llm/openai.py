@@ -18,7 +18,6 @@ from services.llm.base import (
 )
 from services.llm.errors import (
     ProviderResponseIncompleteError,
-    RateLimitError as CustomRateLimitError,
     make_error_handler,
 )
 from services.llm.httpx_transport import create_httpx_client
@@ -88,14 +87,6 @@ def _handle_openai_error(e: Exception) -> Exception:
         AuthenticationError,
         RateLimitError,
     )
-
-    if isinstance(e, RateLimitError):
-        retry_after = None
-        if hasattr(e, "headers") and e.headers:
-            retry_after = e.headers.get("retry-after")
-        elif hasattr(e, "response") and e.response and hasattr(e.response, "headers"):
-            retry_after = e.response.headers.get("retry-after")
-        return CustomRateLimitError(str(e), retry_after=retry_after)
 
     return make_error_handler(
         "OpenAI",
@@ -215,8 +206,26 @@ class OpenAIProvider(BaseLLMProvider):
             messages=messages, system=system, temperature=temperature, max_tokens=max_tokens, **kwargs,
         ))
 
-    @circuit_protected("llm_openai")
     def chat_streaming(
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        system: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        **kwargs: Any,
+    ) -> Iterator[str]:
+        stream_model = model or self.default_model
+        return self._dispatch_stream(
+            lambda: self._do_chat_streaming(
+                messages, model=model, system=system, temperature=temperature,
+                max_tokens=max_tokens, **kwargs,
+            ),
+            stream_model,
+        )
+
+    @circuit_protected("llm_openai")
+    def _do_chat_streaming(
         self,
         messages: list[dict[str, str]],
         model: Optional[str] = None,
@@ -382,7 +391,7 @@ class OpenAIProvider(BaseLLMProvider):
         max_tokens: int,
     ) -> tuple[Any, Any]:
         return cast(tuple[Any, Any], self._retry_with_backoff(
-            self._do_call_api_with_tools, model,
+            self._do_call_api_with_tools, model, model,
             messages=messages, tools=tools, tool_choice=tool_choice,
             temperature=temperature, max_tokens=max_tokens,
         ))

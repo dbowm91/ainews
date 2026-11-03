@@ -456,6 +456,7 @@ class TestTheBeatTaskDoesNotWaitForAModel:
             source_id=source.id,
             original_title="Recoverable review article",
             pipeline_status=PipelineStatus.REVIEW,
+            extracted_text="Recoverable source text",
             research_brief='{"key_claims": []}',
         )
         db.session.add(article)
@@ -466,9 +467,9 @@ class TestTheBeatTaskDoesNotWaitForAModel:
         db.session.expire_all()
         stored = db.session.get(Article, article_id)
         assert stored is not None
-        assert stored.pipeline_status == PipelineStatus.WRITING
+        assert stored.pipeline_status == PipelineStatus.RESEARCHING
         assert stored.raw_metadata["incomplete_review_retries"] == 1
-        assert dispatched == [(article_id, PipelineStatus.WRITING)]
+        assert dispatched == [(article_id, PipelineStatus.RESEARCHING)]
 
     def test_editor_task_has_room_for_multiple_slow_local_calls(self):
         from tasks.edit import edit_article

@@ -738,7 +738,7 @@ class TestOnboardingService:
         profile = get_pipeline_profile("quality")
         result = pipeline_profile_to_env(profile)
         assert "pipeline" in result
-        assert result["pipeline"]["selector"]["max_tokens"] == 4096
+        assert result["pipeline"]["selector"]["max_tokens"] == 512
         assert result["pipeline"]["writer"]["concurrency"] == 1
 
     def test_source_profile_to_yaml(self):

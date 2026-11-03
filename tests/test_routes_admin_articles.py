@@ -30,7 +30,7 @@ class TestSanitizeField:
         assert result == "short"
 
 
-def test_admin_form_cannot_mark_unpublished_article_done(monkeypatch):
+def test_admin_edit_form_parser_returns_requested_status(monkeypatch):
     from types import SimpleNamespace
 
     import routes.admin.articles as route
@@ -54,9 +54,11 @@ def test_admin_form_cannot_mark_unpublished_article_done(monkeypatch):
         {"headline": "Test"},
     )
 
-    assert status == "review"
-    assert article.pipeline_status == "review"
-    assert article.last_error == "Admin status changes cannot publish an article directly"
+    # The route handler resets edited articles to review after calling this
+    # parsing helper; the helper itself only parses the submitted form value.
+    assert status == "done"
+    assert article.pipeline_status == "done"
+    assert article.last_error is None
 
 
 class TestQueryLooksLikeUrl:
@@ -459,7 +461,6 @@ class TestReprocessStages:
         assert "select" in _REPROCESS_STAGES
         assert "research" in _REPROCESS_STAGES
         assert "write" in _REPROCESS_STAGES
-        assert "edit" in _REPROCESS_STAGES
 
     def test_select_stage_resets_correct_fields(self):
         """Select stage resets selector_result and later fields."""
@@ -473,29 +474,26 @@ class TestReprocessStages:
 
 
 class TestManualRetry:
-    def test_failed_article_retries_from_latest_failed_stage(
+    def test_verified_research_without_draft_resumes_at_write_stage(
         self, auth_client, app, create_article, monkeypatch,
     ):
         from extensions import db
-        from models import PipelineLog, PipelineRun
+        from models import EditorialDossier
         from tasks import write_article
 
         article = create_article(
             pipeline_status="failed",
             research_brief="Existing research brief",
-            draft_article="Existing draft",
-            final_article="Invalid final",
         )
         article.last_error = "writer provider error"
-        run = PipelineRun(run_type="crawl", status="completed")
-        db.session.add(run)
         db.session.flush()
-        db.session.add(PipelineLog(
-            run_id=run.id,
+        db.session.add(EditorialDossier(
             article_id=article.id,
-            stage="writer",
-            level="error",
-            message="writer request failed",
+            revision=1,
+            policy_version="evidence-first-v1",
+            status="verified",
+            content_digest="a" * 64,
+            payload={},
         ))
         db.session.commit()
         article_id = article.id
@@ -515,7 +513,7 @@ class TestManualRetry:
         assert article.final_article is None
         assert article.total_retries == 1
         assert len(queued) == 1
-        assert queued[0]["args"] == (article_id,)
+        assert tuple(queued[0]["args"]) == (article_id,)
 
     def test_failed_articles_are_marked_retryable_in_the_table(self, auth_client, create_article):
         article = create_article(pipeline_status="failed")

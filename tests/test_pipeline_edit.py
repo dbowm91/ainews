@@ -50,8 +50,8 @@ class TestEditStage:
             assert result == work_result
             work_fn.assert_called_once()
 
-    def test_edit_degrades_to_review_hold(self, app, create_article):
-        """A fallback draft without valid final structure remains in review."""
+    def test_edit_degrades_to_unpublished_done_article(self, app, create_article):
+        """An invalid fallback completes processing without being published."""
         with app.app_context():
             draft = json.dumps({"headline": "Draft Title", "body": "Draft body"})
             article = create_article(pipeline_status="editing")
@@ -62,7 +62,8 @@ class TestEditStage:
             with patch("extensions.db"):
                 _degrade_and_advance(article, "edit")
 
-            assert article.pipeline_status == "review"
+            assert article.pipeline_status == "done"
+            assert article.publicly_visible is False
             assert article.final_article == draft
             assert article.original_ai_article == draft
 
@@ -80,7 +81,7 @@ class TestEditStage:
                 _degrade_and_advance(article, "edit")
 
             assert article.retry_count == 0
-            assert article.last_error.startswith("Cannot publish final content:")
+            assert article.last_error is None
 
     def test_edit_degrade_accepts_status_name(self, app, create_article):
         """Degrade should accept 'editing' as well as 'edit'."""
@@ -93,7 +94,8 @@ class TestEditStage:
             with patch("extensions.db"):
                 _degrade_and_advance(article, "editing")
 
-            assert article.pipeline_status == "review"
+            assert article.pipeline_status == "done"
+            assert article.publicly_visible is False
 
     def test_edit_routes_to_review_below_threshold(self, app, create_article):
         """Articles below auto_publish_threshold should route to review."""

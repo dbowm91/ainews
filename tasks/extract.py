@@ -343,16 +343,7 @@ def process_item(
             validated.title[:60],
         )
 
-    duplicate = None
-    try:
-        duplicate = _find_duplicate_article(validated.url, validated.title)
-    except SQLAlchemyError as exc:
-        logger.warning("Dedup check failed for %s: %s", truncate_for_log(validated.title), exc)
-        try:
-            from services.metrics import get_metrics
-            get_metrics().increment("pipeline.dedup_check_failed", tags={"source": source_key})
-        except Exception as e:  # noqa: BLE001 - metrics failure is non-critical
-            logger.debug("Failed to increment dedup_check_failed metric: %s", e)
+    duplicate = _find_duplicate_for_item(validated, truncate_for_log)
 
     if duplicate:
         result = _handle_duplicate(
@@ -430,3 +421,25 @@ def process_item(
     _dispatch_after_extraction(article.id, run_id)
 
     return {"article_id": article.id}
+
+
+def _find_duplicate_for_item(validated, truncate_for_log):
+    """Find duplicates while keeping metric reporting best-effort."""
+    try:
+        return _find_duplicate_article(validated.url, validated.title)
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Dedup check failed for %s: %s",
+            truncate_for_log(validated.title),
+            exc,
+        )
+        try:
+            from services.metrics import get_metrics
+
+            get_metrics().increment(
+                "pipeline.dedup_check_failed",
+                tags={"source": validated.source_key},
+            )
+        except Exception as metric_error:  # noqa: BLE001 - metrics failure is non-critical
+            logger.debug("Failed to increment dedup_check_failed metric: %s", metric_error)
+        return None

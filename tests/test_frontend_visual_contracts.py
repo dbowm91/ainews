@@ -154,10 +154,13 @@ class TestAdminNavigation:
     """Every admin section stays reachable."""
 
     def test_the_header_is_two_rows(self):
-        pages = _read("pages.css")
-        assert "grid-template-areas:" in pages
-        assert '"nav     logout"' in pages
-        assert '"subnav  subnav"' in pages
+        template = (ROOT / "templates" / "base_admin.html").read_text()
+        header = re.search(r'<header class="admin-header">(.*?)</header>', template, re.DOTALL)
+        assert header is not None
+        contents = header.group(1)
+        primary_nav = contents.index('<nav class="nav">')
+        admin_nav = contents.index('<nav class="admin-subnav"')
+        assert primary_nav < admin_nav
 
     def test_the_second_row_wraps_instead_of_scrolling(self):
         body = _rule_body(_read("pages.css"), ".admin-subnav")
@@ -165,7 +168,8 @@ class TestAdminNavigation:
         assert "flex-wrap: wrap" in body
         assert "overflow-x: auto" not in body
 
-    def test_the_primary_nav_wraps_on_a_wide_screen(self):
-        pages = _read("pages.css")
-        assert "@media (min-width: 769px)" in pages
-        assert "overflow-x: visible" in pages
+    def test_the_primary_nav_uses_available_width(self):
+        body = _rule_body(_read("critical.css"), ".nav-links")
+        assert body is not None
+        assert "display: flex" in body
+        assert "flex: 1" in body

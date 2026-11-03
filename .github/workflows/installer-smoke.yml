@@ -24,7 +24,7 @@ concurrency:
 env:
   # The packaged venv is relocated to the clean-host jobs. Pin the patch
   # release so its interpreter symlink resolves identically on each runner.
-  PYTHON_VERSION: "3.12.16"
+  PYTHON_VERSION: "3.12.15"
 
 jobs:
   # ── Build test artifact (shared by all installer jobs) ──────────────

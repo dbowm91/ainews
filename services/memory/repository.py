@@ -37,6 +37,71 @@ def _like_pattern(token: str) -> str:
     return f"%{escaped}%"
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _high_review_cutoff(now: datetime, grace_days: int) -> datetime:
+    utc_now = _as_utc(now)
+    if utc_now is None:
+        utc_now = datetime.now(timezone.utc)
+    return utc_now - timedelta(days=max(0, int(grace_days)))
+
+
+def current_record_suppression_reason(
+    item: MemoryItem,
+    *,
+    now: datetime | None = None,
+    high_review_grace_days: int | None = None,
+) -> str | None:
+    """Return a stable reason when an item is not eligible for current reads."""
+    current_time = _as_utc(now) or datetime.now(timezone.utc)
+    if item.status != "active":
+        return "inactive"
+    expires_at = _as_utc(item.expires_at)
+    if expires_at is not None and expires_at <= current_time:
+        return "expired"
+    if item.importance >= 3:
+        if high_review_grace_days is None:
+            from schemas.pipeline import load_pipeline_config
+
+            high_review_grace_days = load_pipeline_config().memory.high_review_grace_days
+        review_due_at = _as_utc(item.review_due_at)
+        if review_due_at is None:
+            return "high_review_missing"
+        if review_due_at <= _high_review_cutoff(current_time, high_review_grace_days):
+            return "high_review_overdue"
+    return None
+
+
+def current_synthesis_suppression_reason(
+    item: MemoryItem | None,
+    *,
+    category_id: str,
+    now: datetime | None = None,
+    high_review_grace_days: int | None = None,
+) -> str | None:
+    """Validate the linked synthesis before its category projection is exposed."""
+    if item is None:
+        return "missing_current_memory"
+    reason = current_record_suppression_reason(
+        item,
+        now=now,
+        high_review_grace_days=high_review_grace_days,
+    )
+    if reason is not None:
+        return reason
+    if item.item_type != "synthesis":
+        return "wrong_type"
+    if item.owner_category != normalize_category(category_id):
+        return "wrong_category"
+    if not item.text or not item.text.strip():
+        return "empty_synthesis"
+    return None
+
+
 def _lexical_score(terms: list[str]) -> ColumnElement[int]:
     score: ColumnElement[int] = case(
         (MemoryItem.text.ilike(_like_pattern(terms[0]), escape="\\"), 1), else_=0,
@@ -88,9 +153,8 @@ def _candidate_ids(  # noqa: C901 - bounded candidate generation keeps scope and
     now = datetime.now(timezone.utc)
     from schemas.pipeline import load_pipeline_config
 
-    high_review_cutoff = now - timedelta(
-        days=load_pipeline_config().memory.high_review_grace_days
-    )
+    memory_config = load_pipeline_config().memory
+    high_review_cutoff = _high_review_cutoff(now, memory_config.high_review_grace_days)
     active_statuses = ("active", "synthesized", "superseded", "archived") if historical else ("active",)
     conditions = [MemoryItem.status.in_(active_statuses)]
     if not historical:
@@ -261,9 +325,8 @@ def memory_search(  # noqa: C901 - bounded filtering, ranking and diversity are 
     now = datetime.now(timezone.utc)
     from schemas.pipeline import load_pipeline_config
 
-    high_review_cutoff = now - timedelta(
-        days=load_pipeline_config().memory.high_review_grace_days
-    )
+    memory_config = load_pipeline_config().memory
+    high_review_cutoff = _high_review_cutoff(now, memory_config.high_review_grace_days)
     evidence_rows = db.session.execute(
         select(MemoryEvidence.memory_id, MemoryEvidence.source_article_id, MemoryEvidence.source_url).where(
             MemoryEvidence.memory_id.in_(ids), MemoryEvidence.source_article_id.is_not(None)
@@ -285,13 +348,11 @@ def memory_search(  # noqa: C901 - bounded filtering, ranking and diversity are 
         item = by_id.get(item_id)
         if item is None:
             continue
-        expires_at = item.expires_at
-        if not historical and expires_at and (expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at) <= now:
-            continue
-        review_due = item.review_due_at
-        if review_due and review_due.tzinfo is None:
-            review_due = review_due.replace(tzinfo=timezone.utc)
-        if not historical and item.importance == 3 and (review_due is None or review_due <= high_review_cutoff):
+        if not historical and current_record_suppression_reason(
+            item,
+            now=now,
+            high_review_grace_days=memory_config.high_review_grace_days,
+        ) is not None:
             continue
         text_tokens = set(tokenize(item.text))
         overlap = len(query_tokens & text_tokens) / max(len(query_tokens), 1)

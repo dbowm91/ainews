@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 
 def _item(MemoryItem, category, text, fingerprint, *, importance=3, status="active", expires=None, review_due_at=None):
     return MemoryItem(
@@ -275,6 +277,268 @@ def test_memory_context_uses_current_summary_and_keeps_relevant_shared_synthesis
         assert pack.rendered.count("AI policy current synthesis") == 1
         assert f'current_memory_id="{current.id}"' in pack.rendered
         assert [record.id for record in pack.records].count(shared.id) == 1
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        "archived",
+        "superseded",
+        "expired",
+        "wrong_category",
+        "wrong_type",
+        "high_overdue",
+        "high_missing_review",
+        "pinned_high_overdue",
+        "null_pointer",
+        "missing_item",
+        "empty_projection",
+        "projection_mismatch",
+    ],
+)
+def test_memory_context_suppresses_ineligible_category_summary(app, state):
+    from extensions import db
+    from models import MemoryCategorySummary, MemoryItem
+    from services.memory import memory_context
+
+    with app.app_context():
+        now = datetime.now(timezone.utc)
+        owner = "security" if state == "wrong_category" else "ai"
+        item_type = "observation" if state == "wrong_type" else "synthesis"
+        importance = 3 if "high_" in state or state == "pinned_high_overdue" else 2
+        review_due = now + timedelta(days=10)
+        expires_at = None
+        status = "active"
+        if state in {"archived", "superseded"}:
+            status = state
+        elif state == "expired":
+            expires_at = now - timedelta(seconds=1)
+        elif state in {"high_overdue", "pinned_high_overdue"}:
+            review_due = now - timedelta(days=40)
+        elif state == "high_missing_review":
+            review_due = None
+
+        item = MemoryItem(
+            owner_category=owner,
+            item_type=item_type,
+            text="AI policy current synthesis must not leak",
+            importance=importance,
+            status=status,
+            review_due_at=review_due,
+            expires_at=expires_at,
+            is_pinned=state == "pinned_high_overdue",
+            fingerprint=f"fp-summary-ineligible-{state}",
+        )
+        db.session.add(item)
+        db.session.flush()
+        pointer = item.id
+        content = item.text
+        if state == "null_pointer":
+            pointer = None
+        elif state == "missing_item":
+            pointer = item.id + 100000
+        elif state == "empty_projection":
+            content = "  \n"
+        elif state == "projection_mismatch":
+            content = "A projection that no longer matches its synthesis"
+        projection = MemoryCategorySummary(
+            category_id="ai",
+            content=content,
+            evidence_ids=[],
+            revision=7,
+            current_memory_id=pointer,
+        )
+        db.session.add(projection)
+        db.session.commit()
+
+        pack = memory_context("ai", None, 500, "edit", query="AI policy current synthesis")
+
+        assert "<category_summary" not in pack.rendered
+        assert f'current_memory_id="{item.id}"' not in pack.rendered
+        if item_type == "synthesis":
+            assert item.text not in pack.rendered
+
+
+def test_maintenance_archival_suppresses_summary_without_clearing_history_or_stale_cache(app):
+    from extensions import db
+    from models import MemoryCategorySummary, MemoryItem
+    from services.memory import memory_context
+    from services.memory.lifecycle import maintain_memory
+
+    with app.app_context():
+        now = datetime.now(timezone.utc)
+        synthesis = MemoryItem(
+            owner_category="ai",
+            item_type="synthesis",
+            text="AI policy synthesis archived by maintenance",
+            importance=3,
+            status="active",
+            review_due_at=now + timedelta(days=1),
+            fingerprint="fp-summary-archived-by-maintenance",
+        )
+        db.session.add(synthesis)
+        db.session.flush()
+        projection = MemoryCategorySummary(
+            category_id="ai",
+            content=synthesis.text,
+            evidence_ids=[],
+            revision=3,
+            current_memory_id=synthesis.id,
+        )
+        db.session.add(projection)
+        db.session.commit()
+
+        before = memory_context("ai", None, 500, "edit", query="AI policy synthesis")
+        assert before.rendered.count(synthesis.text) == 1
+
+        synthesis.review_due_at = now - timedelta(days=40)
+        db.session.commit()
+        result = maintain_memory(limit=10)
+        db.session.refresh(synthesis)
+        db.session.refresh(projection)
+
+        assert result["high_retired"] == 1
+        assert synthesis.status == "archived"
+        assert projection.content == synthesis.text
+        assert projection.current_memory_id == synthesis.id
+
+        after = memory_context("ai", None, 500, "edit", query="AI policy synthesis")
+        assert after.rendered == ""
+        assert after.cache_version != before.cache_version
+
+
+def test_suppressed_summary_keeps_eligible_local_and_shared_memories(app):
+    from extensions import db
+    from models import MemoryCategorySummary, MemoryItem, MemoryScope
+    from services.memory import memory_context
+
+    with app.app_context():
+        now = datetime.now(timezone.utc)
+        expired_summary = MemoryItem(
+            owner_category="ai",
+            item_type="synthesis",
+            text="AI policy stale category summary",
+            importance=2,
+            status="archived",
+            fingerprint="fp-stale-summary-preserve-local-shared",
+        )
+        local = _item(
+            MemoryItem,
+            "ai",
+            "AI policy local relevant source-backed detail",
+            "fp-local-alongside-stale-summary",
+            importance=2,
+        )
+        shared = _item(
+            MemoryItem,
+            "security",
+            "AI policy shared relevant source-backed detail",
+            "fp-shared-alongside-stale-summary",
+            importance=2,
+        )
+        db.session.add_all([expired_summary, local, shared])
+        db.session.flush()
+        db.session.add_all([
+            MemoryScope(memory_id=local.id, scope_type="category", scope_id="ai"),
+            MemoryScope(memory_id=shared.id, scope_type="shared", scope_id="global"),
+            MemoryCategorySummary(
+                category_id="ai",
+                content=expired_summary.text,
+                evidence_ids=[],
+                revision=2,
+                current_memory_id=expired_summary.id,
+                updated_at=now,
+            ),
+        ])
+        db.session.commit()
+
+        pack = memory_context(
+            "ai",
+            None,
+            500,
+            "edit",
+            query="AI policy relevant source-backed detail",
+        )
+
+        assert "<category_summary" not in pack.rendered
+        assert local.text in pack.rendered
+        assert shared.text in pack.rendered
+        assert local.id in pack.memory_ids
+        assert shared.id in pack.memory_ids
+
+
+def test_summary_that_exceeds_tiny_context_budget_is_removed_as_a_whole(app):
+    from extensions import db
+    from models import MemoryCategorySummary, MemoryItem
+    from services.memory import memory_context
+
+    with app.app_context():
+        text = "AI policy synthesis " * 80
+        synthesis = MemoryItem(
+            owner_category="ai",
+            item_type="synthesis",
+            text=text,
+            importance=2,
+            status="active",
+            review_due_at=datetime.now(timezone.utc) + timedelta(days=10),
+            fingerprint="fp-summary-too-large-for-budget",
+        )
+        db.session.add(synthesis)
+        db.session.flush()
+        db.session.add(MemoryCategorySummary(
+            category_id="ai",
+            content=text,
+            evidence_ids=[],
+            revision=1,
+            current_memory_id=synthesis.id,
+        ))
+        db.session.commit()
+
+        pack = memory_context("ai", None, 5, "edit", query="AI policy synthesis")
+
+        assert pack.rendered == ""
+        assert pack.truncated
+        assert "<category_summary" not in pack.rendered
+
+
+def test_summary_eligibility_handles_sqlite_naive_timestamps(app):
+    from extensions import db
+    from models import MemoryCategorySummary, MemoryItem
+    from services.memory import memory_context
+
+    with app.app_context():
+        now = datetime.now(timezone.utc)
+        synthesis = MemoryItem(
+            owner_category="ai",
+            item_type="synthesis",
+            text="AI policy synthesis with SQLite timestamps",
+            importance=3,
+            status="active",
+            review_due_at=now + timedelta(days=1),
+            expires_at=now + timedelta(days=2),
+            fingerprint="fp-summary-sqlite-naive-timestamps",
+        )
+        db.session.add(synthesis)
+        db.session.flush()
+        db.session.add(MemoryCategorySummary(
+            category_id="ai",
+            content=synthesis.text,
+            evidence_ids=[],
+            revision=1,
+            current_memory_id=synthesis.id,
+        ))
+        db.session.commit()
+        synthesis_id = synthesis.id
+        db.session.expunge_all()
+        reloaded = db.session.get(MemoryItem, synthesis_id)
+        assert reloaded is not None
+        assert reloaded.review_due_at is not None and reloaded.review_due_at.tzinfo is None
+        assert reloaded.expires_at is not None and reloaded.expires_at.tzinfo is None
+
+        pack = memory_context("ai", None, 500, "edit", query="AI policy synthesis")
+
+        assert "<category_summary" in pack.rendered
+        assert pack.tokens_estimate <= 500
 
 
 def test_old_high_review_items_are_historical_only_after_grace(app):

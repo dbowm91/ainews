@@ -133,18 +133,26 @@ class TestBuiltInTools:
             tool = tools[0]
             assert tool.name == "web_search"
 
-            with patch("services.search.search_web") as mock_search:
-                mock_result = MagicMock()
-                mock_result.title = "Test Result"
-                mock_result.url = "https://example.test/result"
-                mock_result.snippet = "Test snippet content"
-                mock_search.return_value = [mock_result]
+            from services.search.base import SearchResult
+            from services.search.evidence import SearchOutcome, SearchStatus
+
+            with patch("services.search.search_web_detailed") as mock_search:
+                mock_search.return_value = SearchOutcome(
+                    results=[SearchResult(
+                        title="Test Result",
+                        url="https://example.test/result",
+                        snippet="Test snippet content",
+                    )],
+                    status=SearchStatus.OK,
+                )
 
                 result = tool.fn(query="test query", max_results=1)
                 assert "Test Result" in result
                 assert "https://example.test/result" in result
                 assert "Test snippet content" in result
-                assert "unverified" in result
+                assert "retrieval_status: lead_only" in result
+                assert "external_untrusted" in result
+                mock_search.assert_called_once_with("test query", 1)
 
     def test_search_web_no_results(self, app):
         with app.app_context():
@@ -154,8 +162,10 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
-                mock_search.return_value = []
+            from services.search.evidence import SearchOutcome, SearchStatus
+
+            with patch("services.search.search_web_detailed") as mock_search:
+                mock_search.return_value = SearchOutcome([], SearchStatus.EMPTY)
                 result = tool.fn(query="test query")
                 assert result == "No search results found."
 
@@ -167,7 +177,7 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_search.side_effect = ConnectionError("connection failed")
                 result = tool.fn(query="test query")
                 assert "Error performing web search" in result
@@ -219,7 +229,7 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_search.side_effect = TimeoutError("timeout")
                 result = tool.fn(query="test query")
                 assert "Error performing web search" in result
@@ -232,7 +242,7 @@ class TestBuiltInTools:
             tools = initialize_tool_registry(tool_names=["web_search"])
             tool = tools[0]
 
-            with patch("services.search.search_web") as mock_search:
+            with patch("services.search.search_web_detailed") as mock_search:
                 mock_search.side_effect = ValueError("invalid query")
                 result = tool.fn(query="test query")
                 assert "Error performing web search" in result

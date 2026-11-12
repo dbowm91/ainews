@@ -1,6 +1,6 @@
 # Editorial Memory V2 — Corrective Pass Overview (2026-10-29)
 
-**Status:** C01–C03 implemented with local evidence; C04 CI baseline attribution documented; C05 final merge-readiness corrective OPEN. No active deployed database or database migration evidence is required for merging.
+**Status:** PR #19 was merged on 2026-10-30. C01–C05 are complete on the unified branch and final-HEAD evidence is recorded in `docs/editor-memory-verification-20261029.md`. Scoped reads are enabled in development; writes, tools, maintenance, synthesis, and optional optimizations remain off. No active deployed database or database migration evidence is required.
 **Baseline:** PR #19, `plan/editor-memory-blackboard-synthesis-20261029`, implementation commit `f3aa498e4d0df40e16fc1b9c65f9c45c6103f636`.
 **Parent:** [Editorial Memory Roadmap](editor_memory_roadmap_20261029.md).
 **Goal:** Close correctness and safe-activation gaps in editor memory V2 for a personal/local or privately operated AInews instance, without rebuilding the architecture or setting public-release requirements.
@@ -11,7 +11,7 @@ This is a **personal/local or private-instance** project, not a public distribut
 
 ## Reviewed state
 
-The branch has additive SQLite migrations 037–043, `services/memory/{repository,context_builder,lifecycle,synthesis}.py`, category/blackboard metadata, scoped tools, conditional inference knobs, admin operations, and a local synthetic verification report (`docs/editor-memory-verification-20261029.md`). This is substantive implementation, but PR #19 is not merged; the new read/synthesis/optimization flags remain off. Local evidence reports **5,074 passed / 6 skipped**, clean mypy, and five baseline Ruff findings. GitHub Actions for the implementation commit reports failing CI and installer smoke jobs; investigate root causes separately from the new memory code. No production, provider-backed, or target-database validation is recorded.
+The merged implementation has additive SQLite migrations 037–043, `services/memory/{repository,context_builder,lifecycle,synthesis}.py`, category/blackboard metadata, scoped tools, conditional inference knobs, admin operations, and local synthetic verification (`docs/editor-memory-verification-20261029.md`). PR #19 was merged as `8fdfc61`; the implementation branch tree is identical to that merge commit. Scoped reads were subsequently enabled in the development config; writes, tools, maintenance, synthesis, and optimizations remain off. Historical local/CI counts are recorded against their original SHAs and are not final-HEAD evidence. No active deployed database needs migration evidence.
 
 The corrective work should **not** invalidate the existing M1–M5 plans. Add these as explicit follow-up gates and mark milestones complete only after all dependencies and evidence are satisfied.
 
@@ -25,7 +25,7 @@ The corrective work should **not** invalidate the existing M1–M5 plans. Add th
 | C04 | P0 operational | [Existing CI baseline and local evidence](editor_memory_corrective_04_release_verification_20261029.md) | Distinguish inherited CI failures from memory regressions; no live/deployed database migration evidence required | C01–C03 |
 | C05 | P0 merge | [Last corrective before PR #19 review/merge](editor_memory_c05_merge_readiness_20261030.md) | Fail-closed summary currentness, final-HEAD tests, docs/PR review handoff | C01–C03 implemented; C04 attribution |
 
-**Current sequencing:** C01–C03 implementation and C04 baseline investigation have landed; complete **C05** to make draft PR #19 reviewable. Preserve all V2 read/write/tools/maintenance/synthesis and optimization flags off at merge. There is no active deployed database and **no database migration evidence or public-launch checklist** is required. Optional feature activation and its quality comparisons are separate from merging.
+**Current sequencing:** C01–C05 and PR #19 have landed. C05 closed the stale-summary read guard, final-HEAD verification, and documentation. Scoped reads are enabled in the development config; C05 did not change flags. Maintenance/synthesis and inference-saving features remain separate later stages. There is no active deployed database and **no database migration evidence or public-launch checklist** is required.
 
 ## Non-negotiable design constraints
 
@@ -38,6 +38,6 @@ The corrective work should **not** invalidate the existing M1–M5 plans. Add th
 
 ## Closure criteria
 
-C05 closes after a regression test reproduces and fixes stale category-summary injection, targeted and final-HEAD full tests/static checks are recorded, documentation matches the code, and PR #19 is ready for review. **Do not require new migration evidence**, a recovered database, external provider A/B or broad installer validation. Separate inherited CI failures from new regressions; report observed local results without claiming unmeasured savings.
+C05 closed after a regression test reproduced and fixed stale category-summary injection, targeted and final-HEAD full tests/static checks were recorded, and documentation was aligned with the code. PR #19 was already merged upstream. **Do not require new migration evidence**, a recovered database, external provider A/B or broad installer validation. Separate inherited CI failures from new regressions; report observed local results without claiming unmeasured savings.
 
-**Registration:** C05 is linked in `plans/plan.md` and the parent roadmap; status remains OPEN until its code fix and final-HEAD evidence land. This planning update makes no runtime correction.
+**Registration:** C05 is linked in `plans/plan.md` and the parent roadmap and is complete on the unified branch. This overview is planning/evidence only; the runtime correction is recorded in the code and test history.

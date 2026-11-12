@@ -1,25 +1,25 @@
 # C05 — Editorial Memory V2 Merge-Readiness Corrective Pass (2026-10-30)
 
-**Status:** OPEN — implementation handoff; this document registers work, not a completed fix.
-**Priority:** P0 for merging draft [PR #19](https://github.com/dbowm91/ainews/pull/19).
+**Status:** COMPLETED — the stale-summary correction, regressions, final-HEAD checks and documentation are integrated on the unified branch. See the dated closure evidence in `docs/editor-memory-verification-20261029.md`.
+**Priority:** P0 current-memory exposure correctness. [PR #19](https://github.com/dbowm91/ainews/pull/19) was already merged on 2026-10-30; this is a follow-up against the current unified branch.
 **Branch:** `plan/editor-memory-blackboard-synthesis-20261029`.
-**Inspected head:** `5dcf2d35faab8a330f41c80cf449c3136a182545` (recheck before implementing).
+**Implementation baseline:** PR #19 merge commit `8fdfc61` has the same tree as branch head `7c5a646`; current `main` has since incorporated other branches and corrective work.
 **Parents:** [Editorial memory roadmap](editor_memory_roadmap_20261029.md), [C01–C04 corrective overview](editor_memory_corrective_pass_overview_20261029.md).
-**Goal:** Close the last concrete read-path correctness edge case, prove that current-HEAD tests cover it, align the registry/docs with the actual scope, and move PR #19 from draft into a reviewable, merge-ready state.
+**Goal:** Close the last concrete read-path correctness edge case, prove that current-HEAD tests cover it, and align the registry/docs with the actual scope. PR #19 was already merged upstream; no replacement PR or draft transition was needed.
 
 ## Scope decision — merge the code, do not stage a database deployment
 
-The owner has explicitly confirmed that **there is no active deployed AInews database requiring a migration** and **database migration evidence is not required for this handoff**. Do not locate/restore/inspect any missing deployment database, create a production-equivalent database migration report, perform an Alembic downgrade/rollback rehearsal, or block the merge on a live database, provider-backed A/B trial, external deployment, multi-OS installer matrix, or public-release checklist.
+The owner has explicitly confirmed that **there is no active deployed AInews database requiring a migration** and **database migration evidence is not required for this handoff**. Do not locate/restore/inspect any missing deployment database, create a production-equivalent database migration report, perform an Alembic downgrade/rollback rehearsal, or block the code integration on a live database, provider-backed A/B trial, external deployment, multi-OS installer matrix, or public-release checklist.
 
-Existing migrations `037`–`043` and existing disposable migration tests can remain in the codebase, but **producing new migration evidence is not a C05 acceptance criterion**. Treat future real-instance enablement as a separate opt-in decision if the deployment situation changes. The PR must still preserve backward-compatible, **disabled-by-default** flags: `memory_v2_writes_enabled`, `memory_v2_enabled`, `memory_tools_enabled`, `memory_maintenance_enabled`, `memory_synthesis_enabled` and all optional pipeline optimizations. No automatic V2 enablement during merge.
+Existing migrations `037`–`043` and existing disposable migration tests can remain in the codebase, but **producing new migration evidence is not a C05 acceptance criterion**. The schema config defaults are false. The owner separately authorized scoped retrieval first, so the current development `pipeline.yaml` explicitly sets `memory_v2_enabled: true`; C05 must preserve that existing choice without changing it. Writes, tools, maintenance, synthesis, and all optional pipeline optimizations remain off. Do not enable another gate as part of this correction.
 
 Existing repository-wide CI failures (baseline Ruff, CI environment secrets/Redis/Compose, scanning-action permissions, dependency advisories, installer disk/launcher issues) have been compared against `main`; they are tracked independently. **Do not weaken security checks** or describe these as passing. Fix any *new* critical memory-related regression; do not turn unrelated inherited red jobs into mandatory work for C05.
 
 ## Current state and focused defect
 
-C01–C03 have substantive implementation on the branch: relevance-aware FTS retrieval and scoped cumulative tools, finite HIGH retirement, versioned/current synthesis and fair snapshot selection, and candidate confidence/importance separation. Local evidence records **5,094 passed / 6 skipped** on the prior full-suite run and **63 focused tests** after the fairness correction, with clean mypy and no new Ruff errors in changed files. The most recent schema-preflight refinement was committed **after** that full-suite report. These results must not be represented as full-suite verification of the final C05 head.
+C01–C03 are present in the already-merged implementation: relevance-aware FTS retrieval and scoped cumulative tools, finite HIGH retirement, versioned/current synthesis and fair snapshot selection, and candidate confidence/importance separation. The PR branch tree is identical to merge commit `8fdfc61`; subsequent main work changed the memory repository's FTS fallback to use a savepoint so preflight/retrieval does not roll back caller writes. C05's current-summary guard and regressions are integrated into the unified branch and verified at the exact HEAD recorded in the closure evidence.
 
-**Confirmed read-path omission:** `services/memory/context_builder.py:memory_context()` always renders `MemoryCategorySummary.content` if it is nonempty. The linked `summary.current_memory_id` is fetched for metadata only; the code does not test the referenced item's `status`, `item_type`, `owner_category`, `expires_at`, or HIGH `review_due_at` grace eligibility. Meanwhile, `services/memory/lifecycle.py:maintain_memory()` can archive a due synthesis, and `services/memory/repository.py:memory_search()` correctly excludes non-active/stale records. Therefore a retired or orphaned synthesized projection can **bypass the ordinary retrieval gates** by remaining in the prompt as a category summary. This is a P0 correctness issue for C05.
+**Confirmed read-path omission:** `services/memory/context_builder.py:memory_context()` rendered any nonempty `MemoryCategorySummary.content`. It fetched the linked `summary.current_memory_id` for metadata only and did not validate status, type, owner category, expiry, or HIGH review grace. Because maintenance can archive a synthesis while retaining the projection for history, stale or orphaned text could bypass ordinary retrieval gates. The fix now validates the linked synthesis, requires projection/item text equality, keeps category-owned syntheses on the guarded projection path, and includes summary suppression state in `ContextPack.cache_version`.
 
 ## C05.1 — Fail-closed current category-summary eligibility (P0)
 
@@ -47,23 +47,23 @@ After **all** C05 code/docs commits, capture exact HEAD and rerun on that commit
 - Review PR #19's complete diff for accidental unrelated behavior changes, generated/temporary files, credentials/secrets, needless migration or provider changes, and discrepancies between documentation and actual flags. Document any intentionally broader changes (e.g. synthesis retry adapter hardening). No scope expansion merely to make unrelated CI workflows green.
 - Confirm `main` vs PR HEAD, rebase/update only if actually necessary, and repeat relevant checks if code changed. New critical failures in the changed memory path **block** merge readiness.
 
-## C05.3 — Registry, documentation, and PR handoff closure (P1)
+## C05.3 — Registry, documentation, and merge closure (P1)
 
 Synchronize the *current* implementation contract, not the original plan-era description:
 
-- `plans/plan.md`: C01–C03 **implemented with local evidence**, C04 **CI attribution + disposable checks documented** but **no live database evidence required**, C05 **OPEN until final regression/diff review**. The master plan currently claims the target database's absence keeps C04 open; correct that now.
+- `plans/plan.md`: record PR #19 as already merged, C01–C04 as complete, C05 as complete only after final tests/static checks and documentation land; keep M5 staged behavior work separate. The repo config enables scoped reads per the owner's earlier instruction; other gates remain off.
 - `plans/editor_memory_roadmap_20261029.md` and `plans/editor_memory_corrective_pass_overview_20261029.md`: register C05, mark it as the **sole outstanding merge-readiness corrective** after the main C01–C03 fixes (subject to newly discovered defects). Do not mark staged runtime feature activation complete.
-- `plans/editor_memory_m5_verification_20261029.md` and `plans/editor_memory_corrective_04_release_verification_20261029.md`: remove/clearly supersede contradictory target-DB backup, migration and rollback instructions. Distinguish **merge of disabled code** from **later opt-in feature enablement**. No new database migration evidence requirement.
-- `docs/trend-memory.md`, `docs/context-service.md` and `docs/pipeline.md` where relevant: accurately describe migrations **through 043**, synthesis-only cursor preflight vs ordinary read preflight, finite HIGH eligibility, summary suppression on retirement, separate write/read/tools/maintenance/synthesis gates, and no default enablement. Remove stale statements suggesting due HIGH items are never retired or that the earlier roadmap is blocked on a nonexistent active install.
+- `plans/editor_memory_m5_verification_20261029.md` and `plans/editor_memory_corrective_04_release_verification_20261029.md`: clearly supersede historical target-DB backup, migration and rollback instructions. Distinguish **code integration** from **later opt-in feature enablement**. No new database migration evidence requirement.
+- `docs/trend-memory.md`, `docs/context-service.md` and `docs/pipeline.md` where relevant: accurately describe migrations **through 043**, synthesis-only cursor preflight vs ordinary read preflight, finite HIGH eligibility, summary suppression on retirement, separate write/read/tools/maintenance/synthesis gates, schema defaults, and the explicitly enabled development scoped-read gate. Remove stale statements suggesting due HIGH items are never retired or that the work is blocked on a nonexistent active install.
 - `docs/editor-memory-verification-20261029.md` or a dated C05 closure note: append final HEAD, real test results, remaining limitations and explicit no-target-database-evidence scope decision. Do not overwrite past test dates or convert synthetic/local model evaluations into broad quality claims.
-- Prepare a concise PR description/checklist: implemented C01–C03 + C05 correction, new tests, flags off, known inherited CI failures with baseline comparison, explicit exclusions, and reviewers' focused verification steps. Once the actual code/evidence criteria pass, mark PR **ready for review** (do not merge automatically unless separately authorized). Update C05 status to COMPLETED only after these deliverables land.
+- PR #19 is already merged, so no draft/ready-for-review transition or replacement PR is required for this follow-up. The closure note records the exact unified-branch commit, tests, static checks, exclusions, remaining staged feature work, and no-database-evidence decision.
 
 ## Merge-ready acceptance
 
 - All cases above demonstrate no stale/superseded/archived/wrong-category category-summary injection; valid summaries remain evidence-backed and budgets are enforced.
 - A final-HEAD full-suite test run and static checks are recorded with no **new relevant** regressions. Inherited CI failures are categorized with evidence, not hidden or claimed green.
-- The implementation diff, registry, roadmap and operational docs agree about the **disabled-by-default** feature gates and scope.
+- The implementation diff, registry, roadmap and operational docs agree: schema defaults are off; only scoped reads are explicitly enabled in the development config; other feature gates remain off.
 - No migration rehearsal, restored DB, provider-backed quality benchmark, installer matrix, public deployment or staged activation is demanded by C05.
-- PR #19 can be taken out of draft and reviewed/merged independently of subsequent, opt-in V2 activation and inference optimization.
+- The C05 follow-up is integrated into current `main` without re-merging the already-squash-merged PR #19 branch tree. Later maintenance/synthesis and optimization activation remain separate.
 
-**Explicit non-goal:** This plan does not implement the fix, flip feature flags, create an additional PR, or merge PR #19. The implementing agent should complete the code, evidence and PR-readiness steps in a focused follow-up.
+**Explicit non-goal:** C05 did not flip feature flags, require a provider-backed quality benchmark, or require database migration rehearsal. Scoped reads remain enabled in the development config by prior instruction; remaining gates are off.

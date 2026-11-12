@@ -1,16 +1,16 @@
-# M5 — Private-Instance Verification, Migration Enablement, and Closure Evidence
+# M5 — Local Behavior Verification and Staged Feature Activation
 
-**Status:** Deferred/optional staged local behavior checks after merge. No active deployed DB needs this change; database migration evidence is not required. **C05**, not M5, is the focused merge-readiness gate.
+**Status:** Staged local behavior activation remains in progress. Scoped retrieval is enabled in the development `pipeline.yaml`; maintenance/synthesis and optional inference-saving features remain off pending their respective checks. No active deployed DB needs this change; database migration evidence is not required. **C05** covers the stale-summary merge correction, separate from M5 activation.
 **Requires:** M1–M4 implementation where applicable  
 **Parent:** [Editorial memory roadmap](editor_memory_roadmap_20261029.md)
 
 ## Scope precedence — 2026-10-30
 
-The owner's explicit decision is that **no database migration evidence is needed** for merging this work: there is no active deployed AInews database requiring upgrade. Historical M5 text below describes a possible future implementation/enablement workflow, **not** merge acceptance criteria. Do not restore a missing DB, perform backup/upgrade/downgrade rehearsals or request corresponding evidence. See [C05 merge readiness](editor_memory_c05_merge_readiness_20261030.md) for the only outstanding corrective. Preserve ordinary automated tests; optional provider/quality comparisons apply only to later enabled optimizations.
+The owner's explicit decision is that **no database migration evidence is needed** for merging this work: there is no active deployed AInews database requiring upgrade. Historical M5 text below describes a possible future implementation/enablement workflow, **not** merge acceptance criteria. Do not restore a missing DB, perform backup/upgrade/downgrade rehearsals or request corresponding evidence. Scoped retrieval was explicitly enabled first in the development config; the code's schema defaults remain off. Keep writes, tools, maintenance, synthesis, and optimizations off until their staged checks are complete. Optional provider/quality comparisons apply only before enabling inference-saving optimizations.
 
 ## Outcome
 
-AInews is intended for **personal/local or privately operated use**, not a public release or broad installer/platform certification. Demonstrate correctness, safe migration, bounded memory context, cross-category control, retrieval usefulness and *measured, if claimed* inference savings on **the owner's actual SQLite/WAL installation**. Produce evidence sufficient for an implementation handoff to be closed without treating test mocks as proof of runtime functionality.
+AInews is intended for **personal/local or privately operated use**, not a public release or broad installer/platform certification. Demonstrate bounded memory context, cross-category control, retrieval usefulness and *measured, if claimed* inference savings in the local development environment. Existing disposable migration tests are code coverage; do not investigate or rehearse changes against an actual deployment database because none needs this capability. Keep evidence specific to local fixtures and do not treat mocks as runtime proof.
 
 ## Baseline and fixture capture (before M1 behavior changes)
 
@@ -33,7 +33,7 @@ Build a golden set of at least 30–50 diverse real or synthetic article scenari
 | Pipeline savings | Fixed A/B or shadow comparison of extra model calls, token usage, context latency, selection/review outcomes and output quality |
 | Operator workflows | Admin auth/CSRF, audit log, reviewing/pinning/unsharing, schedule task registration, backup/restore |
 
-Run `ruff check . --exclude .venv`, `mypy . --exclude .venv`, the targeted memory/runner/pipeline tests, and the full local `pytest` suite. Review applicable CI status; distinguish inherited/unrelated job failures from new memory regressions. Run migration rehearsal against a verified copy of the actual SQLite database, never mutate the working DB without a restorable backup. Cross-platform installer CI is independently valuable but is not a blanket memory-activation requirement.
+Run `ruff check . --exclude .venv`, `mypy . --exclude .venv`, the targeted memory/runner/pipeline tests, and the full local `pytest` suite. Review applicable CI status; distinguish inherited/unrelated job failures from new memory regressions. Existing migration-fixture tests cover schema behavior; do not run a target-database migration or backup/restore rehearsal. Cross-platform installer CI is independently valuable but is not a blanket memory-activation requirement.
 
 ## Quantitative gates (initial suggested defaults, tune with baseline)
 
@@ -47,23 +47,23 @@ Run `ruff check . --exclude .venv`, `mypy . --exclude .venv`, the targeted memor
 
 ## Optional enablement stages on the private/local instance
 
-**R0 — prepare:** Capture metrics; verify backups and restore; pin migration checks and revisions; correct P0 runtime issues with old storage and strict caps.
+**R0 — prepare:** For the current disposable development database, record the fresh schema/config state and correct P0 runtime issues with strict caps. Backup/restore and target migration rehearsals are not in scope.
 
-**R1 — additive store:** Migrate the actual SQLite instance to M2 tables/indexes/FTS behind `memory_v2_enabled=false`. Backfill into new tables idempotently and compare counts/categories/evidence; do not drop legacy rows. Keep bounded legacy reads as fallback. Note install-target resource/time limits (especially SBC class) and chunk index rebuilding.
+**R1 — disposable schema coverage:** Use the existing fresh-install and migration-fixture tests for schema and idempotent backfill behavior. Do not migrate an actual deployment database or create migration/rollback evidence for this workstream.
 
-**R2 — shadow retrieval:** For every representative article, compute both bounded legacy and new retrieval, but only inject legacy. Record selected IDs/scope, relevance, tokens, time, quality and missing results in redacted logs. Fix mismatch and index errors.
+**R2 — optional local comparison:** A small, fixed real-article comparison can help qualify optional inference-saving features. Use the local model when available; record outputs, relevance, factual/citation issues, latency and calls. This comparison is not a provider-backed requirement and does not block maintenance/synthesis activation.
 
-**R3 — scoped local trial:** Enable V2 retrieval for a small selection of categories or article IDs using a deterministic feature flag. Monitor latency, degraded articles, model errors, relevance and leakage. Expand gradually, with feature-flag rollback.
+**R3 — scoped local trial (COMPLETE):** `pipeline.yaml` enables `memory_v2_enabled` on the fresh disposable development DB. A scoped context read was smoke-tested with a temporary row that was rolled back. The current DB has no editorial-memory rows; this confirms wiring and scoped behavior, not production utility or article-quality improvement.
 
-**R4 — bounded synthesis trial:** Enable M3 maintenance, category summaries and shared blackboard for selected categories. Keep old promotion task disabled only after the new tasks and schedule registration are confirmed. Enforce caps and observe daily maintenance with zero-change batches.
+**R4 — bounded synthesis trial (REMAINING):** Run bounded local maintenance/synthesis checks, first confirming schedule registration, caps, idempotency, HIGH review/retirement, summary currentness and the no-change path. Then enable maintenance/synthesis in the development config and observe local cycles. The optional model tools and memory writes remain independently gated.
 
-**R5 — inference optimization:** Enable M4 changes independently, one substage at a time; compare generated publication against golden fixtures and human review of complicated samples. Revert any feature that harms attribution or factual correctness.
+**R5 — inference optimization (REMAINING):** After limited real-article comparisons using the local model, enable M4 features independently, one substage at a time; compare outputs and calls against the same articles and manually review complicated samples. Leave any feature off if it harms attribution or factual correctness; do not claim savings from synthetic fixtures.
 
-**R6 — close:** Update `docs/trend-memory.md`, `docs/context-service.md`, `docs/pipeline.md`, `architecture/*` and relevant `AGENTS.md` with verified current contracts. Attach test logs, benchmark dataset notes, migrations/rollback evidence, design deviations and commit/PR links to this plan and parent roadmap. Leave old data for a separately approved deprecation window; do not casually remove historical evidence.
+**R6 — close:** Update `docs/trend-memory.md`, `docs/context-service.md`, `docs/pipeline.md` and relevant plans with verified current contracts. Attach test results, local article comparison notes where applicable, design deviations and commit/PR links. No target-database migration or rollback evidence is required.
 
 ## Closure standard
 
-Feature-disabled, backward-compatible code may be merged after relevant static/integration/migration tests without completing a live provider A/B study. **Before enabling V2 against the owner's real data**, rehearse backup/restore and the migration/backfill, verify relevant scoped reads and perform a manageable representative article review. Run provider-backed comparisons only to justify enabling M4 savings optimizations or claiming costs/quality benefits. Do not create a public-readiness checklist or require unsupported OS installer targets.
+Feature-disabled, backward-compatible code may be integrated after relevant static/integration tests; migration fixtures remain part of ordinary code coverage. Scoped retrieval is already enabled in the development config. Enable maintenance/synthesis only after bounded local checks; enable inference-saving optimizations only after limited real-article comparisons. Use a local model if available and make no broad quality/cost claim from a small sample. Do not create a public-readiness checklist or require unsupported OS installer targets.
 
 ## Operational diagnostics
 
@@ -71,12 +71,11 @@ Expose an authenticated administrative overview: active/archived/superseded coun
 
 ## Handoff completion checklist
 
-- [ ] M1 regression reproduction and correction landed with runtime evidence.
-- [ ] M2 migration/backfill tested and rollback documented.
-- [ ] M2 scoped search and bounded prompt context verified in end-to-end stage tests.
-- [ ] M3 synthesis/revision and HIGH review/retirement verified with conflicting evidence.
-- [ ] M3 shared promotion visible across categories without unrestricted read.
-- [ ] M4 deterministic offloads verified against baseline quality and inference metrics.
-- [ ] Limited private-instance trial/shadow comparison documented, including missed or harmful memories.
-- [ ] Relevant memory tests, schema and task-registration checks pass; unrelated CI/installer failures are separately classified and tracked rather than treated as public release blockers.
-- [ ] Parent roadmap/index updated to `COMPLETED` only after measured evidence.
+- [x] M1–M4 code and focused contract tests are integrated; no live database migration evidence is required.
+- [x] M2 scoped retrieval is enabled in development and its bounded context path has been smoke-tested on the fresh disposable DB.
+- [x] C05 summary eligibility guard and regressions are integrated; current full-suite/static verification is recorded in the closure note.
+- [ ] M3 local maintenance/synthesis activation and bounded no-change/changed cycles.
+- [ ] M4 optional optimizations compared on a limited set of real articles with the local model before enabling.
+- [ ] Record observed misses or harmful inclusions from those article comparisons; do not generalize quality or cost claims beyond the sample.
+- [x] Task registration, relevant memory coverage, and documentation are checked; unrelated CI/installer failures remain separate from this private/local work.
+- [ ] Close M5 only after the remaining staged activation and comparison work is complete.

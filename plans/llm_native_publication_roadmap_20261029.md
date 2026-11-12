@@ -1,6 +1,6 @@
 # LLM-native publication, newsletter editions, and distribution roadmap
 
-**Status:** M1–M5 implementation recorded; C01–C04 corrective code implemented and locally tested; C05 private-instance runtime qualification remains open. Restored-target DB migration rehearsal is explicitly closed as unnecessary at this stage. See [corrective pass](llm_native_corrective_pass_overview_20261030.md).
+**Status:** PR #20 merged on 2026-10-31 as `a5f5007`; M1–M5 and C01–C04 code are integrated. The branch's later shared-admin-navigation commit `8fe5130` is integrated into `main` via merge `66a6538`. C05 private-instance runtime qualification remains open only for enabled deployment-specific capabilities. Restored-target DB migration rehearsal is explicitly closed as unnecessary. See [corrective pass](llm_native_corrective_pass_overview_20261030.md).
 **Date:** 2026-10-29
 **Baseline:** main at 60fd18eda3a5e8852943e70bf32d4f957dbb3ff5. Recheck on merge and against ongoing PRs #18 (Eggsearch retrieval) and #19 (editorial memory).
 **Operating intent:** personal/local or privately operated AInews, with *optional* exposure to external agents or an optional public instance. Not a public-launch or broad packaging-readiness program.
@@ -62,7 +62,7 @@ Each milestone owns tests and migrations; no milestone is complete based only on
 
 ## Implementation evidence
 
-- **Branch/rebase:** `plan/llm-native-editions-delivery-20261029`; `origin/main` at `60fd18e` was already an ancestor of the PR branch. Corrective docs arrived on the fetched PR branch; implementation and qualification notes were committed and pushed as recorded in Git history.
+- **Branch/rebase:** `plan/llm-native-editions-delivery-20261029`; PR #20 is merged. The follow-up shared-admin-navigation commit is integrated into `main`; it preserves the established public navigation in the admin header and has focused navigation/visual-contract tests.
 - **M1:** cryptographically random article public IDs, explicit visibility/read DTO, URL and search/feed/RSS/sitemap filters, withdrawal on reprocessing, hardened numeric-route default, additive migration `037_llm_native_publication`.
 - **M2:** separately hashed read-only agent keys, REST and seven-tool Streamable HTTP MCP surfaces, signed keyset cursors, ETags/OpenAPI/discovery docs, fail-closed Redis fixed-hour plus burst quotas, admin credential controls. MCP uses the optional `agent` dependency extra.
 - **M3:** deterministic frozen edition snapshots, occurrence-key idempotency, safe preview, scheduled task registration, persistent profile/local-time planning, catch-up and DST handling.

@@ -1,6 +1,6 @@
 # Editorial Memory, Shared Blackboard, and Deterministic Pipeline Roadmap
 
-**Status:** C01–C03 implemented with local evidence; C05 merge-readiness corrective OPEN on draft PR #19. No active deployed DB requires migration evidence; all V2 flags remain off and later activation is separate.
+**Status:** PR #19 implementation merged. C01–C05 are complete on the unified branch; final verification is recorded in `docs/editor-memory-verification-20261029.md`. Scoped retrieval alone is enabled in the development config; maintenance/synthesis and optional inference optimizations remain off. No active deployed DB requires migration evidence. M5 staged activation remains separate.
 **Created:** 2026-10-29  
 **Baseline:** `main` at `60fd18eda3a5e8852943e70bf32d4f957dbb3ff5` (revalidate against the implementation branch before coding)  
 **Owner:** AInews editorial pipeline / memory services  
@@ -66,11 +66,11 @@ Prevent memory poisoning through untrusted articles: treat stored text as data, 
 
 ## Acceptance and handoff
 
-Milestones require failing regression tests first for verified bugs, migration upgrade/downgrade rehearsal, no loss of old entries, token-budget invariants, read path with and without embeddings, cross-category isolation/blackboard tests, citation lineage, idempotent async jobs, and a fixed article-fixture comparison of recall/quality/cost/latency. See M5 and C04 for local activation checks.
+Code integration requires failing regressions for verified bugs, memory-specific tests, token-budget invariants, read behavior with and without embeddings, cross-category isolation/blackboard coverage, citation lineage, idempotent jobs, and repository checks. Existing disposable migration tests remain normal code coverage; no active deployed database needs a migration rehearsal or backup/rollback evidence. After integration, continue the local activation sequence separately: scoped retrieval is already enabled in development; maintenance/synthesis follows, and optional inference-saving features wait for limited real-article comparisons. See M5 and C04 for the staged behavior checks.
 
 ## Corrective pass registration — 2026-10-29
 
-The implementation has undergone code and local-evidence review. One focused **C05 merge-readiness corrective** remains; later M5 staged feature activation is independent of the merge. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). These are *implementation plans, not completed fixes*.
+The implementation has undergone code and local-evidence review. C01–C05 merge-readiness correctives are complete; later M5 staged feature activation is independent of the merge. Detailed corrective overview: [editor memory corrective pass](editor_memory_corrective_pass_overview_20261029.md). Historical plan descriptions below are retained as the implementation record.
 
 | Corrective | Priority | Plan | Focus |
 | --- | --- | --- | --- |
@@ -80,21 +80,23 @@ The implementation has undergone code and local-evidence review. One focused **C
 | C04 | P0 operational | [CI baseline attribution and scoped checks](editor_memory_corrective_04_release_verification_20261029.md) | CI baseline and disposable checks documented; **no target deployed DB or migration evidence required for merge** | 
 | C05 | P0 merge | [Merge-readiness final corrective](editor_memory_c05_merge_readiness_20261030.md) | Suppress stale category summaries, final-HEAD tests/static checks, docs/registry cleanup and PR review handoff |
 
-**Current handoff:** C01–C03 and C04 CI attribution are already implemented/documented. Execute C05's stale-summary regression, final-HEAD checks and PR documentation closure next. Keep all V2 write/read/tools/maintenance/synthesis and optional optimization flags **disabled at merge**; later feature activation is independent. No target database migration evidence is requested.
+**Current handoff:** C01–C05 are implemented, verified and documented on the unified branch. PR #19 was already merged upstream; the stale-summary correction is a follow-up included in the unified branch. The development config enables scoped reads only. Writes, tools, maintenance, synthesis and optional optimization flags remain off. No target database migration evidence is requested.
 
-**Merge vs later activation:** C05 gates **merging disabled code**; it does not require a restored, migrated or benchmarked database. If features are later enabled, stage scoped retrieval first, maintenance/synthesis second, and optional inference-saving features only after limited real-article comparisons. All these gates currently default off.
+**Merge vs later activation:** C05 closed code integration and does not require a restored or migrated deployment database. If more features are later enabled, maintenance/synthesis follows scoped retrieval, and optional inference-saving features follow limited real-article comparisons. The current development config has scoped retrieval enabled; remaining gates are off.
 
 **Current CI:** GitHub Actions implementation SHA `f3aa498e`, runs `40928360912` (CI) and `40928361243` (Installer Smoke), failed. Logs indicate baseline Ruff findings, missing CI test secrets/`.env`, unavailable Redis in theme tests, Gitleaks API permission error, Werkzeug audit advisory, installer runner disk exhaustion, and a broken aarch64 launcher path. Root causes must be classified against `main` before attribution to the memory branch. The evidence file records 5,094 full-suite passes on an earlier code head and subsequent focused regression passes. C05 requires a fresh full-suite result at the final code HEAD. Classify inherited/unrelated CI jobs independently rather than blocking private memory work on the entire installer matrix. See C04.
 
-## Implementation evidence — 2026-10-29
+## Historical implementation evidence — 2026-10-29
 
-Implementation work is committed on `plan/editor-memory-blackboard-synthesis-20261029` as `f3aa498e4d0df40e16fc1b9c65f9c45c6103f636` (PR #19, still unmerged at corrective-pass review). M1 wiring, prompt/tool validation, structured final-artifact proposals, legacy retrieval bounds, schema/idempotency fixes and metrics are implemented. M2 provides the additive category store, evidence/scopes/lineage/summary schema, FTS5 with bounded lexical fallback, scoped context/search/get, backfill, and feature-flagged V2 reads. M3 adds lifecycle review/archive, evidence-grounded synthesis with persisted retry slots, shared-scope operator actions, diagnostics and a separately registered maintenance task. M4 adds independent rollback switches for deterministic prefiltering, conditional research/edit subagents, structured memory-candidate reuse and optional-call budgets. M5 adds a synthetic retrieval/trigger suite, read-only baseline script and migration/backfill rehearsal evidence. Details and limits are in [verification evidence](../docs/editor-memory-verification-20261029.md).
+This section records the original PR #19 review snapshot and is superseded by the current status and dated C05 closure evidence below.
+
+At the original corrective-pass review, implementation was committed on `plan/editor-memory-blackboard-synthesis-20261029` as `f3aa498e4d0df40e16fc1b9c65f9c45c6103f636`; PR #19 had not yet merged. M1 wiring, prompt/tool validation, structured final-artifact proposals, legacy retrieval bounds, schema/idempotency fixes and metrics were implemented. M2 provided the additive category store, evidence/scopes/lineage/summary schema, FTS5 with bounded lexical fallback, scoped context/search/get, backfill, and feature-flagged V2 reads. M3 added lifecycle review/archive, evidence-grounded synthesis with persisted retry slots, shared-scope operator actions, diagnostics and a separately registered maintenance task. M4 added independent rollback switches for deterministic prefiltering, conditional research/edit subagents, structured memory-candidate reuse and optional-call budgets. M5 added a synthetic retrieval/trigger suite, read-only baseline script and migration/backfill rehearsal evidence. Details and limits are in [verification evidence](../docs/editor-memory-verification-20261029.md).
 
 Verification on the final implementation worktree: full suite **5,074 passed, 6 skipped**; repository mypy **clean (507 source files)**; repository Ruff reports only the same five existing findings, with no new findings in changed code; `git diff --check` clean. A disposable synthetic SQLite/WAL upgrade reached revision 041 with integrity check `ok`, and repeated backfill was idempotent without deleting legacy rows. The local `instance/dev.db` is inconsistent with its Alembic revision and was not modified.
 
 **M1:** code and local regression gates are implemented and pass. Runtime provider-call and article-quality baselines remain deployment evidence.
 
-**M2:** additive migration, scoped retrieval, bounded context, restartable/provenance-preserving backfill and FTS shortlist filtering have local coverage. V2 reads remain disabled pending a target-database shadow retrieval comparison and backup/restore rehearsal.
+**M2 (at original review):** additive schema, scoped retrieval, bounded context, restartable/provenance-preserving backfill and FTS shortlist filtering had local coverage. V2 reads were then disabled. The current development config now enables scoped reads only; no target-database shadow retrieval or backup/restore evidence is required.
 
 **M3:** synthesis grounding/rejection/retry, conflicting lineage, persistent attempt caps, operator auth/CSRF/audit, and task registration have local coverage. Maintenance and synthesis remain disabled by default pending a scheduled no-change cycle and deployment canary.
 

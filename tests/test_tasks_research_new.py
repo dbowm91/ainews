@@ -25,6 +25,16 @@ def _retrieved_source():
     )
 
 
+def _search_outcome(results):
+    from services.search.evidence import SearchOutcome, SearchStatus
+
+    return SearchOutcome(
+        results=results,
+        status=SearchStatus.OK if results else SearchStatus.EMPTY,
+        provider_attempts=("duckduckgo",),
+    )
+
+
 def _make_brief(claims=None, impact_score=50):
     """Helper to build a ResearchBrief with mock claims that have .claim attr.
 
@@ -185,9 +195,6 @@ class TestPerformWebSearchAndSynthesis:
         mock_search_result.url = "https://example.com"
         mock_search_result.snippet = "Snippet"
 
-        mock_provider = MagicMock()
-        mock_provider.search.return_value = [mock_search_result]
-
         mock_stage_config = MagicMock()
         mock_stage_config.tools = []
 
@@ -198,7 +205,7 @@ class TestPerformWebSearchAndSynthesis:
 
         with (
             app.app_context(),
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.search.search_web_detailed", return_value=_search_outcome([mock_search_result])) as mock_search,
             patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
             patch("services.editorial_evidence.persist_dossier"),
             patch("extensions.db.session.commit", side_effect=lambda: call_order.append("commit")),
@@ -211,9 +218,10 @@ class TestPerformWebSearchAndSynthesis:
         assert len(results) == 1
         assert results[0]["title"] == "Result"
         assert synthesis == "synthesized"
-        assert mock_provider.search.call_count == 4
-        assert all(call.kwargs["max_results"] == 3 for call in mock_provider.search.call_args_list)
-        assert any("Test Title" in call.args[0] for call in mock_provider.search.call_args_list)
+        assert mock_search.call_count == 4
+        assert all(call.kwargs["max_results"] == 3 for call in mock_search.call_args_list)
+        assert all(call.kwargs["provider_id"] == "duckduckgo" for call in mock_search.call_args_list)
+        assert any("Test Title" in call.args[0] for call in mock_search.call_args_list)
         assert call_order == ["commit", "synthesis"]
 
     def test_uses_default_search_when_no_provider(self, app):
@@ -245,7 +253,7 @@ class TestPerformWebSearchAndSynthesis:
 
         with (
             app.app_context(),
-            patch("services.search.search_web", return_value=[mock_search_result]),
+            patch("services.search.search_web_detailed", return_value=_search_outcome([mock_search_result])),
             patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
             patch("services.editorial_evidence.persist_dossier"),
             patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
@@ -269,12 +277,9 @@ class TestPerformWebSearchAndSynthesis:
         rc.web_search_provider = "duckduckgo"
         rc.web_search_max_results = 5
 
-        mock_provider = MagicMock()
-        mock_provider.search.return_value = []
-
         with (
             app.app_context(),
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.search.search_web_detailed", return_value=_search_outcome([])),
             patch("services.editorial_evidence.persist_dossier"),
         ):
             results, synthesis = _perform_web_search_and_synthesis(article, rc)
@@ -302,9 +307,6 @@ class TestPerformWebSearchAndSynthesis:
         mock_search_result.url = "https://x.com"
         mock_search_result.snippet = "s"
 
-        mock_provider = MagicMock()
-        mock_provider.search.return_value = [mock_search_result]
-
         mock_stage_config = MagicMock()
         mock_stage_config.tools = ["tool1"]
 
@@ -314,7 +316,7 @@ class TestPerformWebSearchAndSynthesis:
 
         with (
             app.app_context(),
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.search.search_web_detailed", return_value=_search_outcome([mock_search_result])),
             patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
             patch("services.editorial_evidence.persist_dossier"),
             patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),
@@ -346,9 +348,6 @@ class TestPerformWebSearchAndSynthesis:
         mock_search_result.url = "https://x.com"
         mock_search_result.snippet = "s"
 
-        mock_provider = MagicMock()
-        mock_provider.search.return_value = [mock_search_result]
-
         mock_stage_config = MagicMock()
         mock_stage_config.tools = []
 
@@ -358,7 +357,7 @@ class TestPerformWebSearchAndSynthesis:
 
         with (
             app.app_context(),
-            patch("services.search.get_search_provider", return_value=mock_provider),
+            patch("services.search.search_web_detailed", return_value=_search_outcome([mock_search_result])),
             patch("services.editorial_evidence.retrieve_search_candidates", return_value=[_retrieved_source()]),
             patch("services.editorial_evidence.persist_dossier"),
             patch("services.optional_llm_budget.reserve_optional_llm_call", return_value=True),

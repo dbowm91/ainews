@@ -47,6 +47,9 @@ dependencies = [
 ainews = "ainews_cli.main:app"
 
 [project.optional-dependencies]
+eggsearch = [
+    "eggsearch==0.4.4",
+]
 dev = [
     "pytest>=9.0.3,<10",
     "pytest-cov>=4.0,<5",

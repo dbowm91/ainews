@@ -1,0 +1,10 @@
+# Known test-only placeholder credentials in historical commits.
+# Each entry is a pinned Gitleaks fingerprint; changed content or locations
+# will still be scanned as new findings.
+60fd18eda3a5e8852943e70bf32d4f957dbb3ff5:tests/test_tasks_edit_new.py:generic-api-key:541
+60fd18eda3a5e8852943e70bf32d4f957dbb3ff5:tests/test_tasks_research_new.py:generic-api-key:666
+9e07a0ac3f4d9bd8088dba73090994f956195bac:tests/test_provider_adapters.py:generic-api-key:31
+fc199e3bee4344fc360e9a2c621bcfc4e14a13dc:tests/test_theme_packaging.py:generic-api-key:295
+fc199e3bee4344fc360e9a2c621bcfc4e14a13dc:tests/test_theme_packaging.py:generic-api-key:298
+7c5bef346f83e9da448587488359145542702bcc:tests/test_smoke_celery.py:generic-api-key:16
+f072138a9a43e570497dc22e1b9a35fc17aecfc2:tests/test_csrf_admin_api.py:generic-api-key:79

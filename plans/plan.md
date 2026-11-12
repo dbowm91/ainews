@@ -1,5 +1,11 @@
 # Master Implementation Plan (Consolidated)
 
+## Active Plan Registry — Optional Eggsearch Retrieval (2026-10-28)
+
+**Status:** Adapter, typed outcomes, optional packaging, fallback controls, and focused tests are integrated; Eggsearch remains disabled and DuckDuckGo remains the default. Linux wheel CI, full PR CI, broader comparison, and canary/rollback qualification remain open.
+**Roadmap:** [Eggsearch retrieval roadmap](eggsearch_web_retrieval_roadmap.md).
+**Qualification record:** [Eggsearch retrieval qualification](../docs/eggsearch-retrieval-qualification.md).
+
 **Status:** Evidence-first article synthesis E01–E05 complete; E06 local implementation and validation complete; provider-backed comparison pending. Existing historical workstream statuses are retained below.
 **Last Updated:** 2026-11-02 (reconciled with origin/main; historical workstreams retained)
 **Goal:** Track active workstreams for the personal/local or privately operated AInews instance while preserving historical completed security, quality and operational work. No public-release program is implied.

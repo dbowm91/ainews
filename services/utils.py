@@ -3,6 +3,8 @@ import logging
 import re
 from typing import Any, Optional
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
 # Simple but effective email pattern - catches common mistakes
@@ -54,11 +56,19 @@ def parse_article_headline(
 
 
 def get_admin_categories() -> list[str]:
-    """Get category names from pipeline config, with fallback."""
+    """Get category names from the topic config, with a safe fallback."""
     try:
         from schemas.topic import load_topics
 
         return list(load_topics().topics.keys())
-    except (ImportError, AttributeError, KeyError) as e:
+    except (
+        ImportError,
+        AttributeError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        yaml.YAMLError,
+    ) as e:
         logger.debug("Failed to load topics from config, using fallback: %s", e)
         return ["ai", "privacy", "security", "programming", "hardware"]

@@ -13,6 +13,14 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 admin_api_bp = Blueprint("admin_api", __name__, url_prefix="/api/v1")
 
 
+@admin_bp.app_context_processor
+def _admin_navigation_context() -> dict[str, list[str]]:
+    """Expose the public topic navigation while rendering admin pages."""
+    from services.utils import get_admin_categories
+
+    return {"categories": get_admin_categories()}
+
+
 def verify_api_token(token_str):
     """Verify an API token and return True if valid.
 

@@ -61,42 +61,49 @@
   <a href="#content" class="skip-link">Skip to content</a>
   <header class="admin-header">
     <nav class="nav">
-      <a href="/admin/" class="logo">ainews<span class="logo-slash">//</span> admin</a>
+      <a href="/" class="logo">ainews<span class="logo-slash">//</span></a>
       <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox" hidden>
       <label for="nav-toggle" class="nav-toggle-label" role="button" tabindex="0"
-             aria-controls="admin-nav-links" aria-label="Toggle navigation" aria-expanded="false">
+             aria-controls="site-nav-links" aria-label="Toggle navigation" aria-expanded="false">
         <span></span>
       </label>
-      <div class="nav-links" id="admin-nav-links">
-        <a href="/" hx-boost="false" {% if request.path == '/' %}class="active"{% endif %}>public site</a>
-        <a href="/admin/" {% if request.path == '/admin/' %}class="active"{% endif %}>dashboard</a>
-        <a href="/admin/pipelines" {% if request.path.startswith('/admin/pipelines') %}class="active"{% endif %}>pipelines</a>
-        <a href="/admin/review" {% if request.path == '/admin/review' %}class="active"{% endif %}>review</a>
-        <a href="/admin/articles" {% if request.path.startswith('/admin/articles') %}class="active"{% endif %}>articles</a>
-        <a href="/admin/newsletters" {% if request.path.startswith('/admin/newsletters') %}class="active"{% endif %}>newsletters</a>
-        <a href="/admin/metrics" {% if request.path.startswith('/admin/metrics') %}class="active"{% endif %}>metrics</a>
-        <a href="/admin/subscribers" {% if request.path.startswith('/admin/subscribers') %}class="active"{% endif %}>subscribers</a>
-        <a href="/admin/shares" {% if request.path.startswith('/admin/shares') %}class="active"{% endif %}>shares</a>
-        <a href="/admin/trend-memory" {% if request.path.startswith('/admin/trend-memory') %}class="active"{% endif %}>trend memory</a>
+      <div class="nav-links" id="site-nav-links">
+        {% for cat in categories if categories is defined %}
+          <a href="/topic/{{ cat }}"
+             {% if request.path == '/topic/' + cat %}class="active"{% endif %}>{{ cat }}</a>
+        {% endfor %}
+        <a href="/feed" class="rss-link" title="RSS feed" hx-boost="false">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+        </a>
         {% include "partials/theme_selector.html" %}
       </div>
+      <div class="nav-meta">
+        <span class="nav-tag">condensed by agents</span>
+      </div>
     </nav>
-    {# The primary nav scrolls horizontally with a hidden scrollbar, so the
-       remaining admin sections live in a second, always visible row. #}
+    {# Admin navigation stays visible on every authenticated admin page while
+       public topics remain in the same primary row as the public site. #}
     <nav class="admin-subnav" aria-label="Admin sections">
+      <a href="/admin/" {% if request.path == '/admin/' %}class="active"{% endif %}>dashboard</a>
+      <a href="/admin/pipelines" {% if request.path.startswith('/admin/pipelines') %}class="active"{% endif %}>pipelines</a>
+      <a href="/admin/review" {% if request.path == '/admin/review' %}class="active"{% endif %}>review</a>
+      <a href="/admin/articles" {% if request.path.startswith('/admin/articles') %}class="active"{% endif %}>articles</a>
+      <a href="/admin/newsletters" {% if request.path.startswith('/admin/newsletters') %}class="active"{% endif %}>newsletters</a>
+      <a href="/admin/metrics" {% if request.path.startswith('/admin/metrics') %}class="active"{% endif %}>metrics</a>
+      <a href="/admin/subscribers" {% if request.path.startswith('/admin/subscribers') %}class="active"{% endif %}>subscribers</a>
+      <a href="/admin/shares" {% if request.path.startswith('/admin/shares') %}class="active"{% endif %}>shares</a>
+      <a href="/admin/trend-memory" {% if request.path.startswith('/admin/trend-memory') %}class="active"{% endif %}>trend memory</a>
       <a href="/admin/sources" {% if request.path.startswith('/admin/sources') %}class="active"{% endif %}>sources</a>
       <a href="/admin/topic-notes" {% if request.path.startswith('/admin/topic-notes') %}class="active"{% endif %}>topic notes</a>
       <a href="/admin/webhooks" {% if request.path.startswith('/admin/webhooks') %}class="active"{% endif %}>webhooks</a>
       <a href="/admin/dead-letters" {% if request.path.startswith('/admin/dead-letters') %}class="active"{% endif %}>dead letters</a>
       <a href="/admin/pipeline-audit" {% if request.path.startswith('/admin/pipeline-audit') or '/audit' in request.path %}class="active"{% endif %}>pipeline audit</a>
       <a href="/admin/settings" {% if request.path.startswith('/admin/settings') %}class="active"{% endif %}>settings</a>
-    </nav>
-    <div class="nav-logout">
       <form method="POST" action="/admin/logout" class="inline" hx-boost="false">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn-logout">logout</button>
       </form>
-    </div>
+    </nav>
   </header>
 
   <main class="container">

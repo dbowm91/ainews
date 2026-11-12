@@ -153,11 +153,11 @@ class TestTransparentSurfaces:
 class TestAdminNavigation:
     """Every admin section stays reachable."""
 
-    def test_the_header_is_two_rows(self):
-        pages = _read("pages.css")
-        assert "grid-template-areas:" in pages
-        assert '"nav     logout"' in pages
-        assert '"subnav  subnav"' in pages
+    def test_the_header_has_public_and_admin_navigation_rows(self):
+        template = (ROOT / "templates/base_admin.html").read_text()
+        assert '<div class="nav-links" id="site-nav-links">' in template
+        assert '<nav class="admin-subnav" aria-label="Admin sections">' in template
+        assert 'href="/topic/{{ cat }}"' in template
 
     def test_the_second_row_wraps_instead_of_scrolling(self):
         body = _rule_body(_read("pages.css"), ".admin-subnav")
@@ -165,7 +165,9 @@ class TestAdminNavigation:
         assert "flex-wrap: wrap" in body
         assert "overflow-x: auto" not in body
 
-    def test_the_primary_nav_wraps_on_a_wide_screen(self):
+    def test_the_admin_sections_wrap_without_a_hidden_scroller(self):
         pages = _read("pages.css")
-        assert "@media (min-width: 769px)" in pages
-        assert "overflow-x: visible" in pages
+        body = _rule_body(pages, ".admin-subnav")
+        assert body is not None
+        assert "overflow-x: visible" in body
+        assert "flex-wrap: wrap" in body

@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = REPO_ROOT / "templates"
@@ -112,6 +113,42 @@ class TestAdminPagesRender:
             f"{path} answered {response.status_code}: "
             f"{response.get_data(as_text=True)[:200]}"
         )
+
+    def test_admin_header_renders_public_topic_navigation(self, auth_client):
+        from schemas.topic import load_topics
+
+        response = auth_client.get("/admin/")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        for topic in load_topics().topics:
+            assert f'href="/topic/{topic}"' in html
+        assert 'aria-label="Admin sections"' in html
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            OSError("topics file is unreadable"),
+            ValueError("topics config is invalid"),
+            yaml.YAMLError("topics file is malformed"),
+        ],
+    )
+    def test_admin_categories_fall_back_when_topic_config_cannot_load(
+        self, monkeypatch, error
+    ):
+        from schemas import topic
+        from services.utils import get_admin_categories
+
+        def fail_to_load_topics():
+            raise error
+
+        monkeypatch.setattr(topic, "load_topics", fail_to_load_topics)
+        assert get_admin_categories() == [
+            "ai",
+            "privacy",
+            "security",
+            "programming",
+            "hardware",
+        ]
 
 
 class TestAdminDeadLetters:

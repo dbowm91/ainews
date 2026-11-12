@@ -153,7 +153,7 @@ class TestTransparentSurfaces:
 class TestAdminNavigation:
     """Every admin section stays reachable."""
 
-    def test_the_header_is_two_rows(self):
+    def test_the_header_reuses_public_navigation_and_keeps_admin_sections_separate(self):
         template = (ROOT / "templates" / "base_admin.html").read_text()
         header = re.search(r'<header class="admin-header">(.*?)</header>', template, re.DOTALL)
         assert header is not None
@@ -161,12 +161,16 @@ class TestAdminNavigation:
         primary_nav = contents.index('<nav class="nav">')
         admin_nav = contents.index('<nav class="admin-subnav"')
         assert primary_nav < admin_nav
+        assert '<div class="nav-links" id="site-nav-links">' in template
+        assert '<nav class="admin-subnav" aria-label="Admin sections">' in template
+        assert 'href="/topic/{{ cat }}"' in template
 
     def test_the_second_row_wraps_instead_of_scrolling(self):
         body = _rule_body(_read("pages.css"), ".admin-subnav")
         assert body is not None
         assert "flex-wrap: wrap" in body
         assert "overflow-x: auto" not in body
+        assert "overflow-x: visible" in body
 
     def test_the_primary_nav_uses_available_width(self):
         body = _rule_body(_read("critical.css"), ".nav-links")

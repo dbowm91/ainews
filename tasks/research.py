@@ -64,18 +64,29 @@ def _perform_web_search_and_synthesis(article, rc):
 
     max_results = min(5, max(1, rc.web_search_max_results or 5))
     queries = build_research_queries(article.original_title or "", article.topics or [])
+    from services.search import search_web_detailed
+
     search_results = []
-    if rc.web_search_provider:
-        from services.search import get_search_provider
-
-        search_prov = get_search_provider(rc.web_search_provider)
-        for query in queries:
-            search_results.extend(search_prov.search(query, max_results=max_results))
-    else:
-        from services.search import search_web
-
-        for query in queries:
-            search_results.extend(search_web(query, max_results=max_results))
+    for query in queries:
+        outcome = search_web_detailed(
+            query,
+            max_results=max_results,
+            provider_id=rc.web_search_provider or None,
+        )
+        logger.info(
+            "Research web search completed",
+            extra={
+                "article_id": article.id,
+                "search_status": outcome.status.value,
+                "search_provider_attempts": outcome.provider_attempts,
+                "search_fallback_used": outcome.fallback_used,
+                "search_deadline_exceeded": outcome.deadline_exceeded,
+                "search_failure_classes": outcome.provider_failures,
+                "search_warning_codes": outcome.warnings,
+                "search_capabilities": outcome.enforced_capabilities,
+            },
+        )
+        search_results.extend(outcome.results)
 
     # Clustered feed entries are discovery candidates only; retrieve their
     # pages again through the safe evidence path before using any content.

@@ -99,7 +99,7 @@ def _load_patterns() -> dict[str, list[str]]:
             ttl=300,
         )
         return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - cache failures must fall back to file
         logger.debug("Config cache failed for trend patterns: %s", e)
         return _load_patterns_from_file()
 

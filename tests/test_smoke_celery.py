@@ -33,9 +33,10 @@ class TestCeleryAppImports:
 
 class TestCeleryAppHasTasks:
     def test_expected_tasks_registered(self):
-        import tasks  # noqa: F401 — triggers shared_task registration
-
         celery_app = _import_celery_app()
+        # Exercise the worker's normal loader path; tests must not import tasks
+        # manually or they can hide missing worker task-discovery configuration.
+        celery_app.loader.import_default_modules()
         task_names = set(celery_app.tasks.keys())
         expected = [
             "tasks.select.select_article",

@@ -168,8 +168,15 @@ search_providers:
   enabled: false
   config:
     host: http://localhost:8888
+- id: eggsearch
+  type: eggsearch
+  enabled: false
+  config:
+    config_path: null
 - id: hybrid
   type: hybrid
   enabled: true
   config: {}
 default_search_provider: duckduckgo
+search_runtime_fallback_providers: []
+search_runtime_deadline_seconds: 20

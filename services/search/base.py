@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 from services.provider_base import BaseProvider, ProviderManager
@@ -13,6 +13,7 @@ class SearchResult:
     url: str
     snippet: str
     source: str = ""
+    metadata: dict = field(default_factory=dict)
 
 
 class BaseSearchProvider(BaseProvider, abc.ABC):

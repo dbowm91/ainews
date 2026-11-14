@@ -1,32 +1,24 @@
 # Onboarding
 
-The `ainews onboard` command provides a guided first-run setup for new installations. It walks through deployment profile selection, secret generation, LLM provider configuration, pipeline tuning, and optional service start.
+`ainews onboard` provides an interactive or bootstrap-file workflow for collecting and validating deployment choices. **It does not currently write the staged environment or YAML configuration, apply migrations, start services, or verify service health.** A successful summary means the selections passed the onboarding checks, not that the installation is ready to run. Use [Configuration](configuration.md) to apply settings and [Deployment](deployment.md) to start services.
 
 ## Modes
 
-### Interactive (default)
+### Interactive
 
 ```bash
 ainews onboard
 ```
 
-Prompts for each decision with sensible defaults. State is saved after each stage, so interrupted onboarding can be resumed.
+Prompts for deployment, administrator, provider, pipeline, and source choices. The command records stage status and failure details in `onboarding-state.json`, but a later invocation starts from the first stage rather than resuming the saved stage list.
 
-### Non-interactive (declarative)
-
-```bash
-ainews onboard --non-interactive --config-file bootstrap.yaml
-```
-
-Requires a bootstrap YAML file. All values come from the file and environment — no prompts. Add `--start` to start services after completion.
-
-### Dry-run
+### Bootstrap file
 
 ```bash
-ainews onboard --dry-run
+ainews onboard --non-interactive --config-file bootstrap.yaml --dry-run
 ```
 
-Validates configuration without writing any files. Useful for verifying a bootstrap file before deployment.
+Bootstrap files use schema version `1`. Dry-run validates the file and summarizes the selected values without writing configuration. Without `--dry-run`, the command records onboarding state and install metadata, but still does not apply the staged environment or YAML values. `--start` is accepted but service startup is deferred.
 
 ### Reset
 
@@ -34,61 +26,48 @@ Validates configuration without writing any files. Useful for verifying a bootst
 ainews onboard --reset
 ```
 
-Erases all onboarding progress and starts fresh.
+After confirmation, this removes onboarding progress only. It does not delete or change application configuration, data, or services.
 
-## Onboarding Stages
+## Workflow stages
 
-The onboarding pipeline executes 16 stages in order:
+The CLI iterates through these 16 stages:
 
-| # | Stage | Description |
-|---|-------|-------------|
-| 1 | `resolve_paths` | Resolve configuration and data directory paths |
-| 2 | `select_deployment_profile` | Choose deployment target (docker-local, bare-metal, etc.) |
-| 3 | `initialize_directories` | Create config and data directories |
-| 4 | `configure_admin` | Set admin username and password |
-| 5 | `generate_secrets` | Generate SECRET_KEY and CELERY_TASK_SECRET |
-| 6 | `configure_database_and_redis` | Set database and Redis URLs |
-| 7 | `configure_provider` | Configure LLM provider connection |
-| 8 | `select_models` | Choose default models for pipeline roles |
-| 9 | `select_pipeline_profile` | Apply pipeline configuration profile |
-| 10 | `select_source_profile` | Apply source and topic configuration |
-| 11 | `configure_optional_newsletter` | Optionally enable newsletter |
-| 12 | `validate_staged_configuration` | Cross-file validation of all staged config |
-| 13 | `apply_database_migrations` | Run Alembic migrations |
-| 14 | `optionally_start` | Start services if requested |
-| 15 | `verify_health` | Verify service health endpoint |
-| 16 | `write_completion_record` | Write install metadata |
+| # | Stage | Current behavior |
+|---|---|---|
+| 1 | `resolve_paths` | Records configuration and install paths |
+| 2 | `select_deployment_profile` | Selects profile defaults in memory |
+| 3 | `initialize_directories` | Creates the configuration and install directories |
+| 4 | `configure_admin` | Validates and hashes the administrator password in memory |
+| 5 | `generate_secrets` | Generates application secrets in memory |
+| 6 | `configure_database_and_redis` | Records database and Redis URLs in memory |
+| 7 | `configure_provider` | Records one provider definition in memory |
+| 8 | `select_models` | Records the default model; no live model discovery is performed |
+| 9 | `select_pipeline_profile` | Records a pipeline profile in memory |
+| 10 | `select_source_profile` | Records a source profile in memory |
+| 11 | `configure_optional_newsletter` | Records the newsletter choice |
+| 12 | `validate_staged_configuration` | Validates the staged values across files |
+| 13 | `apply_database_migrations` | Defers migrations to service start |
+| 14 | `optionally_start` | Defers service startup |
+| 15 | `verify_health` | Defers health checks to service start |
+| 16 | `write_completion_record` | Writes `install-metadata.json`, not the staged configuration |
 
-Stages are tracked in `onboarding-state.json`. Failed stages record `last_failure_code` and `last_failure_message` for diagnosis.
+The state file records completed stages and failure details. It does not contain passwords or generated secret values. The CLI currently does not load that saved state when starting a new onboarding invocation.
 
-## Deployment Profiles
+## Deployment profiles
 
-| Profile | Description | Docker Required |
-|---------|-------------|-----------------|
-| `docker-local` | Docker Compose on localhost — development and single-machine demo | Yes |
-| `docker-lan` | Docker Compose exposed on LAN — internal network access | Yes |
-| `reverse-proxy` | Behind nginx/Caddy — production deployments with TLS termination | Yes |
-| `bare-metal` | No Docker, foreground commands via process manager | No |
-| `custom` | Full control — prompts for all values | No |
+| Profile | Description | Docker required |
+|---|---|---|
+| `docker-local` | Compose on localhost for development or a single-machine demo | Yes |
+| `docker-lan` | Compose exposed on a LAN; warns that traffic is unencrypted | Yes |
+| `reverse-proxy` | Compose behind a TLS-terminating proxy | Yes |
+| `bare-metal` | Foreground services on a host or VM | No |
+| `custom` | Prompts for deployment values | No |
 
-Each profile sets environment variable defaults:
-- `FLASK_CONFIG` (development for docker-local, production for others)
-- `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` (Docker service names vs localhost)
-- `DATABASE_URL` (SQLite path)
-- `AINEWS_RUNNING_IN_DOCKER` (set to `1` for Docker profiles)
+Profiles provide suggested `FLASK_CONFIG`, Redis URLs, database URL, and Docker environment defaults. The Compose file can override these values. The `reverse-proxy` profile asks for a site URL and trusted proxy settings. The `bare-metal` profile does not install systemd units; use the service CLI for that.
 
-### Docker Networking Notes
+## Bootstrap YAML
 
-- **docker-local**: Services communicate via Docker network. Redis host is `redis`.
-- **docker-lan**: Same as docker-local but warns about unencrypted traffic.
-- **reverse-proxy**: Requires TLS termination in front. Prompts for `site_url` and `trusted_proxies`.
-- **bare-metal**: Uses localhost for all services. Requires Redis running locally.
-
-## Bootstrap YAML Schema
-
-The bootstrap file enables unattended setup. Schema version: `1`.
-
-### Full Example
+This example shows the accepted schema. It is not a completed deployment recipe because onboarding currently stages but does not apply these values.
 
 ```yaml
 version: 1
@@ -107,7 +86,7 @@ provider:
   id: ollama-local
   base_url: http://localhost:11434/v1
   api_key_env: ""
-  default_model: auto
+  default_model: qwen3:8b
 
 pipeline:
   profile: balanced
@@ -118,115 +97,64 @@ sources:
 newsletter:
   enabled: false
 
-start: true
+start: false
 ```
 
-### Validation Rules
+Validation rules:
 
-- **Schema version**: Must be `1`
-- **Admin password**: Use `password_env` (env var name) or `password_file` (path). Embedded passwords are rejected.
-- **Sensitive patterns**: Values matching `SECRET_KEY`, `CELERY_TASK_SECRET`, `ADMIN_PASSWORD`, or `SMTP_PASSWORD` must use `${ENV_VAR}` references.
-- **Profile names**: Must be one of the known profiles (see tables above).
-- **Port**: Must be an integer between 1 and 65535.
+- `version` must be `1`.
+- Set an administrator password with `password_env` or `password_file`. Inline passwords are rejected.
+- Sensitive values must be supplied through environment references or password files, not embedded in YAML.
+- Profile names must match the supported values below.
+- Deployment port must be between 1 and 65535.
 
-### Environment Variable References
-
-Use `${VAR_NAME}` syntax to reference environment variables:
-
-```yaml
-admin:
-  password_env: ADMIN_PASSWORD  # reads $ADMIN_PASSWORD at runtime
-```
+Validate a file without writing configuration:
 
 ```bash
-export ADMIN_PASSWORD="my-secure-password"
-ainews onboard --non-interactive --config-file bootstrap.yaml
+export ADMIN_PASSWORD='use-a-strong-password'
+ainews onboard --non-interactive --config-file bootstrap.yaml --dry-run
 ```
 
-## Provider Setup
+The onboarding password policy requires at least 8 characters and rejects common placeholder passwords. The standalone `scripts/hash_password.py` helper has a stricter policy; see [Configuration](configuration.md#generate-a-hashed-admin-password).
 
-The onboarding wizard configures one LLM provider. The provider adapter handles endpoint normalization, credential validation, and model discovery.
+## Pipeline profiles
 
-### Adapter Types
+| Profile | Concurrency | Token limits by role | Subagents | Crawl interval |
+|---|---|---|---|---|
+| `lightweight-local` | 1 per role | Selector 512; others 4096 | Disabled | 60 min |
+| `balanced` | 2 per role | Selector 512; others 4096 to 8192 | Unchanged | 30 min |
+| `quality` | 1 to 2 per role | Selector 512; others 8192 to 16384 | Enabled | 30 min |
+| `low-cost` | 1 per role | Selector 512; others 2048 | Disabled | 60 min |
+| `custom` | Current values | Current values | Current values | Current value |
 
-| Type | Auth | Default Endpoint | Notes |
-|------|------|------------------|-------|
-| `ollama` | None | `http://localhost:11434/v1` | Local inference only |
-| `openai` | API key | `https://api.openai.com/v1` | Cloud API |
-| `anthropic` | API key | `https://api.anthropic.com` | Cloud API |
-| `gemini` | API key | `https://generativelanguage.googleapis.com` | Cloud API |
-| `eggpool` | API key | Custom | Managed inference |
-| `generic` | Optional | Custom | Any OpenAI-compatible endpoint |
+These values are recorded by onboarding but are not written to `pipeline.yaml`.
 
-### Model Discovery
+## Source profiles
 
-After provider configuration, the wizard discovers available models:
-- **Ollama**: Queries `/api/tags` for locally pulled models
-- **OpenAI/Anthropic/Gemini**: Lists models from the API
-- **Generic**: Falls back to configured defaults
+| Profile | Sources | Topics | Note |
+|---|---:|---:|---|
+| `minimal` | 1 | 1 | Uses `blog.example.com`; replace this placeholder with a real public feed |
+| `ai-general` | 4 | 2 | OpenAI, Google, Hugging Face, and arXiv feeds |
+| `ai-security` | 2 | 2 | Alignment Forum and Anthropic feeds |
+| `comprehensive` | 6 | 3 | Broader AI, research, and safety coverage |
+| `existing-defaults` | Existing | Existing | Requests no source changes; the current workflow does not load existing values |
+| `custom` | 0 | 0 | Starts with empty source and topic values |
 
-Models are assigned to pipeline roles (selector, researcher, writer, editor) based on the selected pipeline profile.
+The source profiles are staged in memory and do not replace `sources.yaml` or `topics.yaml`.
 
-## Pipeline Profiles
+## Provider and secret handling
 
-| Profile | Concurrency | Token Limits | Subagents | Crawl Interval |
-|---------|------------|--------------|-----------|----------------|
-| `lightweight-local` | 1 per role | 2K-4K | Disabled | 60 min |
-| `balanced` | 2 per role | 2K-8K | Enabled | 30 min |
-| `quality` | 1-2 per role | 4K-16K | Enabled | 30 min |
-| `low-cost` | 1 per role | 1K-2K | Disabled | 60 min |
-| `custom` | User-defined | User-defined | User-defined | User-defined |
+The workflow accepts Ollama, OpenAI, Anthropic, Gemini, EggPool, and generic OpenAI-compatible providers. It records one provider configuration but does not perform live model discovery or write `providers.yaml`.
 
-## Source Profiles
+Application secrets are generated in memory. Administrator passwords are hashed with Werkzeug and are not written to `.env` by onboarding. The state file stores stage metadata and profile identifiers only, not secret values. Configure the values in `.env` and the YAML files using [Configuration](configuration.md).
 
-| Profile | Sources | Topics |
-|---------|---------|--------|
-| `minimal` | 1 feed | 1 topic |
-| `ai-general` | 4 feeds (OpenAI, Google, HuggingFace, arXiv) | 2 topics |
-| `ai-security` | 2 feeds (Alignment Forum, Anthropic) | 2 topics |
-| `comprehensive` | 6 feeds | 3 topics |
-| `existing-defaults` | Preserve existing | Preserve existing |
-| `custom` | Empty | Empty |
+## Reconfiguration and troubleshooting
 
-## Secret Handling
+Use `ainews config set`, `ainews config unset`, or edit the appropriate YAML file for targeted changes. Validate with:
 
-- **Generation**: `SECRET_KEY` and `CELERY_TASK_SECRET` are generated as 64-char hex strings
-- **Admin password**: Hashed with werkzeug `generate_password_hash()` (pbkdf2:sha256)
-- **Password policy**: Minimum 8 characters, no known placeholder values
-- **Non-interactive**: Passwords read from env vars (`password_env`) or files (`password_file`)
-- **No embedded secrets**: Bootstrap validation rejects inline secret values
-- **Not persisted in state**: Secrets (passwords, keys) are never written to `onboarding-state.json`. State tracks stage completion and failure metadata only — secret values are written directly to config files and never stored in the resume state.
+```bash
+ainews config check
+ainews config check --production
+```
 
-## Reconfiguration
-
-To reconfigure an existing installation:
-
-1. **Re-run onboarding**: `ainews onboard` — detects existing state and resumes from incomplete stages
-2. **Reset first**: `ainews onboard --reset` then `ainews onboard` — starts fresh
-3. **Targeted changes**: Use `ainews config set/unset` for individual values
-
-## Troubleshooting
-
-### Onboarding failed at stage X
-
-Check `onboarding-state.json` in the config directory for `last_failure_code` and `last_failure_message`. Common issues:
-- `MISSING_INPUT`: Required value not provided in non-interactive mode
-- `INVALID_PROFILE`: Unknown profile name
-- `VALIDATION_FAILED`: Cross-file configuration errors
-- `IO_ERROR`: Permission denied on config directory
-
-### Bootstrap validation errors
-
-Run `ainews onboard --config-file bootstrap.yaml --dry-run` to see validation errors without writing files.
-
-### Resuming after interruption
-
-Onboarding state is saved after each stage. Re-run `ainews onboard` to resume from the last incomplete stage.
-
-### Provider probe failed
-
-The probe checks connectivity but doesn't block onboarding. Use `ainews providers-test <ID>` after onboarding to diagnose. Common causes:
-- Wrong endpoint URL
-- Missing API key
-- Network/firewall blocking access
-- Ollama not running (for local inference)
+`onboarding-state.json` contains the last recorded failure code and message. Common codes include `MISSING_INPUT`, `INVALID_PROFILE`, `VALIDATION_FAILED`, and `IO_ERROR`. A new `ainews onboard` invocation starts a fresh in-memory workflow; it does not resume from the state file.

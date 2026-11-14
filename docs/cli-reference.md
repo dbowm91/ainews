@@ -4,15 +4,17 @@ The `ainews` operator CLI provides configuration management and system diagnosti
 
 ## Installation
 
+Python 3.12 or newer is required. From a source checkout, install the project and its dependencies with:
+
 ```bash
-pip install -e .
+uv sync
 ```
 
-This registers the `ainews` console command via `pyproject.toml` `[project.scripts]`.
+This creates the environment and registers the `ainews` command in `.venv/bin/`.
 
 ## Installer
 
-The one-liner installer downloads and installs pre-built release artifacts. It does **not** configure the application — delegate to `ainews onboard` afterward.
+The installer downloads and installs prebuilt release artifacts. It can invoke `ainews onboard`, but onboarding currently stages and validates values without applying them. Complete configuration manually using [Configuration](configuration.md) before starting services.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dbowm91/ainews/main/scripts/install.sh | bash
@@ -67,14 +69,14 @@ curl -fsSL https://raw.githubusercontent.com/dbowm91/ainews/main/scripts/install
 Show package version, Python version, and git commit (when available).
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **JSON fields:**
-- `version` — Package version (from `importlib.metadata`)
-- `python` — Python interpreter version
-- `git` — Short git commit hash (omitted when not in a repo)
-- `config_schema` — Field registry schema version (e.g. `1.0.80`)
-- `install_channel` — `stable`, `prerelease`, `main`, or `development` (when no install metadata exists)
+- `version`: Package version (from `importlib.metadata`)
+- `python`: Python interpreter version
+- `git`: Short git commit hash (omitted when not in a repo)
+- `config_schema`: Field registry schema version (e.g. `1.0.80`)
+- `install_channel`: `stable`, `prerelease`, `main`, or `development` (when no install metadata exists)
 
 ---
 
@@ -85,11 +87,11 @@ Show all resolved configuration paths with provenance, existence, and writabilit
 **Output:** Table with columns: Path, Provenance, Exists, Writable.
 
 **Provenance values:**
-- `explicit` — CLI option override
-- `environment` — Environment variable
-- `install_metadata` — Install metadata file
-- `platform_default` — OS canonical location
-- `development` — Repository-local fallback
+- `explicit`: CLI option override
+- `environment`: Environment variable
+- `install_metadata`: Install metadata file
+- `platform_default`: OS canonical location
+- `development`: Repository-local fallback
 
 ---
 
@@ -98,7 +100,7 @@ Show all resolved configuration paths with provenance, existence, and writabilit
 Show effective configuration values grouped by file. Secrets are redacted by default.
 
 **Options:**
-- `--show-secrets` — Reveal secret values (unsafe, not recommended)
+- `--show-secrets`: Reveal secret values (unsafe, not recommended)
 
 ---
 
@@ -107,12 +109,12 @@ Show effective configuration values grouped by file. Secrets are redacted by def
 Run offline syntax, schema, semantic, and production-policy validation.
 
 **Options:**
-- `--production` — Include production-specific checks
-- `--json` — Machine-readable output
+- `--production`: Include production-specific checks
+- `--json`: Machine-readable output
 
 **Exit codes:**
-- `0` — All checks passed
-- `3` — Validation errors found
+- `0`: All checks passed
+- `3`: Validation errors found
 
 ---
 
@@ -121,11 +123,11 @@ Run offline syntax, schema, semantic, and production-policy validation.
 Return a typed value by dotted key. Secrets are redacted.
 
 **Arguments:**
-- `KEY` — Configuration key in dotted notation (e.g., `pipeline.writer.model`)
+- `KEY`: Configuration key in dotted notation (e.g., `pipeline.writer.model`)
 
 **Exit codes:**
-- `0` — Value found and displayed
-- `5` — Key not found
+- `0`: Value found and displayed
+- `5`: Key not found
 
 ---
 
@@ -134,16 +136,16 @@ Return a typed value by dotted key. Secrets are redacted.
 Set a configuration value. Parses through the field registry, stages the change, validates, and commits atomically.
 
 **Arguments:**
-- `KEY` — Configuration key in dotted notation
-- `VALUE` — New value (parsed according to field type)
+- `KEY`: Configuration key in dotted notation
+- `VALUE`: New value (parsed according to field type)
 
 **Options:**
-- `--dry-run` — Show what would change without writing
+- `--dry-run`: Show what would change without writing
 
 **Exit codes:**
-- `0` — Value set successfully
-- `2` — Configuration error
-- `7` — Lock acquisition failed
+- `0`: Value set successfully
+- `2`: Configuration error
+- `7`: Lock acquisition failed
 
 ---
 
@@ -152,9 +154,9 @@ Set a configuration value. Parses through the field registry, stages the change,
 Set a secret configuration value. Reads from stdin or prompts interactively.
 
 **Arguments:**
-- `KEY` — Configuration key in dotted notation
+- `KEY`: Configuration key in dotted notation
 
-**Note:** Do not pass secret values as command arguments — they would appear in shell history.
+**Note:** Do not pass secret values as command arguments: they would appear in shell history.
 
 ---
 
@@ -163,11 +165,11 @@ Set a secret configuration value. Reads from stdin or prompts interactively.
 Remove an optional configuration override, restoring the default.
 
 **Arguments:**
-- `KEY` — Configuration key in dotted notation
+- `KEY`: Configuration key in dotted notation
 
 **Exit codes:**
-- `0` — Override removed
-- `2` — Attempted to remove a required value
+- `0`: Override removed
+- `2`: Attempted to remove a required value
 
 ---
 
@@ -176,7 +178,7 @@ Remove an optional configuration override, restoring the default.
 Compare current configuration with packaged defaults.
 
 **Options:**
-- `--baseline SNAPSHOT` — Compare with a specific rollback snapshot
+- `--baseline SNAPSHOT`: Compare with a specific rollback snapshot
 
 **Output:** Diff showing added, changed, and removed values (secrets redacted).
 
@@ -187,8 +189,8 @@ Compare current configuration with packaged defaults.
 List available rollback snapshots or restore a specific one.
 
 **Options:**
-- `--list` — List all available snapshots
-- `--restore TRANSACTION_ID` — Restore a specific snapshot
+- `--list`: List all available snapshots
+- `--restore TRANSACTION_ID`: Restore a specific snapshot
 
 ---
 
@@ -197,15 +199,15 @@ List available rollback snapshots or restore a specific one.
 Run system and configuration diagnostics. Three tiers of checks based on flags.
 
 **Options:**
-- `--production` — Include production-specific checks (strict `.env` permissions)
-- `--quick` — Only basic checks (version, paths, config parsing)
-- `--network` — Add connectivity checks (may contact external providers)
+- `--production`: Include production-specific checks (strict `.env` permissions)
+- `--quick`: Only basic checks (version, paths, config parsing)
+- `--network`: Add connectivity checks (may contact external providers)
 
 **Status model:** Each check returns one of four statuses:
-- `PASS` — Check succeeded
-- `WARN` — Non-blocking issue detected
-- `FAIL` — Blocking failure requiring attention
-- `SKIP` — Check was not applicable (e.g., Docker not installed)
+- `PASS`: Check succeeded
+- `WARN`: Non-blocking issue detected
+- `FAIL`: Blocking failure requiring attention
+- `SKIP`: Check was not applicable (e.g., Docker not installed)
 
 **Checks performed (default):**
 - Package version, schema version
@@ -266,8 +268,8 @@ Run system and configuration diagnostics. Three tiers of checks based on flags.
 Each check may include a `reason_code` field for machine-readable failure classification (e.g. `http_error`, `dns_failure`, `timeout`, `ssrf_blocked`, `connection_failed`, `content_type_rejected`). The `--json` flag controls whether output uses this structured format or the human-readable table.
 
 **Exit codes:**
-- `0` — No blocking failures (all checks PASS, WARN, or SKIP)
-- `1` — One or more checks have FAIL status
+- `0`: No blocking failures (all checks PASS, WARN, or SKIP)
+- `1`: One or more checks have FAIL status
 
 ## Service Management
 
@@ -473,7 +475,7 @@ The CLI resolves configuration through this precedence chain:
 
 - Secrets are redacted in all output by default (`***` or `****xxxx`)
 - `config set-secret` reads from stdin to avoid shell history exposure
-- `--show-secrets` is not available in Release 1
+- `config show --show-secrets` reveals secret values; use only when necessary and avoid sharing its output
 - Secret file permissions (`.env`) are checked by `doctor`
 
 ---
@@ -482,112 +484,32 @@ The CLI resolves configuration through this precedence chain:
 
 ### `ainews onboard`
 
-Interactive first-run onboarding or reconfiguration. Walks through deployment profile selection, secret generation, admin setup, LLM provider configuration, model discovery, pipeline/source profile application, and optional service start.
+Interactive workflow for collecting deployment, administrator, provider, pipeline, and source choices. It validates staged values but does not write the staged configuration, apply migrations, start services, or verify health. A successful summary does not mean the installation is ready.
 
 **Options:**
-- `--config-file`, `-c` — Bootstrap YAML file for non-interactive setup
-- `--non-interactive`, `-n` — Non-interactive mode (requires `--config-file`)
-- `--dry-run` — Show what would change without writing
-- `--start` — Start services after onboarding completes
-- `--reset` — Reset onboarding state and start over
-- `--rotate-secrets` — Regenerate all application secrets
+- `--config-file`, `-c`: Bootstrap YAML file for non-interactive setup
+- `--non-interactive`, `-n`: Non-interactive mode (requires `--config-file`)
+- `--dry-run`: Show what would change without writing
+- `--start`: Accepted, but service startup is currently deferred
+- `--reset`: Reset onboarding state and start over
+- `--rotate-admin-password`: Rotate the administrator password
+- `--rotate-application-secrets`: Rotate `SECRET_KEY` and `CELERY_TASK_SECRET`
+- `--rotate-all-secrets`: Rotate the administrator password and application secrets
 
 **Modes:**
 - **Interactive** (default): Prompts for each decision with sensible defaults
 - **Non-interactive**: Requires `--config-file` with a bootstrap YAML
 - **Dry-run**: Validates configuration without writing any files
 
-**State persistence:** Onboarding state is saved to `onboarding-state.json` in the config directory, allowing resume after interruption.
+**State persistence:** Stage status and failure details are written to `onboarding-state.json`. The current CLI does not load this file on the next invocation, so a rerun starts from the first stage. Secret values are not included in the state file.
 
 ---
 
 ### Bootstrap YAML Schema
 
-The bootstrap file provides declarative, unattended onboarding. Current schema version: `1`.
+Bootstrap schema version `1` and the profile reference are documented in the [Onboarding guide](onboarding.md#bootstrap-yaml). That guide is the canonical place for the full example and validation rules.
 
-```yaml
-version: 1
-
-deployment:
-  profile: docker-local          # docker-local | docker-lan | reverse-proxy | bare-metal | custom
-  port: 5000
-  site_url: http://localhost:5000
-
-admin:
-  username: admin
-  password_env: ADMIN_PASSWORD   # Read password from env var
-  # OR
-  password_file: /run/secrets/admin_password  # Read password from file
-
-provider:
-  type: ollama                   # ollama | openai | anthropic | gemini | eggpool | generic
-  id: ollama-local
-  base_url: http://localhost:11434/v1
-  api_key_env: ""                # Env var name for API key (not the key itself)
-  default_model: auto
-
-pipeline:
-  profile: balanced              # lightweight-local | balanced | quality | low-cost | custom
-
-sources:
-  profile: minimal               # minimal | ai-general | ai-security | comprehensive | existing-defaults | custom
-
-newsletter:
-  enabled: false
-
-start: false                     # Start services after onboarding
-```
-
-**Validation rules:**
-- Schema version must be `1`
-- `admin.password_env` or `admin.password_file` is required (no embedded passwords)
-- Sensitive env var patterns (`SECRET_KEY`, `CELERY_TASK_SECRET`, `ADMIN_PASSWORD`, `SMTP_PASSWORD`) are rejected as inline values
-- `${ENV_VAR}` references are resolved from the environment at validation time
-
-**Example:**
-```bash
-# Validate without executing
-ainews onboard --config-file bootstrap.yaml --dry-run
-
-# Full unattended setup
-export ADMIN_PASSWORD="my-secure-password"
-ainews onboard --non-interactive --config-file bootstrap.yaml --start
-```
-
----
-
-### Deployment Profiles
-
-| Profile | Description | Docker Required |
-|---------|-------------|-----------------|
-| `docker-local` | Docker Compose on localhost — development | Yes |
-| `docker-lan` | Docker Compose exposed on LAN — internal network | Yes |
-| `reverse-proxy` | Behind nginx/Caddy — production deployments | Yes |
-| `bare-metal` | No Docker, foreground commands | No |
-| `custom` | Full control over all values | No |
-
-Each profile sets environment variable defaults for Redis URLs, database URL, and Flask config. Interactive profiles prompt for additional values (e.g., `site_url`, `trusted_proxies`).
-
-### Pipeline Profiles
-
-| Profile | Description |
-|---------|-------------|
-| `lightweight-local` | Conservative concurrency, smaller token limits, bounded timeouts |
-| `balanced` | Production-like defaults, moderate concurrency and token limits |
-| `quality` | Larger budgets, quality-oriented — increased latency and cost |
-| `low-cost` | Smaller models, lower concurrency, reduced token ceilings |
-| `custom` | Preserve current values, prompt for individual assignments |
-
-### Source Profiles
-
-| Profile | Description |
-|---------|-------------|
-| `minimal` | Single AI news RSS feed for quick setup |
-| `ai-general` | General AI news sources — broad coverage |
-| `ai-security` | AI safety and security focused sources |
-| `comprehensive` | Full coverage — AI, security, industry, and research |
-| `existing-defaults` | Keep existing sources.yaml — do not modify |
-| `custom` | Start with empty sources configuration |
+Use `ainews onboard --config-file FILE --dry-run` to validate a bootstrap file. A normal run records workflow state and metadata, but does not apply the staged configuration. The `start` field and `--start` option do not start services in the current implementation.
 
 ---
 
@@ -598,7 +520,7 @@ Each profile sets environment variable defaults for Redis URLs, database URL, an
 Show all configured providers with type, endpoint, enabled status, default flag, and pipeline role assignments.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 ---
 
@@ -607,9 +529,9 @@ Show all configured providers with type, endpoint, enabled status, default flag,
 Add a new LLM provider. Without `--type`, lists available adapter types. With `--type`, enters interactive field collection and optional connectivity probe.
 
 **Options:**
-- `--type`, `-t` — Provider type (`ollama`, `openai`, `anthropic`, `gemini`, `eggpool`, `generic`)
-- `--skip-probe` — Skip connectivity probe after configuration
-- `--json`, `-j` — Output in JSON format
+- `--type`, `-t`: Provider type (`ollama`, `openai`, `anthropic`, `gemini`, `eggpool`, `generic`)
+- `--skip-probe`: Skip connectivity probe after configuration
+- `--json`, `-j`: Output in JSON format
 
 **Adapter types:**
 | Type | Display Name | Auth |
@@ -632,14 +554,14 @@ Each adapter implements the `ProviderSetupAdapter` protocol: `fields()`, `normal
 Test provider connectivity and authentication. Without an argument, tests all configured providers.
 
 **Arguments:**
-- `ID` — Provider ID to test (optional, tests all if omitted)
+- `ID`: Provider ID to test (optional, tests all if omitted)
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **Exit codes:**
-- `0` — All tested providers passed
-- `1` — One or more providers failed
+- `0`: All tested providers passed
+- `1`: One or more providers failed
 
 ---
 
@@ -648,10 +570,10 @@ Test provider connectivity and authentication. Without an argument, tests all co
 List available models for a configured provider. Discovers models via the provider's API (e.g., Ollama `/api/tags`, OpenAI `/v1/models`).
 
 **Arguments:**
-- `ID` — Provider ID (required)
+- `ID`: Provider ID (required)
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **Output:** Table with model ID, display name, context window size, and tool support indicator. Provenance shows whether models were discovered from the API, loaded from a catalog, or from configuration.
 
@@ -662,11 +584,11 @@ List available models for a configured provider. Discovers models via the provid
 Set a provider as the default for the pipeline fallback chain.
 
 **Arguments:**
-- `ID` — Provider ID (required)
+- `ID`: Provider ID (required)
 
 **Exit codes:**
-- `0` — Default updated
-- `5` — Provider not found
+- `0`: Default updated
+- `5`: Provider not found
 
 ---
 
@@ -675,15 +597,15 @@ Set a provider as the default for the pipeline fallback chain.
 Assign a provider and model to pipeline roles. Without `--roles`, assigns to all four roles (selector, researcher, writer, editor).
 
 **Arguments:**
-- `ID` — Provider ID (required)
-- `MODEL` — Model name to assign (required)
+- `ID`: Provider ID (required)
+- `MODEL`: Model name to assign (required)
 
 **Options:**
-- `--roles`, `-r` — Comma-separated roles (`selector`, `researcher`, `writer`, `editor`)
+- `--roles`, `-r`: Comma-separated roles (`selector`, `researcher`, `writer`, `editor`)
 
 **Exit codes:**
-- `0` — Assignment committed
-- `5` — Provider not found
+- `0`: Assignment committed
+- `5`: Provider not found
 
 ---
 
@@ -692,15 +614,15 @@ Assign a provider and model to pipeline roles. Without `--roles`, assigns to all
 Remove a provider from configuration. If the provider is assigned to pipeline roles, requires `--reassign-to` to reassign those roles first.
 
 **Arguments:**
-- `ID` — Provider ID to remove (required)
+- `ID`: Provider ID to remove (required)
 
 **Options:**
-- `--reassign-to` — Reassign roles to this provider before removal
+- `--reassign-to`: Reassign roles to this provider before removal
 
 **Exit codes:**
-- `0` — Provider removed
-- `5` — Provider not found
-- `3` — Provider in use without reassignment
+- `0`: Provider removed
+- `5`: Provider not found
+- `3`: Provider in use without reassignment
 
 ---
 
@@ -711,7 +633,7 @@ Remove a provider from configuration. If the provider is assigned to pipeline ro
 Show all configured sources with type, enabled status, endpoint, and schedule.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 ---
 
@@ -720,11 +642,11 @@ Show all configured sources with type, enabled status, endpoint, and schedule.
 Show details for a specific source including configuration and topic matching.
 
 **Arguments:**
-- `SOURCE_ID` — Source ID to show (required)
+- `SOURCE_ID`: Source ID to show (required)
 
 **Exit codes:**
-- `0` — Source found
-- `5` — Source not found
+- `0`: Source found
+- `5`: Source not found
 
 ---
 
@@ -733,8 +655,8 @@ Show details for a specific source including configuration and topic matching.
 Add a new source interactively or from flags. Without `--type`, lists available adapter types. With `--type`, enters interactive field collection.
 
 **Options:**
-- `--type`, `-t` — Source type (`rss`, `api`, `web`)
-- `--dry-run` — Show what would change without writing
+- `--type`, `-t`: Source type (`rss`, `api`, `web`)
+- `--dry-run`: Show what would change without writing
 
 **Adapter types:**
 | Type | Display Name | OPML Support | Key Fields |
@@ -752,16 +674,16 @@ Each adapter implements the `SourceSetupAdapter` protocol: `fields()`, `build_de
 Update basic fields of an existing source.
 
 **Arguments:**
-- `SOURCE_ID` — Source ID to update (required)
+- `SOURCE_ID`: Source ID to update (required)
 
 **Options:**
-- `--name` — New display name
-- `--schedule` — New schedule interval in minutes (5-1440)
-- `--url` — New endpoint URL
+- `--name`: New display name
+- `--schedule`: New schedule interval in minutes (5-1440)
+- `--url`: New endpoint URL
 
 **Exit codes:**
-- `0` — Source updated
-- `5` — Source not found
+- `0`: Source updated
+- `5`: Source not found
 
 ---
 
@@ -770,11 +692,11 @@ Update basic fields of an existing source.
 Enable a disabled source.
 
 **Arguments:**
-- `SOURCE_ID` — Source ID to enable (required)
+- `SOURCE_ID`: Source ID to enable (required)
 
 **Exit codes:**
-- `0` — Source enabled or already enabled
-- `5` — Source not found
+- `0`: Source enabled or already enabled
+- `5`: Source not found
 
 ---
 
@@ -783,11 +705,11 @@ Enable a disabled source.
 Disable a source without removing it.
 
 **Arguments:**
-- `SOURCE_ID` — Source ID to disable (required)
+- `SOURCE_ID`: Source ID to disable (required)
 
 **Exit codes:**
-- `0` — Source disabled or already disabled
-- `5` — Source not found
+- `0`: Source disabled or already disabled
+- `5`: Source not found
 
 ---
 
@@ -796,14 +718,14 @@ Disable a source without removing it.
 Remove a source from configuration. Associated articles and historical data are preserved.
 
 **Arguments:**
-- `SOURCE_ID` — Source ID to remove (required)
+- `SOURCE_ID`: Source ID to remove (required)
 
 **Options:**
-- `--force`, `-f` — Skip confirmation prompt
+- `--force`, `-f`: Skip confirmation prompt
 
 **Exit codes:**
-- `0` — Source removed
-- `5` — Source not found
+- `0`: Source removed
+- `5`: Source not found
 
 ---
 
@@ -812,10 +734,10 @@ Remove a source from configuration. Associated articles and historical data are 
 Test source connectivity and configuration using the shared safe-probe layer. Without an argument, tests all configured sources.
 
 **Arguments:**
-- `SOURCE_ID` — Source ID to test (optional, tests all if omitted)
+- `SOURCE_ID`: Source ID to test (optional, tests all if omitted)
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **Test layers:**
 1. Schema validity
@@ -832,11 +754,11 @@ Test source connectivity and configuration using the shared safe-probe layer. Wi
 Import sources from an OPML file. Defaults to dry-run preview.
 
 **Arguments:**
-- `FILE` — Path to OPML file (required)
+- `FILE`: Path to OPML file (required)
 
 **Options:**
-- `--conflict` — Conflict strategy: `skip` (default), `merge`, `replace`, `rename`
-- `--no-dry-run` — Actually apply changes (default is dry-run)
+- `--conflict`: Conflict strategy: `skip` (default), `merge`, `replace`, `rename`
+- `--no-dry-run`: Actually apply changes (default is dry-run)
 
 **Safety features:**
 - Maximum file size: 1 MB
@@ -846,8 +768,8 @@ Import sources from an OPML file. Defaults to dry-run preview.
 - Only `http://` and `https://` URLs accepted
 
 **Exit codes:**
-- `0` — Import completed
-- `4` — File I/O error
+- `0`: Import completed
+- `4`: File I/O error
 
 ---
 
@@ -856,12 +778,12 @@ Import sources from an OPML file. Defaults to dry-run preview.
 Export sources to an OPML file. Only exports enabled RSS sources with valid `feed_url`. Credentials are never included.
 
 **Options:**
-- `--output`, `-o` — Output file path (stdout if omitted)
-- `--all` — Export all sources (not just enabled)
+- `--output`, `-o`: Output file path (stdout if omitted)
+- `--all`: Export all sources (not just enabled)
 
 **Exit codes:**
-- `0` — Export completed
-- `4` — File I/O error
+- `0`: Export completed
+- `4`: File I/O error
 
 ---
 
@@ -872,7 +794,7 @@ Export sources to an OPML file. Only exports enabled RSS sources with valid `fee
 Show all configured topics with display name, color, and description.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 ---
 
@@ -881,11 +803,11 @@ Show all configured topics with display name, color, and description.
 Show details for a specific topic.
 
 **Arguments:**
-- `TOPIC_ID` — Topic ID to show (required)
+- `TOPIC_ID`: Topic ID to show (required)
 
 **Exit codes:**
-- `0` — Topic found
-- `5` — Topic not found
+- `0`: Topic found
+- `5`: Topic not found
 
 ---
 
@@ -894,10 +816,10 @@ Show details for a specific topic.
 Add a new topic interactively or from flags.
 
 **Options:**
-- `--name` — Topic display name
-- `--description` — Topic description
-- `--color` — Topic color (default: `blue`)
-- `--query` — Search query for matching
+- `--name`: Topic display name
+- `--description`: Topic description
+- `--color`: Topic color (default: `blue`)
+- `--query`: Search query for matching
 
 **Behavior:**
 - Topic ID is auto-generated from the display name (lowercase, underscores)
@@ -910,17 +832,17 @@ Add a new topic interactively or from flags.
 Update an existing topic's fields.
 
 **Arguments:**
-- `TOPIC_ID` — Topic ID to update (required)
+- `TOPIC_ID`: Topic ID to update (required)
 
 **Options:**
-- `--name` — New display name
-- `--description` — New description
-- `--color` — New color
-- `--query` — New search query
+- `--name`: New display name
+- `--description`: New description
+- `--color`: New color
+- `--query`: New search query
 
 **Exit codes:**
-- `0` — Topic updated
-- `5` — Topic not found
+- `0`: Topic updated
+- `5`: Topic not found
 
 ---
 
@@ -929,14 +851,14 @@ Update an existing topic's fields.
 Remove a topic from configuration.
 
 **Arguments:**
-- `TOPIC_ID` — Topic ID to remove (required)
+- `TOPIC_ID`: Topic ID to remove (required)
 
 **Options:**
-- `--force`, `-f` — Skip confirmation prompt
+- `--force`, `-f`: Skip confirmation prompt
 
 **Exit codes:**
-- `0` — Topic removed
-- `5` — Topic not found
+- `0`: Topic removed
+- `5`: Topic not found
 
 ---
 
@@ -947,7 +869,7 @@ Remove a topic from configuration.
 Show current pipeline role assignments (selector, researcher, writer, editor).
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 ---
 
@@ -956,11 +878,11 @@ Show current pipeline role assignments (selector, researcher, writer, editor).
 Validate pipeline configuration: provider existence, model specification, enabled state.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **Exit codes:**
-- `0` — Configuration valid
-- `3` — Validation errors found
+- `0`: Configuration valid
+- `3`: Validation errors found
 
 ---
 
@@ -969,7 +891,7 @@ Validate pipeline configuration: provider existence, model specification, enable
 Apply a named pipeline profile overlaying provider/model assignments.
 
 **Options:**
-- `--profile`, `-p` — Profile name: `balanced`, `fast`, `cheap` (required)
+- `--profile`, `-p`: Profile name: `balanced`, `fast`, `cheap` (required)
 
 **Profiles:**
 | Profile | Description |
@@ -979,8 +901,8 @@ Apply a named pipeline profile overlaying provider/model assignments.
 | `cheap` | Mixed smaller models |
 
 **Exit codes:**
-- `0` — Profile applied
-- `3` — Unknown profile
+- `0`: Profile applied
+- `3`: Unknown profile
 
 ---
 
@@ -989,13 +911,13 @@ Apply a named pipeline profile overlaying provider/model assignments.
 Assign a provider/model to a pipeline role.
 
 **Arguments:**
-- `ROLE` — Pipeline role: `selector`, `researcher`, `writer`, `editor` (required)
-- `PROVIDER/MODEL` — Provider and model in format `provider_id/model_name` (required)
+- `ROLE`: Pipeline role: `selector`, `researcher`, `writer`, `editor` (required)
+- `PROVIDER/MODEL`: Provider and model in format `provider_id/model_name` (required)
 
 **Exit codes:**
-- `0` — Assignment committed
-- `3` — Invalid role or format
-- `5` — Provider not found
+- `0`: Assignment committed
+- `3`: Invalid role or format
+- `5`: Provider not found
 
 ---
 
@@ -1004,12 +926,12 @@ Assign a provider/model to a pipeline role.
 Remove provider/model assignment from a pipeline role.
 
 **Arguments:**
-- `ROLE` — Pipeline role to unassign (required)
+- `ROLE`: Pipeline role to unassign (required)
 
 **Exit codes:**
-- `0` — Unassigned
-- `3` — Invalid role
-- `5` — No assignment found
+- `0`: Unassigned
+- `3`: Invalid role
+- `5`: No assignment found
 
 ---
 
@@ -1018,7 +940,7 @@ Remove provider/model assignment from a pipeline role.
 Show differences from a baseline pipeline configuration.
 
 **Options:**
-- `--baseline` — Baseline profile or `defaults`
+- `--baseline`: Baseline profile or `defaults`
 
 ---
 
@@ -1029,15 +951,15 @@ Show differences from a baseline pipeline configuration.
 Start all ainews services (Docker Compose or bare metal). Runs `doctor` checks first unless `--skip-doctor`. Applies database migrations unless `--skip-migrations`.
 
 **Options:**
-- `--skip-doctor` — Skip prerequisite doctor checks
-- `--skip-migrations` — Skip database migrations
-- `--no-wait` — Don't wait for health check after start
-- `--timeout` — Timeout in seconds (default: 120)
-- `--json` — Output in JSON format
+- `--skip-doctor`: Skip prerequisite doctor checks
+- `--skip-migrations`: Skip database migrations
+- `--no-wait`: Don't wait for health check after start
+- `--timeout`: Timeout in seconds (default: 120)
+- `--json`: Output in JSON format
 
 **Exit codes:**
-- `0` — Services started successfully
-- `1` — Start failed (doctor checks failed or services didn't start)
+- `0`: Services started successfully
+- `1`: Start failed (doctor checks failed or services didn't start)
 
 ---
 
@@ -1046,7 +968,7 @@ Start all ainews services (Docker Compose or bare metal). Runs `doctor` checks f
 Stop all ainews services.
 
 **Options:**
-- `--json` — Output in JSON format
+- `--json`: Output in JSON format
 
 ---
 
@@ -1055,9 +977,9 @@ Stop all ainews services.
 Restart all ainews services. Runs `doctor` checks first unless `--skip-doctor`.
 
 **Options:**
-- `--skip-doctor` — Skip prerequisite doctor checks
-- `--timeout` — Timeout in seconds (default: 120)
-- `--json` — Output in JSON format
+- `--skip-doctor`: Skip prerequisite doctor checks
+- `--timeout`: Timeout in seconds (default: 120)
+- `--json`: Output in JSON format
 
 ---
 
@@ -1066,7 +988,7 @@ Restart all ainews services. Runs `doctor` checks first unless `--skip-doctor`.
 Show the status of all services, including web URL, Redis, database, Celery, and pending migrations.
 
 **Options:**
-- `--json` — Output in JSON format
+- `--json`: Output in JSON format
 
 **Output:** Table of service states (running/stopped/failed), plus summary of infrastructure health.
 
@@ -1077,13 +999,13 @@ Show the status of all services, including web URL, Redis, database, Celery, and
 View service logs. Without an argument, shows logs from all services.
 
 **Arguments:**
-- `SERVICE` — Service name (optional)
+- `SERVICE`: Service name (optional)
 
 **Options:**
-- `--tail` — Number of lines to show (default: 100)
-- `--follow`, `-f` — Follow log output (live tail)
-- `--timestamps`, `-t` — Show timestamps
-- `--raw` — Raw passthrough without formatting
+- `--tail`: Number of lines to show (default: 100)
+- `--follow`, `-f`: Follow log output (live tail)
+- `--timestamps`, `-t`: Show timestamps
+- `--raw`: Raw passthrough without formatting
 
 ---
 
@@ -1092,8 +1014,8 @@ View service logs. Without an argument, shows logs from all services.
 Check service health endpoint. Returns status (ok/degraded/error) and response time.
 
 **Options:**
-- `--timeout` — Timeout in seconds (default: 10)
-- `--json` — Output in JSON format
+- `--timeout`: Timeout in seconds (default: 10)
+- `--json`: Output in JSON format
 
 ---
 
@@ -1102,12 +1024,12 @@ Check service health endpoint. Returns status (ok/degraded/error) and response t
 Run post-deploy smoke checks. Tests critical endpoints and service connectivity.
 
 **Options:**
-- `--timeout` — Timeout in seconds (default: 30)
-- `--json` — Output in JSON format
+- `--timeout`: Timeout in seconds (default: 30)
+- `--json`: Output in JSON format
 
 **Exit codes:**
-- `0` — All smoke checks passed
-- `1` — One or more checks failed
+- `0`: All smoke checks passed
+- `1`: One or more checks failed
 
 ---
 
@@ -1118,14 +1040,14 @@ Run post-deploy smoke checks. Tests critical endpoints and service connectivity.
 Create a point-in-time backup of configuration files and database.
 
 **Options:**
-- `--include-logs` — Include application log files in the backup
-- `--tag TAG` — Add a human-readable tag to the backup
+- `--include-logs`: Include application log files in the backup
+- `--tag TAG`: Add a human-readable tag to the backup
 
 **Output:** Backup ID, manifest path, total size.
 
 **Exit codes:**
-- `0` — Backup created successfully
-- `9` — Backup error
+- `0`: Backup created successfully
+- `9`: Backup error
 
 ---
 
@@ -1134,7 +1056,7 @@ Create a point-in-time backup of configuration files and database.
 List available backups with creation time, version, tag, and size.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **Output fields (text):** ID, Created, Version, Tag, Size, Verified.
 **JSON fields:** `id`, `created_at`, `app_version`, `tag`, `total_bytes`, `verified`.
@@ -1146,11 +1068,11 @@ List available backups with creation time, version, tag, and size.
 Show detailed information about a specific backup including section checksums and sizes.
 
 **Arguments:**
-- `BACKUP_ID` — Backup ID (required)
+- `BACKUP_ID`: Backup ID (required)
 
 **Exit codes:**
-- `0` — Backup found
-- `5` — Backup not found
+- `0`: Backup found
+- `5`: Backup not found
 
 ---
 
@@ -1159,19 +1081,19 @@ Show detailed information about a specific backup including section checksums an
 Verify backup integrity without modifying it. Checks manifest schema, section checksums, SQLite integrity, config tarball parseability, and version compatibility.
 
 **Arguments:**
-- `BACKUP_ID` — Backup ID (required)
+- `BACKUP_ID`: Backup ID (required)
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 **Output fields:** Status (pass/fail), sections checked, reason codes for failures.
 
 **Reason codes:** `backup_not_found`, `manifest_missing`, `manifest_corrupt`, `manifest_invalid`, `schema_too_new`, `version_incompatible`, `section_missing`, `unsafe_path`, `file_missing`, `size_mismatch`, `checksum_mismatch`, `db_corrupt`, `config_tar_corrupt`, `config_parse_error`.
 
 **Exit codes:**
-- `0` — Backup verified successfully
-- `1` — Verification failed
-- `5` — Backup not found
+- `0`: Backup verified successfully
+- `1`: Verification failed
+- `5`: Backup not found
 
 ---
 
@@ -1180,15 +1102,15 @@ Verify backup integrity without modifying it. Checks manifest schema, section ch
 Remove old backups respecting retention policy (default: 10 backups, 90 days). Pinned backups are never pruned. The last verified backup is never deleted.
 
 **Options:**
-- `--max-count N` — Maximum number of backups to keep (default: 10)
-- `--max-age-days N` — Maximum age in days (default: 90)
-- `--dry-run` — Show which backups would be pruned without deleting
+- `--max-count N`: Maximum number of backups to keep (default: 10)
+- `--max-age-days N`: Maximum age in days (default: 90)
+- `--dry-run`: Show which backups would be pruned without deleting
 
 **Output:** Number of backups pruned, list of pruned backup IDs.
 
 **Exit codes:**
-- `0` — Prune completed
-- `9` — Backup error
+- `0`: Prune completed
+- `9`: Backup error
 
 ---
 
@@ -1197,19 +1119,19 @@ Remove old backups respecting retention policy (default: 10 backups, 90 days). P
 Restore configuration and/or database from a verified backup. Creates an automatic pre-restore safety backup before applying changes.
 
 **Arguments:**
-- `BACKUP_ID` — Backup ID to restore from (required)
+- `BACKUP_ID`: Backup ID to restore from (required)
 
 **Options:**
-- `--config-only` — Restore configuration files only (skip database)
-- `--data-only` — Restore database only (skip configuration files)
-- `--dry-run` — Show restore plan without applying changes
-- `-y`, `--yes` — Skip confirmation prompt
+- `--config-only`: Restore configuration files only (skip database)
+- `--data-only`: Restore database only (skip configuration files)
+- `--dry-run`: Show restore plan without applying changes
+- `-y`, `--yes`: Skip confirmation prompt
 
 **Exit codes:**
-- `0` — Restore completed successfully
-- `1` — Restore failed
-- `5` — Backup not found
-- `9` — Backup error
+- `0`: Restore completed successfully
+- `1`: Restore failed
+- `5`: Backup not found
+- `9`: Backup error
 
 ---
 
@@ -1218,7 +1140,7 @@ Restore configuration and/or database from a verified backup. Creates an automat
 Show current database migration status: applied migrations, pending migrations, and current schema version.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 ---
 
@@ -1227,7 +1149,7 @@ Show current database migration status: applied migrations, pending migrations, 
 Plan pending migrations without applying them. Shows migration IDs and dependency order.
 
 **Options:**
-- `--json`, `-j` — Output in JSON format
+- `--json`, `-j`: Output in JSON format
 
 ---
 
@@ -1236,12 +1158,12 @@ Plan pending migrations without applying them. Shows migration IDs and dependenc
 Apply pending database migrations. Runs preflight checks before applying.
 
 **Options:**
-- `--dry-run` — Show migrations that would be applied without executing
-- `-y`, `--yes` — Skip confirmation prompt
+- `--dry-run`: Show migrations that would be applied without executing
+- `-y`, `--yes`: Skip confirmation prompt
 
 **Exit codes:**
-- `0` — Migrations applied successfully
-- `1` — Migration failed
+- `0`: Migrations applied successfully
+- `1`: Migration failed
 
 ---
 
@@ -1252,8 +1174,8 @@ Apply pending database migrations. Runs preflight checks before applying.
 Check for available updates (non-mutating). Resolves the configured channel through the same GitHub API path as the installer.
 
 **Options:**
-- `-c`, `--channel CHANNEL` — Override release channel (stable, main, prerelease)
-- `-j`, `--json` — Output in JSON format
+- `-c`, `--channel CHANNEL`: Override release channel (stable, main, prerelease)
+- `-j`, `--json`: Output in JSON format
 
 **Output includes:** Current version, latest version, channel, whether update is available, upgrade/downgrade/reinstall classification.
 
@@ -1264,9 +1186,9 @@ Check for available updates (non-mutating). Resolves the configured channel thro
 Show detailed update plan (non-mutating). Includes artifact size, checksum, migration steps, downtime estimate, and blockers.
 
 **Options:**
-- `-c`, `--channel CHANNEL` — Override release channel
-- `--dry-run` — Show what would happen without applying
-- `-j`, `--json` — Output in JSON format
+- `-c`, `--channel CHANNEL`: Override release channel
+- `--dry-run`: Show what would happen without applying
+- `-j`, `--json`: Output in JSON format
 
 **Output includes:** Artifact size, config/DB migration steps, service restart requirement, estimated downtime, backup requirement, rollback capability, paths that will change, and any blockers.
 
@@ -1277,17 +1199,17 @@ Show detailed update plan (non-mutating). Includes artifact size, checksum, migr
 Apply an available update. Detects incomplete operations and offers resume/rollback. Creates pre-update backup, downloads artifact, verifies checksum, stops services, activates update, runs migrations, starts services, and runs health check.
 
 **Options:**
-- `-c`, `--channel CHANNEL` — Override release channel
-- `--dry-run` — Show what would happen without applying
-- `-y`, `--yes` — Skip confirmation prompts
-- `-j`, `--json` — Output in JSON format
+- `-c`, `--channel CHANNEL`: Override release channel
+- `--dry-run`: Show what would happen without applying
+- `-y`, `--yes`: Skip confirmation prompts
+- `-j`, `--json`: Output in JSON format
 
 **Exit codes:**
-- `0` — Update completed successfully
-- `1` — Update failed
-- `7` — Lock error (concurrent operation)
-- `8` — Rollback error
-- `10` — Update error
+- `0`: Update completed successfully
+- `1`: Update failed
+- `7`: Lock error (concurrent operation)
+- `8`: Rollback error
+- `10`: Update error
 
 ---
 
@@ -1296,13 +1218,13 @@ Apply an available update. Detects incomplete operations and offers resume/rollb
 Rollback a failed or incomplete update. Restores previous app version from backup or staging. If both the previous version and backup are unavailable, manual recovery instructions are displayed.
 
 **Options:**
-- `-y`, `--yes` — Skip confirmation prompts
-- `-j`, `--json` — Output in JSON format
+- `-y`, `--yes`: Skip confirmation prompts
+- `-j`, `--json`: Output in JSON format
 
 **Exit codes:**
-- `0` — Rollback completed successfully
-- `1` — Rollback failed
-- `8` — Rollback error
+- `0`: Rollback completed successfully
+- `1`: Rollback failed
+- `8`: Rollback error
 
 **Manual recovery:** If automatic rollback fails, the following steps can restore the system:
 1. Check update status: `ainews update status --json`
@@ -1317,7 +1239,7 @@ Rollback a failed or incomplete update. Restores previous app version from backu
 Show current update operation status. Reports phase, operation details, and incomplete operations.
 
 **Options:**
-- `-j`, `--json` — Output in JSON format
+- `-j`, `--json`: Output in JSON format
 
 ---
 
@@ -1328,7 +1250,7 @@ Show current update operation status. Reports phase, operation details, and inco
 Show the current release channel, version, commit, and installation metadata.
 
 **Options:**
-- `-j`, `--json` — Output in JSON format
+- `-j`, `--json`: Output in JSON format
 
 ---
 
@@ -1337,19 +1259,19 @@ Show the current release channel, version, commit, and installation metadata.
 Set the release channel. Validates channel, requires confirmation for risky channels (prerelease, main). Does NOT trigger an implicit update unless `--apply` is specified.
 
 **Arguments:**
-- `CHANNEL` — New channel: stable, prerelease, or main
+- `CHANNEL`: New channel: stable, prerelease, or main
 
 **Options:**
-- `--dry-run` — Show what would change without writing
-- `-y`, `--yes` — Skip confirmation prompt
-- `--apply` — Immediately check for and apply updates after channel change
-- `--version VERSION` — Pin to a specific version (prevents channel resolution)
-- `-j`, `--json` — Output in JSON format
+- `--dry-run`: Show what would change without writing
+- `-y`, `--yes`: Skip confirmation prompt
+- `--apply`: Immediately check for and apply updates after channel change
+- `--version VERSION`: Pin to a specific version (prevents channel resolution)
+- `-j`, `--json`: Output in JSON format
 
 **Channel semantics:**
-- `stable` — Latest GitHub release tag (default, recommended for production)
-- `prerelease` — Latest pre-release tag (may be unstable)
-- `main` — Branch HEAD commit (development only)
+- `stable`: Latest GitHub release tag (default, recommended for production)
+- `prerelease`: Latest pre-release tag (may be unstable)
+- `main`: Branch HEAD commit (development only)
 
 **Downgrade limitations:** Switching from a higher version channel to a lower one (e.g., `stable` to `main`) does not automatically downgrade. Run `ainews update check` to see available versions, then `ainews update apply` if a downgrade is desired. Downgrades may require manual intervention for config/database migrations.
 
@@ -1362,11 +1284,11 @@ Set the release channel. Validates channel, requires confirmation for risky chan
 Remove ainews application files while preserving operator-owned state. By default removes only application files (binaries, code). Use `--purge` to remove config, data, and backups.
 
 **Options:**
-- `--remove-app-only` — Only remove application files, keep config/data/backups
-- `--purge` — Remove everything including config, data, and backups (requires `--yes` in non-interactive mode)
-- `-y`, `--yes` — Skip confirmation prompts
-- `--dry-run` — Show what would be deleted without deleting
-- `-j`, `--json` — Output in JSON format
+- `--remove-app-only`: Only remove application files, keep config/data/backups
+- `--purge`: Remove everything including config, data, and backups (requires `--yes` in non-interactive mode)
+- `-y`, `--yes`: Skip confirmation prompts
+- `--dry-run`: Show what would be deleted without deleting
+- `-j`, `--json`: Output in JSON format
 
 **Safety:**
 - Requires install metadata to determine what to remove
@@ -1375,12 +1297,12 @@ Remove ainews application files while preserving operator-owned state. By defaul
 - Stops services before removal
 - `--purge` prompts for a final backup before deleting mutable state
 
-**Purge implications:** `--purge` permanently removes all configuration, databases, application data, and backups. A final backup is created before purge unless declined. This action is irreversible — ensure you have external backups before proceeding.
+**Purge implications:** `--purge` permanently removes all configuration, databases, application data, and backups. A final backup is created before purge unless declined. This action is irreversible: ensure you have external backups before proceeding.
 
 **Exit codes:**
-- `0` — Uninstall completed successfully
-- `1` — Uninstall failed
-- `5` — Not found (no install metadata)
-- `11` — Uninstall error
+- `0`: Uninstall completed successfully
+- `1`: Uninstall failed
+- `5`: Not found (no install metadata)
+- `11`: Uninstall error
 
 **Manual recovery:** If uninstall partially fails, check the output for which items failed to remove. You can manually remove remaining files after verifying they are safe to delete.

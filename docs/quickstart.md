@@ -1,54 +1,33 @@
 # Quick Start Guide
 
-Get ainews running locally for development in under 10 minutes.
+Run ainews locally for development. This guide assumes a source checkout and Python 3.12 or newer.
+
+> **Onboarding limitation:** `ainews onboard` currently collects and validates selections but does not write the staged configuration or start services. Follow the manual configuration steps below, then use `ainews start`.
 
 ## Prerequisites
 
-| Tool | Required | Install |
-|------|----------|---------|
-| Python 3.12+ | Yes | [python.org](https://python.org) |
-| Redis | Yes | See below |
-| Ollama | Recommended | [ollama.ai](https://ollama.ai) |
+- Python 3.12 or newer
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- Redis, either already reachable or installed locally so the development supervisor can start it
+- An LLM provider, such as Ollama, an OpenAI-compatible server, or a cloud API
 
-### Install Redis
+For local inference with Ollama, install it from [ollama.ai](https://ollama.ai). Start the server in one terminal:
 
-**macOS:**
 ```bash
-brew install redis
+ollama serve
 ```
 
-**Ubuntu/Debian:**
-```bash
-sudo apt update && sudo apt install redis-server
-```
-
-The development supervisor starts a local Redis process when no configured Redis endpoint is reachable, then stops that process with the rest of the stack. If you run Redis as a separate system service, it will reuse that service instead.
-
-**Optional verification for an already running Redis service:**
-```bash
-redis-cli ping   # Should return PONG
-```
-
-### Install Ollama (for local LLM)
+In another terminal, pull a model:
 
 ```bash
-# macOS / Linux
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Start the Ollama server
-ollama serve &
-
-# Pull a model (qwen3:8b is recommended for this project)
 ollama pull qwen3:8b
 ```
 
-> **Alternative:** Skip Ollama and use OpenAI or Anthropic APIs instead. See [LLM Providers](#llm-providers) below.
+Keep the Ollama server running while using ainews.
 
-## Setup
+## Install and configure
 
-### 1. Clone and install
-
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or pip.
+Clone the repository and install its dependencies:
 
 ```bash
 git clone https://github.com/dbowm91/ainews.git
@@ -56,244 +35,71 @@ cd ainews
 uv sync
 ```
 
-### 2. Configure environment
+Create a local environment file and select development mode:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum, set these:
+Edit `.env` and set `FLASK_CONFIG=development`. Generate independent values for `SECRET_KEY` and `CELERY_TASK_SECRET` by running this command once for each variable:
 
 ```bash
-# Use development mode for local setup (not production)
-FLASK_CONFIG=development
-
-# Generate a secret key
-SECRET_KEY=<run: python -c "import secrets; print(secrets.token_hex(32))">
-
-# Hash your admin password (recommended)
-# Run: python scripts/hash_password.py
-ADMIN_PASSWORD=<hashed password from script output>
-
-# Generate a Celery task secret
-CELERY_TASK_SECRET=<run: python -c "import secrets; print(secrets.token_hex(32))">
+uv run python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Redis defaults (`redis://localhost:6379/0`) work out of the box.
-
-### 3. Start everything
+For an admin password hash, run the helper and follow its prompts:
 
 ```bash
-bash scripts/dev.sh
+uv run python scripts/hash_password.py
 ```
 
-This starts:
-- **Flask** at `http://localhost:5000`
-- **Celery worker** for background tasks
-- **Celery beat** for scheduled jobs
+Copy its `ADMIN_PASSWORD=...` output into `.env`. The helper requires a strong password. Do not pass your password as a command-line argument.
 
-**Stop everything:**
+## Configure an LLM provider
+
+Review `providers.yaml` before starting. The shipped configuration enables `local`, an OpenAI-compatible endpoint at `http://127.0.0.1:1234/v1`, and `opencode`. Disable providers you do not use, or configure their endpoints and credentials. If no server is listening at the `local` endpoint, select a working provider.
+
+For Ollama, disable unused providers, enable `ollama-local`, set its `host` to `http://localhost:11434`, and set `default_provider: ollama-local`. For a cloud provider, enable it in `providers.yaml` and put its API key in `.env`. See [Configuration](configuration.md#providersyaml-llm-providers) for examples.
+
+List configured provider IDs and test the one you enabled. Replace `local` with that provider's ID if needed:
+
+```bash
+uv run ainews providers-list
+uv run ainews providers-test local
+```
+
+## Start the development stack
+
+Use the supervisor so web, worker, Beat, and any locally started Redis share one lifecycle:
+
+```bash
+bash scripts/dev.sh start
+bash scripts/dev.sh status
+```
+
+The web app is at `http://localhost:5000`. Check its health endpoint, then visit `http://localhost:5000/admin/login` in a browser:
+
+```bash
+curl http://localhost:5000/health
+```
+
+To stop the stack:
+
 ```bash
 bash scripts/dev.sh stop
 ```
 
-**Check status:**
-```bash
-bash scripts/dev.sh status
-```
+Use the admin interface to trigger a crawl. The development supervisor manages child processes and stops only the Redis process it started. Avoid running the web, worker, and Beat in separate terminals for normal development.
 
-## Verify
+## Docker Compose
 
-```bash
-# Health check
-curl http://localhost:5000/health
+For a Docker setup, including production secrets, Redis networking, Ollama options, and reverse-proxy guidance, follow the [Deployment Guide](deployment.md#docker-compose). Compose overrides the localhost Redis settings in `.env.example` with the internal `redis` service URLs.
 
-# Homepage
-open http://localhost:5000
-
-# Admin dashboard
-open http://localhost:5000/admin/login
-```
-
-## Trigger a crawl
-
-From the admin dashboard, click **Trigger Crawl**, or:
+## Common checks
 
 ```bash
-celery -A celery_app:celery_app call tasks.crawl.run_all_sources
+uv run ainews doctor --quick
+uv run ainews config check
 ```
 
-## LLM Providers
-
-### Ollama (default, local)
-
-Already configured in `providers.yaml`:
-
-```yaml
-providers:
-  - id: ollama-local
-    type: ollama
-    enabled: true
-    config:
-      host: "http://localhost:11434"
-      model: "qwen3:8b"
-```
-
-### OpenAI
-
-Edit `providers.yaml`:
-```yaml
-- id: openai
-  type: openai
-  enabled: true        # Change to true
-  config:
-    api_key: "${OPENAI_API_KEY}"
-    model: "gpt-4o-mini"
-```
-
-Add to `.env`:
-```bash
-OPENAI_API_KEY=sk-...
-```
-
-### Anthropic
-
-Edit `providers.yaml`:
-```yaml
-- id: anthropic
-  type: anthropic
-  enabled: true        # Change to true
-  config:
-    api_key: "${ANTHROPIC_API_KEY}"
-    model: "claude-sonnet-4-5-20250929"
-```
-
-Add to `.env`:
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-### Disable Ollama
-
-If using OpenAI or Anthropic instead of Ollama, disable the Ollama provider and set the `default_provider`:
-
-```yaml
-default_provider: openai  # or anthropic
-```
-
-## Running Tests
-
-```bash
-bash scripts/test.sh
-```
-
-With coverage:
-```bash
-bash scripts/test.sh --cov
-```
-
-Filter tests:
-```bash
-bash scripts/test.sh --pattern test_routes
-```
-
-## Manual Service Management
-
-Run the development stack through the supervisor so the web server, worker, Beat and any locally started Redis share one lifecycle. Starting services in separate terminals can leave them out of sync.
-
-For debugging only, the individual process commands are:
-
-**Terminal 1 — Flask:**
-```bash
-source .venv/bin/activate
-flask run --reload
-```
-
-**Terminal 2 — Celery Worker:**
-```bash
-source .venv/bin/activate
-celery -A celery_app:celery_app worker -l info
-```
-
-**Terminal 3 — Celery Beat:**
-```bash
-source .venv/bin/activate
-celery -A celery_app:celery_app beat -l info
-```
-
-## Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `.env` | Secrets, SMTP, LLM API keys |
-| `pipeline.yaml` | AI processing pipeline settings |
-| `sources.yaml` | RSS/API feed sources |
-| `topics.yaml` | Topic categories |
-| `providers.yaml` | LLM provider configuration |
-
-See [configuration.md](configuration.md) for the full reference.
-
-## Docker Alternative
-
-If you prefer Docker over local setup:
-
-```bash
-cp .env.example .env
-# Edit .env — set SECRET_KEY, ADMIN_PASSWORD, CELERY_TASK_SECRET
-# For cloud LLM: set OPENAI_API_KEY in .env and enable openai in providers.yaml
-# For Ollama in Docker: use the override file and update providers.yaml
-docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
-docker compose exec ollama ollama pull qwen3:8b
-```
-
-> **Important:** When using Docker Ollama, update `providers.yaml` to use `http://ollama:11434` instead of `http://localhost:11434` for the Ollama provider host. The default `localhost` refers to the container itself, not the host machine. See [Deployment Guide](deployment.md#docker-with-ollama) for details.
-
-## Troubleshooting
-
-### Redis connection error
-
-```bash
-redis-cli ping           # Should return PONG
-brew services start redis   # macOS
-sudo systemctl start redis-server   # Linux
-```
-
-### Ollama not responding
-
-```bash
-curl http://localhost:11434/api/tags   # Should list models
-ollama serve                           # Start if not running
-```
-
-### Celery tasks not executing
-
-```bash
-# Check worker is connected
-celery -A celery_app:celery_app inspect ping
-
-# Check logs
-tail -f .pids/celery-worker.log
-```
-
-### Database locked
-
-SQLite with WAL mode prevents most locking issues. If you see locked errors:
-- Ensure only one Flask process writes to the database
-- Check `instance/` directory permissions
-
-### Port 5000 already in use
-
-```bash
-# Find what's using port 5000
-lsof -i :5000
-
-# Or use a different port
-flask run --reload --port 5001
-```
-
-## Next Steps
-
-- [Configuration Reference](configuration.md) — All config files explained
-- [Deployment Guide](deployment.md) — Deploy to production
-- Customize `sources.yaml` with your RSS feeds
-- Configure SMTP in `.env` for newsletter delivery
+See [Troubleshooting](troubleshooting.md) for common startup, Redis, provider, source, and database problems. For all environment variables and YAML settings, see [Configuration](configuration.md).

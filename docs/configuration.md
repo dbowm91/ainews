@@ -1,22 +1,27 @@
 # Configuration Reference
 
-All configuration is managed through YAML files in the project root and environment variables in `.env`.
+Configuration uses YAML files and environment variables. A source checkout reads project-local files; installed deployments resolve paths from the installation settings. See [Configuration Files](#configuration-files) for path precedence.
 
 ## Environment Variables (`.env`)
 
-### Required
+### Production requirements
 
-Production startup fails without these.
+Set `FLASK_CONFIG=production` for production. Startup validation requires the secrets below and at least one valid, enabled LLM provider. Redis and a database must also be reachable, but local defaults are provided for development.
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `SECRET_KEY` | Flask session signing key (64-char hex) | `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `ADMIN_PASSWORD` | Admin dashboard password (hashed) | `scrypt:32768:8:1$salt$hash...` |
-| `CELERY_TASK_SECRET` | HMAC signing secret for Celery tasks (>=32 chars) | `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `CELERY_BROKER_URL` | Redis URL for Celery | `redis://localhost:6379/0` |
-| `CELERY_RESULT_BACKEND` | Redis URL for Celery results | `redis://localhost:6379/1` |
-| `DATABASE_URL` | SQLite database URL | `sqlite:///instance/ainews.db` |
-| `FLASK_CONFIG` | Set to `production` for production deployments | `production` |
+| Variable | Requirement | Description |
+|----------|-------------|-------------|
+| `SECRET_KEY` | Required | 64-character hexadecimal key for session signing |
+| `ADMIN_PASSWORD` | Required | Supported Werkzeug password hash, not plaintext |
+| `CELERY_TASK_SECRET` | Required | HMAC secret of at least 32 characters |
+
+### Runtime endpoints
+
+| Variable | Default or example | Description |
+|----------|--------------------|-------------|
+| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Redis URL used by Celery as its broker |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Redis URL used for task results |
+| `DATABASE_URL` | Production default: SQLite under `instance/prod.db` | SQLAlchemy database URL. Docker Compose sets its container path. |
+| `FLASK_CONFIG` | `development` in `.env.example` | Set to `production` for a production deployment |
 
 ### Optional
 
@@ -28,29 +33,26 @@ Production startup fails without these.
 | `SMTP_PASSWORD` | | SMTP password |
 | `SMTP_FROM` | `noreply@ainews.dev` | Sender email address |
 | `SMTP_USE_TLS` | `true` | Enable TLS for SMTP |
-| `OLLAMA_MODEL` | `llama3.1` | Ollama model name |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API URL |
 | `OPENAI_API_KEY` | | OpenAI API key |
 | `ANTHROPIC_API_KEY` | | Anthropic API key |
-| `SAFE_FETCH_MAX_REDIRECTS` | `5` | Maximum redirect hops for safe fetch client |
-| `SAFE_FETCH_MAX_BYTES` | `2000000` | Maximum response body size (bytes) |
-| `SAFE_FETCH_CONNECT_TIMEOUT` | `5` | TCP connection timeout (seconds) |
-| `SAFE_FETCH_READ_TIMEOUT` | `10` | Read timeout (seconds) |
-| `SAFE_FETCH_TOTAL_TIMEOUT` | `20` | Total timeout (seconds) |
+| `GEMINI_API_KEY` | | Google Gemini API key |
+
+Other provider API keys are listed in `.env.example`. Set a key only when an enabled provider references it.
 
 ### Generate a hashed admin password
 
-```bash
-# Interactive (recommended)
-python scripts/hash_password.py
+Run the helper in a project environment with its dependencies installed. It prompts for the password without echoing it; avoid passing a password as a command-line argument because shell history and process listings may expose it.
 
-# As argument (may appear in shell history)
-python scripts/hash_password.py mypassword
+```bash
+uv run python scripts/hash_password.py
 ```
+
+The helper requires at least 12 characters, including uppercase and lowercase letters, a digit, and a special character. It prints a Werkzeug `scrypt` hash for `ADMIN_PASSWORD`.
 
 ## Safe Fetch Configuration
 
-All outbound HTTP requests go through the safe fetch client (`services/safe_fetch.py`). The following environment variables control its behavior:
+Requests to untrusted source URLs use the SSRF-protected safe fetch client (`services/safe_fetch.py`). The following environment variables control its behavior:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -63,7 +65,7 @@ All outbound HTTP requests go through the safe fetch client (`services/safe_fetc
 **Production notes:**
 
 - These values are read at process start and cached. Changing them requires a service restart.
-- Malformed environment variables (e.g., non-numeric strings) produce safe defaults via `_safe_int_env()` / `_safe_float_env()` helpers instead of raising `ValueError` at construction time. The default values are logged for visibility.
+- The fetch client falls back to defaults when it parses malformed values. Production startup also validates these settings and stops on malformed or out-of-range values, or when the total timeout is shorter than the connect and read timeouts combined.
 - The byte limit prevents memory exhaustion when fetching untrusted content. Increase only if you have verified the source returns large but legitimate responses (e.g., full article HTML).
 - The total timeout is a hard ceiling enforced before each redirect follow and each chunk read in the streaming loop. If `SAFE_FETCH_TOTAL_TIMEOUT` is less than `SAFE_FETCH_CONNECT_TIMEOUT + SAFE_FETCH_READ_TIMEOUT`, the connect timeout takes precedence.
 
@@ -139,14 +141,14 @@ Use `ainews config path` to see all resolved paths, their provenance, existence,
 
 Values from different sources are merged with this precedence:
 
-1. **Environment variables** (highest priority) — override YAML values for any key
-2. **YAML file values** — `providers.yaml`, `pipeline.yaml`, `sources.yaml`, `topics.yaml`
-3. **Code defaults** — built-in defaults defined in the field registry
+1. **Environment variables** (highest priority): override YAML values for any key
+2. **YAML file values**: `providers.yaml`, `pipeline.yaml`, `sources.yaml`, `topics.yaml`
+3. **Code defaults**: built-in defaults defined in the field registry
 
 **Effective value resolution:**
 
 - The `.env` file is loaded first and merged with the process environment. Process environment variables take precedence over `.env` values.
-- YAML files support `${VAR}` interpolation — unresolved variables produce a diagnostic warning.
+- YAML files support `${VAR}` interpolation: unresolved variables produce a diagnostic warning.
 - CLI `config set` writes to the appropriate YAML file via atomic transaction with rollback.
 - CLI `config unset` removes a YAML override, falling back to defaults.
 - `config show` displays the effective value with provenance (where each value came from).
@@ -203,7 +205,7 @@ ainews config check --json
 
 The command reports errors and warnings. Exit code `0` means valid; exit code `3` means validation errors were found. Each diagnostic includes the source file, key, and remediation when available.
 
-### `pipeline.yaml` — Processing Pipeline
+### `pipeline.yaml`: Processing Pipeline
 
 Controls the AI processing stages: selector, researcher, writer, editor.
 
@@ -279,7 +281,7 @@ newsletter_pipeline:
 | `timeout_seconds` | Request timeout |
 | `system_prompt` | Custom system prompt (uses built-in default if omitted) |
 
-### `sources.yaml` — RSS/API Sources
+### `sources.yaml`: RSS/API Sources
 
 ```yaml
 sources:
@@ -333,7 +335,7 @@ sources:
 | `api` | JSON API. Requires `list_url`, `item_url`, `fields`. |
 | `web` | Web scraping. Requires `base_url`, `listing_url`, CSS selectors. |
 
-### `topics.yaml` — Topic Categories
+### `topics.yaml`: Topic Categories
 
 ```yaml
 topics:
@@ -366,7 +368,7 @@ topics:
     color: blue
 ```
 
-### `providers.yaml` — LLM Providers
+### `providers.yaml`: LLM Providers
 
 ```yaml
 # Bare-metal Ollama (app runs on same host as Ollama):
@@ -430,7 +432,7 @@ Any `openai`-type provider is handled by the OpenAI-compatible adapter and works
 | Docker Compose Ollama service | `http://ollama:11434` |
 | Host Ollama from container | `http://host.docker.internal:11434` |
 
-> **Warning:** `localhost` inside a Docker container refers to the container itself, not the host. Using `http://localhost:11434` from Docker containers will silently fail at LLM call time. See [Deployment Guide](deployment.md#docker-with-ollama).
+> **Warning:** `localhost` inside a Docker container refers to the container itself, not the host. Using `http://localhost:11434` from Docker containers will silently fail at LLM call time. See [Deployment Guide](deployment.md#ollama-options).
 
 **Production validation:** In production (`FLASK_CONFIG=production`), provider config is validated at startup:
 - At least one provider must be enabled
@@ -440,7 +442,7 @@ Any `openai`-type provider is handled by the OpenAI-compatible adapter and works
 - Disabled providers with placeholder keys are silently skipped
 - Validation errors raise `RuntimeError` and prevent startup (fail-closed)
 
-### `subagent:` — Subagent Configuration
+### `subagent:`: Subagent Configuration
 
 Subagents are lightweight AI tasks that run within pipeline stages. Configuration lives under `subagent:` in `pipeline.yaml`:
 
@@ -471,7 +473,7 @@ subagent:
 
 The `tools:` list controls which subagent tools are available for each stage. Available tools: `web_search`, `context_notes`, `related_articles`, `trend_memory`.
 
-### `memory:` — Trend Memory Configuration
+### `memory:`: Trend Memory Configuration
 
 Tiered, LLM-judged memory for the editor. After each article is finalized, the LLM extracts 0–3 high-signal memory entries. The system is configurable:
 
@@ -488,7 +490,7 @@ memory:
 **Importance tiers:**
 - `1` (low): Short-lived observations, expires in 7 days unless consolidated
 - `2` (medium): Valid observations promoted by consolidation, expires in 30 days
-- `3` (high): Major developments, no expiry — triggers consolidation of overlapping low entries
+- `3` (high): Major developments, no expiry: triggers consolidation of overlapping low entries
 
 **How it works:**
 1. After an article is finalized (`DONE`), `propose_trend_memory()` asks the LLM to extract 0–3 entries and stores them with tier-based TTL
@@ -507,7 +509,7 @@ crawl → extract → select → research → write → edit → done
 |-------|-------------|-----------|
 | `crawl` | Fetch RSS/API items from sources | No |
 | `extract` | Extract full text from article URLs | No |
-| `select` | LLM evaluates newsworthiness (score 1-10) | Yes — set `enabled: false` |
+| `select` | LLM evaluates newsworthiness (score 1-10) | Yes: set `enabled: false` |
 | `research` | LLM compiles research brief with external sources | Yes |
 | `write` | LLM drafts condensed article | Yes |
 | `edit` | LLM reviews and polishes draft, assigns tags | Yes |

@@ -102,7 +102,7 @@ def create_source() -> tuple[Response, int] | Response:
             },
             category="config",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for source_create")
 
     return api_response(
@@ -216,7 +216,7 @@ def update_source(source_id: int) -> tuple[Response, int] | Response:
             },
             category="config",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for source_update")
 
     return api_response(meta={"message": "Source updated"})
@@ -286,7 +286,7 @@ def update_source_partial(source_id: int) -> tuple[Response, int] | Response:
             },
             category="config",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for source_update_partial")
 
     return api_response(
@@ -333,7 +333,7 @@ def delete_source(source_id: int) -> tuple[Response, int] | Response:
             details={"source_key": source.source_key},
             category="config",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for source_delete")
 
     return api_response(meta={"message": "Source deleted"})
@@ -422,7 +422,7 @@ def refresh_source(source_id: int) -> tuple[Response, int] | Response:
             details={"source_key": source.source_key},
             category="config",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for source_refresh")
 
     return api_response(meta={"message": "Source refresh triggered", "source_id": source_id})

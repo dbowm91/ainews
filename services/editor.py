@@ -19,7 +19,6 @@ def get_editor_system_prompt(article=None) -> str:
     rc = get_role_config("editor")
     config = load_pipeline_config()
 
-    # Check for experiment variant
     if article and hasattr(article, 'experiment_group') and article.experiment_group:
         experiments = config.experiments
         if experiments.get("enabled", False):
@@ -123,7 +122,6 @@ def build_editor_prompt(
 
     parts.append("")
 
-    # Tagging section
     tag_str = (
         ", ".join(existing_tags)
         if existing_tags

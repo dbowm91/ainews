@@ -122,7 +122,6 @@ def load_bundled_manifest(
     """
     diagnostics: list[ThemeDiagnostic] = []
 
-    # First, attempt to load via importlib.resources.
     manifest_resource = None
     try:
         traversable = importlib.resources.files(_BUNDLED_PACKAGE)

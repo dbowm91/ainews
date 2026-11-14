@@ -46,14 +46,12 @@ class MetricsCollector:
     ) -> None:
         """Increment a counter."""
         key = self._make_key(name, labels)
-        # Try Redis first
         try:
             if self._redis is not None:
                 self._redis.incrby(f"{self._REDIS_PREFIX}:counter:{key}", value)
                 return
         except redis.exceptions.RedisError:
             pass
-        # Fallback to in-memory
         with self._lock:
             self._counters[key] += value
 
@@ -62,7 +60,6 @@ class MetricsCollector:
     ) -> None:
         """Set a gauge value."""
         key = self._make_key(name, labels)
-        # Try Redis first
         try:
             if self._redis is not None:
                 redis_key = f"{self._REDIS_PREFIX}:gauge:{key}"
@@ -70,7 +67,6 @@ class MetricsCollector:
                 return
         except redis.exceptions.RedisError:
             pass
-        # Fallback to in-memory
         with self._lock:
             self._gauges[key] = value
 
@@ -79,20 +75,17 @@ class MetricsCollector:
     ) -> None:
         """Record a histogram observation."""
         key = self._make_key(name, labels)
-        # Try Redis first (store as JSON array of observations)
         try:
             if self._redis is not None:
                 redis_key = f"{self._REDIS_PREFIX}:histogram:{key}"
-                # Use Redis list to store observations, trim to maxlen
                 pipe = self._redis.pipeline()
                 pipe.rpush(redis_key, value)
-                pipe.ltrim(redis_key, -1000, -1)  # Keep last 1000 observations
+                pipe.ltrim(redis_key, -1000, -1)
                 pipe.expire(redis_key, self._HISTOGRAM_TTL)
                 pipe.execute()
                 return
         except redis.exceptions.RedisError:
             pass
-        # Fallback to in-memory
         with self._lock:
             self._histograms[key].append(value)
 
@@ -109,7 +102,6 @@ class MetricsCollector:
             self._counters.clear()
             self._gauges.clear()
             self._histograms.clear()
-        # Clear Redis keys if available
         if self._redis is not None:
             try:
                 keys = list(self._redis.scan_iter(f"{self._REDIS_PREFIX}:*"))
@@ -185,19 +177,16 @@ class MetricsCollector:
             "histograms": {},
         }
 
-        # Counters
         result["counters"] = self._get_counters_from_redis()
         if not result["counters"]:
             with self._lock:
                 result["counters"] = dict(self._counters)
 
-        # Gauges
         result["gauges"] = self._get_gauges_from_redis()
         if not result["gauges"]:
             with self._lock:
                 result["gauges"] = dict(self._gauges)
 
-        # Histograms
         result["histograms"] = self._get_histograms_from_redis()
         if not result["histograms"]:
             with self._lock:
@@ -226,7 +215,6 @@ class MetricsCollector:
             brace_idx = key.find("{")
             return key if brace_idx == -1 else key[:brace_idx]
 
-        # Collect all metrics first (from Redis with in-memory fallback)
         counters = self._get_counters_from_redis()
         if not counters:
             with self._lock:
@@ -242,7 +230,6 @@ class MetricsCollector:
             with self._lock:
                 histograms = {k: list(v) for k, v in self._histograms.items() if v}
 
-        # Counters
         for key, value in counters.items():
             base = _base_name(key)
             if base not in seen_types:
@@ -250,7 +237,6 @@ class MetricsCollector:
                 lines.append(f"# HELP {base} Incrementing counter metric")
                 lines.append(f"# TYPE {base} counter")
             lines.append(f"{key} {value}")
-        # Gauges
         for key, gval in gauges.items():
             base = _base_name(key)
             if base not in seen_types:
@@ -258,7 +244,6 @@ class MetricsCollector:
                 lines.append(f"# HELP {base} Current gauge value")
                 lines.append(f"# TYPE {base} gauge")
             lines.append(f"{key} {gval}")
-        # Histograms
         for key, values in histograms.items():
             if values:
                 base = _base_name(key)

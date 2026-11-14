@@ -96,7 +96,7 @@ def replay_article_stage(article_id: int) -> tuple[Response, int]:
             },
             category="pipeline",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for article replay", exc_info=True)
 
     meta = {"message": f"Replay of {stage} stage dispatched"}
@@ -156,7 +156,7 @@ def restore_article_version(article_id: int) -> tuple[Response, int]:
             },
             category="pipeline",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for article restore", exc_info=True)
 
     return api_response(

@@ -145,7 +145,7 @@ def create_webhook() -> tuple[Response, int] | Response:
             },
             category="webhook",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for webhook_create")
 
     return api_response(
@@ -261,7 +261,7 @@ def update_webhook(webhook_id: int) -> tuple[Response, int] | Response:
             },
             category="webhook",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for webhook_update")
 
     return api_response(meta={"message": "Webhook updated"})
@@ -289,7 +289,7 @@ def delete_webhook(webhook_id: int) -> tuple[Response, int] | Response:
             details={"name": webhook.name},
             category="webhook",
         )
-    except Exception:  # noqa: BLE001 fail-closed for audit logging
+    except Exception:  # noqa: BLE001 - best-effort audit logging
         logger.warning("Audit logging failed for webhook_delete")
 
     return api_response(meta={"message": "Webhook deleted"})

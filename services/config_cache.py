@@ -162,11 +162,9 @@ class ConfigCache:
                     except redis.exceptions.RedisError:
                         pass
             else:
-                # Poll for value
                 value = self._poll_for_cache(full_key, ttl)
                 if value is not None:
                     return value
-                # Fallback: load directly
                 value = loader_fn()
                 try:
                     self._redis.setex(full_key, ttl, _serialize(value))
@@ -192,23 +190,19 @@ class ConfigCache:
     ) -> Any:
         full_key = f"{self.prefix}:{key}"
 
-        # First memory check (no lock)
         val = self._check_memory_cache(full_key, ttl)
         if val is not None:
             return val
 
-        # Recheck memory under lock
         with self._lock:
             val = self._check_memory_cache(full_key, ttl)
             if val is not None:
                 return val
 
-        # Check Redis
         val = self._read_redis_cache(full_key, ttl)
         if val is not None:
             return val
 
-        # Handle cache miss
         return self._handle_cache_miss(full_key, key, loader_fn, ttl)
 
     def invalidate(self, key: str) -> None:

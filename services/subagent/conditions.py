@@ -90,7 +90,6 @@ def _eval_node(
     context: dict,
 ) -> Any:
     """Recursively evaluate an AST node with given allowed ops/names/context."""
-    # Create a callback with the extra arguments bound
     def _eval(node: ast.AST) -> Any:
         return _eval_node(node, allowed_ops, allowed_names, context)
 
